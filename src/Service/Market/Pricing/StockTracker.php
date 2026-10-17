@@ -47,6 +47,8 @@ class StockTracker
     // --- Market Microstructure: Order Flow Variance Budget ---
     /** Half-life in years of the realized impact-variance estimate the budget is drawn from. */
     public const IMPACT_VARIANCE_EMA_YEARS = 0.25;
+    /** Horizon the impact variance is read at: a trading day's summed impact, the horizon realized variance is quoted on. */
+    public const IMPACT_MEASUREMENT_YEARS = 1.0 / FinancialConstants::TRADING_DAYS_PER_YEAR;
 
     // --- Sell-Side Price Targets (Brav & Lehavy 2003) ---
     /** How far above fair value the published twelve-month target is set. Targets are systematically optimistic; Brav & Lehavy measure them around 28% above price, and with price near fair value on average this lands in the same place. */
@@ -65,6 +67,9 @@ class StockTracker
 
     /** @var array<string, float> Annualized variance the sovereign fund's impact has supplied to each name (EMA); the market factor gives it back. */
     private array $fundImpactVariance = [];
+
+    /** @var array<string, array{flow: array{sum: float, elapsed: float}, fund: array{sum: float, elapsed: float}}> Each name's impact returns summed over the trading day so far, which its impact variance is read on. */
+    private array $impactDay = [];
 
     /**
      * Constructor.
@@ -229,6 +234,8 @@ class StockTracker
 
             // Fetch true, dynamic WACC from the DebtEngine
             $health = $this->debtEngine->analyzeDebtHealth($stock, $macroDTO);
+            // The beta this tick trades the name on, kept for the option desk to quote the same exposure.
+            $stock->setLeveredBeta($health->leveredBeta);
 
             // What this firm's credit costs, published for the bond desk to discount its listed issues at.
             // Computed here rather than there so there is one authority on it: the same figure the firm
@@ -347,20 +354,30 @@ class StockTracker
 
             // Realized impact variance, annualized, as an exponentially weighted mean. This is what the
             // budget draws on, so it has to decay: a name that was heavily traded a year ago must not keep
-            // reclaiming variance it no longer supplies.
+            // reclaiming variance it no longer supplies. Read on the trading day's summed impact, so flow that
+            // persists across ticks counts at the horizon it moves the price over, at any tick rate.
             if ($dt > 0.0) {
-                $stock->setImpactVarianceEma(TimeSeries::ewmaAnnualizedVariance(
+                $ticker = $stock->getTicker();
+                $empty = ['sum' => 0.0, 'elapsed' => 0.0];
+                $flowRead = TimeSeries::ewmaWindowedVariance(
                     $stock->getImpactVarianceEma() ?? 0.0,
+                    $this->impactDay[$ticker]['flow'] ?? $empty,
                     $budgetedImpactLogReturn,
                     $dt,
-                    self::IMPACT_VARIANCE_EMA_YEARS
-                ));
-                $this->fundImpactVariance[$stock->getTicker()] = TimeSeries::ewmaAnnualizedVariance(
-                    $this->fundImpactVariance[$stock->getTicker()] ?? 0.0,
-                    $budgetedFundLogReturn,
-                    $dt,
+                    self::IMPACT_MEASUREMENT_YEARS,
                     self::IMPACT_VARIANCE_EMA_YEARS
                 );
+                $fundRead = TimeSeries::ewmaWindowedVariance(
+                    $this->fundImpactVariance[$ticker] ?? 0.0,
+                    $this->impactDay[$ticker]['fund'] ?? $empty,
+                    $budgetedFundLogReturn,
+                    $dt,
+                    self::IMPACT_MEASUREMENT_YEARS,
+                    self::IMPACT_VARIANCE_EMA_YEARS
+                );
+                $stock->setImpactVarianceEma($flowRead['variance']);
+                $this->fundImpactVariance[$ticker] = $fundRead['variance'];
+                $this->impactDay[$ticker] = ['flow' => $flowRead['window'], 'fund' => $fundRead['window']];
             }
 
             $stock->setPrice((string) $newPrice);

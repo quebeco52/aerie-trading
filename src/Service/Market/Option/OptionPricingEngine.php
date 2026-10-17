@@ -31,9 +31,11 @@ use App\Service\Math\StochasticProcesses;
  *      mean-reverting variance that is the closed-form integral in averageMeanRevertingVolatility(); using
  *      spot volatility instead asserts that today's shock lasts undiminished to expiry, which is wrong in
  *      the same direction on every contract at once after any shock.
- *   2. The shape comes from the jump the price process will actually realize, taken through
- *      MarketEngine::calibratedJumpParameters() so that the desk and the tape agree on the same jump. A desk
- *      quoting the seed's uncalibrated jump would be selling a distribution the market never produces.
+ *   2. The shape comes from the jumps the price process will actually realize: the name's own, taken through
+ *      MarketEngine::calibratedJumpParameters(), and the market's, through the levered beta the price step
+ *      trades it on (MarketEngine::systemicJumpParameters()), so that the desk and the tape agree. A desk
+ *      quoting the seed's uncalibrated jump, or the name's alone, would be selling a distribution the market
+ *      never produces.
  *   3. The level is marked up by the variance risk premium, because a desk that quotes its own forecast of
  *      realized variance loses money on average.
  *
@@ -99,22 +101,23 @@ final class OptionPricingEngine
         $totalVariance = $atmVolatility * $atmVolatility;
 
         $jump = MarketEngine::calibratedJumpParameters($longRunVolatility, $beta, $lambda, $jumpVol);
-        $pUp = MarketEngine::jumpProbabilityUp();
+        // The name gaps on its own news and on the market's crashes, which reach it through its beta; the tape
+        // delivers both, so the desk writes both.
+        $jumps = [
+            ['lambda' => max(0.0, $lambda), 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $jump['eta_up'], 'eta_down' => $jump['eta_down']],
+            MarketEngine::systemicJumpParameters($beta),
+        ];
 
-        // The jump's share of that variance, so the diffusion is handed the REMAINDER and the shape function
-        // adds the two back to exactly the variance the contract is being struck on. Charging the jump on
-        // top instead would quote a name at more volatility than its own tape realizes.
-        $jumpVariance = max(0.0, $lambda) * OptionPricing::calculateKouJumpMoment(2, $pUp, $jump['eta_up'], $jump['eta_down']);
+        // The jumps' share of that variance, so the diffusion is handed the REMAINDER and the shape function
+        // adds them back to exactly the variance the contract is being struck on. Charging the jumps on top
+        // instead would quote a name at more volatility than its own tape realizes.
+        $jumpVariance = 0.0;
+        foreach ($jumps as $component) {
+            $jumpVariance += $component['lambda'] * OptionPricing::calculateKouJumpMoment(2, $component['p_up'], $component['eta_up'], $component['eta_down']);
+        }
         $diffusionVariance = max(0.0, $totalVariance - $jumpVariance);
 
-        $shape = OptionPricing::calculateJumpDiffusionShape(
-            $diffusionVariance,
-            $lambda,
-            $pUp,
-            $jump['eta_up'],
-            $jump['eta_down'],
-            $timeToExpiry
-        );
+        $shape = OptionPricing::calculateMultiJumpDiffusionShape($diffusionVariance, $jumps, $timeToExpiry);
 
         return [
             'atm_volatility' => $atmVolatility,
@@ -127,7 +130,7 @@ final class OptionPricingEngine
      * The surface of a stock at one expiry, from what the row carries.
      *
      * @param float|null $leveredBeta The beta the price step is using, when the caller has already computed
-     *                                it; the stored asset beta otherwise.
+     *                                it; the one the last tick stored otherwise, and the asset beta before any.
      * @return array{atm_volatility: float, skewness: float, excess_kurtosis: float}
      */
     public function surfaceFor(Stock $stock, float $timeToExpiry, ?float $leveredBeta = null): array
@@ -139,7 +142,7 @@ final class OptionPricingEngine
         return $this->surface(
             $spotVolatility,
             (float) $stock->getVolatility(),
-            $leveredBeta ?? (float) $stock->getBeta(),
+            $leveredBeta ?? $stock->getLeveredBeta() ?? (float) $stock->getBeta(),
             (float) $stock->getJumpIntensity(),
             (float) $stock->getJumpVol(),
             $timeToExpiry

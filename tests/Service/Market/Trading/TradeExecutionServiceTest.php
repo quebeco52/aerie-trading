@@ -1101,6 +1101,49 @@ class TradeExecutionServiceTest extends TestCase
         $this->assertEqualsWithDelta(LiquidityEngine::BOND_HALF_SPREAD, $this->service->previewCosts('G10-001', 'BUY', 10)['spread'] ?? null, 1e-9);
     }
 
+    /**
+     * The issue just dealt is re-marked at the valuation it dealt off, so net worth holds what was paid: the ladder
+     * is marked once a trading day, and the holding used to sit at the morning's mark until the next one.
+     */
+    public function testABondFillReMarksTheIssueAtTheLiveValuation(): void
+    {
+        $state = MacroStateBuilder::create()->build();
+        $state->totalTime = 3.3;
+        $macro = \App\DTO\MacroStateDTO::fromMacroState($state);
+        $provider = $this->createStub(MacroStateProvider::class);
+        $provider->method('liveState')->willReturn($macro);
+        (new \ReflectionProperty(TradeExecutionService::class, 'macroStates'))->setValue($this->service, $provider);
+        (new \ReflectionProperty(TradeExecutionService::class, 'bondPricing'))->setValue($this->service, new BondPricingEngine());
+
+        $bond = (new Bond())
+            ->setTicker('G10-001')->setName('test issue')->setTenorYears('10')->setCouponRate('0.04')
+            ->setFaceValue((string) FinancialConstants::BOND_FACE_VALUE)
+            ->setIssuedAtTime(1.0)->setMaturesAtTime(11.0)->setLastCouponTime(3.0)
+            ->setPrice('800');
+        (new \ReflectionProperty(Bond::class, 'id'))->setValue($bond, 42);
+        $live = (new BondPricingEngine())->dealingPrice($bond, $macro);
+
+        $this->stockRepoStub->method('findOneByTicker')->willReturn(null);
+        $this->etfRepoStub->method('findOneByTicker')->willReturn(null);
+        $this->bondRepoStub->method('findOneByTicker')->willReturn($bond);
+        $this->userBondRepoStub->method('findOneBy')->willReturn(null);
+        $statements = [];
+        $this->connectionMock->method('executeStatement')->willReturnCallback(static function (string $sql, array $params = []) use (&$statements): int {
+            $statements[] = [$sql, $params];
+
+            return 1;
+        });
+
+        $user = new User();
+        $user->setCashBalance('100000.00');
+        $this->service->executeOrder($user, 'G10-001', 'BUY', 'MARKET', 10);
+
+        $marks = array_values(array_filter($statements, static fn (array $statement): bool => str_contains($statement[0], 'bonds')));
+        $this->assertCount(1, $marks);
+        $this->assertContains(42, $marks[0][1]);
+        $this->assertContains((string) $live, $marks[0][1]);
+    }
+
     public function testCoveringReturnsTheBorrowAndReducesShortInterest(): void
     {
         $user = $this->marginUser();

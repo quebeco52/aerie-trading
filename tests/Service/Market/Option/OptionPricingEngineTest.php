@@ -73,12 +73,40 @@ class OptionPricingEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.30 * OptionPricingEngine::OPTION_VARIANCE_RISK_PREMIUM, $surface['atm_volatility'], 1e-9);
     }
 
-    public function testTheSurfaceCarriesNoShapeWhenTheNameDoesNotJump(): void
+    public function testTheSurfaceCarriesNoShapeWhenNothingJumpsIntoTheName(): void
     {
-        $surface = $this->engine->surface(0.30, 0.30, 1.0, 0.0, 0.10, 0.5);
+        // No jump of its own and no market loading: a diffusion, quoted flat.
+        $surface = $this->engine->surface(0.30, 0.30, 0.0, 0.0, 0.10, 0.5);
 
         $this->assertSame(0.0, $surface['skewness']);
         $this->assertSame(0.0, $surface['excess_kurtosis']);
+    }
+
+    /**
+     * A name that never gaps on its own news still falls with the market's crashes, through its beta, and the tape
+     * delivers that: the desk quotes its crash skew, steeper the higher the beta. It used to quote the name's own
+     * jump alone, and on the stored asset beta rather than the levered one the price step trades it on.
+     */
+    public function testTheMarketsCrashesReachTheSmileThroughTheBeta(): void
+    {
+        $lowBeta = $this->engine->surface(0.30, 0.30, 0.8, 0.0, 0.10, 0.25);
+        $highBeta = $this->engine->surface(0.30, 0.30, 1.6, 0.0, 0.10, 0.25);
+
+        $this->assertLessThan(0.0, $lowBeta['skewness']);
+        $this->assertLessThan($lowBeta['skewness'], $highBeta['skewness']);
+        $this->assertGreaterThan($lowBeta['excess_kurtosis'], $highBeta['excess_kurtosis']);
+    }
+
+    public function testAStockIsQuotedOnTheBetaItsTapeTradesOn(): void
+    {
+        $stock = \App\Tests\Support\StockBuilder::create('BETA')->withPrice(100.0)->build();
+        $stock->setBeta('1.0')->setVolatility('0.30')->setCurrentVolatility('0.30')->setJumpIntensity('1.0')->setJumpVol('0.10');
+
+        $asset = $this->engine->surfaceFor($stock, 0.25);
+        $stock->setLeveredBeta(1.6);
+
+        $this->assertEqualsWithDelta($this->engine->surface(0.30, 0.30, 1.6, 1.0, 0.10, 0.25)['skewness'], $this->engine->surfaceFor($stock, 0.25)['skewness'], 1e-12);
+        $this->assertNotEqualsWithDelta($asset['skewness'], $this->engine->surfaceFor($stock, 0.25)['skewness'], 1e-6);
     }
 
     // --- Surface Shape ---
@@ -106,13 +134,13 @@ class OptionPricingEngineTest extends TestCase
 
         $surface = $this->engine->surface($longRunVol, $longRunVol, 1.0, $lambda, $configuredJumpVol, 0.25);
 
-        $expected = OptionPricing::calculateJumpDiffusionShape(
+        $own = ['lambda' => $lambda, 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $calibrated['eta_up'], 'eta_down' => $calibrated['eta_down']];
+        $market = MarketEngine::systemicJumpParameters(1.0);
+        $expected = OptionPricing::calculateMultiJumpDiffusionShape(
             max(0.0, (($longRunVol * OptionPricingEngine::OPTION_VARIANCE_RISK_PREMIUM) ** 2)
-                - ($lambda * OptionPricing::calculateKouJumpMoment(2, MarketEngine::jumpProbabilityUp(), $calibrated['eta_up'], $calibrated['eta_down']))),
-            $lambda,
-            MarketEngine::jumpProbabilityUp(),
-            $calibrated['eta_up'],
-            $calibrated['eta_down'],
+                - ($lambda * OptionPricing::calculateKouJumpMoment(2, $own['p_up'], $own['eta_up'], $own['eta_down']))
+                - ($market['lambda'] * OptionPricing::calculateKouJumpMoment(2, $market['p_up'], $market['eta_up'], $market['eta_down']))),
+            [$own, $market],
             0.25
         );
 
@@ -133,13 +161,13 @@ class OptionPricingEngineTest extends TestCase
 
         // And the two components the shape is built from add back to exactly that variance.
         $calibrated = MarketEngine::calibratedJumpParameters(0.30, 1.0, 3.0, 0.10);
-        $shape = OptionPricing::calculateJumpDiffusionShape(
+        $own = ['lambda' => 3.0, 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $calibrated['eta_up'], 'eta_down' => $calibrated['eta_down']];
+        $market = MarketEngine::systemicJumpParameters(1.0);
+        $shape = OptionPricing::calculateMultiJumpDiffusionShape(
             max(0.0, ($jumpy['atm_volatility'] ** 2)
-                - (3.0 * OptionPricing::calculateKouJumpMoment(2, MarketEngine::jumpProbabilityUp(), $calibrated['eta_up'], $calibrated['eta_down']))),
-            3.0,
-            MarketEngine::jumpProbabilityUp(),
-            $calibrated['eta_up'],
-            $calibrated['eta_down'],
+                - (3.0 * OptionPricing::calculateKouJumpMoment(2, $own['p_up'], $own['eta_up'], $own['eta_down']))
+                - ($market['lambda'] * OptionPricing::calculateKouJumpMoment(2, $market['p_up'], $market['eta_up'], $market['eta_down']))),
+            [$own, $market],
             0.5
         );
 

@@ -210,6 +210,13 @@ final class OptionDeskService
             $lap('model');
         }
 
+        // A name whose whole chain has expired owes no delta: its hedge is handed back.
+        foreach ($stocks as $stock) {
+            if ($stock->getId() !== null && !isset($chains[$stock->getId()])) {
+                $this->gammaEngine->refresh($stock, [], []);
+            }
+        }
+
         if ($markRows !== []) {
             BulkRowUpdate::apply($connection, 'option_contracts', self::MARK_COLUMNS, $markRows);
             $lap('marks');
@@ -230,15 +237,14 @@ final class OptionDeskService
     }
 
     /**
-     * Places the desk's hedge for the move since it last hedged, in every name that carries a chain.
+     * Brings the desk's hedge to the delta it owes, in every name it has a book in.
      *
      * The flow joins the tick's order flow rather than moving the price itself, so it is charged the same
      * impact as a player's order and the diffusion gives back the variance it supplies.
      *
-     * Need not run on every tick. The hedge is gamma times the move since the last one, which TELESCOPES:
-     * hedging once across six ticks trades exactly what six hedges across the same six ticks would have,
-     * because the intermediate reference prices cancel. Only the granularity of when the flow arrives
-     * changes, and it arrives inside the same bar either way.
+     * Need not run on every tick. The hedge is the gap between the delta owed and the shares held, a state:
+     * hedging once across six ticks trades exactly what six hedges across the same six ticks would have. Only
+     * the granularity of when the flow arrives changes, and it arrives inside the same bar either way.
      *
      * @param array<int, Stock> $stocks
      * @param float             $passYears Time since the previous pass, in years: sizes the liquidity cap.

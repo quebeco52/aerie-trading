@@ -126,3 +126,11 @@ Unpaired seeds 1-4, base = git archive HEAD (1e02187c; reproduces batchB-live 1-
   1.60%, retail 2.31 -> 2.51% (seed sd ~0.4pp); CRE mean 98.8 -> 104.6 (seed range 95-113); starts 98.9 -> 99.7;
   freight 102.3 -> 100.2.
 - Distress: payment defaults 0.25 -> 1.5/seed (t 1.8; history 0.6-2.0), Ch11 0.25 -> 0.75, failures 0.5 -> 0.25.
+
+## Market layer C: option beta and market jump, dealer inventory, bond stamp, daily impact window, slicing (10-17)
+The harness has no option desk, dealer or player fills; it exercises only the day-window impact reading.
+- Seed 9, 2 years at TPY=3600 (the live rate, ~14 ticks a trading day), TRACE of 8 names (`iv`), year 0.5-2: measured
+  impact vol sqrt(mean iv) 0.23-1.18% (base, per tick) -> 0.65-2.53% (live, day window), x2.2-2.8 (variance x5-8).
+  Still under 1% of each name's variance (CASC 0.37% vs 0.05%), so the diffusion's give-back barely moves.
+- Board, unpaired seeds 1-4, 5 years at TPY=3600 (marketC-{base,live}-tpy3600.out): vol excess vs configured mean
+  -0.9 -> +1.3pp (t 0.9), EW vol 14.1 -> 15.0 (t 0.5); paths diverge (gap means -2.4..+1.8%), nothing |t| >= 2.

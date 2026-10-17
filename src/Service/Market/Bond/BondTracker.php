@@ -154,7 +154,7 @@ class BondTracker
                 }
 
                 $valuation = $pastDue
-                    ? self::claimValuation(CorporateDefaultService::marketRecovery($bond->getSeniority(), $macroState->corporateDefaultRateEma) * (float) $bond->getFaceValue())
+                    ? BondPricingEngine::claimValuation(CorporateDefaultService::marketRecovery($bond->getSeniority(), $macroState->corporateDefaultRateEma) * (float) $bond->getFaceValue())
                     : $this->pricingEngine->value($bond, $curve, $currentTime, $spread);
 
                 // Wire precision: what a screen shows, not what the valuation carries. The history row below
@@ -246,17 +246,26 @@ class BondTracker
         $bond->setLastCouponTime($maturity);
     }
 
-    /** A claim with nothing left to discount, worth what it will recover: no accrual, yield, duration or convexity. */
-    private static function claimValuation(float $price): \App\DTO\BondValuationDTO
+    /**
+     * Re-marks one issue's row at a valuation struck between the day's marks: a fill dealt off the live curve stamps
+     * the issue it dealt, so net worth holds what was paid rather than the morning's price the curve has left.
+     */
+    public static function stampMark(\Doctrine\DBAL\Connection $connection, Bond $bond, \App\DTO\BondValuationDTO $valuation, float $spread, \DateTimeInterface $at): void
     {
-        return new \App\DTO\BondValuationDTO(
-            dirtyPrice: $price,
-            cleanPrice: $price,
-            accruedInterest: 0.0,
-            yieldToMaturity: 0.0,
-            modifiedDuration: 0.0,
-            convexity: 0.0,
-        );
+        if ($bond->getId() === null) {
+            return;
+        }
+
+        BulkRowUpdate::apply($connection, 'bonds', self::MARK_COLUMNS, [$bond->getId() => [
+            (string) $valuation->dirtyPrice,
+            (string) $valuation->cleanPrice,
+            (string) $valuation->accruedInterest,
+            (string) $valuation->yieldToMaturity,
+            (string) $valuation->modifiedDuration,
+            (string) $valuation->convexity,
+            (string) $spread,
+            $at->format('Y-m-d H:i:s'),
+        ]]);
     }
 
     /**

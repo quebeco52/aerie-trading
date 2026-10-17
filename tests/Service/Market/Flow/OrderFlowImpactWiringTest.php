@@ -339,6 +339,22 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta($afterFirstTick * exp($relaxed - $transient), (float) $stock->getPrice(), 1e-9, 'A drained quantity must not be applied again.');
     }
 
+    /**
+     * Ticks a name until the trading day its impact is read over closes, counting any time already run.
+     *
+     * @return float Years run here.
+     */
+    private function runTradingDay(StockTracker $tracker, Stock $stock, float $dt, float $alreadyRun = 0.0): float
+    {
+        $run = 0.0;
+        while ($alreadyRun + $run < StockTracker::IMPACT_MEASUREMENT_YEARS * (1.0 - 1e-9)) {
+            $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
+            $run += $dt;
+        }
+
+        return $run;
+    }
+
     public function testImpactVarianceIsMeasuredAndHandedBackToTheDiffusion(): void
     {
         $stock = $this->stock();
@@ -347,14 +363,15 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertSame(0.0, $stock->getImpactVarianceEma());
 
         $this->orderFlow->record('APEX', $this->liquidity->averageDailyVolume($stock) * 0.20);
-        $tracker->updateStocks([$stock], 1.0 / 14400.0, false, new MacroStateDTO());
+        // It is read on the trading day's summed impact, so the reading lands when the day closes.
+        $elapsed = $this->runTradingDay($tracker, $stock, 1.0 / 14400.0);
 
         $measured = $stock->getImpactVarianceEma();
         $this->assertGreaterThan(0.0, $measured, 'Flow that moved the price must be recorded as variance it supplied.');
         // Only the two thirds that stay are long-run variance; the transient third washes out within days.
         $stays = (2.0 / 3.0) * $this->liquidity->peakImpact($stock, $this->liquidity->averageDailyVolume($stock) * 0.20);
         $this->assertEqualsWithDelta(
-            TimeSeries::ewmaAnnualizedVariance(0.0, $stays, 1.0 / 14400.0, StockTracker::IMPACT_VARIANCE_EMA_YEARS),
+            TimeSeries::ewmaAnnualizedVariance(0.0, $stays, $elapsed, StockTracker::IMPACT_VARIANCE_EMA_YEARS),
             $measured,
             1e-12
         );
@@ -374,9 +391,10 @@ class OrderFlowImpactWiringTest extends TestCase
         $dt = 1.0 / 14400.0;
 
         $this->orderFlow->record('APEX', $this->liquidity->averageDailyVolume($stock) * 0.50);
-        $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
+        $this->runTradingDay($tracker, $stock, $dt);
 
         $peak = $stock->getImpactVarianceEma();
+        $this->assertGreaterThan(0.0, $peak);
 
         for ($tick = 0; $tick < 5000; $tick++) {
             $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
@@ -573,11 +591,13 @@ class OrderFlowImpactWiringTest extends TestCase
         // The peak move lands in full on the tick, so the price's move is the fund's whole peak impact.
         $fundMove = log((float) $stock->getPrice() / 100.0);
 
+        // Read when the trading day closes, and handed to the tick after.
+        $elapsed = $dt + $this->runTradingDay($tracker, $stock, $dt, $dt);
         $tracker->updateStocks([$stock], $dt, false, new MacroStateDTO());
 
         // The permanent share of the fund's move, annualized into the EMA, reaches the next tick's pricing; the
         // name's own idiosyncratic budget is still untouched.
-        $expected = TimeSeries::ewmaAnnualizedVariance(0.0, FinancialConstants::PERMANENT_IMPACT_SHARE * $fundMove, $dt, StockTracker::IMPACT_VARIANCE_EMA_YEARS);
+        $expected = TimeSeries::ewmaAnnualizedVariance(0.0, FinancialConstants::PERMANENT_IMPACT_SHARE * $fundMove, $elapsed, StockTracker::IMPACT_VARIANCE_EMA_YEARS);
         $this->assertEqualsWithDelta($expected, $captured->fundImpactVariance, 1e-9 * $expected);
         $this->assertGreaterThan(0.0, $captured->fundImpactVariance);
         $this->assertSame(0.0, $stock->getImpactVarianceEma());

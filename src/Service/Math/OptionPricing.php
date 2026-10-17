@@ -344,21 +344,37 @@ final class OptionPricing
         float $etaDown,
         float $horizonYears
     ): array {
+        return self::calculateMultiJumpDiffusionShape($diffusionVariance, [['lambda' => $lambda, 'p_up' => $pUp, 'eta_up' => $etaUp, 'eta_down' => $etaDown]], $horizonYears);
+    }
+
+    /**
+     * The same shape for a diffusion with several independent Kou jump processes, a name's own and the market's:
+     * their cumulants add, each lambda T E[J^n].
+     *
+     * @param float                                                              $diffusionVariance Annualised variance of the diffusion leg, excluding jumps.
+     * @param list<array{lambda: float, p_up: float, eta_up: float, eta_down: float}> $jumps         The jump processes.
+     * @param float                                                              $horizonYears      Years over which the return is measured.
+     * @return array{variance: float, skewness: float, excess_kurtosis: float} Horizon variance and shape.
+     */
+    public static function calculateMultiJumpDiffusionShape(float $diffusionVariance, array $jumps, float $horizonYears): array
+    {
         if ($horizonYears <= 0.0) {
             return ['variance' => 0.0, 'skewness' => 0.0, 'excess_kurtosis' => 0.0];
         }
 
-        $jumpArrivals = max(0.0, $lambda) * $horizonYears;
-
-        $secondCumulant = (max(0.0, $diffusionVariance) * $horizonYears)
-            + ($jumpArrivals * self::calculateKouJumpMoment(2, $pUp, $etaUp, $etaDown));
+        $secondCumulant = max(0.0, $diffusionVariance) * $horizonYears;
+        $thirdCumulant = 0.0;
+        $fourthCumulant = 0.0;
+        foreach ($jumps as $jump) {
+            $jumpArrivals = max(0.0, $jump['lambda']) * $horizonYears;
+            $secondCumulant += $jumpArrivals * self::calculateKouJumpMoment(2, $jump['p_up'], $jump['eta_up'], $jump['eta_down']);
+            $thirdCumulant += $jumpArrivals * self::calculateKouJumpMoment(3, $jump['p_up'], $jump['eta_up'], $jump['eta_down']);
+            $fourthCumulant += $jumpArrivals * self::calculateKouJumpMoment(4, $jump['p_up'], $jump['eta_up'], $jump['eta_down']);
+        }
 
         if ($secondCumulant <= 0.0) {
             return ['variance' => 0.0, 'skewness' => 0.0, 'excess_kurtosis' => 0.0];
         }
-
-        $thirdCumulant = $jumpArrivals * self::calculateKouJumpMoment(3, $pUp, $etaUp, $etaDown);
-        $fourthCumulant = $jumpArrivals * self::calculateKouJumpMoment(4, $pUp, $etaUp, $etaDown);
 
         return [
             'variance' => $secondCumulant,

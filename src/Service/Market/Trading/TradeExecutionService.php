@@ -13,6 +13,7 @@ use App\Entity\UserBond;
 use App\Entity\UserEtf;
 use App\Entity\UserStock;
 use App\Service\Market\Bond\BondPricingEngine;
+use App\Service\Market\Bond\BondTracker;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
@@ -77,6 +78,27 @@ class TradeExecutionService
         return (float) $asset->price();
     }
 
+    /** The shares already queued in a name for the tick an order fills in, which its fill meets in the book. */
+    private function pendingFlow(?Stock $stock): float
+    {
+        return $stock !== null ? $this->orderFlow->pending($stock->getTicker()) : 0.0;
+    }
+
+    /**
+     * Re-marks a bond the desk has just dealt at the valuation it dealt off. The ladder is marked once a trading day
+     * and net worth reads the row, so a holding bought off the live curve would otherwise be valued at the morning's
+     * price until the next mark, a gain or loss nobody made.
+     */
+    private function stampBondMark(Bond $bond): void
+    {
+        if ($this->bondPricing === null || $this->macroStates === null) {
+            return;
+        }
+
+        ['valuation' => $valuation, 'spread' => $spread] = $this->bondPricing->dealingValuation($bond, $this->macroStates->liveState());
+        BondTracker::stampMark($this->em->getConnection(), $bond, $valuation, $spread, new \DateTimeImmutable());
+    }
+
     /**
      * The stamp duty the Diet has in force on each side of a share trade, the founding rate before the ticker has
      * published an economy; the liquidity engine is set to it too, since the duty thins the depth an order meets.
@@ -115,7 +137,8 @@ class TradeExecutionService
             $action,
             $quantity,
             $mid,
-            $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign()
+            $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign(),
+            $this->pendingFlow($stock)
         );
         $consideration = $mid * $quantity;
 
@@ -271,7 +294,8 @@ class TradeExecutionService
                 $action,
                 $quantity,
                 $livePrice,
-                $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign()
+                $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign(),
+                $this->pendingFlow($stock)
             );
             $livePriceStr = Decimal::format($quote->executionPrice, 4);
             $totalValueStr = \bcmul($livePriceStr, $quantityStr, 4);
@@ -370,6 +394,9 @@ class TradeExecutionService
 
             $this->em->persist($user);
             $this->em->flush();
+            if ($asset->entity instanceof Bond && $order->getStatus() === TradeOrder::STATUS_FILLED) {
+                $this->stampBondMark($asset->entity);
+            }
             $this->portfolio->recordUserSnapshot($user);
             $this->em->flush();
             $this->em->getConnection()->commit();
@@ -746,7 +773,8 @@ class TradeExecutionService
                 $order->getAction(),
                 $quantity,
                 $executionPrice,
-                $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign()
+                $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign(),
+                $this->pendingFlow($stock)
             );
 
             // Enforce limit price cap on resting limit orders, while plain stop orders accept market quote.

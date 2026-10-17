@@ -223,10 +223,52 @@ class DealerGammaEngineTest extends TestCase
         $stock->setPrice('104.00000000');
         $owed = 500 * FinancialConstants::OPTION_CONTRACT_MULTIPLIER * 0.02 * 4.0 * DealerGammaEngine::DEALER_HEDGE_RATIO;
 
-        // The chain is re-quoted at double the gamma before the desk has hedged: the delta it owes is unchanged.
-        $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.04)]);
+        // The chain is re-quoted at the new price before the desk has hedged, its delta up by the gamma times the
+        // move and its gamma doubled: the delta it owes is unchanged.
+        $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.04, 0.5 + (0.02 * 4.0))]);
 
         $this->assertEqualsWithDelta($owed, $this->engine->hedgeFlow($stock, self::DAY), 1e-6);
+    }
+
+    // --- The Delta It Owes, Not Only The Move ---
+
+    /**
+     * The public buys calls at an unchanged price: the desk that wrote them buys their delta the next pass. It used
+     * to hedge only gamma times the move, so open interest could build without a share changing hands.
+     */
+    public function testNewOpenInterestIsHedgedAtOnce(): void
+    {
+        $stock = $this->stock(100.0);
+        $this->engine->refresh($stock, [$this->contract(0)], ['VANE-13C100' => $this->quote(0.02)]);
+        $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.02)]);
+
+        $this->assertEqualsWithDelta(
+            500 * FinancialConstants::OPTION_CONTRACT_MULTIPLIER * 0.5 * DealerGammaEngine::DEALER_HEDGE_RATIO,
+            $this->engine->hedgeFlow($stock, self::DAY),
+            1e-6
+        );
+    }
+
+    /** At expiry the delta goes, and the desk sells the shares it held against it. */
+    public function testAnExpiryHandsTheHedgeBack(): void
+    {
+        $stock = $this->stock(100.0);
+        $this->engine->refresh($stock, [$this->contract(0)], ['VANE-13C100' => $this->quote(0.02)]);
+        $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.02)]);
+        $held = $this->engine->hedgeFlow($stock, self::DAY);
+
+        $this->engine->refresh($stock, [], []);
+
+        $this->assertEqualsWithDelta(-$held, $this->engine->hedgeFlow($stock, self::DAY), 1e-6);
+        $this->assertSame(0.0, $this->engine->hedgeFlow($stock, self::DAY));
+    }
+
+    /** A name the desk has never had a book in records nothing when its empty chain is walked. */
+    public function testAnEmptyChainOnAnUnknownNameLeavesNoBook(): void
+    {
+        $this->engine->refresh($this->stock(), [], []);
+
+        $this->assertNull($this->store->read('VANE'));
     }
 
     /**

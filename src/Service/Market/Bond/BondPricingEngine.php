@@ -276,14 +276,40 @@ final class BondPricingEngine
      */
     public function dealingPrice(Bond $bond, MacroStateDTO $macro): float
     {
-        // An issue its issuer could not redeem trades as the overdue claim it has become, at the market's recovery.
-        if ($bond->isPastDue($macro->totalTime)) {
-            return CorporateDefaultService::marketRecovery($bond->getSeniority(), $macro->corporateDefaultRateEma) * (float) $bond->getFaceValue();
-        }
+        return $this->dealingValuation($bond, $macro)['valuation']->dirtyPrice;
+    }
 
+    /**
+     * The whole valuation the desk deals at now, and the issuer spread it was struck at.
+     *
+     * @return array{valuation: BondValuationDTO, spread: float}
+     */
+    public function dealingValuation(Bond $bond, MacroStateDTO $macro): array
+    {
         $spread = $bond->isSovereign() ? 0.0 : (float) ($bond->getIssuer()?->getDynamicCreditSpread() ?? $bond->getCreditSpread());
 
-        return $this->value($bond, $macro->sovereignCurve(), $macro->totalTime, $spread)->dirtyPrice;
+        // An issue its issuer could not redeem trades as the overdue claim it has become, at the market's recovery.
+        if ($bond->isPastDue($macro->totalTime)) {
+            return [
+                'valuation' => self::claimValuation(CorporateDefaultService::marketRecovery($bond->getSeniority(), $macro->corporateDefaultRateEma) * (float) $bond->getFaceValue()),
+                'spread' => $spread,
+            ];
+        }
+
+        return ['valuation' => $this->value($bond, $macro->sovereignCurve(), $macro->totalTime, $spread), 'spread' => $spread];
+    }
+
+    /** A claim with nothing left to discount, worth what it will recover: no accrual, yield, duration or convexity. */
+    public static function claimValuation(float $price): BondValuationDTO
+    {
+        return new BondValuationDTO(
+            dirtyPrice: $price,
+            cleanPrice: $price,
+            accruedInterest: 0.0,
+            yieldToMaturity: 0.0,
+            modifiedDuration: 0.0,
+            convexity: 0.0,
+        );
     }
 
     /**

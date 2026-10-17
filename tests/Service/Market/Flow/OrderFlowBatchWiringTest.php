@@ -44,8 +44,8 @@ class OrderFlowBatchWiringTest extends TestCase
     public function testTheDealerHedgeRecordsInsideOneBatch(): void
     {
         $gamma = new InMemoryDealerGammaStore();
-        $gamma->record('VANE', 10_000.0, 100.0);
-        $gamma->record('OWLS', -4_000.0, 40.0);
+        $gamma->record('VANE', ['gamma' => 10_000.0, 'delta' => 0.0, 'reference_price' => 100.0, 'held' => 0.0]);
+        $gamma->record('OWLS', ['gamma' => -4_000.0, 'delta' => 0.0, 'reference_price' => 40.0, 'held' => 0.0]);
 
         $stocks = [
             StockBuilder::create('VANE')->withPrice(101.0)->withSharesOutstanding(500_000_000)->withPublicFloatPercentage(1.0)->build(),
@@ -96,6 +96,11 @@ class OrderFlowBatchWiringTest extends TestCase
             public function drain(): array
             {
                 return [];
+            }
+
+            public function pending(string $ticker): float
+            {
+                return 0.0;
             }
 
             public function beginBatch(): void

@@ -9,12 +9,12 @@ namespace App\Service\Market\Option;
  */
 final class InMemoryDealerGammaStore implements DealerGammaStoreInterface
 {
-    /** @var array<string, array{gamma: float, reference_price: float}> */
+    /** @var array<string, array{gamma: float, delta: float, reference_price: float, held: float}> */
     private array $state = [];
 
-    public function record(string $ticker, float $customerGamma, float $referencePrice): void
+    public function record(string $ticker, array $entry): void
     {
-        $this->state[$ticker] = ['gamma' => $customerGamma, 'reference_price' => $referencePrice];
+        $this->state[$ticker] = $entry;
     }
 
     public function read(string $ticker): ?array

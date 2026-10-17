@@ -52,13 +52,13 @@ class StockTickColumnsTest extends TestCase
     {
         $first = $this->persisted(StockBuilder::create('AAA')->withPrice(12.5)->withCurrentVolatility(0.31)->build(), 7);
         $first->setImpactVarianceEma(0.002)->setRealizedVarianceEma(0.0961)->setPriceMomentumTrend(-0.05)
-            ->setDynamicCreditSpread('0.0125')->setCorporateFlowBacklog(1500.0)->setFairEquityValue(1.2e10)->setCeoTenureYears(4.25);
+            ->setDynamicCreditSpread('0.0125')->setCorporateFlowBacklog(1500.0)->setFairEquityValue(1.2e10)->setLeveredBeta(1.3)->setCeoTenureYears(4.25);
         $unpersisted = StockBuilder::create('NEW')->build();
 
         $rows = StockTickColumns::rows([$first, $unpersisted]);
 
         $this->assertSame([7], array_keys($rows));
-        $this->assertSame(['12.50000000', '0.3100', 0.002, 0.0961, -0.05, '0.0125', 1500.0, 1.2e10, 4.25], $rows[7]);
+        $this->assertSame(['12.50000000', '0.3100', 0.002, 0.0961, -0.05, '0.0125', 1500.0, 1.2e10, 1.3, 4.25], $rows[7]);
     }
 
     public function testTheWriteGoesOutAsOneBulkStatementForTheWorkingSet(): void

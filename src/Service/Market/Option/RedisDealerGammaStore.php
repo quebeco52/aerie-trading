@@ -24,14 +24,11 @@ final class RedisDealerGammaStore implements DealerGammaStoreInterface
         private readonly ?LoggerInterface $logger = null,
     ) {}
 
-    public function record(string $ticker, float $customerGamma, float $referencePrice): void
+    public function record(string $ticker, array $entry): void
     {
         try {
             /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
-            $this->redis->hSet(self::KEY, $ticker, json_encode([
-                'gamma' => $customerGamma,
-                'reference_price' => $referencePrice,
-            ], JSON_THROW_ON_ERROR));
+            $this->redis->hSet(self::KEY, $ticker, json_encode(self::fields($entry), JSON_THROW_ON_ERROR));
         } catch (\Throwable $e) {
             $this->logger?->warning('Dealer gamma record failed: ' . $e->getMessage());
         }
@@ -88,10 +85,7 @@ final class RedisDealerGammaStore implements DealerGammaStoreInterface
         $payload = [];
 
         foreach ($entries as $ticker => $entry) {
-            $payload[$ticker] = json_encode([
-                'gamma' => $entry['gamma'],
-                'reference_price' => $entry['reference_price'],
-            ], JSON_THROW_ON_ERROR);
+            $payload[$ticker] = json_encode(self::fields($entry), JSON_THROW_ON_ERROR);
         }
 
         try {
@@ -103,7 +97,19 @@ final class RedisDealerGammaStore implements DealerGammaStoreInterface
     }
 
     /**
-     * @return array{gamma: float, reference_price: float}|null
+     * @param array{gamma: float, delta: float, reference_price: float, held: float} $entry
+     * @return array{gamma: float, delta: float, reference_price: float, held: float}
+     */
+    private static function fields(array $entry): array
+    {
+        return ['gamma' => $entry['gamma'], 'delta' => $entry['delta'], 'reference_price' => $entry['reference_price'], 'held' => $entry['held']];
+    }
+
+    /**
+     * An entry written before the desk kept its inventory carries no delta or holding; it reads as none, and the
+     * chain's next walk takes the book as hedged.
+     *
+     * @return array{gamma: float, delta: float, reference_price: float, held: float}|null
      */
     private function decode(mixed $raw): ?array
     {
@@ -113,10 +119,15 @@ final class RedisDealerGammaStore implements DealerGammaStoreInterface
 
         $decoded = json_decode($raw, true);
 
-        if (!is_array($decoded) || !isset($decoded['gamma'], $decoded['reference_price'])) {
+        if (!is_array($decoded) || !isset($decoded['gamma'], $decoded['delta'], $decoded['reference_price'], $decoded['held'])) {
             return null;
         }
 
-        return ['gamma' => (float) $decoded['gamma'], 'reference_price' => (float) $decoded['reference_price']];
+        return [
+            'gamma' => (float) $decoded['gamma'],
+            'delta' => (float) $decoded['delta'],
+            'reference_price' => (float) $decoded['reference_price'],
+            'held' => (float) $decoded['held'],
+        ];
     }
 }

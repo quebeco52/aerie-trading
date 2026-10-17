@@ -33,6 +33,12 @@ interface OrderFlowStoreInterface
     public function drain(): array;
 
     /**
+     * The signed shares already recorded for one ticker and not yet drained: flow the next tick will move the price
+     * by, which an order filled now meets in the book. Zero when the store cannot say.
+     */
+    public function pending(string $ticker): float;
+
+    /**
      * Holds every record() from here until commitBatch(), netted per ticker in process.
      *
      * For a caller that records once per name in a loop — the agent population every tick, the option

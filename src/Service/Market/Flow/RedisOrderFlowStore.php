@@ -92,6 +92,23 @@ final class RedisOrderFlowStore implements OrderFlowStoreInterface
         }
     }
 
+    public function pending(string $ticker): float
+    {
+        // What this process holds unsent in an open batch is pending too.
+        $held = $this->pending[$ticker] ?? 0.0;
+
+        try {
+            /** @phpstan-ignore method.notFound (phpredis hash commands are absent from the analysis stub) */
+            $raw = $this->redis->hGet(self::KEY, $ticker);
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Order flow read failed: ' . $e->getMessage());
+
+            return $held;
+        }
+
+        return $held + (is_numeric($raw) ? (float) $raw : 0.0);
+    }
+
     public function drain(): array
     {
         // Unsent batch flow is taken with the hash: batching changes when flow is written, never which tick

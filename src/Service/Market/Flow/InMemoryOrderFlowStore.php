@@ -29,6 +29,11 @@ final class InMemoryOrderFlowStore implements OrderFlowStoreInterface
         return $drained;
     }
 
+    public function pending(string $ticker): float
+    {
+        return $this->flow[$ticker] ?? 0.0;
+    }
+
     /** Already process-local: a batch has nothing to save here. */
     public function beginBatch(): void {}
 

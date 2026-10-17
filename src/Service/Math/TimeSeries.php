@@ -52,6 +52,29 @@ final class TimeSeries
     }
 
     /**
+     * The same estimate fed on returns summed over a window rather than step by step. Flow that leans the same way tick
+     * after tick shapes a day's move, but each tick's share of it is proportional to dt, so its square over dt shrinks
+     * with the tick and a per-step reading of such a flow vanishes as ticks get finer. Summed over the window, it reads
+     * the same at any tick rate; returns that do not persist read as they did.
+     *
+     * @param array{sum: float, elapsed: float} $window      The window so far: its summed return and its length.
+     * @param float                             $windowYears Length of a window in years.
+     * @return array{variance: float, window: array{sum: float, elapsed: float}} The estimate and the window carried on.
+     */
+    public static function ewmaWindowedVariance(float $prior, array $window, float $logReturn, float $dt, float $windowYears, float $tauYears): array
+    {
+        $window = ['sum' => $window['sum'] + $logReturn, 'elapsed' => $window['elapsed'] + max(0.0, $dt)];
+        if ($window['elapsed'] < $windowYears * (1.0 - 1e-9)) {
+            return ['variance' => $prior, 'window' => $window];
+        }
+
+        return [
+            'variance' => self::ewmaAnnualizedVariance($prior, $window['sum'], $window['elapsed'], $tauYears),
+            'window' => ['sum' => 0.0, 'elapsed' => 0.0],
+        ];
+    }
+
+    /**
      * A known signal as an exponential moving average of it reads at a time: the signal integrated over its past
      * against the average's kernel (1/tau) e^(-s/tau), so a deterministic season can be read as a smoothed index
      * shows it, damped and late.

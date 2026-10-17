@@ -293,7 +293,7 @@ class OptionChainBuilderTest extends TestCase
     public function testDealerGammaIsReportedPerOnePercentMoveAsWellAsPerUnit(): void
     {
         $stock = $this->stock(120.0);
-        $this->gammaStore->record('VANE', 5000.0, 120.0);
+        $this->gammaStore->record('VANE', ['gamma' => 5000.0, 'delta' => 0.0, 'reference_price' => 120.0, 'held' => 0.0]);
 
         $payload = $this->builder([$this->contract($stock, 13, true, 120.0, 100)])->build($stock, null, $this->macro(1.0));
 

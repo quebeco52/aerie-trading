@@ -277,6 +277,41 @@ class LiquidityEngineTest extends TestCase
         $this->assertEqualsWithDelta(100.0 * $expectedFraction * $quantity, $quote->totalCost(), 1e-6);
     }
 
+    /**
+     * An order cut into slices inside one tick meets its own earlier slices in the book, so it costs what the whole
+     * order would. Each slice used to be quoted off an unmoved mid, so ten slices paid a tenth of the impact and a
+     * round trip the next tick earned the difference.
+     */
+    public function testSlicingAnOrderInsideATickSavesNothing(): void
+    {
+        $stock = $this->stock();
+        $slices = 10;
+        $slice = intdiv((int) ($this->engine->averageDailyVolume($stock) * 0.20), $slices);
+        $whole = $this->engine->quote($stock, 'BUY', $slice * $slices, 100.0);
+
+        $pending = 0.0;
+        $impactCost = 0.0;
+        for ($i = 0; $i < $slices; $i++) {
+            $impactCost += $this->engine->quote($stock, 'BUY', $slice, 100.0, $pending)->impactCost;
+            $pending += $slice;
+        }
+
+        $this->assertEqualsWithDelta($whole->impactCost, $impactCost, $whole->impactCost * 1e-9);
+    }
+
+    /** An order against the tick's flow fills on the far side of it: a buy into queued selling pays less than mid would. */
+    public function testAnOrderAgainstTheTicksFlowFillsOnTheFarSideOfIt(): void
+    {
+        $stock = $this->stock();
+        $quantity = (int) ($this->engine->averageDailyVolume($stock) * 0.02);
+        $selling = -10.0 * $quantity;
+
+        $this->assertLessThan(
+            $this->engine->quote($stock, 'BUY', $quantity, 100.0)->executionPrice,
+            $this->engine->quote($stock, 'BUY', $quantity, 100.0, $selling)->executionPrice
+        );
+    }
+
     public function testARoundTripAtAnUnchangedPriceLosesMoney(): void
     {
         $stock = $this->stock();

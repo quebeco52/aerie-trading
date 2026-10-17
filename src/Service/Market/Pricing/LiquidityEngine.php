@@ -312,12 +312,17 @@ final class LiquidityEngine
      * the order fills, so the average fill is the midpoint of that walk. The other half of the move is not
      * a cost to anyone — it is where the price now is.
      *
+     * The walk starts where the flow already in this tick has taken the book, not at the published price: an order
+     * cut into slices meets its own earlier slices there, so slicing it costs what filling it whole would, and an
+     * order against the tick's flow fills on the far side of it.
+     *
      * @param Stock  $stock    The name traded.
      * @param string $action   BUY, SELL, SHORT or COVER; buying to cover pays up like any other buy.
      * @param int    $quantity Shares, always positive.
      * @param float  $midPrice The last published price.
+     * @param float  $pendingSignedShares Signed shares already recorded for the tick this order fills in.
      */
-    public function quote(Stock $stock, string $action, int $quantity, float $midPrice): ExecutionQuoteDTO
+    public function quote(Stock $stock, string $action, int $quantity, float $midPrice, float $pendingSignedShares = 0.0): ExecutionQuoteDTO
     {
         $direction = self::direction($action);
         $signed = $direction * (float) $quantity;
@@ -326,7 +331,8 @@ final class LiquidityEngine
         $halfSpread = $this->halfSpreadFraction($stock);
         $peakImpact = $this->peakImpact($stock, $signed);
 
-        $temporaryFraction = self::TEMPORARY_IMPACT_ETA * abs($peakImpact);
+        // The tick's flow so far, as the share of the price it has moved the book by, signed against this order.
+        $temporaryFraction = (self::TEMPORARY_IMPACT_ETA * abs($peakImpact)) + ($direction * $this->peakImpact($stock, $pendingSignedShares));
 
         $spreadCost = $midPrice * $halfSpread * $quantity;
         $impactCost = $midPrice * $temporaryFraction * $quantity;
@@ -359,10 +365,10 @@ final class LiquidityEngine
      *
      * @param string $assetType 'STOCK', 'ETF' or 'BOND'.
      */
-    public function quoteAsset(Stock|Etf|null $asset, string $assetType, string $action, int $quantity, float $midPrice, bool $isCorporateIssue = false): ExecutionQuoteDTO
+    public function quoteAsset(Stock|Etf|null $asset, string $assetType, string $action, int $quantity, float $midPrice, bool $isCorporateIssue = false, float $pendingSignedShares = 0.0): ExecutionQuoteDTO
     {
         if ($assetType === 'STOCK' && $asset instanceof Stock) {
-            return $this->quote($asset, $action, $quantity, $midPrice);
+            return $this->quote($asset, $action, $quantity, $midPrice, $pendingSignedShares);
         }
 
         // Quote spreads: calibrated wider for corporate credit and tied to constituent arbitrage band for ETFs.

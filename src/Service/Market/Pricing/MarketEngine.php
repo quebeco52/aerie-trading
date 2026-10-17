@@ -141,24 +141,43 @@ class MarketEngine
      */
     public static function systemicJumpMoments(float $beta): array
     {
-        $exposure = abs($beta);
-        if ($exposure <= 0.0) {
+        $jump = self::systemicJumpParameters($beta);
+        if ($jump['lambda'] <= 0.0) {
             return ['compensator' => 0.0, 'mean' => 0.0, 'variance' => 0.0];
         }
 
         $capUp = FinancialConstants::MAX_JUMP_LOG_RETURN;
         $capDown = abs(FinancialConstants::MIN_JUMP_LOG_RETURN);
-        $scaledEtaUp = MacroEngine::SYSTEMIC_JUMP_ETA_UP / $exposure;
-        $scaledEtaDown = MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / $exposure;
-        $pUp = $beta > 0.0 ? MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP : 1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP;
-        $etaUp = $beta > 0.0 ? $scaledEtaUp : $scaledEtaDown;
-        $etaDown = $beta > 0.0 ? $scaledEtaDown : $scaledEtaUp;
-        $intensity = MacroEngine::SYSTEMIC_JUMP_INTENSITY;
+        [$pUp, $etaUp, $etaDown] = [$jump['p_up'], $jump['eta_up'], $jump['eta_down']];
 
         return [
-            'compensator' => $intensity * StochasticProcesses::kouTruncatedCompensator($pUp, $etaUp, $etaDown, $capUp, $capDown),
-            'mean' => $intensity * StochasticProcesses::kouTruncatedMean($pUp, $etaUp, $etaDown, $capUp, $capDown),
-            'variance' => $intensity * StochasticProcesses::kouTruncatedSecondMoment($pUp, $etaUp, $etaDown, $capUp, $capDown),
+            'compensator' => $jump['lambda'] * StochasticProcesses::kouTruncatedCompensator($pUp, $etaUp, $etaDown, $capUp, $capDown),
+            'mean' => $jump['lambda'] * StochasticProcesses::kouTruncatedMean($pUp, $etaUp, $etaDown, $capUp, $capDown),
+            'variance' => $jump['lambda'] * StochasticProcesses::kouTruncatedSecondMoment($pUp, $etaUp, $etaDown, $capUp, $capDown),
+        ];
+    }
+
+    /**
+     * The market-wide Kou jump as a name of this beta takes it: the market's arrival rate, and the rates of the jump
+     * scaled by the beta (a negative beta swaps the tails). The option desk quotes a name's smile on these.
+     *
+     * @return array{lambda: float, p_up: float, eta_up: float, eta_down: float}
+     */
+    public static function systemicJumpParameters(float $beta): array
+    {
+        $exposure = abs($beta);
+        if ($exposure <= 0.0) {
+            return ['lambda' => 0.0, 'p_up' => MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP, 'eta_up' => 0.0, 'eta_down' => 0.0];
+        }
+
+        $scaledEtaUp = MacroEngine::SYSTEMIC_JUMP_ETA_UP / $exposure;
+        $scaledEtaDown = MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / $exposure;
+
+        return [
+            'lambda' => MacroEngine::SYSTEMIC_JUMP_INTENSITY,
+            'p_up' => $beta > 0.0 ? MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP : 1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
+            'eta_up' => $beta > 0.0 ? $scaledEtaUp : $scaledEtaDown,
+            'eta_down' => $beta > 0.0 ? $scaledEtaDown : $scaledEtaUp,
         ];
     }
 

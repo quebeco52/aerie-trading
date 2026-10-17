@@ -264,4 +264,43 @@ class TimeSeriesTest extends TestCase
         self::assertEqualsWithDelta($sum, TimeSeries::fadedExcessIntegral(0.03, $from, $to, 8.0), 1e-9);
         self::assertEqualsWithDelta(0.03 * 8.0 / M_LN2, TimeSeries::fadedExcessIntegral(0.03, 0.0, 1.0e6, 8.0), 1e-9, 'a fading excess compounds a bounded amount');
     }
+
+    /**
+     * Flow that leans the same way tick after tick moves a day's price by the same amount at any tick rate, and the
+     * windowed reading says so; read tick by tick, its variance shrank with the tick. Flow that alternates reads as
+     * it did.
+     */
+    public function testAWindowedVarianceReadsPersistentFlowTheSameAtAnyTickRate(): void
+    {
+        $day = 1.0 / 252.0;
+        $drift = 0.02; // log return per year the flow keeps pushing
+        $read = static function (int $ticksPerDay, bool $windowed) use ($day, $drift): float {
+            $dt = $day / $ticksPerDay;
+            $variance = 0.0;
+            $window = ['sum' => 0.0, 'elapsed' => 0.0];
+            for ($tick = 0; $tick < 252 * 4 * $ticksPerDay; $tick++) {
+                if ($windowed) {
+                    $step = TimeSeries::ewmaWindowedVariance($variance, $window, $drift * $dt, $dt, $day, 0.25);
+                    [$variance, $window] = [$step['variance'], $step['window']];
+                } else {
+                    $variance = TimeSeries::ewmaAnnualizedVariance($variance, $drift * $dt, $dt, 0.25);
+                }
+            }
+
+            return $variance;
+        };
+
+        self::assertEqualsWithDelta($read(1, true), $read(10, true), $read(1, true) * 1e-6);
+        self::assertEqualsWithDelta(($drift * $drift) * $day, $read(10, true), ($drift * $drift) * $day * 1e-3);
+        self::assertLessThan(0.2 * $read(1, false), $read(10, false), 'Read tick by tick, it shrinks with the tick.');
+
+        // Alternating flow cancels inside the day and reads no more than its per-tick figure.
+        $window = ['sum' => 0.0, 'elapsed' => 0.0];
+        $variance = 0.0;
+        for ($tick = 0; $tick < 252 * 4 * 2; $tick++) {
+            $step = TimeSeries::ewmaWindowedVariance($variance, $window, ($tick % 2 === 0 ? 1.0 : -1.0) * 0.001, $day / 2.0, $day, 0.25);
+            [$variance, $window] = [$step['variance'], $step['window']];
+        }
+        self::assertEqualsWithDelta(0.0, $variance, 1e-12);
+    }
 }

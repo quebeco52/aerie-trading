@@ -174,7 +174,7 @@ class JointHarnessTest extends KernelTestCase
                 foreach ($result['updates'] as $u) {
                     if (in_array($u['ticker'], explode(',', (string) getenv('TRACE')), true)) {
                         unset($u['analyst_targets']);
-                        file_put_contents((string) getenv('TRACE_OUT'), json_encode(['tick' => $tick] + $u + $this->traceFv($stocks[$u['ticker']])) . "\n", FILE_APPEND);
+                        file_put_contents((string) getenv('TRACE_OUT'), json_encode(['tick' => $tick] + $u + ['iv' => $stocks[$u['ticker']]->getImpactVarianceEma()] + $this->traceFv($stocks[$u['ticker']])) . "\n", FILE_APPEND);
                     }
                 }
             }

@@ -572,6 +572,14 @@ class Stock
     private ?float $fairEquityValue = null;
 
     /**
+     * @var float|null The beta the price step trades the name on at the last tick: its own beta levered on its capital
+     *                 structure (DebtEngine::analyzeDebtHealth()). The option desk quotes the same systematic exposure the
+     *                 tape delivers. Null until the first tick. A per-tick column.
+     */
+    #[ORM\Column(type: 'float', nullable: true, updatable: false)]
+    private ?float $leveredBeta = null;
+
+    /**
      * @var float|null Annual share turnover as a fraction of the public float: a structural property of the
      *                 name, not a draw. Sets how much volume the market carries and therefore how much size
      *                 costs. Null falls back to the baseline.
@@ -1743,6 +1751,17 @@ class Stock
     public function getFairEquityValue(): ?float
     {
         return $this->fairEquityValue;
+    }
+
+    public function setLeveredBeta(?float $leveredBeta): static
+    {
+        $this->leveredBeta = $leveredBeta;
+        return $this;
+    }
+
+    public function getLeveredBeta(): ?float
+    {
+        return $this->leveredBeta;
     }
 
     public function setTurnoverRatio(?float $turnoverRatio): static

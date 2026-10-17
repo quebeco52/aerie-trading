@@ -149,8 +149,8 @@ class OptionDeskCadenceTest extends TestCase
     public function testTheBulkStoreRoundTripsWhatTheSingleWriterPutIn(): void
     {
         $store = new InMemoryDealerGammaStore();
-        $store->record('VANE', 1200.0, 100.0);
-        $store->record('OWLS', -400.0, 40.0);
+        $store->record('VANE', ['gamma' => 1200.0, 'delta' => 0.0, 'reference_price' => 100.0, 'held' => 0.0]);
+        $store->record('OWLS', ['gamma' => -400.0, 'delta' => 0.0, 'reference_price' => 40.0, 'held' => 0.0]);
 
         $all = $store->readAll();
 
@@ -161,10 +161,10 @@ class OptionDeskCadenceTest extends TestCase
     public function testABulkWriteMovesOnlyTheNamesItNames(): void
     {
         $store = new InMemoryDealerGammaStore();
-        $store->record('VANE', 1200.0, 100.0);
-        $store->record('OWLS', -400.0, 40.0);
+        $store->record('VANE', ['gamma' => 1200.0, 'delta' => 0.0, 'reference_price' => 100.0, 'held' => 0.0]);
+        $store->record('OWLS', ['gamma' => -400.0, 'delta' => 0.0, 'reference_price' => 40.0, 'held' => 0.0]);
 
-        $store->recordAll(['VANE' => ['gamma' => 1200.0, 'reference_price' => 105.0]]);
+        $store->recordAll(['VANE' => ['gamma' => 1200.0, 'delta' => 0.0, 'reference_price' => 105.0, 'held' => 0.0]]);
 
         $this->assertEqualsWithDelta(105.0, $store->read('VANE')['reference_price'], 1e-9);
         $this->assertEqualsWithDelta(40.0, $store->read('OWLS')['reference_price'], 1e-9);
@@ -176,7 +176,7 @@ class OptionDeskCadenceTest extends TestCase
         $engine = new DealerGammaEngine($store, new LiquidityEngine(new MathUtility()));
 
         $stock = StockBuilder::create('DEAD')->withPrice(100.0)->withSharesOutstanding(50_000_000)->build();
-        $store->record('DEAD', 5000.0, 90.0);
+        $store->record('DEAD', ['gamma' => 5000.0, 'delta' => 0.0, 'reference_price' => 90.0, 'held' => 0.0]);
         $stock->setIsBankrupt(true);
 
         $this->assertSame([], $engine->hedgeMarket([$stock], self::TICK_YEARS));
@@ -195,7 +195,7 @@ class OptionDeskCadenceTest extends TestCase
             ->withPublicFloatPercentage(1.0)
             ->build();
 
-        $store->record('VANE', 10_000.0, 100.0);
+        $store->record('VANE', ['gamma' => 10_000.0, 'delta' => 0.0, 'reference_price' => 100.0, 'held' => 0.0]);
 
         $this->assertEqualsWithDelta(
             10_000.0 * 1.0 * DealerGammaEngine::DEALER_HEDGE_RATIO,
