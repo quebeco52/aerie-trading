@@ -167,17 +167,25 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta(0.79 * Policy::publicSpendingGap($expected, self::CAP_RATE) * 40.0, Policy::earningsGap($expected, ['publicSpending' => 40.0], 0.21, self::CAP_RATE), 1e-12);
         $this->assertSame(0.0, Policy::measure('publicSpending', MacroEngine::PUBLIC_PURCHASES_TO_GDP), 'The founding share is no shift.');
 
-        // Purchases the debt has cut below the law are where they are headed, not still closing on it.
+        // A cabinet repairing debt by cuts is priced at the purchases it sets: an indebted one appropriating the law, its cut
+        // already made, is worth what a debt-free one appropriating the law less the cut is. Priced on the appropriation,
+        // the indebted cabinet read as spending its whole law for good.
         $indebted = $this->spending($shareAt($longRun), 0.0, $longRun, debt: 1.10, pace: 0.01);
         $cut = CreditFiscalSubsystem::consolidationSpendingCut(CreditFiscalSubsystem::requiredPrimaryBalance($indebted), $indebted->consolidationTaxShare);
         $this->assertGreaterThan(0.0, $cut);
         $settled = Policy::measure('publicSpending', $shareAt($longRun) - $cut);
         $this->assertEqualsWithDelta(
-            Policy::publicSpendingGap($carried, self::CAP_RATE),
+            Policy::publicSpendingGap($this->spending($shareAt($longRun) - $cut, $settled, $longRun), self::CAP_RATE),
             Policy::publicSpendingGap($this->spending($shareAt($longRun), $settled, $longRun, debt: 1.10, pace: 0.01), self::CAP_RATE),
             1e-12,
             'At the law less the cut, nothing more is closing.'
         );
+
+        // The next government is priced at its own debt plank: the same appropriation under a plank that brings debt down
+        // to 35% at a point a year buys less than under one that holds it at 60%.
+        $holds = $this->spending($shareAt($longRun), $longRun, $longRun, expected: $shareAt($longRun), from: 12.5, debt: 0.60, plank: ['debtTarget' => 0.60, 'debtPace' => 0.0]);
+        $repairs = $this->spending($shareAt($longRun), $longRun, $longRun, expected: $shareAt($longRun), from: 12.5, debt: 0.60, plank: ['debtTarget' => 0.35, 'debtPace' => 0.01]);
+        $this->assertLessThan(Policy::publicSpendingGap($holds, self::CAP_RATE), Policy::publicSpendingGap($repairs, self::CAP_RATE));
     }
 
     /**
@@ -326,19 +334,22 @@ class PolicyCapitalizationTest extends TestCase
      * An economy with public spending in force at $share, purchases at $purchases above the founding level, the trailing
      * earnings carrying $embodied, and the next government expected to set $expected (the law in force if not given).
      */
-    private function spending(float $share, float $purchases, float $embodied, ?float $expected = null, float $from = -1.0, float $debt = 0.0, float $pace = 0.0): MacroStateDTO
+    /** @param array<string, float> $plank The next government's debt plank, when it has its own. */
+    private function spending(float $share, float $purchases, float $embodied, ?float $expected = null, float $from = -1.0, float $debt = 0.0, float $pace = 0.0, array $plank = []): MacroStateDTO
     {
-        // No debt and no pace by default: the budget plans no balance, so purchases close on the law alone.
+        // No debt and no pace by default: the budget plans no balance, so purchases close on the law alone. The debt
+        // target defaults to the debt itself, so a cabinet at its target with no pace only holds it there.
         return new MacroStateDTO(
             totalTime: 10.0,
             sovereignDebtToGdp: $debt,
+            debtTarget: $debt === 0.0 ? 0.0 : min($debt, 0.60),
             debtPace: $pace,
             governmentSpendingIndex: MacroEngine::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
             publicSpendingShare: $share,
             governmentSpendingShiftEmbodied: $embodied,
-            expectedLevers: ['publicSpending' => $expected ?? $share],
+            expectedLevers: ['publicSpending' => $expected ?? $share] + $plank,
             expectedPolicyFrom: $from,
-            previousExpectedLevers: ['publicSpending' => $expected ?? $share],
+            previousExpectedLevers: ['publicSpending' => $expected ?? $share] + $plank,
             previousExpectedPolicyFrom: $from,
         );
     }

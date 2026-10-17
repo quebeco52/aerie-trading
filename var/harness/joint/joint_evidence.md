@@ -77,3 +77,8 @@ beside the business; every leg struck on book less it; net debt for the revenue 
 - Buybacks 19.0T -> 19.8T/seed (sd 0.9-1.5T), dividends 13.7T -> 14.1T: management's headline-P/E tests unmoved.
 - Pinned name-qtrs 8 -> 13, names 2 -> 6 (Poisson noise; the names hold 1-11% cash/equity, FALC and DIPR pinned in
   both arms). divgap_an.py's report-tick slope (-0.03 vs -0.06) does not catch the ex-dividend drop: not a valid test.
+
+## Politics fixes (2026-10-17), on main: one-sided committee camps, public spending priced on purchases
+Arms `base` (git archive HEAD 1547e3d1, deleted after) vs `live` (working copy), 4 unpaired seeds. `pol_base_4s.out`,
+`pol_live_4s.out`. Nothing |t| >= 1: policy mean 3.13 -> 2.99, inflation 2.12 -> 2.08, gap mean -0.82 -> -1.00,
+debt end .54 -> .55, index and P/E flat. Pinned name-qtrs 7 -> 1.

@@ -73,9 +73,9 @@ class MonetaryPolicySubsystem
     public const TAYLOR_INFLATION_ANCHOR_WEIGHT = 0.30;
 
     // --- The Rate Committee's Camps (Bordo & Istrefi 2023) ---
-    /** Points of rate a dovish camp sets less per point of inflation over target. */
+    /** Points of rate a dovish camp sets less per point of inflation over target; under target it follows the rule. */
     public const DOVISH_MAJORITY_INFLATION_RESPONSE = 0.35;
-    /** Points of rate a hawkish camp sets less per point of output gap, cutting less into a slump. */
+    /** Points of rate a hawkish camp sets above the rule per point of negative output gap, cutting less into a slump; in a boom it follows the rule. */
     public const HAWKISH_MAJORITY_GAP_RESPONSE = 0.17;
 
     // --- Shifting Inflation Endpoint (Kozicki & Tinsley 2001; Orphanides & Williams 2005) ---
@@ -340,7 +340,9 @@ class MonetaryPolicySubsystem
 
     /**
      * How far a camp would set the rate from the published rule (Bordo & Istrefi 2023): doves answer inflation over
-     * target less, hawks answer the output gap less; in a neutral economy no camp leans at all.
+     * target less, hawks cut less into a slump. Each leans only on its own side and follows the rule on the other: a
+     * hawk tightens with a boom as the rule does, and a dove eases with inflation under target. Leaning both ways, a
+     * hawkish majority set the rate below the rule in every boom and its hawks dissented for cuts.
      *
      * @param float $camp         Above zero hawkish, below zero dovish, zero neither.
      * @param float $inflationGap The rule's inflation over target.
@@ -349,8 +351,8 @@ class MonetaryPolicySubsystem
     public static function campTilt(float $camp, float $inflationGap, float $gap): float
     {
         return match (true) {
-            $camp < 0.0 => -self::DOVISH_MAJORITY_INFLATION_RESPONSE * $inflationGap,
-            $camp > 0.0 => -self::HAWKISH_MAJORITY_GAP_RESPONSE * $gap,
+            $camp < 0.0 => -self::DOVISH_MAJORITY_INFLATION_RESPONSE * max(0.0, $inflationGap),
+            $camp > 0.0 => -self::HAWKISH_MAJORITY_GAP_RESPONSE * min(0.0, $gap),
             default => 0.0,
         };
     }

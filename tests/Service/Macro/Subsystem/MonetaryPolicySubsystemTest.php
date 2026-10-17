@@ -98,6 +98,10 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(-$dove * 0.01, MonetaryPolicySubsystem::committeeMajorityTerm(-1.0, 0.01, -0.02), 1e-15);
         $this->assertEqualsWithDelta($hawk * 0.02, MonetaryPolicySubsystem::committeeMajorityTerm(1.0, 0.01, -0.02), 1e-15, 'Hawks cut less into a slump.');
         $this->assertSame(0.0, MonetaryPolicySubsystem::committeeMajorityTerm(0.0, 0.01, -0.02));
+        // Each camp leans only on its own side: hawks tighten with a boom as the rule does, doves ease with inflation
+        // under target. Leaning both ways, a hawkish majority set the rate below the rule in every boom.
+        $this->assertSame(0.0, MonetaryPolicySubsystem::campTilt(1.0, 0.01, 0.04), 'A hawk does not cut into a boom.');
+        $this->assertSame(0.0, MonetaryPolicySubsystem::campTilt(-1.0, -0.02, 0.0), 'A dove does not tighten with inflation under target.');
         foreach ([-1.0, 0.0, 1.0] as $camp) {
             $this->assertEqualsWithDelta(0.0, MonetaryPolicySubsystem::campTilt($camp, 0.0, 0.0), 1e-15, 'A neutral economy: no camp leans.');
         }

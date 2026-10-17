@@ -90,7 +90,7 @@ final class PolicyCapitalization
     {
         $speed = MacroEngine::FISCAL_ADJUSTMENT_SPEED;
 
-        return self::expectedOverLife($macro, $capRate, $previous, 'corporateTax', $macro->corporateTaxPolicyShift, static fn (float $law): float => $law, self::LONG_RUN_CORPORATE_TAX_SHIFT, self::CORPORATE_TAX_TERM_PERSISTENCE, $speed)
+        return self::expectedOverLife($macro, $capRate, $previous, 'corporateTax', $macro->corporateTaxPolicyShift, static fn (float $law, array $levers): float => $law, self::LONG_RUN_CORPORATE_TAX_SHIFT, self::CORPORATE_TAX_TERM_PERSISTENCE, $speed)
             - $macro->corporateTaxShiftEmbodied
             // The rate still closing on the law in force.
             + (($macro->corporateTaxShiftRealized - $macro->corporateTaxPolicyShift) * (1.0 - Valuation::perpetuityShareAfter($capRate, 0.0, $speed)));
@@ -104,7 +104,7 @@ final class PolicyCapitalization
      */
     public static function expectedDividendTaxRate(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'dividendTax', $macro->dividendTaxRate, static fn (float $law): float => $law, self::LONG_RUN_DIVIDEND_TAX_RATE, self::DIVIDEND_TAX_TERM_PERSISTENCE);
+        return self::expectedOverLife($macro, $capRate, $previous, 'dividendTax', $macro->dividendTaxRate, static fn (float $law, array $levers): float => $law, self::LONG_RUN_DIVIDEND_TAX_RATE, self::DIVIDEND_TAX_TERM_PERSISTENCE);
     }
 
     /**
@@ -115,7 +115,7 @@ final class PolicyCapitalization
      */
     public static function bankLevyGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'bankLevyRate', $macro->bankLevyRate, static fn (float $law): float => $law, self::LONG_RUN_BANK_LEVY_RATE, self::BANK_LEVY_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'bankLevyRate', $macro->bankLevyRate, static fn (float $law, array $levers): float => $law, self::LONG_RUN_BANK_LEVY_RATE, self::BANK_LEVY_TERM_PERSISTENCE)
             - $macro->bankLevyEmbodied;
     }
 
@@ -127,7 +127,7 @@ final class PolicyCapitalization
      */
     public static function extractionCostGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'extractionStringency', $macro->extractionStringency, static fn (float $law): float => self::measure('extractionStringency', $law), self::LONG_RUN_EXTRACTION_COST_FACTOR, self::EXTRACTION_COST_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'extractionStringency', $macro->extractionStringency, static fn (float $law, array $levers): float => self::measure('extractionStringency', $law), self::LONG_RUN_EXTRACTION_COST_FACTOR, self::EXTRACTION_COST_TERM_PERSISTENCE)
             - $macro->extractionCostFactorEmbodied;
     }
 
@@ -139,7 +139,7 @@ final class PolicyCapitalization
      */
     public static function stampDutyVolumeGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'stampDutyRate', $macro->stampDutyRate, static fn (float $law): float => self::measure('stampDutyRate', $law), self::LONG_RUN_STAMP_DUTY_VOLUME_FACTOR, self::STAMP_DUTY_VOLUME_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'stampDutyRate', $macro->stampDutyRate, static fn (float $law, array $levers): float => self::measure('stampDutyRate', $law), self::LONG_RUN_STAMP_DUTY_VOLUME_FACTOR, self::STAMP_DUTY_VOLUME_TERM_PERSISTENCE)
             - $macro->stampDutyVolumeFactorEmbodied;
     }
 
@@ -151,24 +151,32 @@ final class PolicyCapitalization
      */
     public static function carbonPowerUpliftGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'carbonPrice', $macro->carbonPrice, static fn (float $law): float => self::measure('carbonPrice', $law), self::LONG_RUN_CARBON_POWER_UPLIFT, self::CARBON_POWER_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'carbonPrice', $macro->carbonPrice, static fn (float $law, array $levers): float => self::measure('carbonPrice', $law), self::LONG_RUN_CARBON_POWER_UPLIFT, self::CARBON_POWER_TERM_PERSISTENCE)
             - $macro->carbonPowerUpliftEmbodied;
     }
 
     /**
      * Government purchases above the founding level the market expects over a firm's life, weighted the same way, less
      * what its trailing earnings carry. Purchases close on a budget, less the cuts the debt calls for, at the speed they
-     * revert to it, and those still closing count for the part of the firm's value accruing before they arrive.
+     * revert to it, and those still closing count for the part of the firm's value accruing before they arrive. Each
+     * government's budget is measured as the purchases it would set, its appropriation less the cuts its own debt plank
+     * calls for: measured on the appropriation alone, a cabinet repairing debt by cuts was priced as spending more than
+     * it would, and half of each swing between cabinets went unpriced.
      *
      * @param bool $previous Whether to read the forecast as it stood the tick before.
      */
     public static function publicSpendingGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
         $speed = MacroEngine::GOVT_SPENDING_MEAN_REVERSION;
-        $inForce = self::measure('publicSpending', CreditFiscalSubsystem::purchasesTarget($macro->publicSpendingShare, CreditFiscalSubsystem::requiredPrimaryBalance($macro), $macro->consolidationTaxShare));
+        $purchasesSet = static fn (float $law, array $levers): float => self::measure('publicSpending', CreditFiscalSubsystem::purchasesTarget(
+            $law,
+            CreditFiscalSubsystem::requiredPrimaryBalanceAt($macro, (float) ($levers['debtTarget'] ?? $macro->debtTarget), (float) ($levers['debtPace'] ?? $macro->debtPace)),
+            (float) ($levers['consolidationTaxShare'] ?? $macro->consolidationTaxShare)
+        ));
+        $inForce = $purchasesSet($macro->publicSpendingShare, []);
         $purchases = ($macro->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
 
-        return self::expectedOverLife($macro, $capRate, $previous, 'publicSpending', $macro->publicSpendingShare, static fn (float $law): float => self::measure('publicSpending', $law), self::LONG_RUN_PUBLIC_SPENDING_SHIFT, self::PUBLIC_SPENDING_TERM_PERSISTENCE, $speed)
+        return self::expectedOverLife($macro, $capRate, $previous, 'publicSpending', $macro->publicSpendingShare, $purchasesSet, self::LONG_RUN_PUBLIC_SPENDING_SHIFT, self::PUBLIC_SPENDING_TERM_PERSISTENCE, $speed)
             - $macro->governmentSpendingShiftEmbodied
             + (($purchases - $inForce) * (1.0 - Valuation::perpetuityShareAfter($capRate, 0.0, $speed)));
     }
@@ -181,7 +189,7 @@ final class PolicyCapitalization
      */
     public static function utilityTariffShortfallGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'utilityRateGrant', $macro->utilityRateCaseGrantShare, static fn (float $law): float => self::measure('utilityRateGrant', $law), self::LONG_RUN_UTILITY_TARIFF_SHORTFALL, self::UTILITY_TARIFF_TERM_PERSISTENCE, UtilityBusinessModel::RATE_CASE_DECISION_RATE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'utilityRateGrant', $macro->utilityRateCaseGrantShare, static fn (float $law, array $levers): float => self::measure('utilityRateGrant', $law), self::LONG_RUN_UTILITY_TARIFF_SHORTFALL, self::UTILITY_TARIFF_TERM_PERSISTENCE, UtilityBusinessModel::RATE_CASE_DECISION_RATE)
             - $macro->utilityTariffShortfallEmbodied;
     }
 
@@ -278,14 +286,14 @@ final class PolicyCapitalization
      *
      * @param string                $lever       The lever, keyed as PoliticsEngine::LEVER_FIELDS.
      * @param float                 $law         The law in force.
-     * @param \Closure(float): float $measure     The law as the earnings feel it.
+     * @param \Closure(float, array<string, float>): float $measure The law as the earnings feel it, given the rest of that government's laws.
      * @param float                 $longRun     The measured law's long-run average.
      * @param float                 $persistence Share of the measured law's distance from that average still there a term later.
      * @param float                 $speed       Speed at which a change reaches its full size once started, a year; INF for at once.
      */
     private static function expectedOverLife(MacroStateDTO $macro, float $capRate, bool $previous, string $lever, float $law, \Closure $measure, float $longRun, float $persistence, float $speed = INF): float
     {
-        $inForce = $measure($law);
+        $inForce = $measure($law, []);
         [$sitting, $sittingFrom, $next, $nextFrom] = self::path($macro, $previous, $lever, $inForce, $measure);
         $fromNext = Valuation::perpetuityShareAfter($capRate, $nextFrom - $macro->totalTime, $speed);
 
@@ -313,14 +321,14 @@ final class PolicyCapitalization
      * force stands until the second; without a forecast, the sitting government's stands until the long-run drift takes
      * over a term on.
      *
-     * @param \Closure(float): float $measure The law as the earnings feel it.
+     * @param \Closure(float, array<string, float>): float $measure The law as the earnings feel it, given the rest of that government's laws.
      * @return array{0: float, 1: float, 2: float, 3: float} The sitting law and when, the next law and when.
      */
     private static function path(MacroStateDTO $macro, bool $previous, string $lever, float $inForce, \Closure $measure): array
     {
         $sittingLevers = $previous ? $macro->previousSittingLevers : $macro->sittingLevers;
         $sittingFrom = $previous ? $macro->previousSittingPolicyFrom : $macro->sittingPolicyFrom;
-        $sittingLaw = $sittingFrom < 0.0 || !isset($sittingLevers[$lever]) ? $inForce : $measure($sittingLevers[$lever]);
+        $sittingLaw = $sittingFrom < 0.0 || !isset($sittingLevers[$lever]) ? $inForce : $measure($sittingLevers[$lever], $sittingLevers);
         $sittingFrom = $sittingFrom < 0.0 ? $macro->totalTime : $sittingFrom;
 
         $expectedLevers = $previous ? $macro->previousExpectedLevers : $macro->expectedLevers;
@@ -329,6 +337,6 @@ final class PolicyCapitalization
             return [$sittingLaw, $sittingFrom, $sittingLaw, $sittingFrom];
         }
 
-        return [$sittingLaw, $sittingFrom, $measure($expectedLevers[$lever]), max($sittingFrom, $nextFrom)];
+        return [$sittingLaw, $sittingFrom, $measure($expectedLevers[$lever], $expectedLevers), max($sittingFrom, $nextFrom)];
     }
 }

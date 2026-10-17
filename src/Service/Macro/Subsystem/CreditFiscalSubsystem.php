@@ -493,11 +493,17 @@ class CreditFiscalSubsystem
      */
     public static function requiredPrimaryBalance(MacroState|MacroStateDTO $state): float
     {
+        return self::requiredPrimaryBalanceAt($state, $state->debtTarget, $state->debtPace);
+    }
+
+    /** The primary balance a cabinet with this debt target and pace would plan for from today's debt (requiredPrimaryBalance()). */
+    public static function requiredPrimaryBalanceAt(MacroState|MacroStateDTO $state, float $debtTarget, float $debtPace): float
+    {
         $trendNominalGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + $state->laborForceGrowthRate;
         $holdsDebt = (self::sovereignEffectiveRate($state) - $trendNominalGrowth) * $state->sovereignDebtToGdp;
-        $pace = max(0.0, $state->debtPace);
+        $pace = max(0.0, $debtPace);
 
-        return $holdsDebt + max(-$pace, min($pace, $state->sovereignDebtToGdp - $state->debtTarget));
+        return $holdsDebt + max(-$pace, min($pace, $state->sovereignDebtToGdp - $debtTarget));
     }
 
     /**
