@@ -106,14 +106,11 @@ class TradeExecutionService
 
     /**
      * The stamp duty the Diet has in force on each side of a share trade, the founding rate before the ticker has
-     * published an economy; the liquidity engine is set to it too, since the duty thins the depth an order meets.
+     * published an economy. The liquidity engine reads the same law for the depth an order meets.
      */
     private function liveStampDutyRate(): float
     {
-        $rate = $this->macroStates?->liveState()->stampDutyRate ?? FinancialConstants::STAMP_DUTY_RATE;
-        $this->liquidityEngine->setStampDutyRate($rate);
-
-        return $rate;
+        return $this->macroStates?->liveState()->stampDutyRate ?? FinancialConstants::STAMP_DUTY_RATE;
     }
 
     /**
@@ -202,8 +199,6 @@ class TradeExecutionService
         if ($quantity <= 0) {
             throw new \Exception('Invalid quantity.');
         }
-        // The depth the quote below meets is the market's under the duty in force.
-        $this->liveStampDutyRate();
 
         // Loose here, strict once the instrument is known. The two desks share BUY, SELL and COVER but
         // differ on the fourth — an equity is SHORTed and a contract is WRITTEN — and which one is legal is

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Pricing;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroTransmission;
@@ -517,5 +519,30 @@ class LiquidityEngineTest extends TestCase
         $engine->setStampDutyRate(FinancialConstants::STAMP_DUTY_RATE + 0.001);
         $this->assertEqualsWithDelta(0.9, $engine->structuralDailyVolume($stock) / $founding, 1e-3);
         $this->assertEqualsWithDelta(1.0, MacroTransmission::calculateStampDutyVolumeFactor(FinancialConstants::STAMP_DUTY_RATE), 1e-15);
+    }
+
+    /**
+     * A page, the trade preview or a limit fill quotes under the law the Diet has in force without anyone setting it:
+     * the engine reads it off the live economy. The ticker's rate for the tick takes precedence, and a new request or
+     * message reads the law afresh.
+     */
+    public function testWithNoTickRateTheDepthIsTheLiveLaws(): void
+    {
+        $stock = $this->stock();
+        $raised = FinancialConstants::STAMP_DUTY_RATE + 0.001;
+        $macroStates = $this->createStub(MacroStateProvider::class);
+        $macroStates->method('liveState')->willReturn(new MacroStateDTO(stampDutyRate: $raised));
+        $atRaised = new LiquidityEngine(new MathUtility());
+        $atRaised->setStampDutyRate($raised);
+
+        $engine = new LiquidityEngine(new MathUtility(), $macroStates);
+        $this->assertSame($atRaised->structuralDailyVolume($stock), $engine->structuralDailyVolume($stock), 'unset, it reads the live law');
+
+        $engine->setStampDutyRate(FinancialConstants::STAMP_DUTY_RATE);
+        $founding = (new LiquidityEngine(new MathUtility()))->structuralDailyVolume($stock);
+        $this->assertSame($founding, $engine->structuralDailyVolume($stock), "the tick's rate stands over the live law");
+
+        $engine->reset();
+        $this->assertSame($atRaised->structuralDailyVolume($stock), $engine->structuralDailyVolume($stock), 'after a reset it reads the law again');
     }
 }

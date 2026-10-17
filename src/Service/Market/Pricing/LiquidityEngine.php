@@ -7,9 +7,11 @@ namespace App\Service\Market\Pricing;
 use App\DTO\ExecutionQuoteDTO;
 use App\Entity\Etf;
 use App\Entity\Stock;
+use App\Service\Macro\MacroStateProvider;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use Symfony\Contracts\Service\ResetInterface;
 
 /**
  * How much liquidity a name has, what it costs to cross the spread, and how far an order moves the price.
@@ -36,7 +38,7 @@ use App\Service\Math\MathUtility;
  * The move itself is split again, as in the propagator model (Bouchaud, Gefen, Potters & Wyart 2004) with
  * exponential resilience (Obizhaeva & Wang 2013): a share stays, and the rest relaxes back over about a day.
  */
-final class LiquidityEngine
+final class LiquidityEngine implements ResetInterface
 {
     // --- Order Side ---
     /** Actions that take stock off the book: a buy to cover pays the offer exactly as a buy does. */
@@ -140,10 +142,10 @@ final class LiquidityEngine
     public const ETF_QUOTE_BAND_SHARE = 0.35;
 
     /**
-     * The stamp duty in force on each side of a share trade, which thins turnover; the ticker and the trade desk set it
-     * from the economy.
+     * The stamp duty in force on each side of a share trade, which thins turnover: the tick's, or the live economy's
+     * read once a request or message (stampDutyRate()).
      */
-    private float $stampDutyRate = FinancialConstants::STAMP_DUTY_RATE;
+    private ?float $stampDutyRate = null;
 
     /**
      * @var array<string, float> Each name's log volume shock, carried from tick to tick; lives as long as the process.
@@ -152,12 +154,29 @@ final class LiquidityEngine
 
     public function __construct(
         private readonly MathUtility $mathUtility,
+        /** The live economy the stamp duty is read from when no tick has set it. Null reads the founding rate. */
+        private readonly ?MacroStateProvider $macroStates = null,
     ) {}
 
-    /** Sets the stamp duty in force on each side of a share trade, which every volume figure after it reads. */
+    /** The tick's stamp duty, set by the ticker from the economy it runs; every volume figure after reads it. */
     public function setStampDutyRate(float $stampDutyRate): void
     {
         $this->stampDutyRate = $stampDutyRate;
+    }
+
+    /** A new request or message reads the law in force afresh; the volume shocks are the ticker's and stay. */
+    public function reset(): void
+    {
+        $this->stampDutyRate = null;
+    }
+
+    /**
+     * The stamp duty in force on each side of a share trade: the one the tick set, else the Diet's law in the economy
+     * the ticker last published, else the founding rate.
+     */
+    private function stampDutyRate(): float
+    {
+        return $this->stampDutyRate ??= $this->macroStates?->liveState()->stampDutyRate ?? FinancialConstants::STAMP_DUTY_RATE;
     }
 
     /**
@@ -225,7 +244,7 @@ final class LiquidityEngine
         $float = max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
         $turnover = $stock->getTurnoverRatio() ?? self::BASELINE_ANNUAL_TURNOVER;
 
-        return ($shares * $float * max(0.0, $turnover)) * MacroTransmission::calculateStampDutyVolumeFactor($this->stampDutyRate) / FinancialConstants::TRADING_DAYS_PER_YEAR;
+        return ($shares * $float * max(0.0, $turnover)) * MacroTransmission::calculateStampDutyVolumeFactor($this->stampDutyRate()) / FinancialConstants::TRADING_DAYS_PER_YEAR;
     }
 
     /**
