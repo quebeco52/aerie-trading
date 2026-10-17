@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Checks the working tree against HEAD without Docker: PHPStan and the PER-CS format on the changed PHP files, then the
-# Fast suite, listing every failure rather than stopping at the first.
+# Checks the working tree against HEAD without Docker: PHPStan, the PER-CS format and 120-character comments on the
+# changed PHP files, then the Fast suite, listing every failure rather than stopping at the first.
 #
 #   bin/verify            PHPStan, then every test file that ran under a second in the last full run, plus the slow
 #                         ones written for a changed class (FooTest.php for Foo.php) or changed themselves
@@ -39,6 +39,13 @@ if (( ${#changed[@]} > 0 )); then
     else
         echo "Format: run bin/php-slot php vendor/bin/php-cs-fixer fix on"
         grep -E '^\s*[0-9]+\) ' <<< "$out"
+        status=1
+    fi
+    if out=$(php bin/reflow-comments.php --check "${changed[@]}"); then
+        echo "Comments: changed files wrap at 120"
+    else
+        echo "Comments: run php bin/reflow-comments.php on"
+        echo "$out"
         status=1
     fi
 fi

@@ -92,7 +92,7 @@ one.
 Financial parameters and thresholds are class constants, or go in `FinancialConstants.php` if shared. No bare
 numeric literals in model code except mathematical ones (2, 12 months).
 - Group related constants under a `// --- Section Name ---` comment.
-- Each has a single-line `/** */` docblock saying what it is and the magnitude it gives.
+- Each has a `/** */` docblock saying what it is and the magnitude it gives, on one line when it fits.
 
     // --- NIM (Net Interest Margin) Squeeze ---
     /** Break-even NIM floor (~50bps). Steep curve = profit; flat or inverted curve = squeeze. */
@@ -100,7 +100,7 @@ numeric literals in model code except mathematical ones (2, 12 months).
 
 ## Comments
 Say what a term does in one to three lines. Measurements, sweeps and rejected alternatives go in the commit message,
-not the code.
+not the code. Comments wrap at 120 characters; `php bin/reflow-comments.php <file>` rewraps them.
 
 ## Tests
 - PHPUnit. Every new model or mechanism gets a test.
