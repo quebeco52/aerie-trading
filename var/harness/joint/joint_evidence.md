@@ -154,3 +154,14 @@ wcLease-{base,live}-8s.out, wcLease-firms-8s.out (`wc_an.py`; balances as % of a
 - Board and macro, 8 seeds: nothing |t| >= 1.4. Gap -0.93 -> -0.86 (t 0.15; at 4 seeds it read -0.72 -> -1.52,
   t -1.4, seed noise), recession share 11.1 -> 13.6% (t 0.6), EW 8.05 -> 7.99%/y, payment defaults 1.0 -> 1.6 a seed
   (t 1.1; none among the 13), median ND/EBITDA 1.33 -> 1.44 (t 1.3).
+
+## Receivables on the spread trend, maturing stock, EPS walk-down by measured surprise (10-17)
+Unpaired seeds 1-8, base = git archive HEAD (4177a893; reproduces wcLease-live), live = checkout. Out:
+items15-{base,live}-8s.out, beat-{base,live}-8s.out (`beat_an.py`), wc_an.py for PINT.
+- EPS beat share, board 71.0 -> 74.7%. By model, base ran 50-100% with the flat 7.7%-of-EPS cut (ClearingHouse 99.8,
+  FinancialData 94.3, Tech 90.5, Staples 89.3; Steel 50.8, Defence 49.5, Auto 51.5); live 66-81% except ClearingHouse
+  95.2 and Telecom 56.5 (price-war misses persist). Board median surprise sd 2.52% of revenue sets the prior.
+- PINT inventory 11.9 -> 43.8% of revenue (maturing 0.55 of branded sales), write-downs 0.44 -> 0.31 bp of revenue;
+  ND/EBITDA 1.51 -> 1.63, end rating +0.75 notch (SE 0.75).
+- Board: nothing |t| >= 2. Gap -0.86 -> -0.63, recession share 13.6 -> 8.4% (t -1.3), rescue equity raises 11.4 ->
+  4.9 a seed (t -1.9; the same quantity read 7.5 -> 11.4 one batch earlier), payment defaults 1.6 -> 0.9 (t -1.3).

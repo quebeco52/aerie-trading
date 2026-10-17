@@ -146,6 +146,11 @@ interface OperatingStrategyInterface
      */
     public function getWorkingCapitalDays(Stock $stock): array;
     /**
+     * The share of the firm's inventory that is stock still maturing (spirits in cask). It is carried at cost and
+     * sold years on, after a slump has passed, so no slump marks it down to its selling price.
+     */
+    public function getMaturingInventoryShare(Stock $stock): float;
+    /**
      * Labor's share of the fixed cost base (salaried staff, SG&A payroll). Scales how much of an excess
      * wage-growth impulse reaches fixed costs: a law firm or software house feels nearly all of it, a
      * utility or pipeline operator very little. Variable-cost labor (kitchen crews, crews on site) is

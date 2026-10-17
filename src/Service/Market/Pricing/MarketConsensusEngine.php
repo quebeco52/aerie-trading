@@ -25,8 +25,14 @@ class MarketConsensusEngine
     // --- Analyst Bias & Noise ---
     /** Walk-down of the published revenue consensus below the unbiased estimate: 1.5%, the average S&P 500 revenue surprise (FactSet Earnings Insight, 10-year average; Richardson, Teoh & Wysocki 2004). */
     public const ANALYST_WALKDOWN_BIAS = 0.015;
-    /** Walk-down of the published EPS consensus below the unbiased estimate, set so the share of reports beating it lands on the 75% S&P 500 beat rate (FactSet Earnings Insight, 10-year average). */
-    public const ANALYST_EPS_WALKDOWN_BIAS = 0.077;
+    /** Walk-down of the published EPS consensus in standard deviations of the firm's own measured surprise: 0.674, so three reports in four beat (the S&P 500's 75% 10-year beat rate, FactSet Earnings Insight). */
+    public const ANALYST_EPS_WALKDOWN_SURPRISE_SDS = 0.674;
+    /** Time constant of the surprise record the walk-down is sized from: 1.5 years, about six reports. */
+    public const SURPRISE_RECORD_MEMORY_YEARS = 1.5;
+    /** Weight of the typical firm's surprise before a firm has a record of its own, in reports: two. */
+    public const SURPRISE_RECORD_PRIOR_REPORTS = 2.0;
+    /** The typical firm's quarterly earnings surprise sd as a share of its quarterly revenue: 2.5%, the board's median. */
+    public const TYPICAL_EARNINGS_SURPRISE_SD = 0.025;
 
     // --- Bayesian Analyst Consensus ---
     /** Widest one-quarter change in the structural base the analyst anchor is rolled forward by (x0.5 to x2.0). A capacity cap binding or a collapse is not a growth rate analysts extrapolate. */
@@ -41,6 +47,46 @@ class MarketConsensusEngine
     public const BOOK_TO_BILL_CONSENSUS_SENSITIVITY = 0.35;
     /** Bound on the resulting forward revenue tilt, so a single blowout order quarter cannot run the estimate away. */
     public const MAX_BOOK_TO_BILL_CONSENSUS_TILT = 0.15;
+
+    /**
+     * The dollars the Street shades a firm's EPS estimate by: a fixed number of standard deviations of the surprise
+     * the firm has measurably produced, on its quarterly revenue. A steady firm is walked down by little and a lumpy
+     * one by a lot, and both beat about as often.
+     */
+    public static function epsWalkDown(float $quarterlyRevenue, float $surpriseVariance): float
+    {
+        return self::ANALYST_EPS_WALKDOWN_SURPRISE_SDS * sqrt(max(0.0, $surpriseVariance)) * max(0.0, $quarterlyRevenue);
+    }
+
+    /**
+     * The surprise variance analysts hold for a firm: the mean of its weighted record, or the typical firm's before it
+     * has one.
+     *
+     * @param float $weightedSquares The record's weighted sum of squared surprises (recordSurprise()).
+     * @param float $weight          The record's total weight.
+     */
+    public static function surpriseVariance(float $weightedSquares, float $weight): float
+    {
+        return $weight > 0.0 ? $weightedSquares / $weight : self::TYPICAL_EARNINGS_SURPRISE_SD ** 2;
+    }
+
+    /**
+     * One report's surprise rolled into the record, the old record decayed over the time since the last report. A
+     * firm's first report joins the typical firm's surprise, worth SURPRISE_RECORD_PRIOR_REPORTS reports, which then
+     * fades with the rest of the record.
+     *
+     * @return array{0: float, 1: float} The record's weighted sum of squares and its weight.
+     */
+    public static function recordSurprise(float $weightedSquares, float $weight, float $surprise, float $dt): array
+    {
+        $decay = exp(-$dt / self::SURPRISE_RECORD_MEMORY_YEARS);
+        if ($weight <= 0.0) {
+            $weight = self::SURPRISE_RECORD_PRIOR_REPORTS * (1.0 - $decay);
+            $weightedSquares = $weight * self::TYPICAL_EARNINGS_SURPRISE_SD ** 2;
+        }
+
+        return [($weightedSquares * $decay) + ((1.0 - $decay) * $surprise ** 2), ($weight * $decay) + (1.0 - $decay)];
+    }
 
     /**
      * Generates the analyst consensus estimate for a given quarter.

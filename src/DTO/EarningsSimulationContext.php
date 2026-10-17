@@ -208,6 +208,8 @@ class EarningsSimulationContext
     public float $actualQuarterlyNetIncome = 0.0;
     public float $reportedExpectedNetIncome = 0.0;
     public float $reportedActualNetIncome = 0.0;
+    /** Dollars the published EPS estimate sits below the unbiased one (MarketConsensusEngine::epsWalkDown()). */
+    public float $consensusWalkDown = 0.0;
     public float $truePostTaxReturn = 0.0;
 
     // EPS & Gap

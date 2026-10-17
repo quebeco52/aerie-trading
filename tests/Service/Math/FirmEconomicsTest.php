@@ -13,69 +13,6 @@ use PHPUnit\Framework\TestCase;
  */
 class FirmEconomicsTest extends TestCase
 {
-    public function testCalculateDynamicWorkingCapitalIntensityExpandsUnderStress(): void
-    {
-        $baseIntensity = 0.15; // 15% NWC / Revenue
-
-        // Normal neutral baseline conditions
-        $neutralIntensity = FirmEconomics::calculateDynamicWorkingCapitalIntensity(
-            baselineIntensity: $baseIntensity,
-            creditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            capacityUtilization: 1.0,
-            interbankLiquiditySpread: MacroEngine::INTERBANK_BASELINE_SPREAD
-        );
-        $this->assertEqualsWithDelta($baseIntensity, $neutralIntensity, 0.0001, 'Under neutral conditions, intensity should equal baseline.');
-
-        // Distressed recession conditions: Credit spread +300bps, Capacity utilization 70%, Interbank spread 100bps
-        $stressedIntensity = FirmEconomics::calculateDynamicWorkingCapitalIntensity(
-            baselineIntensity: $baseIntensity,
-            creditSpread: 0.05, // +300bps DSO stretch
-            capacityUtilization: 0.70, // 30% idle capacity DIO stretch
-            interbankLiquiditySpread: 0.0100 // +85bps liquidity crunch DPO drain
-        );
-        $this->assertGreaterThan($baseIntensity, $stressedIntensity, 'Stressed conditions must expand working capital intensity.');
-    }
-
-    public function testCalculateDynamicWorkingCapitalIntensityCompressesNegativeFloatUnderStress(): void
-    {
-        $negativeFloat = -0.05; // -5% NWC / Revenue float (e.g. Consumer Staples / Fast Food)
-
-        // Normal neutral baseline conditions
-        $neutralIntensity = FirmEconomics::calculateDynamicWorkingCapitalIntensity(
-            baselineIntensity: $negativeFloat,
-            creditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            capacityUtilization: 1.0,
-            interbankLiquiditySpread: 0.0015
-        );
-        $this->assertEqualsWithDelta($negativeFloat, $neutralIntensity, 0.0001, 'Under neutral conditions, negative float should be preserved.');
-
-        // Distressed recession conditions: Credit spread +300bps, Capacity utilization 70%, Interbank spread 100bps
-        $stressedIntensity = FirmEconomics::calculateDynamicWorkingCapitalIntensity(
-            baselineIntensity: $negativeFloat,
-            creditSpread: 0.05,
-            capacityUtilization: 0.70,
-            interbankLiquiditySpread: 0.0100
-        );
-        // Under stress, negative float shrinks toward zero (becomes less negative, i.e., -0.05 -> -0.045)
-        $this->assertGreaterThan($negativeFloat, $stressedIntensity, 'Stressed conditions must compress negative float toward zero.');
-        $this->assertLessThan(0.0, $stressedIntensity, 'Float remains negative during stress.');
-    }
-
-    public function testCalculateDynamicWorkingCapitalIntensityTightensDuringBoom(): void
-    {
-        $baseIntensity = 0.15;
-
-        // Roaring boom: credit spreads 50 bps inside baseline, high interbank liquidity (-50bps), 100% capacity utilization
-        $boomIntensity = FirmEconomics::calculateDynamicWorkingCapitalIntensity(
-            baselineIntensity: $baseIntensity,
-            creditSpread: MacroEngine::BASE_CREDIT_SPREAD - 0.005,
-            capacityUtilization: 1.0,
-            interbankLiquiditySpread: 0.0010
-        );
-
-        $this->assertLessThan($baseIntensity, $boomIntensity, 'Boom conditions should tighten working capital intensity below baseline.');
-    }
-
     public function testPerUnitCostsFallAsAShareOfRevenueWhenThePriceRises(): void
     {
         // Revenue P x Q, cost c x Q: at twice the price the same tonnes cost half as much per dollar.
@@ -160,28 +97,33 @@ class FirmEconomicsTest extends TestCase
     public function testWorkingCapitalDayShiftsRespondToTheirOwnDriverOnly(): void
     {
         $neutral = FirmEconomics::calculateWorkingCapitalDayShifts(
-            MacroEngine::BASE_CREDIT_SPREAD,
+            0.016,
+            0.016,
             1.0,
             MacroEngine::INTERBANK_BASELINE_SPREAD
         );
 
-        $this->assertEqualsWithDelta(0.0, $neutral['dso'], 0.0000001, 'At the baseline spread receivables do not age.');
+        $this->assertEqualsWithDelta(0.0, $neutral['dso'], 0.0000001, 'At the spread\'s usual level receivables do not age, wherever that level sits.');
         $this->assertEqualsWithDelta(0.0, $neutral['dio'], 0.0000001, 'At full capacity inventory does not build.');
         $this->assertEqualsWithDelta(0.0, $neutral['dpo'], 0.0000001, 'At baseline liquidity payables do not contract.');
 
-        // Dear credit stretches customer payment: DSO rises with the spread over baseline.
+        // Dear credit stretches customer payment and cheap credit shortens it: DSO moves with the spread over its trend.
         $creditStress = FirmEconomics::calculateWorkingCapitalDayShifts(
-            MacroEngine::BASE_CREDIT_SPREAD + 0.010,
+            0.026,
+            0.016,
             1.0,
             MacroEngine::INTERBANK_BASELINE_SPREAD
         );
         $this->assertEqualsWithDelta(0.010 * FirmEconomics::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $creditStress['dso'], 0.0000001, 'DSO must track the credit spread.');
         $this->assertEqualsWithDelta(0.0, $creditStress['dio'], 0.0000001, 'A credit shock must not move inventory days.');
         $this->assertEqualsWithDelta(0.0, $creditStress['dpo'], 0.0000001, 'A credit shock must not move payable days.');
+        $easyCredit = FirmEconomics::calculateWorkingCapitalDayShifts(0.011, 0.016, 1.0, MacroEngine::INTERBANK_BASELINE_SPREAD);
+        $this->assertEqualsWithDelta(-0.005 * FirmEconomics::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $easyCredit['dso'], 0.0000001, 'A spread below its trend shortens receivable days.');
 
         // Slack plants pile up unsold goods: DIO rises as utilisation falls.
         $slack = FirmEconomics::calculateWorkingCapitalDayShifts(
-            MacroEngine::BASE_CREDIT_SPREAD,
+            0.016,
+            0.016,
             0.80,
             MacroEngine::INTERBANK_BASELINE_SPREAD
         );
@@ -190,7 +132,8 @@ class FirmEconomicsTest extends TestCase
 
         // Interbank stress makes vendors demand cash sooner, so DPO contracts (negative shift).
         $liquidityStress = FirmEconomics::calculateWorkingCapitalDayShifts(
-            MacroEngine::BASE_CREDIT_SPREAD,
+            0.016,
+            0.016,
             1.0,
             MacroEngine::INTERBANK_BASELINE_SPREAD + 0.004
         );

@@ -131,19 +131,46 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         return self::STAPLES_REVERSION_SPEED;
     }
 
-    /** A brand owner's suppliers fund its stock and more; bulk processing and the trading desk tie cash up in what they store. */
+    /**
+     * A brand owner's suppliers fund its stock and more; bulk processing and the trading desk tie cash up in what they
+     * store, and a brand whose goods mature in cask carries that stock on top of what it ships.
+     */
     protected function resolveWorkingCapitalShares(Stock $stock): array
+    {
+        [$weights, $maturing] = $this->resolveWorkingCapitalMix($stock);
+        $branded = self::BRANDED_WORKING_CAPITAL;
+        $branded['inventory'] += $maturing;
+
+        return FirmEconomics::blendWorkingCapitalShares($weights, [$branded, self::VOLUME_WORKING_CAPITAL, self::COMMODITY_TRADING_WORKING_CAPITAL]);
+    }
+
+    /** The maturing stock's share of all the stock the firm holds. */
+    public function getMaturingInventoryShare(Stock $stock): float
+    {
+        [$weights, $maturing] = $this->resolveWorkingCapitalMix($stock);
+        $inventory = $this->resolveWorkingCapitalShares($stock)['inventory'];
+
+        return $inventory > 0.0 ? FirmEconomics::revenueWeightedRatio($weights, [$maturing, 0.0, 0.0]) / $inventory : 0.0;
+    }
+
+    /**
+     * The target mix, branded, bulk and desk in that order, and the branded stream's maturing stock over its revenue.
+     *
+     * @return array{0: list<float>, 1: float}
+     */
+    private function resolveWorkingCapitalMix(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::BrandedStaplesWeight->value   => self::BRANDED_STAPLES_WEIGHT,
             ModelParam::VolumeCommodityWeight->value  => self::VOLUME_COMMODITY_WEIGHT,
             ModelParam::CommodityTradingWeight->value => 0.00,
+            ModelParam::MaturingStockShare->value     => 0.00,
         ]);
 
-        return FirmEconomics::blendWorkingCapitalShares(
+        return [
             [$params[ModelParam::BrandedStaplesWeight], $params[ModelParam::VolumeCommodityWeight], $params[ModelParam::CommodityTradingWeight]],
-            [self::BRANDED_WORKING_CAPITAL, self::VOLUME_WORKING_CAPITAL, self::COMMODITY_TRADING_WORKING_CAPITAL]
-        );
+            max(0.0, $params[ModelParam::MaturingStockShare]),
+        ];
     }
 
     /**

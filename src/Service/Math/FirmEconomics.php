@@ -20,14 +20,6 @@ final class FirmEconomics
     public const CCC_DIO_CAPACITY_SENSITIVITY = 20.0;
     /** Sensitivity of Days Payable Outstanding (DPO) contraction to interbank funding liquidity stress. */
     public const CCC_DPO_LIQUIDITY_SENSITIVITY = 500.0;
-    /** Minimum working capital intensity floor for positive working capital models. */
-    public const MIN_POSITIVE_NWC_INTENSITY = 0.01;
-    /** Maximum working capital intensity ceiling for positive working capital models. */
-    public const MAX_POSITIVE_NWC_INTENSITY = 1.00;
-    /** Minimum working capital intensity floor for negative working capital float models. */
-    public const MIN_NEGATIVE_NWC_INTENSITY = -0.50;
-    /** Maximum working capital intensity ceiling for negative working capital float models. */
-    public const MAX_NEGATIVE_NWC_INTENSITY = -0.001;
 
     /**
      * One step of a staggered lease roll: the slice of the rent roll expiring over dt (dt / WALT) reprices to
@@ -410,64 +402,26 @@ final class FirmEconomics
     }
 
     /**
-     * Computes the dynamic Cash Conversion Cycle (CCC) strain on working capital intensity.
-     *
-     * During downturns:
-     * - DSO expands as customers delay payments (credit spread stress).
-     * - DIO expands as unsold inventories accumulate (low capacity utilization).
-     * - DPO contracts as vendors demand accelerated payment (interbank funding liquidity stress).
-     *
-     * @param float $baselineIntensity         The baseline working capital intensity (NWC / Revenue).
-     * @param float $creditSpread              Prevailing corporate credit spread (DSO driver).
-     * @param float $capacityUtilization       Current operating capacity utilization ratio (DIO driver).
-     * @param float $interbankLiquiditySpread  Prevailing interbank liquidity funding spread (DPO driver).
-     * @return float The dynamic working capital intensity for the quarter.
-     */
-    public static function calculateDynamicWorkingCapitalIntensity(
-        float $baselineIntensity,
-        float $creditSpread,
-        float $capacityUtilization,
-        float $interbankLiquiditySpread
-    ): float {
-        $shifts = self::calculateWorkingCapitalDayShifts($creditSpread, $capacityUtilization, $interbankLiquiditySpread);
-        $dsoShiftDays = $shifts['dso'];
-        $dioShiftDays = $shifts['dio'];
-        $dpoShiftDays = $shifts['dpo'];
-
-        // Total CCC expansion / contraction days translated to annual intensity units (Days / 365)
-        // Standard formula: CCC = DSO + DIO - DPO
-        // Therefore: Delta CCC = Delta DSO + Delta DIO - Delta DPO
-        $totalCccShiftDays = $dsoShiftDays + $dioShiftDays - $dpoShiftDays;
-        $intensityShift = $totalCccShiftDays / 365.0;
-
-        $dynamicIntensity = $baselineIntensity + $intensityShift;
-
-        if ($baselineIntensity < 0.0) {
-            // Negative working capital (float): Under CCC expansion / liquidity stress, vendors tighten terms,
-            // compressing the negative float toward zero (clamped between MIN_NEGATIVE_NWC_INTENSITY and MAX_NEGATIVE_NWC_INTENSITY).
-            return min(self::MAX_NEGATIVE_NWC_INTENSITY, max(self::MIN_NEGATIVE_NWC_INTENSITY, $dynamicIntensity));
-        }
-
-        return max(self::MIN_POSITIVE_NWC_INTENSITY, min(self::MAX_POSITIVE_NWC_INTENSITY, $dynamicIntensity));
-    }
-
-    /**
      * The three separate day-count movements behind a cash conversion cycle shift.
      *
      * Kept as its own method because the components are not interchangeable once working capital is carried
      * as real balances: a receivable that ages is exposed to customer default, while inventory that piles up
      * is exposed to writedown. Only the aggregate is a single number; the risks attach to the parts.
      *
+     * The declared days are the cycle's average, so receivables age against the spread's measured through-the-cycle
+     * level. Utilisation is centred on one already, and the interbank spread is a stress premium over its floor.
+     *
      * @return array{dso: float, dio: float, dpo: float} Day-count shifts, signed as movements in each component.
      */
     public static function calculateWorkingCapitalDayShifts(
         float $creditSpread,
+        float $creditSpreadTrend,
         float $capacityUtilization,
         float $interbankLiquiditySpread
     ): array {
         return [
-            // Customers stretch payment when credit is dear.
-            'dso' => ($creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * self::CCC_DSO_CREDIT_SPREAD_SENSITIVITY,
+            // Customers stretch payment when credit is dearer than it usually is.
+            'dso' => ($creditSpread - $creditSpreadTrend) * self::CCC_DSO_CREDIT_SPREAD_SENSITIVITY,
             // Unsold goods pile up when the plant runs below capacity.
             'dio' => (1.0 - $capacityUtilization) * self::CCC_DIO_CAPACITY_SENSITIVITY,
             // Under interbank liquidity stress, vendors demand faster payment (DPO contracts).

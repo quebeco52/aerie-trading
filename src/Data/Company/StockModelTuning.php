@@ -713,6 +713,7 @@ class StockModelTuning
             ModelParam::VolumeCommodityWeight->value  => 0.20,
             ModelParam::CommodityTradingWeight->value => 0.20, // Internal 'Proof Desk' agricultural futures & silica hoarding
             ModelParam::PricingPowerIndex->value      => 0.85,
+            ModelParam::MaturingStockShare->value     => 0.55, // Heritage spirits age in cask: ~200 days of branded sales held maturing, ~45% of revenue in stock all told
         ],
 
         // --- Copperhead Coffee Roasters (BREW) ---

@@ -5,11 +5,16 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\Data\Company\Sectors;
+use App\DTO\EarningsSimulationContext;
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionMethod;
 
 /**
  * Firms whose suppliers or customers fund more than they tie up still hold the stock and the receivables their
@@ -97,6 +102,42 @@ class WorkingCapitalByStreamTest extends TestCase
             FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY,
             Sectors::strategyFor('Household & Personal Products')->getLeaseIntensity(self::firm('LARK', 'Household & Personal Products'))
         );
+    }
+
+    /** A distiller holds years of spirit in cask, as the listed ones do (40-60% of revenue in stock). */
+    public function testADistillerCarriesItsMaturingStock(): void
+    {
+        $strategy = Sectors::strategyFor('Beverages - Wineries & Distilleries');
+        $pint = self::firm('PINT', 'Beverages - Wineries & Distilleries');
+
+        // The ledger strikes inventory days on cost; at the 25% margin the fixture runs, a share of revenue is days x 0.75 / 365.
+        $inventory = $strategy->getWorkingCapitalDays($pint)['dio'] / FinancialConstants::DAYS_PER_YEAR * (1.0 - 0.25);
+        $this->assertGreaterThan(0.40, $inventory);
+        $this->assertLessThan(0.60, $inventory);
+        // PINT: 60% branded holding 0.55 of its sales maturing, out of ~0.456 of revenue in stock.
+        $this->assertEqualsWithDelta(0.60 * 0.55 / $inventory, $strategy->getMaturingInventoryShare($pint), 1e-9);
+        $this->assertSame(0.0, $strategy->getMaturingInventoryShare(self::firm('LARK', 'Household & Personal Products')), 'Household goods are sold as made.');
+    }
+
+    /** A slump marks down the goods on sale now; spirit sold years on is not written down to this quarter's price. */
+    public function testASlumpWritesDownOnlyTheStockOnSale(): void
+    {
+        $writeDown = static function (string $ticker, string $industry): float {
+            $stock = self::firm($ticker, $industry)->setInventory('1000000000');
+            $ctx = new EarningsSimulationContext($stock, new MacroStateDTO(), Sectors::strategyFor($industry), 'consumer_staples');
+            $ctx->capacityUtilization = 0.80;
+            $ctx->seasonalFactor = 1.0;
+
+            return (new ReflectionMethod(EarningsEngine::class, 'resolveInventoryWriteDown'))
+                ->invoke((new ReflectionClass(EarningsEngine::class))->newInstanceWithoutConstructor(), $ctx);
+        };
+
+        $finishedGoods = $writeDown('LARK', 'Household & Personal Products');
+        $distiller = $writeDown('PINT', 'Beverages - Wineries & Distilleries');
+        $maturing = Sectors::strategyFor('Beverages - Wineries & Distilleries')->getMaturingInventoryShare(self::firm('PINT', 'Beverages - Wineries & Distilleries'));
+
+        $this->assertGreaterThan(0.0, $finishedGoods);
+        $this->assertEqualsWithDelta($finishedGoods * (1.0 - $maturing), $distiller, 1e-3);
     }
 
     private static function firm(string $ticker, string $industry): Stock

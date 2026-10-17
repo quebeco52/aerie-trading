@@ -1207,6 +1207,49 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * The Street walks the estimate down by the firm's own surprise record: a firm without one is cut as a typical firm
+     * is, and the next report reads the record the first one started.
+     */
+    public function testTheEpsWalkDownIsSizedFromTheFirmsSurpriseRecord(): void
+    {
+        $reports = [];
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$reports): void {
+            $reports[] = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+        $stock = $this->buildMatureIndustrial('WALK');
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+        $tick = EarningsEngine::resolveReportingTick('WALK', 252);
+
+        mt_srand(4646); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+        $engine->calculate($stock, $macro, $tick, 252);
+        $first = $reports[0];
+        $this->assertEqualsWithDelta(
+            MarketConsensusEngine::ANALYST_EPS_WALKDOWN_SURPRISE_SDS * MarketConsensusEngine::TYPICAL_EARNINGS_SURPRISE_SD * $first->analystExpectedRevenue,
+            $first->consensusWalkDown,
+            1e-6,
+            'no record: walked down as a typical firm'
+        );
+
+        $record = $stock->getEarningsMomentumZ() ?? [];
+        $surprise = ($first->reportedActualNetIncome - $first->managedAccrual + $first->specialItems - $first->reportedExpectedNetIncome - $first->consensusWalkDown)
+            / $first->analystExpectedRevenue;
+        [$squares, $weight] = MarketConsensusEngine::recordSurprise(0.0, 0.0, $surprise, $first->dt);
+        $this->assertEqualsWithDelta($squares, (float) ($record[EarningsEngine::STATE_SURPRISE_SQUARES] ?? -1.0), 1e-12);
+        $this->assertEqualsWithDelta($weight, (float) ($record[EarningsEngine::STATE_SURPRISE_WEIGHT] ?? -1.0), 1e-12);
+
+        $engine->calculate($stock, $macro, $tick + 63, 252);
+        $second = $reports[1];
+        $this->assertEqualsWithDelta(
+            MarketConsensusEngine::ANALYST_EPS_WALKDOWN_SURPRISE_SDS * sqrt($squares / $weight) * $second->analystExpectedRevenue,
+            $second->consensusWalkDown,
+            1e-6,
+            'the second report reads the record the first left'
+        );
+    }
+
+    /**
      * A firm running at healthy capacity is selling what it makes and has nothing to write down.
      */
     public function testHealthyDemandProducesNoInventoryWriteDown(): void
@@ -1795,10 +1838,10 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.05 * 10.0e9, $risen->deferredTaxExpense - $same->deferredTaxExpense, 1.0);
         $this->assertEqualsWithDelta(-0.05 * 10.0e9, $risen->actualQuarterlyNetIncome - $same->actualQuarterlyNetIncome, 1.0);
         $this->assertEqualsWithDelta(
-            -0.05 * 10.0e9 * (1.0 - \App\Service\Market\Pricing\MarketConsensusEngine::ANALYST_EPS_WALKDOWN_BIAS),
+            -0.05 * 10.0e9,
             $risen->expectedQuarterlyNetIncome - $same->expectedQuarterlyNetIncome,
             1.0,
-            'the law is public, so the estimate carries the re-strike'
+            'the law is public, so the estimate carries the re-strike, and the walk-down is struck on revenue it does not move'
         );
         $this->assertSame($rate, ($risenStock->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_PLANT_DEFERRED_TAX_RATE] ?? null);
     }
@@ -3015,8 +3058,8 @@ class EarningsEngineTest extends TestCase
         // At least the uninsured deposits' share at the long-term rate, a quarter's worth.
         $this->assertGreaterThan(300.0e9 * (1.0 - 0.604) * 0.00105 / 4.0, $levied->bankLevy);
         $this->assertEqualsWithDelta($free->actualQuarterlyNetIncome - $levied->bankLevy, $levied->actualQuarterlyNetIncome, 1.0);
-        // The unbiased estimate carries the whole levy; the published figure is the walked-down share of it.
-        $this->assertEqualsWithDelta($free->expectedQuarterlyNetIncome - ($levied->bankLevy * (1.0 - \App\Service\Market\Pricing\MarketConsensusEngine::ANALYST_EPS_WALKDOWN_BIAS)), $levied->expectedQuarterlyNetIncome, 1.0);
+        // The estimate carries the whole levy: the walk-down is struck on revenue, which the levy does not move.
+        $this->assertEqualsWithDelta($free->expectedQuarterlyNetIncome - $levied->bankLevy, $levied->expectedQuarterlyNetIncome, 1.0);
         $this->assertEqualsWithDelta($free->taxPaid, $levied->taxPaid, 1.0, 'The levy is not deductible.');
         $this->assertEqualsWithDelta($cashChange, $levied->operatingCashFlow + $levied->investingCashFlow + $levied->financingCashFlow, 1.0);
         // The run rate the payout and buyback tests read pays the levy too.

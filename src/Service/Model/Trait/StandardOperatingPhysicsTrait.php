@@ -154,6 +154,12 @@ trait StandardOperatingPhysicsTrait
         return null;
     }
 
+    /** Goods sold as they are made: none of the stock is maturing. */
+    public function getMaturingInventoryShare(Stock $stock): float
+    {
+        return 0.0;
+    }
+
     /** An operating company's cost base follows its revenue: the operating margin's complement. */
     public function getOperatingCostToEarningAssets(Stock $stock): ?float
     {

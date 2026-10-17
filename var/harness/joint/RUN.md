@@ -44,6 +44,8 @@ Question family: does the whole simulation behave sensibly after several merges,
 - Report rows carry the trade balances and lease (`recv`, `inv`, `pay`, `lease`) and the quarter's inventory
   write-down and receivable provision (`invwd`, `recprov`). `wc_an.py <seeds> <armA> <armB>`: those as shares of
   revenue plus ND/EBITDA, equity/assets and end rating for the 13 firms whose cycle and leases are declared by stream.
+- Report rows also carry Street and consensus EPS (`reps`, `ceps`). `beat_an.py <seeds> <arm>`: EPS beat share and
+  each firm's surprise sd on revenue, by business model (needs `runs/ticker_models.json`, see model_an.py below).
 - `model_an.py <seeds> <armA> <armB> [Model,...]`: per business model, revenue over the Street's expected (the
   standing beat) and revenue growth, A against B with the seed-paired SE. Map tickers first:
   `php -r 'require "vendor/autoload.php"; $o=[]; foreach (App\Data\Company\InitialMarket::STOCKS as $k=>$r) $o[$r["ticker"]??$k]=(new ReflectionClass(App\Data\Company\Sectors::strategyFor($r["industry"])))->getShortName(); file_put_contents("var/harness/joint/runs/ticker_models.json", json_encode($o));'`

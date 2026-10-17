@@ -101,6 +101,10 @@ class EarningsEngine
     // --- Bayesian Analyst Consensus ---
     /** Stream-state key: the pre-shock expected revenue the last consensus was formed against, so the analyst anchor can be carried forward with the base rather than frozen at last quarter's size. */
     public const STATE_LAST_EXPECTED_REVENUE = 'state:last_expected_revenue';
+    /** Carried stream-state key: the firm's surprise record, its weighted sum of squared EPS surprises on revenue (MarketConsensusEngine::recordSurprise()). */
+    public const STATE_SURPRISE_SQUARES = self::CARRIED_STATE_PREFIX . 'surprise_squares';
+    /** Carried stream-state key: the surprise record's total weight. */
+    public const STATE_SURPRISE_WEIGHT = self::CARRIED_STATE_PREFIX . 'surprise_weight';
 
     // --- Price Level in Capacity ---
     /** Stream-state key: the GDP deflator at the last report, so the next can measure the quarter's price growth. */
@@ -1407,9 +1411,14 @@ class EarningsEngine
         $ctx->seasonallyAdjustedNetIncome = $runRateEbt - $runRate['current'] - ($recurringTiming * $rate) - $runRate['deferred'] - $ctx->bankLevy;
 
         // Analysts walk the EPS estimate down to a figure the firm can beat (Richardson, Teoh & Wysocki 2004;
-        // Matsumoto 2002): a shading of the published number, struck on the unbiased estimate and separate from the
-        // revenue walk-down, so the cushion does not scale with how operationally levered the firm is.
-        $ctx->expectedQuarterlyNetIncome -= MarketConsensusEngine::ANALYST_EPS_WALKDOWN_BIAS * abs($ctx->expectedQuarterlyNetIncome);
+        // Matsumoto 2002), by as much as the firm's own record says it can miss by. Struck on revenue, so the cushion
+        // neither scales with operating leverage nor vanishes as earnings cross zero.
+        $record = $stock->getEarningsMomentumZ() ?? [];
+        $ctx->consensusWalkDown = MarketConsensusEngine::epsWalkDown(
+            $ctx->analystExpectedRevenue,
+            MarketConsensusEngine::surpriseVariance((float) ($record[self::STATE_SURPRISE_SQUARES] ?? 0.0), (float) ($record[self::STATE_SURPRISE_WEIGHT] ?? 0.0))
+        );
+        $ctx->expectedQuarterlyNetIncome -= $ctx->consensusWalkDown;
 
         // A warning already moved the market and the estimate: analysts have taken the guided shortfall
         // out of their number, so the report confirms it rather than delivering it. Cleared here because
@@ -1561,6 +1570,28 @@ class EarningsEngine
         return max(FinancialConstants::MIN_OPERATING_BASE_CASH, $totalAssets);
     }
 
+    /**
+     * The surprise the Street sizes the firm's next walk-down from: Street earnings before management's accrual against
+     * the unbiased estimate, on revenue, so the record is what the business delivers rather than what was steered.
+     */
+    private function recordEarningsSurprise(EarningsSimulationContext $ctx): void
+    {
+        if ($ctx->analystExpectedRevenue <= 0.0) {
+            return;
+        }
+
+        $streetEarnings = $ctx->reportedActualNetIncome - $ctx->managedAccrual + $ctx->specialItems;
+        $unbiasedEstimate = $ctx->reportedExpectedNetIncome + $ctx->consensusWalkDown;
+        $state = $ctx->stock->getEarningsMomentumZ() ?? [];
+        [$state[self::STATE_SURPRISE_SQUARES], $state[self::STATE_SURPRISE_WEIGHT]] = MarketConsensusEngine::recordSurprise(
+            (float) ($state[self::STATE_SURPRISE_SQUARES] ?? 0.0),
+            (float) ($state[self::STATE_SURPRISE_WEIGHT] ?? 0.0),
+            ($streetEarnings - $unbiasedEstimate) / $ctx->analystExpectedRevenue,
+            $ctx->dt
+        );
+        $ctx->stock->setEarningsMomentumZ($state);
+    }
+
     private function calculateEPSAndSurprise(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
@@ -1572,6 +1603,7 @@ class EarningsEngine
         $ctx->streetQuarterlyEps = ($ctx->reportedActualNetIncome + $ctx->specialItems) / $shares;
         $ctx->expectedQuarterlyEps = $ctx->reportedExpectedNetIncome / $shares;
         $ctx->surpriseAmountQuarterly = $ctx->streetQuarterlyEps - $ctx->expectedQuarterlyEps;
+        $this->recordEarningsSurprise($ctx);
 
         // Seasonally Adjusted Annual EPS for balance sheet and valuation (Kalman TTM EPS)
         $saQuarterlyNetIncome = $ctx->seasonallyAdjustedNetIncome;
@@ -1878,6 +1910,7 @@ class EarningsEngine
         $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
         $shifts = FirmEconomics::calculateWorkingCapitalDayShifts(
             creditSpread: $ctx->macroState->macroCreditSpreadEma,
+            creditSpreadTrend: $ctx->macroState->macroCreditSpreadTrend,
             capacityUtilization: $deseasonalizedUtilization,
             interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma
         );
@@ -2148,8 +2181,10 @@ class EarningsEngine
             return 0.0;
         }
 
+        // Stock still maturing is sold years on, after the slump: only the goods on sale now are marked down.
+        $exposed = $inventory * (1.0 - $ctx->strategy->getMaturingInventoryShare($ctx->stock));
         $severity = min(1.0, ($trigger - $utilization) / $trigger);
-        $charge = $inventory * self::INVENTORY_NRV_LOSS_RATE * $severity;
+        $charge = $exposed * self::INVENTORY_NRV_LOSS_RATE * $severity;
 
         $ctx->stock->setInventoryAllowance((string) ((float) $ctx->stock->getInventoryAllowance() + $charge));
 
