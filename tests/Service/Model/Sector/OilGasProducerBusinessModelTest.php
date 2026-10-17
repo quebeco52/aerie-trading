@@ -203,15 +203,13 @@ final class OilGasProducerBusinessModelTest extends TestCase
         $rightTail = $this->report($this->producer(), $this->macro(crude: 100.0), z: 3.0);
         $this->assertNull($rightTail->eventType);
 
-        // A blowout shuts part of the field in and loads remediation on every barrel still produced.
+        // A blowout shuts part of the field in, and its clean-up is a one-off special item on the barrels it cost,
+        // not a per-barrel cost the run rate would carry forward.
         $disaster = $this->report($this->producer(), $this->macro(crude: 100.0), z: -3.0);
         $this->assertSame(ShockEvent::ENVIRONMENTAL_DISASTER, $disaster->eventType);
         $this->assertTrue($disaster->isPublicEvent);
-        $this->assertEqualsWithDelta(
-            (0.13 + OilGasProducerBusinessModel::ENVIRONMENTAL_DISASTER_PENALTY),
-            $disaster->clampedMargin,
-            0.02
-        );
+        $this->assertEqualsWithDelta(0.13, $disaster->clampedMargin, 0.02);
+        $this->assertGreaterThan(0.0, $disaster->specialCharge);
     }
 
     public function testOnlyThePublicPriceLegIsScaledUpForAnalysts(): void

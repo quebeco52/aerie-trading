@@ -229,7 +229,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
         // Apply structurally driven penalties directly to the baseline variable margin
-        $rawMargin = $realizedVariableMargin + $inputCostDrag + $disasterPenalty;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
@@ -241,6 +241,9 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             ($recyclingZ * $recyclingWeight * self::RECYCLING_VARIANCE_SCALAR * 0.80);
         $observableShockZ *= $baselineVol;
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $disasterPenalty * max(0.0, $actualRevenue - $priceRevenue);
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -251,6 +254,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             priceRevenue: $priceRevenue,
+            specialCharge: $specialCharge,
         );
     }
 

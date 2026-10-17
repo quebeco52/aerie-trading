@@ -289,7 +289,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // Guard payroll follows wage growth; contract rates recover most of it (cost-plus government work, annual retainer resets).
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         // Apply the tactical failure legal penalty directly to the baseline variable margin
-        $rawMargin = $realizedVariableMargin + $inputCostDrag + $tacticalFailurePenalty;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR, $clampedMargin, $actualRevenue);
 
@@ -303,6 +303,9 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
             ($govSpendShift * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR);
         $observableShockZ *= $baselineVol;
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $tacticalFailurePenalty * $actualRevenue;
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -312,6 +315,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            specialCharge: $specialCharge,
         );
     }
 

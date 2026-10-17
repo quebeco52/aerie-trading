@@ -251,13 +251,16 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         // --- Per-Tonne Cost Base ---
         // Stricter rules on extraction cost productivity, and every tonne costs that much more to mine.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        $perTonneCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue) + $disasterPenalty;
+        $perTonneCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue);
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perTonneCostRatio, $priceRelative));
 
         // The benchmark is public; the mine's own output is not. Dividing the price leg by the base visibility
         // lets a persistent price level converge to an unbiased consensus.
         $outputShock = $expectedRevenue > 0.0 ? ($volumeRevenue / $expectedRevenue) - 1.0 : 0.0;
         $observableShockZ = (($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY) + $outputShock;
+
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $disasterPenalty * $volumeRevenue;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -271,6 +274,7 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
             kpis: [
                 'realized_price_index' => $priceRelative,
             ],
+            specialCharge: $specialCharge,
         );
     }
 

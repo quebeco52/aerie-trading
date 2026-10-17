@@ -277,11 +277,9 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::PROJECT_DELAY;
         }
 
-        $costOverrunDrag = match (true) {
-            $overrunElapsed === 1 => self::COST_OVERRUN_PENALTY,
-            $overrunElapsed > 1   => self::PROJECT_OVERRUN_ONGOING_PENALTY,
-            default               => 0.0,
-        };
+        // The delay's write-down is booked once, in the quarter it is found; the idle crews and damages follow it.
+        $overrunWriteDown = $overrunElapsed === 1 ? self::COST_OVERRUN_PENALTY : 0.0;
+        $costOverrunDrag = $overrunElapsed > 1 ? self::PROJECT_OVERRUN_ONGOING_PENALTY : 0.0;
 
         // --- Tri-Stream Revenue Calculation ---
         // Civil and commercial awards enter multi-quarter backlogs and are recognized on percentage of
@@ -329,6 +327,9 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             ($maintenanceZ * $maintenanceWeight * self::FACILITIES_MAINTENANCE_VARIANCE_SCALAR * 0.90);
         $observableShockZ *= $baselineVol;
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $overrunWriteDown * $actualRevenue;
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -339,6 +340,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
                     kpis: ['book_to_bill' => $backlogRevenue > 0.0 ? $backlogOrders / $backlogRevenue : 1.0, 'backlog_quarters' => $backlogQuarters],
+            specialCharge: $specialCharge,
         );
     }
 

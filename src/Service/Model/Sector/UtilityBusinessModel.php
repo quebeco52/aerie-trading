@@ -250,12 +250,13 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $liabilityElapsed = $streams->evolveRegime(self::REGIME_INFRASTRUCTURE_LIABILITY, 0.0, self::INFRASTRUCTURE_LIABILITY_EXIT_HAZARD);
         $eventType = null;
         $disasterPenalty = 0.0;
+        $gridFailureCharge = 0.0;
 
         $districtStormDamage = $macroState->catastropheLossIndexEma >= self::CATASTROPHE_GRID_DAMAGE_THRESHOLD;
         if (($eventZ < self::GRID_FAILURE_Z_SCORE || $districtStormDamage) && $liabilityElapsed === 0) {
             $liabilityElapsed = $streams->startRegime(self::REGIME_INFRASTRUCTURE_LIABILITY);
             $eventType = ShockEvent::INFRASTRUCTURE_FAILURE;
-            $disasterPenalty = self::GRID_FAILURE_PENALTY;
+            $gridFailureCharge = self::GRID_FAILURE_PENALTY;
         } elseif ($liabilityElapsed > 1) {
             $disasterPenalty = self::INFRASTRUCTURE_LIABILITY_ONGOING_PENALTY;
         }
@@ -314,6 +315,9 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $observableShockZ *= $baselineVol;
         $observableShockZ += ($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY;
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $gridFailureCharge * $volumeRevenue;
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -327,6 +331,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             kpis: [
                 'power_price_index' => $merchantPriceRelative,
             ],
+            specialCharge: $specialCharge,
         );
     }
 

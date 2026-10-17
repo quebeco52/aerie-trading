@@ -402,11 +402,9 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         // --- Compensation Ratio Physics & Operating Leverage ---
         $rawMargin = $realizedVariableMargin
-            + $regulatoryPenalty
             + $gammaHedgingCost
             + $hungDebtCost
-            + $tradingInventoryMarkdownCost
-            + $counterpartyDefaultPenalty;
+            + $tradingInventoryMarkdownCost;
 
         $revenueSurplusRatio = ($actualRevenue - $expectedRevenue) / max(1.0, $expectedRevenue);
         $minCompRatio = max(0.01, self::MIN_COMPENSATION_RATIO - ($revenueSurplusRatio * self::COMP_OPERATING_LEVERAGE_SCALAR) - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -434,6 +432,9 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
                 + $tradingZ * $tradingWeight * self::TRADING_ANALYST_VISIBILITY)
                 * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = ($regulatoryPenalty + $counterpartyDefaultPenalty) * $actualRevenue;
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedVariableMargin,
@@ -443,6 +444,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            specialCharge: $specialCharge,
         );
     }
 
