@@ -9,6 +9,7 @@ use App\Data\Macro\MacroFieldCatalog;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
+use App\Repository\CorporateReportRepository;
 use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroStateProvider;
@@ -32,6 +33,13 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 class StockController extends AbstractController
 {
+    // --- Fundamentals ---
+    /**
+     * Reports the fundamentals endpoint returns, newest kept: twelve years of quarters, the most any chart on the stock
+     * page reads (the annual view and the earnings surprise go back twelve years, the quarterly views three).
+     */
+    private const FUNDAMENTALS_REPORTS = 48;
+
     /**
      * The instrument page for a listed company or for the index fund.
      *
@@ -257,6 +265,7 @@ class StockController extends AbstractController
         EntityManagerInterface $entityManager,
         MacroStateProvider $macroStateProvider,
         Redis $redis,
+        CorporateReportRepository $reports,
         #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.ticks_per_year%')]
         int $ticksPerYear,
     ): JsonResponse {
@@ -270,16 +279,9 @@ class StockController extends AbstractController
             return $this->json([]);
         } // ETFs don't have corporate reports
 
-        $conn = $entityManager->getConnection();
-
-        // Fetch all fundamental reports for this stock, oldest to newest (for charting)
-        $sql = 'SELECT cr.* FROM corporate_report cr WHERE cr.stock_id = :id ORDER BY cr.recorded_at ASC';
-        $stmt = $conn->executeQuery($sql, ['id' => $stock->getId()]);
-        $results = $stmt->fetchAllAssociative();
-
+        // The reports the charts read, oldest first, each with the share price at its filing.
+        $results = $reports->findWithPriceAtFiling($stock, self::FUNDAMENTALS_REPORTS);
         $currentPrice = (string) $stock->getPrice();
-        $priceStmt = $conn->prepare('SELECT price FROM stock_history WHERE stock_id = :id AND recorded_at <= :date ORDER BY recorded_at DESC LIMIT 1');
-        $priceStmt->bindValue('id', $stock->getId());
 
         // The quarter each report covers, from the time it was filed. A report filed before that was recorded is read
         // off the reporting schedule; a delisted company stopped filing at some past quarter the schedule cannot
@@ -295,11 +297,11 @@ class StockController extends AbstractController
         $periods = ReportCalendar::reportLabels($filingTimes, $countedBack);
 
         foreach ($results as $index => &$row) {
+            $priceAtFiling = $row['historical_price'];
+            unset($row['historical_price']);
             $row['period'] = $periods[$index] ?? null;
             $row['current_price'] = $currentPrice;
-            $priceStmt->bindValue('date', $row['recorded_at']);
-            $priceResult = $priceStmt->executeQuery()->fetchOne();
-            $row['historical_price'] = $priceResult !== false ? (string) $priceResult : $currentPrice;
+            $row['historical_price'] = $priceAtFiling !== null ? (string) $priceAtFiling : $currentPrice;
         }
         unset($row);
 
