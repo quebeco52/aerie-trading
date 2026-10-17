@@ -251,6 +251,24 @@ class MarketEngineTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $priced(0.0, 5.0)['price'] / $repealed['price'], 0.02, 'A revision of five a tonne at the floors is a small move.');
     }
 
+    /**
+     * Surplus cash is worth its face. Paying a dollar of it out (a fine, a dividend, a buyback) lowers fair value by a
+     * dollar, whatever the business: capitalised through the interest it saved, it was worth about forty cents.
+     */
+    public function testSurplusCashIsWorthItsFace(): void
+    {
+        foreach (['tech', 'utility', 'restaurant'] as $model) {
+            $fair = fn (float $paid): float => $this->engine->strikeFairValue(new MarketPricingContext(
+                currentPrice: 50.0, currentVolatility: 0.25, longTermVolatility: 0.25, dt: 1.0 / 252.0, lambda: 0.0,
+                macroState: new MacroStateDTO(), bookValuePerShare: 30.0 - $paid, currentRoic: 0.12, roicTtm: 0.12, revenuePerShare: 40.0,
+                businessModel: $model, liveCostOfEquity: 0.09, netDebtPerShare: 10.0, investedCapitalPerShare: 40.0, baselineRoic: 0.12,
+                excessCashPerShare: 5.0 - $paid,
+            ))['perceived_fair_value'];
+
+            $this->assertEqualsWithDelta(1.0, $fair(0.0) - $fair(1.0), 1e-9, "{$model}: a surplus dollar paid out is a dollar of value.");
+        }
+    }
+
     /** An expected rise in the tax on dividends costs a payer the taxable holders' share of it on its dividends, and a firm paying none nothing. */
     public function testAnExpectedDividendTaxCostsPayersOnly(): void
     {
