@@ -73,7 +73,9 @@ class MarketPricingContext
         /** @var array<string, float> What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever (App\Service\Market\Pricing\PolicyCapitalization::earningsGap()); empty for a firm with none. */
         public array $policyBasesPerShare = [],
         /** The firm's measured long-run return (Stock::$longRunReturn); null values it on its trailing return. */
-        public ?float $longRunReturn = null
+        public ?float $longRunReturn = null,
+        /** Cash per share beyond what the business needs to run, valued at face beside it; zero for a financial, whose cash is its business. */
+        public float $excessCashPerShare = 0.0
     ) {}
 
     /**
@@ -100,6 +102,13 @@ class MarketPricingContext
         $strategy = Sectors::strategyFor($stock->getIndustry());
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
         $baselineVolatility = (float) $stock->getVolatility();
+        $treasury = (float) $stock->getCorporateTreasury();
+        // The cash the business needs is the model's own target on its operating base, without a manager's taste for more.
+        $excessCash = $strategy->isFinancial() ? 0.0 : max(0.0, $treasury - $strategy->calculateTargetOperatingCash(
+            \App\Service\Corporate\CorporateMetrics::getInstance()->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity()),
+            (float) $stock->getCustomerDeposits(),
+            (float) $stock->getWholesaleDebt()
+        ));
 
         return new self(
             currentPrice: (float) $stock->getPrice(),
@@ -131,8 +140,9 @@ class MarketPricingContext
             businessModel: Sectors::businessModelFor($stock->getIndustry()),
             liveCostOfEquity: $health->costOfEquity,
             // The model's own net debt, as DebtEngine reads it: a lender's deposits and a clearinghouse's margin fund
-            // its book rather than finance it, so they are no claim ahead of the equity.
-            netDebtPerShare: max(0.0, $strategy->getNetDebtCapital((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury())) / $shares,
+            // its book rather than finance it, so they are no claim ahead of the equity. Net of the cash the business
+            // runs on only; the excess is valued on its own.
+            netDebtPerShare: max(0.0, $strategy->getNetDebtCapital((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt(), $treasury - $excessCash)) / $shares,
             secularGrowth: $strategy->getFadedSecularGrowthRate($stock, $macroState->totalTime),
             // The anchor the firm's own model measures it by: a lender or underwriter carries a placeholder in
             // baselineRoic, and its through-the-cycle return is its ROE.
@@ -150,6 +160,7 @@ class MarketPricingContext
             priorMarketVol: $priorMarketVol,
             costOfDebt: $health->rawMetrics->currentMarketRate,
             longRunReturn: $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null,
+            excessCashPerShare: $excessCash / $shares,
             policyBasesPerShare: array_filter([
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,

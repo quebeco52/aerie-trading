@@ -238,7 +238,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         // slumping revenue line and fall as a share of a booming one. Stricter rules on extraction cost productivity,
         // and every barrel costs that much more to lift.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        $perBarrelCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue) + $disasterPenalty;
+        $perBarrelCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue);
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perBarrelCostRatio, $priceRelative));
 
         $hedgeGain = $expectedRevenue * $liquidsShare * $oilVolume * $hedgeRatio * ($hedgedStrike - $oilSpot) * (1.0 + $basisShift);
@@ -247,6 +247,9 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         // visibility lets a persistent price level converge to an unbiased consensus.
         $productionShock = $expectedRevenue > 0.0 ? ($volumeRevenue / $expectedRevenue) - 1.0 : 0.0;
         $observableShockZ = (($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY) + $productionShock;
+
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $disasterPenalty * $volumeRevenue;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -261,6 +264,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
                 'realized_price_index' => $priceRelative,
                 'hedge_gain' => $actualRevenue > 0.0 ? $hedgeGain / $actualRevenue : 0.0,
             ],
+            specialCharge: $specialCharge,
         );
     }
 

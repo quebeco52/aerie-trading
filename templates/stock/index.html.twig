@@ -1959,7 +1959,7 @@
 								<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 									<span class="text-xs text-on-surface-variant">Marginal return</span>
 									<p class="text-base font-semibold font-mono tabular-nums mt-1 {{ sat.marginalReturn < sat.trueReturn - 0.0005 ? 'text-warning' : 'text-on-surface' }}">{{ sat.marginalReturn|pct(2) }}</p>
-									<p class="text-2xs text-on-surface-faint mt-1">next dollar of capital · trailing {{ sat.trueReturn|pct(2) }}</p>
+									<p class="text-2xs text-on-surface-faint mt-1">next dollar of capital{% if sat.trailingReturn is not null %} · trailing {{ sat.trailingReturn|pct(2) }}{% endif %}</p>
 								</div>
 								<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
 									<span class="text-xs text-on-surface-variant">Moat</span>

@@ -168,10 +168,11 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $viralMultiplier = 1.0;
         $eventType = null;
         $foodSafetyPenalty = 0.0;
+        $scandalWriteOff = 0.0;
 
         if ($eventZ < self::FOOD_SAFETY_SCANDAL_Z_SCORE && $recoveryElapsed === 0) {
             $recoveryElapsed = $streams->startRegime(self::REGIME_FOOD_SAFETY_RECOVERY);
-            $foodSafetyPenalty = self::FOOD_SAFETY_SCANDAL_PENALTY;
+            $scandalWriteOff = self::FOOD_SAFETY_SCANDAL_PENALTY;
             $eventType = ShockEvent::PRODUCT_RECALL;
         } elseif ($eventZ > self::VIRAL_MENU_ITEM_Z_SCORE) {
             $viralMultiplier = self::VIRAL_MENU_ITEM_MULT;
@@ -225,6 +226,9 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = ($corporateZ * $corporateWeight * self::REVENUE_VARIANCE_SCALAR * $baselineVol) + ($rentEscalator * $leaseWeight);
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $scandalWriteOff * max(0.0, $actualRevenue - $priceRevenue);
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -235,6 +239,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             priceRevenue: $priceRevenue,
+            specialCharge: $specialCharge,
         );
     }
 

@@ -297,7 +297,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         // commercial payers recovers part of it through contract repricing.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        $rawMargin = $realizedVariableMargin + $inputCostDrag + $auditPenalty;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $inpatientWeight * self::INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY * $spendingMultiplier, $clampedMargin, $actualRevenue);
 
@@ -309,6 +309,9 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             ($arbitrageZ * $arbitrageWeight * self::ARBITRAGE_VARIANCE_SCALAR * 0.15);
         $observableShockZ *= $baselineVol;
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $auditPenalty * max(0.0, $actualRevenue - $priceRevenue);
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -319,6 +322,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             priceRevenue: $priceRevenue,
+            specialCharge: $specialCharge,
         );
     }
 

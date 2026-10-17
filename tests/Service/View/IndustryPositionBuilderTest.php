@@ -41,6 +41,9 @@ class IndustryPositionBuilderTest extends TestCase
         return $stock;
     }
 
+    /** @var list<CorporateReport> The firm's newest filings, newest first. */
+    private array $filings = [];
+
     /**
      * @param array<string, float>|null $kpis
      */
@@ -53,6 +56,7 @@ class IndustryPositionBuilderTest extends TestCase
         }
         $reports = $this->createStub(CorporateReportRepository::class);
         $reports->method('findLatestFor')->willReturn($report);
+        $reports->method('findForStocksNewestFirst')->willReturn($this->filings);
 
         $redis = $this->createStub(\Redis::class);
         $redis->method('get')->willReturn((string) $tick);
@@ -147,6 +151,19 @@ class IndustryPositionBuilderTest extends TestCase
     public function testAnUnpricedFirmShowsNoMergerReview(): void
     {
         $this->assertNull($this->builder(null)->build($this->stock('NEW', 'Steel', 1_000.0), new MacroStateDTO())['industry']['mergerReview']);
+    }
+
+    /**
+     * The page's trailing return is what the last four filings measured, not the model's own return, which is pulled
+     * toward what competition lets the business keep; before any filing there is none to show.
+     */
+    public function testTheTrailingReturnIsWhatTheFilingsMeasured(): void
+    {
+        $firm = $this->stock('STL', 'Steel', 2_000.0);
+        $this->assertNull($this->builder(null)->build($firm, new MacroStateDTO())['industry']['saturation']['trailingReturn']);
+
+        $this->filings = array_map(static fn (string $roic): CorporateReport => (new CorporateReport())->setRoic($roic), ['0.1600', '0.1200', '0.0800', '0.1000']);
+        $this->assertEqualsWithDelta(0.115, $this->builder(null)->build($firm, new MacroStateDTO())['industry']['saturation']['trailingReturn'], 1e-12);
     }
 
     public function testADelistedCompanyHasNoPositionLeft(): void

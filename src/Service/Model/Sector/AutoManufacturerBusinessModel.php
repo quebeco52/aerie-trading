@@ -342,7 +342,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $apexBaseMargin     = $realizedVariableMargin * (self::APEX_LUXURY_COST_INTENSITY / $blendedIntensity);
         $softwareBaseMargin = $realizedVariableMargin * (self::SOFTWARE_SERVICES_COST_INTENSITY / $blendedIntensity);
 
-        $salesCosts    = $salesRevenue    * ($salesBaseMargin + $inflationCostPenalty + $recallPenalty);
+        $salesCosts    = $salesRevenue    * ($salesBaseMargin + $inflationCostPenalty);
         // Veblen price hikes reprice the same hypercar deliveries: no incremental build cost on that slice.
         $apexPriceRevenue = max(0.0, $expectedRevenue * $apexWeight * $veblenInflationPower);
         $apexCosts     = max(0.0, $apexRevenue - $apexPriceRevenue) * $apexBaseMargin;
@@ -358,13 +358,14 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         // Observable shock blending
         $strikeShock = ($salesMultiplier - 1.0) * $salesWeight;
-        $recallShock = -$recallPenalty * $salesWeight;
 
         $observableShockZ = ($salesShock * $salesWeight * 0.60) +
             ($apexShock * $apexWeight * 0.40) +
             ($softwareShock * $softwareWeight * 0.20) +
-            ($strikeShock * 0.80) +
-            ($recallShock * 0.70);
+            ($strikeShock * 0.80);
+
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $recallPenalty * $salesRevenue;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -376,6 +377,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             priceRevenue: $apexPriceRevenue,
+            specialCharge: $specialCharge,
         );
     }
 

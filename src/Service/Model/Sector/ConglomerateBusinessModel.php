@@ -327,7 +327,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
 
         // Realized variable margin scaling
         $rawMargin = $realizedVariableMargin
-            + $restructuringPenalty
             + $ppiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
@@ -341,6 +340,9 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             ($defensiveMacroBoost * $defensiveWeight) +
             ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $restructuringPenalty * $actualRevenue;
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -350,6 +352,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            specialCharge: $specialCharge,
         );
     }
 

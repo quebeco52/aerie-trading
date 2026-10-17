@@ -311,11 +311,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             $overrunElapsed = $streams->startRegime(self::REGIME_PROGRAM_OVERRUN);
             $eventType = ShockEvent::PROJECT_DELAY;
         }
-        $forwardLossPenalty = match (true) {
-            $overrunElapsed === 1 => self::FORWARD_LOSS_PENALTY,
-            $overrunElapsed > 1   => self::FORWARD_LOSS_ONGOING_PENALTY,
-            default               => 0.0,
-        };
+        $forwardLossProvision = $overrunElapsed === 1 ? self::FORWARD_LOSS_PENALTY : 0.0;
+        $forwardLossPenalty = $overrunElapsed > 1 ? self::FORWARD_LOSS_ONGOING_PENALTY : 0.0;
 
         if ($eventZ < self::FLAGSHIP_FAILURE_Z_SCORE) {
             $costPlusMultiplier = self::FLAGSHIP_FAILURE_MULT;
@@ -371,7 +368,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin
             + $learningCurveShift
             + ($forwardLossPenalty * $fixedPriceWeight)
-            + ($flagshipPenalty * $costPlusWeight)
             + ($wartimeSupplyDrag * $fmsWeight)
             + $inputCostDrag;
 
@@ -387,6 +383,9 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = ($costPlusShock * $costPlusWeight) + ($fixedPriceShock * $fixedPriceWeight) + ($fmsShock * $fmsWeight);
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = (($forwardLossProvision * $fixedPriceWeight) + ($flagshipPenalty * $costPlusWeight)) * $actualRevenue;
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -397,6 +396,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
                     kpis: ['book_to_bill' => $backlogRevenue > 0.0 ? $backlogOrders / $backlogRevenue : 1.0, 'backlog_quarters' => $backlogQuarters],
+            specialCharge: $specialCharge,
         );
     }
 

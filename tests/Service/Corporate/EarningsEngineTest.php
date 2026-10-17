@@ -2018,7 +2018,8 @@ class EarningsEngineTest extends TestCase
         $stock = $this->buildMatureIndustrial('NEGQ');
         $stock->setTotalEquity('3000000000');
         $stock->setWholesaleDebt('40000000000');
-        $stock->setCorporateTreasury('5000000000');
+        // The cash its $80B of revenue needs and no more: surplus cash is worth its face beside the business.
+        $stock->setCorporateTreasury('4000000000');
         $stock->setGoodwill('5000000000');
         $stock->setOperatingMargin('0.03');
         $stock->setBaselineRoic('0.02');
@@ -2054,7 +2055,8 @@ class EarningsEngineTest extends TestCase
         $stock = $this->buildMatureIndustrial('STRT');
         $stock->setTotalEquity('3000000000');
         $stock->setWholesaleDebt('40000000000');
-        $stock->setCorporateTreasury('5000000000');
+        // The cash its $80B of revenue needs and no more: surplus cash is worth its face beside the business.
+        $stock->setCorporateTreasury('4000000000');
         $stock->setGoodwill('5000000000');
         $stock->setOperatingMargin('0.03');
         $stock->setBaselineRoic('0.02');

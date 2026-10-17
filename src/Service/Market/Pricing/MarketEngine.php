@@ -629,7 +629,8 @@ class MarketEngine
             $ctx->targetPayoutRatio,
             $ctx->dividendAdjustmentSpeed,
             $ctx->policyBasesPerShare,
-            $ctx->longRunReturn
+            $ctx->longRunReturn,
+            $ctx->excessCashPerShare
         );
     }
 
@@ -663,6 +664,7 @@ class MarketEngine
      * @param float $dividendAdjustmentSpeed Share of the gap to its target dividend the firm closes each quarter.
      * @param array<string, float> $policyBasesPerShare What each law the firm's accounts answer to is charged on or moves, per share, keyed by lever.
      * @param float|null $longRunReturn  The firm's measured long-run return; the trailing return's gap to it is valued as it fades.
+     * @param float $excessCashPerShare  Cash beyond what the business needs to run, valued at face beside it.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
      */
     private function evaluateFundamentalState(
@@ -692,11 +694,17 @@ class MarketEngine
         float $targetPayoutRatio = 0.0,
         float $dividendAdjustmentSpeed = 1.0,
         array $policyBasesPerShare = [],
-        ?float $longRunReturn = null
+        ?float $longRunReturn = null,
+        float $excessCashPerShare = 0.0
     ): array {
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
         $macro = $macroState ?? new MacroStateDTO();
+
+        // Cash beyond what the business needs is worth its face: every leg below values the business on the book it runs
+        // on, and the surplus is added back after. Capitalised through the interest it saved, a surplus dollar was worth
+        // the after-tax rate times the multiple, about forty cents, and nothing at all to a firm already net of debt.
+        $bookValuePerShare = max(0.0, $bookValuePerShare - $excessCashPerShare);
 
         // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, the dividends its policy pays.
         // All are discounted at the cost of equity on the return the firm earns on its equity
@@ -877,10 +885,10 @@ class MarketEngine
             };
 
             $legs = $underExpectedLaws(false);
-            $policyRepricing = $legs['fair_value'] / $underExpectedLaws(true)['fair_value'];
+            $policyRepricing = ($legs['fair_value'] + $excessCashPerShare) / ($underExpectedLaws(true)['fair_value'] + $excessCashPerShare);
         }
 
-        $perceivedFairValue = max(0.01, $legs['fair_value']);
+        $perceivedFairValue = max(0.01, $legs['fair_value'] + $excessCashPerShare);
 
         // Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
         // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained 
@@ -893,9 +901,9 @@ class MarketEngine
             'dynamic_reversion'    => $dynamicReversion,
             'policy_repricing'     => $policyRepricing,
             'analyst_targets'      => [
-                'growth_analyst' => max(0.01, $legs['earnings_value']),
-                'income_analyst' => max(0.01, $legs['dividend_value']),
-                'value_analyst'  => max(0.01, $legs['book_value'] * self::VALUE_ANALYST_BOOK_MULT),
+                'growth_analyst' => max(0.01, $legs['earnings_value'] + $excessCashPerShare),
+                'income_analyst' => max(0.01, $legs['dividend_value'] + $excessCashPerShare),
+                'value_analyst'  => max(0.01, ($legs['book_value'] * self::VALUE_ANALYST_BOOK_MULT) + $excessCashPerShare),
             ]
         ];
     }

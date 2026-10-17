@@ -40,6 +40,11 @@ class IndustryPositionBuilder
     /** Capacity over trend demand at or below which the industry reads as tight. */
     private const TIGHT_RATIO = 0.95;
 
+    // --- Trailing Return ---
+
+    /** Filings the trailing return averages: a year of quarters. */
+    private const TRAILING_REPORTS = 4;
+
     public function __construct(
         private readonly IndustryShareLedger $ledger,
         private readonly CorporateMetrics $corporateMetrics,
@@ -56,7 +61,7 @@ class IndustryPositionBuilder
      *         pricesCapacity: bool,
      *         substitutability: float,
      *         addressableShare: float,
-     *         saturation: array{threshold: float, penalty: float, severity: float, trueReturn: float, marginalReturn: float, moatFactor: float},
+     *         saturation: array{threshold: float, penalty: float, severity: float, trueReturn: float, trailingReturn: ?float, marginalReturn: float, moatFactor: float},
      *         rosterShare: float|null,
      *         peerShares: array<string, float>,
      *         rosterSize: int,
@@ -110,6 +115,15 @@ class IndustryPositionBuilder
         // What that reach costs. The penalty is margin friction in return points; severity is the share of
         // the firm's return it eats; the marginal return is what the NEXT dollar of capital earns.
         $trueReturn = $strategy->getTrueReturn($stock);
+        // What the last four filings measured is what the page calls trailing. The model's own return is that pulled
+        // toward what competition lets the business keep, and it stays the base the saturation figures are struck on.
+        $filedReturns = [];
+        foreach ($this->reports->findForStocksNewestFirst([$stock], self::TRAILING_REPORTS) as $report) {
+            $filed = $strategy->isFinancial() ? $report->getReturnOnEquity() : $report->getRoic();
+            if ($filed !== null) {
+                $filedReturns[] = (float) $filed;
+            }
+        }
         $saturationPenalty = $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
 
         return [
@@ -124,6 +138,7 @@ class IndustryPositionBuilder
                     'penalty' => $saturationPenalty,
                     'severity' => $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn),
                     'trueReturn' => $trueReturn,
+                    'trailingReturn' => $filedReturns === [] ? null : array_sum($filedReturns) / count($filedReturns),
                     'marginalReturn' => $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $macroState),
                     'moatFactor' => FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()] ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'],
                 ],
