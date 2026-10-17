@@ -237,7 +237,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin)
             * max(0.0, $ownedShare);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $restructuringPenalty + $ppiCostDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $ppiCostDrag);
 
         $observableShockZ = ($ownedShock * $ownedWeight * self::WHOLLY_OWNED_OBSERVABLE_DISCOUNT) +
             ($listedShock * $listedWeight * self::LISTED_DIVIDEND_OBSERVABLE_DISCOUNT) +
@@ -245,6 +245,9 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             ($ownedMacroBoost * $ownedWeight * self::WHOLLY_OWNED_OBSERVABLE_DISCOUNT) +
             ($listedMacroBoost * $listedWeight * self::LISTED_DIVIDEND_OBSERVABLE_DISCOUNT) +
             ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
+
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $restructuringPenalty * $actualRevenue;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -255,6 +258,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            specialCharge: $specialCharge,
         );
     }
 

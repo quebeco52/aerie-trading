@@ -212,7 +212,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         $merchantCostShift = $this->resolveMerchantCostShift($macroState, $mathUtility, $realizedVariableMargin, $priceLift);
 
         $clampedMargin = $this->clampMargin(
-            $realizedVariableMargin + $restructuringPenalty + $ppiCostDrag + ($merchantCostShift * $merchantShare)
+            $realizedVariableMargin + $ppiCostDrag + ($merchantCostShift * $merchantShare)
         );
 
         $observableShockZ = ($merchantShock * $merchantWeight * self::MERCHANT_OBSERVABLE_DISCOUNT) +
@@ -221,6 +221,9 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             ($merchantSurge * $merchantWeight * self::MERCHANT_OBSERVABLE_DISCOUNT) +
             ($tollboothMacroBoost * $tollboothWeight) +
             ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
+
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $restructuringPenalty * $actualRevenue;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -231,6 +234,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            specialCharge: $specialCharge,
         );
     }
 

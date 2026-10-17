@@ -195,11 +195,12 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // compliance spending keeps the ad stack's cost base elevated until the decree lapses.
         $decreeElapsed = $streams->evolveRegime(self::REGIME_CONSENT_DECREE, 0.0, self::CONSENT_DECREE_EXIT_HAZARD);
         $regulatoryShock = 0.0;
+        $regulatoryFine  = 0.0;
         $eventType       = null;
 
         if ($eventZ < $regulatoryZThreshold && $decreeElapsed === 0) {
             $decreeElapsed = $streams->startRegime(self::REGIME_CONSENT_DECREE);
-            $regulatoryShock = $regulatorySeverity; // Massive antitrust / surveillance fine
+            $regulatoryFine = $regulatorySeverity; // Massive antitrust / surveillance fine
             $eventType = ShockEvent::REGULATORY_FINE;
         } elseif ($eventZ < self::SEVERE_CHURN_Z_SCORE) {
             $regulatoryShock = self::SEVERE_CHURN_PENALTY;
@@ -257,6 +258,9 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
+        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
+        $specialCharge = $regulatoryFine * $adWeight * $actualRevenue;
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -267,6 +271,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
                     kpis: ['bookings_to_revenue' => $subscriptionBook['book_to_bill'], 'deferred_revenue_quarters' => $subscriptionBook['backlog_quarters']],
+            specialCharge: $specialCharge,
         );
     }
 

@@ -201,8 +201,11 @@ class AutoManufacturerBusinessModelTest extends TestCase
         );
 
         $this->assertSame(\App\Service\Event\ShockEvent::PRODUCT_RECALL, $result->eventType);
-        // Recall penalty = 0.05 on 60% sales stream -> observable shock = -(0.05 * 0.60) * 0.70 = -0.021
-        $this->assertEqualsWithDelta(-0.021, $result->observableShockZ, 0.001);
+        // The recall is a special item on the mass-market sales it was charged against, out of the cost ratio and of
+        // what the Street forecasts, which excludes it: analysts cutting their numbers for it would manufacture a beat.
+        $salesRevenue = $result->streamRevenue['mass_market_sales'];
+        $this->assertEqualsWithDelta(AutoManufacturerBusinessModel::MASSIVE_RECALL_PENALTY * $salesRevenue, $result->specialCharge, 1.0);
+        $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 0.001);
     }
 
     public function testExchangeRateExportDragIsCarriedOnceAtTheDeclaredExposure(): void
