@@ -8,8 +8,8 @@ use App\Data\Macro\InputOutputExposures;
 use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -133,7 +133,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return MacroEngine::TREND_REAL_GROWTH
+        return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 

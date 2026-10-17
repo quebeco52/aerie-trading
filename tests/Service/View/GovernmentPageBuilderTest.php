@@ -18,10 +18,10 @@ use App\Repository\MacroReportHistoryRepository;
 use App\Repository\RateDecisionRepository;
 use App\Repository\StockRepository;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Politics\ElectionForecast;
@@ -458,8 +458,8 @@ class GovernmentPageBuilderTest extends TestCase
         ));
         $tax = array_column($page['budget']['levers'], null, 'name')['Corporate tax rate'];
 
-        $this->assertLessThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $tax['platform']);
-        $this->assertSame(MacroEngine::BASE_CORPORATE_TAX_RATE, $tax['target']);
+        $this->assertLessThan(MacroConstants::BASE_CORPORATE_TAX_RATE, $tax['platform']);
+        $this->assertSame(MacroConstants::BASE_CORPORATE_TAX_RATE, $tax['target']);
         $this->assertSame('blocked', $tax['status']);
     }
 
@@ -489,8 +489,8 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('pending', $levers['Tax on dividends']['status']);
         $this->assertLessThan(Valuation::FOUNDING_DIVIDEND_TAX_RATE, $levers['Tax on dividends']['platform'], 'The right taxes dividends less.');
         $this->assertStringContainsString('at the rate set at Year 1', $levers['Tax on dividends']['note']);
-        $this->assertLessThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['platform']);
-        $this->assertSame(MacroEngine::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted']);
+        $this->assertLessThan(MacroConstants::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['platform']);
+        $this->assertSame(MacroConstants::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted']);
         $this->assertSame('enacted', $levers['Average tariff on imports']['status'], 'An open government has no tariff to levy.');
         $this->assertSame('pending', $levers['Labour force growth']['status']);
         $this->assertSame('Year 1 Q3', $page['budget']['nextRound']);
@@ -837,7 +837,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(0.05, $office['tariff']['inForce']);
         $this->assertSame(0.08, $office['tariff']['next']);
         $this->assertSame(0.02, $office['tariff']['expected']);
-        $this->assertEqualsWithDelta(MacroEngine::TARIFF_RETALIATION_RATIO * 0.05, $office['tariff']['retaliation'], 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::TARIFF_RETALIATION_RATIO * 0.05, $office['tariff']['retaliation'], 1e-12);
         $this->assertGreaterThan(0.0, $office['tariff']['revenueToGdp']);
         $this->assertNull($office['migration']['next']);
         $this->assertSame(0.01, $office['migration']['populationShift']);
@@ -1005,8 +1005,8 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame([Diet::PARTY_NAMES[Diet::COMMON_LOT]], $market['cabinets'][0]['support']);
 
         $levers = array_column($market['levers'], null, 'name');
-        $this->assertEqualsWithDelta(MacroEngine::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted'], 1e-12);
-        $this->assertEqualsWithDelta(MacroEngine::BASE_CORPORATE_TAX_RATE + 0.03, $levers['Corporate tax rate']['expected'], 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_CORPORATE_TAX_RATE, $levers['Corporate tax rate']['enacted'], 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_CORPORATE_TAX_RATE + 0.03, $levers['Corporate tax rate']['expected'], 1e-12);
         $this->assertTrue($levers['Bank levy']['moves']);
         $this->assertFalse($levers['Average tariff on imports']['moves']);
     }

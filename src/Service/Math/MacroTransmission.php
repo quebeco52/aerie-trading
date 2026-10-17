@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Math;
 
-use App\Service\Macro\MacroEngine;
-
 /**
  * How macro aggregates and policy levers reach firms: demand shifts from the PMI, housing starts, foreign demand,
  * the trade balance, broad money and capacity utilisation; PPI stages and cost drag; supply-chain, deal-flow and
@@ -36,6 +34,28 @@ final class MacroTransmission
      * two benchmark years. Added to trend real growth it is the sector's secular real growth, and shares that sum
      * to GDP drift to zero on average, so the sectors together grow with the economy.
      */
+
+    // --- Jovanovic-Rousseau (2002) Capital Markets & M&A Deal Flow ---
+    /** Log-elasticity of deal flow to one cycle-standard-deviation (150bps) of equity risk premium. */
+    public const DEAL_ACTIVITY_ERP_BETA = 0.175;
+    /** Log-elasticity of deal flow to one cycle-standard-deviation (500bps) of high-yield OAS. */
+    public const DEAL_ACTIVITY_HY_BETA = 0.225;
+    /** Log-elasticity of deal flow to one cycle-standard-deviation (6 vol points) of equity volatility. */
+    public const DEAL_ACTIVITY_VOL_BETA = 0.10;
+    /**
+     * Cap on the log deviation of the deal flow target (~1.7x either way): global M&A volume ran 2.2x from the 2007
+     * peak to the 2009 trough, the widest cycle on record, so a 2008 freeze against a 2007 boom stays under 3x.
+     */
+    public const DEAL_ACTIVITY_LOG_RANGE = 0.55;
+
+    // --- Economic Policy Uncertainty (Baker, Bloom & Davis 2016) ---
+    /** One cycle-standard-deviation of the log index (~0.35): the unit the deal-flow elasticity is quoted in. */
+    public const EPU_CYCLE_LOG_SD = 0.35;
+    /**
+     * Log-elasticity of deal flow to one standard deviation of policy uncertainty: acquisition activity falls by
+     * single-digit percents per sd (Bonaime, Gulen & Ion 2018).
+     */
+    public const DEAL_ACTIVITY_EPU_BETA = 0.10;
     public static function gdpShareDrift(float $shareStart, float $shareEnd, float $years): float
     {
         if ($shareStart <= 0.0 || $shareEnd <= 0.0 || $years <= 0.0) {
@@ -110,20 +130,20 @@ final class MacroTransmission
         float $dW,
         float $kappa = 1.60,
         float $sigma = 0.15,
-        float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE,
+        float $policyUncertaintyIndex = MacroConstants::EPU_BASELINE,
     ): float {
-        $erpExcess = ($equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM) / 0.015;
+        $erpExcess = ($equityRiskPremium - MacroConstants::BASE_EQUITY_RISK_PREMIUM) / 0.015;
         // 500 bps is one cycle-standard-deviation of HY OAS (2000-2024), so a 2008-type +1,500 bps reads as three units
         // of stress.
-        $hyExcess = ($hyCreditSpread - (MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER)) / 0.050;
-        $volExcess = ($marketVolatility - MacroEngine::MACRO_VOL_BASE_ANCHOR) / 0.06;
-        $epuExcess = log(max(1.0, $policyUncertaintyIndex) / MacroEngine::EPU_BASELINE) / MacroEngine::EPU_CYCLE_LOG_SD;
+        $hyExcess = ($hyCreditSpread - (MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER)) / 0.050;
+        $volExcess = ($marketVolatility - MacroConstants::MACRO_VOL_BASE_ANCHOR) / 0.06;
+        $epuExcess = log(max(1.0, $policyUncertaintyIndex) / MacroConstants::EPU_BASELINE) / self::EPU_CYCLE_LOG_SD;
 
-        $stressExponent = - (MacroEngine::DEAL_ACTIVITY_ERP_BETA * $erpExcess)
-            - (MacroEngine::DEAL_ACTIVITY_HY_BETA * $hyExcess)
-            - (MacroEngine::DEAL_ACTIVITY_VOL_BETA * $volExcess)
-            - (MacroEngine::DEAL_ACTIVITY_EPU_BETA * $epuExcess);
-        $targetIndex = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(max(-MacroEngine::DEAL_ACTIVITY_LOG_RANGE, min(MacroEngine::DEAL_ACTIVITY_LOG_RANGE, $stressExponent)));
+        $stressExponent = - (self::DEAL_ACTIVITY_ERP_BETA * $erpExcess)
+            - (self::DEAL_ACTIVITY_HY_BETA * $hyExcess)
+            - (self::DEAL_ACTIVITY_VOL_BETA * $volExcess)
+            - (self::DEAL_ACTIVITY_EPU_BETA * $epuExcess);
+        $targetIndex = MacroConstants::DEAL_ACTIVITY_BASELINE * exp(max(-self::DEAL_ACTIVITY_LOG_RANGE, min(self::DEAL_ACTIVITY_LOG_RANGE, $stressExponent)));
 
         $drift = $kappa * ($targetIndex - $currentDealIndex) * $dt;
         $diffusion = $sigma * $currentDealIndex * sqrt($dt) * $dW;
@@ -290,7 +310,7 @@ final class MacroTransmission
      */
     public static function calculatePmiDemandShift(
         float $pmi,
-        float $baseline = MacroEngine::PMI_BASELINE,
+        float $baseline = MacroConstants::PMI_BASELINE,
         float $sensitivity = 0.50,
     ): float {
         $base = max(1.0, $baseline);
@@ -340,7 +360,7 @@ final class MacroTransmission
      */
     public static function calculatePpiCostDrag(
         float $ppi,
-        float $targetInflation = MacroEngine::TARGET_INFLATION,
+        float $targetInflation = MacroConstants::TARGET_INFLATION,
         float $pricingPower = 0.50,
         float $sensitivity = 0.50,
     ): float {
@@ -361,7 +381,7 @@ final class MacroTransmission
      */
     public static function calculateHousingStartsShift(
         float $starts,
-        float $baseline = MacroEngine::HOUSING_STARTS_BASELINE,
+        float $baseline = MacroConstants::HOUSING_STARTS_BASELINE,
         float $sensitivity = 0.30,
     ): float {
         $base = max(1.0, $baseline);
@@ -407,7 +427,7 @@ final class MacroTransmission
      *
      * The shift is the utilization gap -- the deviation from the neutral rate -- carried into demand or
      * overhead absorption at the sector's sensitivity. Both rate and baseline are FRACTIONS as G.17 and
-     * MacroEngine::CU_BASELINE express them (0.785, not 78.5), so their difference is already the gap in
+     * MacroConstants::CU_BASELINE express them (0.785, not 78.5), so their difference is already the gap in
      * unit terms: 80.5% against a 78.5% neutral is 0.020, or two percentage points of slack absorbed.
      *
      * @param float $cuRate      Industrial capacity utilization rate as a fraction (e.g. 0.785).
@@ -417,7 +437,7 @@ final class MacroTransmission
      */
     public static function calculateCapacityUtilizationShift(
         float $cuRate,
-        float $baseline = MacroEngine::CU_BASELINE,
+        float $baseline = MacroConstants::CU_BASELINE,
         float $sensitivity = 0.40,
     ): float {
         $deviation = $cuRate - $baseline;

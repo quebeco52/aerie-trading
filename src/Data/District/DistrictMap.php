@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Data\District;
 
+use App\Service\Math\MacroConstants;
+
 /**
  * Authored cartography for the Aerie Autonomous District: a single street, Glasswater Row,
  * fronted by whichever ~45 listed companies currently rank largest by market cap.
@@ -568,7 +570,7 @@ class DistrictMap
     public const OP_LTE = 'lte';
     /**
      * Stressed when the field is strictly below `value`. Distinct from OP_LTE for a threshold
-     * that is itself a field's neutral resting value (e.g. MacroEngine::PMI_BASELINE) — OP_LTE
+     * that is itself a field's neutral resting value (e.g. MacroConstants::PMI_BASELINE) — OP_LTE
      * would misfire at that exact baseline, since "at or below" includes "at".
      */
     public const OP_LT = 'lt';
@@ -637,11 +639,10 @@ class DistrictMap
                 ['field' => 'yield_10y_ema', 'label' => '10Y', 'unit' => self::UNIT_PERCENT],
             ],
             'stress_rules' => [
-                // MacroEngine::SYSTEMIC_INVERSION_ALARM_YEARS — a yield curve inversion that has persisted long enough
-                // to count as a systemic alarm.
-                ['field' => 'inversion_duration', 'op' => self::OP_GTE, 'value' => 0.75],
-                // MacroEngine::ZLB_PROXIMITY_THRESHOLD — policy rate pinned near the zero lower bound.
-                ['field' => 'policy_rate_ema', 'op' => self::OP_LTE, 'value' => 0.0025],
+                // A yield curve inversion that has persisted long enough to count as a systemic alarm.
+                ['field' => 'inversion_duration', 'op' => self::OP_GTE, 'value' => MacroConstants::SYSTEMIC_INVERSION_ALARM_YEARS],
+                // The policy rate pinned near the zero lower bound.
+                ['field' => 'policy_rate_ema', 'op' => self::OP_LTE, 'value' => MacroConstants::ZLB_PROXIMITY_THRESHOLD],
             ],
         ],
         'credit-registry' => [
@@ -653,15 +654,14 @@ class DistrictMap
                 ['field' => 'high_yield_credit_spread_ema', 'label' => 'HY', 'unit' => self::UNIT_PERCENT],
             ],
             'stress_rules' => [
-                // MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD — an interbank funding freeze.
-                ['field' => 'interbank_liquidity_spread_ema', 'op' => self::OP_GTE, 'value' => 0.0100],
-                // MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD — a high-yield credit seizure.
-                ['field' => 'high_yield_credit_spread_ema', 'op' => self::OP_GTE, 'value' => 0.1000],
-                // MacroEngine::SYSTEMIC_SOVEREIGN_STRESS_SPREAD — the sovereign re-rated.
-                ['field' => 'sovereign_risk_spread_ema', 'op' => self::OP_GTE, 'value' => 0.0150],
-                // MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN — debt service past the deleveraging line over its own
-                // average.
-                ['field' => 'household_debt_service_gap', 'op' => self::OP_GTE, 'value' => 0.020],
+                // An interbank funding freeze.
+                ['field' => 'interbank_liquidity_spread_ema', 'op' => self::OP_GTE, 'value' => MacroConstants::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD],
+                // A high-yield credit seizure.
+                ['field' => 'high_yield_credit_spread_ema', 'op' => self::OP_GTE, 'value' => MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD],
+                // The sovereign re-rated.
+                ['field' => 'sovereign_risk_spread_ema', 'op' => self::OP_GTE, 'value' => MacroConstants::SYSTEMIC_SOVEREIGN_STRESS_SPREAD],
+                // Debt service past the deleveraging line over its own average.
+                ['field' => 'household_debt_service_gap', 'op' => self::OP_GTE, 'value' => MacroConstants::HOUSEHOLD_DSR_STRESS_MARGIN],
                 // The yield-curve probit at even odds of a recession within the year — the Authority's forecast
                 // warning.
                 ['field' => 'recession_probability_ema', 'op' => self::OP_GTE, 'value' => 0.50],
@@ -690,11 +690,11 @@ class DistrictMap
                 ['field' => 'inflation_ema', 'label' => 'CPI', 'unit' => self::UNIT_PERCENT],
             ],
             'stress_rules' => [
-                // 1.5 points over MacroEngine::TARGET_INFLATION — inflation well past the Authority's target.
+                // 1.5 points over MacroConstants::TARGET_INFLATION — inflation well past the Authority's target.
                 ['field' => 'inflation_ema', 'op' => self::OP_GTE, 'value' => 0.035],
                 // Output a point below potential — a recessionary output gap.
                 ['field' => 'output_gap_ema', 'op' => self::OP_LTE, 'value' => -0.010],
-                // A point of unemployment over MacroEngine::NATURAL_UNEMPLOYMENT: labour-market slack.
+                // A point of unemployment over MacroConstants::NATURAL_UNEMPLOYMENT: labour-market slack.
                 ['field' => 'unemployment_rate_ema', 'op' => self::OP_GTE, 'value' => 0.050],
             ],
         ],
@@ -750,10 +750,10 @@ class DistrictMap
                 ['field' => 'producer_price_inflation_ema', 'label' => 'PPI', 'unit' => self::UNIT_PERCENT],
             ],
             'stress_rules' => [
-                // MacroEngine::PMI_BASELINE — the ISM contraction line: a real-world standard boundary, not an
-                // invented number. Strictly-below (OP_LT, not OP_LTE) because 50.0 is also every model's
-                // resting default for this field — OP_LTE would stress at rest.
-                ['field' => 'manufacturing_pmi_ema', 'op' => self::OP_LT, 'value' => 50.0],
+                // The ISM contraction line: a real-world standard boundary, not an invented number. Strictly-below
+                // (OP_LT, not OP_LTE) because 50.0 is also every model's resting default for this field — OP_LTE would
+                // stress at rest.
+                ['field' => 'manufacturing_pmi_ema', 'op' => self::OP_LT, 'value' => MacroConstants::PMI_BASELINE],
             ],
         ],
         'works-ministry' => [

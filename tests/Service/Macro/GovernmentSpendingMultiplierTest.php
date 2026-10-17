@@ -12,6 +12,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -44,8 +45,8 @@ class GovernmentSpendingMultiplierTest extends TestCase
             foreach ($base as $quarter => $row) {
                 $outputSum += $shocked[$quarter]['gap'] - $row['gap'];
                 // Purchases are PUBLIC_PURCHASES_TO_GDP of GDP at the baseline index.
-                $purchasesSum += MacroEngine::PUBLIC_PURCHASES_TO_GDP
-                    * ($shocked[$quarter]['gov'] - $row['gov']) / MacroEngine::GOVT_SPENDING_BASELINE;
+                $purchasesSum += MacroConstants::PUBLIC_PURCHASES_TO_GDP
+                    * ($shocked[$quarter]['gov'] - $row['gov']) / MacroConstants::GOVT_SPENDING_BASELINE;
             }
         }
         $multiplier = $outputSum / $purchasesSum;

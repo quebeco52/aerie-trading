@@ -196,7 +196,7 @@ class ClearingHouseBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(inflationEma: 0.02, marketVolatilityEma: 0.12);
         $state = $this->rollMarginPool(1000.0, [ClearingHouseBusinessModel::STATE_MARGIN_RATE_CHANGE => 0.0], $macro);
 
-        $trend = (0.02 + \App\Service\Macro\MacroEngine::TFP_DRIFT + \App\Service\Macro\MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / 4.0;
+        $trend = (0.02 + \App\Service\Math\MacroConstants::TFP_DRIFT + \App\Service\Math\MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE) / 4.0;
         $this->assertEqualsWithDelta(1000.0 * (1.0 + $trend), $state['customerDeposits'], 1e-9);
         $this->assertEqualsWithDelta($state['customerDeposits'], $state['treasury'], 1e-9, 'Margin arrives as cash held against it.');
     }
@@ -210,7 +210,7 @@ class ClearingHouseBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(inflationEma: 0.02, marketVolatilityEma: 0.30);
         $state = $this->rollMarginPool(1000.0, [ClearingHouseBusinessModel::STATE_MARGIN_RATE_CHANGE => log(2.0)], $macro);
 
-        $trend = (0.02 + \App\Service\Macro\MacroEngine::TFP_DRIFT + \App\Service\Macro\MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / 4.0;
+        $trend = (0.02 + \App\Service\Math\MacroConstants::TFP_DRIFT + \App\Service\Math\MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE) / 4.0;
         $this->assertEqualsWithDelta(2000.0 * (1.0 + $trend), $state['customerDeposits'], 1e-9);
     }
 
@@ -235,7 +235,7 @@ class ClearingHouseBusinessModelTest extends TestCase
      */
     public function testVolatilityIsNeutralAtTheAnchor(): void
     {
-        $anchor = $this->clearingMacro(\App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $anchor = $this->clearingMacro(\App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR);
         $stock = (new Stock())->setTicker('ACC');
 
         $report = $this->model->computeActualFinancials($stock, 100.0, 0.30, 0.0, 0.20, $anchor, $this->quietDraws());
@@ -251,7 +251,7 @@ class ClearingHouseBusinessModelTest extends TestCase
      */
     public function testVolatilityMovesClearingVolumeAndNothingElse(): void
     {
-        $anchorVol = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $anchorVol = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $calm = $this->model->computeActualFinancials((new Stock())->setTicker('ACC'), 100.0, 0.30, 0.0, 0.20, $this->clearingMacro($anchorVol), $this->quietDraws());
         $busy = $this->model->computeActualFinancials((new Stock())->setTicker('ACC'), 100.0, 0.30, 0.0, 0.20, $this->clearingMacro($anchorVol + 0.10), $this->quietDraws());
 

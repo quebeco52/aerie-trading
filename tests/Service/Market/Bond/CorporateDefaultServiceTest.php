@@ -195,7 +195,7 @@ class CorporateDefaultServiceTest extends TestCase
 
     public function testRecoveryIsAShareOfFaceSoTheCashIsFaceTimesIt(): void
     {
-        $recovery = $this->recovery(Bond::SENIORITY_SENIOR_UNSECURED, \App\Service\Macro\MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $recovery = $this->recovery(Bond::SENIORITY_SENIOR_UNSECURED, \App\Service\Math\MacroConstants::CORPORATE_DEFAULT_BASELINE);
         $face = FinancialConstants::BOND_FACE_VALUE;
 
         $this->assertEqualsWithDelta($face * CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $face * $recovery, 1e-6);

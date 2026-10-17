@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro\Subsystem;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -40,14 +40,14 @@ class MortgageLtvCapTest extends TestCase
     private static function household(?float $cap = null): MacroState
     {
         $state = new MacroState();
-        $state->yield10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
-        $state->policyRateEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->yield10yEma = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION + MacroConstants::NS_BASE_TERM_PREMIUM;
+        $state->policyRateEma = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
         $state->outputGapEma = 0.0;
-        $state->householdDebtToIncome = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
-        $state->householdDebtToIncomeEma = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
-        $state->creditToGdpTrend = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
-        $state->householdDebtServiceTrend = MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
-        $state->retailDefaultRate = MacroEngine::RETAIL_DEFAULT_BASELINE;
+        $state->householdDebtToIncome = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->householdDebtToIncomeEma = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->creditToGdpTrend = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->householdDebtServiceTrend = MacroConstants::HOUSEHOLD_DSR_NEUTRAL;
+        $state->retailDefaultRate = MacroConstants::RETAIL_DEFAULT_BASELINE;
         $state->mortgageLtvCap = $cap;
 
         return $state;
@@ -72,7 +72,7 @@ class MortgageLtvCapTest extends TestCase
         $this->assertLessThan(0.001, CreditFiscalSubsystem::mortgageLtvCreditCut(1.00));
 
         $free = $this->advance(self::household(), 3.0, 52);
-        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $free->householdDebtToIncome, 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $free->householdDebtToIncome, 1e-12);
         $this->assertSame(0.0, $free->ltvCutBuilt);
     }
 
@@ -107,7 +107,7 @@ class MortgageLtvCapTest extends TestCase
             $state = $this->advance(self::household(0.85), 1.0, $ticksPerYear);
             $built = $cut * (1.0 - exp(-1.0 / CreditFiscalSubsystem::MORTGAGE_LTV_CUT_YEARS));
             $this->assertEqualsWithDelta($built, $state->ltvCutBuilt, 1e-12, "{$ticksPerYear} ticks a year");
-            $this->assertEqualsWithDelta(-$built, log($state->householdDebtToIncome / MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE), 1e-12, 'The stock falls by what is built, and reversion does not fight it.');
+            $this->assertEqualsWithDelta(-$built, log($state->householdDebtToIncome / MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE), 1e-12, 'The stock falls by what is built, and reversion does not fight it.');
         }
     }
 
@@ -119,7 +119,7 @@ class MortgageLtvCapTest extends TestCase
     {
         $state = $this->advance(self::household(0.85), 30.0, 4);
 
-        $this->assertEqualsWithDelta(-CreditFiscalSubsystem::mortgageLtvCreditCut(0.85), log($state->householdDebtToIncome / MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE), 1e-9);
+        $this->assertEqualsWithDelta(-CreditFiscalSubsystem::mortgageLtvCreditCut(0.85), log($state->householdDebtToIncome / MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE), 1e-9);
     }
 
     /**

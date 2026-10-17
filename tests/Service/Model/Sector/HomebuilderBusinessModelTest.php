@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\HomebuilderBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -127,7 +127,7 @@ final class HomebuilderBusinessModelTest extends TestCase
         $fresh = $this->builder();
         $this->report($fresh, $boom);
         $residual = HomebuilderBusinessModel::residualLandValue(1.10, self::VARIABLE_COST_RATIO, self::CONSTRUCTION_SHARE);
-        $turnover = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / HomebuilderBusinessModel::LAND_BANK_YEARS);
+        $turnover = 1.0 - exp(-FinancialConstants::QUARTER_YEARS / HomebuilderBusinessModel::LAND_BANK_YEARS);
         $expected = HomebuilderBusinessModel::LAND_SHARE_OF_PRICE + ($turnover * ($residual - HomebuilderBusinessModel::LAND_SHARE_OF_PRICE));
         $this->assertEqualsWithDelta($expected, $this->landCost($fresh), 1e-12);
     }

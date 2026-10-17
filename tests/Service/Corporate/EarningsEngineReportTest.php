@@ -14,6 +14,7 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -109,7 +110,7 @@ class EarningsEngineReportTest extends TestCase
             fn($stock, $days, $rev, $costs) => $realMetrics->buildWorkingCapitalBalances($stock, $days, $rev, $costs),
         );
         $this->corporateMetricsMock->method('seedFixedAssetLedger')->willReturnCallback(
-            fn($stock, $ic, $nwc, $gw, $cip, $age = \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO) => $realMetrics->seedFixedAssetLedger($stock, $ic, $nwc, $gw, $cip, $age),
+            fn($stock, $ic, $nwc, $gw, $cip, $age = FinancialConstants::SEED_ASSET_AGE_RATIO) => $realMetrics->seedFixedAssetLedger($stock, $ic, $nwc, $gw, $cip, $age),
         );
         $this->corporateMetricsMock->method('seedReceivablesAllowance')->willReturnCallback(
             fn($stock, $rate) => $realMetrics->seedReceivablesAllowance($stock, $rate),
@@ -910,7 +911,7 @@ class EarningsEngineReportTest extends TestCase
     {
         $share = EarningsEngine::REPORT_IMMEDIATE_RESPONSE_SHARE;
 
-        $quarter = EarningsEngine::REPORT_INTERVAL_YEARS;
+        $quarter = FinancialConstants::QUARTER_YEARS;
 
         $this->assertEqualsWithDelta(exp($share * log(1.10)) - 1.0, EarningsEngine::reportPriceGap(100.0, 110.0, 0.0, 0.0), 1e-12);
         $this->assertEqualsWithDelta(0.0, EarningsEngine::reportPriceGap(100.0, 98.0, 2.0, 0.0), 1e-12, 'Paying the dividend is no news.');

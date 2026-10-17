@@ -88,7 +88,7 @@ final class PortfolioCashInterestTest extends TestCase
     /** The rate the dashboard prints is the one the ticker accrues: policy less the sweep spread, never below zero. */
     public function testTheSweepRateIsThePolicyRateLessTheSpreadFlooredAtZero(): void
     {
-        $this->assertEqualsWithDelta(0.05 - \App\Service\Macro\MacroEngine::CASH_YIELD_SPREAD, Portfolio::cashSweepRate(0.05), 1e-12);
+        $this->assertEqualsWithDelta(0.05 - \App\Service\Math\MacroConstants::CASH_YIELD_SPREAD, Portfolio::cashSweepRate(0.05), 1e-12);
         $this->assertSame(0.0, Portfolio::cashSweepRate(0.001));
     }
 

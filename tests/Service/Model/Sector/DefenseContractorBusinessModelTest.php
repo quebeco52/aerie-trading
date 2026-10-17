@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use App\Service\Model\StreamContext;
@@ -90,7 +90,7 @@ class DefenseContractorBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $model->getCapexCycleSignal(new Stock(), new MacroStateDTO(outputGapEma: -0.06, alliedDefenseSpendingIndexEma: 100.0)), 1e-12);
         $this->assertEqualsWithDelta(
-            MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * log(0.8),
+            MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * log(0.8),
             $model->getCapexCycleSignal(new Stock(), new MacroStateDTO(alliedDefenseSpendingIndexEma: 80.0)),
             1e-12,
         );
@@ -514,7 +514,7 @@ class DefenseContractorBusinessModelTest extends TestCase
     public function testTheCostBaseStaffsToTheProgrammeWorkInHand(): void
     {
         $model = new DefenseContractorBusinessModel();
-        $macro = $this->createMacroState(inflation: MacroEngine::TARGET_INFLATION);
+        $macro = $this->createMacroState(inflation: MacroConstants::TARGET_INFLATION);
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 

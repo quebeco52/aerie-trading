@@ -9,8 +9,8 @@ use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -321,13 +321,13 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Secular real growth of a fully patent-protected branded book. */
     public static function patentedSecularGrowthRate(): float
     {
-        return MacroEngine::TREND_REAL_GROWTH + MacroTransmission::gdpShareDrift(self::PATENTED_SHARE_2000, self::PATENTED_SHARE_2019, self::PATENTED_SHARE_WINDOW_YEARS);
+        return MacroConstants::TREND_REAL_GROWTH + MacroTransmission::gdpShareDrift(self::PATENTED_SHARE_2000, self::PATENTED_SHARE_2019, self::PATENTED_SHARE_WINDOW_YEARS);
     }
 
     /** Secular real growth of an unprotected generic book. */
     public static function genericSecularGrowthRate(): float
     {
-        return MacroEngine::TREND_REAL_GROWTH + MacroTransmission::gdpShareDrift(self::GENERIC_SHARE_2010, self::GENERIC_SHARE_2018, self::GENERIC_SHARE_WINDOW_YEARS);
+        return MacroConstants::TREND_REAL_GROWTH + MacroTransmission::gdpShareDrift(self::GENERIC_SHARE_2010, self::GENERIC_SHARE_2018, self::GENERIC_SHARE_WINDOW_YEARS);
     }
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
@@ -775,7 +775,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $knownShift = $streams->getPersistedState(self::STATE_KNOWN_COMMERCIAL_SHIFT, 0.0);
         $baseRevenue = $expectedRevenue / (max(0.1, 1.0 + $knownShift) * $this->getStructuralRevenueMultiplier($stock));
 
-        $reimbursementBaseline = MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
+        $reimbursementBaseline = MacroConstants::TARGET_INFLATION - MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
         $reimbursementShift    = $macroState->reimbursementRateGrowth - $reimbursementBaseline;
         $establishedRevenue    = max(0.0, $baseRevenue * $establishedWeight * $measured['marketed'] * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR)) + $reimbursementShift));
         $pipelineRevenue       = max(0.0, $baseRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));

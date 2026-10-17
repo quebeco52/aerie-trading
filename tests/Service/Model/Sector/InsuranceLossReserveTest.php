@@ -6,8 +6,8 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\ReinsuranceBusinessModel;
@@ -44,7 +44,7 @@ final class InsuranceLossReserveTest extends TestCase
     /** A quarter's incurred losses and LAE for a steady book on its structural loss and LAE ratio. */
     private function structuralIncurred(float $annualPremium): float
     {
-        return $annualPremium * EarningsEngine::QUARTERLY_TIME_STEP * (1.0 - self::MARGIN)
+        return $annualPremium * FinancialConstants::QUARTER_YEARS * (1.0 - self::MARGIN)
             * (((1.0 - self::FIXED_COST_RATIO) * (1.0 - InsuranceBusinessModel::BASE_EXPENSE_RATIO_SHARE))
                 + (self::FIXED_COST_RATIO * InsuranceBusinessModel::FIXED_COST_LAE_SHARE));
     }
@@ -115,7 +115,7 @@ final class InsuranceLossReserveTest extends TestCase
     /** Written premium is earned pro rata over an annual term, so half a year of it is always unearned. */
     public function testTheUnearnedPremiumReserveIsHalfAPolicyTerm(): void
     {
-        $quarterlyPremium = self::ANNUAL_PREMIUM * EarningsEngine::QUARTERLY_TIME_STEP;
+        $quarterlyPremium = self::ANNUAL_PREMIUM * FinancialConstants::QUARTER_YEARS;
 
         $this->assertEqualsWithDelta(0.5 * self::ANNUAL_PREMIUM, (new InsuranceBusinessModel())->resolveUnearnedPremiumReserve($quarterlyPremium), 1.0);
     }
@@ -124,7 +124,7 @@ final class InsuranceLossReserveTest extends TestCase
     public function testASteadyBookHoldsEachStockAtItsRatio(): void
     {
         $model = new InsuranceBusinessModel();
-        $quarterlyPremium = self::ANNUAL_PREMIUM * EarningsEngine::QUARTERLY_TIME_STEP;
+        $quarterlyPremium = self::ANNUAL_PREMIUM * FinancialConstants::QUARTER_YEARS;
         $settled = $model->resolveReserveToPremiumRatio($this->carrier(0.0, 0.0)) * self::ANNUAL_PREMIUM;
         $stock = $this->carrier($settled, $this->structuralIncurred(self::ANNUAL_PREMIUM), [InsuranceBusinessModel::STATE_UNEARNED_PREMIUM_BASE => $quarterlyPremium]);
 
@@ -143,7 +143,7 @@ final class InsuranceLossReserveTest extends TestCase
     public function testWrittenPremiumAheadOfEarnedRaisesFloatAndCash(): void
     {
         $model = new InsuranceBusinessModel();
-        $quarterlyPremium = self::ANNUAL_PREMIUM * EarningsEngine::QUARTERLY_TIME_STEP;
+        $quarterlyPremium = self::ANNUAL_PREMIUM * FinancialConstants::QUARTER_YEARS;
         $settled = $model->resolveReserveToPremiumRatio($this->carrier(0.0, 0.0)) * self::ANNUAL_PREMIUM;
         $stock = $this->carrier($settled, $this->structuralIncurred(self::ANNUAL_PREMIUM), [InsuranceBusinessModel::STATE_UNEARNED_PREMIUM_BASE => $quarterlyPremium]);
         $this->runQuarter($model, $stock);
@@ -166,7 +166,7 @@ final class InsuranceLossReserveTest extends TestCase
         $settled = InsuranceBusinessModel::LOSS_RESERVE_TO_PREMIUM_RATIO * self::ANNUAL_PREMIUM;
         $stock = $this->carrier($settled, $this->structuralIncurred(self::ANNUAL_PREMIUM / 2.0));
         $runoffYears = $model->resolveReserveRunoffYears($stock);
-        $quarters = (int) round($runoffYears / EarningsEngine::QUARTERLY_TIME_STEP);
+        $quarters = (int) round($runoffYears / FinancialConstants::QUARTER_YEARS);
 
         $previous = $settled;
         for ($quarter = 0; $quarter < $quarters; $quarter++) {
@@ -178,7 +178,7 @@ final class InsuranceLossReserveTest extends TestCase
 
         // After one runoff lag, 1/e of the gap to the smaller book's float remains.
         $gapRemaining = ($previous - $settled / 2.0) / ($settled / 2.0);
-        $elapsed = $quarters * EarningsEngine::QUARTERLY_TIME_STEP;
+        $elapsed = $quarters * FinancialConstants::QUARTER_YEARS;
         $this->assertEqualsWithDelta(exp(-$elapsed / $runoffYears), $gapRemaining, 0.001);
     }
 
@@ -254,7 +254,7 @@ final class InsuranceLossReserveTest extends TestCase
         $probe = $this->carrier(0.0, 0.0);
         $lifeShare = $model->resolveLifePremiumShare($probe);
         $ratios = $model->resolveReserveRatios($probe);
-        $quarterlyPremium = self::ANNUAL_PREMIUM * EarningsEngine::QUARTERLY_TIME_STEP;
+        $quarterlyPremium = self::ANNUAL_PREMIUM * FinancialConstants::QUARTER_YEARS;
         $incurred = $this->structuralIncurred(self::ANNUAL_PREMIUM);
         $steady = [
             InsuranceBusinessModel::STATE_INCURRED_LIFE_BENEFITS => $incurred * $lifeShare,
@@ -347,7 +347,7 @@ final class InsuranceLossReserveTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
         $stock = $this->carrier(0.0, 0.0);
-        $structuralLossRatio = $this->structuralIncurred(1.0) / EarningsEngine::QUARTERLY_TIME_STEP;
+        $structuralLossRatio = $this->structuralIncurred(1.0) / FinancialConstants::QUARTER_YEARS;
 
         $this->assertEqualsWithDelta(
             InsuranceBusinessModel::LOSS_RESERVE_TO_PREMIUM_RATIO / $structuralLossRatio,

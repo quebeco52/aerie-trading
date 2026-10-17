@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\CustodyBankBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -51,7 +51,7 @@ final class CustodyBankBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $share, 'the District custodian holds part of the fund');
 
         // The fund shrinking to 0.8x its opening size against the economy, with markets at trend.
-        $drawn = new MacroStateDTO(equityWealthRatio: 1.0, equityWealthTrend: 1.0, sovereignFundToGdp: 0.8 * MacroEngine::OPENING_FUND_TO_GDP);
+        $drawn = new MacroStateDTO(equityWealthRatio: 1.0, equityWealthTrend: 1.0, sovereignFundToGdp: 0.8 * MacroConstants::OPENING_FUND_TO_GDP);
         $this->assertEqualsWithDelta($share * -0.2, $this->invoke($this->model, 'resolveFeeVolumeShift', $custodian, $drawn), 1e-12);
     }
 

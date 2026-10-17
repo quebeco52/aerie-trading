@@ -13,10 +13,10 @@ use App\Entity\Etf;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
+use App\Service\Math\MacroConstants;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\CoastGuard;
 use App\Service\Politics\Exchequer;
@@ -139,7 +139,7 @@ class SystemicEventReporter
 
         return [
             'government' => implode('-', array_map(static fn(string $party): string => $names[$party], AerieDiet::governingParties($politics->governingCoalition))),
-            'tax_rate_pct' => number_format((MacroEngine::BASE_CORPORATE_TAX_RATE + $politics->corporateTaxPolicyShift) * 100.0, 1),
+            'tax_rate_pct' => number_format((MacroConstants::BASE_CORPORATE_TAX_RATE + $politics->corporateTaxPolicyShift) * 100.0, 1),
             'tariff_pct' => number_format($politics->importTariffRate * 100.0, 1),
             'labor_growth_pct' => number_format($politics->laborForceGrowthRate * 100.0, 2),
             'carbon_price' => number_format($politics->carbonPrice, 2),

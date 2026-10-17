@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DistressedDebtBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -145,10 +145,10 @@ class DistressedDebtBusinessModelTest extends TestCase
 
         $calmMacro = new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             // Baseline HY
-            highYieldCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+            highYieldCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
             corporateDefaultRateEma: 0.020,   // Baseline 2.0%
         );
 
@@ -214,10 +214,10 @@ class DistressedDebtBusinessModelTest extends TestCase
         $stock->setTicker('DD_TEST');
         $recession = new MacroStateDTO(
             outputGapEma: -0.03,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             highYieldCreditSpreadEma: DistressedDebtBusinessModel::HY_SPREAD_BLOWOUT_BASELINE,
-            corporateDefaultRateEma: MacroEngine::CORPORATE_DEFAULT_BASELINE,
+            corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_BASELINE,
         );
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);

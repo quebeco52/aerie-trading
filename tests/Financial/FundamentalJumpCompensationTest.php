@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
@@ -30,7 +31,7 @@ class FundamentalJumpCompensationTest extends TestCase
         $intensity = self::PRICE_JUMP_INTENSITY * EarningsEngine::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
         $vol = self::PRICE_JUMP_VOL * EarningsEngine::FUNDAMENTAL_JUMP_VOL_SCALE;
         $mean = -self::PRICE_JUMP_VOL * EarningsEngine::FUNDAMENTAL_JUMP_MEAN_SCALE;
-        $dt = EarningsEngine::QUARTERLY_TIME_STEP;
+        $dt = FinancialConstants::QUARTER_YEARS;
 
         $sum = 0.0;
         $sumSq = 0.0;

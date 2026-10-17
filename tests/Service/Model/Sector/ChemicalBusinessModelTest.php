@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ChemicalBusinessModel;
@@ -42,7 +42,7 @@ class ChemicalBusinessModelTest extends TestCase
         // (0.50*0.24) + (0.30*0.18) + (0.20*0.28) = 0.120 + 0.054 + 0.056 = 0.230
         $this->assertEqualsWithDelta(0.230, $this->model->getWorkingCapitalIntensity($stock), 0.001);
         // Trend growth plus chemical products value added sliding from 2.02% to 1.74% of GDP over 1997-2019.
-        $this->assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH - 0.0068, $this->model->getSecularGrowthRate($stock), 1e-4);
+        $this->assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH - 0.0068, $this->model->getSecularGrowthRate($stock), 1e-4);
         $this->assertEquals(3.50, $this->model->getCapexCyclicality());
     }
 
@@ -220,7 +220,7 @@ class ChemicalBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(
             $this->feedstockCostRatio($model, oil: 0.0, gas: 0.0),
-            $this->feedstockCostRatio($model, oil: 0.0, gas: 0.0, crack: 2.0 * MacroEngine::CRACK_SPREAD_BASELINE),
+            $this->feedstockCostRatio($model, oil: 0.0, gas: 0.0, crack: 2.0 * MacroConstants::CRACK_SPREAD_BASELINE),
             1e-12,
         );
     }
@@ -319,7 +319,7 @@ class ChemicalBusinessModelTest extends TestCase
     }
 
     /** Variable cost ratio of a flat-draw quarter with oil and gas moved by the given relative deviations. */
-    private function feedstockCostRatio(ChemicalBusinessModel $model, float $oil, float $gas, float $agriIndex = 100.0, float $crack = MacroEngine::CRACK_SPREAD_BASELINE): float
+    private function feedstockCostRatio(ChemicalBusinessModel $model, float $oil, float $gas, float $agriIndex = 100.0, float $crack = MacroConstants::CRACK_SPREAD_BASELINE): float
     {
         $stock = new Stock();
         $stock->setTicker('FULM_FEED');
@@ -332,8 +332,8 @@ class ChemicalBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             agriculturalCommodityIndexEma: $agriIndex,
-            energyCostPushLag: $oil * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
-            naturalGasPriceIndexEma: MacroEngine::NATURAL_GAS_BASELINE * (1.0 + $gas),
+            energyCostPushLag: $oil * MacroConstants::ENERGY_COST_PUSH_TRANSMISSION,
+            naturalGasPriceIndexEma: MacroConstants::NATURAL_GAS_BASELINE * (1.0 + $gas),
             refiningCrackSpread: $crack,
         );
 

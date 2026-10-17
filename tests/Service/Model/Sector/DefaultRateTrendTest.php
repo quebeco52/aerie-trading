@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
@@ -94,10 +94,10 @@ final class DefaultRateTrendTest extends TestCase
         $math->method('generateUniform')->willReturn(1.0);
 
         $macro = new MacroStateDTO(
-            corporateDefaultRateEma: MacroEngine::CORPORATE_DEFAULT_BASELINE * $rateMultiple * $corporateScale,
-            retailDefaultRateEma: MacroEngine::RETAIL_DEFAULT_BASELINE * $rateMultiple * $retailScale,
-            corporateDefaultRateTrend: MacroEngine::CORPORATE_DEFAULT_BASELINE * $trendMultiple,
-            retailDefaultRateTrend: MacroEngine::RETAIL_DEFAULT_BASELINE * $trendMultiple,
+            corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_BASELINE * $rateMultiple * $corporateScale,
+            retailDefaultRateEma: MacroConstants::RETAIL_DEFAULT_BASELINE * $rateMultiple * $retailScale,
+            corporateDefaultRateTrend: MacroConstants::CORPORATE_DEFAULT_BASELINE * $trendMultiple,
+            retailDefaultRateTrend: MacroConstants::RETAIL_DEFAULT_BASELINE * $trendMultiple,
         );
         // A balance sheet a lender's book is sized on; the operating firms ignore it.
         $stock = (new Stock())->setTicker($ticker)->setBeta('1.0')->setTotalEquity('10000000000')

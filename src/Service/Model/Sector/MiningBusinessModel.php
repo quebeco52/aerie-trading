@@ -9,8 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 
@@ -199,10 +199,10 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     public function resolveStreamPriceRelatives(MacroStateDTO $macroState): array
     {
         return [
-            'base_metals' => max(0.0, $macroState->industrialMetalsIndexEma) / MacroEngine::METALS_BASELINE,
-            'precious_metals' => max(0.0, $macroState->goldPriceIndexEma) / MacroEngine::GOLD_BASELINE,
-            'energy_minerals' => max(0.0, $macroState->naturalGasPriceIndexEma) / MacroEngine::NATURAL_GAS_BASELINE,
-            'fertilizer_minerals' => max(0.0, $macroState->agriculturalCommodityIndexEma) / MacroEngine::AGRI_BASELINE,
+            'base_metals' => max(0.0, $macroState->industrialMetalsIndexEma) / MacroConstants::METALS_BASELINE,
+            'precious_metals' => max(0.0, $macroState->goldPriceIndexEma) / MacroConstants::GOLD_BASELINE,
+            'energy_minerals' => max(0.0, $macroState->naturalGasPriceIndexEma) / MacroConstants::NATURAL_GAS_BASELINE,
+            'fertilizer_minerals' => max(0.0, $macroState->agriculturalCommodityIndexEma) / MacroConstants::AGRI_BASELINE,
         ];
     }
 

@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Math;
 
-use App\Service\Macro\MacroEngine;
-
 /**
  * Credit risk: Vasicek loss and systematic factor, collateral LGD and recovery, Merton asset-value solves, tranche
  * spreads, the rating-class spread curve and an issuer's multiple of it, leverage limits, default-rate and
@@ -19,7 +17,7 @@ final class CreditRisk
      * Aggregate corporate default rate the base recoveries above are quoted at: the long-run average year of the series
      * the macro publishes.
      */
-    public const RECOVERY_BASELINE_DEFAULT_RATE = MacroEngine::CORPORATE_DEFAULT_BASELINE;
+    public const RECOVERY_BASELINE_DEFAULT_RATE = MacroConstants::CORPORATE_DEFAULT_BASELINE;
     /**
      * Fall in recovery per unit of log excess in the aggregate default rate. Recovery and default are NEGATIVELY
      * correlated: defaults cluster in bad years, distressed assets are sold into a market with no buyers, and the same
@@ -80,6 +78,39 @@ final class CreditRisk
      * @param float $capitalBuffer Buffer as a share of assets (0 to 0.025 under Basel III).
      * @return float Debt-to-equity cap with the buffer, never above the unbuffered cap.
      */
+
+    // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
+    /**
+     * IG spread widening per unit of interbank stress (~0.6): 2008's +430 bps TED moved IG OAS ~+450 bps. TED reads the
+     * excess bond premium, never IG, so the two share a factor without forming a loop.
+     */
+    public const INTERBANK_CREDIT_CONTAGION_SENSITIVITY = 0.6;
+    /**
+     * IG spread per unit of excess bond premium, direct leg (0.58): GZ spreads map to IG OAS at 0.78 (their 2008 peaks
+     * over medians), and 0.6 x 0.32 of that already arrives through TED contagion.
+     */
+    public const CREDIT_SPREAD_PREMIUM_LOADING = 0.58;
+    /**
+     * Log-elasticity of the IG spread to the output gap (distance-to-default): the GZ default-risk part (spread less
+     * premium) on the gap holding VIX fixed, 1990-2026, -6.2 (se 1.3). The level alone explains none of it (R2 0.01,
+     * 1973-2026): in 2010 it was back at its pre-crisis 2.5% with the gap still -4%.
+     */
+    public const MERTON_LEVERAGE_SENSITIVITY = 6.2;
+    /**
+     * IG default-risk widening per unit of equity volatility above the threshold (0.037): the GZ default-risk part on
+     * VIX, 0.047 (se 0.009), at the 0.78 GZ-to-IG scale. 45% vol adds ~90 bps; the rest of a crisis spread is the
+     * premium.
+     */
+    public const MERTON_VOL_SENSITIVITY = 0.037;
+    /** Floor on the investment-grade spread (80 bps), the tightest IG OAS of the 2000s cycle. */
+    public const MIN_CREDIT_SPREAD = 0.008;
+    /** Cap on the investment-grade spread (650 bps): ICE BofA US Corporate OAS peaked near 620 bps in Dec 2008. */
+    public const MAX_CREDIT_SPREAD = 0.065;
+    /**
+     * Equity volatility above which credit charges a vol premium (~20%, the long-run VIX median), so ordinary vol does
+     * not widen IG.
+     */
+    public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
     public static function calculateBufferedLeverageLimit(float $leverageLimit, float $capitalBuffer): float
     {
         $equityShare = 1.0 / (1.0 + max(0.0, $leverageLimit));
@@ -287,14 +318,14 @@ final class CreditRisk
         float $marketVolEma,
         float $interbankStress,
         float $excessBondPremium = 0.0,
-        float $premiumLoading = MacroEngine::CREDIT_SPREAD_PREMIUM_LOADING,
-        float $hyBaseMultiplier = MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
-        float $leverageSens = MacroEngine::MERTON_LEVERAGE_SENSITIVITY,
-        float $volSens = MacroEngine::MERTON_VOL_SENSITIVITY,
-        float $volThreshold = MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
-        float $contagionSens = MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
-        float $minIgSpread = MacroEngine::MIN_CREDIT_SPREAD,
-        float $maxIgSpread = MacroEngine::MAX_CREDIT_SPREAD,
+        float $premiumLoading = self::CREDIT_SPREAD_PREMIUM_LOADING,
+        float $hyBaseMultiplier = MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
+        float $leverageSens = self::MERTON_LEVERAGE_SENSITIVITY,
+        float $volSens = self::MERTON_VOL_SENSITIVITY,
+        float $volThreshold = self::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
+        float $contagionSens = self::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
+        float $minIgSpread = self::MIN_CREDIT_SPREAD,
+        float $maxIgSpread = self::MAX_CREDIT_SPREAD,
     ): array {
         $cycleSpread = $baseIgSpread * exp(-$leverageSens * $outputGapEma);
         $excessVol = max(0.0, $marketVolEma - $volThreshold);
@@ -333,10 +364,10 @@ final class CreditRisk
         float $slope,
         float $termPremium,
         float $fci,
-        float $beta0 = MacroEngine::RECESSION_PROBIT_BETA_0,
-        float $betaSlope = MacroEngine::RECESSION_PROBIT_BETA_SLOPE,
-        float $betaTp = MacroEngine::RECESSION_PROBIT_BETA_TP,
-        float $betaFci = MacroEngine::RECESSION_PROBIT_BETA_FCI,
+        float $beta0 = MacroConstants::RECESSION_PROBIT_BETA_0,
+        float $betaSlope = MacroConstants::RECESSION_PROBIT_BETA_SLOPE,
+        float $betaTp = MacroConstants::RECESSION_PROBIT_BETA_TP,
+        float $betaFci = MacroConstants::RECESSION_PROBIT_BETA_FCI,
     ): float {
         $probitIndex = $beta0 + ($betaSlope * $slope) + ($betaTp * $termPremium) + ($betaFci * $fci);
         $probability = Distributions::calculateNormalCDF($probitIndex);
@@ -392,7 +423,7 @@ final class CreditRisk
      */
     public static function calculateCorporateDefaultRate(
         float $macroZ,
-        float $baseDefaultRate = MacroEngine::CORPORATE_DEFAULT_BASELINE,
+        float $baseDefaultRate = MacroConstants::CORPORATE_DEFAULT_BASELINE,
         float $rho = self::CORPORATE_DEFAULT_RHO,
     ): float {
         $invPd = Distributions::calculateInverseNormalCDF($baseDefaultRate);

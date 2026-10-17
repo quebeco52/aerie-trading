@@ -7,9 +7,9 @@ namespace App\Service\Corporate;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\CreditRisk;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\Valuation;
@@ -305,8 +305,8 @@ class DebtEngine
         $lossGivenDefault = \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
         $issuerMultiple = CreditRisk::calculateIssuerSpreadMultiple(
             (float) $stock->getCreditSpread(),
-            MacroEngine::BASE_CREDIT_SPREAD,
-            MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+            MacroConstants::BASE_CREDIT_SPREAD,
+            MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
             $lossGivenDefault,
             self::CLASS_CURVE_LOSS_GIVEN_DEFAULT,
         );

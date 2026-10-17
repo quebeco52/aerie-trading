@@ -6,8 +6,8 @@ namespace App\Tests\Service\Model\Trait;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\Model\BareStandardModel;
 use PHPUnit\Framework\TestCase;
@@ -107,7 +107,7 @@ final class StandardTreasuryTraitTest extends TestCase
     public function testCashYieldTracksThePolicyRateAndFloorsAtZero(): void
     {
         $macro = new MacroStateDTO(policyRateEma: 0.05);
-        $this->assertEqualsWithDelta(0.05 - MacroEngine::CASH_YIELD_SPREAD, $this->model->calculateCashYield($macro), 0.0000001, 'Cash earns the policy rate less the intermediation spread.');
+        $this->assertEqualsWithDelta(0.05 - MacroConstants::CASH_YIELD_SPREAD, $this->model->calculateCashYield($macro), 0.0000001, 'Cash earns the policy rate less the intermediation spread.');
 
         // At the zero bound the spread would take the yield negative; a treasury is not charged to hold cash.
         $zeroBound = new MacroStateDTO(policyRateEma: 0.001);

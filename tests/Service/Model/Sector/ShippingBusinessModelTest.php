@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ShippingBusinessModel;
 use App\Service\Model\StreamContext;
@@ -167,8 +167,8 @@ class ShippingBusinessModelTest extends TestCase
         $cargoElasticity = ShippingBusinessModel::OPERATING_CYCLICALITY * ShippingBusinessModel::MACRO_DEMAND_SCALAR;
 
         $gap = -0.01;
-        $neutral = new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 100.0, freightRateIndexEma: MacroEngine::FREIGHT_BASELINE);
-        $slump = new MacroStateDTO(outputGapEma: $gap, exchangeRateIndexEma: 100.0, freightRateIndexEma: MacroEngine::FREIGHT_BASELINE);
+        $neutral = new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 100.0, freightRateIndexEma: MacroConstants::FREIGHT_BASELINE);
+        $slump = new MacroStateDTO(outputGapEma: $gap, exchangeRateIndexEma: 100.0, freightRateIndexEma: MacroConstants::FREIGHT_BASELINE);
 
         // The root carries no cycle; the spot book takes the cargo elasticity, and a fresh charter book its burn rate
         // of it.
@@ -184,13 +184,13 @@ class ShippingBusinessModelTest extends TestCase
         );
 
         // A freight-rate move reprices the same cargo one for one, books as price, and leaves the charter book alone.
-        $dear = $run(new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 100.0, freightRateIndexEma: 1.2 * MacroEngine::FREIGHT_BASELINE));
+        $dear = $run(new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 100.0, freightRateIndexEma: 1.2 * MacroConstants::FREIGHT_BASELINE));
         $this->assertEqualsWithDelta(1.2, $dear->streamRevenue['spot'] / $base->streamRevenue['spot'], 1e-9);
         $this->assertEqualsWithDelta($dear->streamRevenue['spot'] - $base->streamRevenue['spot'], $dear->priceRevenue, 1e-9);
         $this->assertEqualsWithDelta($base->streamRevenue['contract'], $dear->streamRevenue['contract'], 1e-9);
 
         // The exchange rate reaches the charter book once, through the root shift, not again in its orders.
-        $strong = $run(new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 120.0, freightRateIndexEma: MacroEngine::FREIGHT_BASELINE));
+        $strong = $run(new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: 120.0, freightRateIndexEma: MacroConstants::FREIGHT_BASELINE));
         $this->assertEqualsWithDelta($base->streamRevenue['contract'], $strong->streamRevenue['contract'], 1e-9);
     }
 
@@ -202,8 +202,8 @@ class ShippingBusinessModelTest extends TestCase
         $stock->setTicker('SHIP');
         $stock->setBeta('1.2');
 
-        $home = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE);
-        $abroad = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE, foreignOutputGapEma: 0.03);
+        $home = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroConstants::TRADE_BALANCE_BASELINE);
+        $abroad = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroConstants::TRADE_BALANCE_BASELINE, foreignOutputGapEma: 0.03);
 
         $quiet = $this->createStub(MathUtility::class);
         $spotHome = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $home, $quiet)->streamRevenue['spot'];

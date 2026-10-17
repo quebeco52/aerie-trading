@@ -83,7 +83,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
                 return $this->model->computeActualFinancials($stock, 100_000_000.0, $variableCostRatio, 20_000_000.0, 0.10, $macro, $math)->clampedMargin;
             };
 
-            $neutral = \App\Service\Macro\MacroEngine::SENTIMENT_TREND_LEVEL;
+            $neutral = \App\Service\Math\MacroConstants::SENTIMENT_TREND_LEVEL;
             $this->assertGreaterThan($blendedCost($neutral), $blendedCost($neutral + 20.0), $ticker);
         }
     }
@@ -109,7 +109,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
     {
         $stock = new Stock();
         $stock->setTicker('HW_GAP');
-        $recession = new MacroStateDTO(outputGapEma: -0.03, consumerSentimentIndexEma: \App\Service\Macro\MacroEngine::SENTIMENT_TREND_LEVEL - 10.0, exchangeRateIndexEma: 100.0);
+        $recession = new MacroStateDTO(outputGapEma: -0.03, consumerSentimentIndexEma: \App\Service\Math\MacroConstants::SENTIMENT_TREND_LEVEL - 10.0, exchangeRateIndexEma: 100.0);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 

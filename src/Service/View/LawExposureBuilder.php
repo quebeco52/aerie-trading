@@ -7,9 +7,9 @@ namespace App\Service\View;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\PolicyCapitalization;
-use App\Service\Model\Sector\UtilityBusinessModel;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 
 /**
@@ -37,7 +37,7 @@ final class LawExposureBuilder
     /**
      * The law each is measured against: none, but for public spending and the utility grant, measured against Year 1's.
      */
-    private const NO_LAW = ['publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP, 'utilityRateGrant' => UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE];
+    private const NO_LAW = ['publicSpending' => MacroConstants::PUBLIC_PURCHASES_TO_GDP, 'utilityRateGrant' => FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE];
 
     /**
      * @param iterable<Stock>      $stocks   The listed board.
@@ -101,8 +101,8 @@ final class LawExposureBuilder
         // table.
         $corporateTax = null;
         if (isset($expected['corporateTax'])) {
-            $inForce = MacroEngine::BASE_CORPORATE_TAX_RATE + $standing['corporateTax'];
-            $law = MacroEngine::BASE_CORPORATE_TAX_RATE + $expected['corporateTax'];
+            $inForce = MacroConstants::BASE_CORPORATE_TAX_RATE + $standing['corporateTax'];
+            $law = MacroConstants::BASE_CORPORATE_TAX_RATE + $expected['corporateTax'];
             $earnings = PolicyCapitalization::afterTaxScale($inForce, $law) - 1.0;
             $corporateTax = ['inForce' => $inForce, 'expected' => $law, 'earnings' => $earnings, 'moves' => abs($earnings) >= self::PRINTED_SHARE];
         }

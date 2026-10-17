@@ -6,8 +6,8 @@ namespace App\Tests\Service\Math;
 
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -102,7 +102,7 @@ class FirmEconomicsTest extends TestCase
             0.016,
             0.016,
             1.0,
-            MacroEngine::INTERBANK_BASELINE_SPREAD,
+            MacroConstants::INTERBANK_BASELINE_SPREAD,
         );
 
         $this->assertEqualsWithDelta(0.0, $neutral['dso'], 0.0000001, 'At the spread\'s usual level receivables do not age, wherever that level sits.');
@@ -115,12 +115,12 @@ class FirmEconomicsTest extends TestCase
             0.026,
             0.016,
             1.0,
-            MacroEngine::INTERBANK_BASELINE_SPREAD,
+            MacroConstants::INTERBANK_BASELINE_SPREAD,
         );
         $this->assertEqualsWithDelta(0.010 * FirmEconomics::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $creditStress['dso'], 0.0000001, 'DSO must track the credit spread.');
         $this->assertEqualsWithDelta(0.0, $creditStress['dio'], 0.0000001, 'A credit shock must not move inventory days.');
         $this->assertEqualsWithDelta(0.0, $creditStress['dpo'], 0.0000001, 'A credit shock must not move payable days.');
-        $easyCredit = FirmEconomics::calculateWorkingCapitalDayShifts(0.011, 0.016, 1.0, MacroEngine::INTERBANK_BASELINE_SPREAD);
+        $easyCredit = FirmEconomics::calculateWorkingCapitalDayShifts(0.011, 0.016, 1.0, MacroConstants::INTERBANK_BASELINE_SPREAD);
         $this->assertEqualsWithDelta(-0.005 * FirmEconomics::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $easyCredit['dso'], 0.0000001, 'A spread below its trend shortens receivable days.');
 
         // Slack plants pile up unsold goods: DIO rises as utilisation falls.
@@ -128,7 +128,7 @@ class FirmEconomicsTest extends TestCase
             0.016,
             0.016,
             0.80,
-            MacroEngine::INTERBANK_BASELINE_SPREAD,
+            MacroConstants::INTERBANK_BASELINE_SPREAD,
         );
         $this->assertEqualsWithDelta(0.20 * FirmEconomics::CCC_DIO_CAPACITY_SENSITIVITY, $slack['dio'], 0.0000001, 'DIO must track idle capacity.');
         $this->assertEqualsWithDelta(0.0, $slack['dso'], 0.0000001, 'Idle capacity must not move receivable days.');
@@ -138,7 +138,7 @@ class FirmEconomicsTest extends TestCase
             0.016,
             0.016,
             1.0,
-            MacroEngine::INTERBANK_BASELINE_SPREAD + 0.004,
+            MacroConstants::INTERBANK_BASELINE_SPREAD + 0.004,
         );
         $this->assertEqualsWithDelta(-0.004 * FirmEconomics::CCC_DPO_LIQUIDITY_SENSITIVITY, $liquidityStress['dpo'], 0.0000001, 'DPO must contract under interbank stress.');
         $this->assertLessThan(0.0, $liquidityStress['dpo'], 'Vendors demanding faster payment shortens the payable cycle.');
@@ -340,7 +340,7 @@ class FirmEconomicsTest extends TestCase
         $this->assertSame(1.0, FirmEconomics::merchantPowerPriceRelative(0.0, 2.0));
         $this->assertSame(1.5, FirmEconomics::merchantPowerPriceRelative(0.5, 2.0));
         $this->assertSame(1.0, FirmEconomics::carbonUpliftEarningsPerUnit(0.0));
-        $this->assertEqualsWithDelta(1.0 - (1.0 / MacroEngine::CARBON_POWER_PASS_THROUGH), FirmEconomics::carbonUpliftEarningsPerUnit(1.0), 1e-12);
+        $this->assertEqualsWithDelta(1.0 - (1.0 / MacroConstants::CARBON_POWER_PASS_THROUGH), FirmEconomics::carbonUpliftEarningsPerUnit(1.0), 1e-12);
     }
 
     /** Each balance is the revenue-weighted mean of the streams' own, so weights need not sum to one. */

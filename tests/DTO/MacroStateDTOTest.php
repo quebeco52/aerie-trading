@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\DTO;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Math\MacroConstants;
 use PHPUnit\Framework\TestCase;
 
 class MacroStateDTOTest extends TestCase
@@ -17,16 +17,16 @@ class MacroStateDTOTest extends TestCase
 
         $this->assertSame((new MacroStateDTO())->toArray(), $dto->toArray(), 'A payload with nothing in it is the opening, field for field.');
         $this->assertSame(0.0, $dto->outputGap, 'The economy opens at trend.');
-        $this->assertEquals(MacroEngine::TARGET_INFLATION, $dto->inflation);
-        $this->assertEquals(MacroEngine::TARGET_INFLATION, $dto->inflationEma);
+        $this->assertEquals(MacroConstants::TARGET_INFLATION, $dto->inflation);
+        $this->assertEquals(MacroConstants::TARGET_INFLATION, $dto->inflationEma);
         $this->assertEquals(100.0, $dto->exchangeRateIndex);
         $this->assertEquals(100.0, $dto->industrialMetalsIndex);
         $this->assertEquals(100.0, $dto->governmentSpendingIndex);
         $this->assertEquals(100.0, $dto->commercialPropertyIndex);
-        $this->assertEquals(MacroEngine::TFP_BASELINE, $dto->totalFactorProductivityIndex);
-        $this->assertEquals(MacroEngine::PMI_BASELINE, $dto->manufacturingPmi);
-        $this->assertEquals(MacroEngine::TRADE_BALANCE_BASELINE, $dto->tradeBalanceToGdp);
-        $this->assertEquals(MacroEngine::HOUSING_STARTS_BASELINE, $dto->housingStartsIndex);
+        $this->assertEquals(MacroConstants::TFP_BASELINE, $dto->totalFactorProductivityIndex);
+        $this->assertEquals(MacroConstants::PMI_BASELINE, $dto->manufacturingPmi);
+        $this->assertEquals(MacroConstants::TRADE_BALANCE_BASELINE, $dto->tradeBalanceToGdp);
+        $this->assertEquals(MacroConstants::HOUSING_STARTS_BASELINE, $dto->housingStartsIndex);
         $this->assertFalse($dto->qeActive);
         $this->assertNull($dto->eventType);
     }
@@ -226,6 +226,6 @@ class MacroStateDTOTest extends TestCase
         $slump = new MacroStateDTO(outputGapEma: -0.04, consumerSentimentIndexEma: 70.0, consumerSentimentMood: -6.0);
 
         $this->assertEqualsWithDelta(-0.06, $slump->sentimentResidual(), 1e-12);
-        $this->assertEqualsWithDelta((70.0 - MacroEngine::SENTIMENT_TREND_LEVEL) / 100.0, $slump->sentimentDeviation(), 1e-12);
+        $this->assertEqualsWithDelta((70.0 - MacroConstants::SENTIMENT_TREND_LEVEL) / 100.0, $slump->sentimentDeviation(), 1e-12);
     }
 }

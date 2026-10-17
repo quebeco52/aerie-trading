@@ -9,8 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\MacroReportHistoryRepository;
 use App\Repository\StockRepository;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\View\SovereignReservePageBuilder;
 use PHPUnit\Framework\TestCase;
@@ -106,7 +106,7 @@ class SovereignReservePageBuilderTest extends TestCase
         $this->assertSame(0.81, $page['summary']['grossDebtToGdp']);
         $this->assertSame(0.29, $page['summary']['netDebtToGdp']);
         $this->assertSame(SovereignFundSubsystem::FOREIGN_BOND_DURATION, $page['mandate']['foreignBondDuration']);
-        $this->assertSame(MacroEngine::SOVEREIGN_DEBT_FLOOR, $page['mandate']['debtFloor']);
+        $this->assertSame(MacroConstants::SOVEREIGN_DEBT_FLOOR, $page['mandate']['debtFloor']);
     }
 
     public function testSleevesPartitionTheFundAndItsPolicy(): void

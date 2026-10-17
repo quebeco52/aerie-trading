@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Market\Pricing;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\PoliticsEngine;
 
 /**
@@ -81,7 +80,7 @@ final class PolicyCapitalization
     public const PUBLIC_SPENDING_TERM_PERSISTENCE = 0.504;
     /**
      * The tariff shortfall commissions' grants leave on average over the long run
-     * (UtilityBusinessModel::steadyTariffShortfall()): 4.05% (se 0.06%).
+     * (FirmEconomics::steadyTariffShortfall()): 4.05% (se 0.06%).
      */
     public const LONG_RUN_UTILITY_TARIFF_SHORTFALL = 0.0405;
     /** Share of that shortfall's distance from its average still there a term later: 0.507. */
@@ -116,7 +115,7 @@ final class PolicyCapitalization
      */
     public static function corporateTaxShiftGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        $speed = MacroEngine::FISCAL_ADJUSTMENT_SPEED;
+        $speed = MacroConstants::FISCAL_ADJUSTMENT_SPEED;
 
         return self::expectedOverLife($macro, $capRate, $previous, 'corporateTax', $macro->corporateTaxPolicyShift, static fn(float $law, array $levers): float => $law, self::LONG_RUN_CORPORATE_TAX_SHIFT, self::CORPORATE_TAX_TERM_PERSISTENCE, $speed)
             - $macro->corporateTaxShiftEmbodied
@@ -195,14 +194,14 @@ final class PolicyCapitalization
      */
     public static function publicSpendingGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        $speed = MacroEngine::GOVT_SPENDING_MEAN_REVERSION;
+        $speed = MacroConstants::GOVT_SPENDING_MEAN_REVERSION;
         $purchasesSet = static fn(float $law, array $levers): float => self::measure('publicSpending', CreditFiscalSubsystem::purchasesTarget(
             $law,
             CreditFiscalSubsystem::requiredPrimaryBalanceAt($macro, (float) ($levers['debtTarget'] ?? $macro->debtTarget), (float) ($levers['debtPace'] ?? $macro->debtPace)),
             (float) ($levers['consolidationTaxShare'] ?? $macro->consolidationTaxShare),
         ));
         $inForce = $purchasesSet($macro->publicSpendingShare, []);
-        $purchases = ($macro->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
+        $purchases = ($macro->governmentSpendingIndex / MacroConstants::GOVT_SPENDING_BASELINE) - 1.0;
 
         return self::expectedOverLife($macro, $capRate, $previous, 'publicSpending', $macro->publicSpendingShare, $purchasesSet, self::LONG_RUN_PUBLIC_SPENDING_SHIFT, self::PUBLIC_SPENDING_TERM_PERSISTENCE, $speed)
             - $macro->governmentSpendingShiftEmbodied
@@ -217,7 +216,7 @@ final class PolicyCapitalization
      */
     public static function utilityTariffShortfallGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'utilityRateGrant', $macro->utilityRateCaseGrantShare, static fn(float $law, array $levers): float => self::measure('utilityRateGrant', $law), self::LONG_RUN_UTILITY_TARIFF_SHORTFALL, self::UTILITY_TARIFF_TERM_PERSISTENCE, UtilityBusinessModel::RATE_CASE_DECISION_RATE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'utilityRateGrant', $macro->utilityRateCaseGrantShare, static fn(float $law, array $levers): float => self::measure('utilityRateGrant', $law), self::LONG_RUN_UTILITY_TARIFF_SHORTFALL, self::UTILITY_TARIFF_TERM_PERSISTENCE, FirmEconomics::RATE_CASE_DECISION_RATE)
             - $macro->utilityTariffShortfallEmbodied;
     }
 
@@ -273,8 +272,8 @@ final class PolicyCapitalization
             'extractionStringency' => FirmEconomics::calculateExtractionCostFactor($law),
             'stampDutyRate' => MacroTransmission::calculateStampDutyVolumeFactor($law),
             'carbonPrice' => CommodityLogisticsSubsystem::carbonPowerPriceUplift($law),
-            'publicSpending' => ($law / MacroEngine::PUBLIC_PURCHASES_TO_GDP) - 1.0,
-            'utilityRateGrant' => UtilityBusinessModel::steadyTariffShortfall($law),
+            'publicSpending' => ($law / MacroConstants::PUBLIC_PURCHASES_TO_GDP) - 1.0,
+            'utilityRateGrant' => FirmEconomics::steadyTariffShortfall($law),
             default => throw new \InvalidArgumentException(sprintf('No firm\'s accounts answer to %s directly.', $lever)),
         };
     }

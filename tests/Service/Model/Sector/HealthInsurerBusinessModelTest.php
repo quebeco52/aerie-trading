@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\HealthInsurerBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -84,7 +84,7 @@ final class HealthInsurerBusinessModelTest extends TestCase
 
         // The first quarter after the surge: dg/dt = 3% - g / 1y, from g = 0.
         $first = $this->report($stock, $surge);
-        $gap = 0.03 * HealthInsurerBusinessModel::POLICY_TERM_YEARS * (1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / HealthInsurerBusinessModel::POLICY_TERM_YEARS));
+        $gap = 0.03 * HealthInsurerBusinessModel::POLICY_TERM_YEARS * (1.0 - exp(-FinancialConstants::QUARTER_YEARS / HealthInsurerBusinessModel::POLICY_TERM_YEARS));
         $this->assertEqualsWithDelta(self::PRICED_LOSS_RATIO * exp($gap), $first->kpis['medical_cost_ratio'], 1e-12);
 
         // The ratio peaks while premiums still carry the old trend, then returns as filings catch up with it.
@@ -117,7 +117,7 @@ final class HealthInsurerBusinessModelTest extends TestCase
 
         // One cheap quarter pulls a 0.83 average only part of the way down: still above the floor, nothing rebated.
         $actuals = $this->report($stock, new MacroStateDTO(), 0.80);
-        $average = 0.83 + ((1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / HealthInsurerBusinessModel::MLR_AVERAGING_YEARS)) * (0.80 - 0.83));
+        $average = 0.83 + ((1.0 - exp(-FinancialConstants::QUARTER_YEARS / HealthInsurerBusinessModel::MLR_AVERAGING_YEARS)) * (0.80 - 0.83));
 
         $this->assertGreaterThan(HealthInsurerBusinessModel::reportedLossRatioFloor(), $average);
         $state = $stock->getEarningsMomentumZ();

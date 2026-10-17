@@ -9,7 +9,7 @@ use App\DTO\InterestExpenseDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 
@@ -117,7 +117,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     /** Clearing-fee revenue per unit of 2s10s slope beyond the neutral slope (+2% per 100bp of swap hedging flow). */
     public const RATES_VOL_REVENUE_SCALAR = 2.0;
     /**
-     * Clearing-fee revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.4% per vol
+     * Clearing-fee revenue per unit of volatility over MacroConstants::MACRO_VOL_BASE_ANCHOR, both ways (+0.4% per vol
      * point); the only volatility channel into fees.
      */
     public const VIX_REVENUE_SCALAR     = 0.40;
@@ -340,7 +340,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
      */
     private function resolveClearingVolumeShift(\App\DTO\MacroStateDTO $macroState): float
     {
-        $volatilityShift = ($macroState->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
+        $volatilityShift = ($macroState->marketVolatilityEma - MacroConstants::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
 
         $yieldCurveSlope = abs($macroState->yield10yEma - $macroState->yield2yEma);
         $ratesVolBonus = $yieldCurveSlope > self::RATES_VOL_NEUTRAL_SLOPE ? ($yieldCurveSlope - self::RATES_VOL_NEUTRAL_SLOPE) * self::RATES_VOL_REVENUE_SCALAR : 0.0;
@@ -440,7 +440,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // a bank's deposit base follows; the rate moves with the change in the volatility it is struck on, which
         // sector physics carried here. A volatility LEVEL moves the pool's level, never its growth rate: read as a
         // rate, a quiet market bled the pool away every quarter it stayed quiet.
-        $trendGrowthQuarterly = ($macroState->inflationEma + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) * \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
+        $trendGrowthQuarterly = ($macroState->inflationEma + MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE) * \App\Service\Math\FinancialConstants::QUARTER_YEARS;
         $marginRateChange = (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_MARGIN_RATE_CHANGE] ?? 0.0);
         $noise = $mathUtility->generateStandardNormal() * self::POOL_GROWTH_NOISE_STD;
 

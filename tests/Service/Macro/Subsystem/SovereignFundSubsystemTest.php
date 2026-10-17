@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Macro\Subsystem;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
@@ -31,7 +31,7 @@ class SovereignFundSubsystemTest extends TestCase
         $state = $this->openFund($fund, 720);
 
         $this->assertTrue($fund->isIncepted($state));
-        $this->assertEqualsWithDelta(MacroEngine::OPENING_FUND_TO_GDP, $state->sovereignFundToGdp, 1e-12, 'It opens at its declared size against the economy.');
+        $this->assertEqualsWithDelta(MacroConstants::OPENING_FUND_TO_GDP, $state->sovereignFundToGdp, 1e-12, 'It opens at its declared size against the economy.');
         $this->assertEqualsWithDelta(SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING, $state->sovereignFundOwnershipShare, 1e-12);
         $this->assertEqualsWithDelta($state->sovereignFundTargetWeight, $state->sovereignFundDomesticWeight, 1e-12, 'It opens at its policy weight.');
         $this->assertSame(0.0, $state->sovereignFundTrade, 'A structural holder opens at its holding, with no order.');
@@ -67,9 +67,9 @@ class SovereignFundSubsystemTest extends TestCase
 
         // All in the reserve portfolio: its arithmetic real return less half the variance of equity leg plus currency.
         // The paper earns the forward term premium at its duration over the foreign rate.
-        $foreignReal = MacroEngine::MAINLAND_NEUTRAL_RATE - MacroEngine::TARGET_INFLATION;
+        $foreignReal = MacroConstants::MAINLAND_NEUTRAL_RATE - MacroConstants::TARGET_INFLATION;
         $arithmetic = $foreignReal
-            + (SovereignFundSubsystem::FOREIGN_EQUITY_SHARE * MacroEngine::BASE_EQUITY_RISK_PREMIUM)
+            + (SovereignFundSubsystem::FOREIGN_EQUITY_SHARE * MacroConstants::BASE_EQUITY_RISK_PREMIUM)
             + ((1.0 - SovereignFundSubsystem::FOREIGN_EQUITY_SHARE) * SovereignFundSubsystem::foreignBondExpectedPremium());
         $equityLeg = SovereignFundSubsystem::FOREIGN_EQUITY_SHARE * SovereignFundSubsystem::FOREIGN_EQUITY_VOLATILITY;
         $variance = ($equityLeg * $equityLeg) + (SovereignFundSubsystem::EXCHANGE_RATE_VOLATILITY * SovereignFundSubsystem::EXCHANGE_RATE_VOLATILITY);
@@ -77,9 +77,9 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($arithmetic - (0.5 * $variance), $fund->policyCompoundRealReturn($state, 0.0), 1e-15);
 
         // All on the board: the natural rate plus the premium, less half the market's variance.
-        $boardVariance = MacroEngine::MACRO_VOL_BASE_ANCHOR * MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $boardVariance = MacroConstants::MACRO_VOL_BASE_ANCHOR * MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $this->assertEqualsWithDelta(
-            $state->naturalRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM - (0.5 * $boardVariance),
+            $state->naturalRate + MacroConstants::BASE_EQUITY_RISK_PREMIUM - (0.5 * $boardVariance),
             $fund->policyCompoundRealReturn($state, 1.0),
             1e-15,
         );
@@ -575,8 +575,8 @@ class SovereignFundSubsystemTest extends TestCase
         $fund = new SovereignFundSubsystem(new MathUtility());
         $state = new MacroState();
         $tau = SovereignFundSubsystem::FOREIGN_BOND_DURATION;
-        $neutral = MacroEngine::MAINLAND_NEUTRAL_RATE;
-        $premium = MacroEngine::NS_BASE_TERM_PREMIUM * FixedIncome::calculateTermPremiumDurationScale($tau, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $neutral = MacroConstants::MAINLAND_NEUTRAL_RATE;
+        $premium = MacroConstants::NS_BASE_TERM_PREMIUM * FixedIncome::calculateTermPremiumDurationScale($tau, MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS);
 
         $state->foreignPolicyRate = $neutral;
         $this->assertEqualsWithDelta($neutral + $premium, $fund->foreignZeroYield($state, $tau), 1e-14, 'At neutral the curve is the level plus the premium.');
@@ -584,7 +584,7 @@ class SovereignFundSubsystemTest extends TestCase
         // A cut is expected to unwind at the slope decay, so the long yield takes the Vasicek loading of it, not all of
         // it.
         $state->foreignPolicyRate = $neutral - 0.01;
-        $lambda = MacroEngine::SVENSSON_SLOPE_LAMBDA;
+        $lambda = MacroConstants::SVENSSON_SLOPE_LAMBDA;
         $loading = (1.0 - exp(-$lambda * $tau)) / ($lambda * $tau);
         $this->assertEqualsWithDelta($neutral - (0.01 * $loading) + $premium, $fund->foreignZeroYield($state, $tau), 1e-14);
     }
@@ -594,17 +594,17 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $dt = 1.0 / 720.0;
         $fund = $this->stillFund(flatCurve: false);
-        $state = $this->openFund($fund, 720, MacroEngine::MAINLAND_NEUTRAL_RATE);
+        $state = $this->openFund($fund, 720, MacroConstants::MAINLAND_NEUTRAL_RATE);
         $state->sovereignFundAnnualDraw = 0.0;
         $yieldBefore = $state->foreignBondYield;
         $paperBefore = $state->sovereignFundForeignBonds;
 
-        $state->foreignPolicyRate = MacroEngine::MAINLAND_NEUTRAL_RATE + 0.01;
+        $state->foreignPolicyRate = MacroConstants::MAINLAND_NEUTRAL_RATE + 0.01;
         $this->step($fund, $state, $dt);
 
         $yieldMove = $state->foreignBondYield - $yieldBefore;
         $tau = SovereignFundSubsystem::FOREIGN_BOND_DURATION;
-        $lambda = MacroEngine::SVENSSON_SLOPE_LAMBDA;
+        $lambda = MacroConstants::SVENSSON_SLOPE_LAMBDA;
         $this->assertEqualsWithDelta(0.01 * (1.0 - exp(-$lambda * $tau)) / ($lambda * $tau), $yieldMove, 1e-14);
 
         // Duration and convexity, with a tick of carry: about -2.8% on a 45bp move at a duration of six years.
@@ -618,10 +618,10 @@ class SovereignFundSubsystemTest extends TestCase
      */
     public function testOnASteadyCurveThePaperEarnsTheForwardRateAtAnyTickRate(): void
     {
-        $expected = MacroEngine::MAINLAND_NEUTRAL_RATE + SovereignFundSubsystem::foreignBondExpectedPremium();
+        $expected = MacroConstants::MAINLAND_NEUTRAL_RATE + SovereignFundSubsystem::foreignBondExpectedPremium();
 
         foreach ([72, 720, 7200] as $tpy) {
-            $growth = $this->paperLogGrowthOverAYear($tpy, static fn(float $time): float => MacroEngine::MAINLAND_NEUTRAL_RATE);
+            $growth = $this->paperLogGrowthOverAYear($tpy, static fn(float $time): float => MacroConstants::MAINLAND_NEUTRAL_RATE);
             $this->assertEqualsWithDelta($expected, $growth, 1e-5, "tpy {$tpy}: the paper earns the forward rate, not the yield.");
         }
     }
@@ -629,14 +629,14 @@ class SovereignFundSubsystemTest extends TestCase
     public function testThePaperOverAMovingRateIsTheSameAtAnyTickRate(): void
     {
         // A year of easing from neutral to 150bp below it.
-        $path = static fn(float $time): float => MacroEngine::MAINLAND_NEUTRAL_RATE - (0.015 * min(1.0, $time));
+        $path = static fn(float $time): float => MacroConstants::MAINLAND_NEUTRAL_RATE - (0.015 * min(1.0, $time));
 
         $reference = $this->paperLogGrowthOverAYear(7200, $path);
         foreach ([72, 720] as $tpy) {
             $this->assertEqualsWithDelta($reference, $this->paperLogGrowthOverAYear($tpy, $path), 1e-4, "tpy {$tpy}");
         }
         $this->assertGreaterThan(
-            MacroEngine::MAINLAND_NEUTRAL_RATE + SovereignFundSubsystem::foreignBondExpectedPremium(),
+            MacroConstants::MAINLAND_NEUTRAL_RATE + SovereignFundSubsystem::foreignBondExpectedPremium(),
             $reference,
             'Paper rallies while the foreign rate falls.',
         );
@@ -781,11 +781,11 @@ class SovereignFundSubsystemTest extends TestCase
         $tpy = 720;
         $state = $this->openFund($fund, $tpy);
         $opened = $state->sovereignFundAnnualDraw;
-        $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $state->sovereignFundDrawShare);
+        $this->assertSame(MacroConstants::RESERVE_DRAW_CEILING, $state->sovereignFundDrawShare);
 
         $state->reserveDrawShare = 0.6;
         $this->step($fund, $state, 1.0 / $tpy);
-        $this->assertEqualsWithDelta($opened * 0.6 / MacroEngine::RESERVE_DRAW_CEILING, $state->sovereignFundAnnualDraw, 1e-9 * $opened);
+        $this->assertEqualsWithDelta($opened * 0.6 / MacroConstants::RESERVE_DRAW_CEILING, $state->sovereignFundAnnualDraw, 1e-9 * $opened);
         $this->assertSame(0.6, $state->sovereignFundDrawShare);
 
         while ($state->totalTime < 1.0) {
@@ -859,9 +859,9 @@ class SovereignFundSubsystemTest extends TestCase
 
             public function foreignZeroYield(MacroState $state, float $maturity): float
             {
-                $scale = FixedIncome::calculateTermPremiumDurationScale($maturity, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+                $scale = FixedIncome::calculateTermPremiumDurationScale($maturity, MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS);
 
-                return (-MacroEngine::NS_BASE_TERM_PREMIUM * $scale)
+                return (-MacroConstants::NS_BASE_TERM_PREMIUM * $scale)
                     + (($state->foreignTermPremiumRegime + $state->foreignTermPremiumShock) * $scale);
             }
         };

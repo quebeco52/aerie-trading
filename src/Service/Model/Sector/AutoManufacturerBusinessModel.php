@@ -11,8 +11,8 @@ use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -339,13 +339,13 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         // Input cost basket drag on manufacturing recovered at pricing power, allocated to mass-market volume.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
-        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
+        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE);
         $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));
 
         // Captive Finance NIM Squeeze & Subprime Provisioning, charged to the loan book that earns the interest: the
         // provision over the through-the-cycle loss the cost base carries, both ways, so a calm credit year releases
         // what a bad one builds. The default rates carry the cycle, so confidence enters as its residual over the gap.
-        $dsrShift = $macroState->householdDebtServiceGap / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+        $dsrShift = $macroState->householdDebtServiceGap / MacroConstants::HOUSEHOLD_DSR_NEUTRAL;
         $macroDefaultDrag = (-$macroState->sentimentResidual() * self::MACRO_DEFAULT_SCALAR)
             + ($macroState->retailDefaultDeviation() * self::RETAIL_DEFAULT_PROVISION_SCALAR)
             + ($macroState->corporateDefaultDeviation() * self::CORPORATE_DEFAULT_PROVISION_SCALAR)
@@ -369,7 +369,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $apexShock     = $apexZ     * ($baselineVol * self::APEX_VARIANCE_SCALAR);
         $softwareShock = $softwareZ * ($baselineVol * self::SOFTWARE_VARIANCE_SCALAR);
         $captiveShock  = $captiveZ  * ($baselineVol * self::CAPTIVE_FINANCE_VARIANCE_SCALAR);
-        $cuShift = MacroTransmission::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CAPACITY_UTILIZATION_THROUGHPUT_SCALAR);
+        $cuShift = MacroTransmission::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroConstants::CU_BASELINE, self::CAPACITY_UTILIZATION_THROUGHPUT_SCALAR);
 
         // The firm-wide purchase swing lands on all of expected revenue; vehicle sales carry it, while the fleet's
         // subscriptions and the loan book, stocks built from years of sales, carry their loading of it.

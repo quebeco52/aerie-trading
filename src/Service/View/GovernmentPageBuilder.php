@@ -29,6 +29,7 @@ use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
 use App\Service\Politics\CoalitionFormation;
@@ -479,8 +480,8 @@ class GovernmentPageBuilder
                 'termYears' => $term,
                 'councilSeats' => AerieCouncil::SEATS,
                 'councilTermYears' => AerieCouncil::TERM_YEARS,
-                'reserveDrawCeiling' => MacroEngine::RESERVE_DRAW_CEILING,
-                'budgetRoundMonths' => 12.0 * MacroEngine::BUDGET_ROUND_PERIOD_YEARS,
+                'reserveDrawCeiling' => MacroConstants::RESERVE_DRAW_CEILING,
+                'budgetRoundMonths' => 12.0 * MacroConstants::BUDGET_ROUND_PERIOD_YEARS,
                 'blocLeaders' => array_map(self::midSentenceName(...), $leaders),
                 'blocSeats' => array_map(
                     static fn(string $leader): array => [
@@ -759,7 +760,7 @@ class GovernmentPageBuilder
         $to = max($now, $decisions[array_key_last($decisions)]->getSimTime());
         $inflation = array_values(array_filter($inflation, static fn(array $quarter): bool => $quarter['t'] >= $from - 1e-9 && $quarter['t'] <= $to + 1e-9));
         $rates = array_map(static fn(RateDecision $decision): float => $decision->getRate(), $decisions);
-        $values = $inflation === [] ? $rates : [...$rates, ...array_column($inflation, 'inflation'), MacroEngine::TARGET_INFLATION];
+        $values = $inflation === [] ? $rates : [...$rates, ...array_column($inflation, 'inflation'), MacroConstants::TARGET_INFLATION];
         $step = self::RATE_CHART_GRID_STEPS[array_key_last(self::RATE_CHART_GRID_STEPS)];
         foreach (self::RATE_CHART_GRID_STEPS as $candidate) {
             if ((ceil(max($values) / $candidate) - floor(min($values) / $candidate)) <= self::RATE_CHART_GRIDLINES - 1) {
@@ -829,8 +830,8 @@ class GovernmentPageBuilder
             'inflation' => $quarters === [] ? null : [
                 'line' => implode(' ', array_map(static fn(array $quarter): string => $quarter['x'] . ',' . $quarter['y'], $quarters)),
                 'quarters' => $quarters,
-                'target' => MacroEngine::TARGET_INFLATION,
-                'targetY' => $y(MacroEngine::TARGET_INFLATION),
+                'target' => MacroConstants::TARGET_INFLATION,
+                'targetY' => $y(MacroConstants::TARGET_INFLATION),
             ],
             'summary' => self::rateSummary($decisions, $meetings, $quarters === [] ? null : $quarters[array_key_last($quarters)]['inflation']),
         ];
@@ -986,7 +987,7 @@ class GovernmentPageBuilder
     private static function leverDisplay(string $lever, float $value): float
     {
         return match ($lever) {
-            'corporateTax' => MacroEngine::BASE_CORPORATE_TAX_RATE + $value,
+            'corporateTax' => MacroConstants::BASE_CORPORATE_TAX_RATE + $value,
             'mergerReviewLeniency' => MergerAndAcquisitionEngine::reviewScreens($value)['concentrated'],
             'greenBeltStringency' => AssetMarketSubsystem::planningRefusalRate($value),
             'extractionStringency' => self::extractionCostUplift($value),
@@ -1129,7 +1130,7 @@ class GovernmentPageBuilder
         $row = $rows[$party];
         $position = AerieDiet::position($party, $politics->partyPositions);
         $platform = PoliticsEngine::partyProgramme($party, $politics->partyPositions);
-        $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $neutral = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $talking = $politics->coalitionTakesOfficeAt > $macro->totalTime;
 
         $axes = [];
@@ -1317,7 +1318,7 @@ class GovernmentPageBuilder
     {
         $standing = PoliticsEngine::standingLevers($politics);
         $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, MacroEngine::recessionDeclared($macro));
-        $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
+        $round = MacroConstants::BUDGET_ROUND_PERIOD_YEARS;
         $nextRound = self::simDate((floor($macro->totalTime / $round) + 1.0) * $round);
 
         $status = static function (string $lever) use ($budget, $standing, $talking): string {
@@ -1330,7 +1331,7 @@ class GovernmentPageBuilder
                 default => 'pending',
             };
         };
-        $neutral = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $neutral = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $planned = CreditFiscalSubsystem::requiredPrimaryBalance($macro);
 
         return [
@@ -1373,7 +1374,7 @@ class GovernmentPageBuilder
                     'target' => $budget['levers']['tariff'],
                     'enacted' => $standing['tariff'],
                     'status' => $status('tariff'),
-                    'note' => sprintf('Partners answer with %.1f%% on the District\'s exports', 100.0 * MacroEngine::TARIFF_RETALIATION_RATIO * $standing['tariff']),
+                    'note' => sprintf('Partners answer with %.1f%% on the District\'s exports', 100.0 * MacroConstants::TARIFF_RETALIATION_RATIO * $standing['tariff']),
                 ],
                 [
                     'name' => 'Labour force growth',
@@ -2151,21 +2152,21 @@ class GovernmentPageBuilder
 
         return [
             'tariff' => $law('tariff', $tariff) + [
-                'retaliation' => MacroEngine::TARIFF_RETALIATION_RATIO * $tariff,
+                'retaliation' => MacroConstants::TARIFF_RETALIATION_RATIO * $tariff,
                 'revenueToGdp' => MacroAggregateSubsystem::tariffRevenueToGdp($tariff),
-                'outputCost' => MacroEngine::TARIFF_OUTPUT_LOSS * $tariff,
+                'outputCost' => MacroConstants::TARIFF_OUTPUT_LOSS * $tariff,
                 'goodsImportsToGdp' => MacroAggregateSubsystem::goodsImportsToGdp(),
             ],
             'migration' => $law('laborGrowth', $politics->laborForceGrowthRate) + [
-                'structural' => MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
-                'natural' => MacroEngine::NATURAL_LABOR_FORCE_GROWTH,
-                'structuralMigration' => MacroEngine::STRUCTURAL_NET_MIGRATION_RATE,
+                'structural' => MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
+                'natural' => MacroConstants::NATURAL_LABOR_FORCE_GROWTH,
+                'structuralMigration' => MacroConstants::STRUCTURAL_NET_MIGRATION_RATE,
                 'closed' => PoliticsEngine::MIGRATION_CLOSED_REGIME,
                 'open' => PoliticsEngine::MIGRATION_OPEN_REGIME,
                 'populationShift' => $macro->immigrationPopulationShift,
                 'cyclical' => $macro->cyclicalMigrationRate,
                 // Newcomers a year per point (a hundredth) of unemployment under its natural rate.
-                'jobsResponse' => LaborMarketSubsystem::MIGRATION_JOBS_RESPONSE * max(0.0, $politics->laborForceGrowthRate - MacroEngine::NATURAL_LABOR_FORCE_GROWTH) / 100.0,
+                'jobsResponse' => LaborMarketSubsystem::MIGRATION_JOBS_RESPONSE * max(0.0, $politics->laborForceGrowthRate - MacroConstants::NATURAL_LABOR_FORCE_GROWTH) / 100.0,
             ],
             'foreignBuyers' => $law('foreignBuyerTax', $politics->foreignBuyerTaxRate) + [
                 'priceEffect' => 1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($politics->foreignBuyerTaxRate),

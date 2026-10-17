@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro\Subsystem;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Math\CreditRisk;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
@@ -36,26 +37,26 @@ class AssetMarketSubsystemTest extends TestCase
         $state->outputGapEma = -0.05;
 
         $this->subsystem->calculateEquityRiskPremium($state);
-        $this->assertGreaterThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium);
+        $this->assertGreaterThan(MacroConstants::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium);
     }
 
     public function testTheForeignBlocPricesItsOwnCycleAndReRatesItsEquities(): void
     {
         $state = new MacroState();
         $this->subsystem->calculateEquityRiskPremium($state);
-        $this->assertEqualsWithDelta(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $state->foreignEquityRiskPremium, 1e-15, 'At trend, the base premium.');
+        $this->assertEqualsWithDelta(MacroConstants::BASE_EQUITY_RISK_PREMIUM, $state->foreignEquityRiskPremium, 1e-15, 'At trend, the base premium.');
         $this->assertEqualsWithDelta(0.0, $state->foreignEquityValuation, 1e-15);
 
         // A foreign recession, with the district itself at trend: only the foreign premium and valuation move.
         $state->foreignOutputGapEma = -0.03;
         $this->subsystem->calculateEquityRiskPremium($state);
 
-        $premium = MacroEngine::BASE_EQUITY_RISK_PREMIUM * exp(AssetMarketSubsystem::HABIT_RISK_AVERSION_COEFF * 0.03);
+        $premium = MacroConstants::BASE_EQUITY_RISK_PREMIUM * exp(AssetMarketSubsystem::HABIT_RISK_AVERSION_COEFF * 0.03);
         $annualPersistence = TimeSeries::calculateAr2Autocorrelation(AssetMarketSubsystem::MAINLAND_GAP_AR1, AssetMarketSubsystem::MAINLAND_GAP_AR2, 4);
         $duration = 1.0 / (1.0 - (AssetMarketSubsystem::CAMPBELL_SHILLER_RHO * $annualPersistence));
         $this->assertEqualsWithDelta($premium, $state->foreignEquityRiskPremium, 1e-15);
-        $this->assertEqualsWithDelta(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium, 1e-15);
-        $this->assertEqualsWithDelta(-$duration * ($premium - MacroEngine::BASE_EQUITY_RISK_PREMIUM), $state->foreignEquityValuation, 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium, 1e-15);
+        $this->assertEqualsWithDelta(-$duration * ($premium - MacroConstants::BASE_EQUITY_RISK_PREMIUM), $state->foreignEquityValuation, 1e-15);
         $this->assertEqualsWithDelta($state->foreignEquityValuation, $state->foreignEquityValuationChange, 1e-15, 'The change from trend is handed on.');
         $this->assertLessThan(-0.03, $state->foreignEquityValuation, 'A 3% foreign slump re-rates foreign equities by a few percent.');
 
@@ -76,7 +77,7 @@ class AssetMarketSubsystemTest extends TestCase
         $state->residentialPropertyIndex = 100.0;
 
         $this->subsystem->calculateCommercialPropertyIndex($state, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($state, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($state, MacroConstants::TARGET_INFLATION, 0.25);
 
         $this->assertGreaterThan(0.0, $state->commercialPropertyIndex);
         $this->assertGreaterThan(0.0, $state->residentialPropertyIndex);
@@ -102,18 +103,18 @@ class AssetMarketSubsystemTest extends TestCase
     public function testCommercialPropertyHoldsItsBaselineAtTheEnginesNeutral(): void
     {
         $state = new MacroState();
-        $state->yield10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
-        $state->tipsBreakevenEma = MacroEngine::TARGET_INFLATION;
-        $state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
+        $state->yield10yEma = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION + MacroConstants::NS_BASE_TERM_PREMIUM;
+        $state->tipsBreakevenEma = MacroConstants::TARGET_INFLATION;
+        $state->macroCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD;
         $state->unemploymentRateEma = $state->nairu;
         $state->outputGapEma = 0.0;
-        $state->commercialPropertyIndex = MacroEngine::CRE_BASELINE;
+        $state->commercialPropertyIndex = MacroConstants::CRE_BASELINE;
 
         // A quarter's pull toward a fundamental 7% off moves the index ~0.4 points; the log-mean correction alone,
         // ~0.015.
         $this->subsystem->calculateCommercialPropertyIndex($state, 0.25);
 
-        $this->assertEqualsWithDelta(MacroEngine::CRE_BASELINE, $state->commercialPropertyIndex, 0.05);
+        $this->assertEqualsWithDelta(MacroConstants::CRE_BASELINE, $state->commercialPropertyIndex, 0.05);
     }
 
     private function creFundamentalTick(float $yield10y, float $expectedInflation): float
@@ -176,10 +177,10 @@ class AssetMarketSubsystemTest extends TestCase
         $stateAppreciated = new MacroState();
         $stateAppreciated->exchangeRateIndex = 115.0;
         $stateAppreciated->outputGap = 0.03;
-        $stateAppreciated->tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE;
+        $stateAppreciated->tradeBalanceToGdp = MacroConstants::TRADE_BALANCE_BASELINE;
 
         $this->subsystem->calculateTradeBalance($stateAppreciated, $dt);
-        $this->assertLessThan(MacroEngine::TRADE_BALANCE_BASELINE, $stateAppreciated->tradeBalanceToGdp, 'Currency appreciation and domestic demand absorption must worsen trade deficit');
+        $this->assertLessThan(MacroConstants::TRADE_BALANCE_BASELINE, $stateAppreciated->tradeBalanceToGdp, 'Currency appreciation and domestic demand absorption must worsen trade deficit');
     }
 
     public function testCalculateHousingStarts(): void
@@ -196,7 +197,7 @@ class AssetMarketSubsystemTest extends TestCase
         $stateBoom->sloosTighteningIndexEma = 0.0;
         $stateBoom->housingStartsIndex = 100.0;
 
-        $this->subsystem->calculateHousingStarts($stateBoom, MacroEngine::TARGET_INFLATION, $dt);
+        $this->subsystem->calculateHousingStarts($stateBoom, MacroConstants::TARGET_INFLATION, $dt);
         $this->assertGreaterThan(100.0, $stateBoom->housingStartsIndex, 'High Tobin Q and affordable mortgage finance must stimulate housing starts');
     }
 
@@ -213,15 +214,15 @@ class AssetMarketSubsystemTest extends TestCase
             }
         };
         $state = $this->neutralBuildingState();
-        $state->riskNeutral10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->riskNeutral10yEma = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
         $state->residentialPropertyIndex = 94.0;
         $state->residentialWealthTrend = 94.0;
         $state->industrialMetalsIndex = 130.0;
         $state->industrialMetalsIndexTrend = 130.0;
 
-        (new AssetMarketSubsystem($math))->calculateHousingStarts($state, MacroEngine::TARGET_INFLATION, 0.25);
+        (new AssetMarketSubsystem($math))->calculateHousingStarts($state, MacroConstants::TARGET_INFLATION, 0.25);
 
-        $this->assertEqualsWithDelta(MacroEngine::HOUSING_STARTS_BASELINE, $state->housingStartsIndex, 1e-9, 'At rest q is one and starts hold their baseline.');
+        $this->assertEqualsWithDelta(MacroConstants::HOUSING_STARTS_BASELINE, $state->housingStartsIndex, 1e-9, 'At rest q is one and starts hold their baseline.');
     }
 
     /**
@@ -236,7 +237,7 @@ class AssetMarketSubsystemTest extends TestCase
             $this->subsystem->calculateTradeBalance($state, $dt);
         };
         $once = new MacroState();
-        $once->tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE;
+        $once->tradeBalanceToGdp = MacroConstants::TRADE_BALANCE_BASELINE;
         $twice = clone $once;
 
         $step($once, 0.5);
@@ -244,18 +245,18 @@ class AssetMarketSubsystemTest extends TestCase
         $step($twice, 0.25);
 
         $this->assertEqualsWithDelta($once->tradeBalanceToGdp, $twice->tradeBalanceToGdp, 1e-12);
-        $this->assertNotEqualsWithDelta(MacroEngine::TRADE_BALANCE_BASELINE, $once->tradeBalanceToGdp, 1e-6, 'and it does move.');
+        $this->assertNotEqualsWithDelta(MacroConstants::TRADE_BALANCE_BASELINE, $once->tradeBalanceToGdp, 1e-6, 'and it does move.');
     }
 
     /** Houses at their neutral price, built with materials and labour at their neutral real cost. */
     private function neutralBuildingState(): MacroState
     {
         $state = $this->neutralHousingState();
-        $state->industrialMetalsIndex = MacroEngine::METALS_BASELINE;
+        $state->industrialMetalsIndex = MacroConstants::METALS_BASELINE;
         $state->realWageGap = 0.0;
         $state->sloosTighteningIndexEma = 0.0;
         $state->creditToGdpGapEma = 0.0;
-        $state->housingStartsIndex = MacroEngine::HOUSING_STARTS_BASELINE;
+        $state->housingStartsIndex = MacroConstants::HOUSING_STARTS_BASELINE;
 
         return $state;
     }
@@ -275,7 +276,7 @@ class AssetMarketSubsystemTest extends TestCase
         $dearLabour->realWageGap = 0.04;
 
         foreach ([$calm, $hotNominalPay, $dearLabour] as $state) {
-            $this->subsystem->calculateHousingStarts($state, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateHousingStarts($state, MacroConstants::TARGET_INFLATION, 0.25);
         }
 
         $this->assertEqualsWithDelta($calm->housingStartsIndex, $hotNominalPay->housingStartsIndex, 1e-9, 'Wage growth alone is not a building cost.');
@@ -301,7 +302,7 @@ class AssetMarketSubsystemTest extends TestCase
         $base->riskNeutral10yEma = 0.035;
         $base->yield10yEma = 0.045;
         $base->unemploymentRateEma = $base->nairu;
-        $base->inflationEma = MacroEngine::TARGET_INFLATION;
+        $base->inflationEma = MacroConstants::TARGET_INFLATION;
         $base->outputGapEma = 0.0;
         $base->residentialPropertyIndex = 100.0;
 
@@ -312,9 +313,9 @@ class AssetMarketSubsystemTest extends TestCase
         $dearerPath = clone $base;
         $dearerPath->riskNeutral10yEma = 0.050;
 
-        $this->subsystem->calculateResidentialPropertyIndex($base, MacroEngine::TARGET_INFLATION, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($hikedToday, MacroEngine::TARGET_INFLATION, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($dearerPath, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($base, MacroConstants::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($hikedToday, MacroConstants::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($dearerPath, MacroConstants::TARGET_INFLATION, 0.25);
 
         $this->assertEqualsWithDelta($base->residentialPropertyIndex, $hikedToday->residentialPropertyIndex, 1e-9, 'A rate expected to come back down does not reprice a home.');
         $this->assertLessThan($base->residentialPropertyIndex, $dearerPath->residentialPropertyIndex, 'Dearer money expected for years raises the user cost and lowers fundamental home prices.');
@@ -322,8 +323,8 @@ class AssetMarketSubsystemTest extends TestCase
 
     public function testNeutralUserCostMatchesTheNeutralRatePathPlusMortgageSpread(): void
     {
-        $neutralPolicyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
-        $expected = $neutralPolicyRate + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD + AssetMarketSubsystem::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
+        $neutralPolicyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
+        $expected = $neutralPolicyRate + MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD + AssetMarketSubsystem::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroConstants::TARGET_INFLATION;
 
         $this->assertEqualsWithDelta($expected, AssetMarketSubsystem::RESIDENTIAL_NEUTRAL_USER_COST, 1e-12);
     }
@@ -377,13 +378,13 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($base, $this->fundamental(0.05, 0.03), 1e-9, 'A rate rise matching expected inflation is not a stronger currency.');
         $this->assertEqualsWithDelta($base * exp(AssetMarketSubsystem::UIP_SENSITIVITY * 0.01), $this->fundamental(0.05, 0.02), 1e-9);
 
-        $mainlandHot = AssetMarketSubsystem::exchangeRateFundamentalAt(0.04, 0.02, MacroEngine::MAINLAND_NEUTRAL_RATE, AssetMarketSubsystem::mainlandBreakeven(0.04), 100.0, 100.0, 0.0, 0.0);
+        $mainlandHot = AssetMarketSubsystem::exchangeRateFundamentalAt(0.04, 0.02, MacroConstants::MAINLAND_NEUTRAL_RATE, AssetMarketSubsystem::mainlandBreakeven(0.04), 100.0, 100.0, 0.0, 0.0);
         $this->assertGreaterThan($base, $mainlandHot, 'Higher mainland inflation at the same mainland rate is a lower mainland real rate.');
     }
 
     private function fundamental(float $policyRate, float $expectedInflation): float
     {
-        return AssetMarketSubsystem::exchangeRateFundamentalAt($policyRate, $expectedInflation, MacroEngine::MAINLAND_NEUTRAL_RATE, AssetMarketSubsystem::mainlandBreakeven(MacroEngine::TARGET_INFLATION), 100.0, 100.0, 0.0, 0.0);
+        return AssetMarketSubsystem::exchangeRateFundamentalAt($policyRate, $expectedInflation, MacroConstants::MAINLAND_NEUTRAL_RATE, AssetMarketSubsystem::mainlandBreakeven(MacroConstants::TARGET_INFLATION), 100.0, 100.0, 0.0, 0.0);
     }
 
     /**
@@ -393,7 +394,7 @@ class AssetMarketSubsystemTest extends TestCase
     public function testPanicBidsTheCurrencyOnlyOnceFlightToSafetyStarts(): void
     {
         $neutral = $this->settledFx();
-        $threshold = MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD;
+        $threshold = MacroConstants::FLIGHT_TO_SAFETY_VOL_THRESHOLD;
 
         $this->assertEqualsWithDelta($neutral, $this->settledFx(['marketVolatilityEma' => $threshold]), 1e-9, 'At the threshold the bid is exactly zero.');
         $this->assertEqualsWithDelta($neutral, $this->settledFx(['marketVolatilityEma' => $threshold - 0.05]), 1e-9, 'Below it, calm does not sell the currency.');
@@ -429,8 +430,8 @@ class AssetMarketSubsystemTest extends TestCase
         $spiked->inflation = 0.06;
         $spiked->inflationEma = 0.05;
 
-        $this->subsystem->calculateResidentialPropertyIndex($calm, MacroEngine::TARGET_INFLATION, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($spiked, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($calm, MacroConstants::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($spiked, MacroConstants::TARGET_INFLATION, 0.25);
 
         $this->assertEqualsWithDelta($calm->residentialPropertyIndex, $spiked->residentialPropertyIndex, 1e-9);
     }
@@ -441,7 +442,7 @@ class AssetMarketSubsystemTest extends TestCase
         $anchored = $this->neutralHousingState();
         $unanchored = $this->neutralHousingState();
 
-        $this->subsystem->calculateResidentialPropertyIndex($anchored, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($anchored, MacroConstants::TARGET_INFLATION, 0.25);
         $this->subsystem->calculateResidentialPropertyIndex($unanchored, 0.03, 0.25);
 
         $this->assertGreaterThan($anchored->residentialPropertyIndex, $unanchored->residentialPropertyIndex);
@@ -453,8 +454,8 @@ class AssetMarketSubsystemTest extends TestCase
         $grown = $this->neutralHousingState();
         $grown->immigrationPopulationShift = 0.05;
 
-        $this->subsystem->calculateResidentialPropertyIndex($base, MacroEngine::TARGET_INFLATION, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($grown, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($base, MacroConstants::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($grown, MacroConstants::TARGET_INFLATION, 0.25);
 
         // The index closes its reversion's share of the step in the fundamental, which is the population's log times
         // Saiz's elasticity.
@@ -478,8 +479,8 @@ class AssetMarketSubsystemTest extends TestCase
         $base = $this->neutralHousingState();
         $taxed = $this->neutralHousingState();
         $taxed->foreignBuyerTaxRate = 0.15;
-        $this->subsystem->calculateResidentialPropertyIndex($base, MacroEngine::TARGET_INFLATION, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($taxed, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($base, MacroConstants::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($taxed, MacroConstants::TARGET_INFLATION, 0.25);
         $expected = (1.0 - exp(-AssetMarketSubsystem::RESIDENTIAL_MEAN_REVERSION * 0.25)) * log(AssetMarketSubsystem::foreignBuyerPriceFactor(0.15));
         $this->assertEqualsWithDelta($expected, log($taxed->residentialPropertyIndex / $base->residentialPropertyIndex), 1e-12);
     }
@@ -511,7 +512,7 @@ class AssetMarketSubsystemTest extends TestCase
             $state = $this->neutralHousingState();
             $state->outputGapEma = $gap;
             $state->greenBeltStringency = $stringency;
-            $this->subsystem->calculateResidentialPropertyIndex($state, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($state, MacroConstants::TARGET_INFLATION, 0.25);
 
             return log($state->residentialPropertyIndex / 100.0);
         };
@@ -533,8 +534,8 @@ class AssetMarketSubsystemTest extends TestCase
         $belted->immigrationPopulationShift = 0.05;
         $belted->greenBeltStringency = 1.0;
 
-        $this->subsystem->calculateResidentialPropertyIndex($open, MacroEngine::TARGET_INFLATION, 0.25);
-        $this->subsystem->calculateResidentialPropertyIndex($belted, MacroEngine::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($open, MacroConstants::TARGET_INFLATION, 0.25);
+        $this->subsystem->calculateResidentialPropertyIndex($belted, MacroConstants::TARGET_INFLATION, 0.25);
 
         $expected = (1.0 - exp(-AssetMarketSubsystem::RESIDENTIAL_MEAN_REVERSION * 0.25)) * AssetMarketSubsystem::greenBeltElasticityLift(1.0, 0.05) * 0.05;
         $this->assertEqualsWithDelta($expected, log($belted->residentialPropertyIndex / $open->residentialPropertyIndex), 1e-12);
@@ -547,7 +548,7 @@ class AssetMarketSubsystemTest extends TestCase
             $state = $this->neutralBuildingState();
             $state->residentialPropertyIndex = $price;
             $state->greenBeltStringency = $stringency;
-            $this->subsystem->calculateHousingStarts($state, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateHousingStarts($state, MacroConstants::TARGET_INFLATION, 0.25);
 
             return $state->housingStartsIndex;
         };
@@ -563,7 +564,7 @@ class AssetMarketSubsystemTest extends TestCase
         $state = new MacroState();
         $state->yield10yEma = 0.040;
         $state->unemploymentRateEma = $state->nairu;
-        $state->inflationEma = MacroEngine::TARGET_INFLATION;
+        $state->inflationEma = MacroConstants::TARGET_INFLATION;
         $state->outputGapEma = 0.0;
         $state->residentialPropertyIndex = 100.0;
 
@@ -591,7 +592,7 @@ class AssetMarketSubsystemTest extends TestCase
 
         $neutral = new MacroState();
         $doubled = new MacroState();
-        $doubled->policyUncertaintyIndexEma = 2.0 * MacroEngine::EPU_BASELINE;
+        $doubled->policyUncertaintyIndexEma = 2.0 * MacroConstants::EPU_BASELINE;
 
         $volNeutral = $subsystem->calculateMarketVolatility($neutral, 0.01);
         $volDoubled = $subsystem->calculateMarketVolatility($doubled, 0.01);
@@ -627,7 +628,7 @@ class AssetMarketSubsystemTest extends TestCase
 
         $neutral = new MacroState();
         $wideSpread = new MacroState();
-        $wideSpread->macroCreditSpread = MacroEngine::MAX_CREDIT_SPREAD;
+        $wideSpread->macroCreditSpread = CreditRisk::MAX_CREDIT_SPREAD;
         $premium = new MacroState();
         $premium->excessBondPremium = 0.010;
 
@@ -678,7 +679,7 @@ class AssetMarketSubsystemTest extends TestCase
         $kappa = AssetMarketSubsystem::ALLIED_DEFENSE_MEAN_REVERSION;
         // The quiet path's log level: the baseline less the mobilisations' log drift, which leaves the jumping
         // process's LOG averaging ln(baseline), the centre its log reader (alliedDefenseGap) measures from.
-        $logTrend = log(MacroEngine::ALLIED_DEFENSE_BASELINE)
+        $logTrend = log(MacroConstants::ALLIED_DEFENSE_BASELINE)
             - (AssetMarketSubsystem::ALLIED_MOBILISATION_PROBABILITY * AssetMarketSubsystem::ALLIED_MOBILISATION_MEAN / $kappa);
 
         $dt = 1.0 / 360.0;
@@ -688,7 +689,7 @@ class AssetMarketSubsystemTest extends TestCase
         }
         $elapsed = round($halfLife / $dt) * $dt;
         $this->assertEqualsWithDelta((log(150.0) - $logTrend) * exp(-$kappa * $elapsed), log($state->alliedDefenseSpendingIndex) - $logTrend, 1e-9);
-        $this->assertLessThan(MacroEngine::ALLIED_DEFENSE_BASELINE, exp($logTrend), 'Quiet years sit under the trend the mobilisations average up to.');
+        $this->assertLessThan(MacroConstants::ALLIED_DEFENSE_BASELINE, exp($logTrend), 'Quiet years sit under the trend the mobilisations average up to.');
     }
 
     /** A mobilisation lifts allied spending by the fitted jump at once, before any reversion to speak of. */
@@ -737,8 +738,8 @@ class AssetMarketSubsystemTest extends TestCase
         $stormyHousing = new MacroState();
         $stormyHousing->catastropheLossIndexEma = 3.0;
         for ($i = 0; $i < 200; $i++) {
-            $subsystem->calculateResidentialPropertyIndex($averageHousing, MacroEngine::TARGET_INFLATION, 0.25);
-            $subsystem->calculateResidentialPropertyIndex($stormyHousing, MacroEngine::TARGET_INFLATION, 0.25);
+            $subsystem->calculateResidentialPropertyIndex($averageHousing, MacroConstants::TARGET_INFLATION, 0.25);
+            $subsystem->calculateResidentialPropertyIndex($stormyHousing, MacroConstants::TARGET_INFLATION, 0.25);
         }
         $expectedRatio = 1.0 - (AssetMarketSubsystem::CATASTROPHE_PROPERTY_DAMAGE_SHARE * 2.0);
         $this->assertEqualsWithDelta($expectedRatio, $stormyHousing->residentialPropertyIndex / $averageHousing->residentialPropertyIndex, 0.005, 'Two units of excess burden destroy two percent of the stock.');
@@ -831,10 +832,10 @@ class AssetMarketSubsystemTest extends TestCase
         $this->runMainlandQuarters($this->subsystem, $state, 400);
 
         $this->assertEqualsWithDelta(0.04 * AssetMarketSubsystem::FOREIGN_IMPORT_SPILLOVER, $state->foreignOutputGap, 1e-6, 'The mainland feels the district\'s imports, not its whole cycle.');
-        $this->assertGreaterThan(MacroEngine::MAINLAND_NEUTRAL_RATE, $state->foreignPolicyRate, 'and the Fed leans against the demand it does feel.');
+        $this->assertGreaterThan(MacroConstants::MAINLAND_NEUTRAL_RATE, $state->foreignPolicyRate, 'and the Fed leans against the demand it does feel.');
         $this->assertEqualsWithDelta(AssetMarketSubsystem::WORLD_MAINLAND_LOADING * $state->foreignOutputGap, $state->worldActivityGap, 1e-9, 'With no shocks of its own the rest of the world carries the mainland cycle at its loading.');
-        $restOfWorld = 1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT - AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT;
-        $expectedGlobal = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * $state->outputGap) + (AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT * $state->foreignOutputGap) + ($restOfWorld * $state->worldActivityGap);
+        $restOfWorld = 1.0 - AssetMarketSubsystem::DOMESTIC_DEMAND_WEIGHT - AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT;
+        $expectedGlobal = (AssetMarketSubsystem::DOMESTIC_DEMAND_WEIGHT * $state->outputGap) + (AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT * $state->foreignOutputGap) + ($restOfWorld * $state->worldActivityGap);
         $this->assertEqualsWithDelta($expectedGlobal, $state->globalDemandGap, 1e-9, 'World demand weighs the three economies at their GDP shares.');
         $this->assertEqualsWithDelta(0.63, $restOfWorld, 0.01, 'Most of the world is neither the District nor the mainland.');
     }
@@ -905,10 +906,10 @@ class AssetMarketSubsystemTest extends TestCase
 
             return [$yearOnYear, $state->foreignPolicyRate];
         };
-        [$atTarget, $neutral] = $settle(MacroEngine::TARGET_INFLATION);
-        [$above, $tight] = $settle(MacroEngine::TARGET_INFLATION + 0.01);
+        [$atTarget, $neutral] = $settle(MacroConstants::TARGET_INFLATION);
+        [$above, $tight] = $settle(MacroConstants::TARGET_INFLATION + 0.01);
 
-        $this->assertEqualsWithDelta(MacroEngine::MAINLAND_NEUTRAL_RATE, $neutral, 1e-9, 'At target with the gap closed the Fed rests at neutral.');
+        $this->assertEqualsWithDelta(MacroConstants::MAINLAND_NEUTRAL_RATE, $neutral, 1e-9, 'At target with the gap closed the Fed rests at neutral.');
         $response = ($tight - $neutral) / ($above - $atTarget);
         $this->assertEqualsWithDelta(AssetMarketSubsystem::FED_RULE_INFLATION_RESPONSE, $response, 1e-6);
         $this->assertGreaterThan(1.0, $response, 'Real rates rise when inflation does.');
@@ -922,7 +923,7 @@ class AssetMarketSubsystemTest extends TestCase
             $s->foreignOutputGap = $s->foreignOutputGapLag = -0.06;
         });
 
-        $this->assertSame(MacroEngine::EFFECTIVE_LOWER_BOUND, $state->foreignPolicyRate, 'A deep mainland slump takes the funds rate to the floor and no further.');
+        $this->assertSame(MacroConstants::EFFECTIVE_LOWER_BOUND, $state->foreignPolicyRate, 'A deep mainland slump takes the funds rate to the floor and no further.');
     }
 
     /**
@@ -932,8 +933,8 @@ class AssetMarketSubsystemTest extends TestCase
     public function testTheCurrencyJumpsWithItsFundamentalAndOnlyItsDeviationDecays(): void
     {
         $state = new MacroState();
-        $state->policyRate = $state->policyRateShadow = MacroEngine::MAINLAND_NEUTRAL_RATE;
-        $state->foreignPolicyRate = MacroEngine::MAINLAND_NEUTRAL_RATE;
+        $state->policyRate = $state->policyRateShadow = MacroConstants::MAINLAND_NEUTRAL_RATE;
+        $state->foreignPolicyRate = MacroConstants::MAINLAND_NEUTRAL_RATE;
         $state->exchangeRateDeviation = 1.0;
         $this->subsystem->calculateExchangeRate($state, 0.001);
         $before = $state->exchangeRateIndex;
@@ -968,7 +969,7 @@ class AssetMarketSubsystemTest extends TestCase
 
         $monetary = new MonetaryPolicySubsystem(new MathUtility());
         foreach ([$before, $decided] as $state) {
-            $monetary->applyYieldCurve($state, $monetary->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE), 0.01);
+            $monetary->applyYieldCurve($state, $monetary->calculateYieldCurve($state, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE), 0.01);
         }
         $this->assertSame($before->nsSlope, $decided->nsSlope);
         $this->assertSame($before->structuralSlope, $decided->structuralSlope);
@@ -986,12 +987,12 @@ class AssetMarketSubsystemTest extends TestCase
         $sigma = AssetMarketSubsystem::exchangeRateDeviationVolatility();
         $deviationQuarterVariance = ($sigma ** 2 / $kappa) * (1.0 - exp(-$kappa * $quarter));
         $this->assertEqualsWithDelta(
-            MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY ** 2,
+            MacroConstants::EXCHANGE_RATE_QUARTERLY_VOLATILITY ** 2,
             $deviationQuarterVariance + (AssetMarketSubsystem::EXCHANGE_RATE_FUNDAMENTAL_QUARTERLY_SD ** 2),
             1e-12,
             'Deviation and fundamental together carry the measured quarterly variance, no more.',
         );
-        $this->assertLessThan(MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY, sqrt($deviationQuarterVariance));
+        $this->assertLessThan(MacroConstants::EXCHANGE_RATE_QUARTERLY_VOLATILITY, sqrt($deviationQuarterVariance));
 
         // The step draws on that sigma: a unit draw from parity moves the log deviation by its conditional sd.
         $unitDraw = new AssetMarketSubsystem(new class extends MathUtility {
@@ -1020,8 +1021,8 @@ class AssetMarketSubsystemTest extends TestCase
     public function testTheCurrencyReadsTheForeignPolicyRate(): void
     {
         $neutral = $this->settledFx();
-        $foreignHikes = $this->settledFx(['foreignPolicyRate' => MacroEngine::MAINLAND_NEUTRAL_RATE + 0.02]);
-        $districtHikes = $this->settledFx(['policyRate' => MacroEngine::MAINLAND_NEUTRAL_RATE + 0.02, 'policyRateShadow' => MacroEngine::MAINLAND_NEUTRAL_RATE + 0.02]);
+        $foreignHikes = $this->settledFx(['foreignPolicyRate' => MacroConstants::MAINLAND_NEUTRAL_RATE + 0.02]);
+        $districtHikes = $this->settledFx(['policyRate' => MacroConstants::MAINLAND_NEUTRAL_RATE + 0.02, 'policyRateShadow' => MacroConstants::MAINLAND_NEUTRAL_RATE + 0.02]);
 
         $this->assertLessThan($neutral, $foreignHikes, 'A foreign hiking cycle sells the district\'s currency.');
         $this->assertGreaterThan($neutral, $districtHikes, 'A district hiking cycle with the bloc on hold buys it.');
@@ -1067,9 +1068,9 @@ class AssetMarketSubsystemTest extends TestCase
         $loose->sloosTighteningIndexEma = -0.20;
 
         for ($i = 0; $i < 40; $i++) {
-            $this->subsystem->calculateResidentialPropertyIndex($calm, MacroEngine::TARGET_INFLATION, 0.25);
-            $this->subsystem->calculateResidentialPropertyIndex($tight, MacroEngine::TARGET_INFLATION, 0.25);
-            $this->subsystem->calculateResidentialPropertyIndex($loose, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($calm, MacroConstants::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($tight, MacroConstants::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($loose, MacroConstants::TARGET_INFLATION, 0.25);
         }
 
         $this->assertLessThan(0.85 * $calm->residentialPropertyIndex, $tight->residentialPropertyIndex, 'The price a buyer can pay is the price a lender will finance: the 80% tightening of a crisis takes over 15% off in a decade.');
@@ -1084,8 +1085,8 @@ class AssetMarketSubsystemTest extends TestCase
         $rising->residentialPriceMomentum = 0.05;
 
         $dt = 0.25;
-        $this->subsystem->calculateResidentialPropertyIndex($flat, MacroEngine::TARGET_INFLATION, $dt);
-        $this->subsystem->calculateResidentialPropertyIndex($rising, MacroEngine::TARGET_INFLATION, $dt);
+        $this->subsystem->calculateResidentialPropertyIndex($flat, MacroConstants::TARGET_INFLATION, $dt);
+        $this->subsystem->calculateResidentialPropertyIndex($rising, MacroConstants::TARGET_INFLATION, $dt);
 
         $this->assertEqualsWithDelta(
             exp(AssetMarketSubsystem::RESIDENTIAL_PRICE_MOMENTUM * 0.05 * $dt),
@@ -1107,7 +1108,7 @@ class AssetMarketSubsystemTest extends TestCase
     {
         $state = new MacroState();
         for ($quarter = 0; $quarter < 240; $quarter++) {
-            $this->subsystem->calculateResidentialPropertyIndex($state, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($state, MacroConstants::TARGET_INFLATION, 0.25);
         }
         $start = $state->residentialPropertyIndex;
 
@@ -1115,7 +1116,7 @@ class AssetMarketSubsystemTest extends TestCase
         $state->sloosTighteningIndexEma = -0.40;
         $peak = $start;
         for ($quarter = 0; $quarter < 240; $quarter++) {
-            $this->subsystem->calculateResidentialPropertyIndex($state, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($state, MacroConstants::TARGET_INFLATION, 0.25);
             $peak = max($peak, $state->residentialPropertyIndex);
         }
         $settled = $state->residentialPropertyIndex;
@@ -1143,9 +1144,9 @@ class AssetMarketSubsystemTest extends TestCase
         }
 
         for ($i = 0; $i < 40; $i++) {
-            $this->subsystem->calculateResidentialPropertyIndex($boom, MacroEngine::TARGET_INFLATION, 0.25);
-            $this->subsystem->calculateResidentialPropertyIndex($bust, MacroEngine::TARGET_INFLATION, 0.25);
-            $this->subsystem->calculateResidentialPropertyIndex($neutral, MacroEngine::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($boom, MacroConstants::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($bust, MacroConstants::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateResidentialPropertyIndex($neutral, MacroConstants::TARGET_INFLATION, 0.25);
         }
 
         $this->assertGreaterThan(
@@ -1227,7 +1228,7 @@ class AssetMarketSubsystemTest extends TestCase
         $opening = $state->financialConditionsIndex;
 
         // Spreads half a standard deviation wide for good: a quarter-weighted 0.5 on the composite.
-        $state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD + (0.5 * AssetMarketSubsystem::FCI_CREDIT_STD);
+        $state->macroCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD + (0.5 * AssetMarketSubsystem::FCI_CREDIT_STD);
         $this->subsystem->calculateFinancialConditionsIndex($state, 0.0);
         $this->assertEqualsWithDelta($opening + (0.5 * AssetMarketSubsystem::FCI_CREDIT_SPREAD_WEIGHT), $state->financialConditionsIndex, 1e-9);
 

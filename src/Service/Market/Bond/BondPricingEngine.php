@@ -8,9 +8,9 @@ use App\DTO\BondValuationDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 
 /**
  * Marks sovereign bonds against the live term structure.
@@ -83,15 +83,15 @@ final class BondPricingEngine
             slope: $curve->slope,
             curvature1: $curve->curvature1,
             curvature2: $curve->curvature2,
-            lambda1: MacroEngine::SVENSSON_LAMBDA_1,
-            lambda2: MacroEngine::SVENSSON_LAMBDA_2,
-            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA,
+            lambda1: MacroConstants::SVENSSON_LAMBDA_1,
+            lambda2: MacroConstants::SVENSSON_LAMBDA_2,
+            slopeLambda: MacroConstants::SVENSSON_SLOPE_LAMBDA,
             termPremium10y: $curve->baseTermPremium,
             longEndPremium: $curve->longEndPremium,
-            termPremiumHorizonYears: MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS,
+            termPremiumHorizonYears: MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS,
             balanceSheetIntensity: $curve->balanceSheetIntensity,
-            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
-            effectiveLowerBound: MacroEngine::EFFECTIVE_LOWER_BOUND,
+            habitatSensitivity: MacroConstants::PREFERRED_HABITAT_DURATION_SENSITIVITY,
+            effectiveLowerBound: MacroConstants::EFFECTIVE_LOWER_BOUND,
         );
     }
 
@@ -127,7 +127,7 @@ final class BondPricingEngine
         $low = $this->pillars[$index] ??= $this->pillarAt($curve, $index);
         $high = $this->pillars[$index + 1] ??= $this->pillarAt($curve, $index + 1);
 
-        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $low + (($high - $low) * $weight));
+        return max(MacroConstants::EFFECTIVE_LOWER_BOUND, $low + (($high - $low) * $weight));
     }
 
     /**
@@ -147,14 +147,14 @@ final class BondPricingEngine
             slope: $curve->slope,
             curvature1: $curve->curvature1,
             curvature2: $curve->curvature2,
-            lambda1: MacroEngine::SVENSSON_LAMBDA_1,
-            lambda2: MacroEngine::SVENSSON_LAMBDA_2,
-            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA,
+            lambda1: MacroConstants::SVENSSON_LAMBDA_1,
+            lambda2: MacroConstants::SVENSSON_LAMBDA_2,
+            slopeLambda: MacroConstants::SVENSSON_SLOPE_LAMBDA,
             termPremium10y: $curve->baseTermPremium,
             longEndPremium: $curve->longEndPremium,
-            termPremiumHorizonYears: MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS,
+            termPremiumHorizonYears: MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS,
             balanceSheetIntensity: $curve->balanceSheetIntensity,
-            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
+            habitatSensitivity: MacroConstants::PREFERRED_HABITAT_DURATION_SENSITIVITY,
         );
     }
 

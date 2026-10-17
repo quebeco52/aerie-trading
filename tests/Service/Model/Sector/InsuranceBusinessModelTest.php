@@ -935,7 +935,7 @@ class InsuranceBusinessModelTest extends TestCase
             };
 
             $averageYear = $run(1.0);
-            $stormSeason = $run(1.0 + 3.0 * \App\Service\Macro\MacroEngine::CATASTROPHE_LOSS_INDEX_SD);
+            $stormSeason = $run(1.0 + 3.0 * \App\Service\Macro\Subsystem\CommodityLogisticsSubsystem::CATASTROPHE_LOSS_INDEX_SD);
             $this->assertGreaterThan($averageYear, $stormSeason, sprintf('%s must pay more claims in a district storm season with its own draw flat.', $carrier::class));
         }
     }

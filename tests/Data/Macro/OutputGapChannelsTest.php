@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Data\Macro;
 
 use App\Data\Macro\OutputGapChannels;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -35,10 +35,10 @@ class OutputGapChannelsTest extends TestCase
         $subsystem = new MacroAggregateSubsystem(new MathUtility(), $probe);
 
         $state = new MacroState();
-        $state->inflation = MacroEngine::TARGET_INFLATION;
-        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->inflation = MacroConstants::TARGET_INFLATION;
+        $state->policyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
 
-        $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 1.0 / 3600.0, 1.0);
+        $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 1.0 / 3600.0, 1.0);
 
         $window = $probe->snapshot()['current'];
         $this->assertNotNull($window, 'a production tick opens the probe window');

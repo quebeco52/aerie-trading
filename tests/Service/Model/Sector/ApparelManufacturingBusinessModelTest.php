@@ -7,8 +7,8 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ApparelManufacturingBusinessModel;
@@ -42,7 +42,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.229, $this->model->getWorkingCapitalIntensity($stock), 0.01);
         // Trend growth plus clothing and footwear spending sliding from 2.89% to 1.92% of GDP over 1997-2019.
-        $this->assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH - 0.0186, $this->model->getSecularGrowthRate($stock), 1e-4);
+        $this->assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH - 0.0186, $this->model->getSecularGrowthRate($stock), 1e-4);
 
         $coverage = $this->model->getCoverageProfile($stock);
         $this->assertEquals(ApparelManufacturingBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);
@@ -97,7 +97,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         // Recession: negative output gap (-0.05) and confidence eight points below what that gap alone implies.
         $recessionMacro = new MacroStateDTO(
             outputGapEma: -0.05,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL
+            consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL
                 + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * -0.05) - 8.0,
             consumerSentimentMood: -8.0,
             inflationEma: 0.02,

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Support;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Math\MacroConstants;
 
 /**
  * Fluent builder for creating isolated, deterministic MacroState and MacroStateDTO instances in tests.
@@ -18,40 +18,40 @@ class MacroStateBuilder
     public function __construct()
     {
         $this->state = new MacroState();
-        $this->state->inflation = MacroEngine::TARGET_INFLATION;
-        $this->state->inflationEma = MacroEngine::TARGET_INFLATION;
+        $this->state->inflation = MacroConstants::TARGET_INFLATION;
+        $this->state->inflationEma = MacroConstants::TARGET_INFLATION;
         $this->state->outputGap = 0.0;
         $this->state->outputGapEma = 0.0;
-        $this->state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $this->state->policyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
         $this->state->policyRateEma = $this->state->policyRate;
-        $this->state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $this->state->naturalRate = MacroConstants::BASE_NATURAL_RATE;
         $this->state->marketVolatility = 0.15;
         $this->state->marketVolatilityEma = 0.15;
-        $this->state->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
-        $this->state->macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD;
-        $this->state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
-        $this->state->highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $this->state->unemploymentRate = MacroConstants::NATURAL_UNEMPLOYMENT;
+        $this->state->macroCreditSpread = MacroConstants::BASE_CREDIT_SPREAD;
+        $this->state->macroCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD;
+        $this->state->highYieldCreditSpread = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         $this->state->highYieldCreditSpreadEma = $this->state->highYieldCreditSpread;
         $this->state->yield10y = 0.040;
         $this->state->yield2y = 0.038;
-        $this->state->supercoreInflation = MacroEngine::TARGET_INFLATION;
-        $this->state->supercoreInflationEma = MacroEngine::TARGET_INFLATION;
-        $this->state->coreGoodsInflation = MacroEngine::TARGET_INFLATION;
-        $this->state->coreGoodsInflationEma = MacroEngine::TARGET_INFLATION;
+        $this->state->supercoreInflation = MacroConstants::TARGET_INFLATION;
+        $this->state->supercoreInflationEma = MacroConstants::TARGET_INFLATION;
+        $this->state->coreGoodsInflation = MacroConstants::TARGET_INFLATION;
+        $this->state->coreGoodsInflationEma = MacroConstants::TARGET_INFLATION;
         $this->state->inventoryStockGap = 0.0;
         $this->state->inventoryStockGapEma = 0.0;
-        $this->state->energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE;
-        $this->state->energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE;
-        $this->state->manufacturingPmi = MacroEngine::PMI_BASELINE;
-        $this->state->manufacturingPmiEma = MacroEngine::PMI_BASELINE;
-        $this->state->producerPriceInflation = MacroEngine::TARGET_INFLATION;
-        $this->state->producerPriceInflationEma = MacroEngine::TARGET_INFLATION;
-        $this->state->tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE;
-        $this->state->tradeBalanceToGdpEma = MacroEngine::TRADE_BALANCE_BASELINE;
-        $this->state->housingStartsIndex = MacroEngine::HOUSING_STARTS_BASELINE;
-        $this->state->housingStartsIndexEma = MacroEngine::HOUSING_STARTS_BASELINE;
-        $this->state->moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH;
-        $this->state->moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH;
+        $this->state->energyInventoryIndex = MacroConstants::COMMODITY_INVENTORY_BASELINE;
+        $this->state->energyInventoryIndexEma = MacroConstants::COMMODITY_INVENTORY_BASELINE;
+        $this->state->manufacturingPmi = MacroConstants::PMI_BASELINE;
+        $this->state->manufacturingPmiEma = MacroConstants::PMI_BASELINE;
+        $this->state->producerPriceInflation = MacroConstants::TARGET_INFLATION;
+        $this->state->producerPriceInflationEma = MacroConstants::TARGET_INFLATION;
+        $this->state->tradeBalanceToGdp = MacroConstants::TRADE_BALANCE_BASELINE;
+        $this->state->tradeBalanceToGdpEma = MacroConstants::TRADE_BALANCE_BASELINE;
+        $this->state->housingStartsIndex = MacroConstants::HOUSING_STARTS_BASELINE;
+        $this->state->housingStartsIndexEma = MacroConstants::HOUSING_STARTS_BASELINE;
+        $this->state->moneySupplyGrowth = MacroConstants::M2_BASE_GROWTH;
+        $this->state->moneySupplyGrowthEma = MacroConstants::M2_BASE_GROWTH;
     }
 
     public static function create(): self

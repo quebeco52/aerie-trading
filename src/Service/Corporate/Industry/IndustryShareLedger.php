@@ -6,8 +6,8 @@ namespace App\Service\Corporate\Industry;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\TimeSeries;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 
@@ -279,7 +279,7 @@ class IndustryShareLedger
      */
     public static function secularExcessGrowth(OperatingStrategyInterface $strategy, Stock $stock): float
     {
-        return $strategy->getSecularGrowthRate($stock) - MacroEngine::TREND_REAL_GROWTH;
+        return $strategy->getSecularGrowthRate($stock) - MacroConstants::TREND_REAL_GROWTH;
     }
 
     /**

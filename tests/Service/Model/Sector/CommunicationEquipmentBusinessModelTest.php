@@ -8,7 +8,7 @@ use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommunicationEquipmentBusinessModel;
 use App\Service\Model\StreamContext;
@@ -280,7 +280,7 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $stock = (new Stock())->setTicker('ERNE_TEST');
         $recession = new MacroStateDTO(
             outputGapEma: -0.03,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL - 10.0,
+            consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL - 10.0,
             exchangeRateIndexEma: 100.0,
             inventoryStockGapEma: 0.05,
         );

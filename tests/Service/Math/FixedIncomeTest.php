@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Math;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -349,7 +349,7 @@ class FixedIncomeTest extends TestCase
      */
     public function testMoneyMarketCashEarnsThePolicyRateLessTheSpreadAndNeverBelowZero(): void
     {
-        $this->assertEqualsWithDelta(0.04 - MacroEngine::CASH_YIELD_SPREAD, FixedIncome::moneyMarketYield(0.04), 1e-15);
+        $this->assertEqualsWithDelta(0.04 - MacroConstants::CASH_YIELD_SPREAD, FixedIncome::moneyMarketYield(0.04), 1e-15);
         $this->assertSame(0.0, FixedIncome::moneyMarketYield(0.0), 'At the lower bound the funds waive fees rather than charge for holding cash.');
     }
 
@@ -359,10 +359,10 @@ class FixedIncomeTest extends TestCase
      */
     public function testTheMortgageRateFloatsOverThePolicyRate(): void
     {
-        $this->assertEqualsWithDelta(0.045 + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD, FixedIncome::mortgageRate(0.045), 1e-15);
-        $this->assertEqualsWithDelta(0.03 + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD, FixedIncome::expectedMortgageRate(0.03), 1e-15);
-        $neutralPolicyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
-        $this->assertEqualsWithDelta(MacroEngine::NEUTRAL_MORTGAGE_RATE, FixedIncome::mortgageRate($neutralPolicyRate), 1e-15);
-        $this->assertEqualsWithDelta(MacroEngine::NEUTRAL_MORTGAGE_RATE, FixedIncome::expectedMortgageRate($neutralPolicyRate), 1e-15);
+        $this->assertEqualsWithDelta(0.045 + MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD, FixedIncome::mortgageRate(0.045), 1e-15);
+        $this->assertEqualsWithDelta(0.03 + MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD, FixedIncome::expectedMortgageRate(0.03), 1e-15);
+        $neutralPolicyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
+        $this->assertEqualsWithDelta(MacroConstants::NEUTRAL_MORTGAGE_RATE, FixedIncome::mortgageRate($neutralPolicyRate), 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::NEUTRAL_MORTGAGE_RATE, FixedIncome::expectedMortgageRate($neutralPolicyRate), 1e-15);
     }
 }

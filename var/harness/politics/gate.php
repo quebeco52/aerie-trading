@@ -7,13 +7,14 @@
 // step: no politics, the levers held where they stand, the bank capital requirement raised 1pp at year STEP_AT (default 10),
 // at once or, with STEP_PHASE years, linearly over them)
 require __DIR__ . '/../../../tests/bootstrap.php';
+use App\Data\Politics\AerieDiet;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
+use App\Service\Math\MacroConstants;
+use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Politics\PoliticsEngine;
-use App\Service\Math\MathUtility;
-use App\Data\Politics\AerieDiet;
 [$script, $seedFrom, $seedTo, $years, $tpy, $arm, $out] = $argv;
 $fh = fopen($out, 'w');
 $tpy = (int) $tpy;
@@ -59,10 +60,10 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             // What the economy read before politics left it: the term's ramp and the vote's own tick, no talks.
             $vote = TimeSeries::crossedSimulatedBoundary($m->totalTime, 1.0 / $tpy, PoliticsEngine::ELECTION_TERM_YEARS);
             $policy = new \App\DTO\GovernmentPolicyDTO(
-                publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+                publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,
                 corporateTaxPolicyShift: 0.0,
                 importTariffRate: 0.0,
-                laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+                laborForceGrowthRate: MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
                 foreignBuyerTaxRate: 0.0,
                 mergerReviewLeniency: 0.0,
                 greenBeltStringency: 0.0,
@@ -70,10 +71,10 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 extractionStringency: 0.0,
                 stampDutyRate: \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE,
                 bankLevyRate: 0.0,
-                reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+                reserveDrawShare: MacroConstants::RESERVE_DRAW_CEILING,
                 consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
                 reserveHomeEquityShare: \App\Service\Macro\Subsystem\SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
-                utilityRateCaseGrantShare: \App\Service\Model\Sector\UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+                utilityRateCaseGrantShare: \App\Service\Math\FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
                 dividendTaxRate: \App\Service\Math\Valuation::FOUNDING_DIVIDEND_TAX_RATE,
                 electionPulse: PoliticsEngine::electionPulse($m->totalTime, $vote ? $m->totalTime : -1.0, -1.0),
             );

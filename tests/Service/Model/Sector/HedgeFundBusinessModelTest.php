@@ -82,9 +82,9 @@ class HedgeFundBusinessModelTest extends TestCase
         // The AUM beta, the directional tilt and the VIX regime are all built from published series.
         // Zeroing the root shift hid them from consensus and made every boom quarter a fresh beat.
         $stock = $this->swan();
-        $calm = MacroStateDTO::fromArray(['output_gap_ema' => 0.0, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH]);
-        $boom = MacroStateDTO::fromArray(['output_gap_ema' => 0.03, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH]);
-        $bust = MacroStateDTO::fromArray(['output_gap_ema' => -0.03, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH]);
+        $calm = MacroStateDTO::fromArray(['output_gap_ema' => 0.0, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Math\MacroConstants::M2_BASE_GROWTH]);
+        $boom = MacroStateDTO::fromArray(['output_gap_ema' => 0.03, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Math\MacroConstants::M2_BASE_GROWTH]);
+        $bust = MacroStateDTO::fromArray(['output_gap_ema' => -0.03, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Math\MacroConstants::M2_BASE_GROWTH]);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $calm)['macro_demand_shift'], 1e-12);
         $this->assertGreaterThan(0.0, $this->model->getMacroPhysics($stock, $boom)['macro_demand_shift']);
@@ -99,7 +99,7 @@ class HedgeFundBusinessModelTest extends TestCase
         // a base of 100 must be what the streams alone produce from 100, not the streams on top of the shift.
         $stock = $this->swan();
         $gap = 0.03;
-        $boom = MacroStateDTO::fromArray(['output_gap_ema' => $gap, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH, 'macro_credit_spread_ema' => 0.02]);
+        $boom = MacroStateDTO::fromArray(['output_gap_ema' => $gap, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Math\MacroConstants::M2_BASE_GROWTH, 'macro_credit_spread_ema' => 0.02]);
 
         $root = $this->model->getMacroPhysics($stock, $boom)['macro_demand_shift'];
         $result = $this->model->computeActualFinancials($stock, 100.0 * (1.0 + $root), 0.40, 10.0, 0.10, $boom, $this->zeroAlphaMath());
@@ -120,7 +120,7 @@ class HedgeFundBusinessModelTest extends TestCase
         // (the consensus base) already carries. Before, expected stayed at the calm figure and the whole
         // uplift landed as surprise every quarter for as long as the boom lasted.
         $stock = $this->swan();
-        $boom = MacroStateDTO::fromArray(['output_gap_ema' => 0.04, 'market_volatility_ema' => 0.22, 'money_supply_growth_ema' => \App\Service\Macro\MacroEngine::M2_BASE_GROWTH + 0.03, 'macro_credit_spread_ema' => 0.02]);
+        $boom = MacroStateDTO::fromArray(['output_gap_ema' => 0.04, 'market_volatility_ema' => 0.22, 'money_supply_growth_ema' => \App\Service\Math\MacroConstants::M2_BASE_GROWTH + 0.03, 'macro_credit_spread_ema' => 0.02]);
 
         $expected = 100.0 * (1.0 + $this->model->getMacroPhysics($stock, $boom)['macro_demand_shift']);
         $result = $this->model->computeActualFinancials($stock, $expected, 0.40, 10.0, 0.10, $boom, $this->zeroAlphaMath());

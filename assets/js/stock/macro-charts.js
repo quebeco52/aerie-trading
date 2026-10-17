@@ -190,9 +190,9 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let naturalRateData = [], termPremiumData = [], riskNeutralData = [];
     let balanceSheetHoldingsData = [], balanceSheetChangeData = [];
     let tfpGrowthData = [];
-    // MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, published on the canvas so the page never keeps its own copy.
+    // MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, published on the canvas so the page never keeps its own copy.
     const structuralLaborGrowthPct = parseFloat(document.getElementById('macroGdpGrowthChart')?.dataset.structuralLaborGrowth ?? '0.005') * 100;
-    // MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD, published on the canvas for the same reason.
+    // MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD, published on the canvas for the same reason.
     const mortgageSpreadPct = parseFloat(document.getElementById('macroMortgageChart')?.dataset.mortgageSpread ?? 'NaN') * 100;
     let fciData = [], fciEmaData = [];
     let supercoreInflationData = [], coreGoodsInflationData = [];
@@ -3012,7 +3012,7 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
     });
 }
 
-// The deposit beta is a fixed share (MacroEngine::SYSTEM_DEPOSIT_BETA_BASE), so the card states it in words rather
+// The deposit beta is a fixed share (MacroConstants::SYSTEM_DEPOSIT_BETA_BASE), so the card states it in words rather
 // than drawing a flat line.
 function renderMacroBankingLiquidityChart(labels, mmfShareData, interbankSpreadBpsData) {
     const canvas = document.getElementById('macroBankingLiquidityChart');

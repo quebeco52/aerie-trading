@@ -10,6 +10,7 @@ use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 
 /**
@@ -694,7 +695,7 @@ class MacroState
             $state->carbonPowerUpliftEmbodied = CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice);
         }
         if (!isset($carried['governmentSpendingShiftEmbodied'])) {
-            $state->governmentSpendingShiftEmbodied = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
+            $state->governmentSpendingShiftEmbodied = ($state->governmentSpendingIndexEma / MacroConstants::GOVT_SPENDING_BASELINE) - 1.0;
         }
         if (!isset($carried['balanceSheetIntensity'])) {
             // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.
@@ -719,13 +720,13 @@ class MacroState
             $state->authorityHoldingsToGdpEma = MonetaryPolicySubsystem::authorityHoldingsToGdp($state);
         }
         if (!isset($carried['qeActive'])) {
-            $state->qeActive = $state->balanceSheetIntensity > MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD;
+            $state->qeActive = $state->balanceSheetIntensity > MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD;
         }
         if (!isset($carried['qeIntensity'])) {
             $state->qeIntensity = max(0.0, $state->balanceSheetIntensity);
         }
         if (!isset($carried['qtActive'])) {
-            $state->qtActive = $state->balanceSheetIntensity < -MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD;
+            $state->qtActive = $state->balanceSheetIntensity < -MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD;
         }
         if (!isset($carried['qtIntensity'])) {
             $state->qtIntensity = max(0.0, -$state->balanceSheetIntensity);
@@ -742,7 +743,7 @@ class MacroState
             $state->potentialGdpIndex = $state->nominalGdpIndex / (1.0 + $state->outputGap);
         }
         if (!isset($carried['highYieldCreditSpread'])) {
-            $state->highYieldCreditSpread = $state->macroCreditSpread * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+            $state->highYieldCreditSpread = $state->macroCreditSpread * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         }
 
         // A smoothed series with no reading of its own opens level with the series it smooths. Walked in field order,

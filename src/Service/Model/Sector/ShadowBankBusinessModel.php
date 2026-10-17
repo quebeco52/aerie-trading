@@ -9,8 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -305,7 +305,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // 1. Mortgage Origination Volume Channel:
         // Mortgage rates over their neutral destroy refinancing demand and freeze home purchases; under it, both
         // return. Strong residential property values and housing starts stimulate new mortgage purchase originations.
-        $mortgageRateDrag = ($macroState->mortgageRate() - MacroEngine::NEUTRAL_MORTGAGE_RATE) * self::MORTGAGE_RATE_ORIGINATION_SENSITIVITY;
+        $mortgageRateDrag = ($macroState->mortgageRate() - MacroConstants::NEUTRAL_MORTGAGE_RATE) * self::MORTGAGE_RATE_ORIGINATION_SENSITIVITY;
         $residentialShift = $macroState->housePriceDeviation();
         $propertyOriginationBoost = $residentialShift * 0.20;
         $housingStartsShift = MacroTransmission::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_ORIGINATION_SENSITIVITY);

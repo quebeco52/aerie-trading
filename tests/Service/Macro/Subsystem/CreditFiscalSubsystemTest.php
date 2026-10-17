@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro\Subsystem;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
@@ -15,6 +14,7 @@ use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -45,7 +45,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->interbankLiquiditySpreadEma = 0.0050;
 
         $this->subsystem->calculateMacroCreditSpread($state);
-        $this->assertGreaterThan(MacroEngine::BASE_CREDIT_SPREAD, $state->macroCreditSpread);
+        $this->assertGreaterThan(MacroConstants::BASE_CREDIT_SPREAD, $state->macroCreditSpread);
     }
 
     /**
@@ -92,8 +92,8 @@ class CreditFiscalSubsystemTest extends TestCase
         // No debt to service or repair, so the budget plans no balance and purchases follow the appropriation alone.
         $state->sovereignDebtToGdp = 0.0;
         $state->debtPace = 0.0;
-        $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP * 1.10;
-        $target = MacroEngine::GOVT_SPENDING_BASELINE * 1.10;
+        $state->publicSpendingShare = MacroConstants::PUBLIC_PURCHASES_TO_GDP * 1.10;
+        $target = MacroConstants::GOVT_SPENDING_BASELINE * 1.10;
 
         for ($i = 0; $i < 360; $i++) {
             $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
@@ -103,8 +103,8 @@ class CreditFiscalSubsystemTest extends TestCase
             $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
         }
 
-        $this->assertGreaterThan(MacroEngine::GOVT_SPENDING_BASELINE, $afterOneYear);
-        $this->assertLessThan(MacroEngine::GOVT_SPENDING_BASELINE + (($target - MacroEngine::GOVT_SPENDING_BASELINE) / 2.0), $afterOneYear, 'Less than half the rise has come through after a year.');
+        $this->assertGreaterThan(MacroConstants::GOVT_SPENDING_BASELINE, $afterOneYear);
+        $this->assertLessThan(MacroConstants::GOVT_SPENDING_BASELINE + (($target - MacroConstants::GOVT_SPENDING_BASELINE) / 2.0), $afterOneYear, 'Less than half the rise has come through after a year.');
         $this->assertEqualsWithDelta($target, $state->governmentSpendingIndex, 0.05, 'Purchases settle at the share the budget set.');
     }
 
@@ -173,8 +173,8 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $extra = CreditFiscalSubsystem::maturitySupplyTermPremium(0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
         $this->assertEqualsWithDelta(0.9 * CreditFiscalSubsystem::DEBT_MATURITY_TERM_PREMIUM, $extra, 1e-15);
-        $atOpeningDebt = CreditFiscalSubsystem::maturitySupplyTermPremium(MacroEngine::INITIAL_DEBT_TO_GDP, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
-        $this->assertEqualsWithDelta(0.004 - $atOpeningDebt, CreditFiscalSubsystem::durationExtraction(0.004, MacroEngine::INITIAL_DEBT_TO_GDP, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0), 1e-15, 'A longer book puts back duration QE took out.');
+        $atOpeningDebt = CreditFiscalSubsystem::maturitySupplyTermPremium(MacroConstants::INITIAL_DEBT_TO_GDP, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
+        $this->assertEqualsWithDelta(0.004 - $atOpeningDebt, CreditFiscalSubsystem::durationExtraction(0.004, MacroConstants::INITIAL_DEBT_TO_GDP, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0), 1e-15, 'A longer book puts back duration QE took out.');
 
         // The bond desk's curve carries the same duration as the macro's.
         $dto = new MacroStateDTO(balanceSheetIntensity: 0.004, sovereignDebtToGdpEma: 0.9, sovereignDebtAverageMaturity: CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
@@ -189,7 +189,7 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testTheSizeOfTheBookPricesAsItsMaturityDoes(): void
     {
         $m0 = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY;
-        $d0 = MacroEngine::INITIAL_DEBT_TO_GDP;
+        $d0 = MacroConstants::INITIAL_DEBT_TO_GDP;
         $this->assertSame(0.0, CreditFiscalSubsystem::debtSupplyTermPremium($d0) + CreditFiscalSubsystem::maturitySupplyTermPremium($d0, $m0));
 
         foreach ([[0.35, 4.0], [0.90, $m0], [0.75, 6.5]] as [$debt, $maturity]) {
@@ -206,12 +206,12 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->outputGapEma = -0.04;
-        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $state->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE;
 
         $this->subsystem->calculateDynamicFiscalPolicy($state, 0.25);
         $this->assertLessThan(CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE, $state->netTaxRate);
-        $this->assertSame(MacroEngine::BASE_CORPORATE_TAX_RATE, $state->corporateTaxRate, 'The cycle is not legislated.');
+        $this->assertSame(MacroConstants::BASE_CORPORATE_TAX_RATE, $state->corporateTaxRate, 'The cycle is not legislated.');
     }
 
     /**
@@ -236,7 +236,7 @@ class CreditFiscalSubsystemTest extends TestCase
     /** At founding the two rates and the Authority's remittance raise the budget's whole take between them. */
     public function testNetTaxesAndTheCorporateRateFoundTheWholeTake(): void
     {
-        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP, CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + (MacroEngine::BASE_CORPORATE_TAX_RATE * CreditFiscalSubsystem::CORPORATE_PROFITS_TO_GDP) + CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE, 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::PUBLIC_PURCHASES_TO_GDP, CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + (MacroConstants::BASE_CORPORATE_TAX_RATE * CreditFiscalSubsystem::CORPORATE_PROFITS_TO_GDP) + CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE, 1e-15);
     }
 
     public function testHighYieldWidensAtItsBaseMultipleOfInvestmentGrade(): void
@@ -244,13 +244,13 @@ class CreditFiscalSubsystemTest extends TestCase
         $stateNormal = new MacroState();
         $stateNormal->outputGapEma = 0.01;
         $stateNormal->marketVolatilityEma = 0.15;
-        $stateNormal->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $stateNormal->interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD;
         // The multiple is the corporate-risk part's; the sovereign's share is additive (Durbin & Ng 2005), so hold it
         // at zero.
         $stateNormal->sovereignRiskSpreadEma = 0.0;
 
         $this->subsystem->calculateMacroCreditSpread($stateNormal);
-        $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD, $stateNormal->macroCreditSpread, 0.005);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_CREDIT_SPREAD, $stateNormal->macroCreditSpread, 0.005);
         $this->assertGreaterThan($stateNormal->macroCreditSpread, $stateNormal->highYieldCreditSpread);
 
         $stateRecession = new MacroState();
@@ -264,7 +264,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan($stateNormal->macroCreditSpread, $stateRecession->macroCreditSpread);
         // High yield keeps its base multiple of investment grade, so it widens as IG does
         $this->assertGreaterThan($stateNormal->highYieldCreditSpread * 2.0, $stateRecession->highYieldCreditSpread);
-        $this->assertEqualsWithDelta(MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $stateRecession->highYieldCreditSpread / $stateRecession->macroCreditSpread, 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::HY_BASE_SPREAD_MULTIPLIER, $stateRecession->highYieldCreditSpread / $stateRecession->macroCreditSpread, 1e-12);
     }
 
     /**
@@ -281,9 +281,9 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->subsystem->calculateMacroCreditSpread($state);
 
-        $this->assertEqualsWithDelta(MacroEngine::MAX_CREDIT_SPREAD, $state->macroCreditSpread, 1e-12);
-        $this->assertLessThanOrEqual(0.065, MacroEngine::MAX_CREDIT_SPREAD, 'IG OAS never exceeded ~620 bps (Dec 2008).');
-        $this->assertEqualsWithDelta(MacroEngine::MAX_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $state->highYieldCreditSpread, 1e-12, 'HY peaks at its multiple of the IG record, near the 21.8% of Dec 2008.');
+        $this->assertEqualsWithDelta(CreditRisk::MAX_CREDIT_SPREAD, $state->macroCreditSpread, 1e-12);
+        $this->assertLessThanOrEqual(0.065, CreditRisk::MAX_CREDIT_SPREAD, 'IG OAS never exceeded ~620 bps (Dec 2008).');
+        $this->assertEqualsWithDelta(CreditRisk::MAX_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER, $state->highYieldCreditSpread, 1e-12, 'HY peaks at its multiple of the IG record, near the 21.8% of Dec 2008.');
     }
 
     public function testInterbankContagionWidensIgSpreadByTheCalibratedCoefficient(): void
@@ -291,21 +291,21 @@ class CreditFiscalSubsystemTest extends TestCase
         $neutral = new MacroState();
         $neutral->outputGapEma = 0.0;
         $neutral->marketVolatilityEma = 0.15;
-        $neutral->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $neutral->interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD;
 
         $stressed = clone $neutral;
-        $stressed->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD + 0.02; // +200 bps TED
+        $stressed->interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD + 0.02; // +200 bps TED
 
         $this->subsystem->calculateMacroCreditSpread($neutral);
         $this->subsystem->calculateMacroCreditSpread($stressed);
 
         $this->assertEqualsWithDelta(
-            0.02 * MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
+            0.02 * CreditRisk::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
             $stressed->macroCreditSpread - $neutral->macroCreditSpread,
             1e-9,
             'Contagion must flow through the engine constant, not a literal inside the formula.',
         );
-        $this->assertLessThanOrEqual(1.0, MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY, '2008: +430 bps TED moved IG OAS by ~+450 bps.');
+        $this->assertLessThanOrEqual(1.0, CreditRisk::INTERBANK_CREDIT_CONTAGION_SENSITIVITY, '2008: +430 bps TED moved IG OAS by ~+450 bps.');
     }
 
     public function testInterbankSpreadIsCappedAtTheHistoricalRecord(): void
@@ -320,19 +320,19 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testInterbankSpreadIsThePremiumShareAndADecayingRun(): void
     {
-        $this->assertSame(MacroEngine::INTERBANK_BASELINE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.0, INF));
-        $this->assertSame(MacroEngine::INTERBANK_BASELINE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(-0.005, INF), 'A favourable premium does not ease wholesale funding below its base.');
-        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD + (0.034 * CreditFiscalSubsystem::INTERBANK_PREMIUM_COUPLING), CreditFiscalSubsystem::interbankSpreadAt(0.034, INF), 1e-15);
+        $this->assertSame(MacroConstants::INTERBANK_BASELINE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.0, INF));
+        $this->assertSame(MacroConstants::INTERBANK_BASELINE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(-0.005, INF), 'A favourable premium does not ease wholesale funding below its base.');
+        $this->assertEqualsWithDelta(MacroConstants::INTERBANK_BASELINE_SPREAD + (0.034 * CreditFiscalSubsystem::INTERBANK_PREMIUM_COUPLING), CreditFiscalSubsystem::interbankSpreadAt(0.034, INF), 1e-15);
         $this->assertGreaterThan(0.010, CreditFiscalSubsystem::interbankSpreadAt(0.034, INF), "2008's 340 bps premium must lift TED past 100 bps.");
 
-        $this->assertEqualsWithDelta(MacroEngine::INTERBANK_BASELINE_SPREAD + CreditFiscalSubsystem::INTERBANK_CRISIS_RUN, CreditFiscalSubsystem::interbankSpreadAt(0.0, 0.0), 1e-15, 'The run lands whole on the crisis day.');
+        $this->assertEqualsWithDelta(MacroConstants::INTERBANK_BASELINE_SPREAD + CreditFiscalSubsystem::INTERBANK_CRISIS_RUN, CreditFiscalSubsystem::interbankSpreadAt(0.0, 0.0), 1e-15, 'The run lands whole on the crisis day.');
         $this->assertEqualsWithDelta(
             CreditFiscalSubsystem::INTERBANK_CRISIS_RUN * exp(-1.0),
-            CreditFiscalSubsystem::interbankSpreadAt(0.0, CreditFiscalSubsystem::INTERBANK_RUN_DECAY_YEARS) - MacroEngine::INTERBANK_BASELINE_SPREAD,
+            CreditFiscalSubsystem::interbankSpreadAt(0.0, CreditFiscalSubsystem::INTERBANK_RUN_DECAY_YEARS) - MacroConstants::INTERBANK_BASELINE_SPREAD,
             1e-15,
             'and decays on its time constant.',
         );
-        $this->assertGreaterThan(MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.0, 0.0), 'A crisis day reads as a freeze.');
+        $this->assertGreaterThan(MacroConstants::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.0, 0.0), 'A crisis day reads as a freeze.');
     }
 
     /** The subsystem step reads the state's premium and crisis date through the same function. */
@@ -380,11 +380,11 @@ class CreditFiscalSubsystemTest extends TestCase
 
             $output = 1.3;
             $fundPaid = $funded ? 0.02 * $output : 0.0;
-            $spending = (104.0 / MacroEngine::GOVT_SPENDING_BASELINE) * MacroEngine::PUBLIC_PURCHASES_TO_GDP * ($output / 0.98) + $fundPaid;
+            $spending = (104.0 / MacroConstants::GOVT_SPENDING_BASELINE) * MacroConstants::PUBLIC_PURCHASES_TO_GDP * ($output / 0.98) + $fundPaid;
             // The Authority's paper earns the 5% the whole debt pays, in place of the founding rate the net take leaves
             // room for.
             $remittance = MonetaryPolicySubsystem::CURRENCY_TO_GDP * 0.05;
-            $revenue = ((MacroEngine::PUBLIC_PURCHASES_TO_GDP - CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE + $remittance + 0.025) * $output) + $fundPaid;
+            $revenue = ((MacroConstants::PUBLIC_PURCHASES_TO_GDP - CreditFiscalSubsystem::FOUNDING_CENTRAL_BANK_REMITTANCE + $remittance + 0.025) * $output) + $fundPaid;
             $deficitToGdp = ($spending - $revenue) / $output;
 
             $this->assertEqualsWithDelta($deficitToGdp, $state->primaryDeficitToGdp, 1e-12, 'The published deficit is spending less revenue.');
@@ -404,7 +404,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $state = new MacroState();
         $state->consolidationTaxShare = $share;
-        $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $state->publicSpendingShare = MacroConstants::PUBLIC_PURCHASES_TO_GDP;
         $state->sovereignDebtToGdp = 0.80;
         $state->debtTarget = 0.60;
         $state->debtPace = 0.01;
@@ -413,14 +413,14 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertGreaterThan(0.0, $required);
         $this->assertEqualsWithDelta($share * $required, CreditFiscalSubsystem::fiscalStance($state), 1e-12, 'Tax raises its share of the planned surplus.');
-        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP - $cut, CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, $required, $share), 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::PUBLIC_PURCHASES_TO_GDP - $cut, CreditFiscalSubsystem::purchasesTarget($state->publicSpendingShare, $required, $share), 1e-12);
 
         // Purchases settle on the appropriation less the cut.
         $subsystem = $this->quietSubsystem();
         for ($i = 0; $i < 360 * 30; $i++) {
             $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
         }
-        $this->assertEqualsWithDelta(MacroEngine::GOVT_SPENDING_BASELINE * ($state->publicSpendingShare - $cut) / MacroEngine::PUBLIC_PURCHASES_TO_GDP, $state->governmentSpendingIndex, 0.05);
+        $this->assertEqualsWithDelta(MacroConstants::GOVT_SPENDING_BASELINE * ($state->publicSpendingShare - $cut) / MacroConstants::PUBLIC_PURCHASES_TO_GDP, $state->governmentSpendingIndex, 0.05);
     }
 
     /**
@@ -434,7 +434,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->debtTarget = 0.60;
         $state->debtPace = 0.005;
         $holds = static function (MacroState $at): float {
-            $g = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + $at->laborForceGrowthRate;
+            $g = MacroConstants::TARGET_INFLATION + MacroConstants::TFP_DRIFT + $at->laborForceGrowthRate;
 
             return (CreditFiscalSubsystem::sovereignEffectiveRate($at) - $g) * $at->sovereignDebtToGdp;
         };
@@ -484,7 +484,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $neutral->sovereignFundDollarsPerGdp = 2.0e13;
         $neutral->sovereignFundDrawToGdp = 0.02;
         $neutral->outputGapEma = 0.0;
-        $neutral->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $neutral->publicSpendingShare = MacroConstants::PUBLIC_PURCHASES_TO_GDP;
         $tariffed = clone $neutral;
         $tariffed->importTariffRate = 0.10;
         $tariffed->carbonPrice = 40.0;
@@ -516,8 +516,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $stateCalm = new MacroState();
         $stateCalm->unemploymentRateEma = 0.04;
         $stateCalm->inflationEma = 0.02;
-        $stateCalm->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
-        $stateCalm->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $stateCalm->macroCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD;
+        $stateCalm->interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD;
 
         $subsystem->calculateRetailDefaultRate($stateCalm, 0.25);
 
@@ -537,7 +537,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $stateNormal = new MacroState();
         $stateNormal->outputGapEma = 0.0;
-        $stateNormal->highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $stateNormal->highYieldCreditSpread = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         $stateNormal->sloosTighteningIndexEma = 0.0;
 
         $this->subsystem->calculateCorporateDefaultRate($stateNormal, 0.25);
@@ -563,7 +563,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $neutral = new MacroState();
         $neutral->outputGapEma = 0.0;
-        $neutral->highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $neutral->highYieldCreditSpread = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         $neutral->sloosTighteningIndexEma = 0.0;
         $this->subsystem->calculateCorporateDefaultRate($neutral, 0.25);
 
@@ -575,7 +575,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         // A neutral year at the post-1983 median, below the mean it averages to.
         $this->assertEqualsWithDelta(0.012, $neutral->corporateDefaultRate, 0.001);
-        $this->assertLessThan(MacroEngine::CORPORATE_DEFAULT_BASELINE, $neutral->corporateDefaultRate);
+        $this->assertLessThan(MacroConstants::CORPORATE_DEFAULT_BASELINE, $neutral->corporateDefaultRate);
         // A 2,000 bps blowout held for a year is a Depression year for the all-rated series (1933: ~8.4%),
         // not the speculative-grade 2009 peak of 13% the old calibration produced (14.7% here).
         $this->assertGreaterThan(0.054, $blowout->corporateDefaultRate, 'Worse than 2009\'s all-rated 5.4%, which averaged a shorter blowout.');
@@ -598,7 +598,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $boom = new MacroState();
         $boom->outputGapEma = 0.03;
         $boom->marketVolatilityEma = 0.13;
-        $boom->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $boom->interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD;
         $boom->sovereignRiskSpreadEma = 0.0; // a sound fiscal position, so the cycle alone sets the spread
 
         $crisis = new MacroState();
@@ -617,7 +617,7 @@ class CreditFiscalSubsystemTest extends TestCase
         // Crisis: IG beyond 400 bps and HY beyond 1,500 bps, a 2008-type blowout rather than a 260 bps wobble.
         $this->assertGreaterThan(0.040, $crisis->macroCreditSpread);
         $this->assertGreaterThan(0.150, $crisis->highYieldCreditSpread);
-        $this->assertLessThanOrEqual(MacroEngine::MAX_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $crisis->highYieldCreditSpread);
+        $this->assertLessThanOrEqual(CreditRisk::MAX_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER, $crisis->highYieldCreditSpread);
     }
 
     // --- Administered Healthcare Prices ---
@@ -644,7 +644,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->subsystem->calculateReimbursementRate($state, 0.01);
 
-        $this->assertEqualsWithDelta(0.04 - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET, $state->reimbursementRateGrowth, 1e-9);
+        $this->assertEqualsWithDelta(0.04 - MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET, $state->reimbursementRateGrowth, 1e-9);
         $this->assertEqualsWithDelta(100.0 * (1.0 + $state->reimbursementRateGrowth), $state->reimbursementRateIndex, 1e-9);
     }
 
@@ -660,14 +660,14 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->debtTarget = 0.50;
         $state->debtPace = 0.005;
         $state->consolidationTaxShare = 0.0;
-        $cut = CreditFiscalSubsystem::consolidationSpendingCut(CreditFiscalSubsystem::requiredPrimaryBalance($state), 0.0) / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $cut = CreditFiscalSubsystem::consolidationSpendingCut(CreditFiscalSubsystem::requiredPrimaryBalance($state), 0.0) / MacroConstants::PUBLIC_PURCHASES_TO_GDP;
         $this->assertGreaterThan(0.01, $cut);
 
         $yearEnd = function () use ($state): void {
             $state->totalTime = floor($state->totalTime) + 1.001;
             $this->subsystem->calculateReimbursementRate($state, 0.01);
         };
-        $indexed = 1.0 + 0.04 - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
+        $indexed = 1.0 + 0.04 - MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
 
         $yearEnd();
         $this->assertEqualsWithDelta(($indexed * (1.0 - $cut)) - 1.0, $state->reimbursementRateGrowth, 1e-12, 'The first year carries the cut.');
@@ -734,7 +734,7 @@ class CreditFiscalSubsystemTest extends TestCase
         }
 
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::EPU_ELECTION_LIFT, log($peak->policyUncertaintyIndex / $atMean->policyUncertaintyIndex), 0.02);
-        $this->assertLessThan(MacroEngine::EPU_BASELINE * exp(CreditFiscalSubsystem::EPU_ELECTION_LIFT), $peak->policyUncertaintyIndex, 'and no higher than the full election lift.');
+        $this->assertLessThan(MacroConstants::EPU_BASELINE * exp(CreditFiscalSubsystem::EPU_ELECTION_LIFT), $peak->policyUncertaintyIndex, 'and no higher than the full election lift.');
     }
 
     /**
@@ -804,7 +804,7 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testTheDefaultPremiumIsNearNothingAtTheOpeningDebtAndRisesSteeply(): void
     {
-        $this->assertLessThan(0.0002, $this->settledSovereignSpread(MacroEngine::INITIAL_DEBT_TO_GDP), 'Under two basis points at the opening debt.');
+        $this->assertLessThan(0.0002, $this->settledSovereignSpread(MacroConstants::INITIAL_DEBT_TO_GDP), 'Under two basis points at the opening debt.');
         $this->assertEqualsWithDelta(0.0012, $this->settledSovereignSpread(0.90), 0.0003, 'About 12bp at 90% of GDP.');
         $this->assertGreaterThan(0.015, $this->settledSovereignSpread(1.35), 'About 2% at 135%.');
         $previous = 0.0;
@@ -849,7 +849,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $withoutFund->nominalGdpIndex = 1.0;
         $withoutFund->outputGap = 0.0;
         $withoutFund->governmentSpendingIndex = 100.0;
-        $withoutFund->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $withoutFund->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $withFund = clone $withoutFund;
         $withFund->sovereignFundBondsToGdp = 0.50;
 
@@ -874,7 +874,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->nominalGdpIndex = 1.0;
         $state->outputGap = 0.0;
         $state->governmentSpendingIndex = 100.0;
-        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $state->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $state->sovereignFundDollarsPerGdp = 2.0e13;
         $state->sovereignFundToGdp = 0.60;
         $state->sovereignFundBondsToGdp = 0.0;
@@ -903,8 +903,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateMacroCreditSpread($stressed);
 
         $curve = new MonetaryPolicySubsystem(new MathUtility());
-        $soundCurve = $curve->calculateYieldCurve($sound, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $stressedCurve = $curve->calculateYieldCurve($stressed, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $soundCurve = $curve->calculateYieldCurve($sound, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE);
+        $stressedCurve = $curve->calculateYieldCurve($stressed, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE);
 
         $this->assertEqualsWithDelta(0.008, $stressedCurve['yield_10y'] - $soundCurve['yield_10y'], 1e-9, 'The sovereign curve carries its own spread in full.');
         $this->assertEqualsWithDelta((CreditFiscalSubsystem::SOVEREIGN_CEILING_PASSTHROUGH - 1.0) * 0.008, $stressed->macroCreditSpread - $sound->macroCreditSpread, 1e-12);
@@ -924,7 +924,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->nominalGdpIndex = 1.0;
         $state->outputGap = 0.0;
         $state->governmentSpendingIndex = 100.0;
-        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $state->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $stance = CreditFiscalSubsystem::fiscalStance($state);
         $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + $stance;
 
@@ -965,7 +965,7 @@ class CreditFiscalSubsystemTest extends TestCase
         // Above the floor and under the Bohn threshold: the whole surplus retires debt.
         $reference = $this->surplusBudget(0.50, $surplus);
         $reference->sovereignFundDollarsPerGdp = $dollarsPerGdp;
-        $atFloor = $this->surplusBudget(MacroEngine::SOVEREIGN_DEBT_FLOOR + 0.005, $surplus);
+        $atFloor = $this->surplusBudget(MacroConstants::SOVEREIGN_DEBT_FLOOR + 0.005, $surplus);
         $atFloor->sovereignFundDollarsPerGdp = $dollarsPerGdp;
 
         $this->subsystem->calculateSovereignDebt($reference, $dt);
@@ -974,7 +974,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $retired = 0.50 - $reference->sovereignDebtToGdp;
         $this->assertEqualsWithDelta($surplus * $dt, $retired, 1e-12, 'At r = g the debt falls by the surplus.');
         $this->assertSame(0.0, $reference->sovereignFundBudgetInflow, 'Above the floor nothing is paid in.');
-        $this->assertSame(MacroEngine::SOVEREIGN_DEBT_FLOOR, $atFloor->sovereignDebtToGdp);
+        $this->assertSame(MacroConstants::SOVEREIGN_DEBT_FLOOR, $atFloor->sovereignDebtToGdp);
         $this->assertEqualsWithDelta(
             ($retired - 0.005) * $dollarsPerGdp * $atFloor->nominalGdpIndex,
             $atFloor->sovereignFundBudgetInflow,
@@ -989,11 +989,11 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testWithNoFundTheSurplusKeepsRetiringDebt(): void
     {
-        $state = $this->surplusBudget(MacroEngine::SOVEREIGN_DEBT_FLOOR + 0.005, 0.04);
+        $state = $this->surplusBudget(MacroConstants::SOVEREIGN_DEBT_FLOOR + 0.005, 0.04);
 
         $this->subsystem->calculateSovereignDebt($state, 0.5);
 
-        $this->assertLessThan(MacroEngine::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
+        $this->assertLessThan(MacroConstants::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
         $this->assertSame(0.0, $state->sovereignFundBudgetInflow, 'No fund, nothing to buy.');
     }
 
@@ -1006,7 +1006,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->outputGapEma = 0.0;
-        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $state->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $state->corporateTaxPolicyShift = -0.025;
         // At the debt where the Bohn reaction pays the structural deficit, the fiscal stance is neutral.
         $state->sovereignDebtToGdp = 0.90;
@@ -1015,7 +1015,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $this->subsystem->calculateDynamicFiscalPolicy($state, 0.01);
         }
 
-        $this->assertEqualsWithDelta(MacroEngine::BASE_CORPORATE_TAX_RATE - 0.025, $state->corporateTaxRate, 1e-6);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_CORPORATE_TAX_RATE - 0.025, $state->corporateTaxRate, 1e-6);
     }
 
     public function testALegislatedShiftIsLeviedOnCorporateProfitsNotOnGdp(): void
@@ -1087,7 +1087,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateSovereignDebt($spendingSlump, 0.25);
 
         $this->assertEqualsWithDelta(
-            MacroEngine::PUBLIC_PURCHASES_TO_GDP * ((1.0 / 0.97) - 1.0),
+            MacroConstants::PUBLIC_PURCHASES_TO_GDP * ((1.0 / 0.97) - 1.0),
             $spendingSlump->primaryDeficitToGdp - $spending->primaryDeficitToGdp,
             1e-12,
             'Purchases on trend are a larger share of a GDP 3% under it.',
@@ -1143,7 +1143,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->nominalGdpIndex = $nominalGdpIndex;
         $state->outputGap = 0.0;
         $state->governmentSpendingIndex = 100.0;
-        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $state->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE;
 
         return $state;
@@ -1157,8 +1157,8 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = $this->neutralBudget($debtToGdp);
         $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE + $surplus;
-        $state->inflationEma = MacroEngine::TARGET_INFLATION;
-        $trendGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $state->inflationEma = MacroConstants::TARGET_INFLATION;
+        $trendGrowth = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT + MacroConstants::TARGET_INFLATION;
         $state->yield10yEma = $trendGrowth;
         $state->yield10y = $trendGrowth;
         $state->policyRate = $trendGrowth;
@@ -1237,14 +1237,14 @@ class CreditFiscalSubsystemTest extends TestCase
     private function householdStateAtNeutralRates(): MacroState
     {
         $state = new MacroState();
-        $state->yield10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + MacroEngine::NS_BASE_TERM_PREMIUM;
-        $state->policyRateEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->yield10yEma = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION + MacroConstants::NS_BASE_TERM_PREMIUM;
+        $state->policyRateEma = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
         $state->outputGapEma = 0.0;
         // Leverage at rest: on the baseline households revert to, with its trend there too.
-        $state->householdDebtToIncome = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
-        $state->householdDebtToIncomeEma = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
-        $state->creditToGdpTrend = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
-        $state->householdDebtServiceTrend = MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+        $state->householdDebtToIncome = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->householdDebtToIncomeEma = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->creditToGdpTrend = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
+        $state->householdDebtServiceTrend = MacroConstants::HOUSEHOLD_DSR_NEUTRAL;
 
         return $state;
     }
@@ -1257,15 +1257,15 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $subsystem = $this->quietSubsystem();
         $calm = $this->householdStateAtNeutralRates();
-        $calm->retailDefaultRate = MacroEngine::RETAIL_DEFAULT_BASELINE;
+        $calm->retailDefaultRate = MacroConstants::RETAIL_DEFAULT_BASELINE;
         $crisis = $this->householdStateAtNeutralRates();
         $crisis->retailDefaultRate = 0.06;
 
         $subsystem->calculateHouseholdCredit($calm, 1.0);
         $subsystem->calculateHouseholdCredit($crisis, 1.0);
 
-        $excessChargeOff = $subsystem->householdChargeOffRate(0.06) - $subsystem->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $calm->householdDebtToIncome, 1e-12, 'At the long-run default rate the stock holds.');
+        $excessChargeOff = $subsystem->householdChargeOffRate(0.06) - $subsystem->householdChargeOffRate(MacroConstants::RETAIL_DEFAULT_BASELINE);
+        $this->assertEqualsWithDelta(MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $calm->householdDebtToIncome, 1e-12, 'At the long-run default rate the stock holds.');
         $this->assertEqualsWithDelta(exp(-$excessChargeOff), $crisis->householdDebtToIncome / $calm->householdDebtToIncome, 1e-12, 'The excess charge-off flow leaves the stock.');
         $this->assertGreaterThan(0.01, $excessChargeOff, 'A 2009-scale default rate charges off well over a point of the stock a year.');
     }
@@ -1278,8 +1278,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $longRun = (CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE)
             + ((1.0 - CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * CreditFiscalSubsystem::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE);
 
-        $this->assertEqualsWithDelta($longRun, $this->subsystem->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE), 0.1 * $longRun);
-        $this->assertGreaterThan($this->subsystem->householdChargeOffRate(MacroEngine::RETAIL_DEFAULT_BASELINE), $this->subsystem->householdChargeOffRate(0.04));
+        $this->assertEqualsWithDelta($longRun, $this->subsystem->householdChargeOffRate(MacroConstants::RETAIL_DEFAULT_BASELINE), 0.1 * $longRun);
+        $this->assertGreaterThan($this->subsystem->householdChargeOffRate(MacroConstants::RETAIL_DEFAULT_BASELINE), $this->subsystem->householdChargeOffRate(0.04));
     }
 
     /**
@@ -1289,8 +1289,8 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $path = function (int $ticksPerYear): float {
             $state = new MacroState();
-            $state->macroCreditSpreadTrend = MacroEngine::BASE_CREDIT_SPREAD;
-            $state->macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD + 0.01;
+            $state->macroCreditSpreadTrend = MacroConstants::BASE_CREDIT_SPREAD;
+            $state->macroCreditSpread = MacroConstants::BASE_CREDIT_SPREAD + 0.01;
             for ($tick = 0; $tick < 10 * $ticksPerYear; ++$tick) {
                 $this->subsystem->updateCreditSpreadTrend($state, 1.0 / $ticksPerYear);
             }
@@ -1298,7 +1298,7 @@ class CreditFiscalSubsystemTest extends TestCase
             return $state->macroCreditSpreadTrend;
         };
 
-        $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD + (0.01 * (1.0 - exp(-10.0 / CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS))), $path(12), 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_CREDIT_SPREAD + (0.01 * (1.0 - exp(-10.0 / CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS))), $path(12), 1e-12);
         $this->assertEqualsWithDelta($path(12), $path(252), 1e-12);
     }
 
@@ -1310,7 +1310,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $boom->residentialPropertyIndexEma = 1.20 * AssetMarketSubsystem::RESIDENTIAL_BASELINE;
         $subsystem->calculateHouseholdCredit($boom, 1.0);
 
-        $expectedBoom = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(CreditFiscalSubsystem::CREDIT_GROWTH_HOUSE_PRICE * 0.20);
+        $expectedBoom = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(CreditFiscalSubsystem::CREDIT_GROWTH_HOUSE_PRICE * 0.20);
         $this->assertEqualsWithDelta($expectedBoom, $boom->householdDebtToIncome, 1e-9, 'Twenty percent richer collateral borrows ~7% more in a year.');
     }
 
@@ -1334,7 +1334,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $subsystem->calculateHouseholdCredit($settled, 1.0);
 
         $this->assertEqualsWithDelta(
-            MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE,
+            MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE,
             $settled->householdDebtToIncome,
             1e-9,
             'Prices at their own trend are not a collateral shock, whatever the nominal index reads.',
@@ -1355,7 +1355,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $subsystem->calculateHouseholdCredit($boom, 1.0);
 
-        $expected = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE
+        $expected = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE
             * exp(CreditFiscalSubsystem::CREDIT_GROWTH_HOUSE_PRICE * 0.20);
 
         $this->assertEqualsWithDelta($expected, $boom->householdDebtToIncome, 1e-9);
@@ -1394,7 +1394,7 @@ class CreditFiscalSubsystemTest extends TestCase
             $subsystem->calculateHouseholdCredit($state, 0.25);
         }
 
-        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $state->householdDebtToIncome, 1e-12, 'At baseline leverage with no lift the stock holds.');
+        $this->assertEqualsWithDelta(MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $state->householdDebtToIncome, 1e-12, 'At baseline leverage with no lift the stock holds.');
         $this->assertEqualsWithDelta(0.05 * exp(-1.0 / CreditFiscalSubsystem::HOUSEHOLD_NEW_BORROWING_HORIZON_YEARS), $state->householdNewBorrowing, 1e-12);
     }
 
@@ -1432,7 +1432,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $shocked->householdDebtServiceTrend = 1.0;
         $subsystem->calculateHouseholdCredit($shocked, 1.0);
 
-        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $shocked->householdDebtToIncome, 1e-9);
+        $this->assertEqualsWithDelta(MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $shocked->householdDebtToIncome, 1e-9);
     }
 
     /**
@@ -1445,7 +1445,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $dt = 0.25;
         for ($quarter = 1; $quarter <= 240; $quarter++) {
             $state->totalTime = $quarter * $dt;
-            $state->householdDebtToIncome = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE + 0.0025 * $quarter;
+            $state->householdDebtToIncome = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE + 0.0025 * $quarter;
             $state->householdDebtServiceTrend = 10.0;
             $trend = $state->creditToGdpTrend;
             $slope = $state->creditToGdpTrendSlope;
@@ -1466,12 +1466,12 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->householdDebtToIncome = 1.10;
         $state->totalTime = 5.10;
         $subsystem->calculateHouseholdCredit($state, 0.01);
-        $this->assertSame(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $state->creditToGdpTrend, 'Mid-quarter the trend holds.');
+        $this->assertSame(MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $state->creditToGdpTrend, 'Mid-quarter the trend holds.');
         $this->assertEqualsWithDelta($state->householdDebtToIncome - $state->creditToGdpTrend, $state->creditToGdpGap, 1e-12, '...while the gap reads today\'s leverage against it.');
 
         $state->totalTime = 5.25;
         $subsystem->calculateHouseholdCredit($state, 0.01);
-        $this->assertGreaterThan(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $state->creditToGdpTrend, 'At the quarter the trend takes its step toward leverage.');
+        $this->assertGreaterThan(MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $state->creditToGdpTrend, 'At the quarter the trend takes its step toward leverage.');
     }
 
     public function testTheDebtServiceRatioIsTheBisAnnuityAndRisesWithRates(): void
@@ -1481,7 +1481,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $neutral = $this->householdStateAtNeutralRates();
         $subsystem->calculateHouseholdCredit($neutral, $dt);
-        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DSR_NEUTRAL, $neutral->householdDebtServiceRatio, 5e-4, 'Baseline leverage at neutral rates services at the documented 10.2% of income.');
+        $this->assertEqualsWithDelta(MacroConstants::HOUSEHOLD_DSR_NEUTRAL, $neutral->householdDebtServiceRatio, 5e-4, 'Baseline leverage at neutral rates services at the documented 10.2% of income.');
 
         $hiked = $this->householdStateAtNeutralRates();
         $hiked->yield10yEma += 0.02;
@@ -1634,15 +1634,15 @@ class CreditFiscalSubsystemTest extends TestCase
         $subsystem = $this->quietSubsystem();
 
         $below = $this->householdStateAtNeutralRates();
-        $below->householdDebtServiceGap = MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN - 0.001;
+        $below->householdDebtServiceGap = MacroConstants::HOUSEHOLD_DSR_STRESS_MARGIN - 0.001;
         $subsystem->calculateHouseholdCredit($below, 1.0);
 
         $above = $this->householdStateAtNeutralRates();
-        $above->householdDebtServiceGap = MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN + 0.02;
+        $above->householdDebtServiceGap = MacroConstants::HOUSEHOLD_DSR_STRESS_MARGIN + 0.02;
         $subsystem->calculateHouseholdCredit($above, 1.0);
 
-        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $below->householdDebtToIncome, 1e-9, 'Under the line the service burden is carried, not repaid.');
-        $this->assertEqualsWithDelta(MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-CreditFiscalSubsystem::DELEVERAGING_SPEED * 0.02), $above->householdDebtToIncome, 1e-9, 'Two points over the line repay 3.5% of the stock a year.');
+        $this->assertEqualsWithDelta(MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $below->householdDebtToIncome, 1e-9, 'Under the line the service burden is carried, not repaid.');
+        $this->assertEqualsWithDelta(MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-CreditFiscalSubsystem::DELEVERAGING_SPEED * 0.02), $above->householdDebtToIncome, 1e-9, 'Two points over the line repay 3.5% of the stock a year.');
     }
 
     public function testRetailDefaultsRiseAsHousePricesFallBelowTrendAtFixedUnemployment(): void
@@ -1661,8 +1661,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $underwater->residentialWealthTrend = 100.0;
         $subsystem->calculateRetailDefaultRate($underwater, 0.25);
 
-        $this->assertEqualsWithDelta(CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, base spreads and trend prices the systematic factor is the intercept.');
-        $expected = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + log(0.8) * CreditFiscalSubsystem::RETAIL_HOUSE_PRICE_SENSITIVITY, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
+        $this->assertEqualsWithDelta(CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, base spreads and trend prices the systematic factor is the intercept.');
+        $expected = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + log(0.8) * CreditFiscalSubsystem::RETAIL_HOUSE_PRICE_SENSITIVITY, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
         $this->assertEqualsWithDelta($expected, $underwater->retailDefaultRate, 1e-9, 'Homes 20% below trend default more households at the same unemployment.');
         $this->assertGreaterThan($neutral->retailDefaultRate, $underwater->retailDefaultRate);
     }
@@ -1708,7 +1708,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertLessThan(0.0, $shocked);
         $this->assertEqualsWithDelta($shocked * exp(-CreditFiscalSubsystem::RETAIL_CREDIT_FACTOR_KAPPA * 0.25), $state->retailCreditFactor, 1e-12, 'With no new shock the factor decays at its own rate.');
-        $atRest = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
+        $atRest = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
         $this->assertGreaterThan($atRest, $state->retailDefaultRate, 'A bad factor still defaults more households a quarter later.');
     }
 
@@ -1923,7 +1923,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $state->excessBondPremium = 0.0;
         $subsystem->calculateInterbankLiquiditySpread($state);
-        $this->assertGreaterThan(2.5 * MacroEngine::INTERBANK_BASELINE_SPREAD, $state->interbankLiquiditySpread, 'The day of the crisis is a run on wholesale funding.');
+        $this->assertGreaterThan(2.5 * MacroConstants::INTERBANK_BASELINE_SPREAD, $state->interbankLiquiditySpread, 'The day of the crisis is a run on wholesale funding.');
     }
 
     /**
@@ -2310,9 +2310,9 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $calm = new MacroState();
         $capped = new MacroState();
-        $capped->macroCreditSpread = MacroEngine::MAX_CREDIT_SPREAD;
-        $capped->macroCreditSpreadEma = MacroEngine::MAX_CREDIT_SPREAD;
-        $capped->highYieldCreditSpread = MacroEngine::MAX_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $capped->macroCreditSpread = CreditRisk::MAX_CREDIT_SPREAD;
+        $capped->macroCreditSpreadEma = CreditRisk::MAX_CREDIT_SPREAD;
+        $capped->highYieldCreditSpread = CreditRisk::MAX_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
 
         $this->assertSame($assets->calculateMarketVolatility($calm, 0.25), $assets->calculateMarketVolatility($capped, 0.25), 'Volatility does not read the spread.');
 
@@ -2362,7 +2362,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $credit->calculateMacroCreditSpread($state);
         $this->assertGreaterThan(0.055, $state->macroCreditSpread, 'October 2008 conditions start near the IG record.');
-        $defaultRisk = MacroEngine::BASE_CREDIT_SPREAD * exp(-MacroEngine::MERTON_LEVERAGE_SENSITIVITY * -0.07);
+        $defaultRisk = MacroConstants::BASE_CREDIT_SPREAD * exp(-CreditRisk::MERTON_LEVERAGE_SENSITIVITY * -0.07);
 
         $dt = 1.0 / 52.0;
         $emaWeight = 1.0 - exp(-$dt / 0.25);
@@ -2379,7 +2379,7 @@ class CreditFiscalSubsystemTest extends TestCase
                 $this->assertLessThan(0.055, $state->macroCreditSpread, 'A quarter on the spread is already off its peak.');
             }
             if ($week === 52) {
-                $this->assertLessThan(0.5 * (MacroEngine::MAX_CREDIT_SPREAD - $defaultRisk), $state->macroCreditSpread - $defaultRisk, 'A year on the spread has given back over half its excess over default risk, the gap unchanged.');
+                $this->assertLessThan(0.5 * (CreditRisk::MAX_CREDIT_SPREAD - $defaultRisk), $state->macroCreditSpread - $defaultRisk, 'A year on the spread has given back over half its excess over default risk, the gap unchanged.');
                 $this->assertLessThan(0.75, $state->sloosTighteningIndex, 'A year on standards are off their cap.');
                 $this->assertLessThan(0.33, $state->marketVolatility, 'A year on volatility is down to about two thirds of 45%.');
             }
@@ -2396,7 +2396,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $free->sovereignDebtToGdp = self::SOUND_DEBT_TO_GDP;
         $free->nominalGdpIndex = 1.0;
         $free->outputGap = 0.0;
-        $free->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $free->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $free->governmentSpendingIndex = 100.0;
         $priced = clone $free;
         $priced->carbonPrice = 70.37;
@@ -2417,7 +2417,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $free->sovereignDebtToGdp = self::SOUND_DEBT_TO_GDP;
         $free->nominalGdpIndex = 1.0;
         $free->outputGap = 0.0;
-        $free->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $free->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $free->governmentSpendingIndex = 100.0;
         $free->sovereignFundDollarsPerGdp = 12.0e12;
         $levied = clone $free;
@@ -2456,7 +2456,7 @@ class CreditFiscalSubsystemTest extends TestCase
         }
 
         $this->assertEqualsWithDelta($state->corporateTaxRate - $rate, $state->corporateTaxShiftRealized, 1e-9, 'With the cycle at rest, the rate has moved by the shift as far as it has taken it in.');
-        $this->assertEqualsWithDelta(0.04 * (1.0 - exp(-MacroEngine::FISCAL_ADJUSTMENT_SPEED)), $state->corporateTaxShiftRealized, 2e-4);
+        $this->assertEqualsWithDelta(0.04 * (1.0 - exp(-MacroConstants::FISCAL_ADJUSTMENT_SPEED)), $state->corporateTaxShiftRealized, 2e-4);
         $this->assertLessThan($state->corporateTaxShiftRealized, $state->corporateTaxShiftEmbodied);
         $this->assertGreaterThan(0.0, $state->corporateTaxShiftEmbodied);
         $carried = 1.0 - exp(-1.0 / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS);
@@ -2522,7 +2522,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = $this->neutralBudget(1.10, 1.3);
         $state->outputGap = -0.03;
         $state->netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE - 0.01;
-        $state->corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE + 0.005;
+        $state->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE + 0.005;
         $state->governmentSpendingIndex = 103.0;
         $state->importTariffRate = 0.04;
         $state->carbonPrice = 20.0;
@@ -2561,7 +2561,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $accounts = CreditFiscalSubsystem::publicAccounts($this->neutralBudget(0.60), 0.25);
 
-        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP, $accounts->purchases, 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::PUBLIC_PURCHASES_TO_GDP, $accounts->purchases, 1e-12);
         $this->assertEqualsWithDelta(0.0, $accounts->primaryDeficit(), 1e-12);
     }
 
@@ -2571,8 +2571,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $dto = new MacroStateDTO(sovereignDebtToGdp: 0.8, netTaxRate: 0.17, governmentSpendingIndex: 101.0, outputGap: 0.01);
         $accounts = CreditFiscalSubsystem::publicAccounts($dto, 0.25);
 
-        $this->assertEqualsWithDelta(0.17 + (MacroEngine::BASE_CORPORATE_TAX_RATE * CreditFiscalSubsystem::CORPORATE_PROFITS_TO_GDP), $accounts->netTaxes + $accounts->corporateTax, 1e-12);
-        $this->assertEqualsWithDelta(1.01 * MacroEngine::PUBLIC_PURCHASES_TO_GDP / 1.01, $accounts->purchases, 1e-12);
+        $this->assertEqualsWithDelta(0.17 + (MacroConstants::BASE_CORPORATE_TAX_RATE * CreditFiscalSubsystem::CORPORATE_PROFITS_TO_GDP), $accounts->netTaxes + $accounts->corporateTax, 1e-12);
+        $this->assertEqualsWithDelta(1.01 * MacroConstants::PUBLIC_PURCHASES_TO_GDP / 1.01, $accounts->purchases, 1e-12);
     }
 
     // --- The Authority's Remittance ---
@@ -2666,7 +2666,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state = new MacroState();
         $state->sovereignFundDollarsPerGdp = 2.0e13;
         $state->consolidationTaxShare = 0.0;
-        $state->publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $state->publicSpendingShare = MacroConstants::PUBLIC_PURCHASES_TO_GDP;
         $state->sovereignDebtToGdp = 4.0;
         $state->debtPace = 0.40;
 

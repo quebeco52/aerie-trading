@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 /**
@@ -82,7 +83,7 @@ final class RatePathProbeTest extends KernelTestCase
                     if ($arm === 'base') {
                         $baseRates[$tick] = $rate;
                     } elseif ($q <= 16) {
-                        $rate = max(MacroEngine::EFFECTIVE_LOWER_BOUND, $baseRates[$tick] + ($scale * $path[$q]));
+                        $rate = max(MacroConstants::EFFECTIVE_LOWER_BOUND, $baseRates[$tick] + ($scale * $path[$q]));
                         $state = json_decode((string) $redis->get(MacroEngine::REDIS_MACRO_STATE), true);
                         $state['policy_rate'] = $rate;
                         $redis->set(MacroEngine::REDIS_MACRO_STATE, json_encode($state, JSON_PRESERVE_ZERO_FRACTION));

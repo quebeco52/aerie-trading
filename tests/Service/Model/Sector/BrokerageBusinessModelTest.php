@@ -8,7 +8,7 @@ use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BrokerageBusinessModel;
@@ -93,8 +93,8 @@ class BrokerageBusinessModelTest extends TestCase
         $stock = (new Stock())->setTicker('ROOK');
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $anchor = new MacroStateDTO(marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR);
-        $quiet = new MacroStateDTO(marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR - 0.05);
+        $anchor = new MacroStateDTO(marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR);
+        $quiet = new MacroStateDTO(marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR - 0.05);
 
         $atAnchor = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, $anchor, $mathMock);
         $this->assertEqualsWithDelta(1000.0, $atAnchor->actualRevenue, 1e-9);
@@ -117,10 +117,10 @@ class BrokerageBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
         $deviation = 0.05;
-        $atTrend = new MacroStateDTO(marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $atTrend = new MacroStateDTO(marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR);
         $flush = new MacroStateDTO(
-            marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR,
-            moneySupplyGrowthEma: MacroEngine::M2_BASE_GROWTH + $deviation,
+            marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR,
+            moneySupplyGrowthEma: MacroConstants::M2_BASE_GROWTH + $deviation,
         );
 
         $this->assertEqualsWithDelta(

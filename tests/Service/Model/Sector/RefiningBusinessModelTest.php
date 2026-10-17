@@ -9,7 +9,7 @@ use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\RefiningBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -48,7 +48,7 @@ final class RefiningBusinessModelTest extends TestCase
     /**
      * @param array<string, float> $macro
      */
-    private function macro(float $crack = MacroEngine::CRACK_SPREAD_BASELINE, float $crudeIndex = MacroEngine::ENERGY_BASELINE, array $macro = []): MacroStateDTO
+    private function macro(float $crack = MacroConstants::CRACK_SPREAD_BASELINE, float $crudeIndex = MacroConstants::ENERGY_BASELINE, array $macro = []): MacroStateDTO
     {
         return new MacroStateDTO(...($macro + [
             'refiningCrackSpreadEma' => $crack,
@@ -74,13 +74,13 @@ final class RefiningBusinessModelTest extends TestCase
 
     private function baselineRealization(): float
     {
-        return $this->model->calculateBarrelRealization(RefiningBusinessModel::REFERENCE_CRUDE_PRICE, MacroEngine::CRACK_SPREAD_BASELINE);
+        return $this->model->calculateBarrelRealization(RefiningBusinessModel::REFERENCE_CRUDE_PRICE, MacroConstants::CRACK_SPREAD_BASELINE);
     }
 
     public function testTheBaselineBarrelCapturesWhatRefinersReportAgainstTheBenchmarkCrack(): void
     {
         // Valero's refining margin per barrel over the EIA Gulf Coast 3-2-1: 0.51 to 0.64 a year, 2018-2024.
-        $capture = ($this->baselineRealization() - RefiningBusinessModel::REFERENCE_CRUDE_PRICE) / MacroEngine::CRACK_SPREAD_BASELINE;
+        $capture = ($this->baselineRealization() - RefiningBusinessModel::REFERENCE_CRUDE_PRICE) / MacroConstants::CRACK_SPREAD_BASELINE;
 
         $this->assertGreaterThan(0.50, $capture);
         $this->assertLessThan(0.65, $capture);
@@ -91,7 +91,7 @@ final class RefiningBusinessModelTest extends TestCase
     {
         // Valero's refining margin per barrel over the Gulf Coast 3-2-1, full years 2018-2024: -$0.41 + 0.598 x crack
         // (R 0.99).
-        foreach ([0.0, 9.04, MacroEngine::CRACK_SPREAD_BASELINE, 36.66] as $crack) {
+        foreach ([0.0, 9.04, MacroConstants::CRACK_SPREAD_BASELINE, 36.66] as $crack) {
             $margin = $this->model->calculateBarrelRealization(RefiningBusinessModel::REFERENCE_CRUDE_PRICE, $crack) - RefiningBusinessModel::REFERENCE_CRUDE_PRICE;
             $this->assertEqualsWithDelta(-0.41 + (0.598 * $crack), $margin, 0.10, sprintf('at a $%.2f crack', $crack));
         }
@@ -105,7 +105,7 @@ final class RefiningBusinessModelTest extends TestCase
         // Products are priced over crude, so a 50% crude move carries the revenue line with it.
         $spikeCrude = RefiningBusinessModel::REFERENCE_CRUDE_PRICE * 1.5;
         $this->assertEqualsWithDelta(
-            100.0 * $this->model->calculateBarrelRealization($spikeCrude, MacroEngine::CRACK_SPREAD_BASELINE) / $this->baselineRealization(),
+            100.0 * $this->model->calculateBarrelRealization($spikeCrude, MacroConstants::CRACK_SPREAD_BASELINE) / $this->baselineRealization(),
             $crudeSpike->actualRevenue,
             1e-9,
         );
@@ -126,7 +126,7 @@ final class RefiningBusinessModelTest extends TestCase
     public function testTheCrackIsMarginOnAStandingCostBase(): void
     {
         $baseline = $this->report($this->macro());
-        $wide = $this->report($this->macro(crack: MacroEngine::CRACK_SPREAD_BASELINE * 1.10));
+        $wide = $this->report($this->macro(crack: MacroConstants::CRACK_SPREAD_BASELINE * 1.10));
         $collapsed = $this->report($this->macro(crack: 12.0));
 
         // Throughput and feedstock are unchanged, so the variable cost dollars are identical.
@@ -135,7 +135,7 @@ final class RefiningBusinessModelTest extends TestCase
         // Every extra dollar of crack the light barrel realizes is profit: about 60 cents of each benchmark dollar.
         $passThrough = RefiningBusinessModel::LIGHT_PRODUCT_YIELD * RefiningBusinessModel::REALIZED_CRACK_CAPTURE;
         $this->assertEqualsWithDelta(0.598, $passThrough, 0.005, 'the pass-through Valero reported, 2018-2024');
-        $extraMargin = $passThrough * (MacroEngine::CRACK_SPREAD_BASELINE * 0.10) * 100.0 / $this->baselineRealization();
+        $extraMargin = $passThrough * (MacroConstants::CRACK_SPREAD_BASELINE * 0.10) * 100.0 / $this->baselineRealization();
         $this->assertEqualsWithDelta($baseline->ebit + $extraMargin, $wide->ebit, 1e-9);
 
         $revenueGrowth = ($wide->actualRevenue / $baseline->actualRevenue) - 1.0;
@@ -158,7 +158,7 @@ final class RefiningBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GEN_REFINER');
         $physics = $this->model->getMacroPhysics($stock, $this->macro(macro: ['outputGapEma' => 0.02]));
-        $this->assertEqualsWithDelta(0.02 * MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY, $physics['macro_demand_shift'], 1e-12);
+        $this->assertEqualsWithDelta(0.02 * RefiningBusinessModel::ENERGY_DEMAND_GAP_SENSITIVITY, $physics['macro_demand_shift'], 1e-12);
         $this->assertSame(1.0, $physics['pricing_power_multiplier']);
         $this->assertSame(1.0, $physics['input_cost_multiplier']);
     }
@@ -227,7 +227,7 @@ final class RefiningBusinessModelTest extends TestCase
         $this->assertNotNull($casc);
 
         $margin = (float) $casc['operating_margin'];
-        $turnover = (float) $casc['baseline_roic'] / ($margin * (1.0 - MacroEngine::BASE_CORPORATE_TAX_RATE));
+        $turnover = (float) $casc['baseline_roic'] / ($margin * (1.0 - MacroConstants::BASE_CORPORATE_TAX_RATE));
         $depreciationShare = (float) $casc['depreciation_rate'] / $turnover;
         $variableCostRatio = (1.0 - $margin - $depreciationShare) * (1.0 - (float) $casc['fixed_cost_ratio']);
         $feedstockShare = RefiningBusinessModel::REFERENCE_CRUDE_PRICE / $this->baselineRealization();
@@ -238,6 +238,6 @@ final class RefiningBusinessModelTest extends TestCase
         // Per barrel, free of the crude price in the denominator: Valero's adjusted refining operating income per
         // barrel, full years 2018-2024, was -$6.23 + 0.561 x crack (R 0.98), $6.11 at the baseline crack.
         $operatingIncomePerBarrel = $margin * $this->baselineRealization();
-        $this->assertEqualsWithDelta(-6.23 + (0.561 * MacroEngine::CRACK_SPREAD_BASELINE), $operatingIncomePerBarrel, 0.75);
+        $this->assertEqualsWithDelta(-6.23 + (0.561 * MacroConstants::CRACK_SPREAD_BASELINE), $operatingIncomePerBarrel, 0.75);
     }
 }

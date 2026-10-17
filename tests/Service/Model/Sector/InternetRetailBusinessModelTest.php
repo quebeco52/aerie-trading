@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InternetRetailBusinessModel;
 use App\Service\News\NarrativeEngine;
@@ -171,12 +171,12 @@ class InternetRetailBusinessModelTest extends TestCase
         $run = function (float $sentiment) use ($math): array {
             $stock = (new Stock())->setTicker('WEAV_SENT')->setBeta('1.0');
 
-            return $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment, consumerSentimentMood: $sentiment - MacroEngine::SENTIMENT_TREND_LEVEL), $math)->streamRevenue;
+            return $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment, consumerSentimentMood: $sentiment - MacroConstants::SENTIMENT_TREND_LEVEL), $math)->streamRevenue;
         };
 
         // With output at trend the slump is twenty points of mood: confidence the cycle does not explain.
-        $calm = $run(MacroEngine::SENTIMENT_TREND_LEVEL);
-        $slump = $run(MacroEngine::SENTIMENT_TREND_LEVEL - 20.0);
+        $calm = $run(MacroConstants::SENTIMENT_TREND_LEVEL);
+        $slump = $run(MacroConstants::SENTIMENT_TREND_LEVEL - 20.0);
 
         $expectedDrop = 0.20 * InternetRetailBusinessModel::CONSUMER_SENTIMENT_SCALAR * InternetRetailBusinessModel::OPERATING_CYCLICALITY;
         $this->assertEqualsWithDelta($calm['first_party_retail'] * (1.0 - $expectedDrop), $slump['first_party_retail'], 1e-6);
@@ -187,7 +187,7 @@ class InternetRetailBusinessModelTest extends TestCase
     {
         $stock = (new Stock())->setTicker('LOON_ACTIVITY')->setBeta('1.0');
         // Confidence falls by its gap loading with the gap, so the residual over the gap is zero.
-        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL + (-0.03 * \App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP);
+        $sentiment = MacroConstants::SENTIMENT_TREND_LEVEL + (-0.03 * \App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP);
         $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0, consumerSentimentIndexEma: $sentiment);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
@@ -206,7 +206,7 @@ class InternetRetailBusinessModelTest extends TestCase
      */
     public function testTheSecularExcessIsTheDistrictsOnlineAdoption(): void
     {
-        $excess = $this->model->getSecularGrowthRate(new Stock()) - MacroEngine::TREND_REAL_GROWTH;
+        $excess = $this->model->getSecularGrowthRate(new Stock()) - MacroConstants::TREND_REAL_GROWTH;
 
         $this->assertEqualsWithDelta(log(0.065 / 0.040) / 10.0 + log(0.0593 / 0.0676) / 22.0, $excess, 1e-12);
         $this->assertEqualsWithDelta(0.0426, $excess, 0.0005);

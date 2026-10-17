@@ -6,7 +6,7 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Model\ModelParam;
 
 /**
@@ -87,7 +87,7 @@ class CustodyBankBusinessModel extends CommercialBankBusinessModel
     {
         $fundShare = $this->resolveFundCustodyShare($stock);
         $equityMark = $macroState->equityWealthTrend > 0.0 ? ($macroState->equityWealthRatio / $macroState->equityWealthTrend) - 1.0 : 0.0;
-        $fundMark = $macroState->sovereignFundToGdp > 0.0 ? ($macroState->sovereignFundToGdp / MacroEngine::OPENING_FUND_TO_GDP) - 1.0 : 0.0;
+        $fundMark = $macroState->sovereignFundToGdp > 0.0 ? ($macroState->sovereignFundToGdp / MacroConstants::OPENING_FUND_TO_GDP) - 1.0 : 0.0;
 
         return ((1.0 - $fundShare) * self::EQUITY_FEE_ELASTICITY * $equityMark) + ($fundShare * $fundMark);
     }

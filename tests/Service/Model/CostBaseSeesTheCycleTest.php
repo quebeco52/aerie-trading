@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Model\BusinessModelInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -63,17 +63,17 @@ class CostBaseSeesTheCycleTest extends TestCase
         $recession = new MacroStateDTO(
             outputGap: self::GAP,
             outputGapEma: self::GAP,
-            unemploymentRate: MacroEngine::NATURAL_UNEMPLOYMENT - (0.5 * self::GAP),
-            unemploymentRateEma: MacroEngine::NATURAL_UNEMPLOYMENT - (0.5 * self::GAP),
+            unemploymentRate: MacroConstants::NATURAL_UNEMPLOYMENT - (0.5 * self::GAP),
+            unemploymentRateEma: MacroConstants::NATURAL_UNEMPLOYMENT - (0.5 * self::GAP),
             marketVolatilityEma: 0.25,
-            macroCreditSpread: 2.0 * MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: 2.0 * MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: 2.0 * MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: 2.0 * MacroConstants::BASE_CREDIT_SPREAD,
             domesticDemandGapEma: self::GAP,
             foreignOutputGap: self::GAP,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * self::GAP),
-            corporateDefaultRate: 2.0 * MacroEngine::CORPORATE_DEFAULT_BASELINE,
-            corporateDefaultRateEma: 2.0 * MacroEngine::CORPORATE_DEFAULT_BASELINE,
-            manufacturingPmi: MacroEngine::PMI_BASELINE - 5.0,
+            consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * self::GAP),
+            corporateDefaultRate: 2.0 * MacroConstants::CORPORATE_DEFAULT_BASELINE,
+            corporateDefaultRateEma: 2.0 * MacroConstants::CORPORATE_DEFAULT_BASELINE,
+            manufacturingPmi: MacroConstants::PMI_BASELINE - 5.0,
             exchangeRateIndexEma: 100.0,
         );
 

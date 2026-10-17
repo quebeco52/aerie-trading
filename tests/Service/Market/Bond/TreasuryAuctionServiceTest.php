@@ -6,10 +6,10 @@ namespace App\Tests\Service\Market\Bond;
 
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\TreasuryAuctionService;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -63,8 +63,8 @@ class TreasuryAuctionServiceTest extends TestCase
             slope: -0.0175,
             curvature1: 0.0,
             curvature2: 0.0,
-            baseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
-            longEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
+            baseTermPremium: MacroConstants::NS_BASE_TERM_PREMIUM,
+            longEndPremium: MacroConstants::NS_BASE_TERM_PREMIUM,
             balanceSheetIntensity: 0.0,
         );
     }
@@ -135,8 +135,8 @@ class TreasuryAuctionServiceTest extends TestCase
             slope: -0.0175,
             curvature1: 0.0,
             curvature2: 0.0,
-            baseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
-            longEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
+            baseTermPremium: MacroConstants::NS_BASE_TERM_PREMIUM,
+            longEndPremium: MacroConstants::NS_BASE_TERM_PREMIUM,
             balanceSheetIntensity: 0.0,
         );
 

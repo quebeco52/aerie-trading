@@ -9,8 +9,8 @@ use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConglomerateBusinessModel;
 use App\Service\Model\Sector\InvestmentCompanyBusinessModel;
@@ -110,8 +110,8 @@ class InvestmentCompanyBusinessModelTest extends TestCase
     {
         $neutral = $this->model->getStructuralValuationDiscount($this->neutralMacro());
 
-        $frightened = $this->neutralMacro(sentiment: MacroEngine::SENTIMENT_TREND_LEVEL - 20.0);
-        $exuberant  = $this->neutralMacro(sentiment: MacroEngine::SENTIMENT_TREND_LEVEL + 20.0);
+        $frightened = $this->neutralMacro(sentiment: MacroConstants::SENTIMENT_TREND_LEVEL - 20.0);
+        $exuberant  = $this->neutralMacro(sentiment: MacroConstants::SENTIMENT_TREND_LEVEL + 20.0);
 
         $this->assertGreaterThan($neutral, $this->model->getStructuralValuationDiscount($frightened));
         $this->assertLessThan($neutral, $this->model->getStructuralValuationDiscount($exuberant));
@@ -123,12 +123,12 @@ class InvestmentCompanyBusinessModelTest extends TestCase
 
         return new MacroStateDTO(
             outputGapEma: $outputGapEma,
-            consumerSentimentIndexEma: $sentiment ?? MacroEngine::SENTIMENT_TREND_LEVEL,
+            consumerSentimentIndexEma: $sentiment ?? MacroConstants::SENTIMENT_TREND_LEVEL,
             // With output at trend, whatever moves confidence is mood.
-            consumerSentimentMood: ($sentiment ?? MacroEngine::SENTIMENT_TREND_LEVEL) - MacroEngine::SENTIMENT_TREND_LEVEL,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
-            policyRateEma: MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+            consumerSentimentMood: ($sentiment ?? MacroConstants::SENTIMENT_TREND_LEVEL) - MacroConstants::SENTIMENT_TREND_LEVEL,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
+            policyRateEma: MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION,
             producerPriceInflationEma: $ppi ?? $defaults->producerPriceInflationEma,
             realWageGap: $realWageGap,
         );

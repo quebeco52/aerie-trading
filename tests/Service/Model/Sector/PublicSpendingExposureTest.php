@@ -7,8 +7,8 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConstructionBusinessModel;
 use App\Service\Model\Sector\EducationBusinessModel;
@@ -63,7 +63,7 @@ class PublicSpendingExposureTest extends TestCase
         $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
         $math->method('generatePersistentZ')->willReturn(0.0);
         $math->method('checkProbability')->willReturn(false);
-        $macro = new MacroStateDTO(inflationEma: MacroEngine::TARGET_INFLATION, governmentSpendingIndexEma: MacroEngine::GOVT_SPENDING_BASELINE * (1.0 + $purchases));
+        $macro = new MacroStateDTO(inflationEma: MacroConstants::TARGET_INFLATION, governmentSpendingIndexEma: MacroConstants::GOVT_SPENDING_BASELINE * (1.0 + $purchases));
 
         return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
     }

@@ -7,9 +7,9 @@ namespace App\Service\Market\Option;
 use App\DTO\MacroStateDTO;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Market\Ticker\BulkRowUpdate;
+use App\Service\Math\MacroConstants;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -191,7 +191,7 @@ final class OptionDeskService
                 $contracts,
                 $quotes,
                 $macroState->marketVolatility,
-                MacroEngine::MACRO_VOL_BASE_ANCHOR,
+                MacroConstants::MACRO_VOL_BASE_ANCHOR,
                 $dt,
             );
 

@@ -9,7 +9,7 @@ use App\DTO\MacroStateDTO;
 
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -189,7 +189,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     private function resolveCycleVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $beta = $this->getOperatingCyclicality($stock);
-        $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
+        $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroConstants::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 
         return ($this->resolveLaggedOutputGap($macroState) * $beta * self::INVESTMENT_ACCELERATOR_MULTIPLIER) + ($pmiShift * $beta);
     }
@@ -254,7 +254,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
         // Blast furnace fixed overhead absorption via capacity utilization
-        $cuShift = MacroTransmission::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_MARGIN_ABSORPTION_SENSITIVITY);
+        $cuShift = MacroTransmission::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroConstants::CU_BASELINE, self::CU_MARGIN_ABSORPTION_SENSITIVITY);
         $cuMarginAdjustment = -$cuShift; // Higher CU improves margin
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag + $cuMarginAdjustment);

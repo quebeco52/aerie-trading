@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Math;
 
-use App\Service\Macro\MacroEngine;
-
 /**
  * Fixed income: the Nelson-Siegel and Svensson curves, term-premium scaling, the single evaluation of the sovereign
  * zero curve, bond price, yield, duration, convexity and accrued interest, and the retail rates priced off the curve.
@@ -25,7 +23,7 @@ final class FixedIncome
      */
     public static function moneyMarketYield(float $policyRate): float
     {
-        return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        return max(0.0, $policyRate - MacroConstants::CASH_YIELD_SPREAD);
     }
 
     /**
@@ -34,7 +32,7 @@ final class FixedIncome
      */
     public static function expectedMortgageRate(float $riskNeutralTenYear): float
     {
-        return $riskNeutralTenYear + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        return $riskNeutralTenYear + MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD;
     }
 
     /**
@@ -43,7 +41,7 @@ final class FixedIncome
      */
     public static function mortgageRate(float $policyRateEma): float
     {
-        return $policyRateEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        return $policyRateEma + MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD;
     }
 
     /**

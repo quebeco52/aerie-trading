@@ -21,11 +21,11 @@ use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
@@ -2334,7 +2334,7 @@ class EarningsEngineTest extends TestCase
         $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
         $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-9), 'the released working capital must land in cash');
 
-        $annualizedRevenue = $captured->actualRevenue / EarningsEngine::QUARTERLY_TIME_STEP;
+        $annualizedRevenue = $captured->actualRevenue / FinancialConstants::QUARTER_YEARS;
         $this->assertLessThan(-0.25 * $annualizedRevenue, $captured->deltaWorkingCapital, 'the fixture must release more than the old clamp allowed');
     }
 
@@ -2473,9 +2473,9 @@ class EarningsEngineTest extends TestCase
         $this->assertNotNull($captured);
         $this->assertNotSame(0.0, $captured->totalShockPct, 'the fixture must report a surprise for this test to have power');
 
-        $weight = 1.0 - exp(-EarningsEngine::REPORT_INTERVAL_YEARS / EarningsEngine::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
+        $weight = 1.0 - exp(-FinancialConstants::QUARTER_YEARS / EarningsEngine::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
         $this->assertEqualsWithDelta(
-            $weight * (log(1.0 + $captured->totalShockPct) ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS,
+            $weight * (log(1.0 + $captured->totalShockPct) ** 2) / FinancialConstants::QUARTER_YEARS,
             (float) $stock->getAnnouncementVarianceEma(),
             1e-12,
         );
@@ -2495,13 +2495,13 @@ class EarningsEngineTest extends TestCase
         for ($quarter = 0; $quarter < 400; $quarter++) {
             $record->invoke($engine, $stock, $move, true);
         }
-        $this->assertEqualsWithDelta(($move ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS, (float) $stock->getAnnouncementVarianceEma(), 1e-12);
+        $this->assertEqualsWithDelta(($move ** 2) / FinancialConstants::QUARTER_YEARS, (float) $stock->getAnnouncementVarianceEma(), 1e-12);
 
         for ($quarter = 0; $quarter < 400; $quarter++) {
             $record->invoke($engine, $stock, $move, false);
             $record->invoke($engine, $stock, $move, true);
         }
-        $this->assertEqualsWithDelta(2.0 * ($move ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS, (float) $stock->getAnnouncementVarianceEma(), 1e-9);
+        $this->assertEqualsWithDelta(2.0 * ($move ** 2) / FinancialConstants::QUARTER_YEARS, (float) $stock->getAnnouncementVarianceEma(), 1e-9);
     }
 
     public function testMeanAbsoluteScaleRecoversSigmaAndResistsASingleOutlier(): void
@@ -2763,7 +2763,7 @@ class EarningsEngineTest extends TestCase
     public function testCardLenderEarnsItsTargetRoeAndDoesNotMissEveryQuarterInACalmMacro(): void
     {
         $macroState = new MacroStateDTO(
-            corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
+            corporateTaxRate: MacroConstants::BASE_CORPORATE_TAX_RATE,
             policyRate: 0.04,
             policyRateEma: 0.04,
             yield2yEma: 0.04,

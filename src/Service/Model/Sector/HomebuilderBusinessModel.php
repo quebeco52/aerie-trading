@@ -8,10 +8,9 @@ use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 use App\Service\Model\StreamContext;
@@ -112,13 +111,13 @@ class HomebuilderBusinessModel extends StandardCorporateBusinessModel
     {
         $params = $this->resolveModelParameters($stock, [ModelParam::LandBankYears->value => self::LAND_BANK_YEARS]);
 
-        return max(EarningsEngine::QUARTERLY_TIME_STEP, (float) $params[ModelParam::LandBankYears]);
+        return max(FinancialConstants::QUARTER_YEARS, (float) $params[ModelParam::LandBankYears]);
     }
 
     /** Market housing starts over the level they revert to: the firm keeps its share of a market of this size. */
     public function resolveStartsRelative(MacroStateDTO $macroState): float
     {
-        return max(0.0, $macroState->housingStartsIndexEma) / MacroEngine::HOUSING_STARTS_BASELINE;
+        return max(0.0, $macroState->housingStartsIndexEma) / MacroConstants::HOUSING_STARTS_BASELINE;
     }
 
     /** The real house price over the trend it has measurably settled at. */
@@ -199,7 +198,7 @@ class HomebuilderBusinessModel extends StandardCorporateBusinessModel
             $landCost = $residualValue;
         }
         // Lots are used at the closing rate and replaced at the residual value.
-        $turnover = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP * $closings / $landBankYears);
+        $turnover = 1.0 - exp(-FinancialConstants::QUARTER_YEARS * $closings / $landBankYears);
         $streams->registerState(self::STATE_LAND_COST, $landCost + ($turnover * ($residualValue - $landCost)));
 
         // The house price is published and read in full; the backlog shows the visible share of the closings.

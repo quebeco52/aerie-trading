@@ -10,8 +10,8 @@ use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -72,8 +72,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
     // --- VIX & Trading Volume ---
     /**
-     * Trading-stream revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per vol
-     * point).
+     * Trading-stream revenue per unit of volatility over MacroConstants::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per
+     * vol point).
      */
     public const VIX_REVENUE_SCALAR     = 0.50;
     /** Extreme VIX threshold triggering record trading volume event lore. */
@@ -206,7 +206,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      */
     protected function resolveTradingVolatilityShift(\App\DTO\MacroStateDTO $macroState): float
     {
-        return ($macroState->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
+        return ($macroState->marketVolatilityEma - MacroConstants::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
     }
 
     /** Retail trading and margin borrowing against normal: M2 growth over its trend. */

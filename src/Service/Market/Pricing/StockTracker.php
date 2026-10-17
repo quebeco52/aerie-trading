@@ -13,11 +13,11 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Market\Index\IndexCommittee;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\TimeSeries;
 use App\Service\News\EventPresenter;
 
@@ -169,7 +169,7 @@ class StockTracker
         $this->priorMarketVol = $marketVol;
         // The market variance trend the common idiosyncratic factor is read against, seeded where the market settles.
         $this->marketVarianceTrend = TimeSeries::ewmaLevel(
-            $this->marketVarianceTrend ?? (MacroEngine::MACRO_VOL_BASE_ANCHOR ** 2),
+            $this->marketVarianceTrend ?? (MacroConstants::MACRO_VOL_BASE_ANCHOR ** 2),
             $marketVol * $marketVol,
             $dt,
             MarketEngine::MARKET_VARIANCE_TREND_YEARS,

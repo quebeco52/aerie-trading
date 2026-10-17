@@ -11,9 +11,9 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -55,10 +55,10 @@ class GovernmentPolicyTest extends TestCase
         $this->assertNull($state->mortgageLtvCap, 'The District opens with no cap, as the US runs none.');
 
         $this->enactPolicyDto($state, new GovernmentPolicyDTO(
-            publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,
             corporateTaxPolicyShift: 0.0,
             importTariffRate: 0.0,
-            laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+            laborForceGrowthRate: MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
             foreignBuyerTaxRate: 0.0,
             mergerReviewLeniency: 0.0,
             greenBeltStringency: 0.0,
@@ -66,10 +66,10 @@ class GovernmentPolicyTest extends TestCase
             extractionStringency: 0.0,
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0,
-            reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+            reserveDrawShare: MacroConstants::RESERVE_DRAW_CEILING,
             consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
             reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
-            utilityRateCaseGrantShare: UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+            utilityRateCaseGrantShare: FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
             dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
             electionPulse: 0.0,
             mortgageLtvCap: 0.85,
@@ -86,7 +86,7 @@ class GovernmentPolicyTest extends TestCase
         $index = $state->totalFactorProductivityIndex;
 
         $this->enact($state, tariff: 0.1);
-        $loss = -MacroEngine::TARIFF_OUTPUT_LOSS * 0.1;
+        $loss = -MacroConstants::TARIFF_OUTPUT_LOSS * 0.1;
         $this->assertSame(0.1, $state->importTariffRate);
         $this->assertEqualsWithDelta($loss, $state->tfpShockLevel, 1e-15, 'The level potential absorbs falls by the output loss,');
         $this->assertEqualsWithDelta($index * exp($loss), $state->totalFactorProductivityIndex, 1e-9, 'and productivity with it.');
@@ -107,10 +107,10 @@ class GovernmentPolicyTest extends TestCase
     {
         $state = new MacroState();
         $rules = new GovernmentPolicyDTO(
-            publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,
             corporateTaxPolicyShift: 0.0,
             importTariffRate: 0.0,
-            laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+            laborForceGrowthRate: MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
             foreignBuyerTaxRate: 0.0,
             mergerReviewLeniency: 0.0,
             greenBeltStringency: 0.0,
@@ -118,10 +118,10 @@ class GovernmentPolicyTest extends TestCase
             extractionStringency: 0.0,
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0,
-            reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+            reserveDrawShare: MacroConstants::RESERVE_DRAW_CEILING,
             consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
             reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
-            utilityRateCaseGrantShare: UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+            utilityRateCaseGrantShare: FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
             dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
             electionPulse: 0.0,
             initialMarginRequirement: 0.7,
@@ -144,10 +144,10 @@ class GovernmentPolicyTest extends TestCase
     {
         $state = new MacroState();
         $forecast = static fn(?array $levers, ?float $from): GovernmentPolicyDTO => new GovernmentPolicyDTO(
-            publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,
             corporateTaxPolicyShift: 0.01,
             importTariffRate: 0.0,
-            laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+            laborForceGrowthRate: MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
             foreignBuyerTaxRate: 0.0,
             mergerReviewLeniency: 0.0,
             greenBeltStringency: 0.0,
@@ -218,7 +218,7 @@ class GovernmentPolicyTest extends TestCase
         $this->enactPolicy->invokeArgs($this->engine, [$state, $policy]);
     }
 
-    private function enact(MacroState $state, float $tariff, float $corporateTax = 0.0, float $laborGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, float $leniency = 0.0, float $pulse = 0.0, float $spending = MacroEngine::PUBLIC_PURCHASES_TO_GDP): void
+    private function enact(MacroState $state, float $tariff, float $corporateTax = 0.0, float $laborGrowth = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, float $leniency = 0.0, float $pulse = 0.0, float $spending = MacroConstants::PUBLIC_PURCHASES_TO_GDP): void
     {
         $this->enactPolicy->invokeArgs($this->engine, [$state, new GovernmentPolicyDTO(
             publicSpendingShare: $spending,
@@ -232,10 +232,10 @@ class GovernmentPolicyTest extends TestCase
             extractionStringency: 0.0,
             stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
             bankLevyRate: 0.0,
-            reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+            reserveDrawShare: MacroConstants::RESERVE_DRAW_CEILING,
             consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
             reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
-            utilityRateCaseGrantShare: UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+            utilityRateCaseGrantShare: FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
             dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
             electionPulse: $pulse,
         )]);

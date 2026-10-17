@@ -10,9 +10,9 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -193,7 +193,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
      */
     public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float
     {
-        return MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
+        return MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
     }
 
     // --- Secular Demand ---
@@ -208,7 +208,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return MacroEngine::TREND_REAL_GROWTH
+        return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
@@ -306,7 +306,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // --- Allied Procurement & Cost-Plus Fiscal Physics ---
         // Programme awards are defence investment, which moves 1.54 times the allied budgets it comes out of.
-        $alliedOrders = MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
+        $alliedOrders = MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
 
         // Cost-plus contracts pass the inflation surprise through as nominal revenue, both ways.
         $costPlusBonus = $macroState->inflationSurprise() * self::COST_PLUS_BONUS_SCALAR;

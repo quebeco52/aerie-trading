@@ -1,8 +1,8 @@
 <?php
 // The corporate-tax target CreditFiscalSubsystem::calculateDynamicFiscalPolicy() clamps, recomputed unclamped from a
 // macro state (DTO) with its parts; fiscalStance() takes MacroState, so its two public static pieces are composed here.
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem as CF;
+use App\Service\Math\MacroConstants;
 
 function fiscalClampRow(object $m, int $seed, float $t): array
 {
@@ -12,9 +12,9 @@ function fiscalClampRow(object $m, int $seed, float $t): array
     $cut = CF::consolidationSpendingCut($m->sovereignNetDebtToGdp, $funded, $m->consolidationTaxShare);
     $stance = $bohn - $deficit - $cut;
     $stab = CF::FISCAL_STABILIZER_SENSITIVITY * $m->outputGapEma;
-    $target = MacroEngine::BASE_CORPORATE_TAX_RATE + $m->corporateTaxPolicyShift + $stab + $stance;
+    $target = MacroConstants::BASE_CORPORATE_TAX_RATE + $m->corporateTaxPolicyShift + $stab + $stance;
 
-    return ['seed' => $seed, 't' => round($t, 3), 'target' => $target, 'base' => MacroEngine::BASE_CORPORATE_TAX_RATE,
+    return ['seed' => $seed, 't' => round($t, 3), 'target' => $target, 'base' => MacroConstants::BASE_CORPORATE_TAX_RATE,
         'law' => $m->corporateTaxPolicyShift, 'stab' => $stab, 'stance' => $stance, 'bohn' => $bohn, 'deficit' => $deficit,
         'cut' => $cut, 'tax_share' => $m->consolidationTaxShare, 'rate' => $m->corporateTaxRate,
         'net_debt' => $m->sovereignNetDebtToGdp, 'fund_dpg' => $m->sovereignFundDollarsPerGdp, 'funded' => $funded,

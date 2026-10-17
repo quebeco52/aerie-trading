@@ -12,10 +12,9 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -160,8 +159,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Baseline volatility multiplier for loan origination and fee revenue shocks. */
     public const REVENUE_VARIANCE_SCALAR = 0.15;
 
-    // --- Vasicek ASRF Credit Model (segment PDs and correlations are the macro's: MacroEngine, CreditFiscalSubsystem)
-    // ---
+    // --- Vasicek ASRF Credit Model (segment PDs and correlations from MacroConstants, CreditFiscalSubsystem) ---
     /** Baseline Loss Given Default (LGD) for senior secured / collateralized bank credit facilities. */
     public const LGD_BASELINE                  = 0.45;
 
@@ -318,7 +316,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Upper bound: banks rarely pay more than 70% of the policy rate to retain depositors. */
     public const MAX_DEPOSIT_BETA              = 0.70;
     /** The system deposit beta at the neutral rate: the beta a deposit bank's own is expressed against. */
-    public const DEPOSIT_BETA_NORMALIZATION_BASELINE = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
+    public const DEPOSIT_BETA_NORMALIZATION_BASELINE = MacroConstants::SYSTEM_DEPOSIT_BETA_BASE;
     /** Floor on any deposit rate: banks always pay some yield. */
     public const MIN_DEPOSIT_RATE              = 0.001;
     /**
@@ -536,7 +534,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
-        $depositRate = $this->resolveDepositRate($policyRate, MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
+        $depositRate = $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
         $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $macroState->yield5yEma) + (float) $stock->getCreditSpread();
 
         $allowedWholesaleLeverage = min($wholesaleDebt / $effectiveEquity, max(0.0, $this->getWholesaleLeverageLimit()));
@@ -620,7 +618,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     {
         $point = 0.01;
         $policyRate = $macroState->policyRateEma;
-        $systemBeta = MacroEngine::SYSTEM_DEPOSIT_BETA_BASE;
+        $systemBeta = MacroConstants::SYSTEM_DEPOSIT_BETA_BASE;
         $depositChange = ($this->resolveDepositRate($policyRate + $point, $systemBeta) - $this->resolveDepositRate($policyRate, $systemBeta))
             * (1.0 - exp(-static::BETA_HORIZON_YEARS / self::DEPOSIT_REPRICING_YEARS));
 
@@ -780,7 +778,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         foreach ($parts as $key => [$marketYield, $repricingYears]) {
             $streams->registerState($key, TimeSeries::calculateDistributedLag($streams->getPersistedState($key, $marketYield), $marketYield, $quarter, $repricingYears));
         }
-        $longRunDepositRate = $this->resolveDepositRate($macroState->policyRateEma, MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
+        $longRunDepositRate = $this->resolveDepositRate($macroState->policyRateEma, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
         $streams->registerState(self::STATE_DEPOSIT_RATE, TimeSeries::calculateDistributedLag($streams->getPersistedState(self::STATE_DEPOSIT_RATE, $longRunDepositRate), $longRunDepositRate, $quarter, self::DEPOSIT_REPRICING_YEARS));
         $streams->registerState(self::STATE_FLOATING_LOAN_SHARE, $pricing['floating_share']);
         $streams->registerState(self::STATE_LOAN_SPREAD, $pricing['loan_spread']);
@@ -1213,7 +1211,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             return (float) $momentum[self::STATE_DEPOSIT_RATE];
         }
 
-        return $this->resolveDepositRate($policyRate, MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
+        return $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
     }
 
     /** A deposit bank's own beta at the neutral rate: the system's (its pass-through is the rate cycle's). */
@@ -1293,7 +1291,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // income: realized inflation plus potential real growth. The rate channel is the migration into money
         // funds as the deposit spread opens, and back out as it closes (Drechsler, Savov & Schnabl 2017); the
         // smoothed share lags the level by about a quarter's move.
-        $trendGrowthQuarterly = ($macroState->inflationEma + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / FinancialConstants::QUARTERS_PER_YEAR;
+        $trendGrowthQuarterly = ($macroState->inflationEma + MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE) / FinancialConstants::QUARTERS_PER_YEAR;
         $mmfMigrationQuarterly = ($macroState->moneyMarketFundShare - $macroState->moneyMarketFundShareEma) * self::MMF_MIGRATION_DEPOSIT_DRAG;
         $growthQuarterly = $trendGrowthQuarterly - $mmfMigrationQuarterly + ($mathUtility->generateStandardNormal() * self::LIABILITY_GROWTH_DRIFT_STD);
         $liabilityChange = $currentLiabilities * max(-self::LIABILITY_MAX_CHANGE_LIMIT, min(self::LIABILITY_MAX_CHANGE_LIMIT, $growthQuarterly));

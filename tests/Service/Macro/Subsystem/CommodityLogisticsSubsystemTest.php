@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Macro\Subsystem;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
@@ -46,14 +46,14 @@ class CommodityLogisticsSubsystemTest extends TestCase
     {
         // Balanced: trend demand against baseline capacity clears at the baseline price.
         $this->assertEqualsWithDelta(
-            MacroEngine::ENERGY_BASELINE,
-            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(MacroEngine::ENERGY_BASELINE),
+            MacroConstants::ENERGY_BASELINE,
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(MacroConstants::ENERGY_BASELINE),
             1e-9,
         );
 
         // 2% short of capacity clears at the combined inelasticity.
         $this->assertEqualsWithDelta(
-            MacroEngine::ENERGY_BASELINE * ((100.0 / 98.0) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY),
+            MacroConstants::ENERGY_BASELINE * ((100.0 / 98.0) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY),
             CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(98.0),
             1e-9,
         );
@@ -72,10 +72,10 @@ class CommodityLogisticsSubsystemTest extends TestCase
     {
         $realRate = CommodityLogisticsSubsystem::GOLD_REAL_RATE_ANCHOR;
         $inflation = CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
-        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL;
+        $sentiment = MacroConstants::SENTIMENT_TREND_LEVEL;
         $resting = CommodityLogisticsSubsystem::resolveGoldEquilibriumPrice($realRate, $inflation, $sentiment);
 
-        $this->assertEqualsWithDelta(MacroEngine::GOLD_BASELINE, $resting, 1e-9, 'every driver at rest: gold at its baseline');
+        $this->assertEqualsWithDelta(MacroConstants::GOLD_BASELINE, $resting, 1e-9, 'every driver at rest: gold at its baseline');
         $this->assertEqualsWithDelta(exp(-0.131), CommodityLogisticsSubsystem::resolveGoldEquilibriumPrice($realRate + 0.01, $inflation, $sentiment) / $resting, 1e-9, 'a point of real yield takes 13.1 log points off');
         $this->assertEqualsWithDelta(exp(0.365), CommodityLogisticsSubsystem::resolveGoldEquilibriumPrice($realRate, $inflation + 0.01, $sentiment) / $resting, 1e-9, 'a point of expected inflation adds 36.5');
         $this->assertGreaterThan($resting, CommodityLogisticsSubsystem::resolveGoldEquilibriumPrice($realRate, $inflation, $sentiment - 15.0), 'bad times raise the price of the refuge');
@@ -94,7 +94,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $state = new MacroState();
         $state->yield10yEma = CommodityLogisticsSubsystem::GOLD_REAL_RATE_ANCHOR + CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
         $state->tipsBreakevenEma = CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
-        $state->consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL;
+        $state->consumerSentimentIndexEma = MacroConstants::SENTIMENT_TREND_LEVEL;
         $state->goldPriceIndex = 150.0;
 
         for ($quarter = 0; $quarter < 4; $quarter++) {
@@ -105,7 +105,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $kappa = CommodityLogisticsSubsystem::GOLD_MEAN_REVERSION;
         $sigma = CommodityLogisticsSubsystem::GOLD_VOLATILITY;
         // The log mean that leaves the level averaging the equilibrium: ln theta - sigma^2 / 4 kappa.
-        $alpha = log(MacroEngine::GOLD_BASELINE) - ($sigma * $sigma) / (4.0 * $kappa);
+        $alpha = log(MacroConstants::GOLD_BASELINE) - ($sigma * $sigma) / (4.0 * $kappa);
         $expected = exp((exp(-$kappa) * log(150.0)) + ((1.0 - exp(-$kappa)) * $alpha));
         $this->assertEqualsWithDelta($expected, $state->goldPriceIndex, 1e-6);
         $this->assertEqualsWithDelta(0.51, exp(-$kappa), 0.01, 'deviations carry half their size into the next year');
@@ -117,7 +117,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $state = new MacroState();
         $state->yield10yEma = CommodityLogisticsSubsystem::GOLD_REAL_RATE_ANCHOR + CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
         $state->tipsBreakevenEma = CommodityLogisticsSubsystem::GOLD_INFLATION_EXPECTATION_ANCHOR;
-        $state->consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL;
+        $state->consumerSentimentIndexEma = MacroConstants::SENTIMENT_TREND_LEVEL;
 
         $annual = [];
         $previous = $state->goldPriceIndex;
@@ -178,7 +178,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $subsystem = new CommodityLogisticsSubsystem($quiet);
         $state = new MacroState();
         $state->globalDemandGapEma = 0.0;
-        $state->energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE;
+        $state->energyInventoryIndexEma = MacroConstants::COMMODITY_INVENTORY_BASELINE;
 
         // Settle the stochastic part, then read the season off one more year, a week at a time.
         $crackAt = [];
@@ -206,7 +206,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         mt_srand(20260924);
         $state = new MacroState();
         $state->globalDemandGapEma = 0.0;
-        $state->energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE;
+        $state->energyInventoryIndexEma = MacroConstants::COMMODITY_INVENTORY_BASELINE;
 
         $logBase = [];
         $levels = [];
@@ -232,7 +232,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertLessThan(0.55, sqrt($variance));
         $this->assertGreaterThan(0.30, $halfLifeYears, 'shocks fade over months, not weeks');
         $this->assertLessThan(0.80, $halfLifeYears);
-        $this->assertEqualsWithDelta(MacroEngine::CRACK_SPREAD_BASELINE, array_sum($levels) / count($levels), 2.5, 'centred on the baseline, not ten percent below it');
+        $this->assertEqualsWithDelta(MacroConstants::CRACK_SPREAD_BASELINE, array_sum($levels) / count($levels), 2.5, 'centred on the baseline, not ten percent below it');
     }
 
     /**
@@ -245,18 +245,18 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $state = new MacroState();
         $state->freightRateIndex = 130.0;
         $state->freightRateIndexDecadeTrend = 130.0;
-        $state->supplierDeliveryTimes = MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL;
+        $state->supplierDeliveryTimes = MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL;
         $this->subsystem->calculateSupplyChainPressureIndex($state);
         $this->assertSame(0.0, $state->supplyChainPressureIndex, 'Freight at its trend and deliveries at neutral read no pressure.');
 
-        $choked = CommodityLogisticsSubsystem::supplyChainPressureAt(260.0, 130.0, MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL + 10.0);
+        $choked = CommodityLogisticsSubsystem::supplyChainPressureAt(260.0, 130.0, MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL + 10.0);
         $this->assertGreaterThan(2.0, $choked, 'Freight doubled and deliveries ten points slow is a generational squeeze.');
-        $this->assertLessThan(0.0, CommodityLogisticsSubsystem::supplyChainPressureAt(100.0, 130.0, MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL - 3.0), 'Cheap freight and fast deliveries read as slack.');
+        $this->assertLessThan(0.0, CommodityLogisticsSubsystem::supplyChainPressureAt(100.0, 130.0, MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL - 3.0), 'Cheap freight and fast deliveries read as slack.');
 
         $oneSd = CommodityLogisticsSubsystem::supplyChainPressureAt(
             130.0 * exp(CommodityLogisticsSubsystem::SUPPLY_CHAIN_FREIGHT_LOG_SD),
             130.0,
-            MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL + CommodityLogisticsSubsystem::SUPPLY_CHAIN_DELIVERY_SD,
+            MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL + CommodityLogisticsSubsystem::SUPPLY_CHAIN_DELIVERY_SD,
         );
         $this->assertEqualsWithDelta(2.0 / CommodityLogisticsSubsystem::SUPPLY_CHAIN_SUM_SD, $oneSd, 1e-12);
     }
@@ -264,11 +264,11 @@ class CommodityLogisticsSubsystemTest extends TestCase
     /** Delivery times read neutral at baseline utilization and a balanced fleet, and slow as either congests. */
     public function testSupplierDeliveryTargetIsNeutralAtBaselineAndRisesWithCongestion(): void
     {
-        $neutral = CommodityLogisticsSubsystem::supplierDeliveryTarget(MacroEngine::CU_BASELINE, 1.0);
-        $this->assertEqualsWithDelta(MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL, $neutral, 1e-12);
+        $neutral = CommodityLogisticsSubsystem::supplierDeliveryTarget(MacroConstants::CU_BASELINE, 1.0);
+        $this->assertEqualsWithDelta(MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL, $neutral, 1e-12);
 
         $this->assertGreaterThan($neutral, CommodityLogisticsSubsystem::supplierDeliveryTarget(0.85, 1.0), 'busier factories quote longer lead times');
-        $this->assertGreaterThan($neutral, CommodityLogisticsSubsystem::supplierDeliveryTarget(MacroEngine::CU_BASELINE, 1.2), 'a tight fleet slows deliveries');
+        $this->assertGreaterThan($neutral, CommodityLogisticsSubsystem::supplierDeliveryTarget(MacroConstants::CU_BASELINE, 1.2), 'a tight fleet slows deliveries');
         $this->assertLessThan($neutral, CommodityLogisticsSubsystem::supplierDeliveryTarget(0.70, 0.9));
     }
 
@@ -280,15 +280,15 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $subsystem = new CommodityLogisticsSubsystem($math);
 
         $state = new MacroState();
-        $state->capacityUtilizationRate = MacroEngine::CU_BASELINE;
+        $state->capacityUtilizationRate = MacroConstants::CU_BASELINE;
         $state->globalDemandGapEma = 0.0;
-        $state->industrialMetalsIndexEma = MacroEngine::METALS_BASELINE;
-        $state->freightSupplyEma = MacroEngine::FREIGHT_BASELINE;
+        $state->industrialMetalsIndexEma = MacroConstants::METALS_BASELINE;
+        $state->freightSupplyEma = MacroConstants::FREIGHT_BASELINE;
         $state->supplierDeliveryTimes = 60.0;
 
         $subsystem->calculateSupplierDeliveryTimes($state, 0.25);
 
-        $expected = MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL + (10.0 * exp(-CommodityLogisticsSubsystem::DELIVERY_REVERSION_KAPPA * 0.25));
+        $expected = MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL + (10.0 * exp(-CommodityLogisticsSubsystem::DELIVERY_REVERSION_KAPPA * 0.25));
         $this->assertEqualsWithDelta($expected, $state->supplierDeliveryTimes, 1e-9);
     }
 
@@ -421,7 +421,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $window = [];
         for ($step = 1; $step <= 120 * 360; $step++) {
             $state->totalTime += $dt;
-            $state->naturalGasPriceIndex = MacroEngine::NATURAL_GAS_BASELINE;
+            $state->naturalGasPriceIndex = MacroConstants::NATURAL_GAS_BASELINE;
             $this->subsystem->calculateWholesalePowerIndex($state, $dt);
             $levels[] = $state->wholesalePowerPriceIndex;
             $window[] = $state->wholesalePowerPriceIndex / CommodityLogisticsSubsystem::resolvePowerSeasonalFactor($state->totalTime);
@@ -442,7 +442,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         // Four-hub quarterly means of the de-seasonalised log heat rate, 2017-2025: sd 0.183, AR1 0.37.
         $this->assertEqualsWithDelta(0.183, sqrt($variance), 0.03);
         $this->assertEqualsWithDelta(0.37, $lagged / ($variance * $n), 0.12);
-        $this->assertEqualsWithDelta(MacroEngine::WHOLESALE_POWER_BASELINE, array_sum($levels) / count($levels), 2.0, 'centred on the baseline, not its median');
+        $this->assertEqualsWithDelta(MacroConstants::WHOLESALE_POWER_BASELINE, array_sum($levels) / count($levels), 2.0, 'centred on the baseline, not its median');
     }
 
     // --- Physical Catastrophes ---
@@ -555,7 +555,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
             $state->energySupplyEma = $supply;
             $state->energyPriceIndex = 100.0;
             $state->energyBasePrice = 100.0;
-            $state->energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE;
+            $state->energyInventoryIndex = MacroConstants::COMMODITY_INVENTORY_BASELINE;
             for ($i = 0; $i < 400; $i++) {
                 // hold the price capacity sees, so only demand moves the clearing level
                 $state->energyPriceIndexEma = 100.0;
@@ -682,7 +682,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $path = $this->shockPath($dt, 1.0);
 
         $this->assertEqualsWithDelta(log(1.5), $path[0], 1e-9, 'The shock is in the base price on the tick it lands.');
-        $this->assertEqualsWithDelta(log(1.5) * exp(-MacroEngine::ENERGY_MEAN_REVERSION * (count($path) - 1) * $dt), $path[count($path) - 1], 1e-9, 'A year on it has decayed at the reversion speed, not vanished.');
+        $this->assertEqualsWithDelta(log(1.5) * exp(-CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION * (count($path) - 1) * $dt), $path[count($path) - 1], 1e-9, 'A year on it has decayed at the reversion speed, not vanished.');
     }
 
     /**
@@ -699,7 +699,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $fine = $area(1.0 / 3600.0);
 
         $this->assertEqualsWithDelta($coarse, $fine, 0.01 * $coarse);
-        $this->assertEqualsWithDelta(log(1.5) * (1.0 - exp(-2.0 * MacroEngine::ENERGY_MEAN_REVERSION)) / MacroEngine::ENERGY_MEAN_REVERSION, $fine, 0.01 * $fine);
+        $this->assertEqualsWithDelta(log(1.5) * (1.0 - exp(-2.0 * CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION)) / CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION, $fine, 0.01 * $fine);
     }
 
     /**
@@ -720,9 +720,9 @@ class CommodityLogisticsSubsystemTest extends TestCase
         // 53.06 kg of CO2 per MMBtu, 7.74 MMBtu per MWh: 0.41 t a MWh, 80% of which reaches the price.
         $adder = 0.80 * 0.05306 * 7.74 * 70.37;
         $this->assertEqualsWithDelta($adder, CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37), 1e-12);
-        $this->assertEqualsWithDelta(MacroEngine::WHOLESALE_POWER_BASELINE * $adder / MacroEngine::REFERENCE_POWER_PRICE, $priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex, 1e-9);
+        $this->assertEqualsWithDelta(MacroConstants::WHOLESALE_POWER_BASELINE * $adder / MacroConstants::REFERENCE_POWER_PRICE, $priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex, 1e-9);
         $this->assertSame(0.0, CommodityLogisticsSubsystem::carbonPowerPriceAdder(0.0));
-        $this->assertEqualsWithDelta(($priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex) / MacroEngine::WHOLESALE_POWER_BASELINE, CommodityLogisticsSubsystem::carbonPowerPriceUplift(70.37), 1e-9, 'The uplift is the carbon part of the power index\'s move off its baseline.');
+        $this->assertEqualsWithDelta(($priced->wholesalePowerPriceIndex - $free->wholesalePowerPriceIndex) / MacroConstants::WHOLESALE_POWER_BASELINE, CommodityLogisticsSubsystem::carbonPowerPriceUplift(70.37), 1e-9, 'The uplift is the carbon part of the power index\'s move off its baseline.');
     }
 
     /** A state from before the carbon lag has its earnings already carrying the carbon price in force. */

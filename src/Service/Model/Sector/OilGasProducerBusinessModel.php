@@ -9,9 +9,9 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 use App\Service\Model\StreamContext;
@@ -181,7 +181,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
             return 0.0;
         }
 
-        return log($macroState->energyPriceIndexEma / MacroEngine::ENERGY_BASELINE);
+        return log($macroState->energyPriceIndexEma / MacroConstants::ENERGY_BASELINE);
     }
 
     public function getWorkingCapitalIntensity(Stock $stock): float
@@ -252,9 +252,9 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
 
         // --- Realized Price ---
         // Oil sells partly at the strikes the swap ladder locked in over the last year, the rest at spot.
-        $oilSpot = $macroState->energyPriceIndexEma / MacroEngine::ENERGY_BASELINE;
-        $gasSpot = $macroState->naturalGasPriceIndexEma / MacroEngine::NATURAL_GAS_BASELINE;
-        $hedgedStrike = $this->rollHedgeLadder($streams, $macroState) / MacroEngine::ENERGY_BASELINE;
+        $oilSpot = $macroState->energyPriceIndexEma / MacroConstants::ENERGY_BASELINE;
+        $gasSpot = $macroState->naturalGasPriceIndexEma / MacroConstants::NATURAL_GAS_BASELINE;
+        $hedgedStrike = $this->rollHedgeLadder($streams, $macroState) / MacroConstants::ENERGY_BASELINE;
         $basisShift = $basisZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::BASIS_DIFFERENTIAL_VOL_SCALAR;
         $oilRealized = (($hedgeRatio * $hedgedStrike) + ((1.0 - $hedgeRatio) * $oilSpot)) * (1.0 + $basisShift);
         $gasRealized = $gasSpot * (1.0 + $basisShift);

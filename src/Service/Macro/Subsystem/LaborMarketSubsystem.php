@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\Macro\Subsystem;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\TimeSeries;
 
 /**
@@ -104,7 +104,7 @@ class LaborMarketSubsystem
 
         // Ball (2009) partial hysteresis: scarring heals toward the natural rate throughout, not only once unemployment
         // has fallen below the NAIRU. Gated on that, it froze at its peak through every recovery from above.
-        $healing = max(0.0, $state->nairu - MacroEngine::NATURAL_UNEMPLOYMENT) * self::NAIRU_REABSORPTION_SPEED * $dt;
+        $healing = max(0.0, $state->nairu - MacroConstants::NATURAL_UNEMPLOYMENT) * self::NAIRU_REABSORPTION_SPEED * $dt;
         $state->nairu -= $healing;
 
         $unclampedNairu = $state->nairu;
@@ -142,7 +142,7 @@ class LaborMarketSubsystem
      */
     public function calculateCyclicalMigration(MacroState $state): void
     {
-        $admitted = max(0.0, $state->laborForceGrowthRate - MacroEngine::NATURAL_LABOR_FORCE_GROWTH);
+        $admitted = max(0.0, $state->laborForceGrowthRate - MacroConstants::NATURAL_LABOR_FORCE_GROWTH);
         $state->cyclicalMigrationRate = -self::MIGRATION_JOBS_RESPONSE * $admitted * ($state->unemploymentRateEma - $state->nairu);
     }
 
@@ -211,12 +211,12 @@ class LaborMarketSubsystem
         // A scarred NAIRU is a matching-efficiency loss (Pissarides 2000): the curve shifts out by the square of the
         // NAIRU's rise, so tightness at the NAIRU stays the natural tightness and scarring is not read as standing
         // slack.
-        $beveridgeConstant = self::BEVERIDGE_CURVE_CONSTANT * (($state->nairu / MacroEngine::NATURAL_UNEMPLOYMENT) ** 2);
+        $beveridgeConstant = self::BEVERIDGE_CURVE_CONSTANT * (($state->nairu / MacroConstants::NATURAL_UNEMPLOYMENT) ** 2);
         $state->jobVacanciesRate = max(0.01, min(0.12, $beveridgeConstant / $effectiveUnemployment));
         $state->laborTightness = $state->jobVacanciesRate / $effectiveUnemployment;
 
         $errorCorrection = self::WAGE_ERROR_CORRECTION_SPEED * $state->realWageGap;
-        $tightnessPush = self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroEngine::NATURAL_LABOR_TIGHTNESS);
+        $tightnessPush = self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - MacroConstants::NATURAL_LABOR_TIGHTNESS);
         $unclampedTarget = $tfpGrowthRate + $state->tipsBreakevenEma + $tightnessPush - $errorCorrection;
         $targetWageGrowth = max(0.0, min(self::MAX_NOMINAL_WAGE_GROWTH, $unclampedTarget));
 

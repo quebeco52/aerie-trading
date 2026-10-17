@@ -10,7 +10,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -235,8 +235,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         // the fleet, so the domestic gap reaches the spot book through cargo volume only.
         $outputGap = $macroState->outputGapEma;
         $cargoVolumeShift = $this->resolveCargoVolumeShift($stock, $macroState);
-        $spotRateShift = ($macroState->freightRateIndexEma - MacroEngine::FREIGHT_BASELINE) / MacroEngine::FREIGHT_BASELINE;
-        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
+        $spotRateShift = ($macroState->freightRateIndexEma - MacroConstants::FREIGHT_BASELINE) / MacroConstants::FREIGHT_BASELINE;
+        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE);
         $eventType = null;
 
         // Congestion and glut are regimes, not blips: berths take quarters to clear and a newbuild

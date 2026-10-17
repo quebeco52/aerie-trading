@@ -9,10 +9,10 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 use App\Service\Model\StreamContext;
@@ -262,8 +262,8 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         // --- Prices: the forward ladders and spot ---
         $powerStrike = $this->rollLadder($streams, self::STATE_POWER_STRIKE_SUM_PREFIX, fn(int $quarters): float => $this->powerForward($macroState, $quarters / 4.0));
         $gasStrike = $this->rollLadder($streams, self::STATE_GAS_STRIKE_SUM_PREFIX, fn(int $quarters): float => $this->gasForward($macroState, $quarters / 4.0));
-        $powerSpot = max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroEngine::WHOLESALE_POWER_BASELINE;
-        $gasSpot = max(0.0, $macroState->naturalGasPriceIndexEma) / MacroEngine::NATURAL_GAS_BASELINE;
+        $powerSpot = max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroConstants::WHOLESALE_POWER_BASELINE;
+        $gasSpot = max(0.0, $macroState->naturalGasPriceIndexEma) / MacroConstants::NATURAL_GAS_BASELINE;
 
         // What was sold forward is delivered at its strike; output above or below it settles at spot, so a shortfall is
         // power bought back at today's price. The gas for the gas-fired part was bought forward alongside it.
@@ -397,7 +397,7 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
             $macroState->globalDemandGapEma,
             $macroState->energySupplyEma,
             $years,
-        ) / MacroEngine::ENERGY_BASELINE;
+        ) / MacroConstants::ENERGY_BASELINE;
 
         return $oil * CommodityLogisticsSubsystem::gasOilRatioForward(exp($macroState->gasOilRatioLog), $years);
     }

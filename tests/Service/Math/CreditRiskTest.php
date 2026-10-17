@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Math;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
+use App\Service\Math\MacroConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -335,53 +335,53 @@ class CreditRiskTest extends TestCase
     {
         // Neutral cycle, vol exactly at the threshold, no interbank stress: IG is the base spread untouched.
         $neutral = CreditRisk::calculateDualTrancheCreditSpreads(
-            MacroEngine::BASE_CREDIT_SPREAD,
+            MacroConstants::BASE_CREDIT_SPREAD,
             0.0,
-            MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
+            CreditRisk::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
             0.0,
         );
-        $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD, $neutral['ig'], 0.0000001, 'A closed gap leaves the IG spread at its base.');
+        $this->assertEqualsWithDelta(MacroConstants::BASE_CREDIT_SPREAD, $neutral['ig'], 0.0000001, 'A closed gap leaves the IG spread at its base.');
         $this->assertEqualsWithDelta(
-            MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+            MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
             $neutral['hy'],
             0.0000001,
             'With no contraction the HY tranche is a flat multiple of IG.',
         );
 
         // Vol below the threshold contributes nothing: the excess term is one-sided.
-        $lowVol = CreditRisk::calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, 0.0, 0.05, 0.0);
+        $lowVol = CreditRisk::calculateDualTrancheCreditSpreads(MacroConstants::BASE_CREDIT_SPREAD, 0.0, 0.05, 0.0);
         $this->assertEqualsWithDelta($neutral['ig'], $lowVol['ig'], 0.0000001, 'Calm markets must not tighten spreads below base.');
 
         // Excess vol and interbank stress are additive on the IG leg.
         $stressed = CreditRisk::calculateDualTrancheCreditSpreads(
-            MacroEngine::BASE_CREDIT_SPREAD,
+            MacroConstants::BASE_CREDIT_SPREAD,
             0.0,
-            MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD + 0.10,
+            CreditRisk::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD + 0.10,
             0.05,
         );
         $this->assertEqualsWithDelta(
-            MacroEngine::BASE_CREDIT_SPREAD
-                + 0.10 * MacroEngine::MERTON_VOL_SENSITIVITY
-                + 0.05 * MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
+            MacroConstants::BASE_CREDIT_SPREAD
+                + 0.10 * CreditRisk::MERTON_VOL_SENSITIVITY
+                + 0.05 * CreditRisk::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
             $stressed['ig'],
             0.0000001,
             'Vol and contagion must add linearly onto the cycle spread.',
         );
 
         // A contraction widens IG through distance-to-default, and HY keeps its multiple of it.
-        $recession = CreditRisk::calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, -0.04, 0.10, 0.0);
-        $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD * exp(MacroEngine::MERTON_LEVERAGE_SENSITIVITY * 0.04), $recession['ig'], 1e-12, 'A contraction must widen investment grade.');
+        $recession = CreditRisk::calculateDualTrancheCreditSpreads(MacroConstants::BASE_CREDIT_SPREAD, -0.04, 0.10, 0.0);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_CREDIT_SPREAD * exp(CreditRisk::MERTON_LEVERAGE_SENSITIVITY * 0.04), $recession['ig'], 1e-12, 'A contraction must widen investment grade.');
         $this->assertEqualsWithDelta($recession['ig'] / $neutral['ig'], $recession['hy'] / $neutral['hy'], 1e-12, 'High yield tracks investment grade at its base multiple.');
 
         // Both legs clamp: a depression cannot produce an unbounded spread.
-        $depression = CreditRisk::calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, -1.0, 2.0, 1.0);
-        $this->assertSame(MacroEngine::MAX_CREDIT_SPREAD, $depression['ig'], 'The IG spread must clamp at its ceiling.');
-        $this->assertEqualsWithDelta(MacroEngine::MAX_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $depression['hy'], 1e-12, 'The HY spread tops out at its multiple of the IG record.');
+        $depression = CreditRisk::calculateDualTrancheCreditSpreads(MacroConstants::BASE_CREDIT_SPREAD, -1.0, 2.0, 1.0);
+        $this->assertSame(CreditRisk::MAX_CREDIT_SPREAD, $depression['ig'], 'The IG spread must clamp at its ceiling.');
+        $this->assertEqualsWithDelta(CreditRisk::MAX_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER, $depression['hy'], 1e-12, 'The HY spread tops out at its multiple of the IG record.');
 
         // A boom floors IG, and HY never compresses inside its minimum multiple of IG.
-        $boom = CreditRisk::calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, 0.50, 0.0, 0.0);
-        $this->assertSame(MacroEngine::MIN_CREDIT_SPREAD, $boom['ig'], 'The IG spread must floor at its minimum.');
-        $this->assertEqualsWithDelta($boom['ig'] * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $boom['hy'], 1e-12, 'HY floors with IG at its multiple.');
+        $boom = CreditRisk::calculateDualTrancheCreditSpreads(MacroConstants::BASE_CREDIT_SPREAD, 0.50, 0.0, 0.0);
+        $this->assertSame(CreditRisk::MIN_CREDIT_SPREAD, $boom['ig'], 'The IG spread must floor at its minimum.');
+        $this->assertEqualsWithDelta($boom['ig'] * MacroConstants::HY_BASE_SPREAD_MULTIPLIER, $boom['hy'], 1e-12, 'HY floors with IG at its multiple.');
     }
 
     /**
@@ -430,8 +430,8 @@ class CreditRiskTest extends TestCase
      */
     public function testTheClassCurveRisesThroughEveryGradeAndADefaultPricesAsCcc(): void
     {
-        $ig = MacroEngine::BASE_CREDIT_SPREAD;
-        $hy = $ig * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $ig = MacroConstants::BASE_CREDIT_SPREAD;
+        $hy = $ig * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         $curve = array_map(static fn(string $r): float => CreditRisk::calculateRatingClassSpread($r, $ig, $hy), ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC']);
 
         for ($i = 1; $i < count($curve); $i++) {
@@ -472,8 +472,8 @@ class CreditRiskTest extends TestCase
      */
     public function testASeededSpreadIsReadAsAMultipleOfTheNearestClass(): void
     {
-        $ig = MacroEngine::BASE_CREDIT_SPREAD;
-        $hy = $ig * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $ig = MacroConstants::BASE_CREDIT_SPREAD;
+        $hy = $ig * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         $class = static fn(string $r): float => CreditRisk::calculateRatingClassSpread($r, $ig, $hy);
 
         foreach (['AAA', 'A', 'BBB', 'BB', 'CCC'] as $rating) {
@@ -501,8 +501,8 @@ class CreditRiskTest extends TestCase
         $this->assertEqualsWithDelta(0.0030, CreditRisk::calculateRecoveryAdjustedSpread(0.0030, 0.26, 0.52), 1e-15);
         $this->assertGreaterThan(CreditRisk::calculateRecoveryAdjustedSpread(0.0442, 0.38, 0.52), CreditRisk::calculateRecoveryAdjustedSpread(0.0442, 0.52, 0.52), 'secured debt pays less');
 
-        $ig = MacroEngine::BASE_CREDIT_SPREAD;
-        $hy = $ig * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $ig = MacroConstants::BASE_CREDIT_SPREAD;
+        $hy = $ig * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         $securedB = CreditRisk::calculateRecoveryAdjustedSpread(CreditRisk::calculateRatingClassSpread('B', $ig, $hy), 0.38, 0.52);
         $this->assertEqualsWithDelta(1.0, CreditRisk::calculateIssuerSpreadMultiple($securedB, $ig, $hy, 0.38, 0.52), 1e-12, 'a secured issuer seeded on its own curve carries no premium');
     }

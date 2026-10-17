@@ -8,9 +8,10 @@ use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\StreamContext;
@@ -261,15 +262,15 @@ class UtilityBusinessModelTest extends TestCase
             mt_srand(7);
             [$shortfall, $pending, $sum, $quarters] = [0.0, false, 0.0, 200000];
             for ($q = 0; $q < $quarters; ++$q) {
-                $shortfall += MacroEngine::TARGET_INFLATION * 0.25;
-                $decided = $pending && (mt_rand() / mt_getrandmax()) < UtilityBusinessModel::RATE_CASE_EXIT_HAZARD;
+                $shortfall += MacroConstants::TARGET_INFLATION * 0.25;
+                $decided = $pending && (mt_rand() / mt_getrandmax()) < FirmEconomics::RATE_CASE_EXIT_HAZARD;
                 if ($decided) {
                     $pending = false;
                     $shortfall -= $shortfall * $grant;
-                } elseif (!$pending && $shortfall >= UtilityBusinessModel::RATE_CASE_FILING_THRESHOLD) {
+                } elseif (!$pending && $shortfall >= FirmEconomics::RATE_CASE_FILING_THRESHOLD) {
                     $pending = true;
                 }
-                $shortfall = min(UtilityBusinessModel::MAX_TARIFF_SHORTFALL, $shortfall);
+                $shortfall = min(FirmEconomics::MAX_TARIFF_SHORTFALL, $shortfall);
                 $sum += $shortfall;
             }
 
@@ -277,13 +278,13 @@ class UtilityBusinessModelTest extends TestCase
         };
 
         $previous = INF;
-        foreach ([0.24, 0.40, 0.55, UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE, 0.85] as $grant) {
-            $closedForm = UtilityBusinessModel::steadyTariffShortfall($grant);
+        foreach ([0.24, 0.40, 0.55, FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE, 0.85] as $grant) {
+            $closedForm = FirmEconomics::steadyTariffShortfall($grant);
             $this->assertEqualsWithDelta($simulated($grant), $closedForm, 0.11 * $simulated($grant), "grant {$grant}");
             $this->assertLessThan($previous, $closedForm);
             $previous = $closedForm;
         }
-        $this->assertEqualsWithDelta(-4.0 * log(1.0 - UtilityBusinessModel::RATE_CASE_EXIT_HAZARD), UtilityBusinessModel::RATE_CASE_DECISION_RATE, 1e-4);
+        $this->assertEqualsWithDelta(-4.0 * log(1.0 - FirmEconomics::RATE_CASE_EXIT_HAZARD), FirmEconomics::RATE_CASE_DECISION_RATE, 1e-4);
     }
 
     /**
@@ -323,7 +324,7 @@ class UtilityBusinessModelTest extends TestCase
         // gas-fired MWh burn 7.74 MMBtu each at spot, recovered only through the power price.
         $calm = $this->merchantQuarter('UTIL', 100.0, 100.0);
         $gas = $this->merchantQuarter('UTIL', 150.0, 100.0);
-        $baselineFuelShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * MacroEngine::REFERENCE_GAS_PRICE / MacroEngine::REFERENCE_POWER_PRICE;
+        $baselineFuelShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * MacroConstants::REFERENCE_GAS_PRICE / MacroConstants::REFERENCE_POWER_PRICE;
         $merchantFuel = 100_000_000.0 * 0.15 * UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE * $baselineFuelShare * 0.50;
         $regulatedClauseLag = 100_000_000.0 * 0.40 * 0.85 * $clauseLagPerRegulatedCost;
 
@@ -376,9 +377,9 @@ class UtilityBusinessModelTest extends TestCase
      */
     public function testCarbonCostsTheGasFleetWhatThePriceDoesNotPassThroughAndPaysRenewables(): void
     {
-        $adderShare = CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37) / MacroEngine::REFERENCE_POWER_PRICE;
-        $macro = new MacroStateDTO(carbonPrice: 70.37, wholesalePowerPriceIndexEma: MacroEngine::WHOLESALE_POWER_BASELINE * (1.0 + $adderShare));
-        $carbonShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * MacroEngine::NATURAL_GAS_CO2_TONNES_PER_MMBTU * 70.37 / MacroEngine::REFERENCE_POWER_PRICE;
+        $adderShare = CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37) / MacroConstants::REFERENCE_POWER_PRICE;
+        $macro = new MacroStateDTO(carbonPrice: 70.37, wholesalePowerPriceIndexEma: MacroConstants::WHOLESALE_POWER_BASELINE * (1.0 + $adderShare));
+        $carbonShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * MacroConstants::NATURAL_GAS_CO2_TONNES_PER_MMBTU * 70.37 / MacroConstants::REFERENCE_POWER_PRICE;
 
         $renewables = new Stock();
         $renewables->setTicker('BIRD');
@@ -405,7 +406,7 @@ class UtilityBusinessModelTest extends TestCase
             $math->method('generatePersistentZ')->willReturn(0.0);
             $math->method('checkProbability')->willReturn(false);
             $uplift = CommodityLogisticsSubsystem::carbonPowerPriceUplift($carbon);
-            $macro = new MacroStateDTO(inflationEma: 0.02, carbonPrice: $carbon, wholesalePowerPriceIndexEma: MacroEngine::WHOLESALE_POWER_BASELINE * (1.0 + $uplift));
+            $macro = new MacroStateDTO(inflationEma: 0.02, carbonPrice: $carbon, wholesalePowerPriceIndexEma: MacroConstants::WHOLESALE_POWER_BASELINE * (1.0 + $uplift));
 
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
@@ -416,7 +417,7 @@ class UtilityBusinessModelTest extends TestCase
             $with = $run($ticker, 40.0);
             $share = $with->streamZ[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE];
 
-            $this->assertEqualsWithDelta($without->streamRevenue['unregulated_merchant'] / $without->actualRevenue * (1.0 - ($gasShare / MacroEngine::CARBON_POWER_PASS_THROUGH)), $without->streamZ[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE], 1e-12, $ticker);
+            $this->assertEqualsWithDelta($without->streamRevenue['unregulated_merchant'] / $without->actualRevenue * (1.0 - ($gasShare / MacroConstants::CARBON_POWER_PASS_THROUGH)), $without->streamZ[FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE], 1e-12, $ticker);
             $this->assertGreaterThan(0.0, $share, $ticker);
             $this->assertEqualsWithDelta($share * $with->actualRevenue * $uplift, $with->ebit - $without->ebit, 1e-6 * $with->actualRevenue, $ticker);
         }

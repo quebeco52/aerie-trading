@@ -8,7 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -34,7 +34,7 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
      * Elasticity of throughput to the output gap: the income elasticity of oil-product demand the energy market itself
      * clears on (Hamilton 2009).
      */
-    public const OPERATING_CYCLICALITY = MacroEngine::ENERGY_DEMAND_GAP_SENSITIVITY;
+    public const OPERATING_CYCLICALITY = self::ENERGY_DEMAND_GAP_SENSITIVITY;
     /**
      * Own-price elasticity of the firm's demand: a small share of a global market faces residual demand far more
      * elastic than the market's (Landes & Posner 1981), so any premium over the benchmark loses the sale. Inert while
@@ -43,6 +43,10 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     public const PRICE_ELASTICITY_OF_DEMAND = 2.50;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
     public const INDUSTRY_SUBSTITUTABILITY = 0.15;
+    /**
+     * Income elasticity of energy demand to the output gap (~0.5, Hamilton 2009; Caldara, Cavallo & Iacoviello 2019).
+     */
+    public const ENERGY_DEMAND_GAP_SENSITIVITY = 0.50;
 
     // --- Input Cost Basket ---
     /**
@@ -192,7 +196,7 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     /** Crude in $/bbl implied by the energy index. */
     public function resolveCrudePrice(MacroStateDTO $macroState): float
     {
-        return max(0.0, $macroState->energyPriceIndexEma) * self::REFERENCE_CRUDE_PRICE / MacroEngine::ENERGY_BASELINE;
+        return max(0.0, $macroState->energyPriceIndexEma) * self::REFERENCE_CRUDE_PRICE / MacroConstants::ENERGY_BASELINE;
     }
 
     /**
@@ -204,11 +208,11 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
      */
     public function describeMarginDrivers(MacroStateDTO $macroState): array
     {
-        $baselineRealization = $this->calculateBarrelRealization(self::REFERENCE_CRUDE_PRICE, MacroEngine::CRACK_SPREAD_BASELINE);
+        $baselineRealization = $this->calculateBarrelRealization(self::REFERENCE_CRUDE_PRICE, MacroConstants::CRACK_SPREAD_BASELINE);
         $secondaryDiscount = 1.0 - self::LIGHT_PRODUCT_YIELD - (self::SECONDARY_PRODUCT_YIELD * self::SECONDARY_PRODUCT_REALIZATION);
 
         return [
-            'crack' => self::LIGHT_PRODUCT_YIELD * self::REALIZED_CRACK_CAPTURE * ($macroState->refiningCrackSpreadEma - MacroEngine::CRACK_SPREAD_BASELINE) / $baselineRealization,
+            'crack' => self::LIGHT_PRODUCT_YIELD * self::REALIZED_CRACK_CAPTURE * ($macroState->refiningCrackSpreadEma - MacroConstants::CRACK_SPREAD_BASELINE) / $baselineRealization,
             'crude' => -$secondaryDiscount * ($this->resolveCrudePrice($macroState) - self::REFERENCE_CRUDE_PRICE) / $baselineRealization,
         ];
     }
@@ -243,7 +247,7 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         $captureShift = $captureZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CAPTURE_VOL_SCALAR;
         $crackSpread = max(0.0, $macroState->refiningCrackSpreadEma * (1.0 + $captureShift));
         $realization = $this->calculateBarrelRealization($crudePrice, $crackSpread);
-        $baselineRealization = $this->calculateBarrelRealization(self::REFERENCE_CRUDE_PRICE, MacroEngine::CRACK_SPREAD_BASELINE);
+        $baselineRealization = $this->calculateBarrelRealization(self::REFERENCE_CRUDE_PRICE, MacroConstants::CRACK_SPREAD_BASELINE);
 
         $throughput = max(0.0, (1.0 + ($throughputZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR)) * $throughputMultiplier);
         $actualRevenue = max(0.0, $expectedRevenue * $throughput * $realization / $baselineRealization);

@@ -598,7 +598,7 @@ class OrderFlowImpactWiringTest extends TestCase
 
         $tracker->updateStocks([$this->stock()], $dt, false, new MacroStateDTO(marketVolatility: 0.30));
 
-        $anchor = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $anchor = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $expected = TimeSeries::ewmaLevel($anchor * $anchor, 0.09, $dt, MarketEngine::MARKET_VARIANCE_TREND_YEARS);
         $this->assertNotNull($captured);
         $this->assertEqualsWithDelta($expected, $captured->marketVarianceTrend, 1e-15);

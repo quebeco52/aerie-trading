@@ -12,8 +12,8 @@ use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -134,7 +134,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
 
     // --- Prime Broker Debt Gating ---
     /** Baseline normal macro credit spread for prime brokerage borrowing, the macro through-the-cycle IG spread. */
-    public const BASELINE_PRIME_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
+    public const BASELINE_PRIME_CREDIT_SPREAD = MacroConstants::BASE_CREDIT_SPREAD;
     /** Scalar multiplying credit spread blowout to determine prime debt gating capacity. */
     public const DEBT_GATE_SPREAD_SCALAR = 10.0;
     /** Multiple compression threshold triggering a freeze on new prime leverage expansion. */

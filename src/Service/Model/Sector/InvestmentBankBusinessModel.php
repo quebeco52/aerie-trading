@@ -8,7 +8,7 @@ use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -151,7 +151,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
      * Volatility at which the S&T, vega and gamma terms are neutral: the sim's volatility anchor, where
      * marketVolatilityEma lives.
      */
-    public const VIX_ARBITRAGE_FLOOR        = MacroEngine::MACRO_VOL_BASE_ANCHOR;
+    public const VIX_ARBITRAGE_FLOOR        = MacroConstants::MACRO_VOL_BASE_ANCHOR;
     /** S&T desk gross trading revenue capture scalar per point of excess VIX. */
     public const VIX_ARBITRAGE_SCALAR       = 1.20;
     /** Maximum regulatory VIX threshold before FRTB VaR capital limits force aggressive balance sheet deleveraging. */

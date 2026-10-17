@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\StreamContext;
@@ -39,7 +40,7 @@ final class UtilityRateCaseTest extends TestCase
      * @param list<int> $decideOn
      * @return array<string, float> the final persisted stream state
      */
-    private function runQuarters(int $quarters, array $decideOn = [], float $inflation = 0.03, float $grantShare = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE): array
+    private function runQuarters(int $quarters, array $decideOn = [], float $inflation = 0.03, float $grantShare = FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE): array
     {
         $model = new UtilityBusinessModel();
         $stock = new Stock();
@@ -145,8 +146,8 @@ final class UtilityRateCaseTest extends TestCase
     public function testTheOrderGrantsTheCommissionsShare(): void
     {
         $requested = $this->runQuarters(8)[self::LAG_KEY];
-        $appointed = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE;
-        $elected = $appointed * UtilityBusinessModel::ELECTED_COMMISSION_GRANT_RATIO;
+        $appointed = FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE;
+        $elected = $appointed * FirmEconomics::ELECTED_COMMISSION_GRANT_RATIO;
 
         $this->assertEqualsWithDelta($requested * (1.0 - $appointed), $this->runQuarters(8, [8])[self::LAG_KEY], 1e-12);
         $this->assertEqualsWithDelta($requested * (1.0 - $elected), $this->runQuarters(8, [8], grantShare: $elected)[self::LAG_KEY], 1e-12);
@@ -176,7 +177,7 @@ final class UtilityRateCaseTest extends TestCase
         $model = new UtilityBusinessModel();
         $macro = new MacroStateDTO(inflationEma: 0.03);
 
-        foreach ([null, 0.0, 0.005, 0.02, 0.05, UtilityBusinessModel::MAX_TARIFF_SHORTFALL, 99.0] as $lag) {
+        foreach ([null, 0.0, 0.005, 0.02, 0.05, FirmEconomics::MAX_TARIFF_SHORTFALL, 99.0] as $lag) {
             $physics = $model->getMacroPhysics($this->stockWithLag($lag), $macro);
 
             $this->assertLessThanOrEqual(
@@ -209,7 +210,7 @@ final class UtilityRateCaseTest extends TestCase
         $physics = $model->getMacroPhysics($this->stockWithLag(99.0), new MacroStateDTO(inflationEma: 0.03));
 
         $this->assertEqualsWithDelta(
-            $physics['input_cost_multiplier'] * (1.0 - UtilityBusinessModel::MAX_TARIFF_SHORTFALL),
+            $physics['input_cost_multiplier'] * (1.0 - FirmEconomics::MAX_TARIFF_SHORTFALL),
             $physics['pricing_power_multiplier'],
             1e-9,
             'Attrition is capped at the point interim rates are granted.',
@@ -230,7 +231,7 @@ final class UtilityRateCaseTest extends TestCase
 
         $this->assertGreaterThan(0.0, $lag, 'A lagging tariff never fully catches its cost base.');
         $this->assertLessThan(
-            UtilityBusinessModel::MAX_TARIFF_SHORTFALL,
+            FirmEconomics::MAX_TARIFF_SHORTFALL,
             $lag,
             'Ordinary inflation must not drive the utility onto the interim-relief floor.',
         );

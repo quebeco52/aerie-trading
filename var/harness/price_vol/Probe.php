@@ -5,10 +5,10 @@ declare(strict_types=1);
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\StochasticProcesses;
 
 /**
@@ -102,10 +102,10 @@ final class PriceVolProbe
         $sysJ = 0.0;
         $ex = abs($beta);
         if ($ex > 0.0) {
-            $eu = MacroEngine::SYSTEMIC_JUMP_ETA_UP / $ex;
-            $ed = MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / $ex;
-            $pu = $beta > 0.0 ? MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP : 1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP;
-            $sysJ = MacroEngine::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedSecondMoment($pu, $beta > 0.0 ? $eu : $ed, $beta > 0.0 ? $ed : $eu, $this->capUp, $this->capDown);
+            $eu = MacroConstants::SYSTEMIC_JUMP_ETA_UP / $ex;
+            $ed = MacroConstants::SYSTEMIC_JUMP_ETA_DOWN / $ex;
+            $pu = $beta > 0.0 ? MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP : 1.0 - MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP;
+            $sysJ = MacroConstants::SYSTEMIC_JUMP_INTENSITY * StochasticProcesses::kouTruncatedSecondMoment($pu, $beta > 0.0 ? $eu : $ed, $beta > 0.0 ? $ed : $eu, $this->capUp, $this->capDown);
         }
         $cap = 0.25 * $vi;
         $imp = max(0.0, $ctx->orderFlowVariance);
@@ -136,7 +136,7 @@ final class PriceVolProbe
             $pull = $lD - $lG;
             $diff = $lG - log($p0);
             $mkt = $beta * $dmv * $ctx->marketZ * $sqrtDt;
-            $sec = sqrt($curIdio) * sqrt(MacroEngine::SECTOR_FACTOR_VARIANCE_SHARE) * $ctx->sectorZ * $sqrtDt;
+            $sec = sqrt($curIdio) * sqrt(MarketEngine::SECTOR_FACTOR_VARIANCE_SHARE) * $ctx->sectorZ * $sqrtDt;
             $idio = $diff - $mkt - $sec;
         }
 
@@ -147,8 +147,8 @@ final class PriceVolProbe
                 'n' => 1.0, 'sigma' => $sigma, 'beta' => $beta, 'vi' => $vi, 'floor' => $vi <= $floor + 1e-15 ? 1.0 : 0.0,
                 'scale' => $scale, 'sysJ' => $sysJ, 'ownJ' => $ownJ, 'imp' => $imp, 'ann' => $ann, 'cap' => $cap,
                 'sysJcapB' => $sysJ > $cap ? 1.0 : 0.0, 'ownJcapB' => $ownJ > $cap ? 1.0 : 0.0, 'impcapB' => $imp > $cap ? 1.0 : 0.0, 'anncapB' => $ann > $cap ? 1.0 : 0.0,
-                'fund' => max(0.0, $ctx->fundImpactVariance), 'shockSys' => $shockSys, 'sysVarAnchor' => ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR) ** 2,
-                'sysJallow' => $sysJstrip, 'sysBlock' => ($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR) ** 2 + ($fixed ? $sysJ : 0.0),
+                'fund' => max(0.0, $ctx->fundImpactVariance), 'shockSys' => $shockSys, 'sysVarAnchor' => ($beta * MacroConstants::MACRO_VOL_BASE_ANCHOR) ** 2,
+                'sysJallow' => $sysJstrip, 'sysBlock' => ($beta * MacroConstants::MACRO_VOL_BASE_ANCHOR) ** 2 + ($fixed ? $sysJ : 0.0),
                 'theta' => $theta, 'curIdio' => $curIdio, 'mvol' => $ctx->marketVol, 'brkB' => $brk !== 0.0 ? 1.0 : 0.0,
             ],
         ];

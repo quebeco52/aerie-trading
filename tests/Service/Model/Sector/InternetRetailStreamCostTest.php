@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InternetRetailBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -26,7 +26,7 @@ class InternetRetailStreamCostTest extends TestCase
             // fp, tp, ads, event
             $math->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, $tpZ, 0.0, 0.0);
             $stock = (new Stock())->setTicker('WEAV')->setBeta('1.0');
-            $macro = new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL);
+            $macro = new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL);
 
             return $model->computeActualFinancials($stock, 1000.0, 0.30, 50.0, 0.15, $macro, $math);
         };

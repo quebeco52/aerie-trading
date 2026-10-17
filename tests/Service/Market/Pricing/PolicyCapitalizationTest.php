@@ -6,15 +6,14 @@ namespace App\Tests\Service\Market\Pricing;
 
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Market\Pricing\PolicyCapitalization as Policy;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\PoliticsEngine;
 use PHPUnit\Framework\TestCase;
 
@@ -33,7 +32,7 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta(exp(-self::CAP_RATE * 3.0), Valuation::perpetuityShareAfter(self::CAP_RATE, 3.0), 1e-15);
 
         // Midpoint sum of c e^{-ct} (1 - e^{-lambda (t - t0)}) from t0 = 2 on.
-        $speed = MacroEngine::FISCAL_ADJUSTMENT_SPEED;
+        $speed = MacroConstants::FISCAL_ADJUSTMENT_SPEED;
         $sum = 0.0;
         $step = 0.001;
         for ($t = 2.0 + ($step / 2.0); $t < 400.0; $t += $step) {
@@ -65,7 +64,7 @@ class PolicyCapitalizationTest extends TestCase
     {
         $inForce = Policy::LONG_RUN_CORPORATE_TAX_SHIFT;
         $macro = $this->macro(['corporateTax' => $inForce], expected: ['corporateTax' => $inForce + 0.04], from: 12.5, time: 10.0);
-        $this->assertEqualsWithDelta($this->path(0.04, 0.0, 2.5, Policy::CORPORATE_TAX_TERM_PERSISTENCE, MacroEngine::FISCAL_ADJUSTMENT_SPEED), Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 1e-15);
+        $this->assertEqualsWithDelta($this->path(0.04, 0.0, 2.5, Policy::CORPORATE_TAX_TERM_PERSISTENCE, MacroConstants::FISCAL_ADJUSTMENT_SPEED), Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 1e-15);
         $nearer = $this->macro(['corporateTax' => $inForce], expected: ['corporateTax' => $inForce + 0.04], from: 10.5, time: 10.0);
         $this->assertLessThan(Policy::corporateTaxShiftGap($nearer, self::CAP_RATE), Policy::corporateTaxShiftGap($macro, self::CAP_RATE), 'Nearer, it counts for more.');
     }
@@ -135,7 +134,7 @@ class PolicyCapitalizationTest extends TestCase
 
         // Once the earnings carry it, only the drift back to the long-run law after the term is left to price.
         $takenIn = $this->macro(['corporateTax' => $new], expected: ['corporateTax' => $new], from: 10.0, time: 10.0, realized: $new, embodied: ['corporateTax' => $new]);
-        $this->assertEqualsWithDelta($this->path(0.0, 0.04, 0.0, Policy::CORPORATE_TAX_TERM_PERSISTENCE, MacroEngine::FISCAL_ADJUSTMENT_SPEED), Policy::corporateTaxShiftGap($takenIn, self::CAP_RATE), 1e-15);
+        $this->assertEqualsWithDelta($this->path(0.0, 0.04, 0.0, Policy::CORPORATE_TAX_TERM_PERSISTENCE, MacroConstants::FISCAL_ADJUSTMENT_SPEED), Policy::corporateTaxShiftGap($takenIn, self::CAP_RATE), 1e-15);
         $this->assertLessThan(0.0, Policy::corporateTaxShiftGap($takenIn, self::CAP_RATE));
 
         // The levy, the rules on extraction and the duty likewise, each reaching the accounts in full from the day it
@@ -162,9 +161,9 @@ class PolicyCapitalizationTest extends TestCase
      */
     public function testPublicSpendingIsPricedByThePurchasesItSets(): void
     {
-        $speed = MacroEngine::GOVT_SPENDING_MEAN_REVERSION;
+        $speed = MacroConstants::GOVT_SPENDING_MEAN_REVERSION;
         $longRun = Policy::LONG_RUN_PUBLIC_SPENDING_SHIFT;
-        $shareAt = static fn(float $shift): float => MacroEngine::PUBLIC_PURCHASES_TO_GDP * (1.0 + $shift);
+        $shareAt = static fn(float $shift): float => MacroConstants::PUBLIC_PURCHASES_TO_GDP * (1.0 + $shift);
 
         $carried = $this->spending($shareAt($longRun), $longRun, $longRun);
         $this->assertEqualsWithDelta(0.0, Policy::publicSpendingGap($carried, self::CAP_RATE), 1e-12);
@@ -178,7 +177,7 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta(Policy::publicSpendingGap($foreseen, self::CAP_RATE), Policy::publicSpendingGap($passed, self::CAP_RATE), 1e-12, 'Purchases still closing on the law count until they arrive.');
 
         $this->assertEqualsWithDelta(0.79 * Policy::publicSpendingGap($expected, self::CAP_RATE) * 40.0, Policy::earningsGap($expected, ['publicSpending' => 40.0], 0.21, self::CAP_RATE), 1e-12);
-        $this->assertSame(0.0, Policy::measure('publicSpending', MacroEngine::PUBLIC_PURCHASES_TO_GDP), 'The founding share is no shift.');
+        $this->assertSame(0.0, Policy::measure('publicSpending', MacroConstants::PUBLIC_PURCHASES_TO_GDP), 'The founding share is no shift.');
 
         // A cabinet repairing debt by cuts is priced at the purchases it sets: an indebted one appropriating the law,
         // its cut already made, is worth what a debt-free one appropriating the law less the cut is. Priced on the
@@ -208,9 +207,9 @@ class PolicyCapitalizationTest extends TestCase
      */
     public function testTheUtilityGrantIsPricedByTheShortfallItLeaves(): void
     {
-        $founding = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE;
-        $elected = $founding * UtilityBusinessModel::ELECTED_COMMISSION_GRANT_RATIO;
-        $carried = UtilityBusinessModel::steadyTariffShortfall($founding);
+        $founding = FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE;
+        $elected = $founding * FirmEconomics::ELECTED_COMMISSION_GRANT_RATIO;
+        $carried = FirmEconomics::steadyTariffShortfall($founding);
         $macro = new MacroStateDTO(
             totalTime: 10.0,
             utilityRateCaseGrantShare: $founding,
@@ -220,17 +219,17 @@ class PolicyCapitalizationTest extends TestCase
             previousExpectedLevers: ['utilityRateGrant' => $elected],
             previousExpectedPolicyFrom: 12.5,
         );
-        $rise = UtilityBusinessModel::steadyTariffShortfall($elected) - $carried;
+        $rise = FirmEconomics::steadyTariffShortfall($elected) - $carried;
 
         $this->assertGreaterThan(0.0, $rise, 'A stingier commission leaves the tariff further behind its costs.');
         $this->assertEqualsWithDelta(
-            $this->path($rise, $carried - Policy::LONG_RUN_UTILITY_TARIFF_SHORTFALL, 2.5, Policy::UTILITY_TARIFF_TERM_PERSISTENCE, UtilityBusinessModel::RATE_CASE_DECISION_RATE),
+            $this->path($rise, $carried - Policy::LONG_RUN_UTILITY_TARIFF_SHORTFALL, 2.5, Policy::UTILITY_TARIFF_TERM_PERSISTENCE, FirmEconomics::RATE_CASE_DECISION_RATE),
             Policy::utilityTariffShortfallGap($macro, self::CAP_RATE),
             1e-12,
         );
         $this->assertEqualsWithDelta(-0.79 * Policy::utilityTariffShortfallGap($macro, self::CAP_RATE) * 100.0, Policy::earningsGap($macro, ['utilityRateGrant' => 100.0], 0.21, self::CAP_RATE), 1e-12);
-        $this->assertEqualsWithDelta(UtilityBusinessModel::FOUNDING_TARIFF_SHORTFALL, $carried, 1e-4, 'The trailing earnings open on the founding grant\'s shortfall.');
-        $this->assertSame(UtilityBusinessModel::FOUNDING_TARIFF_SHORTFALL, (new MacroStateDTO())->utilityTariffShortfallEmbodied);
+        $this->assertEqualsWithDelta(FirmEconomics::FOUNDING_TARIFF_SHORTFALL, $carried, 1e-4, 'The trailing earnings open on the founding grant\'s shortfall.');
+        $this->assertSame(FirmEconomics::FOUNDING_TARIFF_SHORTFALL, (new MacroStateDTO())->utilityTariffShortfallEmbodied);
     }
 
     /** The sitting government's coming budget is priced before it passes, so the round that passes it moves nothing. */
@@ -358,7 +357,7 @@ class PolicyCapitalizationTest extends TestCase
             sovereignDebtToGdp: $debt,
             debtTarget: $debt === 0.0 ? 0.0 : min($debt, 0.60),
             debtPace: $pace,
-            governmentSpendingIndex: MacroEngine::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
+            governmentSpendingIndex: MacroConstants::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
             publicSpendingShare: $share,
             governmentSpendingShiftEmbodied: $embodied,
             expectedLevers: ['publicSpending' => $expected ?? $share] + $plank,

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
@@ -12,6 +11,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
@@ -183,10 +183,10 @@ class FinancialInvariantTest extends TestCase
             ->withPolicyRate(0.005)
             ->build();
 
-        $targetRate = $monetarySubsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $targetRate = $monetarySubsystem->calculateTargetRate($state, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
         $newRate = $monetarySubsystem->updatePolicyRate($state, $targetRate, 0.25);
 
-        $this->assertGreaterThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $newRate, 'Policy rate must respect the Effective Lower Bound');
+        $this->assertGreaterThanOrEqual(MacroConstants::EFFECTIVE_LOWER_BOUND, $newRate, 'Policy rate must respect the Effective Lower Bound');
         $this->assertFalse(is_nan($newRate), 'Policy rate must not be NaN');
     }
 
@@ -197,7 +197,7 @@ class FinancialInvariantTest extends TestCase
 
         $withHistory = MacroStateBuilder::create()->withInflation(0.005)->withOutputGap(-0.02)->withPolicyRate(0.01)->build();
         for ($quarter = 0; $quarter < 8; $quarter++) {
-            $monetarySubsystem->calculateTargetRate($withHistory, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+            $monetarySubsystem->calculateTargetRate($withHistory, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
         }
         $fresh = MacroStateBuilder::create()->withInflation(0.03)->withOutputGap(0.01)->withPolicyRate(0.035)->build();
         foreach (['inflation', 'inflationEma', 'outputGap', 'outputGapEma', 'policyRate', 'policyRateEma'] as $field) {
@@ -205,8 +205,8 @@ class FinancialInvariantTest extends TestCase
         }
 
         $this->assertSame(
-            $monetarySubsystem->calculateTargetRate($fresh, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25),
-            $monetarySubsystem->calculateTargetRate($withHistory, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25),
+            $monetarySubsystem->calculateTargetRate($fresh, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25),
+            $monetarySubsystem->calculateTargetRate($withHistory, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25),
             'Two years of undershoot buy no extra accommodation once inflation is back.',
         );
     }
@@ -239,8 +239,8 @@ class FinancialInvariantTest extends TestCase
             ->withInventoryGap(0.05) // Significant 5% inventory overhang
             ->build();
 
-        $gapClean = $aggregateSubsystem->calculateOutputGap($stateClean, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapOverhang = $aggregateSubsystem->calculateOutputGap($stateOverhang, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapClean = $aggregateSubsystem->calculateOutputGap($stateClean, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapOverhang = $aggregateSubsystem->calculateOutputGap($stateOverhang, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         // Invariant: Inventory overhang acts as an explicit drag on production ($gapOverhang < $gapClean)
         $this->assertLessThan(
@@ -267,7 +267,7 @@ class FinancialInvariantTest extends TestCase
         for ($path = 0; $path < 192; $path++) {
             $state = new MacroState();
             $state->agriChi = 0.0;
-            $state->agriXi = log(MacroEngine::AGRI_BASELINE);
+            $state->agriXi = log(MacroConstants::AGRI_BASELINE);
             $sum = 0.0;
             $count = 0;
             for ($tick = 0; $tick < 110 * 48; $tick++) {
@@ -351,7 +351,7 @@ class FinancialInvariantTest extends TestCase
             ->withInflation(0.02)
             ->build();
         $easingState->targetRate = 0.020;
-        $easingCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $easingCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $easingState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
 
         $this->assertGreaterThan(0.0, $easingCurve['yield_2y']);
         $this->assertGreaterThan($easingCurve['yield_2y'], $easingCurve['yield_10y'], 'Normal expansion must exhibit an upward-sloping yield curve (10Y > 2Y)');
@@ -364,7 +364,7 @@ class FinancialInvariantTest extends TestCase
             ->withInflation(0.060)
             ->build();
         $hikingState->targetRate = 0.065;
-        $hikingCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $hikingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $hikingCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $hikingState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
 
         // When short rates are driven to 5.5% while long-term expectations are anchored, the curve inverts
         $this->assertGreaterThan(0.0, $hikingCurve['yield_10y']);
@@ -387,7 +387,7 @@ class FinancialInvariantTest extends TestCase
             ->build();
         $zlbState->unemploymentRateEma = 0.065; // Elevated above 5.0%
 
-        $shadowRate = $monetary->calculateTargetRate($zlbState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $shadowRate = $monetary->calculateTargetRate($zlbState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
         $newPolicyRate = $monetary->updatePolicyRate($zlbState, $shadowRate, 0.25);
 
         // Invariant 1: Wu-Xia shadow rate must remain continuous and positive (not flatlined to 0.00)
@@ -424,7 +424,7 @@ class FinancialInvariantTest extends TestCase
         $maxGap = -1.0;
 
         for ($quarter = 0; $quarter < 40; $quarter++) {
-            $newGap = $aggregateSubsystem->calculateOutputGap($state, 0.040, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+            $newGap = $aggregateSubsystem->calculateOutputGap($state, 0.040, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
             $state->outputGap = $newGap;
             $state->outputGapEma += 0.25 * ($newGap - $state->outputGapEma);
 
@@ -497,8 +497,8 @@ class FinancialInvariantTest extends TestCase
         $crisisState = clone $calmState;
         $crisisState->marketVolatilityEma = 0.45;
 
-        $calmCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $calmState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $crisisCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $crisisState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $calmCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $calmState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
+        $crisisCurve = YieldCurveProbe::balanceSheetAndCurve($monetary, $crisisState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
 
         // Invariant: Safe-haven demand during equity panic must compress sovereign term premium (Campbell et al. 2020)
         $this->assertLessThan(
@@ -514,13 +514,13 @@ class FinancialInvariantTest extends TestCase
 
         // Severe deflation / depression state
         $stressState = MacroStateBuilder::create()
-            ->withPolicyRate(MacroEngine::EFFECTIVE_LOWER_BOUND)
+            ->withPolicyRate(MacroConstants::EFFECTIVE_LOWER_BOUND)
             ->withOutputGap(-0.06)
             ->withInflation(-0.02)
             ->build();
         $stressState->targetRate = -0.05;
 
-        $curve = YieldCurveProbe::balanceSheetAndCurve($monetary, $stressState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curve = YieldCurveProbe::balanceSheetAndCurve($monetary, $stressState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
 
         // Invariant 1: ACM identity holds exactly (10Y Yield = Risk-Neutral 10Y + 10Y Term Premium)
         $this->assertEqualsWithDelta(
@@ -531,10 +531,10 @@ class FinancialInvariantTest extends TestCase
         );
 
         // Invariant 2: All nominal tenors must strictly respect the Effective Lower Bound floor
-        $this->assertGreaterThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $curve['yield_2y'], '2Y yield must respect ELB');
-        $this->assertGreaterThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $curve['yield_5y'], '5Y yield must respect ELB');
-        $this->assertGreaterThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $curve['yield_10y'], '10Y yield must respect ELB');
-        $this->assertGreaterThanOrEqual(MacroEngine::EFFECTIVE_LOWER_BOUND, $curve['yield_30y'], '30Y yield must respect ELB');
+        $this->assertGreaterThanOrEqual(MacroConstants::EFFECTIVE_LOWER_BOUND, $curve['yield_2y'], '2Y yield must respect ELB');
+        $this->assertGreaterThanOrEqual(MacroConstants::EFFECTIVE_LOWER_BOUND, $curve['yield_5y'], '5Y yield must respect ELB');
+        $this->assertGreaterThanOrEqual(MacroConstants::EFFECTIVE_LOWER_BOUND, $curve['yield_10y'], '10Y yield must respect ELB');
+        $this->assertGreaterThanOrEqual(MacroConstants::EFFECTIVE_LOWER_BOUND, $curve['yield_30y'], '30Y yield must respect ELB');
     }
 
     public function testSupplyShocksAreSymmetricProvidingTailwindsWhenBelowBaseline(): void
@@ -558,8 +558,8 @@ class FinancialInvariantTest extends TestCase
             ->withPolicyRate(0.035)
             ->withInflation(0.02)
             ->build();
-        $stateNeutral->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
-        $stateNeutral->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
+        $stateNeutral->energyPriceIndexEma = MacroConstants::ENERGY_BASELINE;
+        $stateNeutral->freightRateIndexEma = MacroConstants::FREIGHT_BASELINE;
 
         $stateCheapEnergy = clone $stateNeutral;
         $stateCheapEnergy->energyPriceIndexEma = 75.0; // 25% energy cost relief / dividend
@@ -567,9 +567,9 @@ class FinancialInvariantTest extends TestCase
         $stateExpensiveEnergy = clone $stateNeutral;
         $stateExpensiveEnergy->energyPriceIndexEma = 125.0; // 25% energy cost spike
 
-        $gapNeutral = $aggregate->calculateOutputGap($stateNeutral, 0.040, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapDividend = $aggregate->calculateOutputGap($stateCheapEnergy, 0.040, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapDrag = $aggregate->calculateOutputGap($stateExpensiveEnergy, 0.040, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapNeutral = $aggregate->calculateOutputGap($stateNeutral, 0.040, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapDividend = $aggregate->calculateOutputGap($stateCheapEnergy, 0.040, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapDrag = $aggregate->calculateOutputGap($stateExpensiveEnergy, 0.040, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         // Invariant: Cheap energy must act as a positive supply dividend ($gapDividend > $gapNeutral)
         $this->assertGreaterThan(
@@ -616,10 +616,10 @@ class FinancialInvariantTest extends TestCase
                 ->build();
             $state->macroCreditSpreadEma = 0.045;
             $state->interbankLiquiditySpreadEma = 0.006;
-            $state->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
-            $state->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
+            $state->energyPriceIndexEma = MacroConstants::ENERGY_BASELINE;
+            $state->freightRateIndexEma = MacroConstants::FREIGHT_BASELINE;
 
-            return $aggregate->calculateOutputGap($state, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+            return $aggregate->calculateOutputGap($state, $yield5y, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         };
         $tight = $gapAt(0.045, 0.045);
         $eased = $gapAt(0.015, 0.025);
@@ -683,13 +683,13 @@ class FinancialInvariantTest extends TestCase
         $expansionState->inflationEma = 0.028;
         $expansionState->tipsBreakeven = 0.027;
 
-        $target = $monetary->calculateTargetRate($expansionState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $target = $monetary->calculateTargetRate($expansionState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
 
         // Invariant: in a hot expansion the Authority's rule leans past Taylor's (1993) prescription, as an activist
         // rule should, but no further than its own weights on the state's inflation and gap.
         $inflation = 0.028;
-        $taylor1993 = MacroEngine::BASE_NATURAL_RATE + $inflation + (0.5 * ($inflation - MacroEngine::TARGET_INFLATION)) + (0.5 * 0.026);
-        $charter = MacroEngine::BASE_NATURAL_RATE + $inflation + (MonetaryPolicySubsystem::TAYLOR_INFLATION_WEIGHT * ($inflation - MacroEngine::TARGET_INFLATION)) + (MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT * 0.026);
+        $taylor1993 = MacroConstants::BASE_NATURAL_RATE + $inflation + (0.5 * ($inflation - MacroConstants::TARGET_INFLATION)) + (0.5 * 0.026);
+        $charter = MacroConstants::BASE_NATURAL_RATE + $inflation + (MonetaryPolicySubsystem::TAYLOR_INFLATION_WEIGHT * ($inflation - MacroConstants::TARGET_INFLATION)) + (MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT * 0.026);
         $this->assertGreaterThan($taylor1993, $target, sprintf('Above Taylor 1993 in a hot expansion (%0.2f%%, got %0.2f%%)', $taylor1993 * 100, $target * 100));
         $this->assertLessThanOrEqual($charter + 0.0025, $target, sprintf('No further than the Charter weights (%0.2f%%, got %0.2f%%)', $charter * 100, $target * 100));
     }
@@ -710,8 +710,8 @@ class FinancialInvariantTest extends TestCase
         $stateHighExp = clone $stateLowExp;
         $stateHighExp->tipsBreakeven = 0.028;
 
-        $curveLow = YieldCurveProbe::balanceSheetAndCurve($monetary, $stateLowExp, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $curveHigh = YieldCurveProbe::balanceSheetAndCurve($monetary, $stateHighExp, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveLow = YieldCurveProbe::balanceSheetAndCurve($monetary, $stateLowExp, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
+        $curveHigh = YieldCurveProbe::balanceSheetAndCurve($monetary, $stateHighExp, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
 
         // Invariant: Higher forward-looking inflation expectations must lift Nelson-Siegel level beta0
         $this->assertGreaterThan(
@@ -737,12 +737,12 @@ class FinancialInvariantTest extends TestCase
         // 1. Neutral macroeconomic state (policy rate = 3.5%, inflation = 2.0%, output gap = 0%)
         $neutralState = MacroStateBuilder::create()
             ->withOutputGap(0.0)
-            ->withInflation(MacroEngine::TARGET_INFLATION)
-            ->withPolicyRate(MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION)
+            ->withInflation(MacroConstants::TARGET_INFLATION)
+            ->withPolicyRate(MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION)
             ->build();
-        $neutralState->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $neutralState->tipsBreakeven = MacroConstants::TARGET_INFLATION;
 
-        $curveNeutral = YieldCurveProbe::balanceSheetAndCurve($monetary, $neutralState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveNeutral = YieldCurveProbe::balanceSheetAndCurve($monetary, $neutralState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
         $spreadNeutral = $curveNeutral['yield_10y'] - $curveNeutral['yield_2y'];
 
         // Invariant 1: In neutral equilibrium, 2s10s spread must be positive and healthy (>= +35 bps)
@@ -761,7 +761,7 @@ class FinancialInvariantTest extends TestCase
         $easingState->targetRate = 0.005;
         $easingState->tipsBreakeven = 0.018;
 
-        $curveEasing = YieldCurveProbe::balanceSheetAndCurve($monetary, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveEasing = YieldCurveProbe::balanceSheetAndCurve($monetary, $easingState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
         $spreadEasing = $curveEasing['yield_10y'] - $curveEasing['yield_2y'];
 
         // Invariant 2: In monetary easing cycles, the yield curve must bull-steepen significantly (>= +100 bps)
@@ -783,7 +783,7 @@ class FinancialInvariantTest extends TestCase
         // positive.
         $peakState->termPremiumRegime = 0.0;
 
-        $curvePeak = YieldCurveProbe::balanceSheetAndCurve($monetary, $peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curvePeak = YieldCurveProbe::balanceSheetAndCurve($monetary, $peakState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
         $spreadPeak = $curvePeak['yield_10y'] - $curvePeak['yield_2y'];
 
         // Invariant 3: At the peak of monetary policy tightening in a low-premium era, 2s10s spread must invert (< 0.0)
@@ -833,7 +833,7 @@ class FinancialInvariantTest extends TestCase
 
             $path = [];
             for ($quarter = 0; $quarter < 12; $quarter++) {
-                $newGap = $aggregate->calculateOutputGap($state, $yield5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+                $newGap = $aggregate->calculateOutputGap($state, $yield5y, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
                 $state->outputGap = $newGap;
                 $state->outputGapEma += 0.25 * ($newGap - $state->outputGapEma);
                 $path[] = $newGap;

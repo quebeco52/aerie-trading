@@ -5,18 +5,19 @@ declare(strict_types=1);
 use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\FailureSweep;
+use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\StockTracker;
-use App\Service\Politics\PoliticsEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
+use App\Service\Politics\PoliticsEngine;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Console\Tester\CommandTester;
-use App\Service\Corporate\EarningsEngine;
 
 /**
  * Whole-board headless replay on the PRODUCTION service graph: real container, in-memory Redis, stub EM,
@@ -181,8 +182,8 @@ final class RecessionDiagHarnessTest extends KernelTestCase
                 $q["lat{$bp}_t"] = ($q["lat{$bp}_t"] ?? 0) + ($this->gridLatch[$bp] ? 1 : 0);
                 $q["uni{$bp}_t"] = ($q["uni{$bp}_t"] ?? 0) + ($this->gridLatch[$bp] || $sahmNow ? 1 : 0);
             }
-            $q['elb_t'] = ($q['elb_t'] ?? 0) + ($m->policyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD ? 1 : 0);
-            $q['evans_t'] = ($q['evans_t'] ?? 0) + (($m->policyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD && max(MacroEngine::EFFECTIVE_LOWER_BOUND, $m->targetRate) > $m->policyRate
+            $q['elb_t'] = ($q['elb_t'] ?? 0) + ($m->policyRate <= MacroConstants::ZLB_PROXIMITY_THRESHOLD ? 1 : 0);
+            $q['evans_t'] = ($q['evans_t'] ?? 0) + (($m->policyRate <= MacroConstants::ZLB_PROXIMITY_THRESHOLD && max(MacroConstants::EFFECTIVE_LOWER_BOUND, $m->targetRate) > $m->policyRate
                 && $m->unemploymentRateEma > $m->nairu + 0.009 && max($m->inflationEma, $m->tipsBreakeven) < 0.025) ? 1 : 0);
             $q['regime_t'] = ($q['regime_t'] ?? 0) + ($regimeNow ? 1 : 0);
             $q['fastcut_t'] = ($q['fastcut_t'] ?? 0) + ($regimeNow && $m->targetRate < $m->policyRate ? 1 : 0);
@@ -208,8 +209,8 @@ final class RecessionDiagHarnessTest extends KernelTestCase
             // Panic-speed question: the condition the pre-2026-10-11 rule accelerated hikes on (target above the rate, not
             // held by Evans, max(headline, headline EMA) over 3.5%), read on either tree, so the fix arm reports how often
             // it would have engaged.
-            $evansNow = $this->prevPolicy <= MacroEngine::ZLB_PROXIMITY_THRESHOLD && $m->unemploymentRateEma > $m->nairu + 0.009 && max($m->inflationEma, $m->tipsBreakeven) < 0.025;
-            $q['panic_t'] = ($q['panic_t'] ?? 0) + (is_finite($this->prevPolicy) && !$evansNow && max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(0.20, $m->targetRate)) > $this->prevPolicy
+            $evansNow = $this->prevPolicy <= MacroConstants::ZLB_PROXIMITY_THRESHOLD && $m->unemploymentRateEma > $m->nairu + 0.009 && max($m->inflationEma, $m->tipsBreakeven) < 0.025;
+            $q['panic_t'] = ($q['panic_t'] ?? 0) + (is_finite($this->prevPolicy) && !$evansNow && max(MacroConstants::EFFECTIVE_LOWER_BOUND, min(0.20, $m->targetRate)) > $this->prevPolicy
                 && max($m->inflation, $m->inflationEma) > 0.035 ? 1 : 0);
             $this->prevPolicy = $m->policyRate;
             unset($q);

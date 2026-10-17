@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\MerchantHouseBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -16,7 +16,7 @@ class MerchantHouseBusinessModelTest extends TestCase
     private MerchantHouseBusinessModel $model;
 
     /** The short rate a calm economy sits at: the neutral rate the MacroStateDTO itself perceives. */
-    private const NEUTRAL_POLICY_RATE = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+    private const NEUTRAL_POLICY_RATE = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
 
     protected function setUp(): void
     {
@@ -49,8 +49,8 @@ class MerchantHouseBusinessModelTest extends TestCase
     {
         return new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             policyRateEma: self::NEUTRAL_POLICY_RATE,
         );
     }
@@ -108,8 +108,8 @@ class MerchantHouseBusinessModelTest extends TestCase
         $boom = new MacroStateDTO(
             outputGapEma: 0.0,
             agriculturalCommodityIndexEma: 140.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             policyRateEma: self::NEUTRAL_POLICY_RATE,
         );
 
@@ -137,8 +137,8 @@ class MerchantHouseBusinessModelTest extends TestCase
     {
         $busy = new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             policyRateEma: self::NEUTRAL_POLICY_RATE,
             manufacturingPmiEma: 57.0,
         );
@@ -158,8 +158,8 @@ class MerchantHouseBusinessModelTest extends TestCase
     {
         $dislocated = new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             policyRateEma: self::NEUTRAL_POLICY_RATE,
             energyInventoryIndexEma: 72.0,
             supplyChainPressureIndexEma: 2.20,
@@ -200,8 +200,8 @@ class MerchantHouseBusinessModelTest extends TestCase
     {
         $zirp = new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             policyRateEma: 0.0,
         );
 
@@ -218,8 +218,8 @@ class MerchantHouseBusinessModelTest extends TestCase
         $recession = new MacroStateDTO(
             outputGapEma: -0.03,
             foreignOutputGapEma: 0.0,
-            manufacturingPmiEma: MacroEngine::PMI_BASELINE,
-            tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE,
+            manufacturingPmiEma: MacroConstants::PMI_BASELINE,
+            tradeBalanceToGdpEma: MacroConstants::TRADE_BALANCE_BASELINE,
             exchangeRateIndexEma: 100.0,
         );
 
@@ -236,7 +236,7 @@ class MerchantHouseBusinessModelTest extends TestCase
             foreignOutputGapEma: -0.02,
             industrialMetalsIndexEma: 60.0,
             manufacturingPmiEma: 47.0,
-            tradeBalanceToGdpEma: MacroEngine::TRADE_BALANCE_BASELINE,
+            tradeBalanceToGdpEma: MacroConstants::TRADE_BALANCE_BASELINE,
             exchangeRateIndexEma: 100.0,
         );
         $expected = (0.55 * ((-0.06 * 0.25) + (-0.02 * 2.0))) + (0.30 * (-0.03 * 0.15));

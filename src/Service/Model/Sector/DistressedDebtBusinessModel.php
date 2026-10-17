@@ -8,8 +8,8 @@ use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\CreditRisk;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 
@@ -64,7 +64,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
      * Baseline high-yield credit spread (macro IG baseline x HY multiple) above which distressed turnaround
      * opportunities surge.
      */
-    public const HY_SPREAD_BLOWOUT_BASELINE     = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+    public const HY_SPREAD_BLOWOUT_BASELINE     = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
     /** Sensitivity multiplier translating excess high-yield credit spreads into turnaround recovery revenue. */
     public const HY_SPREAD_SURGE_SCALAR         = 10.00;
     /**
@@ -144,7 +144,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
      */
     private function resolveDistressMultiplier(\App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
-        $creditSpread = ($macroState->macroCreditSpread !== MacroEngine::BASE_CREDIT_SPREAD)
+        $creditSpread = ($macroState->macroCreditSpread !== MacroConstants::BASE_CREDIT_SPREAD)
             ? $macroState->macroCreditSpread
             : $macroState->macroCreditSpreadEma;
         $outputGap = $macroState->outputGapEma;

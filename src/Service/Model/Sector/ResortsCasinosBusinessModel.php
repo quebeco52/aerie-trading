@@ -8,12 +8,11 @@ use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -209,7 +208,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return MacroEngine::TREND_REAL_GROWTH
+        return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
@@ -262,7 +261,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $eventZ     = $streams->generateExogenousZ('event', 0.0);
 
         // --- Regulatory Regime (Hamilton 1989 Markov switching) ---
-        $quarter = EarningsEngine::QUARTERLY_TIME_STEP;
+        $quarter = FinancialConstants::QUARTER_YEARS;
         $streams->evolveRegime(self::CRACKDOWN_REGIME, 0.0, 1.0 - exp(-$quarter / self::GAMING_CRACKDOWN_MEAN_YEARS));
         $eventType = null;
         if (Distributions::calculateNormalCDF($eventZ) < 1.0 - exp(-self::GAMING_CRACKDOWN_INTENSITY * $quarter)

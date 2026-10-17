@@ -7,6 +7,7 @@ namespace App\Tests\Service\Macro;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Math\MacroConstants;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -48,7 +49,7 @@ class SystemicEventTest extends TestCase
     public function testInterbankFundingFreezeIsReported(): void
     {
         $state = new MacroState();
-        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
+        $state->interbankLiquiditySpread = MacroConstants::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
 
         $this->assertSame(ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE, $this->fire($state));
     }
@@ -56,7 +57,7 @@ class SystemicEventTest extends TestCase
     public function testHighYieldBlowOutIsReportedAsCreditSeizure(): void
     {
         $state = new MacroState();
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
 
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
     }
@@ -84,7 +85,7 @@ class SystemicEventTest extends TestCase
     public function testSustainedCurveInversionTripsTheAlarm(): void
     {
         $state = new MacroState();
-        $state->inversionDuration = MacroEngine::SYSTEMIC_INVERSION_ALARM_YEARS + 0.25;
+        $state->inversionDuration = MacroConstants::SYSTEMIC_INVERSION_ALARM_YEARS + 0.25;
 
         $this->assertSame(ShockEvent::YIELD_CURVE_INVERSION_ALARM, $this->fire($state));
     }
@@ -112,7 +113,7 @@ class SystemicEventTest extends TestCase
     {
         $state = new MacroState();
         $state->totalTime = 12.5;
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
 
         $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
@@ -148,7 +149,7 @@ class SystemicEventTest extends TestCase
     {
         $state = new MacroState();
         $state->totalTime = 12.5;
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
 
         $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
@@ -175,8 +176,8 @@ class SystemicEventTest extends TestCase
     public function testMostSevereConditionWinsWhenSeveralTriggerTogether(): void
     {
         $state = new MacroState();
-        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->interbankLiquiditySpread = MacroConstants::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
         $state->recessionDeclared = true;
 
         $this->assertSame(
@@ -189,7 +190,7 @@ class SystemicEventTest extends TestCase
     public function testEventIsAPulseAndNotALatch(): void
     {
         $state = new MacroState();
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
 
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
         $this->assertNull($this->fire($state), 'The event must clear on the next tick rather than latching on.');
@@ -198,7 +199,7 @@ class SystemicEventTest extends TestCase
     public function testSustainedCrisisReportsOncePerEpisode(): void
     {
         $state = new MacroState();
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
 
         $fired = 0;
         for ($tick = 0; $tick < self::TICKS_PER_YEAR; $tick++) {
@@ -209,17 +210,17 @@ class SystemicEventTest extends TestCase
 
         $this->assertSame(1, $fired, 'A year-long crisis is one headline, not one per cooldown window.');
 
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD - 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD - 0.02;
         $this->assertNull($this->fire($state), 'The seizure eases.');
 
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state), 'A fresh seizure is fresh news.');
     }
 
     public function testAnAlarmHeldBackByTheCooldownReportsWhenItEnds(): void
     {
         $state = new MacroState();
-        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
+        $state->interbankLiquiditySpread = MacroConstants::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
         $state->recessionDeclared = true;
         $first = $this->fire($state);
         $this->assertSame(ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE, $first);
@@ -250,7 +251,7 @@ class SystemicEventTest extends TestCase
     public function testCooldownSurvivesSerializationRoundTrip(): void
     {
         $state = new MacroState();
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
 
         // Tick 1: event fires and sets cooldown
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
@@ -277,12 +278,12 @@ class SystemicEventTest extends TestCase
     public function testASovereignDowngradeIsReportedBelowACreditSeizureAndAboveARecession(): void
     {
         $state = new MacroState();
-        $state->sovereignRiskSpread = MacroEngine::SYSTEMIC_SOVEREIGN_STRESS_SPREAD + 0.005;
+        $state->sovereignRiskSpread = MacroConstants::SYSTEMIC_SOVEREIGN_STRESS_SPREAD + 0.005;
         $state->recessionDeclared = true;
         $this->assertSame(ShockEvent::SOVEREIGN_DOWNGRADE, $this->fire($state));
 
         $state->eventCooldownTimer = 0.0;
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
     }
 
@@ -307,7 +308,7 @@ class SystemicEventTest extends TestCase
     public function testHouseholdDeleveragingIsReportedBelowAStormAndOnlyWhileCreditContracts(): void
     {
         $state = new MacroState();
-        $state->householdDebtServiceGap = MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN + 0.01;
+        $state->householdDebtServiceGap = MacroConstants::HOUSEHOLD_DSR_STRESS_MARGIN + 0.01;
         $state->householdDebtToIncome = 1.20;
         $state->householdDebtToIncomeEma = 1.25;
         $this->assertSame(ShockEvent::HOUSEHOLD_DELEVERAGING, $this->fire($state));
@@ -348,8 +349,8 @@ class SystemicEventTest extends TestCase
         $state = new MacroState();
         $state->totalTime = 3.0;
         $state->eventCooldownTimer = 0.15;
-        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->interbankLiquiditySpread = MacroConstants::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
         $state->recessionDeclared = true;
         $state->lastCatastropheAt = 3.0;
         $state->lastCatastropheSeverity = 2.0;
@@ -365,7 +366,7 @@ class SystemicEventTest extends TestCase
         $state = new MacroState();
         $state->totalTime = 12.5;
         $state->lastCreditCrisisAt = 12.5;
-        $state->interbankLiquiditySpread = MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
+        $state->interbankLiquiditySpread = MacroConstants::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD + 0.005;
 
         $this->assertSame(ShockEvent::BANKING_CRISIS, $this->fire($state), 'The crisis is the cause; the funding freeze it forces is the symptom.');
 
@@ -377,7 +378,7 @@ class SystemicEventTest extends TestCase
     {
         $state = new MacroState();
         $state->totalTime = 12.5;
-        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+        $state->highYieldCreditSpread = MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
         $this->assertGreaterThan(0.0, $state->eventCooldownTimer);
 

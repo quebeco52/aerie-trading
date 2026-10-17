@@ -1842,7 +1842,7 @@ class DebtEngineTest extends TestCase
             new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.04, yield5yEma: 0.045, macroCreditSpreadEma: $ema, macroCreditSpreadTrend: $trend, corporateTaxRate: 0.21),
         );
 
-        $multiple = static fn(float $seeded): float => CreditRisk::calculateIssuerSpreadMultiple($seeded, \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD, \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD * \App\Service\Macro\MacroEngine::HY_BASE_SPREAD_MULTIPLIER);
+        $multiple = static fn(float $seeded): float => CreditRisk::calculateIssuerSpreadMultiple($seeded, \App\Service\Math\MacroConstants::BASE_CREDIT_SPREAD, \App\Service\Math\MacroConstants::BASE_CREDIT_SPREAD * \App\Service\Math\MacroConstants::HY_BASE_SPREAD_MULTIPLIER);
         $bbb = CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'] * $multiple(0.0163);
         $this->assertEqualsWithDelta($bbb * 0.019, $metrics(0.019, 0.015)->dynamicSpread, 1e-12, 'A firm seeded at the BBB spread trades at the BBB multiple of the index.');
         $this->assertEqualsWithDelta($bbb * 0.012, $metrics(0.012, 0.015)->dynamicSpread, 1e-12, 'A tight market lowers the cost of new debt.');

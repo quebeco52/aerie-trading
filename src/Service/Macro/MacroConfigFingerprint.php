@@ -12,6 +12,9 @@ use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\CreditRisk;
+use App\Service\Math\MacroConstants;
+use App\Service\Math\MacroTransmission;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\PoliticsEngine;
 
@@ -27,10 +30,12 @@ final class MacroConfigFingerprint
     // --- Parameter Classes ---
 
     /**
-     * The classes whose constants are the macro economy's parameters, the government's among them, since the levers it
-     * sets move the economy.
+     * The classes whose constants are the macro economy's parameters: the shared ones, the engine's, its subsystems',
+     * the formulas in Math that set credit spreads and deal flow, and the government's, since the levers it sets move
+     * the economy.
      */
     private const PARAMETER_CLASSES = [
+        MacroConstants::class,
         MacroEngine::class,
         MonetaryPolicySubsystem::class,
         LaborMarketSubsystem::class,
@@ -39,6 +44,8 @@ final class MacroConfigFingerprint
         AssetMarketSubsystem::class,
         CreditFiscalSubsystem::class,
         SovereignFundSubsystem::class,
+        CreditRisk::class,
+        MacroTransmission::class,
         PoliticsEngine::class,
         CoalitionFormation::class,
         AerieDiet::class,

@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\ReinsuranceBusinessModel;
@@ -64,14 +64,14 @@ final class InsuranceClaimsInflationTest extends TestCase
 
     private static function inflation(float $coreGoods, float $supercore): MacroStateDTO
     {
-        return new MacroStateDTO(coreGoodsInflationEma: $coreGoods, supercoreInflationEma: $supercore, inflationEma: MacroEngine::TARGET_INFLATION);
+        return new MacroStateDTO(coreGoodsInflationEma: $coreGoods, supercoreInflationEma: $supercore, inflationEma: MacroConstants::TARGET_INFLATION);
     }
 
     /** @param class-string<InsuranceBusinessModel> $class */
     #[DataProvider('insurers')]
     public function testClaimsInflationAtTargetLeavesTheLossRatioAlone(string $class): void
     {
-        [$state] = $this->runQuarters($class, 8, self::inflation(MacroEngine::TARGET_INFLATION, MacroEngine::TARGET_INFLATION));
+        [$state] = $this->runQuarters($class, 8, self::inflation(MacroConstants::TARGET_INFLATION, MacroConstants::TARGET_INFLATION));
 
         $this->assertEqualsWithDelta(0.0, $state[InsuranceBusinessModel::STATE_UNRECOVERED_CLAIMS_COST], 1e-12);
     }
@@ -80,7 +80,7 @@ final class InsuranceClaimsInflationTest extends TestCase
     #[DataProvider('insurers')]
     public function testAnInflationSurgeRaisesTheCostRatioUntilRatesCatchUp(string $class): void
     {
-        $calm = self::inflation(MacroEngine::TARGET_INFLATION, MacroEngine::TARGET_INFLATION);
+        $calm = self::inflation(MacroConstants::TARGET_INFLATION, MacroConstants::TARGET_INFLATION);
         $surge = self::inflation(0.08, 0.05);
         [, $calmRatio] = $this->runQuarters($class, 12, $calm);
         [$surgeState, $surgeRatio] = $this->runQuarters($class, 12, $surge);
@@ -88,7 +88,7 @@ final class InsuranceClaimsInflationTest extends TestCase
         $this->assertGreaterThan($calmRatio, $surgeRatio, 'Claims that inflate faster than filed rates cost margin.');
 
         // A steady excess x settles at x times the catch-up lag.
-        $excess = (InsuranceBusinessModel::CLAIMS_COST_GOODS_SHARE * 0.08) + ((1.0 - InsuranceBusinessModel::CLAIMS_COST_GOODS_SHARE) * 0.05) - MacroEngine::TARGET_INFLATION;
+        $excess = (InsuranceBusinessModel::CLAIMS_COST_GOODS_SHARE * 0.08) + ((1.0 - InsuranceBusinessModel::CLAIMS_COST_GOODS_SHARE) * 0.05) - MacroConstants::TARGET_INFLATION;
         [$settled] = $this->runQuarters($class, 80, $surge);
         $this->assertEqualsWithDelta($excess * InsuranceBusinessModel::PREMIUM_CATCH_UP_YEARS, $settled[InsuranceBusinessModel::STATE_UNRECOVERED_CLAIMS_COST], 1e-6);
 

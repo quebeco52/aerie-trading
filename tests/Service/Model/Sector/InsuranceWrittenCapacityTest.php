@@ -7,8 +7,8 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\Distributions;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
@@ -75,7 +75,7 @@ final class InsuranceWrittenCapacityTest extends TestCase
         $term = InsuranceBusinessModel::WRITTEN_SHARE_ADJUSTMENT_YEARS;
         $this->assertSame(InsuranceBusinessModel::POLICY_TERM_YEARS, $term);
 
-        foreach ([EarningsEngine::QUARTERLY_TIME_STEP, 1.0 / 360.0] as $dt) {
+        foreach ([FinancialConstants::QUARTER_YEARS, 1.0 / 360.0] as $dt) {
             $next = InsuranceBusinessModel::adjustWrittenShare(1.0, 0.40, $dt);
             $this->assertEqualsWithDelta(exp(-$dt / $term), ($next - 0.40) / (1.0 - 0.40), 1e-12, sprintf('dt = %.5f', $dt));
 
@@ -105,7 +105,7 @@ final class InsuranceWrittenCapacityTest extends TestCase
         $result = $model->computeActualFinancials($stock, 1.0e9, 0.90, 1.0e8, 0.10, $macro, $math);
         $advanced = $result->streamZ[InsuranceBusinessModel::STATE_WRITTEN_SHARE] ?? null;
         $this->assertNotNull($advanced);
-        $this->assertEqualsWithDelta(InsuranceBusinessModel::adjustWrittenShare(1.0, $target, EarningsEngine::QUARTERLY_TIME_STEP), $advanced, 1e-9);
+        $this->assertEqualsWithDelta(InsuranceBusinessModel::adjustWrittenShare(1.0, $target, FinancialConstants::QUARTER_YEARS), $advanced, 1e-9);
 
         $stock->setEarningsMomentumZ(array_merge($stock->getEarningsMomentumZ() ?? [], [InsuranceBusinessModel::STATE_WRITTEN_SHARE => $advanced]));
         $turnover = $model->getTargetMetrics($stock, $macro, $math)['baseline_roic']

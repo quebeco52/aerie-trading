@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Macro;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
 use PHPUnit\Framework\TestCase;
@@ -55,7 +55,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
 
         $this->assertGreaterThan(50.0, $expansionState->manufacturingPmi, 'PMI must indicate expansion (>50) during an economic boom.');
         $this->assertGreaterThanOrEqual(52.0, $expansionState->manufacturingPmi);
-        $this->assertLessThanOrEqual(MacroEngine::MAX_PMI, $expansionState->manufacturingPmi);
+        $this->assertLessThanOrEqual(MacroAggregateSubsystem::MAX_PMI, $expansionState->manufacturingPmi);
 
         // 2. Contractionary scenario: negative output gap, depressed capacity utilization, inventory overhang
         $recessionState = (new MacroStateBuilder())
@@ -75,31 +75,31 @@ class TradingEconomicsIndicatorsTest extends TestCase
 
         $this->assertLessThan(50.0, $recessionState->manufacturingPmi, 'PMI must indicate contraction (<50) during a recession.');
         $this->assertLessThanOrEqual(48.0, $recessionState->manufacturingPmi);
-        $this->assertGreaterThanOrEqual(MacroEngine::MIN_PMI, $recessionState->manufacturingPmi);
+        $this->assertGreaterThanOrEqual(MacroAggregateSubsystem::MIN_PMI, $recessionState->manufacturingPmi);
     }
 
     public function testProducerPriceInflationStageOfProcessingTransmission(): void
     {
         $dt = 0.25;
-        $tfpGrowth = MacroEngine::TFP_DRIFT;
+        $tfpGrowth = MacroConstants::TFP_DRIFT;
 
         // 1. Benign conditions: each index sits ON its own trend, so a stable price contributes nothing
         // however high its level is. The legs take rates.
         $calmState = (new MacroStateBuilder())->build();
-        $calmState->energyPriceIndex = MacroEngine::ENERGY_BASELINE;
-        $calmState->energyPriceIndexTrend = MacroEngine::ENERGY_BASELINE;
-        $calmState->industrialMetalsIndex = MacroEngine::METALS_BASELINE;
-        $calmState->industrialMetalsIndexEma = MacroEngine::METALS_BASELINE;
-        $calmState->industrialMetalsIndexTrend = MacroEngine::METALS_BASELINE;
-        $calmState->agriculturalCommodityIndex = MacroEngine::AGRI_BASELINE;
-        $calmState->agriculturalCommodityIndexTrend = MacroEngine::AGRI_BASELINE;
+        $calmState->energyPriceIndex = MacroConstants::ENERGY_BASELINE;
+        $calmState->energyPriceIndexTrend = MacroConstants::ENERGY_BASELINE;
+        $calmState->industrialMetalsIndex = MacroConstants::METALS_BASELINE;
+        $calmState->industrialMetalsIndexEma = MacroConstants::METALS_BASELINE;
+        $calmState->industrialMetalsIndexTrend = MacroConstants::METALS_BASELINE;
+        $calmState->agriculturalCommodityIndex = MacroConstants::AGRI_BASELINE;
+        $calmState->agriculturalCommodityIndexTrend = MacroConstants::AGRI_BASELINE;
         $calmState->supplyChainPressureIndex = 0.0;
-        $calmState->wageGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowth; // Neutral wage growth
+        $calmState->wageGrowth = MacroConstants::TARGET_INFLATION + $tfpGrowth; // Neutral wage growth
         $calmState->outputGap = 0.0;
 
         $this->macroAggregateSubsystem->calculateProducerPriceInflation($calmState, $tfpGrowth, $dt);
 
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $calmState->producerPriceInflation, 0.010, 'Calm baseline PPI should track close to long-run inflation target.');
+        $this->assertEqualsWithDelta(MacroConstants::TARGET_INFLATION, $calmState->producerPriceInflation, 0.010, 'Calm baseline PPI should track close to long-run inflation target.');
 
         // 2. Stagflationary upstream cost shock: energy surge, metals spike, supply bottlenecks
         $shockState = (new MacroStateBuilder())
@@ -107,11 +107,11 @@ class TradingEconomicsIndicatorsTest extends TestCase
             ->build();
         // Displaced from a trend still at baseline, so the leg reads a genuine price SURGE.
         $shockState->energyPriceIndex = 180.0; // +80% energy shock
-        $shockState->energyPriceIndexTrend = MacroEngine::ENERGY_BASELINE;
+        $shockState->energyPriceIndexTrend = MacroConstants::ENERGY_BASELINE;
         $shockState->industrialMetalsIndex = 140.0;
-        $shockState->industrialMetalsIndexTrend = MacroEngine::METALS_BASELINE;
+        $shockState->industrialMetalsIndexTrend = MacroConstants::METALS_BASELINE;
         $shockState->agriculturalCommodityIndex = 130.0;
-        $shockState->agriculturalCommodityIndexTrend = MacroEngine::AGRI_BASELINE;
+        $shockState->agriculturalCommodityIndexTrend = MacroConstants::AGRI_BASELINE;
         $shockState->supplyChainPressureIndex = 2.5; // Supply bottleneck
         $shockState->wageGrowth = 0.060;            // Wage pressure
         $shockState->outputGap = -0.010;
@@ -120,7 +120,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
 
         $this->assertGreaterThan($calmState->producerPriceInflation, $shockState->producerPriceInflation);
         $this->assertGreaterThan(0.050, $shockState->producerPriceInflation, 'Upstream wholesale cost surges must push PPI significantly higher.');
-        $this->assertLessThanOrEqual(MacroEngine::MAX_PPI_INFLATION, $shockState->producerPriceInflation);
+        $this->assertLessThanOrEqual(MacroAggregateSubsystem::MAX_PPI_INFLATION, $shockState->producerPriceInflation);
 
         // 3. The same expensive levels with the trend caught up: an index parked at 180 for a decade is an
         // expensive economy, not an inflating one. Reading that level as a rate was the bug.
@@ -159,12 +159,12 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $stateOvervalued = (new MacroStateBuilder())->build();
         $stateOvervalued->outputGap = 0.035;
         $stateOvervalued->exchangeRateIndex = 115.0; // 15% currency appreciation
-        $stateOvervalued->tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE;
+        $stateOvervalued->tradeBalanceToGdp = MacroConstants::TRADE_BALANCE_BASELINE;
 
         $this->assetMarketSubsystem->calculateTradeBalance($stateOvervalued, $dt);
 
         $this->assertLessThan(
-            MacroEngine::TRADE_BALANCE_BASELINE,
+            MacroConstants::TRADE_BALANCE_BASELINE,
             $stateOvervalued->tradeBalanceToGdp,
             'Currency appreciation and strong domestic absorption must deteriorate the trade balance.',
         );
@@ -173,12 +173,12 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $stateDepreciated = (new MacroStateBuilder())->build();
         $stateDepreciated->outputGap = -0.035;
         $stateDepreciated->exchangeRateIndex = 85.0; // 15% currency depreciation
-        $stateDepreciated->tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE;
+        $stateDepreciated->tradeBalanceToGdp = MacroConstants::TRADE_BALANCE_BASELINE;
 
         $this->assetMarketSubsystem->calculateTradeBalance($stateDepreciated, $dt);
 
         $this->assertGreaterThan(
-            MacroEngine::TRADE_BALANCE_BASELINE,
+            MacroConstants::TRADE_BALANCE_BASELINE,
             $stateDepreciated->tradeBalanceToGdp,
             'Currency depreciation and domestic import compression must improve the net export balance.',
         );
@@ -201,7 +201,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $boomState->sloosTighteningIndexEma = 0.0;
         $boomState->housingStartsIndex = 100.0;
 
-        $this->assetMarketSubsystem->calculateHousingStarts($boomState, MacroEngine::TARGET_INFLATION, $dt);
+        $this->assetMarketSubsystem->calculateHousingStarts($boomState, MacroConstants::TARGET_INFLATION, $dt);
 
         $this->assertGreaterThan(
             100.0,
@@ -222,7 +222,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $slumpState->sloosTighteningIndexEma = 0.40; // 40% net banks tightening mortgages
         $slumpState->housingStartsIndex = 100.0;
 
-        $this->assetMarketSubsystem->calculateHousingStarts($slumpState, MacroEngine::TARGET_INFLATION, $dt);
+        $this->assetMarketSubsystem->calculateHousingStarts($slumpState, MacroConstants::TARGET_INFLATION, $dt);
 
         $this->assertLessThan(
             100.0,
@@ -234,8 +234,8 @@ class TradingEconomicsIndicatorsTest extends TestCase
     public function testMoneySupplyGrowthMonetaryTransmission(): void
     {
         $dt = 0.25;
-        $tfpGrowth = MacroEngine::TFP_DRIFT;
-        $neutralGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowth + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+        $tfpGrowth = MacroConstants::TFP_DRIFT;
+        $neutralGrowth = MacroConstants::TARGET_INFLATION + $tfpGrowth + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE;
 
         // 1. Central bank quantitative easing (QE) & expansionary bank credit
         $qeState = (new MacroStateBuilder())->build();

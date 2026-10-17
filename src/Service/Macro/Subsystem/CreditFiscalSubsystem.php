@@ -14,12 +14,12 @@ use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
-use App\Service\Model\Sector\UtilityBusinessModel;
 
 /**
  * Handles corporate and retail credit spreads, interbank liquidity (TED spread),
@@ -66,7 +66,7 @@ class CreditFiscalSubsystem
      * remittance. These carry the automatic stabilisers and the structural stance (Girouard & Andre 2005: income taxes,
      * contributions and unemployment benefits), so the rate firms pay moves only with the law.
      */
-    public const FOUNDING_NET_TAX_RATE = MacroEngine::PUBLIC_PURCHASES_TO_GDP - (MacroEngine::BASE_CORPORATE_TAX_RATE * self::CORPORATE_PROFITS_TO_GDP) - self::FOUNDING_CENTRAL_BANK_REMITTANCE;
+    public const FOUNDING_NET_TAX_RATE = MacroConstants::PUBLIC_PURCHASES_TO_GDP - (MacroConstants::BASE_CORPORATE_TAX_RATE * self::CORPORATE_PROFITS_TO_GDP) - self::FOUNDING_CENTRAL_BANK_REMITTANCE;
     /**
      * Net corporate dividends over GDP, the base the tax on dividends is levied on before the taxable share of holders:
      * 5.5%, between the financial centres' net distributions, paid less received, 2015-19 (Switzerland 5.9%, Ireland 5%
@@ -108,7 +108,7 @@ class CreditFiscalSubsystem
 
     // --- The Budget's Debt Path (each cabinet's debt target and pace: Politics\AerieDiet::DEBT_PLANKS) ---
     /** Gross debt to GDP the budget steers to before a cabinet has set its own: where the District opened. */
-    public const FOUNDING_DEBT_TARGET = MacroEngine::INITIAL_DEBT_TO_GDP;
+    public const FOUNDING_DEBT_TARGET = MacroConstants::INITIAL_DEBT_TO_GDP;
     /** Points of GDP a year the budget moves debt toward its target before a cabinet has set its own pace. */
     public const FOUNDING_DEBT_PACE = 0.005;
     /** Share of a consolidation the founding budget raises by tax, the rest by cutting purchases: two parts in five. */
@@ -548,22 +548,22 @@ class CreditFiscalSubsystem
      */
     public function calculateMacroCreditSpread(MacroState $state): void
     {
-        $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
+        $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroConstants::INTERBANK_BASELINE_SPREAD);
 
         $trancheSpreads = CreditRisk::calculateDualTrancheCreditSpreads(
-            baseIgSpread: MacroEngine::BASE_CREDIT_SPREAD,
+            baseIgSpread: MacroConstants::BASE_CREDIT_SPREAD,
             outputGapEma: $state->outputGapEma,
             marketVolEma: $state->marketVolatilityEma,
             interbankStress: $interbankStress,
             excessBondPremium: $state->excessBondPremium,
-            hyBaseMultiplier: MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+            hyBaseMultiplier: MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
         );
 
         // Durbin & Ng (2005): a corporate yield carries the sovereign spread at the pass-through share, and the
         // District curve these spreads sit over already carries all of it, so the spread over that curve carries the
         // difference (it narrows as the sovereign widens, as corporates trading through their sovereign do).
         $sovereignLoading = (self::SOVEREIGN_CEILING_PASSTHROUGH - 1.0) * $state->sovereignRiskSpreadEma;
-        $state->macroCreditSpread = max(MacroEngine::MIN_CREDIT_SPREAD, $trancheSpreads['ig'] + $sovereignLoading);
+        $state->macroCreditSpread = max(CreditRisk::MIN_CREDIT_SPREAD, $trancheSpreads['ig'] + $sovereignLoading);
         $state->highYieldCreditSpread = max($state->macroCreditSpread, $trancheSpreads['hy'] + $sovereignLoading);
     }
 
@@ -602,7 +602,7 @@ class CreditFiscalSubsystem
 
         return min(
             self::INTERBANK_MAX_SPREAD,
-            MacroEngine::INTERBANK_BASELINE_SPREAD + (self::INTERBANK_PREMIUM_COUPLING * max(0.0, $excessBondPremium)) + $run,
+            MacroConstants::INTERBANK_BASELINE_SPREAD + (self::INTERBANK_PREMIUM_COUPLING * max(0.0, $excessBondPremium)) + $run,
         );
     }
 
@@ -623,8 +623,8 @@ class CreditFiscalSubsystem
     {
         $unemploymentShock = ($state->unemploymentRateEma - $state->nairu) * self::RETAIL_UNEMPLOYMENT_SENSITIVITY;
 
-        $borrowingSpreadStress = max(0.0, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
-        $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
+        $borrowingSpreadStress = max(0.0, $state->macroCreditSpreadEma - MacroConstants::BASE_CREDIT_SPREAD);
+        $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroConstants::INTERBANK_BASELINE_SPREAD);
         $spreadShock = ($borrowingSpreadStress + $interbankStress) * self::RETAIL_CREDIT_SPREAD_SENSITIVITY;
 
         $housePriceGap = $state->residentialWealthTrend > 0.0 && $state->residentialPropertyIndexEma > 0.0
@@ -643,7 +643,7 @@ class CreditFiscalSubsystem
 
         $conditionalPd = CreditRisk::calculateVasicekExpectedLoss(
             macroZ: $macroZ,
-            pdLra: MacroEngine::RETAIL_DEFAULT_BASELINE,
+            pdLra: MacroConstants::RETAIL_DEFAULT_BASELINE,
             rho: CreditRisk::RETAIL_ASRF_RHO,
             lgd: 1.0,
         );
@@ -666,8 +666,8 @@ class CreditFiscalSubsystem
     {
         $state->governmentSpendingIndex = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->governmentSpendingIndex,
-            kappa: MacroEngine::GOVT_SPENDING_MEAN_REVERSION,
-            theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, self::requiredPrimaryBalance($state), $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            kappa: MacroConstants::GOVT_SPENDING_MEAN_REVERSION,
+            theta: MacroConstants::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, self::requiredPrimaryBalance($state), $state->consolidationTaxShare) / MacroConstants::PUBLIC_PURCHASES_TO_GDP,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal(),
@@ -706,9 +706,9 @@ class CreditFiscalSubsystem
     {
         $stanceTarget = self::FOUNDING_NET_TAX_RATE + self::fiscalStance($state);
         $levies = self::publicAccounts($state, $dt)->policyLevies();
-        $state->netTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $levies + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) - $state->netTaxRate) * $dt;
-        $state->netTaxStanceRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $state->netTaxStanceRate) * $dt;
-        $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * (MacroEngine::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift - $state->corporateTaxRate) * $dt;
+        $state->netTaxRate += MacroConstants::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $levies + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) - $state->netTaxRate) * $dt;
+        $state->netTaxStanceRate += MacroConstants::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $state->netTaxStanceRate) * $dt;
+        $state->corporateTaxRate += MacroConstants::FISCAL_ADJUSTMENT_SPEED * (MacroConstants::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift - $state->corporateTaxRate) * $dt;
 
         $trendWeight = 1.0 - exp(-$dt / self::TAX_RATE_TREND_YEARS);
         $state->netTaxStanceRateTrend += $trendWeight * ($state->netTaxStanceRate - $state->netTaxStanceRateTrend);
@@ -716,7 +716,7 @@ class CreditFiscalSubsystem
 
         // The legislated part of that adjustment on its own, and the laws as the trailing year's earnings carry them,
         // which the market measures what it expects against (App\Service\Market\Pricing\PolicyCapitalization).
-        $state->corporateTaxShiftRealized += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($state->corporateTaxPolicyShift - $state->corporateTaxShiftRealized) * $dt;
+        $state->corporateTaxShiftRealized += MacroConstants::FISCAL_ADJUSTMENT_SPEED * ($state->corporateTaxPolicyShift - $state->corporateTaxShiftRealized) * $dt;
         $state->corporateTaxShiftEmbodied += ($state->corporateTaxShiftRealized - $state->corporateTaxShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->bankLevyEmbodied += ($state->bankLevyRate - $state->bankLevyEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         // The rules on extraction, the stamp duty and the carbon price reach costs, turnover and the power price at
@@ -725,11 +725,11 @@ class CreditFiscalSubsystem
         $state->stampDutyVolumeFactorEmbodied += (MacroTransmission::calculateStampDutyVolumeFactor($state->stampDutyRate) - $state->stampDutyVolumeFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $state->carbonPowerUpliftEmbodied += (CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice) - $state->carbonPowerUpliftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         // A commission's grant reaches the tariff as rate cases close, which the trailing year then lags.
-        $state->utilityTariffShortfallEmbodied += (UtilityBusinessModel::steadyTariffShortfall($state->utilityRateCaseGrantShare) - $state->utilityTariffShortfallEmbodied)
-            * $dt / ((1.0 / UtilityBusinessModel::RATE_CASE_DECISION_RATE) + self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
+        $state->utilityTariffShortfallEmbodied += (FirmEconomics::steadyTariffShortfall($state->utilityRateCaseGrantShare) - $state->utilityTariffShortfallEmbodied)
+            * $dt / ((1.0 / FirmEconomics::RATE_CASE_DECISION_RATE) + self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
         // The firms the budget buys from read purchases through their smoothed level, which the trailing year then
         // lags.
-        $state->governmentSpendingShiftEmbodied += ((($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0) - $state->governmentSpendingShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        $state->governmentSpendingShiftEmbodied += ((($state->governmentSpendingIndexEma / MacroConstants::GOVT_SPENDING_BASELINE) - 1.0) - $state->governmentSpendingShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
     }
 
     /**
@@ -763,7 +763,7 @@ class CreditFiscalSubsystem
      */
     public static function requiredPrimaryBalanceAt(MacroState|MacroStateDTO $state, float $debtTarget, float $debtPace): float
     {
-        $trendNominalGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + $state->laborForceGrowthRate;
+        $trendNominalGrowth = MacroConstants::TARGET_INFLATION + MacroConstants::TFP_DRIFT + $state->laborForceGrowthRate;
         $holdsDebt = (self::sovereignEffectiveRate($state) - $trendNominalGrowth) * $state->sovereignDebtToGdp;
         $pace = max(0.0, $debtPace);
 
@@ -851,14 +851,14 @@ class CreditFiscalSubsystem
         $state->centralBankDeferredAssetToGdp -= ((MonetaryPolicySubsystem::authorityNetIncomeToGdp($state) - $accounts->centralBankRemittance) * $dt)
             + ($state->nominalGdpGrowth * $state->centralBankDeferredAssetToGdp * $dt);
 
-        $belowFloor = MacroEngine::SOVEREIGN_DEBT_FLOOR - $state->sovereignDebtToGdp;
+        $belowFloor = MacroConstants::SOVEREIGN_DEBT_FLOOR - $state->sovereignDebtToGdp;
         $state->sovereignFundBudgetInflow = ($funded && $belowFloor > 0.0)
             ? $belowFloor * $state->sovereignFundDollarsPerGdp * $state->nominalGdpIndex
             : 0.0;
         // The floor is where the fund sweeps the surplus; with no fund the surplus stays with the Exchequer as net
         // assets.
         if ($funded) {
-            $state->sovereignDebtToGdp = max(MacroEngine::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
+            $state->sovereignDebtToGdp = max(MacroConstants::SOVEREIGN_DEBT_FLOOR, $state->sovereignDebtToGdp);
         }
 
         // IMF GFSM 2014 net debt: gross debt less the debt instruments the government holds, which here is the
@@ -907,7 +907,7 @@ class CreditFiscalSubsystem
             foreignBuyerTax: AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($state->foreignBuyerTaxRate),
             fundContribution: $fundContribution,
             centralBankRemittance: self::centralBankRemittance(MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), $state->centralBankDeferredAssetToGdp, $dt),
-            purchases: ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) * MacroEngine::PUBLIC_PURCHASES_TO_GDP / (1.0 + $state->outputGap),
+            purchases: ($state->governmentSpendingIndex / MacroConstants::GOVT_SPENDING_BASELINE) * MacroConstants::PUBLIC_PURCHASES_TO_GDP / (1.0 + $state->outputGap),
             fundFinancedSpending: $fundContribution,
             interest: self::sovereignEffectiveRate($state) * $state->sovereignDebtToGdp,
             // Blanchard (2019): g is the growth of the nominal GDP the ratio is struck on, so a slump lowers it and the
@@ -968,7 +968,7 @@ class CreditFiscalSubsystem
         // tighter cap is built into the stock at Richter, Schularick & Shim's (2019) pace; a looser one lifts the
         // constraint at once and borrowing rises only as households choose to lever up, through the reversion below
         // toward the baseline the cap now allows.
-        $leverageBaseline = MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-$state->ltvCutBuilt);
+        $leverageBaseline = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE * exp(-$state->ltvCutBuilt);
         $ltvTarget = self::mortgageLtvCreditCut($state->mortgageLtvCap);
         $ltvBuilt = $ltvTarget > $state->ltvCutBuilt
             ? TimeSeries::calculateDistributedLag($state->ltvCutBuilt, $ltvTarget, $dt, self::MORTGAGE_LTV_CUT_YEARS)
@@ -976,7 +976,7 @@ class CreditFiscalSubsystem
         $ltvSqueeze = max(0.0, $ltvBuilt - $state->ltvCutBuilt);
         $state->ltvCutBuilt = $ltvBuilt;
         $relativeExcess = ($state->householdDebtToIncome - $leverageBaseline) / $leverageBaseline;
-        $excessDsr = max(0.0, $state->householdDebtServiceGap - MacroEngine::HOUSEHOLD_DSR_STRESS_MARGIN);
+        $excessDsr = max(0.0, $state->householdDebtServiceGap - MacroConstants::HOUSEHOLD_DSR_STRESS_MARGIN);
 
         // The terms US household credit supports (1976-2019). Rates, the gap and business-loan standards have no
         // direct pull on it once house prices are in; they act through the collateral and the debt service. What is
@@ -1135,7 +1135,7 @@ class CreditFiscalSubsystem
      */
     public static function debtSupplyTermPremium(float $grossDebtToGdp): float
     {
-        return FixedIncome::calculateDebtSupplyTermPremium($grossDebtToGdp, MacroEngine::INITIAL_DEBT_TO_GDP, self::FOUNDING_DEBT_AVERAGE_MATURITY, self::DEBT_MATURITY_TERM_PREMIUM);
+        return FixedIncome::calculateDebtSupplyTermPremium($grossDebtToGdp, MacroConstants::INITIAL_DEBT_TO_GDP, self::FOUNDING_DEBT_AVERAGE_MATURITY, self::DEBT_MATURITY_TERM_PREMIUM);
     }
 
     /**
@@ -1156,7 +1156,7 @@ class CreditFiscalSubsystem
      */
     public function householdChargeOffRate(float $retailDefaultRate): float
     {
-        $householdZ = CreditRisk::calculateVasicekSystematicFactor($retailDefaultRate, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO);
+        $householdZ = CreditRisk::calculateVasicekSystematicFactor($retailDefaultRate, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO);
 
         return (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO, 1.0))
             + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO, 1.0));
@@ -1341,7 +1341,7 @@ class CreditFiscalSubsystem
     {
         $jumpLogCompensator = self::EPU_JUMP_PROBABILITY * self::EPU_JUMP_MEAN / self::EPU_MEAN_REVERSION;
 
-        $target = MacroEngine::EPU_BASELINE * exp(
+        $target = MacroConstants::EPU_BASELINE * exp(
             (self::EPU_ELECTION_LIFT * $state->electionPulse)
                 + (self::EPU_SLACK_LIFT * ($state->unemploymentRate - $state->nairu))
                 - $jumpLogCompensator,
@@ -1387,8 +1387,8 @@ class CreditFiscalSubsystem
             return;
         }
 
-        $austerity = max(0.0, self::consolidationSpendingCut(self::requiredPrimaryBalance($state), $state->consolidationTaxShare)) / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
-        $indexation = max(self::REIMBURSEMENT_MIN_UPDATE, $state->inflationEma - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET);
+        $austerity = max(0.0, self::consolidationSpendingCut(self::requiredPrimaryBalance($state), $state->consolidationTaxShare)) / MacroConstants::PUBLIC_PURCHASES_TO_GDP;
+        $indexation = max(self::REIMBURSEMENT_MIN_UPDATE, $state->inflationEma - MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET);
 
         // The level is the indexed path times what the budget leaves of it, so a cut and its restoration cancel
         // exactly.
@@ -1455,7 +1455,7 @@ class CreditFiscalSubsystem
      */
     public function calculateCorporateDefaultRate(MacroState $state, float $dt): void
     {
-        $baseHySpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $baseHySpread = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         $excessHySpread = max(0.0, $state->highYieldCreditSpread - $baseHySpread);
 
         $macroZ = ($state->outputGapEma * self::CORPORATE_DEFAULT_GAP_SENSITIVITY)
@@ -1464,7 +1464,7 @@ class CreditFiscalSubsystem
 
         $state->corporateDefaultRate = CreditRisk::calculateCorporateDefaultRate(
             macroZ: $macroZ,
-            baseDefaultRate: MacroEngine::CORPORATE_DEFAULT_BASELINE,
+            baseDefaultRate: MacroConstants::CORPORATE_DEFAULT_BASELINE,
             rho: CreditRisk::CORPORATE_DEFAULT_RHO,
         );
     }

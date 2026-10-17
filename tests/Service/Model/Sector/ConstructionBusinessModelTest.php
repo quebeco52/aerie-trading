@@ -72,7 +72,7 @@ class ConstructionBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             // A neutral real stance, r* plus expected inflation, so the rate moves no orders.
-            policyRateEma: \App\Service\Macro\MacroEngine::BASE_NATURAL_RATE + \App\Service\Macro\MacroEngine::TARGET_INFLATION,
+            policyRateEma: \App\Service\Math\MacroConstants::BASE_NATURAL_RATE + \App\Service\Math\MacroConstants::TARGET_INFLATION,
             inflationEma: 0.02,
             energyPriceIndexEma: 100.0,
         );
@@ -108,7 +108,7 @@ class ConstructionBusinessModelTest extends TestCase
             policyRateEma: 0.03,
             inflationEma: 0.06, // 400bps above 2% target
             energyPriceIndexEma: 140.0, // 40% energy spike
-            energyCostPushLag: 0.40 * \App\Service\Macro\MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
+            energyCostPushLag: 0.40 * \App\Service\Math\MacroConstants::ENERGY_COST_PUSH_TRANSMISSION,
             producerPriceInflationEma: 0.06,
         );
 
@@ -247,7 +247,7 @@ class ConstructionBusinessModelTest extends TestCase
      */
     public function testRateDragIsStruckAgainstTheNominalNeutralNotRealRStar(): void
     {
-        $neutral = \App\Service\Macro\MacroEngine::BASE_NATURAL_RATE + 0.02;
+        $neutral = \App\Service\Math\MacroConstants::BASE_NATURAL_RATE + 0.02;
         $commercial = function (float $policyRate): float {
             $stock = new Stock();
             $stock->setTicker('GEN_CONST');
@@ -278,7 +278,7 @@ class ConstructionBusinessModelTest extends TestCase
             $stock->setBeta('1.0');
             $math = $this->createStub(MathUtility::class);
             $math->method('generatePersistentZ')->willReturn(0.0);
-            $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: \App\Service\Macro\MacroEngine::BASE_NATURAL_RATE, inflationEma: 0.02, catastropheLossIndexEma: $burden);
+            $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: \App\Service\Math\MacroConstants::BASE_NATURAL_RATE, inflationEma: 0.02, catastropheLossIndexEma: $burden);
 
             return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->streamRevenue['civil_infrastructure'];
         };

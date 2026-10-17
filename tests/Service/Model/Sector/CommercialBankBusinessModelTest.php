@@ -7,9 +7,9 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
@@ -209,8 +209,8 @@ class CommercialBankBusinessModelTest extends TestCase
         $meanLoss = 0.0;
         for ($z = -7.0; $z <= 7.0 + 1e-9; $z += $step) {
             $macro = new MacroStateDTO(
-                retailDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0),
-                corporateDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroEngine::CORPORATE_DEFAULT_BASELINE, CreditRisk::CORPORATE_DEFAULT_RHO, 1.0),
+                retailDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0),
+                corporateDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroConstants::CORPORATE_DEFAULT_BASELINE, CreditRisk::CORPORATE_DEFAULT_RHO, 1.0),
             );
             $stock->setEarningsMomentumZ([]);
             $result = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.10, $macro, $this->mathUtility);
@@ -280,8 +280,8 @@ class CommercialBankBusinessModelTest extends TestCase
         };
 
         // At long-run default rates each segment defaults at its conditional PD for the factor those rates imply.
-        $householdZ = CreditRisk::calculateVasicekSystematicFactor(MacroEngine::RETAIL_DEFAULT_BASELINE, MacroEngine::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO);
-        $corporateZ = CreditRisk::calculateVasicekSystematicFactor(MacroEngine::CORPORATE_DEFAULT_BASELINE, MacroEngine::CORPORATE_DEFAULT_BASELINE, CreditRisk::CORPORATE_DEFAULT_RHO);
+        $householdZ = CreditRisk::calculateVasicekSystematicFactor(MacroConstants::RETAIL_DEFAULT_BASELINE, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO);
+        $corporateZ = CreditRisk::calculateVasicekSystematicFactor(MacroConstants::CORPORATE_DEFAULT_BASELINE, MacroConstants::CORPORATE_DEFAULT_BASELINE, CreditRisk::CORPORATE_DEFAULT_RHO);
         $mortgageLoss = 0.80 * CreditRisk::calculateVasicekExpectedLoss($householdZ, CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE / 0.45, CreditRisk::RETAIL_ASRF_RHO, 1.0);
         $businessLoss = 0.20 * CreditRisk::calculateVasicekExpectedLoss($corporateZ, CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE / 0.45, CreditRisk::CORPORATE_DEFAULT_RHO, 1.0) * 0.45;
         $this->assertEqualsWithDelta(
@@ -776,27 +776,27 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($resultLowRisk->clampedMargin, $resultHighRisk->clampedMargin, 1e-12, 'the forecast reserve is not a running cost');
 
-        $atBaseRate = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: MacroEngine::RECESSION_BASE_RATE));
+        $atBaseRate = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: MacroConstants::RECESSION_BASE_RATE));
         $calm = $this->model->getForwardCreditLossMultiplier($bank, $macroLowRisk);
         $stressed = $this->model->getForwardCreditLossMultiplier($bank, $macroHighRisk);
         $this->assertEqualsWithDelta(1.0, $atBaseRate, 1e-9, 'at the base-rate outlook the estimate is the through-the-cycle one');
         $this->assertEqualsWithDelta(
-            1.0 - (MacroEngine::RECESSION_BASE_RATE - 0.10) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
+            1.0 - (MacroConstants::RECESSION_BASE_RATE - 0.10) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
             $calm,
             1e-9,
             'a better-than-average outlook releases, as the spread term does, so the average outlook carries no standing build',
         );
         $this->assertEqualsWithDelta(
-            1.0 + (0.70 - MacroEngine::RECESSION_BASE_RATE) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
+            1.0 + (0.70 - MacroConstants::RECESSION_BASE_RATE) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
             $stressed,
             1e-9,
         );
 
         // Spreads: widening lifts the target, a benign market releases part of it, never past the floor.
-        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD + 0.03));
+        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD + 0.03));
         $this->assertEqualsWithDelta(1.0 + 0.03 * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $wide, 1e-9);
         $benign = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: 0.0));
-        $this->assertEqualsWithDelta(1.0 - MacroEngine::BASE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
+        $this->assertEqualsWithDelta(1.0 - MacroConstants::BASE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
         $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::CECL_RESERVE_MULTIPLIER_FLOOR, $benign);
     }
 
@@ -1068,8 +1068,8 @@ class CommercialBankBusinessModelTest extends TestCase
             return $state['customerDeposits'];
         };
 
-        $steady = $run(MacroEngine::MMF_SHARE_BASE, MacroEngine::MMF_SHARE_BASE);
-        $migrating = $run(MacroEngine::MMF_SHARE_BASE + 0.0125, MacroEngine::MMF_SHARE_BASE);
+        $steady = $run(MacroConstants::MMF_SHARE_BASE, MacroConstants::MMF_SHARE_BASE);
+        $migrating = $run(MacroConstants::MMF_SHARE_BASE + 0.0125, MacroConstants::MMF_SHARE_BASE);
 
         $this->assertLessThan($steady, $migrating, 'A quarter in which money funds gain share is a quarter deposits leave.');
         // Exactly the migrating share of the base, times the drag.
@@ -1088,10 +1088,10 @@ class CommercialBankBusinessModelTest extends TestCase
         $deposits = 1000.0;
         foreach ([[0.0125, 0.0], [0.0, 0.0125]] as [$shareMove, $emaMove]) {
             $macro = MacroStateDTO::fromArray([
-                'inflation_ema' => -(MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE),
+                'inflation_ema' => -(MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE),
                 'policy_rate_ema' => 0.05,
-                'money_market_fund_share' => MacroEngine::MMF_SHARE_BASE + $shareMove,
-                'money_market_fund_share_ema' => MacroEngine::MMF_SHARE_BASE + $emaMove,
+                'money_market_fund_share' => MacroConstants::MMF_SHARE_BASE + $shareMove,
+                'money_market_fund_share_ema' => MacroConstants::MMF_SHARE_BASE + $emaMove,
             ]);
             $state = ['customerDeposits' => $deposits, 'wholesaleDebt' => 200.0, 'treasury' => 50.0, 'events' => []];
             $this->model->processPassiveLiabilityGrowth($stock, $macro, $state, $mathMock);
@@ -1111,8 +1111,8 @@ class CommercialBankBusinessModelTest extends TestCase
             'inflation_ema' => 0.03,
             'policy_rate_ema' => 0.05,
             'output_gap_ema' => -0.03,
-            'money_market_fund_share' => MacroEngine::MMF_SHARE_BASE,
-            'money_market_fund_share_ema' => MacroEngine::MMF_SHARE_BASE,
+            'money_market_fund_share' => MacroConstants::MMF_SHARE_BASE,
+            'money_market_fund_share_ema' => MacroConstants::MMF_SHARE_BASE,
         ]);
 
         $grow = function (float $equity, float $wholesaleDebt) use ($macro, $mathMock): float {
@@ -1128,7 +1128,7 @@ class CommercialBankBusinessModelTest extends TestCase
 
         // Money demand has unit income elasticity: the base compounds at inflation plus potential growth, a
         // quarter at a time, through a recession-sized gap and at a high policy rate alike.
-        $trend = 0.03 + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+        $trend = 0.03 + MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE;
         $this->assertEqualsWithDelta(1000.0 * $trend / 4.0, $grow(1000.0, 0.0), 1e-9);
         // A lender at its leverage limit pays the floor beta; that prices its funding, it does not shrink the
         // deposit base it is handed. Scaling growth by the beta froze card lenders' books for twenty years.
@@ -1146,15 +1146,15 @@ class CommercialBankBusinessModelTest extends TestCase
         $macro = MacroStateDTO::fromArray([
             'inflation_ema' => 0.06,
             'policy_rate_ema' => 0.03,
-            'money_market_fund_share' => MacroEngine::MMF_SHARE_BASE,
-            'money_market_fund_share_ema' => MacroEngine::MMF_SHARE_BASE,
+            'money_market_fund_share' => MacroConstants::MMF_SHARE_BASE,
+            'money_market_fund_share_ema' => MacroConstants::MMF_SHARE_BASE,
         ]);
         $state = ['customerDeposits' => 1000.0, 'wholesaleDebt' => 200.0, 'treasury' => 50.0, 'events' => []];
 
         $this->model->processPassiveLiabilityGrowth($stock, $macro, $state, $mathMock);
 
         // Over 2% in the quarter clears the 0.5% capture threshold, but it is the economy's growth, not share won.
-        $this->assertEqualsWithDelta(1000.0 * (0.06 + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) / 4.0, $state['customerDeposits'] - 1000.0, 1e-9);
+        $this->assertEqualsWithDelta(1000.0 * (0.06 + MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE) / 4.0, $state['customerDeposits'] - 1000.0, 1e-9);
         $this->assertSame([], $state['events']);
     }
 

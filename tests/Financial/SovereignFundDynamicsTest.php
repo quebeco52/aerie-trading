@@ -13,6 +13,7 @@ use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -105,12 +106,12 @@ class SovereignFundDynamicsTest extends TestCase
         $netWith = $this->median(array_merge(...array_map(static fn(array $run): array => $run['lateNetLiabilities'], $withFund)));
         $netWithout = $this->median(array_merge(...array_map(static fn(array $run): array => $run['lateNetLiabilities'], $withoutFund)));
         $this->assertLessThan(
-            $netWithout - (0.5 * MacroEngine::OPENING_FUND_TO_GDP),
+            $netWithout - (0.5 * MacroConstants::OPENING_FUND_TO_GDP),
             $netWith,
             'Funding the structural deficit lowers the net liabilities the fiscal rule settles on by at least half the fund it opened with.',
         );
         $debtWith = $this->median(array_merge(...array_map(static fn(array $run): array => $run['lateDebt'], $withFund)));
-        $this->assertGreaterThan(MacroEngine::SOVEREIGN_DEBT_FLOOR + 0.20, $debtWith, 'Gross debt stays well off the floor.');
+        $this->assertGreaterThan(MacroConstants::SOVEREIGN_DEBT_FLOOR + 0.20, $debtWith, 'Gross debt stays well off the floor.');
     }
 
     /**
@@ -159,7 +160,7 @@ class SovereignFundDynamicsTest extends TestCase
             // premium, and carries the engine's own market shocks as a transitory component around that.
             $transitory = ($reversion * $transitory) + ($macro->marketVolatility * sqrt($dt) * $macro->marketZ);
             $nextFloatCap = self::OPENING_FLOAT_CAP * ($macro->nominalGdpIndex / $openingGdp)
-                * exp((-self::ERP_VALUATION_SLOPE * ($macro->equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM)) + $transitory);
+                * exp((-self::ERP_VALUATION_SLOPE * ($macro->equityRiskPremium - MacroConstants::BASE_EQUITY_RISK_PREMIUM)) + $transitory);
             $dividends = self::DIVIDEND_YIELD * $floatCap * $dt;
             $priceReturn = ($nextFloatCap / $floatCap) - 1.0;
             $floatCap = $nextFloatCap;

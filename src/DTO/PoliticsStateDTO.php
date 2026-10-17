@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\DTO;
 
 use App\Data\Politics\AerieDiet;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\Exchequer;
 use App\Service\Politics\FairTradingBoard;
@@ -79,11 +79,11 @@ readonly class PoliticsStateDTO
         public float $electionInflationGap = 0.0,
         public float $electionIncumbentSwing = 0.0,
         /** Government purchases as a share of GDP, as the last budget set the level they revert to. */
-        public float $publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+        public float $publicSpendingShare = MacroConstants::PUBLIC_PURCHASES_TO_GDP,
         /** The corporate rate's shift from the neutral rate, as the last budget set it. */
         public float $corporateTaxPolicyShift = 0.0,
         public float $importTariffRate = 0.0,
-        public float $laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+        public float $laborForceGrowthRate = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
         /** Tax on a home bought by a buyer from outside the District, as the last budget set it. */
         public float $foreignBuyerTaxRate = 0.0,
         /** How far the green belt stands between the founding planning regime (0) and the strictest on record (1). */
@@ -97,13 +97,13 @@ readonly class PoliticsStateDTO
         /** Bank levy on short-term funding, a year (half that on long-term funding). */
         public float $bankLevyRate = 0.0,
         /** Share of the reserve fund's expected long-term real return the budget spends. */
-        public float $reserveDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
+        public float $reserveDrawShare = MacroConstants::RESERVE_DRAW_CEILING,
         /** Share of the surplus the debt calls for that the budget raises by tax rather than by cutting purchases. */
         public float $consolidationTaxShare = CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
         /** Share of the reserve fund's equities held on the District's own board. */
         public float $reserveHomeEquityShare = SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
         /** Share of a utility's rate request the utility commission grants. */
-        public float $utilityRateCaseGrantShare = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+        public float $utilityRateCaseGrantShare = FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
         /** Tax on the dividends the District's own shareholders are paid. */
         public float $dividendTaxRate = Valuation::FOUNDING_DIVIDEND_TAX_RATE,
         /**

@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SteelManufacturingBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -85,7 +85,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
 
         $base = $run(new MacroStateDTO(energyPriceIndexEma: 100.0, freightRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0));
-        $fuelAndFreight = $run(new MacroStateDTO(energyPriceIndexEma: 150.0, energyCostPushLag: 0.50 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION, freightRateIndexEma: 140.0, industrialMetalsIndexEma: 100.0));
+        $fuelAndFreight = $run(new MacroStateDTO(energyPriceIndexEma: 150.0, energyCostPushLag: 0.50 * MacroConstants::ENERGY_COST_PUSH_TRANSMISSION, freightRateIndexEma: 140.0, industrialMetalsIndexEma: 100.0));
         $metals = $run(new MacroStateDTO(energyPriceIndexEma: 100.0, freightRateIndexEma: 100.0, industrialMetalsIndexEma: 130.0));
 
         $this->assertEqualsWithDelta($base->clampedMargin, $fuelAndFreight->clampedMargin, 1e-12);

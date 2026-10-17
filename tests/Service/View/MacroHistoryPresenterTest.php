@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Service\View;
 
 use App\Data\Macro\OutputGapChannels;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\View\MacroHistoryPresenter;
 use PHPUnit\Framework\TestCase;
@@ -27,12 +27,12 @@ class MacroHistoryPresenterTest extends TestCase
         $subsystem = new MacroAggregateSubsystem(new MathUtility(), $probe);
 
         $state = new MacroState();
-        $state->inflation = MacroEngine::TARGET_INFLATION;
-        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->inflation = MacroConstants::TARGET_INFLATION;
+        $state->policyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
 
         $gap = 0.01;
         for ($tick = 0; $tick < 3; ++$tick) {
-            $gap = $subsystem->calculateOutputGap($state, $gap, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 1.0 / 3600.0, 1.0);
+            $gap = $subsystem->calculateOutputGap($state, $gap, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 1.0 / 3600.0, 1.0);
         }
         $probe->rollWindow();
 

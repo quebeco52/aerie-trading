@@ -15,7 +15,6 @@ use App\Entity\User;
 use App\Repository\BondRepository;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
-use App\Service\Corporate\EarningsEngine;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Index\MarketIndex;
@@ -204,7 +203,7 @@ class StockPageBuilder
 
         return [
             'dateline' => DistrictCalendar::dateline($time),
-            'quarter' => DistrictCalendar::quarter($time - EarningsEngine::REPORT_INTERVAL_YEARS),
+            'quarter' => DistrictCalendar::quarter($time - FinancialConstants::QUARTER_YEARS),
         ];
     }
 

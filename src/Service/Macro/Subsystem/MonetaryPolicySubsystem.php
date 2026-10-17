@@ -6,11 +6,11 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -489,14 +489,14 @@ class MonetaryPolicySubsystem
         $habitatShiftAtTenYears = FixedIncome::calculatePreferredHabitatTermPremiumShift(
             balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($state->balanceSheetIntensity, $state->sovereignDebtToGdpEma, $state->sovereignDebtAverageMaturity),
             tau: 10.0,
-            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
+            habitatSensitivity: MacroConstants::PREFERRED_HABITAT_DURATION_SENSITIVITY,
         );
         // Sovereign credit risk is left in the yield: a rule easing as the debt premium rises is fiscal dominance.
-        $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears - $state->sovereignRiskSpreadEma) - MacroEngine::NS_BASE_TERM_PREMIUM;
+        $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears - $state->sovereignRiskSpreadEma) - MacroConstants::NS_BASE_TERM_PREMIUM;
 
-        $slopeLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA);
+        $slopeLoad10y = (1.0 - exp(-10.0 * MacroConstants::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroConstants::SVENSSON_SLOPE_LAMBDA);
         $endpointDeviation = self::KOZICKI_TINSLEY_ENDPOINT_WEIGHT
-            * ($state->perceivedNeutralRate - ($naturalRate + MacroEngine::TARGET_INFLATION))
+            * ($state->perceivedNeutralRate - ($naturalRate + MacroConstants::TARGET_INFLATION))
             * (1.0 - $slopeLoad10y);
 
         return $premiumDeviation + $endpointDeviation;
@@ -532,10 +532,10 @@ class MonetaryPolicySubsystem
 
         if ($this->diagnostics?->isEnabled()) {
             $this->diagnostics->recordPolicyRate($policyRate, [
-                'lowerBound' => $targetRate <= MacroEngine::EFFECTIVE_LOWER_BOUND,
+                'lowerBound' => $targetRate <= MacroConstants::EFFECTIVE_LOWER_BOUND,
                 'meeting' => $meeting,
                 'surprise' => $meeting && abs($state->policySurprise) > 1e-12,
-                'targetCap' => $targetRate >= MacroEngine::POLICY_RATE_CEILING,
+                'targetCap' => $targetRate >= MacroConstants::POLICY_RATE_CEILING,
             ], $dt);
         }
 
@@ -545,7 +545,7 @@ class MonetaryPolicySubsystem
     /** A meeting's decision on a shadow rate: the nearest step, never under the floor. */
     public static function decision(float $shadowRate): float
     {
-        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, self::POLICY_RATE_STEP * round($shadowRate / self::POLICY_RATE_STEP));
+        return max(MacroConstants::EFFECTIVE_LOWER_BOUND, self::POLICY_RATE_STEP * round($shadowRate / self::POLICY_RATE_STEP));
     }
 
     /** When the next rate meeting after a moment falls. */
@@ -627,7 +627,7 @@ class MonetaryPolicySubsystem
     {
         // Purchases stand in for the cut the floor forbids (Wu & Xia 2016): none while the rule's own rate is
         // reachable, the full programme once the rule asks for the shadow rate the 2014 stock delivered.
-        $floorShortfall = max(0.0, MacroEngine::EFFECTIVE_LOWER_BOUND - $state->targetRate);
+        $floorShortfall = max(0.0, MacroConstants::EFFECTIVE_LOWER_BOUND - $state->targetRate);
         $qeYieldSuppressionTarget = min(self::QE_MAX_SUPPRESSION, self::QE_MAX_SUPPRESSION * $floorShortfall / self::QE_FULL_PROGRAM_SHORTFALL);
 
         // Overheating does not create a tightening position out of nothing: it ends the reinvestment phase early
@@ -648,7 +648,7 @@ class MonetaryPolicySubsystem
             // Quantitative easing purchase trajectory ramping toward crisis target dose.
             $balanceSheetTarget = max($portfolio, $qeYieldSuppressionTarget);
             $newHoldTimer = 0.0;
-        } elseif ($portfolio > MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD) {
+        } elseif ($portfolio > MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD) {
             $newHoldTimer = $state->balanceSheetHoldTimer + $dt;
 
             // Bernanke (2020) reinvestment hold phase preceding systematic balance sheet runoff.
@@ -709,7 +709,7 @@ class MonetaryPolicySubsystem
             kappaChi: self::TERM_PREMIUM_SHOCK_KAPPA,
             kappaXi: self::TERM_PREMIUM_REGIME_KAPPA,
             thetaChi: 0.0,
-            thetaXi: MacroEngine::NS_BASE_TERM_PREMIUM,
+            thetaXi: MacroConstants::NS_BASE_TERM_PREMIUM,
             sigChi: self::TERM_PREMIUM_SHOCK_SIGMA,
             sigXi: self::TERM_PREMIUM_REGIME_SIGMA,
             rho: 0.0,
@@ -726,7 +726,7 @@ class MonetaryPolicySubsystem
             kappaChi: self::TERM_PREMIUM_SHOCK_KAPPA,
             kappaXi: self::TERM_PREMIUM_REGIME_KAPPA,
             thetaChi: 0.0,
-            thetaXi: MacroEngine::NS_BASE_TERM_PREMIUM,
+            thetaXi: MacroConstants::NS_BASE_TERM_PREMIUM,
             sigChi: self::TERM_PREMIUM_SHOCK_SIGMA,
             sigXi: self::TERM_PREMIUM_REGIME_SIGMA,
             rho: 0.0,
@@ -750,9 +750,9 @@ class MonetaryPolicySubsystem
 
         return [
             'shock' => ($own * $state->termPremiumShock) + ($global * $state->foreignTermPremiumShock),
-            'regime' => MacroEngine::NS_BASE_TERM_PREMIUM
-                + ($own * ($state->termPremiumRegime - MacroEngine::NS_BASE_TERM_PREMIUM))
-                + ($global * ($state->foreignTermPremiumRegime - MacroEngine::NS_BASE_TERM_PREMIUM)),
+            'regime' => MacroConstants::NS_BASE_TERM_PREMIUM
+                + ($own * ($state->termPremiumRegime - MacroConstants::NS_BASE_TERM_PREMIUM))
+                + ($global * ($state->foreignTermPremiumRegime - MacroConstants::NS_BASE_TERM_PREMIUM)),
         ];
     }
 
@@ -778,7 +778,7 @@ class MonetaryPolicySubsystem
      */
     public static function marketShortRate(MacroState $state): float
     {
-        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $state->policyRateShadow);
+        return max(MacroConstants::EFFECTIVE_LOWER_BOUND, $state->policyRateShadow);
     }
 
     /**
@@ -811,8 +811,8 @@ class MonetaryPolicySubsystem
      */
     public function calculateYieldCurve(MacroState $state, float $targetInflation, float $naturalRate): array
     {
-        $inflationRiskPremium = self::TERM_PREMIUM_IRP_EXPECTATION_SCALE * max(0.0, $state->tipsBreakeven - MacroEngine::TARGET_INFLATION);
-        $flightToSafetyShift = self::FLIGHT_TO_SAFETY_SENSITIVITY * max(0.0, $state->marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
+        $inflationRiskPremium = self::TERM_PREMIUM_IRP_EXPECTATION_SCALE * max(0.0, $state->tipsBreakeven - MacroConstants::TARGET_INFLATION);
+        $flightToSafetyShift = self::FLIGHT_TO_SAFETY_SENSITIVITY * max(0.0, $state->marketVolatilityEma - MacroConstants::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $cyclicalTermPremium = $state->outputGap * self::NS_GAP_TERM_PREMIUM_SCALE;
         // Laubach (2009) structural fiscal debt-to-GDP term premium component.
         $termPremiumFactors = self::districtTermPremiumFactors($state);
@@ -839,8 +839,8 @@ class MonetaryPolicySubsystem
         $nsBeta3 = self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift;
 
         // Greenwood & Vayanos (2014) preferred-habitat long-end duration demand hurdle.
-        $scale30y = FixedIncome::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
-        $longEndHurdle = $naturalRate + $targetInflation + (MacroEngine::NS_BASE_TERM_PREMIUM * $scale30y);
+        $scale30y = FixedIncome::calculateTermPremiumDurationScale(30.0, MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $longEndHurdle = $naturalRate + $targetInflation + (MacroConstants::NS_BASE_TERM_PREMIUM * $scale30y);
         $habitatDemandShift = self::HABITAT_LONG_END_DEMAND_SENSITIVITY * max(0.0, $state->yield30yEma - $longEndHurdle);
         $longEndPremium = max(0.0, $termPremiumFactors['regime'] - $habitatDemandShift);
 
@@ -849,9 +849,9 @@ class MonetaryPolicySubsystem
         $yield10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);
         $yield30y = $this->calculateSvenssonTenor(30.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);
 
-        $durationFactor10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA);
-        $curvatureLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1)) / (10.0 * MacroEngine::SVENSSON_LAMBDA_1);
-        $factor2_10y = $curvatureLoad10y - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1);
+        $durationFactor10y = (1.0 - exp(-10.0 * MacroConstants::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroConstants::SVENSSON_SLOPE_LAMBDA);
+        $curvatureLoad10y = (1.0 - exp(-10.0 * MacroConstants::SVENSSON_LAMBDA_1)) / (10.0 * MacroConstants::SVENSSON_LAMBDA_1);
+        $factor2_10y = $curvatureLoad10y - exp(-10.0 * MacroConstants::SVENSSON_LAMBDA_1);
 
         // Adrian, Crump & Moench (2013) pure risk-neutral rate path under zero term premium.
         $riskNeutral10y = $level + ($nsBeta1 * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
@@ -959,15 +959,15 @@ class MonetaryPolicySubsystem
             slope: $nsBeta1,
             curvature1: $nsBeta2,
             curvature2: $nsBeta3,
-            lambda1: MacroEngine::SVENSSON_LAMBDA_1,
-            lambda2: MacroEngine::SVENSSON_LAMBDA_2,
-            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA,
+            lambda1: MacroConstants::SVENSSON_LAMBDA_1,
+            lambda2: MacroConstants::SVENSSON_LAMBDA_2,
+            slopeLambda: MacroConstants::SVENSSON_SLOPE_LAMBDA,
             termPremium10y: $termPremium10y,
             longEndPremium: $longEndPremium,
-            termPremiumHorizonYears: MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS,
+            termPremiumHorizonYears: MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS,
             balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($state->balanceSheetIntensity, $state->sovereignDebtToGdpEma, $state->sovereignDebtAverageMaturity),
-            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
-            effectiveLowerBound: MacroEngine::EFFECTIVE_LOWER_BOUND,
+            habitatSensitivity: MacroConstants::PREFERRED_HABITAT_DURATION_SENSITIVITY,
+            effectiveLowerBound: MacroConstants::EFFECTIVE_LOWER_BOUND,
         );
     }
 
@@ -983,11 +983,11 @@ class MonetaryPolicySubsystem
     public function calculateDepositChannel(MacroState $state, float $dt): void
     {
         $policyRate = max(0.0, $state->policyRateEma);
-        $neutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $neutralRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
 
-        $depositSpread = $policyRate * (1.0 - MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
-        $neutralSpread = $neutralRate * (1.0 - MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
-        $targetShare = MacroEngine::MMF_SHARE_BASE + (self::MMF_SPREAD_SENSITIVITY * ($depositSpread - $neutralSpread));
+        $depositSpread = $policyRate * (1.0 - MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
+        $neutralSpread = $neutralRate * (1.0 - MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
+        $targetShare = MacroConstants::MMF_SHARE_BASE + (self::MMF_SPREAD_SENSITIVITY * ($depositSpread - $neutralSpread));
         $targetShare = max(self::MIN_MMF_SHARE, min(self::MAX_MMF_SHARE, $targetShare));
         $state->moneyMarketFundShare = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->moneyMarketFundShare,
@@ -1013,10 +1013,10 @@ class MonetaryPolicySubsystem
             slope: $slope,
             termPremium: $state->termPremium10y,
             fci: $state->financialConditionsIndex,
-            beta0: MacroEngine::RECESSION_PROBIT_BETA_0,
-            betaSlope: MacroEngine::RECESSION_PROBIT_BETA_SLOPE,
-            betaTp: MacroEngine::RECESSION_PROBIT_BETA_TP,
-            betaFci: MacroEngine::RECESSION_PROBIT_BETA_FCI,
+            beta0: MacroConstants::RECESSION_PROBIT_BETA_0,
+            betaSlope: MacroConstants::RECESSION_PROBIT_BETA_SLOPE,
+            betaTp: MacroConstants::RECESSION_PROBIT_BETA_TP,
+            betaFci: MacroConstants::RECESSION_PROBIT_BETA_FCI,
         );
     }
 

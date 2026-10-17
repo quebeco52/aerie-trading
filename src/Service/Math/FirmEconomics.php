@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Math;
 
-use App\Service\Macro\MacroEngine;
-
 /**
  * Industrial organisation and the cost side of a firm: Cournot and fringe price levels, concentration, segment
  * counts, per-unit and productivity-loss cost factors, the REIT lease ladder, the inventory cycle, capacity
@@ -20,6 +18,37 @@ final class FirmEconomics
     public const CCC_DIO_CAPACITY_SENSITIVITY = 20.0;
     /** Sensitivity of Days Payable Outstanding (DPO) contraction to interbank funding liquidity stress. */
     public const CCC_DPO_LIQUIDITY_SENSITIVITY = 500.0;
+
+    // --- Regulated Tariffs: the Rate Case Cycle (regulatory lag and earnings attrition) ---
+    /** Unrecovered non-fuel cost at which management files a general rate case rather than absorb further attrition. */
+    public const RATE_CASE_FILING_THRESHOLD = 0.02;
+    /** Quarterly probability a pending case is decided (~5 quarters, the 12 to 18 month regulatory lag). */
+    public const RATE_CASE_EXIT_HAZARD = 0.20;
+    /**
+     * The same hazard as a rate a year, -4 ln(1 - 0.20): the speed a change in what commissions grant reaches the
+     * tariff.
+     */
+    public const RATE_CASE_DECISION_RATE = 0.8926;
+    /**
+     * The average tariff shortfall the founding commission's grant leaves (steadyTariffShortfall() at it, 3.7%), where
+     * the District's trailing earnings open.
+     */
+    public const FOUNDING_TARIFF_SHORTFALL = 0.0372;
+    /**
+     * What an elected commission grants of a request, as a share of what an appointed one grants: their pass-through of
+     * fuel-cost increases into residential prices, 0.22 against 0.62 (Besley & Coate 2003, Table 4, with controls,
+     * 1960-97), read across from cost pass-through to rate requests.
+     */
+    public const ELECTED_COMMISSION_GRANT_RATIO = 0.22 / 0.62;
+    /**
+     * Share of a request an appointed commission grants, the District's at its founding; the disallowed remainder is
+     * still a real cost, so it rolls into the next filing. The US average, 58% of the net electric increases requested
+     * January 2023 to August 2024 (S&P Global data via EIA, Today in Energy, August 2024), is held by 40 appointed
+     * commissions and 10 elected ones.
+     */
+    public const APPOINTED_COMMISSION_GRANTED_SHARE = 0.58 / (0.8 + (0.2 * self::ELECTED_COMMISSION_GRANT_RATIO));
+    /** Lag at which interim relief is granted rather than leave the utility earning below its cost of service. */
+    public const MAX_TARIFF_SHORTFALL = 0.10;
 
     /**
      * One step of a staggered lease roll: the slice of the rent roll expiring over dt (dt / WALT) reprices to
@@ -39,6 +68,34 @@ final class FirmEconomics
         $rollover = $dt / max($dt, $waltYears);
 
         return [$inPlaceRent + ($releasingSpread * $rollover), $releasingSpread];
+    }
+
+    /**
+     * The tariff shortfall a commission granting this share of each request leaves on average, as a share of the
+     * tariff: the cycle UtilityBusinessModel runs, in expectation. Costs outrun the frozen tariff at the inflation
+     * rate; a case is filed at the threshold, or at once if the last order left the shortfall above it, and decided at
+     * the decision rate; the order removes the granted share. With D the case's exponential length, the time-weighted
+     * shortfall while it is pending is its starting level plus inflation over the decision rate, and the start settles
+     * where an order leaves it (the expectation of D in place of D, so the spread of case lengths is not carried).
+     *
+     * @param float $grantShare Share of each request the commission grants.
+     * @param float $inflation  Inflation the cost base rises at, a year.
+     */
+    public static function steadyTariffShortfall(float $grantShare, float $inflation = MacroConstants::TARGET_INFLATION): float
+    {
+        $grant = max(0.01, min(1.0, $grantShare));
+        $drift = max(0.0, $inflation) / self::RATE_CASE_DECISION_RATE;
+        $threshold = self::RATE_CASE_FILING_THRESHOLD;
+        // Where a case starts: the threshold, or the shortfall an order leaves if that is above it (s = (1 - g)(s +
+        // drift)).
+        $start = max($threshold, (1.0 - $grant) * $drift / $grant);
+        $pendingMean = $start + $drift;
+        $afterOrder = (1.0 - $grant) * $pendingMean;
+        $idleYears = $inflation > 0.0 ? max(0.0, $threshold - $afterOrder) / $inflation : 0.0;
+        $pendingYears = 1.0 / self::RATE_CASE_DECISION_RATE;
+        $mean = (($pendingMean * $pendingYears) + ((($threshold + $afterOrder) / 2.0) * $idleYears)) / ($pendingYears + $idleYears);
+
+        return min(self::MAX_TARIFF_SHORTFALL, $mean);
     }
 
     /**
@@ -281,9 +338,9 @@ final class FirmEconomics
     public static function calculateCapacityUtilization(
         float $outputGap,
         float $capitalStockOverhang,
-        float $baselineCu = MacroEngine::CU_BASELINE,
-        float $gapSensitivity = MacroEngine::CU_GAP_SENSITIVITY,
-        float $overhangSensitivity = MacroEngine::CU_OVERHANG_SENSITIVITY,
+        float $baselineCu = MacroConstants::CU_BASELINE,
+        float $gapSensitivity = MacroConstants::CU_GAP_SENSITIVITY,
+        float $overhangSensitivity = MacroConstants::CU_OVERHANG_SENSITIVITY,
     ): float {
         $rawCu = $baselineCu + ($gapSensitivity * $outputGap) - ($overhangSensitivity * $capitalStockOverhang);
         return max(0.60, min(0.92, $rawCu));
@@ -340,7 +397,7 @@ final class FirmEconomics
      */
     public static function gasFuelShareOfPowerPrice(): float
     {
-        return MacroEngine::GAS_FLEET_HEAT_RATE * MacroEngine::REFERENCE_GAS_PRICE / MacroEngine::REFERENCE_POWER_PRICE;
+        return MacroConstants::GAS_FLEET_HEAT_RATE * MacroConstants::REFERENCE_GAS_PRICE / MacroConstants::REFERENCE_POWER_PRICE;
     }
 
     /**
@@ -352,7 +409,7 @@ final class FirmEconomics
      */
     public static function gasFiredFuelCostChange(float $gasRelative, float $carbonPrice): float
     {
-        $carbonShare = MacroEngine::GAS_FLEET_HEAT_RATE * MacroEngine::NATURAL_GAS_CO2_TONNES_PER_MMBTU * $carbonPrice / MacroEngine::REFERENCE_POWER_PRICE;
+        $carbonShare = MacroConstants::GAS_FLEET_HEAT_RATE * MacroConstants::NATURAL_GAS_CO2_TONNES_PER_MMBTU * $carbonPrice / MacroConstants::REFERENCE_POWER_PRICE;
 
         return (self::gasFuelShareOfPowerPrice() * ($gasRelative - 1.0)) + $carbonShare;
     }
@@ -367,7 +424,7 @@ final class FirmEconomics
      */
     public static function carbonUpliftEarningsPerUnit(float $gasFleetShare): float
     {
-        return 1.0 - ($gasFleetShare / MacroEngine::CARBON_POWER_PASS_THROUGH);
+        return 1.0 - ($gasFleetShare / MacroConstants::CARBON_POWER_PASS_THROUGH);
     }
 
     /**
@@ -429,7 +486,7 @@ final class FirmEconomics
             // Unsold goods pile up when the plant runs below capacity.
             'dio' => (1.0 - $capacityUtilization) * self::CCC_DIO_CAPACITY_SENSITIVITY,
             // Under interbank liquidity stress, vendors demand faster payment (DPO contracts).
-            'dpo' => - ($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * self::CCC_DPO_LIQUIDITY_SENSITIVITY,
+            'dpo' => - ($interbankLiquiditySpread - MacroConstants::INTERBANK_BASELINE_SPREAD) * self::CCC_DPO_LIQUIDITY_SENSITIVITY,
         ];
     }
 

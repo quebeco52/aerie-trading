@@ -8,9 +8,9 @@ use App\Data\Macro\InputOutputExposures;
 use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -82,7 +82,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return MacroEngine::TREND_REAL_GROWTH
+        return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
     public function getCapexCyclicality(): float
@@ -142,15 +142,15 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 
     // --- Transaction Stream Macro Channel ---
     /**
-     * Rating-issuance revenue per unit of IG spread below MacroEngine::BASE_CREDIT_SPREAD (+2% per 100bp of
+     * Rating-issuance revenue per unit of IG spread below MacroConstants::BASE_CREDIT_SPREAD (+2% per 100bp of
      * tightening).
      */
     public const DCM_SPREAD_ISSUANCE_SENSITIVITY = 2.0;
     /** Rating-issuance revenue per unit of output gap, before operating cyclicality (+1.5% per 1% gap). */
     public const DCM_OUTPUT_GAP_ISSUANCE_SENSITIVITY = 1.5;
     /**
-     * Market-data feed revenue per unit of volatility over MacroEngine::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per vol
-     * point).
+     * Market-data feed revenue per unit of volatility over MacroConstants::MACRO_VOL_BASE_ANCHOR, both ways (+0.5% per
+     * vol point).
      */
     public const MARKET_DATA_VOLATILITY_SENSITIVITY = 0.50;
 
@@ -260,7 +260,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $creditSpreadGap = $macroState->macroCreditSpreadTrend - $macroState->macroCreditSpreadEma;
         $dcmIssuanceBoost = ($creditSpreadGap * self::DCM_SPREAD_ISSUANCE_SENSITIVITY)
             + ($macroState->outputGapEma * self::DCM_OUTPUT_GAP_ISSUANCE_SENSITIVITY * $this->getOperatingCyclicality($stock));
-        $vixVolBoost = ($macroState->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR) * self::MARKET_DATA_VOLATILITY_SENSITIVITY;
+        $vixVolBoost = ($macroState->marketVolatilityEma - MacroConstants::MACRO_VOL_BASE_ANCHOR) * self::MARKET_DATA_VOLATILITY_SENSITIVITY;
         $dealActivityShift = $macroState->dealActivityDeviation();
 
         return $dcmIssuanceBoost + $vixVolBoost + ($dealActivityShift * self::DEAL_ACTIVITY_RATING_SENSITIVITY);

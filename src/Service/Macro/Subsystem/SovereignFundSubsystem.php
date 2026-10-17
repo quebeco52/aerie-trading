@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\Macro\Subsystem;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
@@ -76,7 +76,7 @@ class SovereignFundSubsystem
      * Annual volatility of the trade-weighted currency, the quarterly one over four quarters (5.4%); the reserve
      * portfolio carries it in home terms.
      */
-    public const EXCHANGE_RATE_VOLATILITY = 2.0 * MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY;
+    public const EXCHANGE_RATE_VOLATILITY = 2.0 * MacroConstants::EXCHANGE_RATE_QUARTERLY_VOLATILITY;
 
     // --- Deviation Limits (GPIF policy asset mix, 5th medium-term period, FY2025) ---
     /** Share of the board's float the fund holds at inception (GPIF owned 5.8% of the Japanese market in 2016). */
@@ -147,7 +147,7 @@ class SovereignFundSubsystem
      * Listed-company capitalisation over GDP at inception: the board over District GDP, 1.69, a financial centre's
      * (World Bank CM.MKT.LCAP.GD.ZS 2015-22: Singapore 1.2-2.3, US 1.4-2.1, Switzerland 2.0-2.8).
      */
-    public const MARKET_CAP_TO_GDP = self::BOARD_OPENING_CAP_USD / MacroEngine::DISTRICT_GDP_USD;
+    public const MARKET_CAP_TO_GDP = self::BOARD_OPENING_CAP_USD / MacroConstants::DISTRICT_GDP_USD;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -220,7 +220,7 @@ class SovereignFundSubsystem
         $dollarsPerGdp = $state->equityMarketCap / (self::MARKET_CAP_TO_GDP * $state->nominalGdpIndex);
         $gdpDollars = $dollarsPerGdp * $state->nominalGdpIndex;
         $domestic = self::DOMESTIC_OWNERSHIP_OPENING * $state->boardFloatCap;
-        $foreign = max(0.0, (MacroEngine::OPENING_FUND_TO_GDP * $gdpDollars) - $domestic);
+        $foreign = max(0.0, (MacroConstants::OPENING_FUND_TO_GDP * $gdpDollars) - $domestic);
 
         $state->sovereignFundDollarsPerGdp = $dollarsPerGdp;
         $state->sovereignFundDomesticEquity = $domestic;
@@ -285,7 +285,7 @@ class SovereignFundSubsystem
         return StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: $state->foreignEquityIndex,
             idiosyncraticVolatility: $idiosyncraticVolatility,
-            drift: $state->foreignPolicyRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            drift: $state->foreignPolicyRate + MacroConstants::BASE_EQUITY_RISK_PREMIUM,
             gravityDrift: 0.0,
             dt: $dt,
             beta: self::FOREIGN_EQUITY_MARKET_CORRELATION,
@@ -328,18 +328,18 @@ class SovereignFundSubsystem
      */
     public function foreignZeroYield(MacroState $state, float $maturity): float
     {
-        $neutral = MacroEngine::MAINLAND_NEUTRAL_RATE;
+        $neutral = MacroConstants::MAINLAND_NEUTRAL_RATE;
         $expectationsYield = FixedIncome::calculateSvenssonYield(
             level: $neutral,
             slope: $state->foreignPolicyRate - $neutral,
             curvature1: 0.0,
             curvature2: 0.0,
             tau: $maturity,
-            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA,
+            slopeLambda: MacroConstants::SVENSSON_SLOPE_LAMBDA,
         );
 
         return $expectationsYield
-            + (($state->foreignTermPremiumRegime + $state->foreignTermPremiumShock) * FixedIncome::calculateTermPremiumDurationScale($maturity, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS));
+            + (($state->foreignTermPremiumRegime + $state->foreignTermPremiumShock) * FixedIncome::calculateTermPremiumDurationScale($maturity, MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS));
     }
 
     /**
@@ -348,8 +348,8 @@ class SovereignFundSubsystem
      */
     public static function foreignBondExpectedPremium(): float
     {
-        return MacroEngine::NS_BASE_TERM_PREMIUM
-            * FixedIncome::calculateTermPremiumForwardScale(self::FOREIGN_BOND_DURATION, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        return MacroConstants::NS_BASE_TERM_PREMIUM
+            * FixedIncome::calculateTermPremiumForwardScale(self::FOREIGN_BOND_DURATION, MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS);
     }
 
     /**
@@ -422,7 +422,7 @@ class SovereignFundSubsystem
 
     /**
      * This budget year's draw: the share the Diet has passed of the expected long-term (compound) real return on the
-     * fund at the start of the year, half of it without the fund's consent (MacroEngine::RESERVE_DRAW_CEILING).
+     * fund at the start of the year, half of it without the fund's consent (MacroConstants::RESERVE_DRAW_CEILING).
      *
      * @return float Currency per year.
      */
@@ -464,12 +464,12 @@ class SovereignFundSubsystem
         $equity = max(0.0, min(1.0 - $domestic, $foreignEquityWeight));
         $paper = 1.0 - $domestic - $equity;
 
-        $foreignRealRate = MacroEngine::MAINLAND_NEUTRAL_RATE - MacroEngine::TARGET_INFLATION;
+        $foreignRealRate = MacroConstants::MAINLAND_NEUTRAL_RATE - MacroConstants::TARGET_INFLATION;
         $arithmetic = ($domestic * $this->domesticExpectedRealReturn($state))
-            + ($equity * ($foreignRealRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM))
+            + ($equity * ($foreignRealRate + MacroConstants::BASE_EQUITY_RISK_PREMIUM))
             + ($paper * ($foreignRealRate + self::foreignBondExpectedPremium()));
 
-        $boardVol = MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $boardVol = MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $equityVol = self::FOREIGN_EQUITY_VOLATILITY;
         $fxVol = self::EXCHANGE_RATE_VOLATILITY;
         $foreignShare = $equity + $paper;
@@ -742,6 +742,6 @@ class SovereignFundSubsystem
     /** Expected real return on the board: the natural rate plus the equity premium. */
     private function domesticExpectedRealReturn(MacroState $state): float
     {
-        return $state->naturalRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+        return $state->naturalRate + MacroConstants::BASE_EQUITY_RISK_PREMIUM;
     }
 }

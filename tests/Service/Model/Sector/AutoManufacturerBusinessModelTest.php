@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AutoManufacturerBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
 class AutoManufacturerBusinessModelTest extends TestCase
 {
     /** A policy rate at the natural real rate plus expected inflation, so the real stance moves no purchases. */
-    private const NEUTRAL_POLICY_RATE = MacroEngine::TARGET_INFLATION + MacroEngine::BASE_NATURAL_RATE;
+    private const NEUTRAL_POLICY_RATE = MacroConstants::TARGET_INFLATION + MacroConstants::BASE_NATURAL_RATE;
 
     private AutoManufacturerBusinessModel $model;
     private MathUtility $mathUtility;
@@ -283,7 +283,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             return $this->model->getMacroPhysics($stock, $macroState)['macro_demand_shift'];
         };
 
-        $neutralShift = $shift(new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL, policyRateEma: 0.02));
+        $neutralShift = $shift(new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL, policyRateEma: 0.02));
 
         $mild = new MacroStateDTO(outputGapEma: -0.015, consumerSentimentIndexEma: 82.0, policyRateEma: 0.043, manufacturingPmiEma: 43.0);
         $mildDrop = $shift($mild) - $neutralShift;
@@ -317,7 +317,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
         $stateAt = fn(float $gap): MacroStateDTO => new MacroStateDTO(
             outputGapEma: $gap,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
+            consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
             exchangeRateIndexEma: 100.0,
         );
         $response = function (float $gap) use ($stock, $quiet, $expectedRevenue, $stateAt): float {
@@ -341,20 +341,20 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $shift = fn(float $policy, float $breakeven): float => $this->model->getMacroPhysics($stock, new MacroStateDTO(
             policyRateEma: $policy,
             tipsBreakevenEma: $breakeven,
-            naturalRateEma: MacroEngine::BASE_NATURAL_RATE,
+            naturalRateEma: MacroConstants::BASE_NATURAL_RATE,
             exchangeRateIndexEma: 100.0,
         ))['macro_demand_shift'];
 
         // Neutral at 2% and at 4% expected inflation alike; a nominal 3% neutral would read the second as 250bp tight.
-        $neutralLowInflation = $shift(MacroEngine::BASE_NATURAL_RATE + 0.02, 0.02);
-        $neutralHighInflation = $shift(MacroEngine::BASE_NATURAL_RATE + 0.04, 0.04);
+        $neutralLowInflation = $shift(MacroConstants::BASE_NATURAL_RATE + 0.02, 0.02);
+        $neutralHighInflation = $shift(MacroConstants::BASE_NATURAL_RATE + 0.04, 0.04);
         $this->assertEqualsWithDelta(0.0, $neutralLowInflation, 1e-12);
         $this->assertEqualsWithDelta(0.0, $neutralHighInflation, 1e-12);
 
         // 100bp of real tightness takes cyclicality x the rate scalar of it off volume.
         $this->assertEqualsWithDelta(
             -0.01 * AutoManufacturerBusinessModel::OPERATING_CYCLICALITY * AutoManufacturerBusinessModel::RATE_SENSITIVITY_SCALAR,
-            $shift(MacroEngine::BASE_NATURAL_RATE + 0.03, 0.02),
+            $shift(MacroConstants::BASE_NATURAL_RATE + 0.03, 0.02),
             1e-12,
         );
     }
@@ -503,9 +503,9 @@ class AutoManufacturerBusinessModelTest extends TestCase
             policyRateEma: self::NEUTRAL_POLICY_RATE,
             yield10yEma: 0.03,
             yield2yEma: 0.045,
-            retailDefaultRateEma: 2.0 * MacroEngine::RETAIL_DEFAULT_BASELINE,
-            corporateDefaultRateEma: 2.0 * MacroEngine::CORPORATE_DEFAULT_BASELINE,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD + 0.02,
+            retailDefaultRateEma: 2.0 * MacroConstants::RETAIL_DEFAULT_BASELINE,
+            corporateDefaultRateEma: 2.0 * MacroConstants::CORPORATE_DEFAULT_BASELINE,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD + 0.02,
         );
 
         // EIDR's fleets finance through their own banks.

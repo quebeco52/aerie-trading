@@ -7,9 +7,9 @@ namespace App\Service\Politics;
 use App\Data\Politics\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
@@ -351,7 +351,7 @@ final class OpinionPolls
         }
         $years = $state->totalTime - $state->campaignStartedAt;
 
-        return (log(PoliticsEngine::realGdp($macro) / $state->campaignStartRealGdp) - (($macro->laborForceGrowthRate + MacroEngine::TFP_DRIFT) * $years))
+        return (log(PoliticsEngine::realGdp($macro) / $state->campaignStartRealGdp) - (($macro->laborForceGrowthRate + MacroConstants::TFP_DRIFT) * $years))
             / PoliticsEngine::ELECTION_CAMPAIGN_WINDOW_YEARS;
     }
 
@@ -366,7 +366,7 @@ final class OpinionPolls
         }
         $years = $state->totalTime - $state->termStartedAt;
 
-        return (log($macro->consumerPriceLevel / $state->termStartDeflator) - (MacroEngine::TARGET_INFLATION * $years)) / PoliticsEngine::ELECTION_TERM_YEARS;
+        return (log($macro->consumerPriceLevel / $state->termStartDeflator) - (MacroConstants::TARGET_INFLATION * $years)) / PoliticsEngine::ELECTION_TERM_YEARS;
     }
 
     /**

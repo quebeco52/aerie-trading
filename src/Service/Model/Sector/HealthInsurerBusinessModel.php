@@ -7,9 +7,8 @@ namespace App\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 
@@ -171,10 +170,10 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
         // --- Underwriting Cycle ---
         // The cost ratio drifts at the gap between the trend claims run at and the trend premiums were priced on, and
         // returns to target as the book renews: dg/dt = (claims trend - priced trend) - g / policy term.
-        $dt = EarningsEngine::QUARTERLY_TIME_STEP;
+        $dt = FinancialConstants::QUARTER_YEARS;
         $costTrend = $macroState->reimbursementRateGrowth;
         // A book with no history was priced at the steady-state update, so a trend already off it reaches the plan.
-        $pricedTrend = $streams->getPersistedState(self::STATE_PRICED_TREND, MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET);
+        $pricedTrend = $streams->getPersistedState(self::STATE_PRICED_TREND, MacroConstants::TARGET_INFLATION - MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET);
         $gap = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $streams->getPersistedState(self::STATE_LOSS_RATIO_GAP, 0.0),
             targetValue: ($costTrend - $pricedTrend) * self::POLICY_TERM_YEARS,

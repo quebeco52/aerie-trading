@@ -7,6 +7,7 @@ namespace App\Service\Market\Pricing;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
@@ -55,6 +56,11 @@ class MarketEngine
      * component of single-stock return variance is a minority of the total (Huang & Tauchen 2005).
      */
     private const MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE = 0.25;
+    /**
+     * Fraction of a stock's non-market variance loaded onto its sector factor, setting within- vs cross-sector
+     * correlation.
+     */
+    public const SECTOR_FACTOR_VARIANCE_SHARE = 0.20;
 
     // --- Common Idiosyncratic Volatility (Herskovic, Kelly, Lustig & Van Nieuwerburgh 2016) ---
     /**
@@ -154,7 +160,7 @@ class MarketEngine
     public static function longTermIdiosyncraticVariance(float $longTermVolatility, float $beta): float
     {
         $longTermVar = $longTermVolatility * $longTermVolatility;
-        $baselineSystematicVar = (($beta * MacroEngine::MACRO_VOL_BASE_ANCHOR) ** 2) + self::systemicJumpMoments($beta)['variance'];
+        $baselineSystematicVar = (($beta * MacroConstants::MACRO_VOL_BASE_ANCHOR) ** 2) + self::systemicJumpMoments($beta)['variance'];
 
         return max($longTermVar * self::MIN_IDIOSYNCRATIC_VARIANCE_SHARE, $longTermVar - $baselineSystematicVar);
     }
@@ -196,15 +202,15 @@ class MarketEngine
     {
         $exposure = abs($beta);
         if ($exposure <= 0.0) {
-            return ['lambda' => 0.0, 'p_up' => MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP, 'eta_up' => 0.0, 'eta_down' => 0.0];
+            return ['lambda' => 0.0, 'p_up' => MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP, 'eta_up' => 0.0, 'eta_down' => 0.0];
         }
 
-        $scaledEtaUp = MacroEngine::SYSTEMIC_JUMP_ETA_UP / $exposure;
-        $scaledEtaDown = MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / $exposure;
+        $scaledEtaUp = MacroConstants::SYSTEMIC_JUMP_ETA_UP / $exposure;
+        $scaledEtaDown = MacroConstants::SYSTEMIC_JUMP_ETA_DOWN / $exposure;
 
         return [
-            'lambda' => MacroEngine::SYSTEMIC_JUMP_INTENSITY,
-            'p_up' => $beta > 0.0 ? MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP : 1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
+            'lambda' => MacroConstants::SYSTEMIC_JUMP_INTENSITY,
+            'p_up' => $beta > 0.0 ? MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP : 1.0 - MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP,
             'eta_up' => $beta > 0.0 ? $scaledEtaUp : $scaledEtaDown,
             'eta_down' => $beta > 0.0 ? $scaledEtaDown : $scaledEtaUp,
         ];
@@ -276,7 +282,7 @@ class MarketEngine
      */
     public static function commonIdiosyncraticVarianceScale(float $marketVol, ?float $marketVarianceTrend = null): float
     {
-        $trend = $marketVarianceTrend ?? (MacroEngine::MACRO_VOL_BASE_ANCHOR * MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $trend = $marketVarianceTrend ?? (MacroConstants::MACRO_VOL_BASE_ANCHOR * MacroConstants::MACRO_VOL_BASE_ANCHOR);
         $marketVarianceRatio = $trend > 0.0 ? ($marketVol * $marketVol) / $trend : 1.0;
 
         return max(0.0, 1.0 + (self::IDIOSYNCRATIC_COMMON_FACTOR_LOADING * ($marketVarianceRatio - 1.0)));
@@ -568,7 +574,7 @@ class MarketEngine
             marketZ: $marketZ,
             w1: $idiosyncraticShock,
             sectorZ: $sectorZ,
-            sectorVarianceShare: MacroEngine::SECTOR_FACTOR_VARIANCE_SHARE,
+            sectorVarianceShare: self::SECTOR_FACTOR_VARIANCE_SHARE,
         );
 
         // Geometrically blend the GBM price with the fundamental Fair Value

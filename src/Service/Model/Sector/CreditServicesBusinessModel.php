@@ -10,9 +10,9 @@ use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 
@@ -186,7 +186,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // Inflation Bonus (Interchange Swipe Fees):
         // Swipe fees (Visa/MC network) are a percentage of transaction value — higher prices = higher revenue.
         $inflation = $macroState->inflationEma;
-        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * $this->getOperatingCyclicality($stock);
+        $inflationBonus = ($inflation - MacroConstants::TARGET_INFLATION) * $this->getOperatingCyclicality($stock);
 
         // Blended dual-stream revenue (Lending vs. Payment Network Interchange) Lending standards gate card line
         // extensions and origination both ways: tighter cuts them, looser extends them.
@@ -275,7 +275,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
 
         // Credit services require highly competitive APYs on their high-yield savings accounts
-        $depositRate = $this->resolveDepositRate($policyRate, MacroEngine::SYSTEM_DEPOSIT_BETA_BASE);
+        $depositRate = $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         $actualLeverage = $effectiveEquity > 0 ? ($totalDebt / $effectiveEquity) : 0.0;

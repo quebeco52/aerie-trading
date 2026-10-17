@@ -11,10 +11,11 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -236,7 +237,7 @@ class PoliticsEngine
      * share and its log coincide. The opposition costs no extra spending with it, so this is the most the two sides'
      * budgets part by.
      */
-    public const POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP = 0.007 / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+    public const POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP = 0.007 / MacroConstants::PUBLIC_PURCHASES_TO_GDP;
 
     // --- Platforms: Corporate Tax (financial centres: Singapore, Luxembourg) ---
     /**
@@ -264,7 +265,7 @@ class PoliticsEngine
     /**
      * Net migration an open immigration regime admits: Canada's 0.73% and Australia's 0.86%, averaged (the same
      * series). Between the two regimes sits the US's 0.50%, the rate the District's average party keeps
-     * (MacroEngine::STRUCTURAL_NET_MIGRATION_RATE).
+     * (MacroConstants::STRUCTURAL_NET_MIGRATION_RATE).
      */
     public const MIGRATION_OPEN_REGIME = (0.00728 + 0.00859) / 2.0;
 
@@ -297,8 +298,8 @@ class PoliticsEngine
     /**
      * Share of the reserve fund's expected long-term real return the big-state end of the axis spends: 60%, the
      * Workers' Party of Singapore's proposal to raise the Net Investment Returns Contribution from 50% (manifestos 2020
-     * and 2025). The small-state end keeps the founding half (MacroEngine::RESERVE_DRAW_CEILING), which the fund must
-     * consent to any budget exceeding.
+     * and 2025). The small-state end keeps the founding half (MacroConstants::RESERVE_DRAW_CEILING), which the fund
+     * must consent to any budget exceeding.
      */
     public const POLICY_BIG_STATE_RESERVE_DRAW_SHARE = 0.60;
 
@@ -456,7 +457,7 @@ class PoliticsEngine
         if (
             $state->coalitionTakesOfficeAt < 0.0
             && $state->coalitionFormedAt < $state->totalTime
-            && TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS)
+            && TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, MacroConstants::BUDGET_ROUND_PERIOD_YEARS)
         ) {
             self::enactBudget($state, MacroEngine::recessionDeclared($macro));
         }
@@ -569,14 +570,14 @@ class PoliticsEngine
 
         return [
             // Purchases move in proportion, the neutral position keeping the founding share
-            // (MacroEngine::PUBLIC_PURCHASES_TO_GDP).
-            'publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP * exp(self::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 2.0 * $stateLean),
+            // (MacroConstants::PUBLIC_PURCHASES_TO_GDP).
+            'publicSpending' => MacroConstants::PUBLIC_PURCHASES_TO_GDP * exp(self::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 2.0 * $stateLean),
             'corporateTax' => self::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 2.0 * $stateLean,
             'tariff' => self::POLICY_PROTECTIONIST_TARIFF * max(0.0, $openness / $closed),
             // The resident population grows the labour force whatever the law; the average party admits the structural
             // newcomers on top, and each end its own regime.
-            'laborGrowth' => MacroEngine::NATURAL_LABOR_FORCE_GROWTH + MacroEngine::STRUCTURAL_NET_MIGRATION_RATE
-                + ((($openness >= 0.0 ? self::MIGRATION_OPEN_REGIME : self::MIGRATION_CLOSED_REGIME) - MacroEngine::STRUCTURAL_NET_MIGRATION_RATE) * ($openness >= 0.0 ? $openness / $open : $openness / $closed)),
+            'laborGrowth' => MacroConstants::NATURAL_LABOR_FORCE_GROWTH + MacroConstants::STRUCTURAL_NET_MIGRATION_RATE
+                + ((($openness >= 0.0 ? self::MIGRATION_OPEN_REGIME : self::MIGRATION_CLOSED_REGIME) - MacroConstants::STRUCTURAL_NET_MIGRATION_RATE) * ($openness >= 0.0 ? $openness / $open : $openness / $closed)),
             'foreignBuyerTax' => self::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX * max(0.0, $openness / $closed),
             'greenBeltStringency' => $stringency,
             'carbonPrice' => self::POLICY_GREEN_CARBON_PRICE * $stringency,
@@ -584,16 +585,16 @@ class PoliticsEngine
             'stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE
                 + ((self::POLICY_BIG_STATE_STAMP_DUTY - FinancialConstants::STAMP_DUTY_RATE) * ($state - $smallState) / $stateSpan),
             'bankLevyRate' => self::POLICY_BIG_STATE_BANK_LEVY * ($state - $smallState) / $stateSpan,
-            'reserveDrawShare' => MacroEngine::RESERVE_DRAW_CEILING
-                + ((self::POLICY_BIG_STATE_RESERVE_DRAW_SHARE - MacroEngine::RESERVE_DRAW_CEILING) * ($state - $smallState) / $stateSpan),
+            'reserveDrawShare' => MacroConstants::RESERVE_DRAW_CEILING
+                + ((self::POLICY_BIG_STATE_RESERVE_DRAW_SHARE - MacroConstants::RESERVE_DRAW_CEILING) * ($state - $smallState) / $stateSpan),
             // The neutral position keeps the average plan's mix
             // (CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE).
             'consolidationTaxShare' => CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE + (self::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 2.0 * $stateLean),
             'reserveHomeShare' => self::POLICY_PROTECTIONIST_RESERVE_HOME_SHARE * ($open - $openness) / $opennessSpan,
             // The technocratic half keeps the appointed commission; toward the populist end it grants as an elected
             // one.
-            'utilityRateGrant' => UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE
-                * (1.0 - ((1.0 - UtilityBusinessModel::ELECTED_COMMISSION_GRANT_RATIO) * max(0.0, $council / $populist))),
+            'utilityRateGrant' => FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE
+                * (1.0 - ((1.0 - FirmEconomics::ELECTED_COMMISSION_GRANT_RATIO) * max(0.0, $council / $populist))),
             // The neutral position keeps the founding rate; each end enacts its own side's plan.
             'dividendTax' => Valuation::FOUNDING_DIVIDEND_TAX_RATE
                 + ((self::POLICY_BIG_STATE_DIVIDEND_TAX - Valuation::FOUNDING_DIVIDEND_TAX_RATE) * max(0.0, $state / $bigState))
@@ -694,9 +695,9 @@ class PoliticsEngine
             $supportHeld[$lever] = $levers[$lever] !== $platform[$lever];
         }
 
-        $fundHeld = !$recession && $levers['reserveDrawShare'] > MacroEngine::RESERVE_DRAW_CEILING;
+        $fundHeld = !$recession && $levers['reserveDrawShare'] > MacroConstants::RESERVE_DRAW_CEILING;
         if ($fundHeld) {
-            $levers['reserveDrawShare'] = MacroEngine::RESERVE_DRAW_CEILING;
+            $levers['reserveDrawShare'] = MacroConstants::RESERVE_DRAW_CEILING;
         }
 
         return ['levers' => $levers, 'platform' => $platform, 'supportHeld' => $supportHeld, 'fundHeld' => $fundHeld];
@@ -756,9 +757,9 @@ class PoliticsEngine
 
         // For the record: the economy the voters weighed.
         $growthGap = self::annualisedLogChange($state->campaignStartRealGdp, $realGdp, $state->totalTime - $state->campaignStartedAt);
-        $growthGap = $growthGap === null ? 0.0 : $growthGap - $macro->laborForceGrowthRate - MacroEngine::TFP_DRIFT;
+        $growthGap = $growthGap === null ? 0.0 : $growthGap - $macro->laborForceGrowthRate - MacroConstants::TFP_DRIFT;
         $inflationGap = self::annualisedLogChange($state->termStartDeflator, $macro->consumerPriceLevel, $state->totalTime - $state->termStartedAt);
-        $inflationGap = $inflationGap === null ? 0.0 : $inflationGap - MacroEngine::TARGET_INFLATION;
+        $inflationGap = $inflationGap === null ? 0.0 : $inflationGap - MacroConstants::TARGET_INFLATION;
 
         $state->electionGrowthGap = $growthGap;
         $state->electionInflationGap = $inflationGap;

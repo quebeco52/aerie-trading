@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Math;
 
-use App\Service\Macro\MacroEngine;
-
 /**
  * Equity valuation: fair P/E from intrinsic value and quality, expected and fundable growth, the dividend discount
  * model, WACC, CAPM and levered beta, ROIC-implied equity returns, the flexible accelerator, and perpetuity shares.
@@ -42,7 +40,7 @@ final class Valuation
      * Real long government yield the sector multiples were quoted at: the founding natural rate plus the founding term
      * premium (2.65%).
      */
-    public const FOUNDING_REAL_RISK_FREE_RATE = MacroEngine::BASE_NATURAL_RATE + MacroEngine::NS_BASE_TERM_PREMIUM;
+    public const FOUNDING_REAL_RISK_FREE_RATE = MacroConstants::BASE_NATURAL_RATE + MacroConstants::NS_BASE_TERM_PREMIUM;
     /** Cap on a Gordon capitalization multiple (~33.3x, a 3% yield). */
     public const MAX_DCF_MULTIPLIER = 33.33;
 
@@ -184,7 +182,7 @@ final class Valuation
     ): float {
         // The secular excess over trend keeps fading (SECULAR_EXCESS_HALF_LIFE_YEARS), so it is priced at its
         // perpetual equivalent rather than as permanent or as nothing.
-        $realGrowth = TimeSeries::persistentEquivalentGrowth($secularGrowth, MacroEngine::TREND_REAL_GROWTH, $discountRate - $inflation)
+        $realGrowth = TimeSeries::persistentEquivalentGrowth($secularGrowth, MacroConstants::TREND_REAL_GROWTH, $discountRate - $inflation)
             + ($outputGap * self::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
 
         // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
@@ -464,6 +462,6 @@ final class Valuation
      */
     public static function sectorHurdleShift(float $hurdleRate, float $beta, float $expectedInflation): float
     {
-        return ($hurdleRate - $expectedInflation) - (self::FOUNDING_REAL_RISK_FREE_RATE + ($beta * MacroEngine::BASE_EQUITY_RISK_PREMIUM));
+        return ($hurdleRate - $expectedInflation) - (self::FOUNDING_REAL_RISK_FREE_RATE + ($beta * MacroConstants::BASE_EQUITY_RISK_PREMIUM));
     }
 }

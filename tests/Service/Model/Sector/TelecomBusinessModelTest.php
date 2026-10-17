@@ -9,8 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\Industry\IndustryRegimeView;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\Distributions;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -283,12 +283,12 @@ class TelecomBusinessModelTest extends TestCase
             return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.45, 20_000_000.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, unemploymentRateEma: $unemployment), $math)->kpis['subscriber_index'];
         };
 
-        $this->assertEqualsWithDelta(1.0, $run(MacroEngine::NATURAL_UNEMPLOYMENT), 1e-9, 'At the natural rate gross adds exactly replace churn.');
+        $this->assertEqualsWithDelta(1.0, $run(MacroConstants::NATURAL_UNEMPLOYMENT), 1e-9, 'At the natural rate gross adds exactly replace churn.');
 
         $excess = 0.04;
         $expectedIndex = 1.0 - ($excess * TelecomBusinessModel::UNEMPLOYMENT_CHURN_SENSITIVITY);
-        $this->assertEqualsWithDelta($expectedIndex, $run(MacroEngine::NATURAL_UNEMPLOYMENT + $excess), 1e-9);
-        $this->assertEqualsWithDelta(1.0, $run(MacroEngine::NATURAL_UNEMPLOYMENT - 0.01), 1e-9, 'A tight labor market does not create subscribers who already have a phone.');
+        $this->assertEqualsWithDelta($expectedIndex, $run(MacroConstants::NATURAL_UNEMPLOYMENT + $excess), 1e-9);
+        $this->assertEqualsWithDelta(1.0, $run(MacroConstants::NATURAL_UNEMPLOYMENT - 0.01), 1e-9, 'A tight labor market does not create subscribers who already have a phone.');
     }
 
     public function testTheCycleReachesTheCostBaseThroughEquipmentVolumeOnly(): void

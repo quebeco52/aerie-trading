@@ -11,9 +11,9 @@ use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Corporate\Industry\IndustryRegimeView;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Model\ModelParam;
@@ -54,14 +54,14 @@ trait StandardOperatingPhysicsTrait
     /** A sector with no measured demand drift grows with the economy. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return MacroEngine::TREND_REAL_GROWTH;
+        return MacroConstants::TREND_REAL_GROWTH;
     }
 
     public function getFadedSecularGrowthRate(Stock $stock, float $simYears): float
     {
         return TimeSeries::fadeTowardTrend(
             $this->getSecularGrowthRate($stock),
-            MacroEngine::TREND_REAL_GROWTH,
+            MacroConstants::TREND_REAL_GROWTH,
             $simYears,
             FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS,
         );
@@ -402,16 +402,16 @@ trait StandardOperatingPhysicsTrait
     public function resolveInputPriceDeviations(MacroStateDTO $macroState): array
     {
         return [
-            'energy'  => $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
+            'energy'  => $macroState->energyCostPushLag / MacroConstants::ENERGY_COST_PUSH_TRANSMISSION,
             'gas'     => ($macroState->naturalGasPriceIndexEma - 100.0) / 100.0,
-            'electricity' => ($macroState->wholesalePowerPriceIndexEma - MacroEngine::WHOLESALE_POWER_BASELINE) / MacroEngine::WHOLESALE_POWER_BASELINE,
+            'electricity' => ($macroState->wholesalePowerPriceIndexEma - MacroConstants::WHOLESALE_POWER_BASELINE) / MacroConstants::WHOLESALE_POWER_BASELINE,
             'metals'  => ($macroState->industrialMetalsIndexEma - 100.0) / 100.0,
             'agri'    => ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0,
             'freight' => ($macroState->freightRateIndexEma - 100.0) / 100.0,
             // PPI is a rate. A price level's gap to its H-year EMA trend is H times its growth smoothed over H, so the
             // rate over target times the PPI's own one-year window is the wholesale price level against its trend.
-            'ppi'     => MacroEngine::COMMODITY_TREND_HORIZON_YEARS
-                * ($macroState->producerPriceInflationEma - MacroEngine::TARGET_INFLATION),
+            'ppi'     => MacroConstants::COMMODITY_TREND_HORIZON_YEARS
+                * ($macroState->producerPriceInflationEma - MacroConstants::TARGET_INFLATION),
             'labor'   => $macroState->realWageGap,
             'imports' => $macroState->importPriceDeviation(),
         ];
@@ -579,7 +579,7 @@ trait StandardOperatingPhysicsTrait
      */
     private function advanceInputCostState(float $costLevel, float $recovery, float $deviation, float $recoveredShare, float $costLagYears): array
     {
-        $dt = \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
+        $dt = FinancialConstants::QUARTER_YEARS;
         $nextLevel = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $costLevel,
             targetValue: $deviation,

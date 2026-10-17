@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BiotechBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -144,11 +144,11 @@ class BiotechBusinessModelTest extends TestCase
         // A fully off-patent (generic) manufacturer: no revenue under exclusivity.
         $generic = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_SHARE => 0.0]);
         $this->assertEqualsWithDelta(BiotechBusinessModel::genericSecularGrowthRate(), $model->getSecularGrowthRate($generic), 1e-15);
-        $this->assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH + (log(0.00502 / 0.00518) / 8.0), BiotechBusinessModel::genericSecularGrowthRate(), 1e-15, 'Generic spending lost share of GDP 2010-2018.');
+        $this->assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + (log(0.00502 / 0.00518) / 8.0), BiotechBusinessModel::genericSecularGrowthRate(), 1e-15, 'Generic spending lost share of GDP 2010-2018.');
 
         $branded = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_SHARE => 1.0]);
         $this->assertEqualsWithDelta(BiotechBusinessModel::patentedSecularGrowthRate(), $model->getSecularGrowthRate($branded), 1e-15);
-        $this->assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH + (log(0.01729 / 0.01190) / 19.0), BiotechBusinessModel::patentedSecularGrowthRate(), 1e-15, 'Prescription spending gained share of GDP 2000-2019.');
+        $this->assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + (log(0.01729 / 0.01190) / 19.0), BiotechBusinessModel::patentedSecularGrowthRate(), 1e-15, 'Prescription spending gained share of GDP 2000-2019.');
     }
 
     public function testContinuousPipelineProgressImpactsVariableCosts(): void
@@ -655,7 +655,7 @@ class BiotechBusinessModelTest extends TestCase
             $baseResult->streamRevenue['commercial_therapeutics'],
             $upliftResult->streamRevenue['commercial_therapeutics'],
         );
-        $expectedUplift = 1.0 + (0.04 - (MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET));
+        $expectedUplift = 1.0 + (0.04 - (MacroConstants::TARGET_INFLATION - MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET));
         $this->assertEqualsWithDelta(
             $baseResult->streamRevenue['commercial_therapeutics'] * $expectedUplift,
             $upliftResult->streamRevenue['commercial_therapeutics'],

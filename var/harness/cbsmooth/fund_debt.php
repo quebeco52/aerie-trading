@@ -18,6 +18,7 @@ use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 
 const YEARS = 80;
@@ -78,7 +79,7 @@ for ($tick = 1; $tick <= YEARS * TPY; ++$tick) {
 
     $transitory = ($reversion * $transitory) + ($macro->marketVolatility * sqrt($dt) * $macro->marketZ);
     $nextFloatCap = OPENING_FLOAT_CAP * ($macro->nominalGdpIndex / $openingGdp)
-        * exp((-ERP_VALUATION_SLOPE * ($macro->equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM)) + $transitory);
+        * exp((-ERP_VALUATION_SLOPE * ($macro->equityRiskPremium - MacroConstants::BASE_EQUITY_RISK_PREMIUM)) + $transitory);
     $dividends = DIVIDEND_YIELD * $floatCap * $dt;
     $priceReturn = ($nextFloatCap / $floatCap) - 1.0;
     $floatCap = $nextFloatCap;
@@ -129,7 +130,7 @@ for ($tick = 1; $tick <= YEARS * TPY; ++$tick) {
             'inflation' => $macro->inflation,
             'stabCap' => ($withFund && abs($macro->sovereignFundStabilisationToGdp - $affordable) < 1e-12) ? 1.0 : 0.0,
             'stabNeg' => $macro->sovereignFundStabilisationToGdp < 0.0 ? 1.0 : 0.0,
-            'atFloor' => $d <= MacroEngine::SOVEREIGN_DEBT_FLOOR + 1e-12 ? 1.0 : 0.0,
+            'atFloor' => $d <= MacroConstants::SOVEREIGN_DEBT_FLOOR + 1e-12 ? 1.0 : 0.0,
             'bohnOn' => $nfl > CreditFiscalSubsystem::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD ? 1.0 : 0.0,
             'rgD' => ($effRate - $macro->nominalGdpGrowth) * $dPrev,
             'interestD' => $effRate * $dPrev,

@@ -10,9 +10,9 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 
@@ -69,12 +69,12 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
      * Through-the-cycle high-yield spread (~430 bps): LBO debt is leveraged loans and HY bonds, priced off HY not IG
      * (Axelson, Jenkinson, Stromberg & Weisbach 2013).
      */
-    public const LBO_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+    public const LBO_CREDIT_SPREAD_BASELINE = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
     /**
      * The sponsor's OWN through-the-cycle funding spread (IG): the management company borrows as a corporate, not as a
      * buyout target.
      */
-    public const SPONSOR_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD;
+    public const SPONSOR_CREDIT_SPREAD_BASELINE = MacroConstants::BASE_CREDIT_SPREAD;
     /** Baseline policy rate (~4.5%) threshold above which LBO financing becomes distressed. */
     public const LBO_RATE_FREEZE_THRESHOLD  = 0.045;
     /**

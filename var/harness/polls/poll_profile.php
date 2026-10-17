@@ -10,7 +10,7 @@ require dirname(__DIR__, 3) . '/tests/bootstrap.php';
 
 use App\Data\Politics\AerieDiet;
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
@@ -23,8 +23,8 @@ $redis = new class extends \Redis {
 };
 $economy = static fn(float $t): MacroStateDTO => new MacroStateDTO(
     totalTime: $t,
-    potentialGdpIndex: exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * $t),
-    gdpDeflator: exp(MacroEngine::TARGET_INFLATION * $t),
+    potentialGdpIndex: exp((MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT) * $t),
+    gdpDeflator: exp(MacroConstants::TARGET_INFLATION * $t),
 );
 
 $errors = [];      // months out => list of z2

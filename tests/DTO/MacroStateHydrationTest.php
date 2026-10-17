@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Tests\DTO;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -82,7 +82,7 @@ class MacroStateHydrationTest extends TestCase
     public function testBalanceSheetInsideTheThresholdIsNeitherEasingNorTightening(): void
     {
         $flat = MacroStateDTO::fromArray([
-            'balance_sheet_intensity' => MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD / 2,
+            'balance_sheet_intensity' => MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD / 2,
         ]);
 
         $this->assertFalse($flat->qeActive);
@@ -107,7 +107,7 @@ class MacroStateHydrationTest extends TestCase
     {
         $dto = MacroStateDTO::fromArray(['macro_credit_spread' => 0.02]);
 
-        $this->assertEqualsWithDelta(0.02 * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, $dto->highYieldCreditSpread, 1e-12);
+        $this->assertEqualsWithDelta(0.02 * MacroConstants::HY_BASE_SPREAD_MULTIPLIER, $dto->highYieldCreditSpread, 1e-12);
         $this->assertEqualsWithDelta(
             $dto->highYieldCreditSpread,
             $dto->highYieldCreditSpreadEma,
@@ -176,7 +176,7 @@ class MacroStateHydrationTest extends TestCase
         $this->assertEqualsWithDelta($state->netExportGap, $dto->netExportGap, 1e-15);
 
         $legacy = MacroState::fromArray(['foreign_output_gap_ema' => 0.01]);
-        $this->assertSame(MacroEngine::ALLIED_DEFENSE_BASELINE, $legacy->alliedDefenseSpendingIndex, 'A state predating allied spending opens it at trend.');
+        $this->assertSame(MacroConstants::ALLIED_DEFENSE_BASELINE, $legacy->alliedDefenseSpendingIndex, 'A state predating allied spending opens it at trend.');
         $this->assertSame(0.0, $legacy->alliedDefenseDeliveryLag);
     }
 
@@ -284,7 +284,7 @@ class MacroStateHydrationTest extends TestCase
     public function testTheOpeningCurveIsTheEnginesOwnCurveAtTheOpeningState(): void
     {
         $state = new MacroState();
-        $curve = (new MonetaryPolicySubsystem(new MathUtility()))->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, $state->naturalRate);
+        $curve = (new MonetaryPolicySubsystem(new MathUtility()))->calculateYieldCurve($state, MacroConstants::TARGET_INFLATION, $state->naturalRate);
 
         // Openings are declared to the basis point.
         foreach (['yield_2y' => 'yield2y', 'yield_5y' => 'yield5y', 'yield_10y' => 'yield10y', 'yield_30y' => 'yield30y',
@@ -348,8 +348,8 @@ class MacroStateHydrationTest extends TestCase
     {
         $reader = $open();
 
-        $this->assertSame(MacroEngine::SENTIMENT_TREND_LEVEL, $reader->consumerSentimentIndex);
-        $this->assertSame(MacroEngine::SENTIMENT_TREND_LEVEL, $reader->consumerSentimentIndexEma);
+        $this->assertSame(MacroConstants::SENTIMENT_TREND_LEVEL, $reader->consumerSentimentIndex);
+        $this->assertSame(MacroConstants::SENTIMENT_TREND_LEVEL, $reader->consumerSentimentIndexEma);
         $this->assertSame(0.0, $reader->consumerSentimentMood);
     }
 

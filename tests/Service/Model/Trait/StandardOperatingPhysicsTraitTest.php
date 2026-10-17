@@ -6,9 +6,8 @@ namespace App\Tests\Service\Model\Trait;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
@@ -194,7 +193,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     public function testInputCostDeviationWeightsOnlyDeclaredExposures(): void
     {
         $calm = new MacroStateDTO(
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
+            producerPriceInflationEma: MacroConstants::TARGET_INFLATION,
         );
         $this->assertEqualsWithDelta(0.0, $this->model->resolveInputCostDeviation($calm), 0.0000001, 'At baseline every channel sits at zero.');
 
@@ -202,18 +201,18 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $configured = new ConfiguredStandardModel();
         $agriSpike = new MacroStateDTO(
             agriculturalCommodityIndexEma: 200.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
+            producerPriceInflationEma: MacroConstants::TARGET_INFLATION,
         );
         $this->assertEqualsWithDelta(0.0, $configured->resolveInputCostDeviation($agriSpike), 0.0000001, 'A market the firm does not buy in cannot move its costs.');
         $this->assertGreaterThan(0.0, $this->model->resolveInputCostDeviation(new MacroStateDTO(
             industrialMetalsIndexEma: 150.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
+            producerPriceInflationEma: MacroConstants::TARGET_INFLATION,
         )), 'The default basket does buy metals.');
 
         // A metals spike reaches it in proportion to the declared share.
         $metalsSpike = new MacroStateDTO(
             industrialMetalsIndexEma: 150.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
+            producerPriceInflationEma: MacroConstants::TARGET_INFLATION,
         );
         $this->assertEqualsWithDelta(0.20 * 0.50, $configured->resolveInputCostDeviation($metalsSpike), 0.0000001, 'The deviation is the share times the relative move.');
     }
@@ -255,7 +254,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             industrialMetalsIndexEma: 100.0,
             agriculturalCommodityIndexEma: 100.0,
             freightRateIndexEma: 100.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
+            producerPriceInflationEma: MacroConstants::TARGET_INFLATION,
             realWageGap: 0.0,
         );
 
@@ -264,13 +263,13 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         }
 
         // Electricity is a level off the wholesale power index, like gas; the retail pass-through lives in the weights.
-        $dearPower = new MacroStateDTO(wholesalePowerPriceIndexEma: 1.30 * MacroEngine::WHOLESALE_POWER_BASELINE);
+        $dearPower = new MacroStateDTO(wholesalePowerPriceIndexEma: 1.30 * MacroConstants::WHOLESALE_POWER_BASELINE);
         $this->assertEqualsWithDelta(0.30, $this->model->resolveInputPriceDeviations($dearPower)['electricity'], 0.0000001);
 
         // Labour is priced by the real wage's LEVEL against its trend-productivity path, not by how fast wages grow.
         $dearLabour = new MacroStateDTO(realWageGap: 0.02);
         $this->assertEqualsWithDelta(0.02, $this->model->resolveInputPriceDeviations($dearLabour)['labor'], 0.0000001);
-        $fastWagesOnPath = new MacroStateDTO(wageGrowthEma: MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION + 0.01);
+        $fastWagesOnPath = new MacroStateDTO(wageGrowthEma: MacroConstants::TFP_DRIFT + MacroConstants::TARGET_INFLATION + 0.01);
         $this->assertEqualsWithDelta(0.0, $this->model->resolveInputPriceDeviations($fastWagesOnPath)['labor'], 0.0000001, 'Wage growth with the level still on its path is not yet a cost.');
     }
 
@@ -282,7 +281,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     public function testThePpiChannelIsTheWholesalePriceLevelAgainstItsTrend(): void
     {
         $excess = 0.03;
-        $horizon = MacroEngine::COMMODITY_TREND_HORIZON_YEARS;
+        $horizon = MacroConstants::COMMODITY_TREND_HORIZON_YEARS;
         $dt = 0.01;
         $level = 0.0;
         $trend = 0.0;
@@ -291,7 +290,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             $trend += (1.0 - exp(-$dt / $horizon)) * ($level - $trend);
         }
 
-        $hot = new MacroStateDTO(producerPriceInflationEma: MacroEngine::TARGET_INFLATION + $excess);
+        $hot = new MacroStateDTO(producerPriceInflationEma: MacroConstants::TARGET_INFLATION + $excess);
         $this->assertEqualsWithDelta($level - $trend, $this->model->resolveInputPriceDeviations($hot)['ppi'], 3e-4, 'Twenty years of a steady excess hold the level H x excess above its trend.');
         $this->assertEqualsWithDelta($horizon * $excess, $this->model->resolveInputPriceDeviations($hot)['ppi'], 1e-12);
     }
@@ -331,7 +330,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $stock = (new Stock())->setTicker('DRAG');
         $spike = new MacroStateDTO(
             industrialMetalsIndexEma: 200.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
+            producerPriceInflationEma: MacroConstants::TARGET_INFLATION,
         );
 
         $taker = $this->model->exposeInputCostDrag($stock, $spike, $this->model->exposeStreamContext([], $this->math), 0.0, 0.60);
@@ -344,14 +343,14 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         // A collapse in input prices is a windfall of the same shape, not an asymmetric no-op.
         $collapse = new MacroStateDTO(
             industrialMetalsIndexEma: 50.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
+            producerPriceInflationEma: MacroConstants::TARGET_INFLATION,
         );
         $this->assertLessThan(0.0, $this->model->exposeInputCostDrag($stock, $collapse, $this->model->exposeStreamContext([], $this->math), 0.0, 0.60), 'Falling input prices must widen margin.');
 
         // However violent the move, one quarter's drag is bounded.
         $crisis = new MacroStateDTO(
             industrialMetalsIndexEma: 100_000.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
+            producerPriceInflationEma: MacroConstants::TARGET_INFLATION,
         );
         $this->assertLessThanOrEqual(0.50, $this->model->exposeInputCostDrag($stock, $crisis, $this->model->exposeStreamContext([], $this->math), 0.0, 0.60), 'The drag is clamped so one quarter cannot destroy the cost base.');
     }
@@ -438,7 +437,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             $stock->setOperatingMargin('0.20');
             foreach ([0.0, 0.5, 1.0, 1.4, 3.0] as $ratio) {
                 for ($quarter = 0; $quarter < 40; $quarter++) {
-                    $model->recordReinvestmentRatio($stock, $ratio, EarningsEngine::QUARTERLY_TIME_STEP);
+                    $model->recordReinvestmentRatio($stock, $ratio, FinancialConstants::QUARTER_YEARS);
                 }
                 $this->assertSame('0.20', $stock->getOperatingMargin(), sprintf('%s moved the margin at a reinvestment ratio of %.1f.', $model::class, $ratio));
             }
@@ -507,7 +506,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     {
         $stock = (new Stock())->setTicker('SCALARS');
 
-        $this->assertSame(MacroEngine::TREND_REAL_GROWTH, $this->model->getSecularGrowthRate($stock), 'Trend growth for a firm with no declared secular story.');
+        $this->assertSame(MacroConstants::TREND_REAL_GROWTH, $this->model->getSecularGrowthRate($stock), 'Trend growth for a firm with no declared secular story.');
         $this->assertSame(1.5, $this->model->getCapexCyclicality(), 'Capex is more cyclical than output.');
         $this->assertGreaterThan(1.0, $this->model->getCapexCyclicality(), 'Investment must swing harder than the cycle it responds to.');
         $this->assertSame(-0.03, $this->model->getCapexCycleSignal($stock, new MacroStateDTO(outputGapEma: -0.03, energyPriceIndexEma: 50.0)), 'The domestic output gap is the cycle; a commodity price is not.');

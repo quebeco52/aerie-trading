@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Service\Macro\Subsystem;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
@@ -96,6 +96,14 @@ class MacroAggregateSubsystem
      * 1996: 3-5y half-life) survive intact while a standing level does not.
      */
     public const EXCHANGE_RATE_TREND_HORIZON_YEARS = 20.0;
+    /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
+    public const CAPITAL_ACCUMULATION_RATE = 0.25;
+    /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
+    public const CAPITAL_DECAY_RATE = 0.30;
+    /** Asymptotic lower bound floor on physical capital stock contraction / overhang. */
+    public const CAPITAL_OVERHANG_MIN = -0.15;
+    /** Asymptotic upper bound ceiling on physical capital stock excess capacity / overhang. */
+    public const CAPITAL_OVERHANG_MAX = 0.15;
 
     // --- Distributed Lag Transmission Constants ---
     /**
@@ -123,6 +131,10 @@ class MacroAggregateSubsystem
     public const NATURAL_RATE_GROWTH_LOADING = 1.113;
     /** Speed of adjustment (kappa) of natural real rate toward fundamental equilibrium. */
     public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
+    /** Structural lower bound floor for natural real rate. */
+    public const MIN_NATURAL_RATE = 0.005;
+    /** Structural upper bound ceiling for natural real rate. */
+    public const MAX_NATURAL_RATE = 0.035;
 
     // --- Open Economy: Trade Volumes and Import Prices (IMF WEO October 2015, Ch. 3, Table 3.1: 60 economies,
     // 1980-2014) ---
@@ -132,7 +144,7 @@ class MacroAggregateSubsystem
      */
     public const DISTRICT_EXPORT_SHARE = 0.32;
     /** Imports over GDP: exports less the structural trade balance (27.5%). */
-    public const DISTRICT_IMPORT_SHARE = self::DISTRICT_EXPORT_SHARE - MacroEngine::TRADE_BALANCE_BASELINE;
+    public const DISTRICT_IMPORT_SHARE = self::DISTRICT_EXPORT_SHARE - MacroConstants::TRADE_BALANCE_BASELINE;
     /**
      * Foreign value added in the District's gross exports, Switzerland's 24.6% (OECD TiVA 2015: domestic content 75.4%,
      * via Council of the EU WK 5369/2021): imports that pass through into exports.
@@ -154,7 +166,7 @@ class MacroAggregateSubsystem
      */
     public const DISTRICT_DEFENSE_EXPORTS_USD = 170.0e9;
     /** Arms exports over GDP, part of the exports above (1.4%). */
-    public const DISTRICT_DEFENSE_EXPORT_SHARE = self::DISTRICT_DEFENSE_EXPORTS_USD / MacroEngine::DISTRICT_GDP_USD;
+    public const DISTRICT_DEFENSE_EXPORT_SHARE = self::DISTRICT_DEFENSE_EXPORTS_USD / MacroConstants::DISTRICT_GDP_USD;
     /**
      * Mean lag (years) from an allied arms order to its delivery as exports: the makers' cost-plus backlog burns 15% a
      * quarter (DefenseContractorBusinessModel).
@@ -517,6 +529,8 @@ class MacroAggregateSubsystem
     public const TFP_OUTPUT_GAP_SENSITIVITY = 0.05;
     /** Structural upper bound ceiling for annual TFP growth rate. */
     public const MAX_TFP_GROWTH_RATE = 0.050;
+    /** Structural lower bound floor for annual TFP growth rate. */
+    public const MIN_TFP_GROWTH_RATE = -0.030;
 
     // --- Productivity Shock Absorption (Basu, Fernald & Kimball 2006) ---
     /**
@@ -559,6 +573,10 @@ class MacroAggregateSubsystem
     public const PMI_KAPPA = 6.0;
     /** Stochastic diffusion volatility of manufacturing PMI survey sentiment. */
     public const PMI_SIGMA = 1.2;
+    /** Asymptotic lower bound floor for manufacturing PMI during severe industrial depressions. */
+    public const MIN_PMI = 30.0;
+    /** Asymptotic upper bound ceiling for manufacturing PMI during hyper-expansionary booms. */
+    public const MAX_PMI = 70.0;
 
     // --- Producer Price Index (PPI) Stage-of-Processing ---
     /** Weight of agricultural raw food commodities in intermediate producer prices. */
@@ -571,7 +589,7 @@ class MacroAggregateSubsystem
      * Weight of the rest of the cost base (purchased services, rents, margins), repricing with expected inflation: what
      * the named shares leave, so the stage weights sum to one.
      */
-    public const PPI_OTHER_COST_WEIGHT = 1.0 - MacroEngine::PPI_METALS_WEIGHT - MacroEngine::PPI_ENERGY_WEIGHT - self::PPI_AGRI_WEIGHT - self::PPI_ULC_WEIGHT;
+    public const PPI_OTHER_COST_WEIGHT = 1.0 - MacroConstants::PPI_METALS_WEIGHT - MacroConstants::PPI_ENERGY_WEIGHT - self::PPI_AGRI_WEIGHT - self::PPI_ULC_WEIGHT;
     /** Sensitivity of wholesale producer price margins to cyclical GDP output gap demand. */
     public const PPI_DEMAND_SENSITIVITY = 0.35;
     /** Lower bound floor on annual producer price deflation. */
@@ -585,6 +603,8 @@ class MacroAggregateSubsystem
      * cost.
      */
     public const PPI_AGRI_PASS_THROUGH = 0.30;
+    /** Upper bound ceiling on runaway wholesale producer price inflation. */
+    public const MAX_PPI_INFLATION = 0.25;
 
     // --- Continuous EMA Indicator Smoothing Horizons ---
     /** Standard quarterly macro indicator EMA smoothing horizon. */
@@ -621,11 +641,11 @@ class MacroAggregateSubsystem
      */
     public function calculateTotalFactorProductivity(MacroState $state, float $dt): float
     {
-        $currentTfp = $state->totalFactorProductivityIndex ?? MacroEngine::TFP_BASELINE;
+        $currentTfp = $state->totalFactorProductivityIndex ?? MacroConstants::TFP_BASELINE;
 
         $endogenousGrowth = $state->outputGapEma * self::TFP_OUTPUT_GAP_SENSITIVITY;
-        $trendGrowthRate = MacroEngine::TFP_DRIFT + $endogenousGrowth;
-        $clampedTrendGrowthRate = max(MacroEngine::MIN_TFP_GROWTH_RATE, min(self::MAX_TFP_GROWTH_RATE, $trendGrowthRate));
+        $trendGrowthRate = MacroConstants::TFP_DRIFT + $endogenousGrowth;
+        $clampedTrendGrowthRate = max(self::MIN_TFP_GROWTH_RATE, min(self::MAX_TFP_GROWTH_RATE, $trendGrowthRate));
 
         $innovation = self::TFP_VOLATILITY * sqrt($dt) * $this->mathUtility->generateStandardNormal();
         $state->tfpShockLevel += $innovation;
@@ -685,9 +705,9 @@ class MacroAggregateSubsystem
      */
     public function calculateNaturalRate(MacroState $state, float $trendGrowthRate, float $dt): void
     {
-        $trendPotentialGrowthGap = ($trendGrowthRate - MacroEngine::TFP_DRIFT) + ($state->laborForceGrowthRate - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE);
-        $targetNaturalRate = MacroEngine::BASE_NATURAL_RATE + (self::NATURAL_RATE_GROWTH_LOADING * $trendPotentialGrowthGap);
-        $targetNaturalRate = max(MacroEngine::MIN_NATURAL_RATE, min(MacroEngine::MAX_NATURAL_RATE, $targetNaturalRate));
+        $trendPotentialGrowthGap = ($trendGrowthRate - MacroConstants::TFP_DRIFT) + ($state->laborForceGrowthRate - MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE);
+        $targetNaturalRate = MacroConstants::BASE_NATURAL_RATE + (self::NATURAL_RATE_GROWTH_LOADING * $trendPotentialGrowthGap);
+        $targetNaturalRate = max(self::MIN_NATURAL_RATE, min(self::MAX_NATURAL_RATE, $targetNaturalRate));
 
         $state->naturalRate += self::NATURAL_RATE_ADJUSTMENT_SPEED * ($targetNaturalRate - $state->naturalRate) * $dt;
     }
@@ -738,14 +758,14 @@ class MacroAggregateSubsystem
         $realRate = (self::BORROWING_POLICY_WEIGHT * ($state->policyRate - $expectedInflation))
             + (self::BORROWING_YIELD5Y_WEIGHT * ($yield5y - $expectedInflation5y));
 
-        $neutral5yDurationScale = FixedIncome::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $neutral5yDurationScale = FixedIncome::calculateTermPremiumDurationScale(5.0, MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS);
         // Bernanke (2006) neutral borrowing benchmark incorporating structural term premium.
-        $neutral5yYield = $naturalRate + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
+        $neutral5yYield = $naturalRate + MacroConstants::TARGET_INFLATION + (MacroConstants::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
 
-        $neutralBorrowingPolicy = (self::BORROWING_POLICY_WEIGHT * ($naturalRate + MacroEngine::TARGET_INFLATION))
+        $neutralBorrowingPolicy = (self::BORROWING_POLICY_WEIGHT * ($naturalRate + MacroConstants::TARGET_INFLATION))
             + (self::BORROWING_YIELD5Y_WEIGHT * $neutral5yYield);
         // Woodford (2003) neutral real rate with expectations anchored at inflation target.
-        $neutralRealRate = $neutralBorrowingPolicy - MacroEngine::TARGET_INFLATION;
+        $neutralRealRate = $neutralBorrowingPolicy - MacroConstants::TARGET_INFLATION;
 
         // Curdia & Woodford (2010) risk-free real stance, reaching spending through a Pascal lag (Solow 1960;
         // Rudebusch & Svensson 1999 lag the real rate a year): investment is planned, ordered and built.
@@ -772,9 +792,9 @@ class MacroAggregateSubsystem
         // spending a budget drawing more of the fund's return, as in a recession, adds to the baseline the founding
         // draw is in.
         $drawAboveFounding = $state->sovereignFundDrawShare > 0.0
-            ? $state->sovereignFundDrawToGdp * ($state->sovereignFundDrawShare - MacroEngine::RESERVE_DRAW_CEILING) / $state->sovereignFundDrawShare
+            ? $state->sovereignFundDrawToGdp * ($state->sovereignFundDrawShare - MacroConstants::RESERVE_DRAW_CEILING) / $state->sovereignFundDrawShare
             : 0.0;
-        $fundDraw = self::KALDOR_GOVT_SPENDING_MULTIPLIER * $drawAboveFounding / MacroEngine::PUBLIC_PURCHASES_TO_GDP;
+        $fundDraw = self::KALDOR_GOVT_SPENDING_MULTIPLIER * $drawAboveFounding / MacroConstants::PUBLIC_PURCHASES_TO_GDP;
 
         // Blanchard & Perotti (2002) AUTOMATIC stabilisers and Friedman (1957) income smoothing, on the contemporaneous
         // gap: nobody decides them, so they carry no lag and act as a spring rather than an anti-damper.
@@ -811,7 +831,7 @@ class MacroAggregateSubsystem
         $crisisDeleveragingDrag = CreditFiscalSubsystem::crisisDirectDrag($state->creditCrisisDrag);
 
         // Baker, Bloom & Davis (2016) real options investment deferral under policy uncertainty.
-        $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * max(0.0, log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE));
+        $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * max(0.0, log(max(1.0, $state->policyUncertaintyIndexEma) / MacroConstants::EPU_BASELINE));
 
         // Metzler (1941) & Blinder (1982) inventory investment cycle step, on domestic demand against its own average:
         // like with like, so the level parts riding beside the demand equation set off no surprise.
@@ -1084,7 +1104,7 @@ class MacroAggregateSubsystem
      */
     public static function alliedDefenseGap(float $alliedDefenseSpendingIndexEma): float
     {
-        return $alliedDefenseSpendingIndexEma > 0.0 ? log($alliedDefenseSpendingIndexEma / MacroEngine::ALLIED_DEFENSE_BASELINE) : 0.0;
+        return $alliedDefenseSpendingIndexEma > 0.0 ? log($alliedDefenseSpendingIndexEma / MacroConstants::ALLIED_DEFENSE_BASELINE) : 0.0;
     }
 
     /**
@@ -1134,7 +1154,7 @@ class MacroAggregateSubsystem
         $retaliatedExportShare = ((self::DISTRICT_EXPORT_SHARE * self::GOODS_SHARE_OF_EXPORTS) - self::DISTRICT_DEFENSE_EXPORT_SHARE) * $domesticContent;
 
         return ((self::DISTRICT_EXPORT_SHARE - self::DISTRICT_DEFENSE_EXPORT_SHARE) * $domesticContent * self::EXPORT_DEMAND_ELASTICITY * $mainlandGap)
-            + (self::DISTRICT_DEFENSE_EXPORT_SHARE * MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * $alliedDefenseGap)
+            + (self::DISTRICT_DEFENSE_EXPORT_SHARE * MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * $alliedDefenseGap)
             - ($priceResponse * $realExchangeRateGap)
             + (self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_DOMESTIC_IMPORT_SHARE * self::GOODS_SHARE_OF_IMPORTS * $tariffDuty)
             - (self::EXPORT_PRICE_ELASTICITY * $retaliatedExportShare * $retaliatoryDuty);
@@ -1200,7 +1220,7 @@ class MacroAggregateSubsystem
      */
     public static function retaliatoryDuty(float $tariffDuty): float
     {
-        return log(1.0 + (MacroEngine::TARIFF_RETALIATION_RATIO * (exp($tariffDuty) - 1.0)));
+        return log(1.0 + (MacroConstants::TARIFF_RETALIATION_RATIO * (exp($tariffDuty) - 1.0)));
     }
 
     /**
@@ -1325,7 +1345,7 @@ class MacroAggregateSubsystem
         // adds a step to the level and then no more inflation.
         $priorEnergyCostPushLag = $state->energyCostPushLag;
         $priorAgriCostPushLag = $state->agriCostPushLag;
-        $rawEnergyCostPush = ($state->energyPriceShock / MacroEngine::ENERGY_BASELINE) * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
+        $rawEnergyCostPush = ($state->energyPriceShock / MacroConstants::ENERGY_BASELINE) * MacroConstants::ENERGY_COST_PUSH_TRANSMISSION;
         $state->energyCostPushLag = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->energyCostPushLag,
             targetValue: $rawEnergyCostPush,
@@ -1334,7 +1354,7 @@ class MacroAggregateSubsystem
         );
 
         // Gelos & Ustyugova (2017) distributed lag agricultural pass-through to food CPI.
-        $rawAgriCostPush = (($state->agriculturalCommodityIndex / MacroEngine::AGRI_BASELINE) - 1.0) * self::AGRI_COST_PUSH_TRANSMISSION;
+        $rawAgriCostPush = (($state->agriculturalCommodityIndex / MacroConstants::AGRI_BASELINE) - 1.0) * self::AGRI_COST_PUSH_TRANSMISSION;
         $state->agriCostPushLag = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->agriCostPushLag,
             targetValue: $rawAgriCostPush,
@@ -1486,7 +1506,7 @@ class MacroAggregateSubsystem
         $currentPotential = $state->potentialGdpIndex > 0.0 ? $state->potentialGdpIndex : 1.0;
         $state->potentialGdpIndex = max(0.10, $currentPotential * exp($realPotentialGrowth * $dt));
         // The population an immigration regime has added over the structural path (log), which bids for housing.
-        $state->immigrationPopulationShift += ($state->laborForceGrowthRate + $state->cyclicalMigrationRate - MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE) * $dt;
+        $state->immigrationPopulationShift += ($state->laborForceGrowthRate + $state->cyclicalMigrationRate - MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE) * $dt;
 
         $currentDeflator = $state->gdpDeflator > 0.0 ? $state->gdpDeflator : 1.0;
         $state->gdpDeflator = max(0.01, $currentDeflator * exp($state->domesticInflation * $dt));
@@ -1529,7 +1549,7 @@ class MacroAggregateSubsystem
     public function updateExponentialMovingAverages(MacroState $state, float $dt): void
     {
         $emaWeight = 1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS);
-        $commodityTrendWeight = 1.0 - exp(-$dt / MacroEngine::COMMODITY_TREND_HORIZON_YEARS);
+        $commodityTrendWeight = 1.0 - exp(-$dt / MacroConstants::COMMODITY_TREND_HORIZON_YEARS);
 
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
         foreach (self::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
@@ -1663,8 +1683,8 @@ class MacroAggregateSubsystem
     public function updateCapitalStockOverhang(MacroState $state, float $dt): void
     {
         // Kaldor (1940) capital stock accumulation and physical depreciation dynamics.
-        $state->capitalStockOverhang += (($state->outputGap * MacroEngine::CAPITAL_ACCUMULATION_RATE) - (MacroEngine::CAPITAL_DECAY_RATE * $state->capitalStockOverhang)) * $dt;
-        $state->capitalStockOverhang = max(MacroEngine::CAPITAL_OVERHANG_MIN, min(MacroEngine::CAPITAL_OVERHANG_MAX, $state->capitalStockOverhang));
+        $state->capitalStockOverhang += (($state->outputGap * self::CAPITAL_ACCUMULATION_RATE) - (self::CAPITAL_DECAY_RATE * $state->capitalStockOverhang)) * $dt;
+        $state->capitalStockOverhang = max(self::CAPITAL_OVERHANG_MIN, min(self::CAPITAL_OVERHANG_MAX, $state->capitalStockOverhang));
     }
 
     /**
@@ -1700,9 +1720,9 @@ class MacroAggregateSubsystem
         $state->capacityUtilizationRate = FirmEconomics::calculateCapacityUtilization(
             outputGap: $state->outputGap,
             capitalStockOverhang: $state->capitalStockOverhang,
-            baselineCu: MacroEngine::CU_BASELINE,
-            gapSensitivity: MacroEngine::CU_GAP_SENSITIVITY,
-            overhangSensitivity: MacroEngine::CU_OVERHANG_SENSITIVITY,
+            baselineCu: MacroConstants::CU_BASELINE,
+            gapSensitivity: MacroConstants::CU_GAP_SENSITIVITY,
+            overhangSensitivity: MacroConstants::CU_OVERHANG_SENSITIVITY,
         );
     }
 
@@ -1723,7 +1743,7 @@ class MacroAggregateSubsystem
      */
     public function calculateManufacturingPmi(MacroState $state, float $dt): void
     {
-        $cuDeviation = $state->capacityUtilizationRate - MacroEngine::CU_BASELINE;
+        $cuDeviation = $state->capacityUtilizationRate - MacroConstants::CU_BASELINE;
         // Brown (1963) real GDP growth momentum derived from EMA output gap time-derivative.
         $excessGrowth = ($state->outputGap - $state->outputGapEma) / self::STANDARD_EMA_HORIZON_YEARS;
         $inventoryDemand = -$state->inventoryStockGap; // Shortfall stimulates orders
@@ -1735,10 +1755,10 @@ class MacroAggregateSubsystem
         ];
 
         $targetPmi = MacroTransmission::calculateDiffusionIndex(
-            baseline: MacroEngine::PMI_BASELINE,
+            baseline: MacroConstants::PMI_BASELINE,
             drivers: $drivers,
-            min: MacroEngine::MIN_PMI,
-            max: MacroEngine::MAX_PMI,
+            min: self::MIN_PMI,
+            max: self::MAX_PMI,
         );
 
         // Gillespie (1996) exact Ornstein-Uhlenbeck discretization for PMI diffusion index.
@@ -1748,7 +1768,7 @@ class MacroAggregateSubsystem
         $diffusion = self::PMI_SIGMA * sqrt((1.0 - ($decay ** 2)) / (2.0 * self::PMI_KAPPA)) * $dW;
         $newPmi = $state->manufacturingPmi + $drift + $diffusion;
 
-        $state->manufacturingPmi = max(MacroEngine::MIN_PMI, min(MacroEngine::MAX_PMI, $newPmi));
+        $state->manufacturingPmi = max(self::MIN_PMI, min(self::MAX_PMI, $newPmi));
     }
 
     /**
@@ -1767,8 +1787,8 @@ class MacroAggregateSubsystem
         $unitLaborCost = $state->wageGrowth - $tfpGrowthRate;
 
         $weights = [
-            'metals' => MacroEngine::PPI_METALS_WEIGHT,
-            'energy' => MacroEngine::PPI_ENERGY_WEIGHT,
+            'metals' => MacroConstants::PPI_METALS_WEIGHT,
+            'energy' => MacroConstants::PPI_ENERGY_WEIGHT,
             'agri' => self::PPI_AGRI_WEIGHT,
             'gscpi' => self::PPI_GSCPI_SENSITIVITY,
             'ulc' => self::PPI_ULC_WEIGHT,
@@ -1786,7 +1806,7 @@ class MacroAggregateSubsystem
             outputGap: $state->outputGap,
             weights: $weights,
             min: self::MIN_PPI_INFLATION,
-            max: MacroEngine::MAX_PPI_INFLATION,
+            max: self::MAX_PPI_INFLATION,
         );
 
         $state->producerPriceInflation = $targetPpi;
@@ -1807,11 +1827,11 @@ class MacroAggregateSubsystem
     private function commodityInflation(float $index, float $trend, float $passThrough): float
     {
         if ($trend <= 0.0) {
-            return MacroEngine::TARGET_INFLATION;
+            return MacroConstants::TARGET_INFLATION;
         }
 
-        $growthRate = (($index - $trend) / $trend) / MacroEngine::COMMODITY_TREND_HORIZON_YEARS;
+        $growthRate = (($index - $trend) / $trend) / MacroConstants::COMMODITY_TREND_HORIZON_YEARS;
 
-        return ($growthRate * $passThrough) + MacroEngine::TARGET_INFLATION;
+        return ($growthRate * $passThrough) + MacroConstants::TARGET_INFLATION;
     }
 }

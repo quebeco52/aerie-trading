@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\MedicalCareFacilityBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -135,8 +135,8 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
             return $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, unemploymentRateEma: $unemployment), $math)->streamRevenue;
         };
 
-        $healthy = $run(MacroEngine::NATURAL_UNEMPLOYMENT);
-        $recession = $run(MacroEngine::NATURAL_UNEMPLOYMENT + 0.02);
+        $healthy = $run(MacroConstants::NATURAL_UNEMPLOYMENT);
+        $recession = $run(MacroConstants::NATURAL_UNEMPLOYMENT + 0.02);
 
         $expectedDrop = 0.02 * MedicalCareFacilityBusinessModel::UNEMPLOYMENT_ELECTIVE_SENSITIVITY;
         $this->assertEqualsWithDelta($healthy['elective_outpatient'] * (1.0 - $expectedDrop), $recession['elective_outpatient'], 1e-6);
@@ -173,7 +173,7 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
         $recession = new MacroStateDTO(
             outputGapEma: -0.03,
             inflationEma: 0.05,
-            unemploymentRateEma: MacroEngine::NATURAL_UNEMPLOYMENT + 0.01,
+            unemploymentRateEma: MacroConstants::NATURAL_UNEMPLOYMENT + 0.01,
             exchangeRateIndexEma: 100.0,
             governmentSpendingIndexEma: 105.0,
         );

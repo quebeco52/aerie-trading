@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
@@ -72,17 +72,17 @@ class MacroVolatilityAnchorTest extends TestCase
     private static function theoreticalJumpContribution(): float
     {
         // Each variance jump is an exponential capped at K times its mean, so its mean is m (1 - e^-K).
-        $meanVarianceJump = ((MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN * StochasticProcesses::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
-            + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN))
+        $meanVarianceJump = ((MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP * AssetMarketSubsystem::SYSTEMIC_JUMP_VARIANCE_MEAN * StochasticProcesses::VARIANCE_JUMP_UPSIDE_MEAN_SHARE)
+            + ((1.0 - MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP) * AssetMarketSubsystem::SYSTEMIC_JUMP_VARIANCE_MEAN))
             * (1.0 - exp(-StochasticProcesses::MAX_VARIANCE_JUMP_MEAN_MULTIPLE));
 
-        return (MacroEngine::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / AssetMarketSubsystem::MACRO_VOL_KAPPA;
+        return (MacroConstants::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / AssetMarketSubsystem::MACRO_VOL_KAPPA;
     }
 
     /** The anchor the diffusion alone is given, as the subsystem actually computes it. */
     private static function diffusiveAnchorVariance(): float
     {
-        return (MacroEngine::MACRO_VOL_BASE_ANCHOR ** 2) - AssetMarketSubsystem::jumpVarianceDrag();
+        return (MacroConstants::MACRO_VOL_BASE_ANCHOR ** 2) - AssetMarketSubsystem::jumpVarianceDrag();
     }
 
     /**
@@ -153,7 +153,7 @@ class MacroVolatilityAnchorTest extends TestCase
     public function testRealizedVolatilityRevertsToItsAnchor(): void
     {
         $realized = $this->measure()['rms'];
-        $anchor = MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $anchor = MacroConstants::MACRO_VOL_BASE_ANCHOR;
 
         $this->assertEqualsWithDelta(
             $anchor,
@@ -209,7 +209,7 @@ class MacroVolatilityAnchorTest extends TestCase
         $measured = $this->measure();
 
         $this->assertGreaterThan(
-            $measured['calmTickVarianceRise'] + (0.5 * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN),
+            $measured['calmTickVarianceRise'] + (0.5 * AssetMarketSubsystem::SYSTEMIC_JUMP_VARIANCE_MEAN),
             $measured['jumpTickVarianceRise'],
             'A market-wide jump must carry its variance jump on the same tick.',
         );
@@ -235,9 +235,9 @@ class MacroVolatilityAnchorTest extends TestCase
 
         $state = new MacroState();
         $state->outputGap = 0.0;
-        $state->macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD;
-        $state->structuralSlope = MacroEngine::NS_BASE_TERM_PREMIUM;
-        $state->marketVolatility = MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $state->macroCreditSpread = MacroConstants::BASE_CREDIT_SPREAD;
+        $state->structuralSlope = MacroConstants::NS_BASE_TERM_PREMIUM;
+        $state->marketVolatility = MacroConstants::MACRO_VOL_BASE_ANCHOR;
 
         $dt = 1.0 / self::TICKS_PER_YEAR;
         $ticks = (int) (self::YEARS * self::TICKS_PER_YEAR);

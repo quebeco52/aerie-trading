@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Math;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
 use PHPUnit\Framework\TestCase;
 
@@ -130,8 +130,8 @@ class ValuationTest extends TestCase
     public function testTheSectorPriorIsReStruckAtTodaysRealHurdle(): void
     {
         $beta = 0.7;
-        $foundingHurdle = Valuation::FOUNDING_REAL_RISK_FREE_RATE + MacroEngine::TARGET_INFLATION + ($beta * MacroEngine::BASE_EQUITY_RISK_PREMIUM);
-        $this->assertEqualsWithDelta(0.0, Valuation::sectorHurdleShift($foundingHurdle, $beta, MacroEngine::TARGET_INFLATION), 1e-12);
+        $foundingHurdle = Valuation::FOUNDING_REAL_RISK_FREE_RATE + MacroConstants::TARGET_INFLATION + ($beta * MacroConstants::BASE_EQUITY_RISK_PREMIUM);
+        $this->assertEqualsWithDelta(0.0, Valuation::sectorHurdleShift($foundingHurdle, $beta, MacroConstants::TARGET_INFLATION), 1e-12);
         $this->assertSame(
             Valuation::calculateIntrinsicFairValuePE($foundingHurdle, 0.20, 0.036, 16.0),
             Valuation::calculateIntrinsicFairValuePE($foundingHurdle, 0.20, 0.036, 16.0, 0.0),
@@ -140,7 +140,7 @@ class ValuationTest extends TestCase
         // A hundred basis points on the real hurdle: the prior's yield rises by the same, so 16x becomes 1 / (1/16 +
         // 1%).
         $hurdle = $foundingHurdle + 0.01;
-        $shift = Valuation::sectorHurdleShift($hurdle, $beta, MacroEngine::TARGET_INFLATION);
+        $shift = Valuation::sectorHurdleShift($hurdle, $beta, MacroConstants::TARGET_INFLATION);
         $this->assertEqualsWithDelta(0.01, $shift, 1e-12);
         $spread = $hurdle - 0.036;
         $own = (1.0 - (0.036 / 0.20)) / $spread;
@@ -152,7 +152,7 @@ class ValuationTest extends TestCase
         );
 
         // Expected inflation moves the yield and nominal growth alike, so on its own it moves no multiple.
-        $this->assertEqualsWithDelta(0.0, Valuation::sectorHurdleShift($foundingHurdle + 0.01, $beta, MacroEngine::TARGET_INFLATION + 0.01), 1e-12);
+        $this->assertEqualsWithDelta(0.0, Valuation::sectorHurdleShift($foundingHurdle + 0.01, $beta, MacroConstants::TARGET_INFLATION + 0.01), 1e-12);
     }
 
     /**
@@ -163,9 +163,9 @@ class ValuationTest extends TestCase
     public function testALongDurationFirmRepricesMoreOnARateRiseThanAShortDurationOne(): void
     {
         $fall = static function (float $beta, float $roic, float $growth, float $sector): float {
-            $hurdle = Valuation::FOUNDING_REAL_RISK_FREE_RATE + MacroEngine::TARGET_INFLATION + ($beta * MacroEngine::BASE_EQUITY_RISK_PREMIUM);
-            $before = Valuation::calculateIntrinsicFairValuePE($hurdle, $roic, $growth, $sector, Valuation::sectorHurdleShift($hurdle, $beta, MacroEngine::TARGET_INFLATION));
-            $after = Valuation::calculateIntrinsicFairValuePE($hurdle + 0.01, $roic, $growth, $sector, Valuation::sectorHurdleShift($hurdle + 0.01, $beta, MacroEngine::TARGET_INFLATION));
+            $hurdle = Valuation::FOUNDING_REAL_RISK_FREE_RATE + MacroConstants::TARGET_INFLATION + ($beta * MacroConstants::BASE_EQUITY_RISK_PREMIUM);
+            $before = Valuation::calculateIntrinsicFairValuePE($hurdle, $roic, $growth, $sector, Valuation::sectorHurdleShift($hurdle, $beta, MacroConstants::TARGET_INFLATION));
+            $after = Valuation::calculateIntrinsicFairValuePE($hurdle + 0.01, $roic, $growth, $sector, Valuation::sectorHurdleShift($hurdle + 0.01, $beta, MacroConstants::TARGET_INFLATION));
 
             return 1.0 - ($after / $before);
         };
@@ -313,7 +313,7 @@ class ValuationTest extends TestCase
 
     public function testExpectedNominalGrowthCarriesTheCycleAndPricesTheSecularExcessAsItFades(): void
     {
-        $trend = MacroEngine::TREND_REAL_GROWTH;
+        $trend = MacroConstants::TREND_REAL_GROWTH;
         // Boom: trend secular growth + half of a 2% gap at beta 1, plus 2% inflation. The cycle is transitory and
         // passes.
         $this->assertEqualsWithDelta($trend + 0.01 + 0.02, Valuation::calculateExpectedNominalGrowth($trend, 0.02, 1.0, 0.02, 0.09), 1e-12);
@@ -371,11 +371,11 @@ class ValuationTest extends TestCase
      */
     public function testExpectedNominalGrowthCarriesInflationInFull(): void
     {
-        $target = MacroEngine::TARGET_INFLATION;
+        $target = MacroConstants::TARGET_INFLATION;
 
-        self::assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH + $target, Valuation::calculateExpectedNominalGrowth(MacroEngine::TREND_REAL_GROWTH, 0.0, 1.0, $target, 0.09), 1e-12);
+        self::assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + $target, Valuation::calculateExpectedNominalGrowth(MacroConstants::TREND_REAL_GROWTH, 0.0, 1.0, $target, 0.09), 1e-12);
         // Above target too: no firm's priced growth loses real growth to inflation its earnings pass through.
-        self::assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH + 0.04, Valuation::calculateExpectedNominalGrowth(MacroEngine::TREND_REAL_GROWTH, 0.0, 1.0, 0.04, 0.09), 1e-12);
+        self::assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + 0.04, Valuation::calculateExpectedNominalGrowth(MacroConstants::TREND_REAL_GROWTH, 0.0, 1.0, 0.04, 0.09), 1e-12);
     }
 
     /** The flexible accelerator: demand growth plus a share of the log capital gap, never a negative build. */

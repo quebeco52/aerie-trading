@@ -6,8 +6,9 @@ namespace App\Tests\Financial;
 
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
-use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -97,11 +98,11 @@ final class PriceFormationInvariantTest extends TestCase
             $sectorZ = $this->math->generateStandardNormal();
 
             $systemic = $this->math->calculateSVJJJumps(
-                lambda: MacroEngine::SYSTEMIC_JUMP_INTENSITY,
-                pUp: MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
-                etaUp: MacroEngine::SYSTEMIC_JUMP_ETA_UP,
-                etaDown: MacroEngine::SYSTEMIC_JUMP_ETA_DOWN,
-                muV: MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN,
+                lambda: MacroConstants::SYSTEMIC_JUMP_INTENSITY,
+                pUp: MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP,
+                etaUp: MacroConstants::SYSTEMIC_JUMP_ETA_UP,
+                etaDown: MacroConstants::SYSTEMIC_JUMP_ETA_DOWN,
+                muV: AssetMarketSubsystem::SYSTEMIC_JUMP_VARIANCE_MEAN,
                 dt: $dt,
             );
             $jumpMultiplier = $systemic['price_multiplier'];
@@ -179,7 +180,7 @@ final class PriceFormationInvariantTest extends TestCase
     #[DataProvider('seededProfiles')]
     public function testRealisedBetaMatchesTheConfiguredBeta(float $beta, float $volatility, float $lambda, float $jumpVol): void
     {
-        $path = $this->simulate($beta, $volatility, $lambda, $jumpVol, MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $path = $this->simulate($beta, $volatility, $lambda, $jumpVol, MacroConstants::MACRO_VOL_BASE_ANCHOR);
 
         $realised = self::covariance($path['returns'], $path['market']) / self::variance($path['market']);
 
@@ -214,7 +215,7 @@ final class PriceFormationInvariantTest extends TestCase
         // Pooled over four fixed paths: a single path's realised variance is decided by its few largest jumps.
         $variances = [];
         foreach ([20260913, 20260914, 20260915, 20260916] as $seed) {
-            $variances[] = self::variance($this->simulate($beta, $volatility, $lambda, $jumpVol, MacroEngine::MACRO_VOL_BASE_ANCHOR, $seed)['returns']);
+            $variances[] = self::variance($this->simulate($beta, $volatility, $lambda, $jumpVol, MacroConstants::MACRO_VOL_BASE_ANCHOR, $seed)['returns']);
         }
 
         $dt = 1.0 / self::TICKS_PER_YEAR;
@@ -235,8 +236,8 @@ final class PriceFormationInvariantTest extends TestCase
     {
         // Same beta, same volatility, wildly different jump processes. An uncompensated jump is a return
         // tax, so the jumpy name settled at a permanently lower price against the same fair value.
-        $calm = $this->simulate(0.85, 0.18, 0.05, 0.05, MacroEngine::MACRO_VOL_BASE_ANCHOR);
-        $jumpy = $this->simulate(0.85, 0.18, 1.50, 0.14, MacroEngine::MACRO_VOL_BASE_ANCHOR);
+        $calm = $this->simulate(0.85, 0.18, 0.05, 0.05, MacroConstants::MACRO_VOL_BASE_ANCHOR);
+        $jumpy = $this->simulate(0.85, 0.18, 1.50, 0.14, MacroConstants::MACRO_VOL_BASE_ANCHOR);
 
         $calmRatio = array_sum($calm['ratios']) / count($calm['ratios']);
         $jumpyRatio = array_sum($jumpy['ratios']) / count($jumpy['ratios']);

@@ -7,7 +7,7 @@ namespace App\Tests\Service\District;
 use App\Data\District\DistrictMap;
 use App\DTO\MacroStateDTO;
 use App\Service\District\DistrictStressEvaluator;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\ClearingHouseBusinessModel;
 use PHPUnit\Framework\TestCase;
 
@@ -37,28 +37,28 @@ class DistrictStressEvaluatorTest extends TestCase
 
     public function testRateCouncilStressedByPersistentInversion(): void
     {
-        $macro = new MacroStateDTO(inversionDuration: MacroEngine::SYSTEMIC_INVERSION_ALARM_YEARS);
+        $macro = new MacroStateDTO(inversionDuration: MacroConstants::SYSTEMIC_INVERSION_ALARM_YEARS);
 
         $this->assertTrue($this->evaluator->evaluate($macro)['rate-council']);
     }
 
     public function testRateCouncilStressedNearTheZeroLowerBound(): void
     {
-        $macro = new MacroStateDTO(policyRateEma: MacroEngine::ZLB_PROXIMITY_THRESHOLD);
+        $macro = new MacroStateDTO(policyRateEma: MacroConstants::ZLB_PROXIMITY_THRESHOLD);
 
         $this->assertTrue($this->evaluator->evaluate($macro)['rate-council']);
     }
 
     public function testCreditRegistryStressedByInterbankFreeze(): void
     {
-        $macro = new MacroStateDTO(interbankLiquiditySpreadEma: MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD);
+        $macro = new MacroStateDTO(interbankLiquiditySpreadEma: MacroConstants::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD);
 
         $this->assertTrue($this->evaluator->evaluate($macro)['credit-registry']);
     }
 
     public function testCreditRegistryStressedByHighYieldSeizure(): void
     {
-        $macro = new MacroStateDTO(highYieldCreditSpreadEma: MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD);
+        $macro = new MacroStateDTO(highYieldCreditSpreadEma: MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD);
 
         $this->assertTrue($this->evaluator->evaluate($macro)['credit-registry']);
     }
@@ -79,7 +79,7 @@ class DistrictStressEvaluatorTest extends TestCase
 
     public function testStatisticalOfficeStressedByInflationWellOverTarget(): void
     {
-        $macro = new MacroStateDTO(inflationEma: MacroEngine::TARGET_INFLATION + 0.015);
+        $macro = new MacroStateDTO(inflationEma: MacroConstants::TARGET_INFLATION + 0.015);
 
         $this->assertTrue($this->evaluator->evaluate($macro)['statistical-office']);
     }
@@ -135,7 +135,7 @@ class DistrictStressEvaluatorTest extends TestCase
 
     public function testJustBelowThresholdDoesNotStress(): void
     {
-        $macro = new MacroStateDTO(highYieldCreditSpreadEma: MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD - 0.001);
+        $macro = new MacroStateDTO(highYieldCreditSpreadEma: MacroConstants::SYSTEMIC_CREDIT_SEIZURE_SPREAD - 0.001);
 
         $this->assertFalse($this->evaluator->evaluate($macro)['credit-registry']);
     }

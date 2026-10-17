@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Macro\Subsystem;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -13,6 +12,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
@@ -46,7 +46,7 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->totalFactorProductivityIndex = 100.0;
-        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $state->naturalRate = MacroConstants::BASE_NATURAL_RATE;
         $state->outputGapEma = 0.01;
 
         $tfpGrowth = $this->subsystem->calculateTotalFactorProductivity($state, 0.25);
@@ -60,26 +60,26 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testTheNaturalRateIgnoresTheOutputGap(): void
     {
         $state = new MacroState();
-        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $state->naturalRate = MacroConstants::BASE_NATURAL_RATE;
         $state->outputGap = 0.03;
         $state->outputGapEma = 0.03;
 
-        $this->subsystem->calculateNaturalRate($state, MacroEngine::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateNaturalRate($state, MacroConstants::TFP_DRIFT, 0.25);
 
-        $this->assertSame(MacroEngine::BASE_NATURAL_RATE, $state->naturalRate);
+        $this->assertSame(MacroConstants::BASE_NATURAL_RATE, $state->naturalRate);
     }
 
     /** r* moves c points per point of trend growth (HLW c = 1.113), approached at the adjustment speed. */
     public function testTheNaturalRateLoadsOnTrendGrowthAtHlwsC(): void
     {
         $state = new MacroState();
-        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $state->naturalRate = MacroConstants::BASE_NATURAL_RATE;
         $dt = 0.1;
 
-        $this->subsystem->calculateNaturalRate($state, MacroEngine::TFP_DRIFT + 0.01, $dt);
+        $this->subsystem->calculateNaturalRate($state, MacroConstants::TFP_DRIFT + 0.01, $dt);
 
         $expectedStep = MacroAggregateSubsystem::NATURAL_RATE_ADJUSTMENT_SPEED * MacroAggregateSubsystem::NATURAL_RATE_GROWTH_LOADING * 0.01 * $dt;
-        $this->assertEqualsWithDelta(MacroEngine::BASE_NATURAL_RATE + $expectedStep, $state->naturalRate, 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_NATURAL_RATE + $expectedStep, $state->naturalRate, 1e-15);
     }
 
     public function testOutputGapAndInflationRespondToShocks(): void
@@ -90,8 +90,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->policyRate = 0.02;
         $state->wageGrowth = 0.035;
 
-        $newGap = $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $newInflation = $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $newGap = $this->subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $newInflation = $this->subsystem->calculateInflation($state, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
 
         $this->assertGreaterThan(-0.12, $newGap);
         $this->assertLessThan(0.10, $newGap);
@@ -121,11 +121,11 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->supplyChainPressureIndex = 2.0; // Supply chain pressure building over its quarter average
         $state->inflation = 0.02;
 
-        $newInflation = $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $newInflation = $this->subsystem->calculateInflation($state, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
 
-        $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $state->supercoreInflation, 'Hot labor market must push supercore services inflation up');
-        $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $state->coreGoodsInflation, 'Rising supply-chain pressure must push core goods inflation up');
-        $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $newInflation, 'Headline inflation must rise above target');
+        $this->assertGreaterThan(MacroConstants::TARGET_INFLATION, $state->supercoreInflation, 'Hot labor market must push supercore services inflation up');
+        $this->assertGreaterThan(MacroConstants::TARGET_INFLATION, $state->coreGoodsInflation, 'Rising supply-chain pressure must push core goods inflation up');
+        $this->assertGreaterThan(MacroConstants::TARGET_INFLATION, $newInflation, 'Headline inflation must rise above target');
     }
 
     public function testMetzlerInventoryCycleDynamics(): void
@@ -135,7 +135,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->outputGapEma = 0.02; // Sharp deceleration from +2% to -2%
         $state->inventoryStockGap = 0.0;
 
-        $updatedGap = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $updatedGap = $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         // Decelerating demand causes involuntary inventory accumulation (+gap)
         $this->assertGreaterThan(0.0, $state->inventoryStockGap, 'Demand slowdown must induce involuntary inventory overhang');
@@ -151,7 +151,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $stateWage->industrialMetalsIndexEma = 100.0;
         $stateWage->inflation = 0.02;
 
-        $this->subsystem->calculateInflation($stateWage, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateInflation($stateWage, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
 
         // Supercore Services must absorb wage-push inflation more heavily than Core Goods
         $this->assertGreaterThan($stateWage->coreGoodsInflation, $stateWage->supercoreInflation, 'Wage surge must drive supercore services higher than core goods');
@@ -160,11 +160,11 @@ class MacroAggregateSubsystemTest extends TestCase
         $stateSupply = new MacroState();
         $stateSupply->wageGrowth = 0.035; // Neutral wage growth
         // Freight doubled, its quarter average still catching up
-        $stateSupply->freightRateIndex = 2.0 * MacroEngine::FREIGHT_BASELINE;
-        $stateSupply->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
+        $stateSupply->freightRateIndex = 2.0 * MacroConstants::FREIGHT_BASELINE;
+        $stateSupply->freightRateIndexEma = MacroConstants::FREIGHT_BASELINE;
         $stateSupply->inflation = 0.02;
 
-        $this->subsystem->calculateInflation($stateSupply, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateInflation($stateSupply, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
 
         // Core Goods must absorb supply chain frictions more heavily than Supercore Services
         $this->assertGreaterThan($stateSupply->supercoreInflation, $stateSupply->coreGoodsInflation, 'Supply chain bottleneck must drive core goods higher than supercore services');
@@ -177,21 +177,21 @@ class MacroAggregateSubsystemTest extends TestCase
         $stateNormal->capitalStockOverhang = 0.0;
 
         $this->subsystem->calculateCapacityUtilization($stateNormal);
-        $this->assertEqualsWithDelta(MacroEngine::CU_BASELINE, $stateNormal->capacityUtilizationRate, 0.0001);
+        $this->assertEqualsWithDelta(MacroConstants::CU_BASELINE, $stateNormal->capacityUtilizationRate, 0.0001);
 
         $stateBoom = new MacroState();
         $stateBoom->outputGap = 0.03;
         $stateBoom->capitalStockOverhang = 0.0;
 
         $this->subsystem->calculateCapacityUtilization($stateBoom);
-        $this->assertGreaterThan(MacroEngine::CU_BASELINE, $stateBoom->capacityUtilizationRate);
+        $this->assertGreaterThan(MacroConstants::CU_BASELINE, $stateBoom->capacityUtilizationRate);
 
         $stateOverhang = new MacroState();
         $stateOverhang->outputGap = 0.0;
         $stateOverhang->capitalStockOverhang = 0.15;
 
         $this->subsystem->calculateCapacityUtilization($stateOverhang);
-        $this->assertLessThan(MacroEngine::CU_BASELINE, $stateOverhang->capacityUtilizationRate);
+        $this->assertLessThan(MacroConstants::CU_BASELINE, $stateOverhang->capacityUtilizationRate);
     }
 
     /**
@@ -211,10 +211,10 @@ class MacroAggregateSubsystemTest extends TestCase
         $boom->capitalStockOverhang = 0.0;
         $this->subsystem->calculateCapacityUtilization($boom);
 
-        $gap = $boom->capacityUtilizationRate - MacroEngine::CU_BASELINE;
+        $gap = $boom->capacityUtilizationRate - MacroConstants::CU_BASELINE;
         $this->assertEqualsWithDelta(
             $gap,
-            MacroTransmission::calculateCapacityUtilizationShift($boom->capacityUtilizationRate, MacroEngine::CU_BASELINE, 1.0),
+            MacroTransmission::calculateCapacityUtilizationShift($boom->capacityUtilizationRate, MacroConstants::CU_BASELINE, 1.0),
             0.0001,
             'At unit sensitivity the shift is the utilization gap itself, in the units the subsystem publishes',
         );
@@ -234,7 +234,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertLessThan(
             SemiconductorBusinessModel::GLUT_CAPACITY_UTILIZATION_THRESHOLD,
-            $glut->capacityUtilizationRate - MacroEngine::CU_BASELINE,
+            $glut->capacityUtilizationRate - MacroConstants::CU_BASELINE,
             'A slump with idle plant must be able to trip the fab glut gate',
         );
     }
@@ -249,7 +249,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $stateNormal->inflation = 0.02;
         $stateNormal->inflationEma = 0.02;
         $stateNormal->outputGap = 0.0;
-        $stateNormal->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $stateNormal->wageGrowth = MacroConstants::TFP_DRIFT + MacroConstants::TARGET_INFLATION;
         $stateNormal->energyPriceShock = 0.0;
         $stateNormal->agriculturalCommodityIndex = 100.0;
 
@@ -264,15 +264,15 @@ class MacroAggregateSubsystemTest extends TestCase
         // The energy lag closes the share 1 - exp(-dt / tau) of its remaining gap each step, so the price level climbs
         // by T w, then T w (1 - w), and so on: steps that shrink geometrically and sum to the full transmission T.
         $dt = 0.25;
-        $transmission = MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
+        $transmission = MacroConstants::ENERGY_COST_PUSH_TRANSMISSION;
         $closed = 1.0 - exp(-$dt / MacroAggregateSubsystem::ENERGY_COST_PUSH_LAG_YEARS);
-        $infNormal = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
-        $infEnergy = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+        $infNormal = $subsystemWithMock->calculateInflation($stateNormal, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
+        $infEnergy = $subsystemWithMock->calculateInflation($stateEnergy, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
 
         $this->assertEqualsWithDelta($transmission * $closed, ($infEnergy - $infNormal) * $dt, 1e-9, 'Energy shock must lift the price level by its full transmission, undiluted by basket weight.');
 
-        $infNormalHeld = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
-        $infEnergyHeld = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+        $infNormalHeld = $subsystemWithMock->calculateInflation($stateNormal, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
+        $infEnergyHeld = $subsystemWithMock->calculateInflation($stateEnergy, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
 
         $this->assertEqualsWithDelta($transmission * $closed * (1.0 - $closed), ($infEnergyHeld - $infNormalHeld) * $dt, 1e-9, 'Energy held high is a price level, not a standing inflation rate.');
     }
@@ -313,16 +313,16 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testPmiRestsAtFiftyWhenActivityDoesWhateverBanksAreDoing(): void
     {
         $state = new MacroState();
-        $state->capacityUtilizationRate = MacroEngine::CU_BASELINE;
+        $state->capacityUtilizationRate = MacroConstants::CU_BASELINE;
         $state->outputGap = 0.0;
         $state->outputGapEma = 0.0;
         $state->inventoryStockGap = 0.0;
         $state->sloosTighteningIndexEma = 0.25;
-        $state->manufacturingPmi = MacroEngine::PMI_BASELINE;
+        $state->manufacturingPmi = MacroConstants::PMI_BASELINE;
 
         $this->subsystem->calculateManufacturingPmi($state, 0.25);
 
-        $this->assertEqualsWithDelta(MacroEngine::PMI_BASELINE, $state->manufacturingPmi, 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::PMI_BASELINE, $state->manufacturingPmi, 1e-12);
     }
 
     /**
@@ -348,7 +348,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $this->subsystem->calculateManufacturingPmi($recovery, 0.25);
         }
         $this->assertGreaterThan(55.0, $recovery->manufacturingPmi, 'a sustained 3.6% growth surplus reads in the high 50s despite slack capacity');
-        $this->assertLessThan(MacroEngine::MAX_PMI, $recovery->manufacturingPmi);
+        $this->assertLessThan(MacroAggregateSubsystem::MAX_PMI, $recovery->manufacturingPmi);
 
         $slowdown = new MacroState();
         $slowdown->capacityUtilizationRate = 0.81; // tight capacity, but growth has stalled
@@ -367,7 +367,7 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testCalculateProducerPriceInflation(): void
     {
         $dt = 0.25;
-        $tfp = MacroEngine::TFP_DRIFT;
+        $tfp = MacroConstants::TFP_DRIFT;
 
         $state = new MacroState();
         $state->industrialMetalsIndex = 140.0;
@@ -378,7 +378,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->outputGap = 0.02;
 
         $this->subsystem->calculateProducerPriceInflation($state, $tfp, $dt);
-        $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $state->producerPriceInflation, 'Upstream commodity surges and supply frictions must drive PPI above CPI target');
+        $this->assertGreaterThan(MacroConstants::TARGET_INFLATION, $state->producerPriceInflation, 'Upstream commodity surges and supply frictions must drive PPI above CPI target');
     }
 
     public function testAHighTermPremiumEraTightensBusinessBorrowingAgainstAStructuralNeutral(): void
@@ -386,17 +386,17 @@ class MacroAggregateSubsystemTest extends TestCase
         $baseline = new MacroState();
         $baseline->outputGap = 0.0;
         $baseline->outputGapEma = 0.0;
-        $baseline->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
-        $baseline->inflation = MacroEngine::TARGET_INFLATION;
-        $scale5y = FixedIncome::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
-        $neutral5y = $baseline->policyRate + MacroEngine::NS_BASE_TERM_PREMIUM * $scale5y;
+        $baseline->policyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
+        $baseline->inflation = MacroConstants::TARGET_INFLATION;
+        $scale5y = FixedIncome::calculateTermPremiumDurationScale(5.0, MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $neutral5y = $baseline->policyRate + MacroConstants::NS_BASE_TERM_PREMIUM * $scale5y;
 
         $highEra = clone $baseline;
         $highEra->termPremiumRegime = 0.020;
         $fiveYearInHighEra = $baseline->policyRate + 0.020 * $scale5y;
 
-        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, $neutral5y, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapHighEra = $this->subsystem->calculateOutputGap($highEra, $fiveYearInHighEra, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, $neutral5y, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapHighEra = $this->subsystem->calculateOutputGap($highEra, $fiveYearInHighEra, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         $this->assertLessThan($gapBaseline, $gapHighEra, 'The neutral is structural: a premium era that lifts the five-year is a real tightening of business borrowing, which the Taylor rule long-rate offset, not the IS curve, is there to lean against.');
     }
@@ -406,13 +406,13 @@ class MacroAggregateSubsystemTest extends TestCase
         $baseline = new MacroState();
         $baseline->outputGap = 0.0;
         $baseline->outputGapEma = 0.0;
-        $baseline->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE;
+        $baseline->governmentSpendingIndexEma = MacroConstants::GOVT_SPENDING_BASELINE;
 
         $stimulus = clone $baseline;
-        $stimulus->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE * 1.10;
+        $stimulus->governmentSpendingIndexEma = MacroConstants::GOVT_SPENDING_BASELINE * 1.10;
 
-        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapStimulus = $this->subsystem->calculateOutputGap($stimulus, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapStimulus = $this->subsystem->calculateOutputGap($stimulus, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         // Domestic demand reaches GDP on its share; the finance the District lives on does not answer purchases.
         $expectedImpulse = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.10 * 0.25;
@@ -449,9 +449,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $shortfall = clone $neutral;
         $shortfall->capitalStockOverhang = -$overhang;
 
-        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapExcess = $this->subsystem->calculateOutputGap($excess, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapShortfall = $this->subsystem->calculateOutputGap($shortfall, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapExcess = $this->subsystem->calculateOutputGap($excess, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapShortfall = $this->subsystem->calculateOutputGap($shortfall, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         $this->assertEqualsWithDelta(
             -MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CAPITAL_DRAG * $overhang * 0.25,
@@ -477,11 +477,11 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testFarmPriceCollapseLowersFoodCostPushBelowZero(): void
     {
         $state = new MacroState();
-        $state->agriculturalCommodityIndex = MacroEngine::AGRI_BASELINE * 0.80;
+        $state->agriculturalCommodityIndex = MacroConstants::AGRI_BASELINE * 0.80;
         $state->agriCostPushLag = 0.0;
 
         for ($i = 0; $i < 8; $i++) {
-            $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+            $this->subsystem->calculateInflation($state, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
         }
 
         $this->assertLessThan(0.0, $state->agriCostPushLag, 'Falling farm prices must pass through as a food-CPI dividend, symmetric to a spike.');
@@ -512,7 +512,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->equityMarketCap = self::TEST_MARKET_CAP * $multipleOfTrend;
         $state->equityMarketCapEma = $state->equityMarketCap;
 
-        return $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        return $this->subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
     }
 
     /**
@@ -552,7 +552,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->nominalGdpIndex = 1.0;
             $state->equityWealthTrend = self::TEST_MARKET_CAP;
             for ($i = 0; $i < 3000; $i++) {
-                $state->outputGap = $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
+                $state->outputGap = $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.01, 1.0);
                 // A held state holds no sales surprise: both averages sit on their series.
                 $state->outputGapEma = $state->outputGap;
                 $state->domesticDemandGapEma = MacroAggregateSubsystem::domesticDemandGap($state);
@@ -625,7 +625,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->residentialPropertyIndexEma = $index;
         $state->residentialWealthTrend = $trend;
 
-        return $this->subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        return $this->subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
     }
 
     /**
@@ -676,7 +676,7 @@ class MacroAggregateSubsystemTest extends TestCase
         // Silent, not merely small: it has to read exactly as a board sitting on its own trend does.
         $this->assertEqualsWithDelta(
             $this->gapWithEquityAt(1.00),
-            $this->subsystem->calculateOutputGap($unreported, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0),
+            $this->subsystem->calculateOutputGap($unreported, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0),
             1e-12,
             'An unreported market must move demand exactly as much as a board at its trend: not at all.',
         );
@@ -698,7 +698,7 @@ class MacroAggregateSubsystemTest extends TestCase
      */
     public function testTheProductivityIndexDeliversTheDriftAndVolatilityItIsParameterisedWith(): void
     {
-        $expectedGrowth = MacroEngine::TFP_DRIFT;
+        $expectedGrowth = MacroConstants::TFP_DRIFT;
 
         foreach ([[3600, 4, 80], [252, 10, 300]] as [$ticksPerYear, $seeds, $years]) {
             $annualGrowth = [];
@@ -794,8 +794,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $base->outputGap = 0.0;
         $dt = 1.0 / 3600.0;
 
-        $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $base->outputGap = $control->calculateOutputGap($base, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $base->outputGap = $control->calculateOutputGap($base, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         $impulse = $state->demandShock - $base->demandShock;
 
         $this->assertGreaterThan(0.0, $impulse, 'The innovation must land on the disturbance.');
@@ -809,8 +809,8 @@ class MacroAggregateSubsystemTest extends TestCase
         // Half a reversion half-life later the disturbance must still be most of the way there.
         $halfLifeTicks = (int) round((log(2.0) / MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION) * 3600.0);
         for ($i = 0; $i < $halfLifeTicks; $i++) {
-            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-            $base->outputGap = $control->calculateOutputGap($base, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+            $base->outputGap = $control->calculateOutputGap($base, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         }
 
         $this->assertEqualsWithDelta(
@@ -826,15 +826,15 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $neutral = new MacroState();
         $neutral->outputGap = 0.0;
-        $neutral->inflation = MacroEngine::TARGET_INFLATION;
-        $neutral->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $neutral->inflation = MacroConstants::TARGET_INFLATION;
+        $neutral->policyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
 
         $shocked = clone $neutral;
         $shocked->demandShock = 0.01;
 
         $dt = 0.25;
-        $baseGap = $this->subsystem->calculateOutputGap($neutral, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $shockedGap = $this->subsystem->calculateOutputGap($shocked, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $baseGap = $this->subsystem->calculateOutputGap($neutral, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $shockedGap = $this->subsystem->calculateOutputGap($shocked, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
         // The disturbance is stepped before the drift reads it, so the tick applies the already-decayed level.
         $applied = 0.01 * (1.0 - (MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION * $dt));
@@ -851,8 +851,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $spiked = $this->neutralBorrowingState();
         $spiked->inflation = 0.06;
 
-        $gapCalm = $this->subsystem->calculateOutputGap($calm, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapSpiked = $this->subsystem->calculateOutputGap($spiked, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapCalm = $this->subsystem->calculateOutputGap($calm, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapSpiked = $this->subsystem->calculateOutputGap($spiked, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         $this->assertEqualsWithDelta($gapCalm, $gapSpiked, 1e-12, 'Headline inflation has no place in the ex-ante real rate.');
     }
@@ -867,8 +867,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $anchored = $this->neutralBorrowingState();
         $unanchored = $this->neutralBorrowingState();
 
-        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapUnanchored = $this->subsystem->calculateOutputGap($unanchored, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.03, 0.25, 1.0);
+        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapUnanchored = $this->subsystem->calculateOutputGap($unanchored, 0.035, MacroConstants::BASE_NATURAL_RATE, 0.03, 0.25, 1.0);
 
         // One percentage point of expected inflation on a 0.50 policy leg is 50bps of real easing, through the drag
         // coefficient over a quarter, of which a one-quarter step has passed w^2 through the two Pascal stages.
@@ -887,8 +887,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $anchored = $this->neutralBorrowingState();
         $tightened = $this->neutralBorrowingState();
 
-        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.01, 0.25, 1.0);
-        $gapTightened = $this->subsystem->calculateOutputGap($tightened, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.0, 0.25, 1.0);
+        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroConstants::BASE_NATURAL_RATE, 0.01, 0.25, 1.0);
+        $gapTightened = $this->subsystem->calculateOutputGap($tightened, 0.035, MacroConstants::BASE_NATURAL_RATE, 0.0, 0.25, 1.0);
         $this->assertGreaterThan(0.0, $anchored->monetaryStanceTransmitted, 'Both legs sit on the restrictive side.');
 
         $expectedDrag = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
@@ -905,9 +905,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $tight = $this->neutralBorrowingState();
         $easy = $this->neutralBorrowingState();
 
-        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapTight = $this->subsystem->calculateOutputGap($tight, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION - 0.01, 0.25, 1.0);
-        $gapEasy = $this->subsystem->calculateOutputGap($easy, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION + 0.01, 0.25, 1.0);
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapTight = $this->subsystem->calculateOutputGap($tight, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION - 0.01, 0.25, 1.0);
+        $gapEasy = $this->subsystem->calculateOutputGap($easy, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION + 0.01, 0.25, 1.0);
 
         $this->assertLessThan($gapNeutral, $gapTight);
         $this->assertGreaterThan($gapNeutral, $gapEasy);
@@ -931,7 +931,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $favorable->excessBondPremiumTrend = 0.004;
         $base = $this->neutralBorrowingState();
 
-        $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $gapNeutral = $run($neutral);
 
         $this->assertEqualsWithDelta($run($base), $gapNeutral, 1e-12, 'A premium at its trend is no credit shock.');
@@ -951,7 +951,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $over = $this->neutralBorrowingState();
         $over->bankCapitalBuilt = $over->bankCapitalRequirement + 0.01;
 
-        $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $gapBuilt = $run($built);
 
         $this->assertEqualsWithDelta(
@@ -972,8 +972,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $repriced = $this->neutralBorrowingState();
         $repriced->tipsBreakeven = 0.03;
 
-        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapRepriced = $this->subsystem->calculateOutputGap($repriced, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapRepriced = $this->subsystem->calculateOutputGap($repriced, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         $expectedLift = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapRepriced - $gapAnchored, 1e-9);
@@ -989,14 +989,14 @@ class MacroAggregateSubsystemTest extends TestCase
         foreach ([1.0 / 360.0, 4.0 / 360.0] as $dt) {
             $state = $this->neutralBorrowingState();
             $state->policyRate += 0.01;
-            $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
             $stance = $state->monetaryStanceStage1 / (1.0 - exp(-$dt / $tau));
             $this->assertLessThan(0.01 * $stance, $state->monetaryStanceTransmitted, 'Nothing reaches demand on the tick.');
 
             $passed = [];
             for ($i = 1; $i < (int) round(2.0 * $tau / $dt); $i++) {
                 $state->outputGap = 0.0;
-                $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+                $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
                 $passed[$i + 1] = $state->monetaryStanceTransmitted / $stance;
             }
             $this->assertEqualsWithDelta(1.0 - (2.0 / M_E), $passed[(int) round($tau / $dt)], 0.01, "One lag constant in at dt {$dt}.");
@@ -1018,12 +1018,12 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $neutral = $this->neutralBorrowingState();
         $heldHigh = $this->neutralBorrowingState();
-        $heldHigh->corporateTaxRate = MacroEngine::PUBLIC_PURCHASES_TO_GDP + 0.04;
+        $heldHigh->corporateTaxRate = MacroConstants::PUBLIC_PURCHASES_TO_GDP + 0.04;
         $heldHigh->corporateTaxRateTrend = $heldHigh->corporateTaxRate;
         $freshRise = $this->neutralBorrowingState();
-        $freshRise->corporateTaxRate = MacroEngine::PUBLIC_PURCHASES_TO_GDP + 0.04;
+        $freshRise->corporateTaxRate = MacroConstants::PUBLIC_PURCHASES_TO_GDP + 0.04;
 
-        $gap = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gap = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $gapNeutral = $gap($neutral);
 
         $this->assertEqualsWithDelta($gapNeutral, $gap($heldHigh), 1e-12, 'A stance the trend has caught up with leaves the gap alone.');
@@ -1041,7 +1041,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->outputGap = -0.01 * MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT;
         $state->domesticDemandGapEma = 0.0;
 
-        $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         $speed = MacroAggregateSubsystem::INVENTORY_ADJUSTMENT_SPEED;
         $built = MacroAggregateSubsystem::INVENTORY_SURPRISE_SENSITIVITY * 0.01 / MacroAggregateSubsystem::INVENTORY_TO_ANNUAL_SALES;
@@ -1053,20 +1053,20 @@ class MacroAggregateSubsystemTest extends TestCase
         $state = new MacroState();
         $state->outputGap = 0.0;
         $state->outputGapEma = 0.0;
-        $state->inflation = MacroEngine::TARGET_INFLATION;
-        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
-        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
-        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
-        $state->corporateTaxRate = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
-        $state->corporateTaxRateTrend = MacroEngine::PUBLIC_PURCHASES_TO_GDP;
-        $state->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
-        $state->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
-        $state->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE;
+        $state->inflation = MacroConstants::TARGET_INFLATION;
+        $state->tipsBreakeven = MacroConstants::TARGET_INFLATION;
+        $state->policyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
+        $state->naturalRate = MacroConstants::BASE_NATURAL_RATE;
+        $state->corporateTaxRate = MacroConstants::PUBLIC_PURCHASES_TO_GDP;
+        $state->corporateTaxRateTrend = MacroConstants::PUBLIC_PURCHASES_TO_GDP;
+        $state->macroCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD;
+        $state->interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD;
+        $state->governmentSpendingIndexEma = MacroConstants::GOVT_SPENDING_BASELINE;
         $state->residentialPropertyIndexEma = AssetMarketSubsystem::RESIDENTIAL_BASELINE;
         $state->exchangeRateIndexEma = AssetMarketSubsystem::EXCHANGE_RATE_BASELINE;
         $state->exchangeRateTrend = AssetMarketSubsystem::EXCHANGE_RATE_BASELINE;
-        $state->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
-        $state->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
+        $state->energyPriceIndexEma = MacroConstants::ENERGY_BASELINE;
+        $state->freightRateIndexEma = MacroConstants::FREIGHT_BASELINE;
         $state->capitalStockOverhang = 0.0;
         $state->inventoryStockGap = 0.0;
         $state->demandShock = 0.0;
@@ -1079,7 +1079,7 @@ class MacroAggregateSubsystemTest extends TestCase
     /** Core on target and nothing passing through: the ten-year prices the target, where the US fit is anchored. */
     public function testTheBreakevenPricesTheTargetWhenCoreIsOnTargetAndNothingPassesThrough(): void
     {
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $this->breakeven($this->onTargetInflationState()), 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::TARGET_INFLATION, $this->breakeven($this->onTargetInflationState()), 1e-15);
     }
 
     /**
@@ -1108,11 +1108,11 @@ class MacroAggregateSubsystemTest extends TestCase
         $onEndpoint->inflationEndpointGap = 0.01;
         $onEndpoint->supercoreInflationEma += 0.01;
         $onEndpoint->coreGoodsInflationEma += 0.01;
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::BREAKEVEN_ENDPOINT_LOADING * 0.01, $this->breakeven($onEndpoint) - MacroEngine::TARGET_INFLATION, 1e-15);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::BREAKEVEN_ENDPOINT_LOADING * 0.01, $this->breakeven($onEndpoint) - MacroConstants::TARGET_INFLATION, 1e-15);
 
         $coreOnTarget = $this->onTargetInflationState();
         $coreOnTarget->inflationEndpointGap = 0.01;
-        $this->assertEqualsWithDelta((MacroAggregateSubsystem::BREAKEVEN_ENDPOINT_LOADING - MacroAggregateSubsystem::BREAKEVEN_CORE_LOADING) * 0.01, $this->breakeven($coreOnTarget) - MacroEngine::TARGET_INFLATION, 1e-15);
+        $this->assertEqualsWithDelta((MacroAggregateSubsystem::BREAKEVEN_ENDPOINT_LOADING - MacroAggregateSubsystem::BREAKEVEN_CORE_LOADING) * 0.01, $this->breakeven($coreOnTarget) - MacroConstants::TARGET_INFLATION, 1e-15);
     }
 
     /**
@@ -1125,7 +1125,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $spike = $this->onTargetInflationState();
         $spike->noncorePassThroughEma = 0.015;
 
-        $share = ($this->breakeven($spike) - MacroEngine::TARGET_INFLATION) / $spike->noncorePassThroughEma;
+        $share = ($this->breakeven($spike) - MacroConstants::TARGET_INFLATION) / $spike->noncorePassThroughEma;
 
         $this->assertGreaterThan(0.09, $share);
         $this->assertLessThan(0.20, $share);
@@ -1164,15 +1164,15 @@ class MacroAggregateSubsystemTest extends TestCase
 
     private function breakeven(MacroState $state): float
     {
-        return $this->subsystem->calculateTipsBreakeven($state, MacroEngine::TARGET_INFLATION);
+        return $this->subsystem->calculateTipsBreakeven($state, MacroConstants::TARGET_INFLATION);
     }
 
     /** Core at target and no energy or food pass-through. */
     private function onTargetInflationState(): MacroState
     {
         $state = new MacroState();
-        $state->supercoreInflationEma = MacroEngine::TARGET_INFLATION;
-        $state->coreGoodsInflationEma = MacroEngine::TARGET_INFLATION;
+        $state->supercoreInflationEma = MacroConstants::TARGET_INFLATION;
+        $state->coreGoodsInflationEma = MacroConstants::TARGET_INFLATION;
         $state->noncorePassThroughEma = 0.0;
 
         return $state;
@@ -1186,14 +1186,14 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $neutral = new MacroState();
         $doubled = new MacroState();
-        $doubled->policyUncertaintyIndexEma = 2.0 * MacroEngine::EPU_BASELINE;
+        $doubled->policyUncertaintyIndexEma = 2.0 * MacroConstants::EPU_BASELINE;
         $halved = new MacroState();
-        $halved->policyUncertaintyIndexEma = 0.5 * MacroEngine::EPU_BASELINE;
+        $halved->policyUncertaintyIndexEma = 0.5 * MacroConstants::EPU_BASELINE;
 
         $dt = 0.25;
-        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapDoubled = $this->subsystem->calculateOutputGap($doubled, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapHalved = $this->subsystem->calculateOutputGap($halved, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapDoubled = $this->subsystem->calculateOutputGap($doubled, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapHalved = $this->subsystem->calculateOutputGap($halved, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
         $expected = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_EPU_DRAG * log(2.0) * $dt;
         $this->assertEqualsWithDelta(-$expected, $gapDoubled - $gapNeutral, 1e-9, 'A doubling of the index takes the drag off demand over the quarter.');
@@ -1210,9 +1210,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $stormy->catastropheLossIndexEma = 3.0;
 
         $dt = 0.25;
-        $gapAverage = $this->subsystem->calculateOutputGap($average, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapQuiet = $this->subsystem->calculateOutputGap($quiet, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapStormy = $this->subsystem->calculateOutputGap($stormy, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapAverage = $this->subsystem->calculateOutputGap($average, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapQuiet = $this->subsystem->calculateOutputGap($quiet, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapStormy = $this->subsystem->calculateOutputGap($stormy, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
         $this->assertEqualsWithDelta($gapAverage, $gapQuiet, 1e-12, 'A quiet season is not a boom.');
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CATASTROPHE_DRAG * 2.0 * $dt, $gapStormy - $gapAverage, 1e-9);
@@ -1230,8 +1230,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $abroad->foreignOutputGapEma = 0.03;
 
         $dt = 0.25;
-        $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
         // The mainland's demand buys the civilian exports, of which the District's own value added is output; the arms
         // makers sell into allied budgets instead.
@@ -1243,16 +1243,16 @@ class MacroAggregateSubsystemTest extends TestCase
         $home->outputGap = $gapHome;
         $abroad->outputGap = $gapAbroad;
         for ($i = 1; $i < 4; $i++) {
-            $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-            $abroad->outputGap = $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+            $abroad->outputGap = $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         }
         $this->assertEqualsWithDelta((1.0 - MacroAggregateSubsystem::EXPORT_DEMAND_PERSISTENCE) * $longRun, $abroad->netExportGap, 1e-12, 'A year brings the short-run elasticity.');
 
         // The domestic-demand equation does not pull the export level back: held, it builds to the long-run size and
         // stays.
         for ($i = 0; $i < 120; $i++) {
-            $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-            $abroad->outputGap = $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+            $abroad->outputGap = $gapAbroad = $this->subsystem->calculateOutputGap($abroad, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         }
         $this->assertEqualsWithDelta($longRun, $abroad->netExportGap, 1e-6);
         $this->assertEqualsWithDelta($longRun, $gapAbroad - $gapHome, 1e-6);
@@ -1279,10 +1279,10 @@ class MacroAggregateSubsystemTest extends TestCase
         $armed->alliedDefenseSpendingIndexEma = 150.0;
 
         $dt = 0.25;
-        $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapArmed = $this->subsystem->calculateOutputGap($armed, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapArmed = $this->subsystem->calculateOutputGap($armed, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
-        $delivered = MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE * MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * log(1.5);
+        $delivered = MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE * MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * log(1.5);
         $firstQuarter = 1.0 - exp(-$dt / MacroAggregateSubsystem::DEFENSE_DELIVERY_LAG_YEARS);
         $this->assertEqualsWithDelta($firstQuarter * $delivered, $armed->netExportGap, 1e-12, 'A quarter delivers the backlog\'s first slice, not the order.');
         $this->assertEqualsWithDelta($firstQuarter * $delivered, $gapArmed - $gapHome, 1e-9);
@@ -1290,8 +1290,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $home->outputGap = $gapHome;
         $armed->outputGap = $gapArmed;
         for ($i = 0; $i < 60; $i++) {
-            $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-            $armed->outputGap = $gapArmed = $this->subsystem->calculateOutputGap($armed, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $home->outputGap = $gapHome = $this->subsystem->calculateOutputGap($home, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+            $armed->outputGap = $gapArmed = $this->subsystem->calculateOutputGap($armed, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         }
         $this->assertEqualsWithDelta($delivered, $armed->netExportGap, 1e-5, 'Held, the whole order book is delivered.');
         $this->assertEqualsWithDelta($delivered, $gapArmed - $gapHome, 1e-5, 'And it stays in the gap as a level.');
@@ -1305,7 +1305,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta((MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * (1.0 - MacroAggregateSubsystem::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS) * MacroAggregateSubsystem::EXPORT_DEMAND_ELASTICITY * 0.03, $mainlandBoom, 1e-15);
 
         $buildUp = MacroAggregateSubsystem::netExportGapAt(0.0, 0.0, 0.2);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE * MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * 0.2, $buildUp, 1e-15);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE * MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * 0.2, $buildUp, 1e-15);
         $this->assertEqualsWithDelta($mainlandBoom + $buildUp, MacroAggregateSubsystem::netExportGapAt(0.03, 0.0, 0.2), 1e-15, 'The two export markets add.');
     }
 
@@ -1344,9 +1344,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $repaying->householdNewBorrowing = -0.03;
 
         $dt = 0.25;
-        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapBorrowing = $this->subsystem->calculateOutputGap($borrowing, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapRepaying = $this->subsystem->calculateOutputGap($repaying, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapBorrowing = $this->subsystem->calculateOutputGap($borrowing, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapRepaying = $this->subsystem->calculateOutputGap($repaying, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
         $this->assertGreaterThan(0.0, MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING);
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING * 0.03 * $dt, $gapBorrowing - $gapNeutral, 1e-9, 'Three points of income borrowed a year are spent.');
@@ -1365,9 +1365,9 @@ class MacroAggregateSubsystemTest extends TestCase
         $repaying->householdDebtServiceGap = 0.02;
 
         $dt = 0.25;
-        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapCarried = $this->subsystem->calculateOutputGap($carried, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-        $gapRepaying = $this->subsystem->calculateOutputGap($repaying, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapCarried = $this->subsystem->calculateOutputGap($carried, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $gapRepaying = $this->subsystem->calculateOutputGap($repaying, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapCarried - $gapNeutral, 1e-9, 'Two points of service below average leave a point a year of demand.');
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_DEBT_SERVICE * 0.02 * $dt, $gapRepaying - $gapNeutral, 1e-9, 'Two points over it take a point a year off demand.');
@@ -1382,7 +1382,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $tightStandards->sloosTighteningIndexEma = 0.80;
 
         $dt = 0.25;
-        $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         $gapNeutral = $run($neutral);
 
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * (1.0 - CreditFiscalSubsystem::CRISIS_HOUSEHOLD_REPAYMENT_SHARE) * 0.02 * $dt, $run($deleveraging) - $gapNeutral, 1e-9, 'Firms\' and banks\' share of the crisis drag enters the drift at face value; the households\' share is debt repaid.');
@@ -1432,7 +1432,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->inflation = 0.02;
             $state->policyRate = 0.02;
             $state->wageGrowth = 0.035;
-            $gap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $gap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
             return [$gap, $state->demandShock, $math->drawCount()];
         };
@@ -1477,7 +1477,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $duty = log(1.10);
         $switching = MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS * $duty;
         $retaliatedExports = ((MacroAggregateSubsystem::DISTRICT_EXPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_EXPORTS) - MacroAggregateSubsystem::DISTRICT_DEFENSE_EXPORT_SHARE) * (1.0 - MacroAggregateSubsystem::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
-        $retaliation = MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * $retaliatedExports * log(1.0 + (MacroEngine::TARIFF_RETALIATION_RATIO * 0.10));
+        $retaliation = MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * $retaliatedExports * log(1.0 + (MacroConstants::TARIFF_RETALIATION_RATIO * 0.10));
 
         $netExports = MacroAggregateSubsystem::netExportGapAt(0.0, 0.0, 0.0, $duty);
 
@@ -1492,7 +1492,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->importTariffRate = 0.10;
         $dt = 0.01;
 
-        $this->subsystem->calculateOutputGap($state, $state->yield5y, $state->naturalRate, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $this->subsystem->calculateOutputGap($state, $state->yield5y, $state->naturalRate, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
         $this->assertEqualsWithDelta(log(1.10) * (1.0 - exp(-$dt / MacroAggregateSubsystem::TRADE_VOLUME_ADJUSTMENT_YEARS)), $state->tariffTradeLag, 1e-12);
     }
@@ -1500,25 +1500,25 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testTheNaturalRateRisesWithLabourForceGrowthAtHlwsC(): void
     {
         $state = new MacroState();
-        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE;
-        $state->laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.01;
+        $state->naturalRate = MacroConstants::BASE_NATURAL_RATE;
+        $state->laborForceGrowthRate = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + 0.01;
         $dt = 0.1;
 
-        $this->subsystem->calculateNaturalRate($state, MacroEngine::TFP_DRIFT, $dt);
+        $this->subsystem->calculateNaturalRate($state, MacroConstants::TFP_DRIFT, $dt);
 
         $expectedStep = MacroAggregateSubsystem::NATURAL_RATE_ADJUSTMENT_SPEED * MacroAggregateSubsystem::NATURAL_RATE_GROWTH_LOADING * 0.01 * $dt;
-        $this->assertEqualsWithDelta(MacroEngine::BASE_NATURAL_RATE + $expectedStep, $state->naturalRate, 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_NATURAL_RATE + $expectedStep, $state->naturalRate, 1e-15);
     }
 
     public function testPotentialAndPopulationGrowWithTheLabourForce(): void
     {
         $state = new MacroState();
         $state->potentialGdpIndex = 1.0;
-        $state->laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.004;
+        $state->laborForceGrowthRate = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + 0.004;
 
-        $this->subsystem->calculatePotentialAndNominalGdp($state, 0.25, MacroEngine::TFP_DRIFT);
+        $this->subsystem->calculatePotentialAndNominalGdp($state, 0.25, MacroConstants::TFP_DRIFT);
 
-        $this->assertEqualsWithDelta(exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.004 + MacroEngine::TFP_DRIFT) * 0.25), $state->potentialGdpIndex, 1e-15);
+        $this->assertEqualsWithDelta(exp((MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + 0.004 + MacroConstants::TFP_DRIFT) * 0.25), $state->potentialGdpIndex, 1e-15);
         $this->assertEqualsWithDelta(0.004 * 0.25, $state->immigrationPopulationShift, 1e-15, 'The regime adds its excess inflow to the population.');
     }
 
@@ -1559,8 +1559,8 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->outputGap = -0.02;
-        $state->inflation = MacroEngine::TARGET_INFLATION;
-        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->inflation = MacroConstants::TARGET_INFLATION;
+        $state->policyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
         $state->demandShock = 0.004;
 
         return $state;
@@ -1579,14 +1579,14 @@ class MacroAggregateSubsystemTest extends TestCase
             $state = $this->probedState();
             $state->sovereignFundDrawToGdp = 0.012;
             $state->sovereignFundDrawShare = $share;
-            $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
             return $this->openWindow($probe)['contributions']['fundDraw'] / $dt;
         };
 
-        $this->assertSame(0.0, $contribution(MacroEngine::RESERVE_DRAW_CEILING), 'The founding draw adds nothing to the baseline it is in.');
+        $this->assertSame(0.0, $contribution(MacroConstants::RESERVE_DRAW_CEILING), 'The founding draw adds nothing to the baseline it is in.');
         $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * (0.012 * 0.1 / 0.6) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * (0.012 * 0.1 / 0.6) / MacroConstants::PUBLIC_PURCHASES_TO_GDP,
             $contribution(0.6),
             1e-15,
             'A sixth of a draw at 60% is the spending above the founding half.',
@@ -1611,7 +1611,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $dt = 1.0 / 3600.0;
         $opening = $state->outputGap;
         for ($tick = 0; $tick < 900; ++$tick) {
-            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         }
 
         $window = $probe->snapshot()['current'];
@@ -1682,7 +1682,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $dt = 1.0 / 360.0;
 
         for ($tick = 0; $tick < 90; ++$tick) {
-            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         }
 
         $decay = 1.0 - (MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION * $dt);
@@ -1710,8 +1710,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $dt = 1.0 / 48.0;
         $absorbed = 0.0;
         for ($tick = 0; $tick < 40 * 48; ++$tick) {
-            $growth = $this->subsystem->absorbProductivityShocks($state, MacroEngine::TFP_DRIFT, $dt);
-            $this->assertEqualsWithDelta(MacroEngine::TFP_DRIFT + ($state->crisisScarStep / $dt), $growth, 1e-12);
+            $growth = $this->subsystem->absorbProductivityShocks($state, MacroConstants::TFP_DRIFT, $dt);
+            $this->assertEqualsWithDelta(MacroConstants::TFP_DRIFT + ($state->crisisScarStep / $dt), $growth, 1e-12);
             $absorbed += $state->crisisScarStep;
         }
         $this->assertEqualsWithDelta(-0.03, $absorbed, 1e-6, 'Potential takes the whole scar and keeps it.');
@@ -1720,8 +1720,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $probe->enable();
         $scarred = $this->probedState();
         $scarred->crisisScarPending = -0.03;
-        $this->subsystem->absorbProductivityShocks($scarred, MacroEngine::TFP_DRIFT, 0.25);
-        $this->probedSubsystem($probe, 0.0)->calculateOutputGap($scarred, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $this->subsystem->absorbProductivityShocks($scarred, MacroConstants::TFP_DRIFT, 0.25);
+        $this->probedSubsystem($probe, 0.0)->calculateOutputGap($scarred, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $this->assertEqualsWithDelta(-$scarred->crisisScarStep, $this->openWindow($probe)['contributions']['crisisScar'], 1e-15, 'The part potential took is booked in the gap, at full weight.');
         $this->assertGreaterThan(0.0, $this->openWindow($probe)['contributions']['crisisScar']);
     }
@@ -1747,7 +1747,7 @@ class MacroAggregateSubsystemTest extends TestCase
                 }
                 $ends[] = $state->tfpShockLevel;
                 if ($seed === 1) {
-                    $offTrend = log($state->totalFactorProductivityIndex / MacroEngine::TFP_BASELINE) - (MacroEngine::TFP_DRIFT * $years);
+                    $offTrend = log($state->totalFactorProductivityIndex / MacroConstants::TFP_BASELINE) - (MacroConstants::TFP_DRIFT * $years);
                     $this->assertEqualsWithDelta($offTrend, $state->tfpShockLevel, 1e-9, 'The index leaves its trend path by the shock level and nothing else.');
                 }
             }
@@ -1771,7 +1771,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $dt = 1.0 / 360.0;
         $growth = 0.0;
         for ($tick = 0; $tick < 720; $tick++) {
-            $growth = $this->subsystem->absorbProductivityShocks($state, MacroEngine::TFP_DRIFT, $dt);
+            $growth = $this->subsystem->absorbProductivityShocks($state, MacroConstants::TFP_DRIFT, $dt);
         }
 
         $t = 2.0;
@@ -1780,7 +1780,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.01 * (1.0 - (1.0 + $ky * $t) * exp(-$ky * $t)), $state->tfpOutputStage2, 2e-5);
         $this->assertEqualsWithDelta(0.01 * (1.0 - (1.0 + $kp * $t) * exp(-$kp * $t)), $state->tfpPotentialAbsorbed, 2e-5);
         $this->assertGreaterThan($state->tfpPotentialAbsorbed, $state->tfpOutputStage2, 'Output catches up with the new technology before potential does.');
-        $this->assertEqualsWithDelta(MacroEngine::TFP_DRIFT + ($kp * ($state->tfpPotentialStage1 - $state->tfpPotentialAbsorbed)), $growth, 1e-5);
+        $this->assertEqualsWithDelta(MacroConstants::TFP_DRIFT + ($kp * ($state->tfpPotentialStage1 - $state->tfpPotentialAbsorbed)), $growth, 1e-5);
     }
 
     /**
@@ -1801,8 +1801,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $dt = 1.0 / 3600.0;
         for ($tick = 0; $tick < 900; ++$tick) {
-            $plain->outputGap = $plainSubsystem->calculateOutputGap($plain, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-            $shocked->outputGap = $shockedSubsystem->calculateOutputGap($shocked, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $plain->outputGap = $plainSubsystem->calculateOutputGap($plain, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+            $shocked->outputGap = $shockedSubsystem->calculateOutputGap($shocked, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         }
 
         $this->assertEqualsWithDelta(0.004, $shocked->outputGap - $plain->outputGap, 1e-12);
@@ -1829,7 +1829,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $dt = 1.0 / 3600.0;
         for ($tick = 0; $tick < 900; ++$tick) {
-            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $state->outputGap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         }
 
         $window = $this->openWindow($probe);
@@ -1852,7 +1852,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $probe->enable();
         $state = $this->probedState();
         $state->creditCrisisDrag = 0.0;
-        $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $contributions = $this->openWindow($probe)['contributions'];
 
         $this->assertSame(0.0, $contributions['crisisDeleveragingDrag']);
@@ -1874,7 +1874,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->creditCrisisDrag = 0.50;
         $state->demandShock = 0.0;
 
-        $newGap = $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $newGap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $window = $this->openWindow($probe);
 
         $this->assertSame(MacroAggregateSubsystem::OUTPUT_GAP_FLOOR, $newGap, 'The floor holds');
@@ -1897,7 +1897,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $subsystem = $this->probedSubsystem($probe, 0.8);
         $state = $this->probedState();
 
-        $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         $this->assertFalse($probe->isEnabled());
         $this->assertNull($probe->snapshot()['current']);
@@ -1915,7 +1915,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $subsystem = $this->probedSubsystem($probe, 0.0);
         $state = $this->probedState();
 
-        $subsystem->calculateOutputGap($state, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $closing = $this->openWindow($probe)['closing_gap'];
 
         $probe->rollWindow();
@@ -1941,8 +1941,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $weakButSettled->exchangeRateIndexEma = 97.3;
         $weakButSettled->exchangeRateTrend = 97.3;
 
-        $gapAtBaseline = $this->subsystem->calculateOutputGap($atBaseline, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
-        $gapWeakButSettled = $this->subsystem->calculateOutputGap($weakButSettled, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gapAtBaseline = $this->subsystem->calculateOutputGap($atBaseline, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapWeakButSettled = $this->subsystem->calculateOutputGap($weakButSettled, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
         $this->assertEqualsWithDelta(
             $gapAtBaseline,
@@ -1969,8 +1969,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $dt = 0.01;
         for ($i = 0; $i < 100; $i++) {
-            $settled->outputGap = $gapSettled = $this->subsystem->calculateOutputGap($settled, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
-            $depreciated->outputGap = $gapDepreciated = $this->subsystem->calculateOutputGap($depreciated, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+            $settled->outputGap = $gapSettled = $this->subsystem->calculateOutputGap($settled, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+            $depreciated->outputGap = $gapDepreciated = $this->subsystem->calculateOutputGap($depreciated, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         }
 
         $priceResponse = (MacroAggregateSubsystem::EXPORT_PRICE_PASS_THROUGH * MacroAggregateSubsystem::EXPORT_PRICE_ELASTICITY * MacroAggregateSubsystem::DISTRICT_VALUE_ADDED_EXPORT_SHARE)
@@ -1997,8 +1997,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $crash = $this->neutralBorrowingState();
         $crash->equityWealthRatio = 0.60;
 
-        $gapCalm = $this->subsystem->calculateOutputGap($calm, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
-        $gapCrash = $this->subsystem->calculateOutputGap($crash, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
+        $gapCalm = $this->subsystem->calculateOutputGap($calm, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.01, 1.0);
+        $gapCrash = $this->subsystem->calculateOutputGap($crash, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.01, 1.0);
 
         $this->assertSame(0.0, $crash->financeOutputGap, 'Credit at its trend: no finance cycle, whatever the market is worth.');
         $this->assertEqualsWithDelta($gapCalm, $gapCrash, 1e-12, 'The lost market value is not lost output.');
@@ -2010,7 +2010,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $boom = $this->neutralBorrowingState();
         $boom->creditToGdpTrend = 1.0;
         $boom->creditToGdpGap = 0.10;
-        $this->subsystem->calculateOutputGap($boom, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
+        $this->subsystem->calculateOutputGap($boom, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.01, 1.0);
 
         $this->assertEqualsWithDelta(
             MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_CREDIT_SHARE * log(1.10),
@@ -2025,7 +2025,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $boom = $this->neutralBorrowingState();
         $boom->dealActivityIndexTrend = 100.0;
         $boom->dealActivityIndexEma = 120.0;
-        $this->subsystem->calculateOutputGap($boom, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.01, 1.0);
+        $this->subsystem->calculateOutputGap($boom, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.01, 1.0);
 
         $this->assertEqualsWithDelta(
             MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_DEAL_SHARE * log(1.20),
@@ -2071,8 +2071,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $calm = $this->neutralBorrowingState();
         $shocked = $this->neutralBorrowingState();
         $shocked->demandShock = 0.02;
-        $delta = $this->subsystem->calculateOutputGap($shocked, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0)
-            - $this->subsystem->calculateOutputGap($calm, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, $dt, 1.0);
+        $delta = $this->subsystem->calculateOutputGap($shocked, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0)
+            - $this->subsystem->calculateOutputGap($calm, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
         $this->assertLessThan(0.02 * $dt * (1.0 - MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE) + 1e-6, $delta, 'The impulse is net of the excess imports.');
     }
 
@@ -2091,8 +2091,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $dt = 0.01;
         $levelGap = 0.0;
         for ($i = 0; $i < 3000; $i++) {
-            $restInflation = $this->subsystem->calculateInflation($atRest, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
-            $levelGap += ($this->subsystem->calculateInflation($appreciated, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt) - $restInflation) * $dt;
+            $restInflation = $this->subsystem->calculateInflation($atRest, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
+            $levelGap += ($this->subsystem->calculateInflation($appreciated, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt) - $restInflation) * $dt;
         }
 
         $importedShare = MacroAggregateSubsystem::IMPORTED_SHARE_OF_GOODS * (MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS + MacroAggregateSubsystem::INFLATION_WEIGHT_COMMODITY);
@@ -2142,8 +2142,8 @@ class MacroAggregateSubsystemTest extends TestCase
         };
         $subsystem = new MacroAggregateSubsystem($quiet);
         $free = new MacroState();
-        $free->inflationEma = MacroEngine::TARGET_INFLATION;
-        $free->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $free->inflationEma = MacroConstants::TARGET_INFLATION;
+        $free->wageGrowth = MacroConstants::TFP_DRIFT + MacroConstants::TARGET_INFLATION;
         $priced = clone $free;
         $priced->carbonPrice = 70.37;
 
@@ -2151,7 +2151,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $added = 0.0;
         $last = 0.0;
         for ($step = 0; $step < 1000; ++$step) {
-            $last = $subsystem->calculateInflation($priced, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt) - $subsystem->calculateInflation($free, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+            $last = $subsystem->calculateInflation($priced, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt) - $subsystem->calculateInflation($free, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
             $added += $last * $dt;
         }
 
@@ -2172,16 +2172,16 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testAProductivityGainLowersInflationCeterisParibus(): void
     {
         $calm = $this->neutralBorrowingState();
-        $calm->inflationEma = MacroEngine::TARGET_INFLATION;
-        $calm->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $calm->inflationEma = MacroConstants::TARGET_INFLATION;
+        $calm->wageGrowth = MacroConstants::TFP_DRIFT + MacroConstants::TARGET_INFLATION;
         $gain = clone $calm;
         $gain->productivitySupplyGap = 0.01;
         $gain->outputGap = 0.01;
         $supplyOnly = clone $gain;
 
-        $calmInflation = $this->subsystem->calculateInflation($calm, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
-        $supplyInflation = $this->subsystem->calculateInflation($supplyOnly, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
-        $gainInflation = $this->subsystem->calculateInflation($gain, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT + 0.01, 0.25);
+        $calmInflation = $this->subsystem->calculateInflation($calm, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
+        $supplyInflation = $this->subsystem->calculateInflation($supplyOnly, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
+        $gainInflation = $this->subsystem->calculateInflation($gain, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT + 0.01, 0.25);
 
         $this->assertEqualsWithDelta($calmInflation, $supplyInflation, 1e-15, 'The supply part of the gap pulls no demand inflation.');
         $this->assertLessThan($calmInflation, $gainInflation, 'Faster productivity at given wages lowers unit labour cost and inflation.');
@@ -2224,12 +2224,12 @@ class MacroAggregateSubsystemTest extends TestCase
             $down = clone $up;
 
             $this->assertSame(
-                $high->calculateInflation($up, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt),
-                $low->calculateInflation($down, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt),
+                $high->calculateInflation($up, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt),
+                $low->calculateInflation($down, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt),
                 "Headline inflation draws no noise at dt {$dt}.",
             );
-            $high->calculateProducerPriceInflation($up, MacroEngine::TFP_DRIFT, $dt);
-            $low->calculateProducerPriceInflation($down, MacroEngine::TFP_DRIFT, $dt);
+            $high->calculateProducerPriceInflation($up, MacroConstants::TFP_DRIFT, $dt);
+            $low->calculateProducerPriceInflation($down, MacroConstants::TFP_DRIFT, $dt);
             $this->assertSame($up->producerPriceInflation, $down->producerPriceInflation, "PPI draws no noise at dt {$dt}.");
         }
     }
@@ -2242,21 +2242,21 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testPersistentFreightAddsNoStandingCoreGoodsInflation(): void
     {
         $calm = $this->neutralBorrowingState();
-        $calm->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
-        $calm->freightRateIndex = MacroEngine::FREIGHT_BASELINE;
-        $calm->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
+        $calm->wageGrowth = MacroConstants::TFP_DRIFT + MacroConstants::TARGET_INFLATION;
+        $calm->freightRateIndex = MacroConstants::FREIGHT_BASELINE;
+        $calm->freightRateIndexEma = MacroConstants::FREIGHT_BASELINE;
         $parked = clone $calm;
-        $parked->freightRateIndex = 2.0 * MacroEngine::FREIGHT_BASELINE;
-        $parked->freightRateIndexEma = 2.0 * MacroEngine::FREIGHT_BASELINE;
+        $parked->freightRateIndex = 2.0 * MacroConstants::FREIGHT_BASELINE;
+        $parked->freightRateIndexEma = 2.0 * MacroConstants::FREIGHT_BASELINE;
         $building = clone $calm;
-        $building->freightRateIndex = 2.0 * MacroEngine::FREIGHT_BASELINE;
+        $building->freightRateIndex = 2.0 * MacroConstants::FREIGHT_BASELINE;
 
         $dt = 0.01;
         $levelGap = 0.0;
         for ($step = 0; $step < 1500; ++$step) {
-            $this->subsystem->calculateInflation($calm, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
-            $this->subsystem->calculateInflation($parked, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
-            $this->subsystem->calculateInflation($building, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt);
+            $this->subsystem->calculateInflation($calm, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
+            $this->subsystem->calculateInflation($parked, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
+            $this->subsystem->calculateInflation($building, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
             $this->assertSame($calm->coreGoodsInflation, $parked->coreGoodsInflation, 'Parked freight adds no core goods inflation.');
             $levelGap += ($building->coreGoodsInflation - $calm->coreGoodsInflation) * $dt;
             $building->freightRateIndexEma += (1.0 - exp(-$dt / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS)) * ($building->freightRateIndex - $building->freightRateIndexEma);
@@ -2277,7 +2277,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.865, MacroAggregateSubsystem::domesticDeflatorWeight(), 1e-12, 'Services 55%, half the 45% of goods made at home, 40% of the imported half.');
 
         $calm = $this->neutralBorrowingState();
-        $calm->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $calm->wageGrowth = MacroConstants::TFP_DRIFT + MacroConstants::TARGET_INFLATION;
         $appreciated = clone $calm;
         $appreciated->exchangeRateIndexEma = 110.0;
         $oilShock = clone $calm;
@@ -2287,8 +2287,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $calmHeadline = 0.0;
         for ($i = 0; $i < 8; $i++) {
-            $calmHeadline = $this->subsystem->calculateInflation($calm, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
-            $appreciatedHeadline = $this->subsystem->calculateInflation($appreciated, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+            $calmHeadline = $this->subsystem->calculateInflation($calm, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
+            $appreciatedHeadline = $this->subsystem->calculateInflation($appreciated, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
         }
         $this->assertGreaterThan(0.0005, abs($appreciatedHeadline - $calmHeadline), 'The currency moves headline through the imported half');
         $this->assertEqualsWithDelta($calm->domesticInflation, $appreciated->domesticInflation, 1e-15, 'but not the deflator, even while core goods carry it.');
@@ -2297,8 +2297,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $reference = clone $oilShock;
         $reference->energyPriceShock = 0.0;
         $priorEnergy = $oilShock->energyCostPushLag;
-        $this->subsystem->calculateInflation($reference, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
-        $this->subsystem->calculateInflation($oilShock, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateInflation($reference, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateInflation($oilShock, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
         $energyPush = ($oilShock->energyCostPushLag - $priorEnergy) / 0.25;
         $this->assertGreaterThan(0.0, $energyPush);
         $this->assertEqualsWithDelta(
@@ -2311,8 +2311,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $untaxed = clone $taxed;
         $untaxed->carbonPrice = 0.0;
         $priorCarbon = $taxed->electricityCarbonPriceLevel;
-        $this->subsystem->calculateInflation($untaxed, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
-        $this->subsystem->calculateInflation($taxed, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateInflation($untaxed, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateInflation($taxed, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
         $carbonPush = MacroAggregateSubsystem::CPI_ELECTRICITY_WEIGHT * ($taxed->electricityCarbonPriceLevel - $priorCarbon) / 0.25;
         $this->assertGreaterThan(0.0, $carbonPush);
         $this->assertEqualsWithDelta($carbonPush / MacroAggregateSubsystem::domesticDeflatorWeight(), $taxed->domesticInflation - $untaxed->domesticInflation, 1e-15);
@@ -2326,7 +2326,7 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $this->assertEqualsWithDelta(
             1.0,
-            MacroEngine::PPI_METALS_WEIGHT + MacroEngine::PPI_ENERGY_WEIGHT + MacroAggregateSubsystem::PPI_AGRI_WEIGHT
+            MacroConstants::PPI_METALS_WEIGHT + MacroConstants::PPI_ENERGY_WEIGHT + MacroAggregateSubsystem::PPI_AGRI_WEIGHT
                 + MacroAggregateSubsystem::PPI_ULC_WEIGHT + MacroAggregateSubsystem::PPI_OTHER_COST_WEIGHT,
             1e-12,
         );
@@ -2338,12 +2338,12 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->agriculturalCommodityIndexTrend = $state->agriculturalCommodityIndex;
         $state->supplyChainPressureIndex = 0.0;
         $state->outputGap = 0.0;
-        $state->wageGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowth;
-        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $state->wageGrowth = MacroConstants::TARGET_INFLATION + $tfpGrowth;
+        $state->tipsBreakeven = MacroConstants::TARGET_INFLATION;
 
         $this->subsystem->calculateProducerPriceInflation($state, $tfpGrowth, 1.0 / 3600.0);
 
-        $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $state->producerPriceInflation, 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::TARGET_INFLATION, $state->producerPriceInflation, 1e-12);
     }
 
     /** The price level is recorded at each month end, and a year of record gives the year-on-year rate in logs. */

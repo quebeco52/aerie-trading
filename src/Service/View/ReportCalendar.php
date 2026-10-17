@@ -6,6 +6,7 @@ namespace App\Service\View;
 
 use App\Data\District\DistrictCalendar;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * When a company reports, as its page dates it: the next results date, and the quarter each filed report covers.
@@ -20,7 +21,7 @@ final class ReportCalendar
     // --- Reporting Calendar ---
 
     /** A quarter, in years: the distance between two reports and between a filing and the quarter it covers. */
-    private const QUARTER_YEARS = EarningsEngine::REPORT_INTERVAL_YEARS;
+    private const QUARTER_YEARS = FinancialConstants::QUARTER_YEARS;
 
     /**
      * Simulation time of the company's next results, strictly after now: a report filed on this very tick is past.

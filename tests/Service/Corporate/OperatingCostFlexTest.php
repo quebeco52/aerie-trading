@@ -149,9 +149,9 @@ final class OperatingCostFlexTest extends TestCase
                     'corporate_tax_rate' => 0.21,
                     'output_gap_ema' => $outputGap,
                     'deal_activity_index_ema' => $dealActivityIndex,
-                    'deal_activity_index_trend' => \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE,
-                    'macro_credit_spread_ema' => \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD,
-                    'macro_credit_spread_trend' => \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD,
+                    'deal_activity_index_trend' => \App\Service\Math\MacroConstants::DEAL_ACTIVITY_BASELINE,
+                    'macro_credit_spread_ema' => \App\Service\Math\MacroConstants::BASE_CREDIT_SPREAD,
+                    'macro_credit_spread_trend' => \App\Service\Math\MacroConstants::BASE_CREDIT_SPREAD,
                     'market_volatility_ema' => \App\Service\Model\Sector\InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
                     'policy_rate' => 0.04,
                     'policy_rate_ema' => 0.04,
@@ -166,8 +166,8 @@ final class OperatingCostFlexTest extends TestCase
             return $this->resolveScale($ctx);
         };
 
-        $this->assertEqualsWithDelta(1.0, $scaleAfterAQuarter(0.0, \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE), 1e-6, 'Normal deal flow keeps the whole base.');
-        $this->assertLessThan(0.995, $scaleAfterAQuarter(-0.045, 0.70 * \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE), 'A deal drought starts trimming the base the quarter it arrives.');
+        $this->assertEqualsWithDelta(1.0, $scaleAfterAQuarter(0.0, \App\Service\Math\MacroConstants::DEAL_ACTIVITY_BASELINE), 1e-6, 'Normal deal flow keeps the whole base.');
+        $this->assertLessThan(0.995, $scaleAfterAQuarter(-0.045, 0.70 * \App\Service\Math\MacroConstants::DEAL_ACTIVITY_BASELINE), 'A deal drought starts trimming the base the quarter it arrives.');
     }
 
     /**
@@ -191,9 +191,9 @@ final class OperatingCostFlexTest extends TestCase
         // annual ABJ elasticity closes its quarterly compounding share of the gap.
         $contraction = \App\Service\Math\TimeSeries::periodAdjustmentSpeed(
             FinancialConstants::STICKY_COST_BETA_EXPANSION + FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY,
-            EarningsEngine::QUARTERLY_TIME_STEP,
+            FinancialConstants::QUARTER_YEARS,
         );
-        $expansion = \App\Service\Math\TimeSeries::periodAdjustmentSpeed(FinancialConstants::STICKY_COST_BETA_EXPANSION, EarningsEngine::QUARTERLY_TIME_STEP);
+        $expansion = \App\Service\Math\TimeSeries::periodAdjustmentSpeed(FinancialConstants::STICKY_COST_BETA_EXPANSION, FinancialConstants::QUARTER_YEARS);
         $this->assertEqualsWithDelta(1.0 - exp($contraction * log(0.90)), $cut, 1e-9);
         $this->assertEqualsWithDelta((0.90 * exp($expansion * log(1.0 / 0.90))) - 0.90, $rebuild, 1e-9);
     }

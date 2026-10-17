@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ToolsAndAccessoriesBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -109,7 +109,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         // Each gap comes with the confidence it implies, so the sentiment residual is nil and only the gap moves.
         $stateAt = fn(float $gap): MacroStateDTO => new MacroStateDTO(
             outputGapEma: $gap,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
+            consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
             exchangeRateIndexEma: 100.0,
         );
         $response = function (float $gap) use ($stock, $quiet, $expectedRevenue, $stateAt): float {
@@ -145,11 +145,11 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
             0.35,
             20_000_000.0,
             0.10,
-            new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment, consumerSentimentMood: $sentiment - MacroEngine::SENTIMENT_TREND_LEVEL, exchangeRateIndexEma: 100.0),
+            new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment, consumerSentimentMood: $sentiment - MacroConstants::SENTIMENT_TREND_LEVEL, exchangeRateIndexEma: 100.0),
             $quiet,
         );
-        $trend = $run(MacroEngine::SENTIMENT_TREND_LEVEL);
-        $gloomy = $run(MacroEngine::SENTIMENT_TREND_LEVEL - 10.0);
+        $trend = $run(MacroConstants::SENTIMENT_TREND_LEVEL);
+        $gloomy = $run(MacroConstants::SENTIMENT_TREND_LEVEL - 10.0);
 
         $this->assertEqualsWithDelta($trend->streamRevenue['commercial'], $gloomy->streamRevenue['commercial'], 1e-6);
         $this->assertEqualsWithDelta(

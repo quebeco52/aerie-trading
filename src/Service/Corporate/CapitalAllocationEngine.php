@@ -8,6 +8,7 @@ use App\DTO\CapitalAllocationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\CreditRisk;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
@@ -551,7 +552,7 @@ class CapitalAllocationEngine
             return 0.0;
         }
 
-        $endRatio = $openingRatio - (TimeSeries::periodAdjustmentSpeed(self::CAPITAL_TARGET_ADJUSTMENT_SPEED, EarningsEngine::QUARTERLY_TIME_STEP) * ($openingRatio - $targetRatio));
+        $endRatio = $openingRatio - (TimeSeries::periodAdjustmentSpeed(self::CAPITAL_TARGET_ADJUSTMENT_SPEED, FinancialConstants::QUARTER_YEARS) * ($openingRatio - $targetRatio));
         if ($equity / $assets <= $endRatio) {
             return 0.0;
         }
@@ -571,7 +572,7 @@ class CapitalAllocationEngine
             return 0.0;
         }
 
-        $endRatio = $openingRatio + (TimeSeries::periodAdjustmentSpeed(self::LEVERAGE_TARGET_ADJUSTMENT_SPEED, EarningsEngine::QUARTERLY_TIME_STEP) * ($targetRatio - $openingRatio));
+        $endRatio = $openingRatio + (TimeSeries::periodAdjustmentSpeed(self::LEVERAGE_TARGET_ADJUSTMENT_SPEED, FinancialConstants::QUARTER_YEARS) * ($targetRatio - $openingRatio));
 
         return max(0.0, (($endRatio * $equity) - $debt) / (1.0 + $endRatio));
     }

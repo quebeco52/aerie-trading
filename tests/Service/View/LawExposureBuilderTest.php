@@ -7,9 +7,9 @@ namespace App\Tests\Service\View;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\PolicyCapitalization;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\View\LawExposureBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -17,7 +17,7 @@ final class LawExposureBuilderTest extends TestCase
 {
     /** The laws in force: a levy, middling extraction rules, the founding duty and a carbon price. */
     private const STANDING = [
-        'utilityRateGrant' => \App\Service\Model\Sector\UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+        'utilityRateGrant' => \App\Service\Math\FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
         'corporateTax' => 0.0,
         'tariff' => 0.0,
         'laborGrowth' => 0.0,
@@ -28,7 +28,7 @@ final class LawExposureBuilderTest extends TestCase
         'stampDutyRate' => FinancialConstants::STAMP_DUTY_RATE,
         'bankLevyRate' => 0.001,
         'reserveDrawShare' => 0.0,
-        'publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP * 1.05,
+        'publicSpending' => MacroConstants::PUBLIC_PURCHASES_TO_GDP * 1.05,
     ];
 
     public function testEachBankOwesTheLevyItsModelCharges(): void
@@ -106,7 +106,7 @@ final class LawExposureBuilderTest extends TestCase
     {
         $macro = new MacroStateDTO();
         $contractor = self::firm('BILD', 'Engineering & Construction', [FinancialConstants::STATE_PUBLIC_SPENDING_EARNINGS_SHARE => 0.2]);
-        $expected = ['publicSpending' => MacroEngine::PUBLIC_PURCHASES_TO_GDP * 0.95] + self::STANDING;
+        $expected = ['publicSpending' => MacroConstants::PUBLIC_PURCHASES_TO_GDP * 0.95] + self::STANDING;
 
         $row = self::row(self::law(LawExposureBuilder::build([$contractor], $macro, self::STANDING, $expected), 'publicSpending'), 'BILD');
 
@@ -141,7 +141,7 @@ final class LawExposureBuilderTest extends TestCase
     {
         $exposure = LawExposureBuilder::build([], new MacroStateDTO(), self::STANDING, ['corporateTax' => 0.02] + self::STANDING);
 
-        $rate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $rate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $this->assertNotNull($exposure['corporateTax']);
         $this->assertEqualsWithDelta($rate, $exposure['corporateTax']['inForce'], 1e-12);
         $this->assertEqualsWithDelta($rate + 0.02, $exposure['corporateTax']['expected'], 1e-12);

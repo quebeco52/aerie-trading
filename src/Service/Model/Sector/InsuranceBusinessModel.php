@@ -614,11 +614,11 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     {
         $claimsInflation = (self::CLAIMS_COST_GOODS_SHARE * $macroState->coreGoodsInflationEma)
             + ((1.0 - self::CLAIMS_COST_GOODS_SHARE) * $macroState->supercoreInflationEma);
-        $excess = $claimsInflation - \App\Service\Macro\MacroEngine::TARGET_INFLATION;
+        $excess = $claimsInflation - \App\Service\Math\MacroConstants::TARGET_INFLATION;
         $gap = TimeSeries::calculateDistributedLag(
             $streams->getPersistedState(self::STATE_UNRECOVERED_CLAIMS_COST, 0.0),
             $excess * self::PREMIUM_CATCH_UP_YEARS,
-            \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
+            \App\Service\Math\FinancialConstants::QUARTER_YEARS,
             self::PREMIUM_CATCH_UP_YEARS,
         );
         $streams->registerState(self::STATE_UNRECOVERED_CLAIMS_COST, $gap);
@@ -722,7 +722,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_OBSERVED_CAPACITY, TimeSeries::calculateDistributedLag(
             currentLaggedValue: $streams->getPersistedState(self::STATE_OBSERVED_CAPACITY, $currentRatio),
             targetValue: $currentRatio,
-            dt: \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
+            dt: \App\Service\Math\FinancialConstants::QUARTER_YEARS,
             lagTimeConstant: self::CAPACITY_OBSERVATION_LAG_YEARS,
         ));
 
@@ -731,7 +731,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_WRITTEN_SHARE, self::adjustWrittenShare(
             $streams->getPersistedState(self::STATE_WRITTEN_SHARE, $targetShare),
             $targetShare,
-            \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
+            \App\Service\Math\FinancialConstants::QUARTER_YEARS,
         ));
     }
 
@@ -1259,7 +1259,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Unearned premium on a book written evenly and earned pro rata over its term: half a term of annual premium. */
     public function resolveUnearnedPremiumReserve(float $quarterlyPremium): float
     {
-        return max(0.0, $quarterlyPremium / \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP) * self::POLICY_TERM_YEARS / 2.0;
+        return max(0.0, $quarterlyPremium / \App\Service\Math\FinancialConstants::QUARTER_YEARS) * self::POLICY_TERM_YEARS / 2.0;
     }
 
     /**
@@ -1270,7 +1270,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     public function rollLossReserves(float $reserves, float $incurred, float $runoffYears): array
     {
-        $dt = \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
+        $dt = \App\Service\Math\FinancialConstants::QUARTER_YEARS;
         $settled = max(0.0, TimeSeries::calculateDistributedLag(
             currentLaggedValue: $reserves,
             targetValue: ($incurred / $dt) * $runoffYears,

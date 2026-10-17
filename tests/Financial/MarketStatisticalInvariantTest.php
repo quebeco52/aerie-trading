@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
@@ -41,10 +44,10 @@ class MarketStatisticalInvariantTest extends TestCase
 
         $this->math = new MathUtility();
         $this->dt = 1.0 / self::TICKS_PER_YEAR;
-        $this->regimePhi = exp(-$this->dt / MacroEngine::MARKET_FACTOR_DECAY_TAU_YEARS);
+        $this->regimePhi = exp(-$this->dt / AssetMarketSubsystem::MARKET_FACTOR_DECAY_TAU_YEARS);
         $this->regimeScale = StochasticProcesses::calculatePersistenceVarianceScale($this->regimePhi);
-        $this->regimeWeight = sqrt(MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE);
-        $this->tailWeight = sqrt(1.0 - MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE);
+        $this->regimeWeight = sqrt(AssetMarketSubsystem::MARKET_FACTOR_REGIME_VARIANCE_SHARE);
+        $this->tailWeight = sqrt(1.0 - AssetMarketSubsystem::MARKET_FACTOR_REGIME_VARIANCE_SHARE);
     }
 
     /** Advances the two-leg market factor exactly as MacroEngine::updateMacroState() does. */
@@ -53,17 +56,17 @@ class MarketStatisticalInvariantTest extends TestCase
         $latent = $this->math->generatePersistentZ($latent, $this->regimePhi);
 
         return ($this->regimeWeight * $latent * $this->regimeScale)
-            + ($this->tailWeight * $this->math->generateStudentsT(MacroEngine::MARKET_FACTOR_TAIL_DF));
+            + ($this->tailWeight * $this->math->generateStudentsT(AssetMarketSubsystem::MARKET_FACTOR_TAIL_DF));
     }
 
     private function nextMarketJump(): float
     {
         return $this->math->calculateSVJJJumps(
-            MacroEngine::SYSTEMIC_JUMP_INTENSITY,
-            MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
-            MacroEngine::SYSTEMIC_JUMP_ETA_UP,
-            MacroEngine::SYSTEMIC_JUMP_ETA_DOWN,
-            MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN,
+            MacroConstants::SYSTEMIC_JUMP_INTENSITY,
+            MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP,
+            MacroConstants::SYSTEMIC_JUMP_ETA_UP,
+            MacroConstants::SYSTEMIC_JUMP_ETA_DOWN,
+            AssetMarketSubsystem::SYSTEMIC_JUMP_VARIANCE_MEAN,
             $this->dt,
         )['price_multiplier'];
     }
@@ -170,7 +173,7 @@ class MarketStatisticalInvariantTest extends TestCase
                     marketZ: $marketShock,
                     w1: $this->math->generateStandardNormal(),
                     sectorZ: $sectorShocks[$ticker[0]],
-                    sectorVarianceShare: MacroEngine::SECTOR_FACTOR_VARIANCE_SHARE,
+                    sectorVarianceShare: MarketEngine::SECTOR_FACTOR_VARIANCE_SHARE,
                 );
 
                 $next = $diffused * $jump;

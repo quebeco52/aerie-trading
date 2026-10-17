@@ -9,7 +9,7 @@ use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -89,7 +89,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         // A 150 bps IG widening with HY unchanged is not a buyout financing shock: LBO debt is speculative grade.
         $igOnlyMacro = MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.03,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD + 0.015,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD + 0.015,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
         ]);
         $this->assertEqualsWithDelta(1.0, $this->model->getMacroPhysics($stock, $igOnlyMacro)['pricing_power_multiplier'], 0.001);
@@ -98,7 +98,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         // multiples.
         $hyMacro = MacroStateDTO::fromArray([
             'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.015,
         ]);
         $expectedCarryMultiple = 1.0 - (0.015 * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY);
@@ -361,8 +361,8 @@ class PrivateEquityBusinessModelTest extends TestCase
             'output_gap_ema' => 0.0,
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
-            'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_ema' => MacroConstants::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
         $result = $this->model->computeActualFinancials($stock, 100.0, 0.35, 10.0, 0.10, $trend, $mathMock);
 
@@ -390,16 +390,16 @@ class PrivateEquityBusinessModelTest extends TestCase
             'output_gap_ema' => 0.0,
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
-            'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_ema' => MacroConstants::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $hotDealMacro = MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
-            'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE * 1.5,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_ema' => MacroConstants::DEAL_ACTIVITY_BASELINE * 1.5,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $baselineResult = $this->model->computeActualFinancials(
@@ -438,8 +438,8 @@ class PrivateEquityBusinessModelTest extends TestCase
         $stock->setWholesaleDebt('50.0');
         $recession = MacroStateDTO::fromArray([
             'output_gap_ema' => -0.03,
-            'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_ema' => MacroConstants::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
         ]);

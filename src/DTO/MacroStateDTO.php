@@ -13,9 +13,10 @@ use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
-use App\Service\Model\Sector\UtilityBusinessModel;
 
 /**
  * Immutable Data Transfer Object representing a snapshot of the macroeconomic state.
@@ -77,8 +78,8 @@ readonly class MacroStateDTO
         ?float $outputGapLag18m = null,
         public float $capitalStockOverhang = 0.0,
         public float $capitalStockOverhangEma = 0.0,
-        public float $unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT,
-        public float $unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT,
+        public float $unemploymentRate = MacroConstants::NATURAL_UNEMPLOYMENT,
+        public float $unemploymentRateEma = MacroConstants::NATURAL_UNEMPLOYMENT,
         /**
          * @var list<float> The unemployment rate at each of the last month ends, oldest first, as many as the Sahm rule
          *                  reads.
@@ -105,33 +106,33 @@ readonly class MacroStateDTO
          * growth.
          */
         public bool $recessionDeclared = false,
-        public float $jobVacanciesRate = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
-        public float $jobVacanciesRateEma = MacroEngine::NATURAL_UNEMPLOYMENT * MacroEngine::NATURAL_LABOR_TIGHTNESS,
-        public float $laborTightness = MacroEngine::NATURAL_LABOR_TIGHTNESS,
-        public float $laborTightnessEma = MacroEngine::NATURAL_LABOR_TIGHTNESS,
-        public float $wageGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT,
-        public float $wageGrowthEma = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT,
+        public float $jobVacanciesRate = MacroConstants::NATURAL_UNEMPLOYMENT * MacroConstants::NATURAL_LABOR_TIGHTNESS,
+        public float $jobVacanciesRateEma = MacroConstants::NATURAL_UNEMPLOYMENT * MacroConstants::NATURAL_LABOR_TIGHTNESS,
+        public float $laborTightness = MacroConstants::NATURAL_LABOR_TIGHTNESS,
+        public float $laborTightnessEma = MacroConstants::NATURAL_LABOR_TIGHTNESS,
+        public float $wageGrowth = MacroConstants::TARGET_INFLATION + MacroConstants::TFP_DRIFT,
+        public float $wageGrowthEma = MacroConstants::TARGET_INFLATION + MacroConstants::TFP_DRIFT,
         public float $realWageGap = 0.0,
-        public float $nairu = MacroEngine::NATURAL_UNEMPLOYMENT,
-        public float $nairuEma = MacroEngine::NATURAL_UNEMPLOYMENT,
-        public float $naturalRate = MacroEngine::BASE_NATURAL_RATE,
-        public float $naturalRateEma = MacroEngine::BASE_NATURAL_RATE,
+        public float $nairu = MacroConstants::NATURAL_UNEMPLOYMENT,
+        public float $nairuEma = MacroConstants::NATURAL_UNEMPLOYMENT,
+        public float $naturalRate = MacroConstants::BASE_NATURAL_RATE,
+        public float $naturalRateEma = MacroConstants::BASE_NATURAL_RATE,
         public float $energyPriceIndex = 100.0,
         public float $energyPriceIndexEma = 100.0,
         public float $energyPriceIndexTrend = 0.0,
         /** Decade trend of the energy index the supply drag reads (MacroAggregateSubsystem::supplyCostShift()). */
-        public float $energyPriceIndexDecadeTrend = MacroEngine::ENERGY_BASELINE,
+        public float $energyPriceIndexDecadeTrend = MacroConstants::ENERGY_BASELINE,
         /** Decade trend of the freight index the supply drag reads. */
-        public float $freightRateIndexDecadeTrend = MacroEngine::FREIGHT_BASELINE,
+        public float $freightRateIndexDecadeTrend = MacroConstants::FREIGHT_BASELINE,
         public float $energyPriceShock = 0.0,
         public float $energyBasePrice = 100.0,
-        public float $energySupplyEma = MacroEngine::ENERGY_BASELINE,
+        public float $energySupplyEma = MacroConstants::ENERGY_BASELINE,
         public float $energyCostPushLag = 0.0,
         public float $agriCostPushLag = 0.0,
         public float $noncorePassThroughEma = 0.0,
-        public float $domesticInflation = MacroEngine::TARGET_INFLATION,
-        public float $consumerSentimentIndex = MacroEngine::SENTIMENT_TREND_LEVEL,
-        public float $consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL,
+        public float $domesticInflation = MacroConstants::TARGET_INFLATION,
+        public float $consumerSentimentIndex = MacroConstants::SENTIMENT_TREND_LEVEL,
+        public float $consumerSentimentIndexEma = MacroConstants::SENTIMENT_TREND_LEVEL,
         /**
          * The part of confidence its fundamentals do not explain, in index points
          * (AssetMarketSubsystem::calculateConsumerSentiment()).
@@ -153,8 +154,8 @@ readonly class MacroStateDTO
          * (CreditFiscalSubsystem::discretionarySpendingShift()).
          */
         public float $governmentSpendingIndexTrend = 100.0,
-        public float $alliedDefenseSpendingIndex = MacroEngine::ALLIED_DEFENSE_BASELINE,
-        public float $alliedDefenseSpendingIndexEma = MacroEngine::ALLIED_DEFENSE_BASELINE,
+        public float $alliedDefenseSpendingIndex = MacroConstants::ALLIED_DEFENSE_BASELINE,
+        public float $alliedDefenseSpendingIndexEma = MacroConstants::ALLIED_DEFENSE_BASELINE,
         public float $commercialPropertyIndex = 100.0,
         public float $commercialPropertyIndexEma = 100.0,
         /**
@@ -166,8 +167,8 @@ readonly class MacroStateDTO
         public float $residentialPropertyIndexEma = 100.0,
         public float $residentialWealthTrend = 100.0,
         public float $residentialPriceMomentum = 0.0,
-        public float $retailDefaultRate = MacroEngine::RETAIL_DEFAULT_BASELINE,
-        public float $retailDefaultRateEma = MacroEngine::RETAIL_DEFAULT_BASELINE,
+        public float $retailDefaultRate = MacroConstants::RETAIL_DEFAULT_BASELINE,
+        public float $retailDefaultRateEma = MacroConstants::RETAIL_DEFAULT_BASELINE,
         public float $retailCreditFactor = 0.0,
         public float $agriculturalCommodityIndex = 100.0,
         public float $agriculturalCommodityIndexEma = 100.0,
@@ -177,16 +178,16 @@ readonly class MacroStateDTO
         public float $freightRateIndex = 100.0,
         public float $freightRateIndexEma = 100.0,
         public float $freightSupplyEma = 100.0,
-        public float $inflation = MacroEngine::TARGET_INFLATION,
-        public float $inflationEma = MacroEngine::TARGET_INFLATION,
-        public float $tipsBreakeven = MacroEngine::TARGET_INFLATION,
-        public float $tipsBreakevenEma = MacroEngine::TARGET_INFLATION,
+        public float $inflation = MacroConstants::TARGET_INFLATION,
+        public float $inflationEma = MacroConstants::TARGET_INFLATION,
+        public float $tipsBreakeven = MacroConstants::TARGET_INFLATION,
+        public float $tipsBreakevenEma = MacroConstants::TARGET_INFLATION,
         /**
          * The breakeven the market quotes, net of the TIPS liquidity premium
          * (MacroAggregateSubsystem::quotedTipsBreakeven()); for display.
          */
-        public float $tipsBreakevenQuoted = MacroEngine::TARGET_INFLATION,
-        public float $tipsBreakevenQuotedEma = MacroEngine::TARGET_INFLATION,
+        public float $tipsBreakevenQuoted = MacroConstants::TARGET_INFLATION,
+        public float $tipsBreakevenQuotedEma = MacroConstants::TARGET_INFLATION,
         public float $policyRate = self::OPENING_POLICY_RATE,
         public float $policyRateEma = self::OPENING_POLICY_RATE,
         /**
@@ -219,14 +220,14 @@ readonly class MacroStateDTO
         public float $riskNeutral10yEma = 0.0347,
         public float $termPremiumShock = 0.0,
         public float $expectedPathShock = 0.0,
-        public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
+        public float $termPremiumRegime = MacroConstants::NS_BASE_TERM_PREMIUM,
         /**
          * The mainland's ten-year term premium factors, the global factor the District's loads on
          * (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::updateTermPremiumDynamics()).
          */
         public float $foreignTermPremiumShock = 0.0,
-        public float $foreignTermPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
-        public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+        public float $foreignTermPremiumRegime = MacroConstants::NS_BASE_TERM_PREMIUM,
+        public float $perceivedNeutralRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION,
         public float $marketVolatility = 0.14,
         public float $marketVolatilityEma = 0.14,
         public float $marketZ = 0.0,
@@ -239,12 +240,12 @@ readonly class MacroStateDTO
          *                           in the sector.
          */
         public array $sectorDemandZ = [],
-        public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE,
+        public float $corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE,
         /**
          * The tax rate's measured structural level, a decade's exponential average
          * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()).
          */
-        public float $corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE,
+        public float $corporateTaxRateTrend = MacroConstants::BASE_CORPORATE_TAX_RATE,
         /**
          * The budget's take outside the corporate tax, net of transfers, as a share of GDP: what carries the automatic
          * stabilisers and the fiscal stance.
@@ -257,42 +258,42 @@ readonly class MacroStateDTO
         public float $netTaxStanceRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
         /** Its decade trend, as corporateTaxRateTrend is the corporate rate's. */
         public float $netTaxStanceRateTrend = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
-        public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
+        public float $sovereignDebtToGdp = MacroConstants::INITIAL_DEBT_TO_GDP,
         /**
          * Interest rate the coupon stock of the debt pays, repricing toward the 10-year as it rolls
          * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateSovereignDebt()).
          */
         public float $sovereignCouponRate = self::OPENING_YIELD_10Y,
-        public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
-        public float $sovereignNetDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
-        public float $sovereignNetDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
+        public float $sovereignDebtToGdpEma = MacroConstants::INITIAL_DEBT_TO_GDP,
+        public float $sovereignNetDebtToGdp = MacroConstants::INITIAL_DEBT_TO_GDP,
+        public float $sovereignNetDebtToGdpEma = MacroConstants::INITIAL_DEBT_TO_GDP,
         /**
          * Gross debt less the whole fund and the rescue holdings, minus net financial worth: what the fiscal reaction
          * and the spread read (CreditFiscalSubsystem::calculateSovereignDebt()).
          */
-        public float $sovereignNetFinancialLiabilitiesToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
-        public float $sovereignNetFinancialLiabilitiesToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
+        public float $sovereignNetFinancialLiabilitiesToGdp = MacroConstants::INITIAL_DEBT_TO_GDP,
+        public float $sovereignNetFinancialLiabilitiesToGdpEma = MacroConstants::INITIAL_DEBT_TO_GDP,
         /**
          * Average maturity of the debt, in years, and the one the Exchequer's head steers it toward as it rolls over
          * (CreditFiscalSubsystem).
          */
         public float $sovereignDebtAverageMaturity = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
         public float $sovereignDebtMaturityTarget = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
-        public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-        public float $macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD,
-        public float $macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD,
+        public float $equityRiskPremium = MacroConstants::BASE_EQUITY_RISK_PREMIUM,
+        public float $macroCreditSpread = MacroConstants::BASE_CREDIT_SPREAD,
+        public float $macroCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD,
         /**
          * The IG spread's measured through-the-cycle level, a decade's exponential average
          * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::updateCreditSpreadTrend()).
          */
-        public float $macroCreditSpreadTrend = MacroEngine::BASE_CREDIT_SPREAD,
-        public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD,
-        public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD,
+        public float $macroCreditSpreadTrend = MacroConstants::BASE_CREDIT_SPREAD,
+        public float $interbankLiquiditySpread = MacroConstants::INTERBANK_BASELINE_SPREAD,
+        public float $interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD,
         public float $excessBondPremium = 0.0,
         /** Decade trend of the excess bond premium the credit drag reads. */
         public float $excessBondPremiumTrend = 0.0,
-        public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE,
-        public float $totalFactorProductivityIndexEma = MacroEngine::TFP_BASELINE,
+        public float $totalFactorProductivityIndex = MacroConstants::TFP_BASELINE,
+        public float $totalFactorProductivityIndexEma = MacroConstants::TFP_BASELINE,
         public float $tfpShockLevel = 0.0,
         /** Scar credit crises have booked that potential has yet to take (log level, negative). */
         public float $crisisScarPending = 0.0,
@@ -328,18 +329,18 @@ readonly class MacroStateDTO
         public float $balanceSheetHoldTimer = 0.0,
         public float $lastQeLaunchAt = -1.0,
         public float $inversionDuration = 0.0,
-        public float $nsLevel = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+        public float $nsLevel = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION,
         public float $nsSlope = self::OPENING_YIELD_10Y - self::OPENING_POLICY_RATE,
         public float $nsSlopeEma = self::OPENING_YIELD_10Y - self::OPENING_POLICY_RATE,
         public float $structuralSlope = self::OPENING_YIELD_10Y - self::OPENING_POLICY_RATE,
         public float $nsCurvature = 0.0,
         public float $nsCurvature2 = 0.0,
-        public float $nsBeta1 = self::OPENING_POLICY_RATE - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
+        public float $nsBeta1 = self::OPENING_POLICY_RATE - (MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION),
         public float $nsBaseTermPremium = 0.0115,
         public float $nsLongEndPremium = 0.0109,
         public float $potentialGdpIndex = 1.0,
         public float $nominalGdpIndex = 1.0,
-        public float $nominalGdpGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION,
+        public float $nominalGdpGrowth = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT + MacroConstants::TARGET_INFLATION,
         public float $equityMarketCap = 0.0,
         public float $equityMarketCapEma = 0.0,
         public float $equityWealthRatio = 0.0,
@@ -359,40 +360,40 @@ readonly class MacroStateDTO
          * Highest three-month average unemployment rate since the recession headline last reported; the episode ends
          * RECESSION_RECOVERY_MARGIN below it (MacroEngine::evaluateSystemicEvent()).
          */
-        public float $supercoreInflation = MacroEngine::TARGET_INFLATION,
-        public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION,
-        public float $coreGoodsInflation = MacroEngine::TARGET_INFLATION,
-        public float $coreGoodsInflationEma = MacroEngine::TARGET_INFLATION,
-        public float $highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
-        public float $highYieldCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+        public float $supercoreInflation = MacroConstants::TARGET_INFLATION,
+        public float $supercoreInflationEma = MacroConstants::TARGET_INFLATION,
+        public float $coreGoodsInflation = MacroConstants::TARGET_INFLATION,
+        public float $coreGoodsInflationEma = MacroConstants::TARGET_INFLATION,
+        public float $highYieldCreditSpread = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
+        public float $highYieldCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
         public float $inventoryStockGap = 0.0,
         public float $inventoryStockGapEma = 0.0,
         public float $demandShock = 0.0,
         public float $demandDisasterShock = 0.0,
         public float $demandDisasterCompensation = 0.0,
-        public float $energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE,
-        public float $energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE,
-        public float $capacityUtilizationRate = MacroEngine::CU_BASELINE,
-        public float $capacityUtilizationRateEma = MacroEngine::CU_BASELINE,
-        public float $recessionProbability = MacroEngine::RECESSION_BASE_RATE,
-        public float $recessionProbabilityEma = MacroEngine::RECESSION_BASE_RATE,
-        public float $corporateDefaultRate = MacroEngine::CORPORATE_DEFAULT_BASELINE,
-        public float $corporateDefaultRateEma = MacroEngine::CORPORATE_DEFAULT_BASELINE,
+        public float $energyInventoryIndex = MacroConstants::COMMODITY_INVENTORY_BASELINE,
+        public float $energyInventoryIndexEma = MacroConstants::COMMODITY_INVENTORY_BASELINE,
+        public float $capacityUtilizationRate = MacroConstants::CU_BASELINE,
+        public float $capacityUtilizationRateEma = MacroConstants::CU_BASELINE,
+        public float $recessionProbability = MacroConstants::RECESSION_BASE_RATE,
+        public float $recessionProbabilityEma = MacroConstants::RECESSION_BASE_RATE,
+        public float $corporateDefaultRate = MacroConstants::CORPORATE_DEFAULT_BASELINE,
+        public float $corporateDefaultRateEma = MacroConstants::CORPORATE_DEFAULT_BASELINE,
         public float $sloosTighteningIndex = 0.0,
         public float $sloosTighteningIndexEma = 0.0,
         public float $supplyChainPressureIndex = 0.0,
         public float $supplyChainPressureIndexEma = 0.0,
-        public float $supplierDeliveryTimes = MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL,
-        public float $supplierDeliveryTimesEma = MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL,
-        public float $refiningCrackSpread = MacroEngine::CRACK_SPREAD_BASELINE,
-        public float $refiningCrackSpreadEma = MacroEngine::CRACK_SPREAD_BASELINE,
-        public float $dealActivityIndex = MacroEngine::DEAL_ACTIVITY_BASELINE,
-        public float $dealActivityIndexEma = MacroEngine::DEAL_ACTIVITY_BASELINE,
+        public float $supplierDeliveryTimes = MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL,
+        public float $supplierDeliveryTimesEma = MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL,
+        public float $refiningCrackSpread = MacroConstants::CRACK_SPREAD_BASELINE,
+        public float $refiningCrackSpreadEma = MacroConstants::CRACK_SPREAD_BASELINE,
+        public float $dealActivityIndex = MacroConstants::DEAL_ACTIVITY_BASELINE,
+        public float $dealActivityIndexEma = MacroConstants::DEAL_ACTIVITY_BASELINE,
         /**
          * Deal flow's measured through-the-cycle level, a decade's exponential average
          * (App\Service\Macro\Subsystem\AssetMarketSubsystem::calculateCapitalMarketsDealIndex()).
          */
-        public float $dealActivityIndexTrend = MacroEngine::DEAL_ACTIVITY_BASELINE,
+        public float $dealActivityIndexTrend = MacroConstants::DEAL_ACTIVITY_BASELINE,
         /**
          * Realized ten-year yield volatility, annualized, over the last quarter
          * (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::applyYieldCurve()).
@@ -400,26 +401,26 @@ readonly class MacroStateDTO
         public float $treasuryVolatility = MonetaryPolicySubsystem::OPENING_TREASURY_VOLATILITY,
         /** That volatility's measured through-the-cycle level, a decade's exponential average. */
         public float $treasuryVolatilityTrend = MonetaryPolicySubsystem::OPENING_TREASURY_VOLATILITY,
-        public float $manufacturingPmi = MacroEngine::PMI_BASELINE,
-        public float $manufacturingPmiEma = MacroEngine::PMI_BASELINE,
-        public float $producerPriceInflation = MacroEngine::TARGET_INFLATION,
-        public float $producerPriceInflationEma = MacroEngine::TARGET_INFLATION,
-        public float $tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE,
-        public float $tradeBalanceToGdpEma = MacroEngine::TRADE_BALANCE_BASELINE,
-        public float $housingStartsIndex = MacroEngine::HOUSING_STARTS_BASELINE,
-        public float $housingStartsIndexEma = MacroEngine::HOUSING_STARTS_BASELINE,
+        public float $manufacturingPmi = MacroConstants::PMI_BASELINE,
+        public float $manufacturingPmiEma = MacroConstants::PMI_BASELINE,
+        public float $producerPriceInflation = MacroConstants::TARGET_INFLATION,
+        public float $producerPriceInflationEma = MacroConstants::TARGET_INFLATION,
+        public float $tradeBalanceToGdp = MacroConstants::TRADE_BALANCE_BASELINE,
+        public float $tradeBalanceToGdpEma = MacroConstants::TRADE_BALANCE_BASELINE,
+        public float $housingStartsIndex = MacroConstants::HOUSING_STARTS_BASELINE,
+        public float $housingStartsIndexEma = MacroConstants::HOUSING_STARTS_BASELINE,
         public float $reimbursementRateIndex = 100.0,
         public float $reimbursementRateIndexEma = 100.0,
-        public float $reimbursementRateGrowth = MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET,
+        public float $reimbursementRateGrowth = MacroConstants::TARGET_INFLATION - MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET,
         public float $reimbursementAusterityShare = 0.0,
-        public float $householdDebtToIncome = MacroEngine::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
-        public float $householdDebtToIncomeEma = MacroEngine::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
-        public float $householdDebtServiceRatio = MacroEngine::OPENING_HOUSEHOLD_DSR,
-        public float $householdDebtServiceRatioEma = MacroEngine::OPENING_HOUSEHOLD_DSR,
+        public float $householdDebtToIncome = MacroConstants::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
+        public float $householdDebtToIncomeEma = MacroConstants::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
+        public float $householdDebtServiceRatio = MacroConstants::OPENING_HOUSEHOLD_DSR,
+        public float $householdDebtServiceRatioEma = MacroConstants::OPENING_HOUSEHOLD_DSR,
         public float $householdDebtServiceTrend = 0.0,
         public float $householdDebtServiceGap = 0.0,
         public float $householdNewBorrowing = 0.0,
-        public float $creditToGdpTrend = MacroEngine::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
+        public float $creditToGdpTrend = MacroConstants::OPENING_HOUSEHOLD_DEBT_TO_INCOME,
         public float $creditToGdpTrendSlope = 0.0,
         public float $creditToGdpGap = 0.0,
         public float $creditToGdpGapEma = 0.0,
@@ -442,28 +443,28 @@ readonly class MacroStateDTO
         public float $worldActivityGap = 0.0,
         /** The part of the world gap the mainland's cycle does not carry, an AR(1) latent. */
         public float $worldActivityIdiosyncratic = 0.0,
-        public float $foreignCoreInflation = MacroEngine::TARGET_INFLATION,
-        public float $foreignCoreInflationLag1 = MacroEngine::TARGET_INFLATION,
-        public float $foreignCoreInflationLag2 = MacroEngine::TARGET_INFLATION,
-        public float $foreignCoreInflationLag3 = MacroEngine::TARGET_INFLATION,
-        public float $foreignPolicyRate = MacroEngine::MAINLAND_NEUTRAL_RATE,
-        public float $foreignPolicyRateEma = MacroEngine::MAINLAND_NEUTRAL_RATE,
+        public float $foreignCoreInflation = MacroConstants::TARGET_INFLATION,
+        public float $foreignCoreInflationLag1 = MacroConstants::TARGET_INFLATION,
+        public float $foreignCoreInflationLag2 = MacroConstants::TARGET_INFLATION,
+        public float $foreignCoreInflationLag3 = MacroConstants::TARGET_INFLATION,
+        public float $foreignPolicyRate = MacroConstants::MAINLAND_NEUTRAL_RATE,
+        public float $foreignPolicyRateEma = MacroConstants::MAINLAND_NEUTRAL_RATE,
         public float $globalDemandGap = 0.0,
         public float $globalDemandGapEma = 0.0,
         public float $catastropheLossIndex = 1.0,
         public float $catastropheLossIndexEma = 1.0,
         public float $lastCatastropheAt = -1.0,
         public float $lastCatastropheSeverity = 0.0,
-        public float $naturalGasPriceIndex = MacroEngine::NATURAL_GAS_BASELINE,
-        public float $naturalGasPriceIndexEma = MacroEngine::NATURAL_GAS_BASELINE,
+        public float $naturalGasPriceIndex = MacroConstants::NATURAL_GAS_BASELINE,
+        public float $naturalGasPriceIndexEma = MacroConstants::NATURAL_GAS_BASELINE,
         public float $gasOilRatioLog = 0.0,
-        public float $goldPriceIndex = MacroEngine::GOLD_BASELINE,
-        public float $goldPriceIndexEma = MacroEngine::GOLD_BASELINE,
-        public float $wholesalePowerPriceIndex = MacroEngine::WHOLESALE_POWER_BASELINE,
-        public float $wholesalePowerPriceIndexEma = MacroEngine::WHOLESALE_POWER_BASELINE,
+        public float $goldPriceIndex = MacroConstants::GOLD_BASELINE,
+        public float $goldPriceIndexEma = MacroConstants::GOLD_BASELINE,
+        public float $wholesalePowerPriceIndex = MacroConstants::WHOLESALE_POWER_BASELINE,
+        public float $wholesalePowerPriceIndexEma = MacroConstants::WHOLESALE_POWER_BASELINE,
         public float $powerHeatRateLog = 0.0,
-        public float $moneyMarketFundShare = MacroEngine::MMF_SHARE_BASE,
-        public float $moneyMarketFundShareEma = MacroEngine::MMF_SHARE_BASE,
+        public float $moneyMarketFundShare = MacroConstants::MMF_SHARE_BASE,
+        public float $moneyMarketFundShareEma = MacroConstants::MMF_SHARE_BASE,
         /**
          * The market's sovereign default premium: none at the opening, where net liabilities sit far below the fiscal
          * limit (CreditRisk::sovereignDefaultPremium()).
@@ -471,19 +472,19 @@ readonly class MacroStateDTO
         public float $sovereignRiskSpread = 0.0,
         public float $sovereignRiskSpreadEma = 0.0,
         public float $primaryDeficitToGdp = -0.0025,
-        public float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE,
-        public float $policyUncertaintyIndexEma = MacroEngine::EPU_BASELINE,
+        public float $policyUncertaintyIndex = MacroConstants::EPU_BASELINE,
+        public float $policyUncertaintyIndexEma = MacroConstants::EPU_BASELINE,
         /**
          * The election calendar's pull on policy uncertainty, as the government last handed it
          * (App\DTO\GovernmentPolicyDTO).
          */
         public float $electionPulse = 0.0,
         /** Government purchases as a share of GDP, the level the Diet's last budget has them revert to. */
-        public float $publicSpendingShare = MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+        public float $publicSpendingShare = MacroConstants::PUBLIC_PURCHASES_TO_GDP,
         public float $corporateTaxPolicyShift = 0.0,
         public float $importTariffRate = 0.0,
         public float $tariffTradeLag = 0.0,
-        public float $laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+        public float $laborForceGrowthRate = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
         /** Tax on a home bought by a buyer from outside the District, a share of the price. */
         public float $foreignBuyerTaxRate = 0.0,
         public float $mergerReviewLeniency = 0.0,
@@ -497,13 +498,13 @@ readonly class MacroStateDTO
          * Share of the reserve fund's expected long-term real return the budget spends, as the Diet passed it with the
          * fund's consent above the ceiling.
          */
-        public float $reserveDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
+        public float $reserveDrawShare = MacroConstants::RESERVE_DRAW_CEILING,
         /** Share of the Bohn reaction's surplus the Diet raises by tax rather than by cutting purchases. */
         public float $consolidationTaxShare = CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
         /** Share of the reserve fund's equities the Diet has it hold on the board. */
         public float $reserveHomeEquityShare = SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
         /** Share of a utility's rate request the commission grants, as the Diet has it run. */
-        public float $utilityRateCaseGrantShare = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+        public float $utilityRateCaseGrantShare = FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
         /** Tax on the dividends the District's own shareholders are paid, as the Diet has it set. */
         public float $dividendTaxRate = Valuation::FOUNDING_DIVIDEND_TAX_RATE,
         /** Gross debt to GDP the Diet's budget steers toward, as the Diet has it set. */
@@ -550,9 +551,9 @@ readonly class MacroStateDTO
         public float $carbonPowerUpliftEmbodied = 0.0,
         /**
          * The average tariff shortfall the commission's grant leaves, as the rate cases and the trailing year have
-         * brought it (App\Service\Model\Sector\UtilityBusinessModel::steadyTariffShortfall()).
+         * brought it (\App\Service\Math\FirmEconomics::steadyTariffShortfall()).
          */
-        public float $utilityTariffShortfallEmbodied = UtilityBusinessModel::FOUNDING_TARIFF_SHORTFALL,
+        public float $utilityTariffShortfallEmbodied = FirmEconomics::FOUNDING_TARIFF_SHORTFALL,
         /**
          * Government purchases above the founding level, as a fraction, as the trailing year's earnings carry them, the
          * same lag.
@@ -631,13 +632,13 @@ readonly class MacroStateDTO
          */
         public float $ltvCutBuilt = 0.0,
         public float $electricityCarbonPriceLevel = 0.0,
-        public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
-        public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
+        public float $moneySupplyGrowth = MacroConstants::M2_BASE_GROWTH,
+        public float $moneySupplyGrowthEma = MacroConstants::M2_BASE_GROWTH,
         /**
          * M2 growth's measured trend, the level its cyclical readers compare it with
          * (App\Service\Macro\Subsystem\MonetaryPolicySubsystem::calculateMoneySupplyGrowth()).
          */
-        public float $moneySupplyGrowthTrend = MacroEngine::M2_BASE_GROWTH,
+        public float $moneySupplyGrowthTrend = MacroConstants::M2_BASE_GROWTH,
         /**
          * The Authority's bond holdings over GDP, averaged over a year: what turns its purchases into a flow of new
          * money (MonetaryPolicySubsystem::calculateMoneySupplyGrowth()).
@@ -665,7 +666,7 @@ readonly class MacroStateDTO
          * The share of the expected return this budget year's draw was set at; a budget that moves the share rescales
          * the draw from its round.
          */
-        public float $sovereignFundDrawShare = MacroEngine::RESERVE_DRAW_CEILING,
+        public float $sovereignFundDrawShare = MacroConstants::RESERVE_DRAW_CEILING,
         public float $sovereignFundRebalanceBacklog = 0.0,
         public float $sovereignFundRebalanceRate = 0.0,
         public float $sovereignFundRebalanceMonthsLeft = 0.0,
@@ -684,8 +685,8 @@ readonly class MacroStateDTO
         public float $sovereignFundReturnIndex = 0.0,
         public float $sovereignFundRealReturnIndex = 0.0,
         public float $sovereignFundExpectedRealReturn = 0.0,
-        public float $foreignEquityIndex = MacroEngine::FOREIGN_EQUITY_BASELINE,
-        public float $foreignEquityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+        public float $foreignEquityIndex = MacroConstants::FOREIGN_EQUITY_BASELINE,
+        public float $foreignEquityRiskPremium = MacroConstants::BASE_EQUITY_RISK_PREMIUM,
         public float $foreignEquityValuation = 0.0,
         public float $foreignEquityValuationChange = 0.0,
         public float $foreignBondYield = 0.0,
@@ -701,13 +702,13 @@ readonly class MacroStateDTO
          * The corporate default rate's measured trend, its decade-long average: where its cyclical readers measure an
          * excess from.
          */
-        public float $corporateDefaultRateTrend = MacroEngine::CORPORATE_DEFAULT_BASELINE,
+        public float $corporateDefaultRateTrend = MacroConstants::CORPORATE_DEFAULT_BASELINE,
         /** The household default rate's measured trend, its decade-long average. */
-        public float $retailDefaultRateTrend = MacroEngine::RETAIL_DEFAULT_BASELINE,
+        public float $retailDefaultRateTrend = MacroConstants::RETAIL_DEFAULT_BASELINE,
         /**
          * Commercial property's measured trend, the level a developer reads a boom in office and retail values against.
          */
-        public float $commercialPropertyIndexTrend = MacroEngine::CRE_BASELINE,
+        public float $commercialPropertyIndexTrend = MacroConstants::CRE_BASELINE,
         /**
          * The financial conditions composite's decade-long average before it is centred: financialConditionsIndex is
          * the composite net of it.
@@ -722,7 +723,7 @@ readonly class MacroStateDTO
          * The recession probability's measured trend, its decade-long average: what a reserving committee reads the
          * outlook against.
          */
-        public float $recessionProbabilityTrend = MacroEngine::RECESSION_BASE_RATE,
+        public float $recessionProbabilityTrend = MacroConstants::RECESSION_BASE_RATE,
     ) {
         // A state given its gap but not its lags is one where the gap has stood long enough to reach every order book.
         $this->outputGapLag3m = $outputGapLag3m ?? $outputGapEma;
@@ -821,7 +822,7 @@ readonly class MacroStateDTO
      */
     public function sentimentDeviation(): float
     {
-        return ($this->consumerSentimentIndexEma - MacroEngine::SENTIMENT_TREND_LEVEL) / self::INDEX_SCALE;
+        return ($this->consumerSentimentIndexEma - MacroConstants::SENTIMENT_TREND_LEVEL) / self::INDEX_SCALE;
     }
 
     /**
@@ -901,7 +902,7 @@ readonly class MacroStateDTO
      * Unemployment over its natural rate, in points as a fraction.
      *
      * The natural rate scars after a slump and heals over the years that follow (LaborMarketSubsystem), so unemployment
-     * read against MacroEngine::NATURAL_UNEMPLOYMENT shows slack long after the labour market has none.
+     * read against MacroConstants::NATURAL_UNEMPLOYMENT shows slack long after the labour market has none.
      */
     public function unemploymentGap(): float
     {

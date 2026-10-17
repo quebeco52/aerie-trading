@@ -6,10 +6,9 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ResortsCasinosBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -25,14 +24,14 @@ class ResortsCasinosBusinessModelTest extends TestCase
     private function createMacroState(
         float $inflation = 0.02,
         float $outputGap = 0.0,
-        float $consumerSentimentIndexEma = MacroEngine::SENTIMENT_TREND_LEVEL,
+        float $consumerSentimentIndexEma = MacroConstants::SENTIMENT_TREND_LEVEL,
         float $energyPriceIndexEma = 100.0,
         float $macroCreditSpread = 0.015,
         float $yield10y = 0.04,
         float $energyCostPushLag = 0.0,
         float $realWageGap = 0.0,
         float $commercialPropertyIndexEma = 100.0,
-        float $retailDefaultRateEma = MacroEngine::RETAIL_DEFAULT_BASELINE,
+        float $retailDefaultRateEma = MacroConstants::RETAIL_DEFAULT_BASELINE,
         float $consumerSentimentMood = 0.0,
     ): MacroStateDTO {
         return new MacroStateDTO(
@@ -132,10 +131,10 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $model = new ResortsCasinosBusinessModel();
 
         // Confidence twenty points above trend with no output gap: all of it is residual.
-        $boom = $model->getMacroPhysics($this->stock('CASINO'), $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + 20.0, consumerSentimentMood: 20.0));
+        $boom = $model->getMacroPhysics($this->stock('CASINO'), $this->createMacroState(consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL + 20.0, consumerSentimentMood: 20.0));
         $this->assertEqualsWithDelta(0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * ResortsCasinosBusinessModel::SENTIMENT_SENSITIVITY_SCALAR, $boom['macro_demand_shift'], 0.001);
 
-        $slump = $model->getMacroPhysics($this->stock('CASINO'), $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL - 20.0, consumerSentimentMood: -20.0));
+        $slump = $model->getMacroPhysics($this->stock('CASINO'), $this->createMacroState(consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL - 20.0, consumerSentimentMood: -20.0));
         $this->assertEqualsWithDelta(-0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * ResortsCasinosBusinessModel::SENTIMENT_SENSITIVITY_SCALAR, $slump['macro_demand_shift'], 0.001);
     }
 
@@ -146,7 +145,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
         // Confidence exactly where the gap puts it adds nothing beyond the gap (Lemmon & Portniaguina 2006).
         $macro = new MacroStateDTO(
             outputGapEma: $gap,
-            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
+            consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
             exchangeRateIndexEma: 100.0,
         );
 
@@ -166,7 +165,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
     {
         $model = new ResortsCasinosBusinessModel();
         // Confidence on the gap's fit, so the cycle shift is the whole visitor shift.
-        $macro = $this->createMacroState(outputGap: -0.04, consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * -0.04));
+        $macro = $this->createMacroState(outputGap: -0.04, consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * -0.04));
         $visitor = $this->cycleShift($model, $this->stock('GULL'), $macro);
         $root = $visitor * $this->gullVisitorShare();
 
@@ -180,7 +179,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
 
         // The rent roll reprices only its expiring slice toward market; percentage rent follows tenant sales.
         $o = ResortsCasinosBusinessModel::OVERAGE_RENT_SHARE;
-        $rolled = $visitor * EarningsEngine::QUARTERLY_TIME_STEP / ResortsCasinosBusinessModel::CRE_LEASE_WALT_YEARS;
+        $rolled = $visitor * FinancialConstants::QUARTER_YEARS / ResortsCasinosBusinessModel::CRE_LEASE_WALT_YEARS;
         $expectedCre = 1.0 + ((1.0 - $o) * $rolled) + ($o * $visitor);
         $this->assertEqualsWithDelta($expectedCre, $result->streamRevenue['cre'] / (10_000.0 * $w['weight:cre']), 1e-9);
         $this->assertEqualsWithDelta($rolled, $result->streamZ[ResortsCasinosBusinessModel::STATE_IN_PLACE_RENT], 1e-12);
@@ -207,7 +206,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
 
         $calm = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0, 0.33, 2000.0, 0.15, $this->createMacroState(), $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
         // Retail defaults at twice their baseline: one unit of relative excess, already seen in expected revenue.
-        $macroWave = $this->createMacroState(retailDefaultRateEma: 2.0 * MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $macroWave = $this->createMacroState(retailDefaultRateEma: 2.0 * MacroConstants::RETAIL_DEFAULT_BASELINE);
         $root = $model->getMacroPhysics($this->stock('GULL', $momentum), $macroWave)['macro_demand_shift'];
         $wave = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0 * (1.0 + $root), 0.33, 2000.0, 0.15, $macroWave, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
 
@@ -266,7 +265,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $model = new ResortsCasinosBusinessModel();
 
         $promotionalDrag = 0.20 * ResortsCasinosBusinessModel::OPERATING_CYCLICALITY * ResortsCasinosBusinessModel::PROMOTIONAL_COMP_DRAG_SCALAR;
-        $macroState = $this->createMacroState(consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL - 20.0);
+        $macroState = $this->createMacroState(consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL - 20.0);
 
         // baseGamingMargin = 0.58 / (0.55 + 2.0 * 0.45) = 0.40; hotel and F&B run at 0.80 plus the comps.
         $result = $model->computeActualFinancials($this->stock('CASINO'), 10_000.0, 0.58, 2000.0, 0.15, $macroState, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
@@ -284,7 +283,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
         // the cost base this quarter; room and menu pricing recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH of it
         // with the pass-through lag.
         $wageDeviation = 0.10 * ResortsCasinosBusinessModel::INPUT_COST_EXPOSURES['labor'];
-        $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
+        $recoveryWeight = 1.0 - exp(-FinancialConstants::QUARTER_YEARS / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
         $macroBase = $this->createMacroState();
         $macroWage = $this->createMacroState(realWageGap: 0.10);
 

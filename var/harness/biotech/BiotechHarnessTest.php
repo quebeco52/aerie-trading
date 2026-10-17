@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\MarketOperator;
 use App\Service\Market\StockTracker;
@@ -15,7 +16,6 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Console\Tester\CommandTester;
-use App\Service\Corporate\EarningsEngine;
 
 /**
  * Whole-board headless replay on the PRODUCTION service graph: real container, in-memory Redis, stub EM,
@@ -118,7 +118,7 @@ final class BiotechHarnessTest extends KernelTestCase
                 'fr' => $mo['state:commercial_franchise'] ?? null, 'ks' => $mo['state:known_commercial_shift'] ?? null,
                 'ps' => $mo['state:patent_protected_share'] ?? null, 'loe' => $mo['state:loe_elapsed_quarters'] ?? null,
                 'clk' => $mo['state:exclusivity_quarters'] ?? null,
-                'ngdp' => $m->nominalGdpIndex, 'reimb' => $m->reimbursementRateGrowth - (\App\Service\Macro\MacroEngine::TARGET_INFLATION - \App\Service\Macro\MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET),
+                'ngdp' => $m->nominalGdpIndex, 'reimb' => $m->reimbursementRateGrowth - (\App\Service\Math\MacroConstants::TARGET_INFLATION - \App\Service\Math\MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET),
                 'rr' => $d[0], 'om0' => $d[1], 'om1' => $d[2], 'bk' => $x->stock->isBankrupt(),
             ];
         });

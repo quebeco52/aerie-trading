@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Math;
 
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use PHPUnit\Framework\TestCase;
 
@@ -66,15 +66,15 @@ class MacroTransmissionTest extends TestCase
             $trough = MacroTransmission::calculateCapitalMarketsDealIndexStep($trough, 0.070, 0.150, 0.60, 0.25, 0.0);
             $peak = MacroTransmission::calculateCapitalMarketsDealIndexStep($peak, 0.025, 0.020, 0.09, 0.25, 0.0);
         }
-        $floor = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(-MacroEngine::DEAL_ACTIVITY_LOG_RANGE);
-        $ceiling = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(MacroEngine::DEAL_ACTIVITY_LOG_RANGE);
+        $floor = MacroConstants::DEAL_ACTIVITY_BASELINE * exp(-MacroTransmission::DEAL_ACTIVITY_LOG_RANGE);
+        $ceiling = MacroConstants::DEAL_ACTIVITY_BASELINE * exp(MacroTransmission::DEAL_ACTIVITY_LOG_RANGE);
         $this->assertEqualsWithDelta($floor, $trough, 0.5, 'A 2008-type freeze bottoms at the capped log range, not at the hard floor.');
         $this->assertGreaterThan(140.0, $peak, 'A 2007/2021-type boom runs about 1.5x baseline.');
         $this->assertLessThan($ceiling, $peak, 'and does not need the cap to stay within a recorded cycle.');
 
         // Policy uncertainty (Bonaime, Gulen & Ion 2018): boards defer deals while the regime is in question.
-        $settled = MacroTransmission::calculateCapitalMarketsDealIndexStep(100.0, 0.045, 0.043, 0.15, 0.25, 0.0, policyUncertaintyIndex: MacroEngine::EPU_BASELINE);
-        $contested = MacroTransmission::calculateCapitalMarketsDealIndexStep(100.0, 0.045, 0.043, 0.15, 0.25, 0.0, policyUncertaintyIndex: 2.0 * MacroEngine::EPU_BASELINE);
+        $settled = MacroTransmission::calculateCapitalMarketsDealIndexStep(100.0, 0.045, 0.043, 0.15, 0.25, 0.0, policyUncertaintyIndex: MacroConstants::EPU_BASELINE);
+        $contested = MacroTransmission::calculateCapitalMarketsDealIndexStep(100.0, 0.045, 0.043, 0.15, 0.25, 0.0, policyUncertaintyIndex: 2.0 * MacroConstants::EPU_BASELINE);
         $this->assertLessThan($settled, $contested, 'A doubling of policy uncertainty lowers the deal-flow target with valuations and credit unchanged.');
         $this->assertLessThan(2.8, $peak / $trough, 'Peak-to-trough deal volume stays near the 2.2x of the widest recorded cycle.');
     }
@@ -329,7 +329,7 @@ class MacroTransmissionTest extends TestCase
         $this->assertEqualsWithDelta(0.015, MacroTransmission::calculateBroadMoneyLiquidityShift(0.085, 0.055, 0.50), 0.0001);
 
         // 6. calculateCapacityUtilizationShift
-        // Fed G.17 and MacroEngine::CU_BASELINE both express utilization as a FRACTION, so the helper is fed
+        // Fed G.17 and MacroConstants::CU_BASELINE both express utilization as a FRACTION, so the helper is fed
         // 0.785 rather than 78.5. Neutral 0.785 -> 0.0
         $this->assertEqualsWithDelta(0.0, MacroTransmission::calculateCapacityUtilizationShift(0.785, 0.785), 0.0001);
         // Shift to 0.805 (+2.0 points of utilization) -> 0.020 * 0.40 = 0.008 (+0.8%)

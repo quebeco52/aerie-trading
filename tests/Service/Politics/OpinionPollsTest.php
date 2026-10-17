@@ -7,8 +7,8 @@ namespace App\Tests\Service\Politics;
 use App\Data\Politics\AerieDiet as Diet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\OpinionPolls;
 use App\Service\Politics\PoliticsEngine as Politics;
@@ -254,9 +254,9 @@ class OpinionPollsTest extends TestCase
         $state->totalTime = self::ELECTION_AT;
         $state->campaignStartedAt = self::ELECTION_AT - Politics::ELECTION_CAMPAIGN_WINDOW_YEARS;
         $economy = new MacroStateDTO(totalTime: self::ELECTION_AT, potentialGdpIndex: 1.03, consumerPriceLevel: 1.12);
-        $trend = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT;
+        $trend = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT;
         $this->assertEqualsWithDelta((log(1.03) / Politics::ELECTION_CAMPAIGN_WINDOW_YEARS) - $trend, OpinionPolls::growthCounted($state, $economy), 1e-12);
-        $this->assertEqualsWithDelta((log(1.12) / self::ELECTION_AT) - MacroEngine::TARGET_INFLATION, OpinionPolls::inflationCounted($state, $economy), 1e-12);
+        $this->assertEqualsWithDelta((log(1.12) / self::ELECTION_AT) - MacroConstants::TARGET_INFLATION, OpinionPolls::inflationCounted($state, $economy), 1e-12);
     }
 
     /**
@@ -411,8 +411,8 @@ class OpinionPollsTest extends TestCase
     {
         return new MacroStateDTO(
             totalTime: $totalTime,
-            potentialGdpIndex: exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * $totalTime),
-            consumerPriceLevel: exp(MacroEngine::TARGET_INFLATION * $totalTime),
+            potentialGdpIndex: exp((MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT) * $totalTime),
+            consumerPriceLevel: exp(MacroConstants::TARGET_INFLATION * $totalTime),
         );
     }
 

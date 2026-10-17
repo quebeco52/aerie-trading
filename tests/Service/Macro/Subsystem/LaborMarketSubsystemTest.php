@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Macro\Subsystem;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
+use App\Service\Math\MacroConstants;
 use PHPUnit\Framework\TestCase;
 
 class LaborMarketSubsystemTest extends TestCase
@@ -36,9 +36,9 @@ class LaborMarketSubsystemTest extends TestCase
     {
         $settle = function (float $supplyGap): float {
             $state = new MacroState();
-            $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
-            $state->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
-            $state->unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT; // no scarring, so the NAIRU holds
+            $state->nairu = MacroConstants::NATURAL_UNEMPLOYMENT;
+            $state->unemploymentRate = MacroConstants::NATURAL_UNEMPLOYMENT;
+            $state->unemploymentRateEma = MacroConstants::NATURAL_UNEMPLOYMENT; // no scarring, so the NAIRU holds
             $state->outputGap = -0.02;
             $state->productivitySupplyGap = $supplyGap;
             for ($i = 0; $i < 400; $i++) {
@@ -48,7 +48,7 @@ class LaborMarketSubsystemTest extends TestCase
             return $state->unemploymentRate;
         };
 
-        $expected = MacroEngine::NATURAL_UNEMPLOYMENT + (LaborMarketSubsystem::OKUNS_COEFFICIENT * 0.02);
+        $expected = MacroConstants::NATURAL_UNEMPLOYMENT + (LaborMarketSubsystem::OKUNS_COEFFICIENT * 0.02);
         $this->assertEqualsWithDelta($expected, $settle(0.0), 1e-6);
         $this->assertEqualsWithDelta($expected, $settle(-0.01), 1e-6, 'The productivity part of the gap moves unemployment like any other.');
     }
@@ -56,14 +56,14 @@ class LaborMarketSubsystemTest extends TestCase
     /** A labour market at its NAIRU is at the natural tightness, scarred or not, so scarring is not read as slack. */
     public function testTightnessAtTheNairuIsTheNaturalTightnessWhateverTheNairu(): void
     {
-        foreach ([MacroEngine::NATURAL_UNEMPLOYMENT, 0.06] as $nairu) {
+        foreach ([MacroConstants::NATURAL_UNEMPLOYMENT, 0.06] as $nairu) {
             $state = new MacroState();
             $state->nairu = $nairu;
             $state->unemploymentRate = $nairu;
 
-            $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, 0.25);
+            $this->subsystem->calculateLaborMarketAndWages($state, MacroConstants::TFP_DRIFT, 0.25);
 
-            $this->assertEqualsWithDelta(MacroEngine::NATURAL_LABOR_TIGHTNESS, $state->laborTightness, 1e-9, sprintf('NAIRU %.3f', $nairu));
+            $this->assertEqualsWithDelta(MacroConstants::NATURAL_LABOR_TIGHTNESS, $state->laborTightness, 1e-9, sprintf('NAIRU %.3f', $nairu));
         }
     }
 
@@ -101,8 +101,8 @@ class LaborMarketSubsystemTest extends TestCase
     private function convergedWageGrowth(float $expectedInflation): float
     {
         $state = new MacroState();
-        $state->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
-        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->unemploymentRate = MacroConstants::NATURAL_UNEMPLOYMENT;
+        $state->nairu = MacroConstants::NATURAL_UNEMPLOYMENT;
         $state->tipsBreakeven = $expectedInflation;
         $state->tipsBreakevenEma = $expectedInflation;
         $state->domesticInflation = $expectedInflation;
@@ -112,7 +112,7 @@ class LaborMarketSubsystemTest extends TestCase
         // Partial adjustment at WAGE_ADJUSTMENT_SPEED closes half the growth gap each quarter; the level the start-up
         // leaves behind error-corrects on a ~7 year half-life, so a century settles both.
         for ($i = 0; $i < 400; $i++) {
-            $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, 0.25);
+            $this->subsystem->calculateLaborMarketAndWages($state, MacroConstants::TFP_DRIFT, 0.25);
         }
 
         return $state->wageGrowth;
@@ -136,7 +136,7 @@ class LaborMarketSubsystemTest extends TestCase
     public function testScarringUnwindsOnceTheLabourMarketTightensAgain(): void
     {
         $state = new MacroState();
-        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->nairu = MacroConstants::NATURAL_UNEMPLOYMENT;
         $state->unemploymentRate = 0.060;
         $state->outputGap = -0.04;
 
@@ -150,7 +150,7 @@ class LaborMarketSubsystemTest extends TestCase
 
         // 0.10/yr x (6.0% - 4.0% - 0.5%) x 2yr ~ +0.29pp, shrinking slightly as NAIRU itself rises.
         $this->assertGreaterThan(
-            MacroEngine::NATURAL_UNEMPLOYMENT + 0.0020,
+            MacroConstants::NATURAL_UNEMPLOYMENT + 0.0020,
             $scarred,
             'Two years of sustained slack must leave structural scarring behind.',
         );
@@ -164,8 +164,8 @@ class LaborMarketSubsystemTest extends TestCase
         }
 
         $surviving = (1.0 - (LaborMarketSubsystem::NAIRU_REABSORPTION_SPEED * 0.25)) ** 40;
-        $expected = MacroEngine::NATURAL_UNEMPLOYMENT
-            + (($scarred - MacroEngine::NATURAL_UNEMPLOYMENT) * $surviving);
+        $expected = MacroConstants::NATURAL_UNEMPLOYMENT
+            + (($scarred - MacroConstants::NATURAL_UNEMPLOYMENT) * $surviving);
 
         $this->assertEqualsWithDelta(
             $expected,
@@ -174,7 +174,7 @@ class LaborMarketSubsystemTest extends TestCase
             'A tight labour market must re-absorb scarring at its own speed, not at the product of two deviations.',
         );
         $this->assertLessThan(
-            MacroEngine::NATURAL_UNEMPLOYMENT + (($scarred - MacroEngine::NATURAL_UNEMPLOYMENT) * 0.40),
+            MacroConstants::NATURAL_UNEMPLOYMENT + (($scarred - MacroConstants::NATURAL_UNEMPLOYMENT) * 0.40),
             $state->nairu,
             'Most of the scarring must be gone after a decade of tight labour markets: the ratchet has to close.',
         );
@@ -187,7 +187,7 @@ class LaborMarketSubsystemTest extends TestCase
     public function testSustainedSlackScarsTheNairuToABalanceNotARatchet(): void
     {
         $state = new MacroState();
-        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->nairu = MacroConstants::NATURAL_UNEMPLOYMENT;
         $state->unemploymentRate = 0.07;
         $state->outputGap = -0.06;
         for ($quarter = 0; $quarter < 160; $quarter++) {
@@ -196,7 +196,7 @@ class LaborMarketSubsystemTest extends TestCase
         }
 
         $balance = ((LaborMarketSubsystem::NAIRU_HYSTERESIS_SPEED * (0.07 - LaborMarketSubsystem::NAIRU_HYSTERESIS_THRESHOLD))
-            + (LaborMarketSubsystem::NAIRU_REABSORPTION_SPEED * MacroEngine::NATURAL_UNEMPLOYMENT))
+            + (LaborMarketSubsystem::NAIRU_REABSORPTION_SPEED * MacroConstants::NATURAL_UNEMPLOYMENT))
             / (LaborMarketSubsystem::NAIRU_HYSTERESIS_SPEED + LaborMarketSubsystem::NAIRU_REABSORPTION_SPEED);
         $this->assertEqualsWithDelta($balance, $state->nairu, 0.0005);
     }
@@ -246,7 +246,7 @@ class LaborMarketSubsystemTest extends TestCase
                 sprintf('Real wage growth moved when only expected inflation changed (%.0f%%).', $expectedInflation * 100),
             );
             $this->assertEqualsWithDelta(
-                MacroEngine::TFP_DRIFT,
+                MacroConstants::TFP_DRIFT,
                 $real,
                 1e-9,
                 'At its natural rate the tightness term vanishes, so real pay is exactly productivity.',
@@ -265,7 +265,7 @@ class LaborMarketSubsystemTest extends TestCase
     public function testNominalWageGrowthIsCappedOnceExpectedInflationPassesTheCeiling(): void
     {
         $ceiling = LaborMarketSubsystem::MAX_NOMINAL_WAGE_GROWTH;
-        $headroom = $ceiling - MacroEngine::TFP_DRIFT;
+        $headroom = $ceiling - MacroConstants::TFP_DRIFT;
 
         $this->assertEqualsWithDelta($ceiling, $this->convergedWageGrowth($headroom), 1e-6, 'The ceiling is reached exactly at its headroom.');
         $this->assertEqualsWithDelta($ceiling, $this->convergedWageGrowth(0.12), 1e-6, 'Beyond it, nominal wage growth stops rising.');
@@ -278,11 +278,11 @@ class LaborMarketSubsystemTest extends TestCase
     private function restingLabourMarket(float $realWageGap): MacroState
     {
         $state = new MacroState();
-        $state->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
-        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->unemploymentRate = MacroConstants::NATURAL_UNEMPLOYMENT;
+        $state->nairu = MacroConstants::NATURAL_UNEMPLOYMENT;
         $state->tipsBreakevenEma = 0.02;
         $state->domesticInflation = 0.02;
-        $state->wageGrowth = 0.02 + MacroEngine::TFP_DRIFT;
+        $state->wageGrowth = 0.02 + MacroConstants::TFP_DRIFT;
         $state->realWageGap = $realWageGap;
 
         return $state;
@@ -293,11 +293,11 @@ class LaborMarketSubsystemTest extends TestCase
         $state = $this->restingLabourMarket(0.0);
         $state->domesticInflation = 0.03;
 
-        $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateLaborMarketAndWages($state, MacroConstants::TFP_DRIFT, 0.25);
 
         // Wages held at 3.5% while prices ran at 3% and productivity at 1.5%: a quarter of a one-point real squeeze.
         $this->assertEqualsWithDelta(0.035, $state->wageGrowth, 1e-12);
-        $this->assertEqualsWithDelta((0.035 - 0.03 - MacroEngine::TFP_DRIFT) * 0.25, $state->realWageGap, 1e-12);
+        $this->assertEqualsWithDelta((0.035 - 0.03 - MacroConstants::TFP_DRIFT) * 0.25, $state->realWageGap, 1e-12);
     }
 
     public function testARealWageAboveItsProductivityPathSlowsWageGrowth(): void
@@ -305,8 +305,8 @@ class LaborMarketSubsystemTest extends TestCase
         $atTrend = $this->restingLabourMarket(0.0);
         $above = $this->restingLabourMarket(0.02);
 
-        $this->subsystem->calculateLaborMarketAndWages($atTrend, MacroEngine::TFP_DRIFT, 0.25);
-        $this->subsystem->calculateLaborMarketAndWages($above, MacroEngine::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateLaborMarketAndWages($atTrend, MacroConstants::TFP_DRIFT, 0.25);
+        $this->subsystem->calculateLaborMarketAndWages($above, MacroConstants::TFP_DRIFT, 0.25);
 
         // The target falls by the correction speed times the gap; wages move down toward it at the rigid speed.
         $expected = -LaborMarketSubsystem::WAGE_ERROR_CORRECTION_SPEED * 0.02
@@ -327,7 +327,7 @@ class LaborMarketSubsystemTest extends TestCase
             $halfLife = null;
             $lowest = 1.0;
             for ($i = 1; $i <= (int) round(40 / $dt); $i++) {
-                $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, $dt);
+                $this->subsystem->calculateLaborMarketAndWages($state, MacroConstants::TFP_DRIFT, $dt);
                 $lowest = min($lowest, $state->realWageGap);
                 if ($halfLife === null && $state->realWageGap <= 0.01) {
                     $halfLife = $i * $dt;
@@ -355,11 +355,11 @@ class LaborMarketSubsystemTest extends TestCase
     {
         $state = $this->restingLabourMarket(0.0);
         $dt = 1.0 / 360.0;
-        $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT + (0.01 / $dt), $dt);
+        $this->subsystem->calculateLaborMarketAndWages($state, MacroConstants::TFP_DRIFT + (0.01 / $dt), $dt);
         $this->assertEqualsWithDelta(-0.01, $state->realWageGap, 1e-3, 'A 1% gain in potential productivity leaves the real wage 1% below its path.');
 
         for ($tick = 0; $tick < 360 * 30; $tick++) {
-            $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, $dt);
+            $this->subsystem->calculateLaborMarketAndWages($state, MacroConstants::TFP_DRIFT, $dt);
         }
         $this->assertGreaterThan(-0.001, $state->realWageGap, 'Thirty years on, wages have caught up with the productivity they are paid out of.');
     }
@@ -382,7 +382,7 @@ class LaborMarketSubsystemTest extends TestCase
     {
         $at = function (float $netMigration, float $unemploymentGap): float {
             $state = new MacroState();
-            $state->laborForceGrowthRate = MacroEngine::NATURAL_LABOR_FORCE_GROWTH + $netMigration;
+            $state->laborForceGrowthRate = MacroConstants::NATURAL_LABOR_FORCE_GROWTH + $netMigration;
             $state->nairu = 0.05;
             $state->unemploymentRateEma = 0.05 + $unemploymentGap;
             $this->subsystem->calculateCyclicalMigration($state);

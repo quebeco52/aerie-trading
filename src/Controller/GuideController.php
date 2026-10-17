@@ -7,9 +7,9 @@ namespace App\Controller;
 use App\Entity\PriceAlert;
 use App\Entity\Season;
 use App\Entity\WatchlistItem;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Politics\SecuritiesCommission;
 use App\Service\Season\SeasonService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -28,7 +28,7 @@ class GuideController extends AbstractController
         return $this->render('guide/index.html.twig', [
             'startingCapital' => (float) SeasonService::startingCapital($macro->consumerPriceLevel),
             'stampDutyRate' => $macro->stampDutyRate,
-            'cashSpread' => MacroEngine::CASH_YIELD_SPREAD,
+            'cashSpread' => MacroConstants::CASH_YIELD_SPREAD,
             'marginSpread' => FinancialConstants::MARGIN_LOAN_SPREAD,
             'initialMargin' => $margins['initial'],
             'maintenanceLong' => $margins['long'],

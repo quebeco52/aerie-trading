@@ -78,6 +78,8 @@ class FinancialConstants
     // --- Reporting Calendar ---
     /** Reporting quarters in a year: the factor between a quarterly flow and its annual rate. */
     public const QUARTERS_PER_YEAR = 4.0;
+    /** Years in one reporting quarter: the earnings time step and the interval between reports. */
+    public const QUARTER_YEARS = 1.0 / self::QUARTERS_PER_YEAR;
 
     // --- Operating Physics ---
     /** Weight of current quarter financial performance in trailing twelve month updates. */

@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
@@ -285,7 +285,7 @@ class ShadowBankBusinessModelTest extends TestCase
             new MacroStateDTO(policyRateEma: $policyRate),
             $mathMock,
         )->streamRevenue['origination_fees'];
-        $neutralPolicyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $neutralPolicyRate = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
 
         $neutral = $origination($neutralPolicyRate);
         $higher = $origination($neutralPolicyRate + 0.01);

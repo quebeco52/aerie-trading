@@ -173,7 +173,7 @@
 								</div>
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroMortgageChart" data-mortgage-spread="{{ constant('App\\Service\\Macro\\MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD') }}"></canvas>
+								<canvas id="macroMortgageChart" data-mortgage-spread="{{ constant('App\\Service\\Math\\MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD') }}"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('credit-registry') }}</p>
 						</div>
@@ -317,7 +317,7 @@
 								</div>
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroGdpGrowthChart" data-structural-labor-growth="{{ constant('App\\Service\\Macro\\MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE') }}"></canvas>
+								<canvas id="macroGdpGrowthChart" data-structural-labor-growth="{{ constant('App\\Service\\Math\\MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE') }}"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
@@ -521,7 +521,7 @@
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
 									<h4 class="text-sm font-semibold text-on-surface">Deposits and money-market funds</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Money-market funds' share of deposits and the interbank spread. Banks pass on {{ constant('App\\Service\\Macro\\MacroEngine::SYSTEM_DEPOSIT_BETA_BASE')|pct(0) }} of a rate change to depositors, so funds gain share as rates rise</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">Money-market funds' share of deposits and the interbank spread. Banks pass on {{ constant('App\\Service\\Math\\MacroConstants::SYSTEM_DEPOSIT_BETA_BASE')|pct(0) }} of a rate change to depositors, so funds gain share as rates rise</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
 									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroBankingLiquidityChart">-</p>
@@ -594,8 +594,8 @@
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroEnergySpreadsChart"
-									data-power-reference="{{ constant('App\\Service\\Macro\\MacroEngine::REFERENCE_POWER_PRICE') }}"
-									data-gas-reference="{{ constant('App\\Service\\Macro\\MacroEngine::REFERENCE_GAS_PRICE') }}"
+									data-power-reference="{{ constant('App\\Service\\Math\\MacroConstants::REFERENCE_POWER_PRICE') }}"
+									data-gas-reference="{{ constant('App\\Service\\Math\\MacroConstants::REFERENCE_GAS_PRICE') }}"
 									data-spark-heat-rate="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::SPARK_SPREAD_BENCHMARK_HEAT_RATE') }}"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('commodity-exchange') }}</p>
@@ -686,7 +686,7 @@
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
 									<h4 class="text-sm font-semibold text-on-surface">Policy uncertainty</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">How unsettled the outlook for taxes, spending and rates is, against its long-run average of {{ constant('App\\Service\\Macro\\MacroEngine::EPU_BASELINE')|number_format(0) }}. It rises into an election and in a downturn, and holds back investment</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">How unsettled the outlook for taxes, spending and rates is, against its long-run average of {{ constant('App\\Service\\Math\\MacroConstants::EPU_BASELINE')|number_format(0) }}. It rises into an election and in a downturn, and holds back investment</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
 									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroPolicyUncertaintyChart">-</p>
@@ -696,7 +696,7 @@
 								</div>
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroPolicyUncertaintyChart" data-baseline="{{ constant('App\\Service\\Macro\\MacroEngine::EPU_BASELINE') }}"></canvas>
+								<canvas id="macroPolicyUncertaintyChart" data-baseline="{{ constant('App\\Service\\Math\\MacroConstants::EPU_BASELINE') }}"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>

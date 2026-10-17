@@ -6,8 +6,8 @@ namespace App\Service\Politics;
 
 use App\Data\Politics\AerieDiet;
 use App\DTO\PoliticsStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -237,7 +237,7 @@ final class ElectionForecast
             $state->coalitionTakesOfficeAt >= 0.0 => max($state->totalTime, $state->talksStartedAt + $talks),
             default => $state->lastGovernmentFormedAt,
         };
-        $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
+        $round = MacroConstants::BUDGET_ROUND_PERIOD_YEARS;
 
         return (floor(($inOffice / $round) + 1e-9) + 1.0) * $round;
     }
@@ -252,7 +252,7 @@ final class ElectionForecast
         if ($state->coalitionTakesOfficeAt >= 0.0 && $state->talksStartedAt !== $state->lastElectionAt) {
             $inOffice = max($inOffice, $state->talksStartedAt + (CoalitionFormation::FORMATION_MEAN_DAYS / FinancialConstants::DAYS_PER_YEAR));
         }
-        $round = MacroEngine::BUDGET_ROUND_PERIOD_YEARS;
+        $round = MacroConstants::BUDGET_ROUND_PERIOD_YEARS;
 
         return (floor(($inOffice / $round) + 1e-9) + 1.0) * $round;
     }

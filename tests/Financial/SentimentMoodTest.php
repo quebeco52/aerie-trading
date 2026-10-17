@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -27,7 +27,7 @@ class SentimentMoodTest extends TestCase
         for ($month = 0; $month < 24000; $month++) {
             $subsystem->calculateConsumerSentiment($state, $dt);
             $this->assertEqualsWithDelta(
-                max(AssetMarketSubsystem::SENTIMENT_FLOOR, min(AssetMarketSubsystem::SENTIMENT_CEILING, MacroEngine::SENTIMENT_TREND_LEVEL + $state->consumerSentimentMood)),
+                max(AssetMarketSubsystem::SENTIMENT_FLOOR, min(AssetMarketSubsystem::SENTIMENT_CEILING, MacroConstants::SENTIMENT_TREND_LEVEL + $state->consumerSentimentMood)),
                 $state->consumerSentimentIndex,
                 1e-9,
                 'With neutral fundamentals the index is the trend level plus the mood, inside the survey\'s range.',

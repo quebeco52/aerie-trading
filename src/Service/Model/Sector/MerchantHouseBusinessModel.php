@@ -8,7 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
@@ -152,7 +152,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
     {
         return MacroTransmission::calculatePmiDemandShift(
             $macroState->manufacturingPmiEma,
-            MacroEngine::PMI_BASELINE,
+            MacroConstants::PMI_BASELINE,
             self::MERCHANT_PMI_SENSITIVITY,
         ) + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, self::MERCHANT_FOREIGN_SENSITIVITY);
     }

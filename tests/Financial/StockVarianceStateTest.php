@@ -102,7 +102,7 @@ final class StockVarianceStateTest extends TestCase
      */
     public function testTheMarketJumpIsPaidForInTheSystematicBlock(): void
     {
-        $anchor = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $anchor = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $jump = MarketEngine::systemicJumpMoments(self::BETA)['variance'];
 
         self::assertGreaterThan(0.0, $jump);
@@ -184,7 +184,7 @@ final class StockVarianceStateTest extends TestCase
      */
     public function testResidualVarianceLoadsOnMarketVarianceAroundItsSettleLevel(): void
     {
-        $anchor = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $anchor = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $loading = MarketEngine::IDIOSYNCRATIC_COMMON_FACTOR_LOADING;
 
         self::assertEqualsWithDelta(1.0, MarketEngine::commonIdiosyncraticVarianceScale($anchor), 1e-12);

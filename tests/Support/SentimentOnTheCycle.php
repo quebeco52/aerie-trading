@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Support;
 
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 
 /**
  * Where consumer sentiment sits for a given output gap with no mood in it, for fixtures that need a confidence reading
@@ -20,6 +20,6 @@ final class SentimentOnTheCycle
 
     public static function at(float $outputGap): float
     {
-        return MacroEngine::SENTIMENT_TREND_LEVEL + (self::POINTS_PER_GAP * $outputGap);
+        return MacroConstants::SENTIMENT_TREND_LEVEL + (self::POINTS_PER_GAP * $outputGap);
     }
 }

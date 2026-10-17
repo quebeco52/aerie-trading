@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Math\MacroConstants;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 /** Macro-only run: the wage level against prices and trend productivity, plus the cycle it sits in. Env: SEEDS YEARS TPY OUT */
@@ -30,7 +31,7 @@ final class LaborMacroProbeTest extends KernelTestCase
             for ($tick = 1; $tick <= $years * $tpy; $tick++) {
                 $m = $macro->updateMacroState($dt, null);
                 // Same integral the engine keeps: this tick's wage, last tick's inflation, the trend TFP read off last tick's gap.
-                $trend = max(MacroEngine::MIN_TFP_GROWTH_RATE, min(MacroAggregateSubsystem::MAX_TFP_GROWTH_RATE, MacroEngine::TFP_DRIFT + $gapEma * MacroAggregateSubsystem::TFP_OUTPUT_GAP_SENSITIVITY));
+                $trend = max(MacroAggregateSubsystem::MIN_TFP_GROWTH_RATE, min(MacroAggregateSubsystem::MAX_TFP_GROWTH_RATE, MacroConstants::TFP_DRIFT + $gapEma * MacroAggregateSubsystem::TFP_OUTPUT_GAP_SENSITIVITY));
                 $rwg += ($m->wageGrowth - $inflation - $trend) * $dt;
                 $gapEma = $m->outputGapEma; $inflation = $m->inflation;
                 if ($tick % $perQuarter === 0) {

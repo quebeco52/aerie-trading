@@ -8,12 +8,11 @@ use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -137,7 +136,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return MacroEngine::TREND_REAL_GROWTH
+        return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
     public function getCapexCyclicality(): float
@@ -166,7 +165,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      * Heat rate of the merchant gas fleet (MMBtu/MWh): the U.S. gas-fired operating average, 2017-2024 (EIA Electric
      * Power Annual, Table 8.1).
      */
-    public const MERCHANT_GAS_HEAT_RATE = MacroEngine::GAS_FLEET_HEAT_RATE;
+    public const MERCHANT_GAS_HEAT_RATE = MacroConstants::GAS_FLEET_HEAT_RATE;
 
     // --- Regulatory Lag & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to output gap (industrial power usage). */
@@ -207,33 +206,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      * the tariff.
      */
     public const STATE_TARIFF_SHORTFALL = 'state:tariff_shortfall';
-    /** Unrecovered non-fuel cost at which management files a general rate case rather than absorb further attrition. */
-    public const RATE_CASE_FILING_THRESHOLD = 0.02;
-    /** Quarterly probability a pending case is decided (~5 quarters, the 12 to 18 month regulatory lag). */
-    public const RATE_CASE_EXIT_HAZARD = 0.20;
-    /**
-     * The same hazard as a rate a year, -4 ln(1 - 0.20): the speed a change in what commissions grant reaches the
-     * tariff.
-     */
-    public const RATE_CASE_DECISION_RATE = 0.8926;
-    /**
-     * The average tariff shortfall the founding commission's grant leaves (steadyTariffShortfall() at it, 3.7%), where
-     * the District's trailing earnings open.
-     */
-    public const FOUNDING_TARIFF_SHORTFALL = 0.0372;
-    /**
-     * What an elected commission grants of a request, as a share of what an appointed one grants: their pass-through of
-     * fuel-cost increases into residential prices, 0.22 against 0.62 (Besley & Coate 2003, Table 4, with controls,
-     * 1960-97), read across from cost pass-through to rate requests.
-     */
-    public const ELECTED_COMMISSION_GRANT_RATIO = 0.22 / 0.62;
-    /**
-     * Share of a request an appointed commission grants, the District's at its founding; the disallowed remainder is
-     * still a real cost, so it rolls into the next filing. The US average, 58% of the net electric increases requested
-     * January 2023 to August 2024 (S&P Global data via EIA, Today in Energy, August 2024), is held by 40 appointed
-     * commissions and 10 elected ones.
-     */
-    public const APPOINTED_COMMISSION_GRANTED_SHARE = 0.58 / (0.8 + (0.2 * self::ELECTED_COMMISSION_GRANT_RATIO));
     /**
      * Allowed return on equity with long Treasuries at zero: RRA average authorised electric ROE on the 30-year
      * Treasury, 1992Q1-2023Q2 (Bulkley, SD PUC EL23-020 Schedule 8: risk premium 8.60% - 0.562 x T30).
@@ -254,8 +226,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      * measured against.
      */
     public const STATE_OPENING_ROE = 'state:opening_roe';
-    /** Lag at which interim relief is granted rather than leave the utility earning below its cost of service. */
-    public const MAX_TARIFF_SHORTFALL = 0.10;
 
     // --- Bond Proxy Capital Structure ---
     /**
@@ -367,7 +337,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $authorisedRoeChange = $this->advanceRateCase($streams, $macroState);
         // The tariff recovers a return on the equity rate base: an order that authorises a higher return adds it
         // to the regulated revenue requirement, as a share of revenue at the book's equity to revenue.
-        $equityToRevenue = max(0.0, (float) $stock->getTotalEquity()) / max(1.0, $expectedRevenue / EarningsEngine::QUARTERLY_TIME_STEP);
+        $equityToRevenue = max(0.0, (float) $stock->getTotalEquity()) / max(1.0, $expectedRevenue / FinancialConstants::QUARTER_YEARS);
         $capitalChargeShift = $authorisedRoeChange * $equityToRevenue * $regulatedCostShare;
 
         // --- Merchant Fuel ---
@@ -450,7 +420,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveMerchantPriceRelative(float $powerShare, MacroStateDTO $macroState): float
     {
-        return FirmEconomics::merchantPowerPriceRelative($powerShare, max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroEngine::WHOLESALE_POWER_BASELINE);
+        return FirmEconomics::merchantPowerPriceRelative($powerShare, max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroConstants::WHOLESALE_POWER_BASELINE);
     }
 
     /**
@@ -461,7 +431,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     private function resolveMerchantFuelCostChange(float $powerShare, float $gasFleetShare, MacroStateDTO $macroState): float
     {
         return $powerShare * $gasFleetShare
-            * FirmEconomics::gasFiredFuelCostChange(max(0.0, $macroState->naturalGasPriceIndexEma) / MacroEngine::NATURAL_GAS_BASELINE, $macroState->carbonPrice);
+            * FirmEconomics::gasFiredFuelCostChange(max(0.0, $macroState->naturalGasPriceIndexEma) / MacroConstants::NATURAL_GAS_BASELINE, $macroState->carbonPrice);
     }
 
     /**
@@ -526,10 +496,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // Non-fuel costs escalate with general inflation while the tariff sits still, so the tariff falls
         // that much further behind the cost base every quarter it is frozen.
-        $shortfall = max(0.0, $shortfall + max(0.0, $macroState->inflationEma * EarningsEngine::QUARTERLY_TIME_STEP));
+        $shortfall = max(0.0, $shortfall + max(0.0, $macroState->inflationEma * FinancialConstants::QUARTER_YEARS));
 
         $pendingBefore = (int) round($streams->getPersistedState(StreamContext::REGIME_STATE_PREFIX . self::REGIME_RATE_CASE, 0.0));
-        $pending = $streams->evolveRegime(self::REGIME_RATE_CASE, 0.0, self::RATE_CASE_EXIT_HAZARD);
+        $pending = $streams->evolveRegime(self::REGIME_RATE_CASE, 0.0, FirmEconomics::RATE_CASE_EXIT_HAZARD);
 
         if ($pendingBefore > 0 && $pending === 0) {
             // The order lands and closes part of the gap. The disallowed remainder is a cost the utility is
@@ -540,45 +510,17 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             $shortfall -= $shortfall * $macroState->utilityRateCaseGrantShare;
             // The order also resets the return, granting the same share of the move as of the request.
             $authorisedRoe += ($allowedRoe - $authorisedRoe) * $macroState->utilityRateCaseGrantShare;
-        } elseif ($pending === 0 && $shortfall >= self::RATE_CASE_FILING_THRESHOLD) {
+        } elseif ($pending === 0 && $shortfall >= FirmEconomics::RATE_CASE_FILING_THRESHOLD) {
             $streams->startRegime(self::REGIME_RATE_CASE);
         }
 
         // A commission that would otherwise leave the utility earning below its cost of service grants
         // interim rates rather than push a monopoly with a mandatory service obligation into distress.
-        $streams->registerState(self::STATE_TARIFF_SHORTFALL, min(self::MAX_TARIFF_SHORTFALL, $shortfall));
+        $streams->registerState(self::STATE_TARIFF_SHORTFALL, min(FirmEconomics::MAX_TARIFF_SHORTFALL, $shortfall));
         $streams->registerState(self::STATE_AUTHORISED_ROE, $authorisedRoe);
         $streams->registerState(self::STATE_OPENING_ROE, $openingRoe);
 
         return $authorisedRoe - $openingRoe;
-    }
-
-    /**
-     * The tariff shortfall a commission granting this share of each request leaves on average, as a share of the
-     * tariff: the cycle advanceRateCase() runs, in expectation. Costs outrun the frozen tariff at the inflation rate; a
-     * case is filed at the threshold, or at once if the last order left the shortfall above it, and decided at the
-     * decision rate; the order removes the granted share. With D the case's exponential length, the time-weighted
-     * shortfall while it is pending is its starting level plus inflation over the decision rate, and the start settles
-     * where an order leaves it (the expectation of D in place of D, so the spread of case lengths is not carried).
-     *
-     * @param float $grantShare Share of each request the commission grants.
-     * @param float $inflation  Inflation the cost base rises at, a year.
-     */
-    public static function steadyTariffShortfall(float $grantShare, float $inflation = MacroEngine::TARGET_INFLATION): float
-    {
-        $grant = max(0.01, min(1.0, $grantShare));
-        $drift = max(0.0, $inflation) / self::RATE_CASE_DECISION_RATE;
-        $threshold = self::RATE_CASE_FILING_THRESHOLD;
-        // Where a case starts: the threshold, or the shortfall an order leaves if that is above it (s = (1 - g)(s +
-        // drift)).
-        $start = max($threshold, (1.0 - $grant) * $drift / $grant);
-        $pendingMean = $start + $drift;
-        $afterOrder = (1.0 - $grant) * $pendingMean;
-        $idleYears = $inflation > 0.0 ? max(0.0, $threshold - $afterOrder) / $inflation : 0.0;
-        $pendingYears = 1.0 / self::RATE_CASE_DECISION_RATE;
-        $mean = (($pendingMean * $pendingYears) + ((($threshold + $afterOrder) / 2.0) * $idleYears)) / ($pendingYears + $idleYears);
-
-        return min(self::MAX_TARIFF_SHORTFALL, $mean);
     }
 
     /**
@@ -594,7 +536,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
-        return max(0.0, min(self::MAX_TARIFF_SHORTFALL, (float) ($momentum[self::STATE_TARIFF_SHORTFALL] ?? 0.0)));
+        return max(0.0, min(FirmEconomics::MAX_TARIFF_SHORTFALL, (float) ($momentum[self::STATE_TARIFF_SHORTFALL] ?? 0.0)));
     }
 
     public function getOperatingMacroFields(): array

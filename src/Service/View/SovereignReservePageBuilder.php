@@ -10,9 +10,9 @@ use App\DTO\PoliticsStateDTO;
 use App\Entity\Stock;
 use App\Repository\MacroReportHistoryRepository;
 use App\Repository\StockRepository;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Index\IndexCommittee;
+use App\Service\Math\MacroConstants;
 use App\Service\Politics\SovereignReserveFund;
 
 /**
@@ -136,18 +136,18 @@ class SovereignReservePageBuilder
             'mandate' => [
                 'spendingShare' => $macro->reserveDrawShare,
                 'homeShare' => $macro->reserveHomeEquityShare,
-                'drawCeiling' => MacroEngine::RESERVE_DRAW_CEILING,
+                'drawCeiling' => MacroConstants::RESERVE_DRAW_CEILING,
                 'foreignEquityShare' => $incepted && $target < 1.0 ? ($equityPolicy - $target) / (1.0 - $target) : SovereignFundSubsystem::FOREIGN_EQUITY_SHARE,
                 'transitionMonths' => SovereignFundSubsystem::POLICY_TRANSITION_MONTHS,
                 'foreignBondDuration' => SovereignFundSubsystem::FOREIGN_BOND_DURATION,
                 'returnIndexBase' => SovereignFundSubsystem::RETURN_INDEX_BASE,
-                'openingSize' => MacroEngine::OPENING_FUND_TO_GDP,
+                'openingSize' => MacroConstants::OPENING_FUND_TO_GDP,
                 'openingOwnership' => SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING,
                 'ownershipCeiling' => SovereignFundSubsystem::MAX_OWNERSHIP_SHARE,
                 'checkMonths' => 12.0 * SovereignFundSubsystem::REBALANCE_CHECK_PERIOD_YEARS,
                 'executionMonths' => SovereignFundSubsystem::REBALANCE_EXECUTION_MONTHS,
                 'stampDutyRate' => $macro->stampDutyRate,
-                'debtFloor' => MacroEngine::SOVEREIGN_DEBT_FLOOR,
+                'debtFloor' => MacroConstants::SOVEREIGN_DEBT_FLOOR,
                 'clearinghouseStake' => StrategicHoldings::CLEARINGHOUSE_STAKE,
             ],
         ];

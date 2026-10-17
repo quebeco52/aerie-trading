@@ -35,7 +35,7 @@ final readonly class GovernmentPolicyDTO
         public float $bankLevyRate,
         /**
          * Share of the reserve fund's expected long-term real return the budget spends
-         * (MacroEngine::RESERVE_DRAW_CEILING without the fund's consent).
+         * (MacroConstants::RESERVE_DRAW_CEILING without the fund's consent).
          */
         public float $reserveDrawShare,
         /**

@@ -11,8 +11,8 @@ use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -152,7 +152,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return MacroEngine::TREND_REAL_GROWTH
+        return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
@@ -223,8 +223,8 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         // High industrial capacity utilization triggers capex expansion for factory automation
         // Macro demand hits ORDERS in full; the order backlog below is what cushions recognized revenue.
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
-        $cuEquipmentBoost = MacroTransmission::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_EQUIPMENT_EXPANSION_SENSITIVITY);
-        $pmiEquipmentBoost = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_EQUIPMENT_SENSITIVITY);
+        $cuEquipmentBoost = MacroTransmission::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroConstants::CU_BASELINE, self::CU_EQUIPMENT_EXPANSION_SENSITIVITY);
+        $pmiEquipmentBoost = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroConstants::PMI_BASELINE, self::PMI_EQUIPMENT_SENSITIVITY);
         $macroEquipmentBoost = ($this->resolveLaggedOutputGap($macroState) * self::MACRO_GDP_SENSITIVITY * $beta) - $overhangDrag + $cuEquipmentBoost + $pmiEquipmentBoost;
 
         // --- Tail Risk Events ---

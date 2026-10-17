@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
@@ -62,8 +62,8 @@ class SchwartzMeanLevelTest extends TestCase
     /** A swap ladder struck on the forward curve must price the long end at the level the spot averages. */
     public function testTheForwardCurveLongEndSitsOnTheMeanPreservingTarget(): void
     {
-        $kappa = MacroEngine::ENERGY_MEAN_REVERSION;
-        $sigma = MacroEngine::ENERGY_VOLATILITY;
+        $kappa = CommodityLogisticsSubsystem::ENERGY_MEAN_REVERSION;
+        $sigma = CommodityLogisticsSubsystem::ENERGY_VOLATILITY;
         $theta = StochasticProcesses::schwartzThetaForMean(100.0, $kappa, $sigma);
 
         $this->assertEqualsWithDelta(100.0, StochasticProcesses::calculateSchwartzForwardPrice(140.0, $kappa, $theta, $sigma, 60.0), 1e-6);
@@ -102,9 +102,9 @@ class SchwartzMeanLevelTest extends TestCase
         mt_srand(self::SEED);
         $subsystem = new CommodityLogisticsSubsystem(new MathUtility());
         $state = new MacroState();
-        $state->energyBasePrice = MacroEngine::ENERGY_BASELINE;
-        $state->energyPriceIndex = MacroEngine::ENERGY_BASELINE;
-        $state->energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE;
+        $state->energyBasePrice = MacroConstants::ENERGY_BASELINE;
+        $state->energyPriceIndex = MacroConstants::ENERGY_BASELINE;
+        $state->energyInventoryIndex = MacroConstants::COMMODITY_INVENTORY_BASELINE;
         $state->globalDemandGapEma = 0.0;
 
         $dt = 0.1;
@@ -113,15 +113,15 @@ class SchwartzMeanLevelTest extends TestCase
         $sum = 0.0;
         for ($i = 0; $i < $burnIn + $steps; $i++) {
             // Hold the price capacity sees, so the equilibrium stays at the baseline.
-            $state->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
-            $state->energySupplyEma = MacroEngine::ENERGY_BASELINE;
+            $state->energyPriceIndexEma = MacroConstants::ENERGY_BASELINE;
+            $state->energySupplyEma = MacroConstants::ENERGY_BASELINE;
             $subsystem->calculateEnergyShock($state, $dt);
             if ($i >= $burnIn) {
                 $sum += $state->energyBasePrice;
             }
         }
 
-        $equilibrium = CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(MacroEngine::ENERGY_BASELINE);
+        $equilibrium = CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(MacroConstants::ENERGY_BASELINE);
         // Standard error ~0.35%.
         $this->assertEqualsWithDelta(1.0, ($sum / $steps) / $equilibrium, 0.015, 'The base price must average the equilibrium it reverts to.');
     }
@@ -153,7 +153,7 @@ class SchwartzMeanLevelTest extends TestCase
         mt_srand(self::SEED);
         $subsystem = new CreditFiscalSubsystem(new MathUtility());
         $state = new MacroState();
-        $state->policyUncertaintyIndex = MacroEngine::EPU_BASELINE;
+        $state->policyUncertaintyIndex = MacroConstants::EPU_BASELINE;
         $state->electionPulse = 0.0;
         $state->unemploymentRate = $state->nairu;
 
@@ -164,7 +164,7 @@ class SchwartzMeanLevelTest extends TestCase
         for ($i = 0; $i < $burnIn + $steps; $i++) {
             $subsystem->calculatePolicyUncertainty($state, $dt);
             if ($i >= $burnIn) {
-                $sum += log($state->policyUncertaintyIndex / MacroEngine::EPU_BASELINE);
+                $sum += log($state->policyUncertaintyIndex / MacroConstants::EPU_BASELINE);
             }
         }
 

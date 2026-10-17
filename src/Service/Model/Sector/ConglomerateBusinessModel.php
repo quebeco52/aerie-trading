@@ -9,8 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\CreditRisk;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -268,7 +268,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, $this->getOperatingCyclicality($stock));
         $pmiShift = MacroTransmission::calculatePmiDemandShift(
             $macroState->manufacturingPmiEma,
-            MacroEngine::PMI_BASELINE,
+            MacroConstants::PMI_BASELINE,
             self::PMI_INDUSTRIAL_SENSITIVITY,
         );
 

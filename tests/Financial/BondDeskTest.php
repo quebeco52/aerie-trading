@@ -6,12 +6,12 @@ namespace App\Tests\Financial;
 
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\TreasuryAuctionService;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
 use PHPUnit\Framework\TestCase;
@@ -42,8 +42,8 @@ class BondDeskTest extends TestCase
             slope: $slope,
             curvature1: $curvature1,
             curvature2: $curvature2,
-            baseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
-            longEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
+            baseTermPremium: MacroConstants::NS_BASE_TERM_PREMIUM,
+            longEndPremium: MacroConstants::NS_BASE_TERM_PREMIUM,
             balanceSheetIntensity: 0.0,
         );
     }
@@ -75,7 +75,7 @@ class BondDeskTest extends TestCase
         $subsystem = new MonetaryPolicySubsystem($this->math);
         $state = MacroStateBuilder::create()->build();
 
-        $yieldData = $subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, $state->naturalRate);
+        $yieldData = $subsystem->calculateYieldCurve($state, MacroConstants::TARGET_INFLATION, $state->naturalRate);
 
         $curve = new SovereignCurveDTO(
             level: $yieldData['level'],
@@ -147,7 +147,7 @@ class BondDeskTest extends TestCase
         $state = MacroStateBuilder::create()->build();
         $subsystem = new MonetaryPolicySubsystem($this->math);
 
-        $yieldData = $subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, $state->naturalRate);
+        $yieldData = $subsystem->calculateYieldCurve($state, MacroConstants::TARGET_INFLATION, $state->naturalRate);
 
         $this->assertNotEqualsWithDelta($yieldData['beta1'], $yieldData['yield_10y'] - $state->policyRate, 1e-6);
     }

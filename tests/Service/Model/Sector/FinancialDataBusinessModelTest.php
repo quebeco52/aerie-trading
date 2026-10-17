@@ -116,7 +116,7 @@ class FinancialDataBusinessModelTest extends TestCase
         $math = $this->createStub(MathUtility::class);
         $math->method('generatePersistentZ')->willReturn(0.0);
         $math->method('generateStandardNormal')->willReturn(0.0);
-        $anchorVol = \App\Service\Macro\MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $anchorVol = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $stock = (new Stock())->setTicker('SHRK');
 
         $anchor = new MacroStateDTO(marketVolatilityEma: $anchorVol);

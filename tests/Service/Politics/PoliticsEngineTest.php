@@ -19,10 +19,11 @@ use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\PoliticsEngine as Politics;
@@ -677,7 +678,7 @@ class PoliticsEngineTest extends TestCase
         }
 
         $this->assertSame($time, $state->lastElectionAt);
-        $this->assertTrue(TimeSeries::crossedSimulatedBoundary($time, $dt, MacroEngine::BUDGET_ROUND_PERIOD_YEARS), 'The budget round falls on the same tick.');
+        $this->assertTrue(TimeSeries::crossedSimulatedBoundary($time, $dt, MacroConstants::BUDGET_ROUND_PERIOD_YEARS), 'The budget round falls on the same tick.');
     }
 
     // --- Headlines ---
@@ -805,9 +806,9 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(Politics::POLICY_PROTECTIONIST_TARIFF, $harbor['tariff'], 1e-12, 'The protectionist party enacts its own tariff.');
         $this->assertSame(0.0, $exchange['tariff']);
         $this->assertEqualsWithDelta(Politics::MIGRATION_OPEN_REGIME - Politics::MIGRATION_CLOSED_REGIME, $exchange['laborGrowth'] - $harbor['laborGrowth'], 1e-12, 'The two immigration regimes are a regime apart.');
-        $this->assertEqualsWithDelta(MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => 0.0])['laborGrowth'], 1e-12, 'A neutral government keeps the structural rate.');
-        $this->assertEqualsWithDelta(MacroEngine::NATURAL_LABOR_FORCE_GROWTH + Politics::MIGRATION_CLOSED_REGIME, $harbor['laborGrowth'], 1e-12, 'The closed end admits Japan\'s regime on top of natural growth.');
-        $this->assertEqualsWithDelta(MacroEngine::NATURAL_LABOR_FORCE_GROWTH + Politics::MIGRATION_OPEN_REGIME, $exchange['laborGrowth'], 1e-12, 'The open end admits Canada\'s and Australia\'s.');
+        $this->assertEqualsWithDelta(MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => 0.0])['laborGrowth'], 1e-12, 'A neutral government keeps the structural rate.');
+        $this->assertEqualsWithDelta(MacroConstants::NATURAL_LABOR_FORCE_GROWTH + Politics::MIGRATION_CLOSED_REGIME, $harbor['laborGrowth'], 1e-12, 'The closed end admits Japan\'s regime on top of natural growth.');
+        $this->assertEqualsWithDelta(MacroConstants::NATURAL_LABOR_FORCE_GROWTH + Politics::MIGRATION_OPEN_REGIME, $exchange['laborGrowth'], 1e-12, 'The open end admits Canada\'s and Australia\'s.');
     }
 
     /**
@@ -820,7 +821,7 @@ class PoliticsEngineTest extends TestCase
         $vanguard = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE] / 2.0]);
         $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $civic['corporateTax'], 1e-12);
         $this->assertEqualsWithDelta(-Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $vanguard['corporateTax'], 1e-12);
-        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP * exp(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 4.0), $civic['publicSpending'], 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::PUBLIC_PURCHASES_TO_GDP * exp(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 4.0), $civic['publicSpending'], 1e-12);
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE - (Politics::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 4.0), $vanguard['consolidationTaxShare'], 1e-12);
         $this->assertSame(Politics::platform([Diet::AXIS_STATE => -2.0])['corporateTax'], Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE]])['corporateTax'], 'Past its end a government enacts the end party\'s law and no more.');
     }
@@ -904,8 +905,8 @@ class PoliticsEngineTest extends TestCase
      */
     public function testTheUtilityCommissionGrantsLessTowardThePopulistEnd(): void
     {
-        $appointed = UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE;
-        $elected = $appointed * UtilityBusinessModel::ELECTED_COMMISSION_GRANT_RATIO;
+        $appointed = FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE;
+        $elected = $appointed * FirmEconomics::ELECTED_COMMISSION_GRANT_RATIO;
         $this->assertEqualsWithDelta(0.58, (0.8 * $appointed) + (0.2 * $elected), 1e-12);
         $this->assertEqualsWithDelta(0.666, $appointed, 0.001);
         $this->assertEqualsWithDelta($elected, Politics::platform(Diet::position(Diet::COMMON_LOT, []))['utilityRateGrant'], 1e-12);
@@ -955,7 +956,7 @@ class PoliticsEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP, log($civic / $vanguard), 1e-12);
         $this->assertEqualsWithDelta(0.007, $civic - $vanguard, 3e-5, 'The ends part by 0.7% of GDP.');
-        $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP, Politics::platform([Diet::AXIS_STATE => 0.0])['publicSpending'], 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::PUBLIC_PURCHASES_TO_GDP, Politics::platform([Diet::AXIS_STATE => 0.0])['publicSpending'], 1e-15);
     }
 
     /**
@@ -1002,7 +1003,7 @@ class PoliticsEngineTest extends TestCase
         $engine = $this->engine($this->quietMath());
         $state = $this->electionTick();
 
-        $engine->advance($state, $this->economy(self::ELECTION_AT, laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + 0.01), 0.01);
+        $engine->advance($state, $this->economy(self::ELECTION_AT, laborForceGrowthRate: MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + 0.01), 0.01);
 
         $this->assertEqualsWithDelta(-0.01, $state->electionGrowthGap, 1e-9, 'Output growing only with the labour force is no growth per head.');
     }
@@ -1016,11 +1017,11 @@ class PoliticsEngineTest extends TestCase
         $state = new PoliticsState();
         $economy = $this->economy(self::ELECTION_AT);
 
-        $trendGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT;
+        $trendGrowth = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT;
         $state->campaignStartedAt = self::ELECTION_AT - Politics::ELECTION_CAMPAIGN_WINDOW_YEARS;
         $state->campaignStartRealGdp = Politics::realGdp($economy) * exp(-($trendGrowth + $growthGap) * Politics::ELECTION_CAMPAIGN_WINDOW_YEARS);
         $state->termStartedAt = 0.0;
-        $state->termStartDeflator = $economy->consumerPriceLevel * exp(-(MacroEngine::TARGET_INFLATION + $inflationGap) * self::ELECTION_AT);
+        $state->termStartDeflator = $economy->consumerPriceLevel * exp(-(MacroConstants::TARGET_INFLATION + $inflationGap) * self::ELECTION_AT);
 
         return $state;
     }
@@ -1067,7 +1068,7 @@ class PoliticsEngineTest extends TestCase
     }
 
     /** The economy as the macro hands it over: at its openings, on the given tick, debt and labour force growth. */
-    private function economy(float $totalTime, float $debtToGdp = 0.5, float $laborForceGrowthRate = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE): MacroStateDTO
+    private function economy(float $totalTime, float $debtToGdp = 0.5, float $laborForceGrowthRate = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE): MacroStateDTO
     {
         return new MacroStateDTO(totalTime: $totalTime, sovereignDebtToGdp: $debtToGdp, laborForceGrowthRate: $laborForceGrowthRate);
     }
@@ -1279,12 +1280,12 @@ class PoliticsEngineTest extends TestCase
     public function testTheFundHoldsTheSecondKeyOnTheDrawAboveHalf(): void
     {
         $positions = Diet::HOME_POSITIONS;
-        $this->assertEqualsWithDelta(MacroEngine::RESERVE_DRAW_CEILING, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['reserveDrawShare'], 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::RESERVE_DRAW_CEILING, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['reserveDrawShare'], 1e-15);
         $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, Politics::platform(Diet::position(Diet::CIVIC, $positions))['reserveDrawShare'], 1e-15);
 
         $founding = Politics::standingLevers(new PoliticsStateDTO());
         $refused = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding);
-        $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $refused['levers']['reserveDrawShare'], 'Out of a recession the fund refuses a draw above half.');
+        $this->assertSame(MacroConstants::RESERVE_DRAW_CEILING, $refused['levers']['reserveDrawShare'], 'Out of a recession the fund refuses a draw above half.');
         $this->assertTrue($refused['fundHeld']);
         $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, $refused['platform']['reserveDrawShare'], 1e-15);
 
@@ -1295,12 +1296,12 @@ class PoliticsEngineTest extends TestCase
         // The slump over, a big-state cabinet's draw lapses back to half on the fund's refusal.
         $drawn = Politics::standingLevers(new PoliticsStateDTO(reserveDrawShare: Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE));
         $lapsed = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $drawn);
-        $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $lapsed['levers']['reserveDrawShare']);
+        $this->assertSame(MacroConstants::RESERVE_DRAW_CEILING, $lapsed['levers']['reserveDrawShare']);
         $this->assertTrue($lapsed['fundHeld']);
 
         // Spending less than half needs no consent.
         $kept = Politics::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, $positions, $founding);
-        $this->assertSame(MacroEngine::RESERVE_DRAW_CEILING, $kept['levers']['reserveDrawShare']);
+        $this->assertSame(MacroConstants::RESERVE_DRAW_CEILING, $kept['levers']['reserveDrawShare']);
         $this->assertFalse($kept['fundHeld']);
     }
 

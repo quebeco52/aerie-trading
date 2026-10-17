@@ -7,7 +7,7 @@ namespace App\Tests\Data\Company;
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use PHPUnit\Framework\TestCase;
@@ -87,7 +87,7 @@ final class IndustryBetasTest extends TestCase
         sort($volatilities);
         $median = $volatilities[intdiv(count($volatilities), 2)];
         $usAverageBeta = 0.91;
-        $market = MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $market = MacroConstants::MACRO_VOL_BASE_ANCHOR;
 
         $residual = sqrt(($median ** 2) - (($usAverageBeta * $market) ** 2));
         $standardError = $residual / ($market * sqrt(60.0));

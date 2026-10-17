@@ -8,7 +8,7 @@ use App\Data\Company\InitialMarket;
 use App\Data\Company\StockInfo;
 use App\Data\Company\StockModelTuning;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InvestmentBankBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -61,9 +61,9 @@ class InvestmentBankBusinessModelTest extends TestCase
             // Neutral curve slope: no DCM stimulus either way
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
             'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR + 0.10,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD, // Neutral spread (0.02)
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM, // Neutral ERP (0.045)
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD, // Neutral spread (0.02)
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM, // Neutral ERP (0.045)
         ]);
 
         $result = $this->model->computeActualFinancials(
@@ -104,9 +104,9 @@ class InvestmentBankBusinessModelTest extends TestCase
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
             'market_volatility_ema'   => 0.80,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
         ]);
 
         $result = $this->model->computeActualFinancials(
@@ -145,9 +145,9 @@ class InvestmentBankBusinessModelTest extends TestCase
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
             'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR + 0.10, // vixGap = 0.10
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
         ]);
 
         $result = $this->model->computeActualFinancials(
@@ -187,8 +187,8 @@ class InvestmentBankBusinessModelTest extends TestCase
             'output_gap_ema'          => 0.02,  // output gap boom
             'equity_risk_premium'     => 0.04,
             // creditSpreadGap = 0.005 * 10.0 = 0.05
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD - 0.005,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD - 0.005,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
             // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate'             => 0.03,
             'policy_rate_ema'         => 0.03,
@@ -240,9 +240,9 @@ class InvestmentBankBusinessModelTest extends TestCase
         $advisory = function (array $overrides) use ($stock, $mathMock): float {
             $macro = \App\DTO\MacroStateDTO::fromArray($overrides + [
                 'output_gap_ema'          => 0.0,
-                'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-                'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-                'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+                'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
+                'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+                'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
                 'policy_rate'             => 0.04,
                 'policy_rate_ema'         => 0.04,
                 'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
@@ -253,13 +253,13 @@ class InvestmentBankBusinessModelTest extends TestCase
         };
 
         $neutral = $advisory([]);
-        $wide = $advisory(['macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD + 0.03]);
+        $wide = $advisory(['macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD + 0.03]);
         $this->assertEqualsWithDelta(
             -InvestmentBankBusinessModel::DCM_ADVISORY_SHARE * InvestmentBankBusinessModel::DCM_CREDIT_SPREAD_ELASTICITY * 0.03,
             $wide / $neutral - 1.0,
             1e-9,
         );
-        $this->assertEqualsWithDelta($neutral, $advisory(['equity_risk_premium' => MacroEngine::BASE_EQUITY_RISK_PREMIUM + 0.02]), 1e-9);
+        $this->assertEqualsWithDelta($neutral, $advisory(['equity_risk_premium' => MacroConstants::BASE_EQUITY_RISK_PREMIUM + 0.02]), 1e-9);
     }
 
     /**
@@ -273,12 +273,12 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateUniform')->willReturn(0.50);
         $anchor = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
             'policy_rate'             => 0.04,
             'policy_rate_ema'         => 0.04,
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
-            'market_volatility_ema'   => MacroEngine::MACRO_VOL_BASE_ANCHOR,
+            'market_volatility_ema'   => MacroConstants::MACRO_VOL_BASE_ANCHOR,
         ]);
 
         foreach (['GS', 'CORV', 'PERE'] as $ticker) {
@@ -460,8 +460,8 @@ class InvestmentBankBusinessModelTest extends TestCase
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.02, // Positive macro boom that would otherwise stimulate advisory
             'equity_risk_premium'     => 0.04,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
             // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate'             => 0.04,
             'policy_rate_ema'         => 0.04,
@@ -500,16 +500,16 @@ class InvestmentBankBusinessModelTest extends TestCase
 
         $macroNormal = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
             // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate'             => 0.04,
             'policy_rate_ema'         => 0.04,
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
             'deal_activity_index_ema' => 100.0,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $resultNormal = $this->model->computeActualFinancials(
@@ -524,16 +524,16 @@ class InvestmentBankBusinessModelTest extends TestCase
 
         $macroBoom = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
             // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate'             => 0.04,
             'policy_rate_ema'         => 0.04,
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
             'deal_activity_index_ema' => 150.0, // High deal activity
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $resultBoom = $this->model->computeActualFinancials(
@@ -561,16 +561,16 @@ class InvestmentBankBusinessModelTest extends TestCase
         // Boom in deal activity with normal volatility (VIX = 0.20)
         $macroBoomCalm = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
             // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate'             => 0.04,
             'policy_rate_ema'         => 0.04,
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
             'deal_activity_index_ema' => 150.0,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
             'market_volatility_ema'   => 0.20,
         ]);
 
@@ -587,16 +587,16 @@ class InvestmentBankBusinessModelTest extends TestCase
         // Market panic: Same high deal pipeline, but VIX = 0.50 (well above IPO_WINDOW_FREEZE_VIX 0.35)
         $macroBoomPanic = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
             // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate'             => 0.04,
             'policy_rate_ema'         => 0.04,
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
             'deal_activity_index_ema' => 150.0,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
             'market_volatility_ema'   => 0.50,
         ]);
 
@@ -627,13 +627,13 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50);
 
-        $baseline = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $baseline = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         $margin = function (float $spot, float $ema) use ($stock, $mathMock): float {
             $macro = \App\DTO\MacroStateDTO::fromArray([
                 'output_gap_ema'               => 0.0,
-                'equity_risk_premium'          => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-                'macro_credit_spread_ema'      => MacroEngine::BASE_CREDIT_SPREAD,
-                'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+                'equity_risk_premium'          => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
+                'macro_credit_spread_ema'      => MacroConstants::BASE_CREDIT_SPREAD,
+                'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
                 'high_yield_credit_spread'     => $spot,
                 'high_yield_credit_spread_ema' => $ema,
                 // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
@@ -668,9 +668,9 @@ class InvestmentBankBusinessModelTest extends TestCase
 
         $drought = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => -0.045,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM + 0.02,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD + 0.01,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM + 0.02,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD + 0.01,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
             'market_volatility_ema'   => 0.27,
             'policy_rate'             => 0.01,
             'policy_rate_ema'         => 0.02,
@@ -704,9 +704,9 @@ class InvestmentBankBusinessModelTest extends TestCase
                 'policy_rate_ema'           => 0.04,
                 // neutral slope over the 4% policy rate: no DCM stimulus
                 'yield_5y_ema'              => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
-                'macro_credit_spread_ema'   => MacroEngine::BASE_CREDIT_SPREAD,
-                'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
-                'equity_risk_premium'       => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+                'macro_credit_spread_ema'   => MacroConstants::BASE_CREDIT_SPREAD,
+                'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+                'equity_risk_premium'       => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
                 'market_volatility_ema'     => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
                 'treasury_volatility'       => 0.0087 * $volatilityRatio,
                 'treasury_volatility_trend' => 0.0087,
@@ -771,9 +771,9 @@ class InvestmentBankBusinessModelTest extends TestCase
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
             'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
         ]);
 
         // Windfall quarter: expected = 500.0, realized base margin = 0.45, fixed costs = 20.0
@@ -808,12 +808,12 @@ class InvestmentBankBusinessModelTest extends TestCase
             'policy_rate_ema'         => 0.04,
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
             'market_volatility_ema'   => InvestmentBankBusinessModel::VIX_ARBITRAGE_FLOOR,
-            'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_ema' => MacroConstants::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $result = $this->model->computeActualFinancials(
@@ -848,12 +848,12 @@ class InvestmentBankBusinessModelTest extends TestCase
             'policy_rate_ema'         => 0.04,
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
             'market_volatility_ema'   => 0.20,
             'deal_activity_index_ema' => 70.0,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $resultCalm = $this->model->computeActualFinancials(
@@ -873,12 +873,12 @@ class InvestmentBankBusinessModelTest extends TestCase
             'policy_rate_ema'         => 0.04,
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
             'market_volatility_ema'   => 0.50,
             'deal_activity_index_ema' => 70.0,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $resultPanic = $this->model->computeActualFinancials(
@@ -984,10 +984,10 @@ class InvestmentBankBusinessModelTest extends TestCase
             'yield_5y_ema'            => 0.075, // +100bps steep
             'market_volatility_ema'   => 0.28,  // vol-arb boom
             'macro_credit_spread_ema' => 0.015,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
             'equity_risk_premium'     => 0.04,
             'deal_activity_index_ema' => 120.0,
-            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $result = $this->model->computeActualFinancials(
@@ -1054,9 +1054,9 @@ class InvestmentBankBusinessModelTest extends TestCase
             // neutral slope over the 4% policy rate: no DCM stimulus
             'yield_5y_ema'            => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
             'market_volatility_ema'   => 0.60,
-            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
-            'macro_credit_spread_trend' => MacroEngine::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroConstants::BASE_EQUITY_RISK_PREMIUM,
         ]);
 
         $result = $this->model->computeActualFinancials(

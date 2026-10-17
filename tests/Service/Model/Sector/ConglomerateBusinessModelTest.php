@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConglomerateBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -17,7 +17,7 @@ class ConglomerateBusinessModelTest extends TestCase
     private MathUtility $mathUtility;
 
     /** The short rate a calm economy sits at: the neutral rate the MacroStateDTO itself perceives. */
-    private const NEUTRAL_POLICY_RATE = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+    private const NEUTRAL_POLICY_RATE = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
 
     protected function setUp(): void
     {
@@ -33,8 +33,8 @@ class ConglomerateBusinessModelTest extends TestCase
     {
         return new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             policyRateEma: self::NEUTRAL_POLICY_RATE,
         );
     }
@@ -173,7 +173,7 @@ class ConglomerateBusinessModelTest extends TestCase
         $wideningMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             macroCreditSpread: 0.045,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             policyRateEma: self::NEUTRAL_POLICY_RATE,
         );
 
@@ -237,14 +237,14 @@ class ConglomerateBusinessModelTest extends TestCase
 
         $zirp = new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             policyRateEma: 0.0,
         );
         $restrictive = new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             policyRateEma: 0.055,
         );
 
@@ -299,7 +299,7 @@ class ConglomerateBusinessModelTest extends TestCase
     {
         $stock = new Stock();
         $stock->setTicker('CONG_TEST');
-        $recession = new MacroStateDTO(outputGapEma: -0.03, manufacturingPmiEma: MacroEngine::PMI_BASELINE, exchangeRateIndexEma: 100.0);
+        $recession = new MacroStateDTO(outputGapEma: -0.03, manufacturingPmiEma: MacroConstants::PMI_BASELINE, exchangeRateIndexEma: 100.0);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 

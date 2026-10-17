@@ -6,9 +6,8 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -101,7 +100,7 @@ class SemiconductorBusinessModelTest extends TestCase
         $baseline = $run([]);
         // Fab power is 2.3% of output, but industrial tariffs pass a wholesale move through at only 0.106 (EIA), which
         // puts it under InputOutputExposures::MATERIALITY_FLOOR; oil is under 0.5%.
-        $powerSpike = $run(['wholesale_power_price_index_ema' => 150.0, 'energy_price_index_ema' => 120.0, 'energy_cost_push_lag' => 0.20 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION]);
+        $powerSpike = $run(['wholesale_power_price_index_ema' => 150.0, 'energy_price_index_ema' => 120.0, 'energy_cost_push_lag' => 0.20 * MacroConstants::ENERGY_COST_PUSH_TRANSMISSION]);
         $this->assertEqualsWithDelta($baseline->clampedMargin, $powerSpike->clampedMargin, 1e-12);
 
         // Metals (copper, gold, specialty metals) through the supply chain are the device maker's material commodity
@@ -109,7 +108,7 @@ class SemiconductorBusinessModelTest extends TestCase
         // with the lag.
         $metalsSpike = $run(['industrial_metals_index_ema' => 120.0]);
         $metalsDeviation = 0.20 * SemiconductorBusinessModel::INPUT_COST_EXPOSURES['metals'];
-        $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
+        $recoveryWeight = 1.0 - exp(-FinancialConstants::QUARTER_YEARS / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
         $recovered = SemiconductorBusinessModel::PRICING_POWER_INDEX * SemiconductorBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
         $this->assertEqualsWithDelta(1000.0 * 0.30 * $metalsDeviation * (1.0 - $recovered), $metalsSpike->actualVariableCosts - $baseline->actualVariableCosts, 0.1);
         $this->assertLessThan($baseline->ebit, $metalsSpike->ebit);

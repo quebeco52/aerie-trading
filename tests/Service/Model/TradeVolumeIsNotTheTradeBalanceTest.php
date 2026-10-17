@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ApparelManufacturingBusinessModel;
 use App\Service\Model\Sector\CommunicationEquipmentBusinessModel;
@@ -56,6 +56,6 @@ final class TradeVolumeIsNotTheTradeBalanceTest extends TestCase
             $quiet,
         )->actualRevenue;
 
-        $this->assertSame($revenue(MacroEngine::TRADE_BALANCE_BASELINE), $revenue(MacroEngine::TRADE_BALANCE_BASELINE + 0.02));
+        $this->assertSame($revenue(MacroConstants::TRADE_BALANCE_BASELINE), $revenue(MacroConstants::TRADE_BALANCE_BASELINE + 0.02));
     }
 }

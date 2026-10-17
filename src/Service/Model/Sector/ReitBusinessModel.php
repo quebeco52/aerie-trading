@@ -9,13 +9,12 @@ use App\DTO\DebtExpansionAppetiteDTO;
 
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
 
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -349,13 +348,13 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // Lease ladder: roll in-place rents toward market at the quarterly rollover rate implied by WALT. The roll's
         // level, not its quarterly change, is what the book of leases bills.
         $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $leasingMarketRent);
-        [$rolledInPlaceRent, $releasingSpread] = FirmEconomics::rollLeaseLadder($inPlaceRent, $leasingMarketRent, self::LEASE_WALT_YEARS, self::MAX_RELEASING_SPREAD, EarningsEngine::QUARTERLY_TIME_STEP);
+        [$rolledInPlaceRent, $releasingSpread] = FirmEconomics::rollLeaseLadder($inPlaceRent, $leasingMarketRent, self::LEASE_WALT_YEARS, self::MAX_RELEASING_SPREAD, FinancialConstants::QUARTER_YEARS);
         $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
 
         // --- Vacancy ---
         // Failing tenants hand back space and a strong leasing market fills it, net of the loss the roll was built
         // at; business and household defaults above their trends empty space across the market, and fewer fill it.
-        $dsrShift = $macroState->householdDebtServiceGap / MacroEngine::HOUSEHOLD_DSR_NEUTRAL;
+        $dsrShift = $macroState->householdDebtServiceGap / MacroConstants::HOUSEHOLD_DSR_NEUTRAL;
         $macroTenantVacancy = ($macroState->corporateDefaultDeviation() * self::CORP_DEFAULT_VACANCY_SCALAR)
             + ($macroState->retailDefaultDeviation() * self::RETAIL_DEFAULT_VACANCY_SCALAR)
             + ($dsrShift * self::DSR_TENANT_DEFAULT_SCALAR);

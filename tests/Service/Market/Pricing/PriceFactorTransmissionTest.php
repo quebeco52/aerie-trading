@@ -6,9 +6,9 @@ namespace App\Tests\Service\Market\Pricing;
 
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -279,7 +279,7 @@ final class PriceFactorTransmissionTest extends TestCase
 
         $unexposed = $logStep(0.0);
         foreach ([0.3, 1.3, 2.4, -0.6] as $beta) {
-            $expected = -MacroEngine::SYSTEMIC_JUMP_INTENSITY * $this->clampedSystemicJumpLogMean($beta) * $dt;
+            $expected = -MacroConstants::SYSTEMIC_JUMP_INTENSITY * $this->clampedSystemicJumpLogMean($beta) * $dt;
             $this->assertEqualsWithDelta($expected, $logStep($beta) - $unexposed, 1e-3 * abs($expected), "beta {$beta}");
         }
     }
@@ -301,8 +301,8 @@ final class PriceFactorTransmissionTest extends TestCase
             return $sum;
         };
 
-        return (MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * $tail(MacroEngine::SYSTEMIC_JUMP_ETA_UP, 1.0))
-            + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * $tail(MacroEngine::SYSTEMIC_JUMP_ETA_DOWN, -1.0));
+        return (MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP * $tail(MacroConstants::SYSTEMIC_JUMP_ETA_UP, 1.0))
+            + ((1.0 - MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP) * $tail(MacroConstants::SYSTEMIC_JUMP_ETA_DOWN, -1.0));
     }
 
     /**

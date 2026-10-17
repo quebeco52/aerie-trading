@@ -9,7 +9,6 @@ use App\DTO\InterestExpenseDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 
-use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -211,7 +210,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $laggedPassThrough = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $stock->getInflationPassThrough() ?? $targetPassThrough,
             targetValue: $targetPassThrough,
-            dt: EarningsEngine::QUARTERLY_TIME_STEP,
+            dt: FinancialConstants::QUARTER_YEARS,
             lagTimeConstant: $lagYears ?? (float) static::PRICE_PASS_THROUGH_LAG_YEARS,
         );
 

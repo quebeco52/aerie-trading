@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
@@ -88,7 +88,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $this->assertEquals(0.12, $model->getReversionSpeed());
         $this->assertEquals(0.012, $model->getMoatSpread());
         // Trend growth plus securities and investments value added sliding from 1.41% to 1.30% of GDP over 1997-2019.
-        $this->assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH - 0.0037, $model->getSecularGrowthRate($stock), 1e-4);
+        $this->assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH - 0.0037, $model->getSecularGrowthRate($stock), 1e-4);
 
         $coverage = $model->getCoverageProfile($stock);
         $this->assertEquals(AssetManagementBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);
@@ -268,7 +268,7 @@ class AssetManagementBusinessModelTest extends TestCase
             equityWealthTrend: 1.0,
             moneyMarketFundShare: 0.15,
             moneyMarketFundShareEma: 0.15,
-            moneySupplyGrowthEma: MacroEngine::M2_BASE_GROWTH,
+            moneySupplyGrowthEma: MacroConstants::M2_BASE_GROWTH,
         );
 
         $this->assertEqualsWithDelta(0.0, $model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);

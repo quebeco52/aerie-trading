@@ -6,7 +6,7 @@ namespace App\Tests\Service\Politics;
 
 use App\Data\Politics\AerieDiet as Diet;
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\ElectionForecast;
@@ -122,7 +122,7 @@ class ElectionForecastTest extends TestCase
         $this->assertEqualsWithDelta($expected, ElectionForecast::sittingBudget($state)['corporateTax'], 1e-4);
         $this->assertNotEqualsWithDelta($standing['corporateTax'], ElectionForecast::sittingBudget($state)['corporateTax'], 1e-3, 'The talks\' government is expected to change the law.');
         $endOfTalks = 6.2 + (CoalitionFormation::FORMATION_MEAN_DAYS / \App\Service\Math\FinancialConstants::DAYS_PER_YEAR);
-        $this->assertEqualsWithDelta((floor($endOfTalks / MacroEngine::BUDGET_ROUND_PERIOD_YEARS) + 1.0) * MacroEngine::BUDGET_ROUND_PERIOD_YEARS, ElectionForecast::sittingTakesEffect($state), 1e-9);
+        $this->assertEqualsWithDelta((floor($endOfTalks / MacroConstants::BUDGET_ROUND_PERIOD_YEARS) + 1.0) * MacroConstants::BUDGET_ROUND_PERIOD_YEARS, ElectionForecast::sittingTakesEffect($state), 1e-9);
 
         $state->talksStartedAt = 4.0;
         $state->totalTime = 4.1;
@@ -139,7 +139,7 @@ class ElectionForecastTest extends TestCase
         $state = new PoliticsState();
         $state->totalTime = 6.2;
         $state->forecastFor = 8.0;
-        $this->assertEqualsWithDelta(8.0 + MacroEngine::BUDGET_ROUND_PERIOD_YEARS, ElectionForecast::takesEffect($state), 1e-9);
+        $this->assertEqualsWithDelta(8.0 + MacroConstants::BUDGET_ROUND_PERIOD_YEARS, ElectionForecast::takesEffect($state), 1e-9);
 
         $state->totalTime = 8.4;
         $state->forecastFor = 8.0;
@@ -227,8 +227,8 @@ class ElectionForecastTest extends TestCase
         return new MacroStateDTO(
             totalTime: $totalTime,
             sovereignDebtToGdp: 0.6,
-            potentialGdpIndex: exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * $totalTime),
-            consumerPriceLevel: exp(MacroEngine::TARGET_INFLATION * $totalTime),
+            potentialGdpIndex: exp((MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT) * $totalTime),
+            consumerPriceLevel: exp(MacroConstants::TARGET_INFLATION * $totalTime),
         );
     }
 

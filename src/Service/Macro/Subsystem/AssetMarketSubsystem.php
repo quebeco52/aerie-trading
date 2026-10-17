@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Macro\Subsystem;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
@@ -28,7 +28,7 @@ class AssetMarketSubsystem
      * Equilibrium user cost of housing: neutral 10Y (r* + target + base premium) + mortgage spread + carry costs -
      * target inflation.
      */
-    public const RESIDENTIAL_NEUTRAL_USER_COST = MacroEngine::NEUTRAL_MORTGAGE_RATE + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroEngine::TARGET_INFLATION;
+    public const RESIDENTIAL_NEUTRAL_USER_COST = MacroConstants::NEUTRAL_MORTGAGE_RATE + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - MacroConstants::TARGET_INFLATION;
 
     // --- Immigration and Housing (Saiz 2007) ---
     /**
@@ -199,16 +199,18 @@ class AssetMarketSubsystem
     public const MAINLAND_INFLATION_GAP_SLOPE = 0.004;
     /** Quarterly innovation of annualized mainland core inflation, the regression's residual sd (0.586pp). */
     public const MAINLAND_INFLATION_SIGMA = 0.00586;
+    /** World GDP, 2023: $107.35T (World Bank NY.GDP.MKTP.CD). */
+    public const WORLD_GDP_USD = 107.35e12;
     /** The mainland's (US) GDP, 2023: $27.8T (World Bank NY.GDP.MKTP.CD). */
     public const MAINLAND_GDP_USD = 27.81e12;
     /** The mainland's weight in the world demand that prices commodities: its share of world GDP. */
-    public const MAINLAND_DEMAND_WEIGHT = self::MAINLAND_GDP_USD / MacroEngine::WORLD_GDP_USD;
+    public const MAINLAND_DEMAND_WEIGHT = self::MAINLAND_GDP_USD / self::WORLD_GDP_USD;
     /**
      * Share of the district's cycle that reaches the mainland's demand in the long run: its imports for home use are
      * the mainland's exports, moving 1.4 times its demand (IMF WEO 2015) at their share of its GDP, scaled to the
      * mainland's size.
      */
-    public const FOREIGN_IMPORT_SPILLOVER = MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroEngine::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
+    public const FOREIGN_IMPORT_SPILLOVER = MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroConstants::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
     /** Guard on the mainland gap, beyond the deepest postwar CBO gap; the fitted process does not reach it. */
     public const MAX_FOREIGN_GAP = 0.10;
     /**
@@ -306,6 +308,8 @@ class AssetMarketSubsystem
      * Corte, Sarno, Schmeling & Wagner 2022 on sovereign risk and currency returns). A 100 bps premium costs ~2%.
      */
     public const FX_FISCAL_RISK_SENSITIVITY = 2.0;
+    /** Weight of the district's own gap in the global demand that prices its commodities: its share of world GDP. */
+    public const DOMESTIC_DEMAND_WEIGHT = MacroConstants::DISTRICT_GDP_USD / self::WORLD_GDP_USD;
 
     // --- Physical Catastrophes ---
     /**
@@ -324,7 +328,7 @@ class AssetMarketSubsystem
      * term premium), the base IG spread and the premium, built from the constants the cap rate reads as
      * RESIDENTIAL_NEUTRAL_USER_COST is (5.95%, the low end of the US NCREIF/ACLI 1990-2019 range of ~6-8%).
      */
-    public const CRE_NEUTRAL_CAP_RATE = MacroEngine::BASE_NATURAL_RATE + MacroEngine::NS_BASE_TERM_PREMIUM + MacroEngine::BASE_CREDIT_SPREAD + self::CRE_CAP_RATE_RISK_PREMIUM;
+    public const CRE_NEUTRAL_CAP_RATE = MacroConstants::BASE_NATURAL_RATE + MacroConstants::NS_BASE_TERM_PREMIUM + MacroConstants::BASE_CREDIT_SPREAD + self::CRE_CAP_RATE_RISK_PREMIUM;
     /** Mean-reversion speed of commercial property values toward fundamental equilibrium. */
     public const CRE_MEAN_REVERSION = 0.25;
     /**
@@ -428,11 +432,11 @@ class AssetMarketSubsystem
     /** Weight on bank lending standards (SLOOS net tightening) in the composite FCI. */
     public const FCI_SLOOS_WEIGHT = 0.10;
     /** Neutral IG credit spread for FCI normalization, tied to the model's own through-the-cycle spread. */
-    public const FCI_CREDIT_MEAN = MacroEngine::BASE_CREDIT_SPREAD;
+    public const FCI_CREDIT_MEAN = MacroConstants::BASE_CREDIT_SPREAD;
     /** Historical standard deviation for investment-grade credit spreads in FCI normalization. */
     public const FCI_CREDIT_STD = 0.008;
     /** Neutral equity risk premium for FCI normalization, tied to the model's habit-formation baseline. */
-    public const FCI_ERP_MEAN = MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+    public const FCI_ERP_MEAN = MacroConstants::BASE_EQUITY_RISK_PREMIUM;
     /** Historical standard deviation for equity risk premium in FCI normalization. */
     public const FCI_ERP_STD = 0.015;
     /**
@@ -444,11 +448,11 @@ class AssetMarketSubsystem
      * Neutral 10Y-minus-policy slope for FCI normalization: with policy at neutral the slope is the base ten-year
      * premium.
      */
-    public const FCI_SLOPE_MEAN = MacroEngine::NS_BASE_TERM_PREMIUM;
+    public const FCI_SLOPE_MEAN = MacroConstants::NS_BASE_TERM_PREMIUM;
     /** Historical standard deviation for yield curve slope in FCI normalization. */
     public const FCI_SLOPE_STD = 0.012;
     /** Neutral equity volatility for FCI normalization, tied to the model's calm-market vol anchor. */
-    public const FCI_VOL_MEAN = MacroEngine::MACRO_VOL_BASE_ANCHOR;
+    public const FCI_VOL_MEAN = MacroConstants::MACRO_VOL_BASE_ANCHOR;
     /** Historical standard deviation for equity market volatility in FCI normalization. */
     public const FCI_VOL_STD = 0.06;
     /** Historical mean benchmark for SLOOS net tightening index in FCI normalization. */
@@ -474,9 +478,9 @@ class AssetMarketSubsystem
 
     // --- Mundell-Fleming Trade Balance & Net Exports ---
     /** Lower bound of the trade balance over GDP: 5.5 points under its structural level. */
-    public const MIN_TRADE_BALANCE = MacroEngine::TRADE_BALANCE_BASELINE - 0.055;
+    public const MIN_TRADE_BALANCE = MacroConstants::TRADE_BALANCE_BASELINE - 0.055;
     /** Upper bound of the trade balance over GDP: 5.5 points over its structural level. */
-    public const MAX_TRADE_BALANCE = MacroEngine::TRADE_BALANCE_BASELINE + 0.055;
+    public const MAX_TRADE_BALANCE = MacroConstants::TRADE_BALANCE_BASELINE + 0.055;
     /**
      * Time constant (years) of the trade balance's adjustment to its target: half a year, the J-curve's two-quarter
      * delivery lag on contracts already signed (Magee 1973).
@@ -505,6 +509,20 @@ class AssetMarketSubsystem
     public const MIN_HOUSING_STARTS = 40.0;
     /** Structural upper ceiling for the housing starts index. */
     public const MAX_HOUSING_STARTS = 220.0;
+
+    // --- Systemic Market Factor ---
+    /** Decay time constant (years) of the common equity factor's regime leg, giving a ~20 day trend half-life. */
+    public const MARKET_FACTOR_DECAY_TAU_YEARS = 0.08;
+    /** Degrees of freedom of the market factor's Student's t shock; 5 is the lowest with a finite fourth moment. */
+    public const MARKET_FACTOR_TAIL_DF = 5;
+    /** Share of market factor variance carried by the slow regime leg; kept small so beta stays horizon-stable. */
+    public const MARKET_FACTOR_REGIME_VARIANCE_SHARE = 0.15;
+    /**
+     * Mean variance jump on a market-wide crash (Duffie, Pan & Singleton 2000 SVCJ): a crash lifts vol from the 15%
+     * anchor to ~16%; at four arrivals a year the jumps fund about a fifth of the long-run variance, leaving the
+     * diffusion an anchor well clear of the 8% floor.
+     */
+    public const SYSTEMIC_JUMP_VARIANCE_MEAN = 0.003;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -540,7 +558,7 @@ class AssetMarketSubsystem
         $state->commercialMarketRent = $rentFactor;
 
         $capRate = max(self::CRE_MIN_CAP_RATE, $state->yield10yEma - $state->tipsBreakevenEma + $state->macroCreditSpreadEma + self::CRE_CAP_RATE_RISK_PREMIUM);
-        $fundamentalValue = MacroEngine::CRE_BASELINE * $occupancyFactor * $rentFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
+        $fundamentalValue = MacroConstants::CRE_BASELINE * $occupancyFactor * $rentFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = StochasticProcesses::calculateSchwartz1Factor(
@@ -658,7 +676,7 @@ class AssetMarketSubsystem
         $state->equityRiskPremium = $this->habitEquityRiskPremium($state->outputGapEma);
 
         $state->foreignEquityRiskPremium = $this->habitEquityRiskPremium($state->foreignOutputGapEma);
-        $valuation = -self::foreignValuationDuration() * ($state->foreignEquityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM);
+        $valuation = -self::foreignValuationDuration() * ($state->foreignEquityRiskPremium - MacroConstants::BASE_EQUITY_RISK_PREMIUM);
         $state->foreignEquityValuationChange = $valuation - $state->foreignEquityValuation;
         $state->foreignEquityValuation = $valuation;
     }
@@ -681,7 +699,7 @@ class AssetMarketSubsystem
      */
     private function habitEquityRiskPremium(float $outputGapEma): float
     {
-        $habitErp = MacroEngine::BASE_EQUITY_RISK_PREMIUM * exp(-self::HABIT_RISK_AVERSION_COEFF * $outputGapEma);
+        $habitErp = MacroConstants::BASE_EQUITY_RISK_PREMIUM * exp(-self::HABIT_RISK_AVERSION_COEFF * $outputGapEma);
 
         return max(self::MIN_EQUITY_RISK_PREMIUM, min(0.12, $habitErp));
     }
@@ -708,7 +726,7 @@ class AssetMarketSubsystem
     {
         $currentMarketVol = $state->marketVolatility;
 
-        $policyUncertaintyLog = log(max(1.0, $state->policyUncertaintyIndexEma) / MacroEngine::EPU_BASELINE);
+        $policyUncertaintyLog = log(max(1.0, $state->policyUncertaintyIndexEma) / MacroConstants::EPU_BASELINE);
         $macroDriver = (-$state->outputGap * self::MACRO_VOL_OUTPUT_GAP_SENSITIVITY)
             + ($state->excessBondPremium * self::MACRO_VOL_PREMIUM_SENSITIVITY)
             + (-min(0.0, $state->structuralSlope) * self::MACRO_VOL_SLOPE_SENSITIVITY)
@@ -716,7 +734,7 @@ class AssetMarketSubsystem
 
         $longTermVol = min(
             self::MACRO_VOL_MAX_BASELINE,
-            max(self::MACRO_VOL_MIN_BASELINE, MacroEngine::MACRO_VOL_BASE_ANCHOR * exp($macroDriver)),
+            max(self::MACRO_VOL_MIN_BASELINE, MacroConstants::MACRO_VOL_BASE_ANCHOR * exp($macroDriver)),
         );
 
         $currentVar = $currentMarketVol * $currentMarketVol;
@@ -743,7 +761,7 @@ class AssetMarketSubsystem
      */
     public static function leverageLoading(): float
     {
-        return max(-1.0, min(1.0, self::MACRO_VOL_LEVERAGE_RHO / sqrt(1.0 - MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE)));
+        return max(-1.0, min(1.0, self::MACRO_VOL_LEVERAGE_RHO / sqrt(1.0 - self::MARKET_FACTOR_REGIME_VARIANCE_SHARE)));
     }
 
     /**
@@ -768,11 +786,11 @@ class AssetMarketSubsystem
     public static function jumpVarianceDrag(): float
     {
         $meanVarianceJump = StochasticProcesses::meanVarianceJump(
-            MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
-            MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN,
+            MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP,
+            self::SYSTEMIC_JUMP_VARIANCE_MEAN,
         );
 
-        return (MacroEngine::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / self::MACRO_VOL_KAPPA;
+        return (MacroConstants::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / self::MACRO_VOL_KAPPA;
     }
 
     /**
@@ -786,22 +804,22 @@ class AssetMarketSubsystem
     public function updateSystemicMarketFactor(MacroState $state, float $dt): array
     {
         // Two-factor equity market innovation: AR(1) regime persistence plus Student's t heavy tails.
-        $marketFactorPhi = exp(-$dt / MacroEngine::MARKET_FACTOR_DECAY_TAU_YEARS);
+        $marketFactorPhi = exp(-$dt / self::MARKET_FACTOR_DECAY_TAU_YEARS);
         $state->marketZLatent = $this->mathUtility->generatePersistentZ($state->marketZLatent, $marketFactorPhi);
 
         $regimeShock = $state->marketZLatent * StochasticProcesses::calculatePersistenceVarianceScale($marketFactorPhi);
-        $tailShock = $this->mathUtility->generateStudentsT(MacroEngine::MARKET_FACTOR_TAIL_DF);
+        $tailShock = $this->mathUtility->generateStudentsT(self::MARKET_FACTOR_TAIL_DF);
 
-        $state->marketZ = (sqrt(MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $regimeShock)
-            + (sqrt(1.0 - MacroEngine::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $tailShock);
+        $state->marketZ = (sqrt(self::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $regimeShock)
+            + (sqrt(1.0 - self::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $tailShock);
 
         // Kou (2002) double-exponential jump diffusion for systemic equity market crashes.
         $systemicJump = $this->mathUtility->calculateSVJJJumps(
-            lambda: MacroEngine::SYSTEMIC_JUMP_INTENSITY,
-            pUp: MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
-            etaUp: MacroEngine::SYSTEMIC_JUMP_ETA_UP,
-            etaDown: MacroEngine::SYSTEMIC_JUMP_ETA_DOWN,
-            muV: MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN,
+            lambda: MacroConstants::SYSTEMIC_JUMP_INTENSITY,
+            pUp: MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP,
+            etaUp: MacroConstants::SYSTEMIC_JUMP_ETA_UP,
+            etaDown: MacroConstants::SYSTEMIC_JUMP_ETA_DOWN,
+            muV: self::SYSTEMIC_JUMP_VARIANCE_MEAN,
             dt: $dt,
         );
         $state->marketJumpMultiplier = $systemicJump['price_multiplier'];
@@ -853,7 +871,7 @@ class AssetMarketSubsystem
      */
     public static function exchangeRateDeviationVolatility(): float
     {
-        $residual = sqrt(max(0.0, (MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY ** 2) - (self::EXCHANGE_RATE_FUNDAMENTAL_QUARTERLY_SD ** 2)));
+        $residual = sqrt(max(0.0, (MacroConstants::EXCHANGE_RATE_QUARTERLY_VOLATILITY ** 2) - (self::EXCHANGE_RATE_FUNDAMENTAL_QUARTERLY_SD ** 2)));
 
         return StochasticProcesses::ouSigmaForIncrementSd($residual, self::EXCHANGE_RATE_MEAN_REVERSION, self::EXCHANGE_RATE_VOLATILITY_HORIZON_YEARS);
     }
@@ -906,13 +924,13 @@ class AssetMarketSubsystem
         $rateDiff = ($policyRate - $expectedInflation) - ($foreignPolicyRate - $foreignExpectedInflation);
 
         // Harrod-Balassa-Samuelson terms-of-trade import price effect on real exchange rates.
-        $energyShift = ($energyPriceIndexEma / MacroEngine::ENERGY_BASELINE) - 1.0;
-        $metalsShift = ($industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
-        $importBillShift = (MacroEngine::PPI_ENERGY_WEIGHT * $energyShift) + (MacroEngine::PPI_METALS_WEIGHT * $metalsShift);
+        $energyShift = ($energyPriceIndexEma / MacroConstants::ENERGY_BASELINE) - 1.0;
+        $metalsShift = ($industrialMetalsIndexEma / MacroConstants::METALS_BASELINE) - 1.0;
+        $importBillShift = (MacroConstants::PPI_ENERGY_WEIGHT * $energyShift) + (MacroConstants::PPI_METALS_WEIGHT * $metalsShift);
         $termsOfTradeShift = self::FX_TERMS_OF_TRADE_SENSITIVITY * $importBillShift;
 
         // Caballero & Krishnamurthy (2008) safe-haven currency bid under global volatility flight to safety.
-        $panic = max(0.0, $marketVolatilityEma - MacroEngine::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
+        $panic = max(0.0, $marketVolatilityEma - MacroConstants::FLIGHT_TO_SAFETY_VOL_THRESHOLD);
         $safeHavenBid = self::FX_SAFE_HAVEN_SENSITIVITY * $panic;
 
         // Della Corte et al. (2016) sovereign credit default risk discount on currency valuation.
@@ -943,7 +961,7 @@ class AssetMarketSubsystem
      */
     public static function mainlandBreakeven(float $coreYearOnYear): float
     {
-        return MacroEngine::TARGET_INFLATION + (MacroAggregateSubsystem::BREAKEVEN_CORE_LOADING * ($coreYearOnYear - MacroEngine::TARGET_INFLATION));
+        return MacroConstants::TARGET_INFLATION + (MacroAggregateSubsystem::BREAKEVEN_CORE_LOADING * ($coreYearOnYear - MacroConstants::TARGET_INFLATION));
     }
 
     /**
@@ -965,13 +983,13 @@ class AssetMarketSubsystem
         $unemploymentChange = LaborMarketSubsystem::unemploymentChangeYearOnYear($state->unemploymentMonthly) ?? 0.0;
 
         $slack = self::SENTIMENT_SLACK_LOADING * ($state->unemploymentRate - $state->nairu);
-        $inflation = self::SENTIMENT_INFLATION_LOADING * ($inflationYearOnYear - MacroEngine::TARGET_INFLATION);
+        $inflation = self::SENTIMENT_INFLATION_LOADING * ($inflationYearOnYear - MacroConstants::TARGET_INFLATION);
         $joblessness = self::SENTIMENT_UNEMPLOYMENT_CHANGE_LOADING * $unemploymentChange;
-        $fundamentalSentiment = MacroEngine::SENTIMENT_TREND_LEVEL + $slack + $inflation + $joblessness;
+        $fundamentalSentiment = MacroConstants::SENTIMENT_TREND_LEVEL + $slack + $inflation + $joblessness;
 
         if ($this->diagnostics?->isEnabled()) {
             $this->diagnostics->recordLevel('households', 'sentimentFundamental', [
-                'trend' => MacroEngine::SENTIMENT_TREND_LEVEL,
+                'trend' => MacroConstants::SENTIMENT_TREND_LEVEL,
                 'slack' => $slack,
                 'inflation' => $inflation,
                 'unemploymentChange' => $joblessness,
@@ -1036,7 +1054,7 @@ class AssetMarketSubsystem
     public function calculateCapitalMarketsDealIndex(MacroState $state, float $dt): void
     {
         $dW = $this->mathUtility->generateStandardNormal();
-        $currentDealIndex = $state->dealActivityIndex > 0.0 ? $state->dealActivityIndex : MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $currentDealIndex = $state->dealActivityIndex > 0.0 ? $state->dealActivityIndex : MacroConstants::DEAL_ACTIVITY_BASELINE;
 
         $state->dealActivityIndex = MacroTransmission::calculateCapitalMarketsDealIndexStep(
             currentDealIndex: $currentDealIndex,
@@ -1078,9 +1096,9 @@ class AssetMarketSubsystem
         // World demand weighs each economy at its share of world GDP: the District, the mainland, and the rest. The
         // gaps go in as they stand; globalDemandGapEma is the one smoothing stage, so commodities answer within a
         // quarter.
-        $state->globalDemandGap = (MacroEngine::DOMESTIC_DEMAND_WEIGHT * $state->outputGap)
+        $state->globalDemandGap = (self::DOMESTIC_DEMAND_WEIGHT * $state->outputGap)
             + (self::MAINLAND_DEMAND_WEIGHT * $state->foreignOutputGap)
-            + ((1.0 - MacroEngine::DOMESTIC_DEMAND_WEIGHT - self::MAINLAND_DEMAND_WEIGHT) * $state->worldActivityGap);
+            + ((1.0 - self::DOMESTIC_DEMAND_WEIGHT - self::MAINLAND_DEMAND_WEIGHT) * $state->worldActivityGap);
     }
 
     /**
@@ -1101,7 +1119,7 @@ class AssetMarketSubsystem
         $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $state->alliedDefenseSpendingIndex,
             kappa: self::ALLIED_DEFENSE_MEAN_REVERSION,
-            theta: StochasticProcesses::schwartzThetaForLogMean(MacroEngine::ALLIED_DEFENSE_BASELINE * exp(-$jumpLogShift), self::ALLIED_DEFENSE_MEAN_REVERSION, self::ALLIED_DEFENSE_VOLATILITY),
+            theta: StochasticProcesses::schwartzThetaForLogMean(MacroConstants::ALLIED_DEFENSE_BASELINE * exp(-$jumpLogShift), self::ALLIED_DEFENSE_MEAN_REVERSION, self::ALLIED_DEFENSE_VOLATILITY),
             sigma: self::ALLIED_DEFENSE_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal(),
@@ -1174,7 +1192,7 @@ class AssetMarketSubsystem
         $gap = max(-self::MAX_FOREIGN_GAP, min(self::MAX_FOREIGN_GAP, $gap));
 
         $lags = [$state->foreignCoreInflation, $state->foreignCoreInflationLag1, $state->foreignCoreInflationLag2, $state->foreignCoreInflationLag3];
-        $inflation = (1.0 - array_sum(self::MAINLAND_INFLATION_LAGS)) * MacroEngine::TARGET_INFLATION;
+        $inflation = (1.0 - array_sum(self::MAINLAND_INFLATION_LAGS)) * MacroConstants::TARGET_INFLATION;
         foreach (self::MAINLAND_INFLATION_LAGS as $j => $coefficient) {
             $inflation += $coefficient * $lags[$j];
         }
@@ -1182,8 +1200,8 @@ class AssetMarketSubsystem
 
         // Four quarters of annualized log inflation average to the year-on-year rate the rule is fitted on.
         $yearOnYear = ($inflation + $state->foreignCoreInflation + $state->foreignCoreInflationLag1 + $state->foreignCoreInflationLag2) / 4.0;
-        $ruleRate = MacroEngine::MAINLAND_NEUTRAL_RATE
-            + (self::FED_RULE_INFLATION_RESPONSE * ($yearOnYear - MacroEngine::TARGET_INFLATION))
+        $ruleRate = MacroConstants::MAINLAND_NEUTRAL_RATE
+            + (self::FED_RULE_INFLATION_RESPONSE * ($yearOnYear - MacroConstants::TARGET_INFLATION))
             + (self::FED_RULE_GAP_RESPONSE * $gap);
         $rate = (self::FED_RULE_SMOOTHING * $state->foreignPolicyRate)
             + ((1.0 - self::FED_RULE_SMOOTHING) * $ruleRate)
@@ -1192,7 +1210,7 @@ class AssetMarketSubsystem
         return [
             'gap' => $gap,
             'inflation' => $inflation,
-            'rate' => max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(self::MAX_FOREIGN_POLICY_RATE, $rate)),
+            'rate' => max(MacroConstants::EFFECTIVE_LOWER_BOUND, min(self::MAX_FOREIGN_POLICY_RATE, $rate)),
         ];
     }
 
@@ -1241,7 +1259,7 @@ class AssetMarketSubsystem
     public function calculateTradeBalance(MacroState $state, float $dt): void
     {
         $domesticDemandGap = $state->outputGap - $state->netExportGap;
-        $targetTradeBalance = MacroEngine::TRADE_BALANCE_BASELINE
+        $targetTradeBalance = MacroConstants::TRADE_BALANCE_BASELINE
             + $state->netExportGap
             - (MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * $domesticDemandGap);
 
@@ -1358,7 +1376,7 @@ class AssetMarketSubsystem
         $dW = $this->mathUtility->generateStandardNormal();
 
         $params = [
-            'baseline' => MacroEngine::HOUSING_STARTS_BASELINE,
+            'baseline' => MacroConstants::HOUSING_STARTS_BASELINE,
             'qSens' => self::HOUSING_STARTS_Q_SENSITIVITY * self::greenBeltSupplyResponse($state->greenBeltStringency),
             'costSens' => self::HOUSING_STARTS_USER_COST_SENSITIVITY,
             'sloosSens' => self::HOUSING_STARTS_SLOOS_SENSITIVITY,

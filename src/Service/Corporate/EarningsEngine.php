@@ -55,9 +55,6 @@ class EarningsEngine
     /** Failsafe max expected EBIT loss relative to structural revenue. */
     public const MAX_EBIT_LOSS_RATIO = 0.50;
 
-    /** Default time step in years for quarterly reports. */
-    public const QUARTERLY_TIME_STEP = 0.25;
-
     /** Multiplier applied to baseline volatility to derive base idiosyncratic revenue volatility. */
     public const IDIOSYNCRATIC_REV_VOL_RATIO = 0.25;
 
@@ -93,8 +90,6 @@ class EarningsEngine
     public const REPORT_IMMEDIATE_RESPONSE_SHARE = 0.60;
 
     // --- Announcement Variance ---
-    /** Years between quarterly reports. */
-    public const REPORT_INTERVAL_YEARS = 0.25;
     /**
      * Years the announcement-variance estimate averages over: two, the eight reports SUE is conventionally scaled over
      * (Foster, Olsen & Shevlin 1984).
@@ -395,7 +390,7 @@ class EarningsEngine
             $macroState,
             $strategy,
             $businessModel,
-            self::QUARTERLY_TIME_STEP,
+            FinancialConstants::QUARTER_YEARS,
         );
         $ctx->tickCount = $tickCount;
         $ctx->ticksPerYear = $ticksPerYear;
@@ -1576,7 +1571,7 @@ class EarningsEngine
         $stock->setLongRunReturn((string) TimeSeries::ewmaLevel(
             $priorLongRun !== null ? (float) $priorLongRun : null,
             $ctx->strategy->getTrueReturn($stock),
-            self::REPORT_INTERVAL_YEARS,
+            FinancialConstants::QUARTER_YEARS,
             self::LONG_RUN_RETURN_EMA_YEARS,
         ));
 
@@ -2558,7 +2553,7 @@ class EarningsEngine
             return 0.0;
         }
 
-        $news = log(($fairValueAfter + $dividendPaid) / $fairValueBefore) - ($costOfEquity * self::REPORT_INTERVAL_YEARS);
+        $news = log(($fairValueAfter + $dividendPaid) / $fairValueBefore) - ($costOfEquity * FinancialConstants::QUARTER_YEARS);
 
         return exp(self::REPORT_IMMEDIATE_RESPONSE_SHARE * $news) - 1.0;
     }
@@ -2695,10 +2690,10 @@ class EarningsEngine
         $prior = (float) ($stock->getAnnouncementVarianceEma() ?? 0.0);
 
         if ($closesQuarter) {
-            $next = TimeSeries::ewmaAnnualizedVariance($prior, $logReturn, self::REPORT_INTERVAL_YEARS, self::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
+            $next = TimeSeries::ewmaAnnualizedVariance($prior, $logReturn, FinancialConstants::QUARTER_YEARS, self::ANNOUNCEMENT_VARIANCE_EMA_YEARS);
         } else {
-            $weight = exp(self::REPORT_INTERVAL_YEARS / self::ANNOUNCEMENT_VARIANCE_EMA_YEARS) - 1.0;
-            $next = max(0.0, $prior) + ($weight * ($logReturn * $logReturn) / self::REPORT_INTERVAL_YEARS);
+            $weight = exp(FinancialConstants::QUARTER_YEARS / self::ANNOUNCEMENT_VARIANCE_EMA_YEARS) - 1.0;
+            $next = max(0.0, $prior) + ($weight * ($logReturn * $logReturn) / FinancialConstants::QUARTER_YEARS);
         }
 
         $stock->setAnnouncementVarianceEma($next);

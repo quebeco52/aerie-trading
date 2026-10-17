@@ -6,11 +6,11 @@ namespace App\Tests\Financial;
 
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\TreasuryAuctionService;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -46,8 +46,8 @@ class BondDiscountGridTest extends TestCase
                 slope: $slope,
                 curvature1: $c1,
                 curvature2: $c2,
-                baseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
-                longEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
+                baseTermPremium: MacroConstants::NS_BASE_TERM_PREMIUM,
+                longEndPremium: MacroConstants::NS_BASE_TERM_PREMIUM,
                 balanceSheetIntensity: $balanceSheet,
             );
 

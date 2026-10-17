@@ -8,6 +8,7 @@ require '/home/quebeco/Projects/Code/Private/aerie-trading/tests/bootstrap.php';
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 [$script, $seedFrom, $seedTo, $burn, $horizon, $tpy, $shock, $out] = $argv;
 $tpy = (int) $tpy; $shock = (float) $shock;
@@ -36,7 +37,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 $state['corporate_tax_rate'] -= $size;
             } elseif ($lever === 'tariff') {
                 // As a budget round enacts one: the duty, and the productivity loss it brings.
-                $loss = -MacroEngine::TARIFF_OUTPUT_LOSS * $size;
+                $loss = -MacroConstants::TARIFF_OUTPUT_LOSS * $size;
                 $state['import_tariff_rate'] += $size;
                 $state['tfp_shock_level'] += $loss;
                 $state['total_factor_productivity_index'] *= exp($loss);

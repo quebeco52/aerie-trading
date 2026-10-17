@@ -7,7 +7,8 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\StreamContext;
@@ -49,7 +50,7 @@ final class InsuranceUnderwritingCycleTest extends TestCase
             'inflation_ema' => 0.02,
             // Policy rate at the neutral rate leaves the cash-flow-underwriting discount at zero,
             // isolating the capacity cycle.
-            'policy_rate'  => MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+            'policy_rate'  => MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION,
             'gdp_growth'   => 0.02,
             'credit_spread' => 0.015,
         ]);
@@ -78,7 +79,7 @@ final class InsuranceUnderwritingCycleTest extends TestCase
     public function testFloatYieldDiscountIsCentredOnTheNeutralRate(): void
     {
         $model = new InsuranceBusinessModel();
-        $neutral = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $neutral = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
         $rate = fn(float $policyRate) => $model->getMacroPhysics($this->makeStock(), MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
             'policy_rate'   => $policyRate,
@@ -141,11 +142,11 @@ final class InsuranceUnderwritingCycleTest extends TestCase
     {
         $this->assertEqualsWithDelta(
             4.0,
-            array_sum(MacroEngine::CATASTROPHE_SEASONALITY),
+            array_sum(CommodityLogisticsSubsystem::CATASTROPHE_SEASONALITY),
             1e-9,
             'The season redistributes losses across the year, it does not add any.',
         );
-        $this->assertCount(4, MacroEngine::CATASTROPHE_SEASONALITY);
+        $this->assertCount(4, CommodityLogisticsSubsystem::CATASTROPHE_SEASONALITY);
     }
 
     /** One quarter for a carrier holding three years of its book in surplus, so no capital trigger fires. */

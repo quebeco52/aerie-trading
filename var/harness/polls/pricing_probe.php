@@ -12,10 +12,10 @@
 require dirname(__DIR__, 3) . '/tests/bootstrap.php';
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Market\Pricing\PolicyCapitalization as Policy;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\PoliticsEngine;
@@ -29,12 +29,12 @@ $redis = new class extends \Redis {
 };
 $economy = static fn(float $t): MacroStateDTO => new MacroStateDTO(
     totalTime: $t,
-    potentialGdpIndex: exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * $t),
-    gdpDeflator: exp(MacroEngine::TARGET_INFLATION * $t),
+    potentialGdpIndex: exp((MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT) * $t),
+    gdpDeflator: exp(MacroConstants::TARGET_INFLATION * $t),
     sovereignDebtToGdp: 0.6,
 );
 $value = static function (MacroStateDTO $m, bool $previous, float $capRate, array $bases): float {
-    $tax = MacroEngine::PUBLIC_PURCHASES_TO_GDP + $m->corporateTaxShiftRealized;
+    $tax = MacroConstants::PUBLIC_PURCHASES_TO_GDP + $m->corporateTaxShiftRealized;
     $expected = $tax + Policy::corporateTaxShiftGap($m, $capRate, $previous);
 
     return log(Policy::reprice(1.0, $tax, $expected, Policy::earningsGap($m, $bases, $expected, $capRate, $previous), $capRate));
@@ -66,7 +66,7 @@ for ($seed = 1; $seed <= (int) $seeds; ++$seed) {
         $policy = \App\DTO\PoliticsStateDTO::fromState($state)->policy();
         $previous = $levers;
         $levers = [$policy->expectedLevers ?? [], $policy->expectedLevers === null ? -1.0 : $policy->expectedPolicyFrom, $policy->sittingLevers ?? [], $policy->sittingLevers === null ? -1.0 : $policy->sittingPolicyFrom];
-        $realized += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($policy->corporateTaxPolicyShift - $realized) * $dt;
+        $realized += MacroConstants::FISCAL_ADJUSTMENT_SPEED * ($policy->corporateTaxPolicyShift - $realized) * $dt;
         $embodied += ($realized - $embodied) * $dt / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $levyEmbodied += ($policy->bankLevyRate - $levyEmbodied) * $dt / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS;
         $extractionEmbodied += (FirmEconomics::calculateExtractionCostFactor($policy->extractionStringency) - $extractionEmbodied) * $dt / CreditFiscalSubsystem::TRAILING_EARNINGS_MEAN_LAG_YEARS;
@@ -85,7 +85,7 @@ for ($seed = 1; $seed <= (int) $seeds; ++$seed) {
             bankLevyEmbodied: $levyEmbodied,
             extractionCostFactorEmbodied: $extractionEmbodied,
             stampDutyVolumeFactorEmbodied: $dutyEmbodied,
-            governmentSpendingIndex: MacroEngine::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
+            governmentSpendingIndex: MacroConstants::GOVT_SPENDING_BASELINE * (1.0 + $purchases),
             publicSpendingShare: $policy->publicSpendingShare,
             governmentSpendingShiftEmbodied: $purchasesEmbodied,
             expectedLevers: $levers[0],

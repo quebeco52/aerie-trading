@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AdvertisingAgencyBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -111,7 +111,7 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
     {
         $stock = (new Stock())->setTicker('LYRE_ACTIVITY')->setBeta('1.0');
         // Confidence falls by its gap loading with the gap, so the residual over the gap is zero.
-        $sentiment = MacroEngine::SENTIMENT_TREND_LEVEL + (-0.03 * \App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP);
+        $sentiment = MacroConstants::SENTIMENT_TREND_LEVEL + (-0.03 * \App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP);
         $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0, consumerSentimentIndexEma: $sentiment);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);

@@ -9,8 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 
@@ -350,7 +350,7 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveDwellFactor(MacroStateDTO $macroState): float
     {
-        $pressure = $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE;
+        $pressure = $macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE;
         $jensen = 0.5 * self::STORAGE_DWELL_SENSITIVITY * self::STORAGE_DWELL_SENSITIVITY * self::SUPPLY_CHAIN_PRESSURE_VARIANCE;
 
         return exp((self::STORAGE_DWELL_SENSITIVITY * $pressure) - $jensen);

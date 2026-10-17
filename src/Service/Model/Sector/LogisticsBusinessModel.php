@@ -9,8 +9,8 @@ use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -113,7 +113,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return MacroEngine::TREND_REAL_GROWTH
+        return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
@@ -204,7 +204,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
         // Spot Freight Rate pricing power & supply chain pressure (applied strictly to market-clearing spot brokerage)
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
-        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
+        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE);
         $spotFreightBoost = ($freightShift * self::SPOT_FREIGHT_SENSITIVITY) + ($gscpiShift * self::GSCPI_SPOT_SURGE_SENSITIVITY);
 
         $fleetZ = $streams->generateZ('dedicated_fleet_contracts', 0.40);

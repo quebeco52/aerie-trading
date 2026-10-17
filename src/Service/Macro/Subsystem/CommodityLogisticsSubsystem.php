@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Macro\Subsystem;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
@@ -32,6 +32,13 @@ class CommodityLogisticsSubsystem
     public const ENERGY_JUMP_MEAN = -0.021;
     /** Standard deviation of an oil shock's log size (0.243), the same fit. */
     public const ENERGY_JUMP_VOL = 0.243;
+    /** Mean-reversion speed (kappa) of energy prices reverting to long-run baseline. */
+    public const ENERGY_MEAN_REVERSION = 0.8;
+    /**
+     * Schwartz 1-factor log-price diffusion net of the jumps and of world demand, fitted so oil's yoy log sd matches
+     * WTI's 0.314 (1993-2019).
+     */
+    public const ENERGY_VOLATILITY = 0.21;
 
     // --- Energy Supply Cobweb (Ezekiel 1938; Anderson, Kellogg & Salant 2018) ---
     /**
@@ -90,6 +97,16 @@ class CommodityLogisticsSubsystem
      * storm, roughly a one-in-six-years event on the Pareto tail.
      */
     public const SYSTEMIC_CATASTROPHE_SEVERITY = 1.5;
+    /**
+     * Relative catastrophe frequency by calendar quarter [Q1..Q4], summing to 4.0: Q3 carries the Atlantic wind season,
+     * Q1 the winter freeze and storm peak. Read by the loss process and by the insurers' seasonal threshold.
+     */
+    public const CATASTROPHE_SEASONALITY = [0.80, 0.70, 1.90, 0.60];
+    /**
+     * Stationary standard deviation of the loss index (~1.0 on a mean of 1.0, from lambda E[S^2] / 2 decay with the
+     * Pareto tail truncated); the insurers standardise the burden by it.
+     */
+    public const CATASTROPHE_LOSS_INDEX_SD = 1.0;
 
     // --- Natural Gas (Pilipovic 1998; Ramberg & Parsons 2012) ---
     /**
@@ -265,7 +282,7 @@ class CommodityLogisticsSubsystem
      * with container freight 4.3x its 2019 average (Drewry WCI), a tightness of 4.3^(1/2) at the charter market's
      * inelasticity.
      */
-    public const DELIVERY_SHIPPING_LOADING = (78.8 - MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL) / (1.4586 / self::FREIGHT_CAPACITY_INELASTICITY);
+    public const DELIVERY_SHIPPING_LOADING = (78.8 - MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL) / (1.4586 / self::FREIGHT_CAPACITY_INELASTICITY);
     /** Annual mean reversion of the delivery index toward its congestion target. */
     public const DELIVERY_REVERSION_KAPPA = 6.0;
     /** Stationary sd of the delivery index around its congestion target, in index points. */
@@ -321,8 +338,8 @@ class CommodityLogisticsSubsystem
     public function calculateEnergyShock(MacroState $state, float $dt): void
     {
         // Ezekiel (1938) cobweb dynamics: capacity chases lagged prices while spot market clears demand.
-        $priceSeen = $state->energyPriceIndexEma > 0.0 ? $state->energyPriceIndexEma : MacroEngine::ENERGY_BASELINE;
-        $targetSupply = MacroEngine::ENERGY_BASELINE * (($priceSeen / MacroEngine::ENERGY_BASELINE) ** self::ENERGY_SUPPLY_ELASTICITY);
+        $priceSeen = $state->energyPriceIndexEma > 0.0 ? $state->energyPriceIndexEma : MacroConstants::ENERGY_BASELINE;
+        $targetSupply = MacroConstants::ENERGY_BASELINE * (($priceSeen / MacroConstants::ENERGY_BASELINE) ** self::ENERGY_SUPPLY_ELASTICITY);
         $supplyWeight = 1.0 - exp(-$dt / self::ENERGY_SUPPLY_LAG_YEARS);
         $state->energySupplyEma += $supplyWeight * ($targetSupply - $state->energySupplyEma);
 
@@ -332,9 +349,9 @@ class CommodityLogisticsSubsystem
         $currentBase = $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex;
         $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
             currentPrice: $currentBase,
-            kappa: MacroEngine::ENERGY_MEAN_REVERSION,
+            kappa: self::ENERGY_MEAN_REVERSION,
             theta: self::resolveEnergyProcessTheta($equilibriumPrice),
-            sigma: MacroEngine::ENERGY_VOLATILITY,
+            sigma: self::ENERGY_VOLATILITY,
             dt: $dt,
             dW: $dW,
         );
@@ -353,7 +370,7 @@ class CommodityLogisticsSubsystem
 
         // Litzenberger & Rabinowitz (1995) physical commodity inventory buffer stock evolution.
         $demandDraw = $state->globalDemandGapEma * self::COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY * 100.0;
-        $reversionFlow = self::COMMODITY_INVENTORY_REVERSION_SPEED * (MacroEngine::COMMODITY_INVENTORY_BASELINE - $state->energyInventoryIndex);
+        $reversionFlow = self::COMMODITY_INVENTORY_REVERSION_SPEED * (MacroConstants::COMMODITY_INVENTORY_BASELINE - $state->energyInventoryIndex);
         $dInventory = ($reversionFlow - $demandDraw) * $dt;
         $state->energyInventoryIndex = max(self::COMMODITY_MIN_BUFFER_STOCK, min(160.0, $state->energyInventoryIndex + $dInventory));
 
@@ -362,13 +379,13 @@ class CommodityLogisticsSubsystem
             inventoryLevel: $state->energyInventoryIndex,
             minBufferStock: self::COMMODITY_MIN_BUFFER_STOCK,
         );
-        $conveniencePricePremium = MacroEngine::ENERGY_BASELINE * $convenienceYield;
+        $conveniencePricePremium = MacroConstants::ENERGY_BASELINE * $convenienceYield;
 
         // The spot clears today's world demand against supply that cannot answer within the year, so demand moves the
         // price as it happens; the base process carries supply news and the capacity the cobweb has built (Kilian
         // 2009).
         $state->energyPriceIndex = max(10.0, min(350.0, ($state->energyBasePrice * self::resolveEnergyDemandMultiplier($state->globalDemandGapEma)) + $conveniencePricePremium));
-        $state->energyPriceShock = $state->energyPriceIndex - MacroEngine::ENERGY_BASELINE;
+        $state->energyPriceShock = $state->energyPriceIndex - MacroConstants::ENERGY_BASELINE;
     }
 
     /**
@@ -377,9 +394,9 @@ class CommodityLogisticsSubsystem
      */
     public static function resolveEnergyProcessTheta(float $equilibriumPrice): float
     {
-        $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::ENERGY_JUMP_PROBABILITY, MacroEngine::ENERGY_MEAN_REVERSION, self::ENERGY_JUMP_MEAN, self::ENERGY_JUMP_VOL);
+        $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::ENERGY_JUMP_PROBABILITY, self::ENERGY_MEAN_REVERSION, self::ENERGY_JUMP_MEAN, self::ENERGY_JUMP_VOL);
 
-        return StochasticProcesses::schwartzThetaForMean($equilibriumPrice * exp(-$jumpShift), MacroEngine::ENERGY_MEAN_REVERSION, MacroEngine::ENERGY_VOLATILITY);
+        return StochasticProcesses::schwartzThetaForMean($equilibriumPrice * exp(-$jumpShift), self::ENERGY_MEAN_REVERSION, self::ENERGY_VOLATILITY);
     }
 
     /**
@@ -389,9 +406,9 @@ class CommodityLogisticsSubsystem
      */
     public static function resolveEnergyEquilibriumPrice(float $energySupplyEma): float
     {
-        $utilization = MacroEngine::ENERGY_BASELINE / max(20.0, $energySupplyEma);
+        $utilization = MacroConstants::ENERGY_BASELINE / max(20.0, $energySupplyEma);
 
-        return max(self::MIN_ENERGY_EQUILIBRIUM, min(self::MAX_ENERGY_EQUILIBRIUM, MacroEngine::ENERGY_BASELINE * ($utilization ** self::ENERGY_CAPACITY_INELASTICITY)));
+        return max(self::MIN_ENERGY_EQUILIBRIUM, min(self::MAX_ENERGY_EQUILIBRIUM, MacroConstants::ENERGY_BASELINE * ($utilization ** self::ENERGY_CAPACITY_INELASTICITY)));
     }
 
     /**
@@ -417,9 +434,9 @@ class CommodityLogisticsSubsystem
     {
         $spot = $energyBasePrice > 0.0 ? $energyBasePrice * self::resolveEnergyDemandMultiplier($globalDemandGapEma) : $energyIndexEma;
         // The spot averages its equilibrium, so the curve's long end must too: the Schwartz theta for that mean.
-        $theta = StochasticProcesses::schwartzThetaForMean(self::resolveEnergyEquilibriumPrice($energySupplyEma), MacroEngine::ENERGY_MEAN_REVERSION, MacroEngine::ENERGY_VOLATILITY);
+        $theta = StochasticProcesses::schwartzThetaForMean(self::resolveEnergyEquilibriumPrice($energySupplyEma), self::ENERGY_MEAN_REVERSION, self::ENERGY_VOLATILITY);
 
-        return StochasticProcesses::calculateSchwartzForwardPrice($spot, MacroEngine::ENERGY_MEAN_REVERSION, $theta, MacroEngine::ENERGY_VOLATILITY, $years);
+        return StochasticProcesses::calculateSchwartzForwardPrice($spot, self::ENERGY_MEAN_REVERSION, $theta, self::ENERGY_VOLATILITY, $years);
     }
 
     /**
@@ -457,7 +474,7 @@ class CommodityLogisticsSubsystem
     public function calculateCatastropheLosses(MacroState $state, float $dt): void
     {
         $quarter = (((int) floor($state->totalTime * 4.0)) % 4 + 4) % 4;
-        $seasonalFrequency = MacroEngine::CATASTROPHE_SEASONALITY[$quarter] ?? 1.0;
+        $seasonalFrequency = self::CATASTROPHE_SEASONALITY[$quarter] ?? 1.0;
         $eventCount = $this->mathUtility->generatePoissonCount(self::CATASTROPHE_ARRIVAL_PER_YEAR * $seasonalFrequency * $dt);
 
         // Pickands (1975) extreme value theory Pareto severity calibration for catastrophe loss index.
@@ -520,7 +537,7 @@ class CommodityLogisticsSubsystem
             $this->diagnostics?->recordEvent('naturalGas', $jumpData['exponent']);
         }
 
-        $spot = ($state->energyPriceIndex / MacroEngine::ENERGY_BASELINE) * MacroEngine::NATURAL_GAS_BASELINE * exp($state->gasOilRatioLog) * self::gasSeasonalFactor($state->totalTime);
+        $spot = ($state->energyPriceIndex / MacroConstants::ENERGY_BASELINE) * MacroConstants::NATURAL_GAS_BASELINE * exp($state->gasOilRatioLog) * self::gasSeasonalFactor($state->totalTime);
         $state->naturalGasPriceIndex = max(10.0, min(500.0, $spot));
     }
 
@@ -548,10 +565,10 @@ class CommodityLogisticsSubsystem
         );
         $state->powerHeatRateLog = max(-3.0, min(3.0, log($heatRate)));
 
-        $gasRelative = max(0.01, $state->naturalGasPriceIndex / MacroEngine::NATURAL_GAS_BASELINE);
-        $spot = MacroEngine::WHOLESALE_POWER_BASELINE * self::gasPowerPassThrough($gasRelative)
+        $gasRelative = max(0.01, $state->naturalGasPriceIndex / MacroConstants::NATURAL_GAS_BASELINE);
+        $spot = MacroConstants::WHOLESALE_POWER_BASELINE * self::gasPowerPassThrough($gasRelative)
             * exp($state->powerHeatRateLog) * self::resolvePowerSeasonalFactor($state->totalTime);
-        $carbon = MacroEngine::WHOLESALE_POWER_BASELINE * self::carbonPowerPriceUplift($state->carbonPrice);
+        $carbon = MacroConstants::WHOLESALE_POWER_BASELINE * self::carbonPowerPriceUplift($state->carbonPrice);
         $state->wholesalePowerPriceIndex = max(5.0, min(800.0, $spot + $carbon));
     }
 
@@ -600,7 +617,7 @@ class CommodityLogisticsSubsystem
      */
     public static function carbonPowerPriceAdder(float $carbonPrice): float
     {
-        return MacroEngine::CARBON_POWER_PASS_THROUGH * MacroEngine::NATURAL_GAS_CO2_TONNES_PER_MMBTU * MacroEngine::GAS_FLEET_HEAT_RATE * $carbonPrice;
+        return MacroConstants::CARBON_POWER_PASS_THROUGH * MacroConstants::NATURAL_GAS_CO2_TONNES_PER_MMBTU * MacroConstants::GAS_FLEET_HEAT_RATE * $carbonPrice;
     }
 
     /**
@@ -611,7 +628,7 @@ class CommodityLogisticsSubsystem
      */
     public static function carbonPowerPriceUplift(float $carbonPrice): float
     {
-        return self::carbonPowerPriceAdder($carbonPrice) / MacroEngine::REFERENCE_POWER_PRICE;
+        return self::carbonPowerPriceAdder($carbonPrice) / MacroConstants::REFERENCE_POWER_PRICE;
     }
 
     /**
@@ -637,12 +654,12 @@ class CommodityLogisticsSubsystem
      */
     public static function resolveGoldEquilibriumPrice(float $realTenYearYield, float $expectedInflation, float $consumerSentiment): float
     {
-        $pessimism = -self::PESSIMISM_PER_SENTIMENT_POINT * ($consumerSentiment - MacroEngine::SENTIMENT_TREND_LEVEL);
+        $pessimism = -self::PESSIMISM_PER_SENTIMENT_POINT * ($consumerSentiment - MacroConstants::SENTIMENT_TREND_LEVEL);
         $logDeviation = (self::GOLD_REAL_RATE_SEMI_ELASTICITY * ($realTenYearYield - self::GOLD_REAL_RATE_ANCHOR))
             + (self::GOLD_INFLATION_EXPECTATION_SEMI_ELASTICITY * ($expectedInflation - self::GOLD_INFLATION_EXPECTATION_ANCHOR))
             + (self::GOLD_PESSIMISM_SEMI_ELASTICITY * $pessimism);
 
-        return MacroEngine::GOLD_BASELINE * exp($logDeviation);
+        return MacroConstants::GOLD_BASELINE * exp($logDeviation);
     }
 
     /**
@@ -662,7 +679,7 @@ class CommodityLogisticsSubsystem
         );
 
         $gold = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: $state->goldPriceIndex > 0.0 ? $state->goldPriceIndex : MacroEngine::GOLD_BASELINE,
+            currentPrice: $state->goldPriceIndex > 0.0 ? $state->goldPriceIndex : MacroConstants::GOLD_BASELINE,
             kappa: self::GOLD_MEAN_REVERSION,
             theta: StochasticProcesses::schwartzThetaForMean($equilibrium, self::GOLD_MEAN_REVERSION, self::GOLD_VOLATILITY),
             sigma: self::GOLD_VOLATILITY,
@@ -685,7 +702,7 @@ class CommodityLogisticsSubsystem
      */
     public function calculateIndustrialMetalsIndex(MacroState $state, float $dt): void
     {
-        $baselineLog = log(MacroEngine::METALS_BASELINE);
+        $baselineLog = log(MacroConstants::METALS_BASELINE);
 
         $result = $this->mathUtility->calculateTwoFactorOU(
             chi: $state->metalsChi,
@@ -728,7 +745,7 @@ class CommodityLogisticsSubsystem
             kappaChi: self::AGRI_SHORT_TERM_KAPPA,
             kappaXi: self::AGRI_LONG_TERM_KAPPA,
             thetaChi: -(self::AGRI_WEATHER_JUMP_PROBABILITY * self::AGRI_WEATHER_JUMP_MEAN) / self::AGRI_SHORT_TERM_KAPPA,
-            thetaXi: log(MacroEngine::AGRI_BASELINE),
+            thetaXi: log(MacroConstants::AGRI_BASELINE),
             sigChi: self::AGRI_SHORT_TERM_SIGMA,
             sigXi: self::AGRI_LONG_TERM_SIGMA,
             rho: self::AGRI_RHO,
@@ -769,13 +786,13 @@ class CommodityLogisticsSubsystem
      */
     public function calculateFreightRateIndex(MacroState $state, float $dt): void
     {
-        $profitabilityRatio = max(0.10, $state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE);
-        $targetSupply = MacroEngine::FREIGHT_BASELINE * pow($profitabilityRatio, self::FREIGHT_SUPPLY_ORDER_ELASTICITY);
+        $profitabilityRatio = max(0.10, $state->freightRateIndexEma / MacroConstants::FREIGHT_BASELINE);
+        $targetSupply = MacroConstants::FREIGHT_BASELINE * pow($profitabilityRatio, self::FREIGHT_SUPPLY_ORDER_ELASTICITY);
 
         $slowEmaWeight = 1.0 - exp(-$dt / self::FREIGHT_SUPPLY_LAG_YEARS);
         $state->freightSupplyEma += $slowEmaWeight * ($targetSupply - $state->freightSupplyEma);
         $utilization = self::shippingTightness($state);
-        $equilibriumRate = MacroEngine::FREIGHT_BASELINE * pow($utilization, self::FREIGHT_CAPACITY_INELASTICITY);
+        $equilibriumRate = MacroConstants::FREIGHT_BASELINE * pow($utilization, self::FREIGHT_CAPACITY_INELASTICITY);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newFreight = StochasticProcesses::calculateSchwartz1Factor(
@@ -797,7 +814,7 @@ class CommodityLogisticsSubsystem
     public static function shippingTightness(MacroState $state): float
     {
         $demandFactor = 1.0 + ($state->globalDemandGapEma * self::FREIGHT_DEMAND_GAP_SENSITIVITY);
-        $demand = MacroEngine::FREIGHT_BASELINE * max(0.20, $demandFactor);
+        $demand = MacroConstants::FREIGHT_BASELINE * max(0.20, $demandFactor);
 
         return $demand / max(20.0, $state->freightSupplyEma);
     }
@@ -822,9 +839,9 @@ class CommodityLogisticsSubsystem
     /** The delivery-times reading congestion alone implies: neutral at baseline utilization and a balanced fleet. */
     public static function supplierDeliveryTarget(float $capacityUtilization, float $shippingTightness): float
     {
-        $factoryCongestion = log(MacroTransmission::kingmanCongestion($capacityUtilization) / MacroTransmission::kingmanCongestion(MacroEngine::CU_BASELINE));
+        $factoryCongestion = log(MacroTransmission::kingmanCongestion($capacityUtilization) / MacroTransmission::kingmanCongestion(MacroConstants::CU_BASELINE));
 
-        return MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL
+        return MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL
             + (self::DELIVERY_FACTORY_LOADING * $factoryCongestion)
             + (self::DELIVERY_SHIPPING_LOADING * log(max(0.01, $shippingTightness)));
     }
@@ -842,7 +859,7 @@ class CommodityLogisticsSubsystem
      */
     public function calculateRefiningCrackSpread(MacroState $state, float $dt): void
     {
-        $currentCrack = $state->refiningCrackSpread > 0.0 ? $state->refiningCrackSpread : MacroEngine::CRACK_SPREAD_BASELINE;
+        $currentCrack = $state->refiningCrackSpread > 0.0 ? $state->refiningCrackSpread : MacroConstants::CRACK_SPREAD_BASELINE;
         $baseCrack = $currentCrack / self::resolveCrackSeasonalFactor($state->totalTime - $dt);
 
         $nextBase = FirmEconomics::calculateRefiningCrackSpreadStep(
@@ -851,7 +868,7 @@ class CommodityLogisticsSubsystem
             energyInventoryIndex: $state->energyInventoryIndexEma,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal(),
-            baselineCrack: MacroEngine::CRACK_SPREAD_BASELINE,
+            baselineCrack: MacroConstants::CRACK_SPREAD_BASELINE,
             kappa: self::CRACK_SPREAD_KAPPA,
             sigma: self::CRACK_SPREAD_SIGMA,
         );
@@ -881,7 +898,7 @@ class CommodityLogisticsSubsystem
     public static function supplyChainPressureAt(float $freightRateIndex, float $freightTrend, float $supplierDeliveryTimes): float
     {
         $freightZ = ($freightRateIndex > 0.0 && $freightTrend > 0.0) ? log($freightRateIndex / $freightTrend) / self::SUPPLY_CHAIN_FREIGHT_LOG_SD : 0.0;
-        $deliveryZ = ($supplierDeliveryTimes - MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL) / self::SUPPLY_CHAIN_DELIVERY_SD;
+        $deliveryZ = ($supplierDeliveryTimes - MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL) / self::SUPPLY_CHAIN_DELIVERY_SD;
 
         return ($freightZ + $deliveryZ) / self::SUPPLY_CHAIN_SUM_SD;
     }

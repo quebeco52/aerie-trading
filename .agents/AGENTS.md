@@ -17,7 +17,7 @@ US, Singapore, Switzerland and Sweden share the principles and differ in everyth
 
 ## Map
 src/Service/Math/       shared formulas by domain (FixedIncome, OptionPricing, CreditRisk, Valuation, TimeSeries, ...),
-                        MathUtility (the random source), FinancialConstants (shared constants)
+                        MathUtility (the random source), FinancialConstants and MacroConstants (shared constants)
 src/Service/Macro/      MacroEngine and its six subsystems
 src/Service/Politics/   Diet, cabinets, polls, elections, policy levers
 src/Service/Corporate/  earnings, debt, treasury, capital allocation, M&A
@@ -89,8 +89,9 @@ one.
 - If three attempts don't move the answer, or the budget runs out, stop and report what you have.
 
 ## Constants
-Financial parameters and thresholds are class constants, or go in `FinancialConstants.php` if shared. No bare
-numeric literals in model code except mathematical ones (2, 12 months).
+Financial parameters and thresholds are class constants, or go in `FinancialConstants.php` if shared; the macro
+economy's shared ones go in `MacroConstants.php`, and `MacroConstantOwnershipTest` keeps one-reader dials with their
+reader. No bare numeric literals in model code except mathematical ones (2, 12 months).
 - Group related constants under a `// --- Section Name ---` comment.
 - Each has a `/** */` docblock saying what it is and the magnitude it gives, on one line when it fits.
 
