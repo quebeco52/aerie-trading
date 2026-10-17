@@ -46,3 +46,8 @@ phpstan.neon
 /var/harness/**/vendor/
 # generated OVR copies of src (make_ovr scripts); a hand-written override needs git add -f
 /var/harness/**/ovr*/
+
+###> friendsofphp/php-cs-fixer ###
+/.php-cs-fixer.php
+/.php-cs-fixer.cache
+###< friendsofphp/php-cs-fixer ###

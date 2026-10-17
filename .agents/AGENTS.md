@@ -107,7 +107,10 @@ not the code.
 - Suite membership is explicit in `phpunit.dist.xml`; a test in an unlisted directory never runs.
 - Stochastic behaviour: invariant or distribution tests in `tests/Financial/`, not exact values. Break the guarded
   term by hand once to confirm the test fails.
-- Tests and verification: `bin/verify` (PHPStan on changed files + quick tests, ~20 s; works in sandboxes without Docker).
+- Format: PER-CS 3.0 through php-cs-fixer (`.php-cs-fixer.dist.php`, layout rules only). Run
+  `bin/php-slot php vendor/bin/php-cs-fixer fix` or `make cs-fix` before handing back.
+- Tests and verification: `bin/verify` (PHPStan and format on changed files + quick tests, ~20 s; works in sandboxes
+  without Docker).
   With Docker: `make test-unit` (~0.2 s), `make test` (Fast suite, ~1 min), `make test-realism` (five multi-seed
   long-run tests, ~3 min serial), `make phpstan FILE=<path>`. Before committing: `bin/verify --full` (~1 min).
 - A realism test that runs over ~5 s belongs in the Realism suite in `phpunit.dist.xml`, not Fast.

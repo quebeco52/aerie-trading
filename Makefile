@@ -1,4 +1,4 @@
-.PHONY: up down clean install seed reset ticker ticker-stop macro-dump tailwind-watch bash test test-unit test-integration test-functional test-financial test-realism test-e2e test-all test-coverage phpstan profile-cmd profile-clean
+.PHONY: up down clean install seed reset ticker ticker-stop macro-dump tailwind-watch bash test test-unit test-integration test-functional test-financial test-realism test-e2e test-all test-coverage phpstan cs cs-fix profile-cmd profile-clean
 
 DC = docker compose --env-file .env.dev -f docker-compose.dev.yml
 EXEC_PHP = $(DC) exec aerie-app
@@ -70,6 +70,12 @@ test-coverage: up
 
 phpstan: up
 	$(EXEC_PHP) vendor/bin/phpstan analyse --memory-limit=1G --no-progress --error-format=raw $(FILE)
+
+cs: up
+	$(EXEC_PHP) vendor/bin/php-cs-fixer check --diff
+
+cs-fix: up
+	$(EXEC_PHP) vendor/bin/php-cs-fixer fix
 
 profile-cmd: up
 	$(DC) exec -e XDEBUG_MODE=profile -e XDEBUG_TRIGGER=1 aerie-app php bin/console $(CMD)

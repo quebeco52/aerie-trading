@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Checks the working tree against HEAD without Docker: PHPStan on the changed PHP files, then the Fast suite, listing
-# every failure rather than stopping at the first.
+# Checks the working tree against HEAD without Docker: PHPStan and the PER-CS format on the changed PHP files, then the
+# Fast suite, listing every failure rather than stopping at the first.
 #
 #   bin/verify            PHPStan, then every test file that ran under a second in the last full run, plus the slow
 #                         ones written for a changed class (FooTest.php for Foo.php) or changed themselves
@@ -32,6 +32,15 @@ else
     echo "PHPStan: errors in the changed files"
     grep -v '^Note: Using configuration' <<< "$out"
     status=1
+fi
+if (( ${#changed[@]} > 0 )); then
+    if out=$(bin/php-slot php vendor/bin/php-cs-fixer check --config=.php-cs-fixer.dist.php --path-mode=intersection --sequential --show-progress=none -- "${changed[@]}" 2>&1); then
+        echo "Format: changed files clean"
+    else
+        echo "Format: run bin/php-slot php vendor/bin/php-cs-fixer fix on"
+        grep -E '^\s*[0-9]+\) ' <<< "$out"
+        status=1
+    fi
 fi
 [[ $mode == --phpstan ]] && exit $status
 
