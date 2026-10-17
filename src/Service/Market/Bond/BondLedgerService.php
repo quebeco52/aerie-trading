@@ -90,6 +90,15 @@ class BondLedgerService
     }
 
     /**
+     * Pays out an issue its issuer buys back before maturity, at the market price, and closes every position and order
+     * standing against it: the same close-out as a redemption, at what the bonds are worth rather than at face.
+     */
+    public function processCall(Bond $bond, float $pricePerBond, float $simulationTime, \DateTimeInterface $paidAt): void
+    {
+        $this->closeOut($bond, max(0.0, $pricePerBond), CouponPayment::TYPE_CALL, $simulationTime, $paidAt);
+    }
+
+    /**
      * Pays an issue out for the last time and closes every position and order standing against it.
      *
      * @param float  $amountPerBond Cash per bond.
@@ -181,15 +190,21 @@ class BondLedgerService
         );
         $ticker = $bond->getTicker();
         $face = max(0.01, (float) $bond->getFaceValue());
-        $recovered = $paymentType === CouponPayment::TYPE_RECOVERY;
+        $title = match ($paymentType) {
+            CouponPayment::TYPE_RECOVERY => sprintf('%s defaulted and was settled', $ticker),
+            CouponPayment::TYPE_CALL => sprintf('%s was bought back by its issuer', $ticker),
+            default => sprintf('%s matured', $ticker),
+        };
         $this->notifier->queueForHolders(
             $rows,
             $ticker,
-            $recovered ? sprintf('%s defaulted and was settled', $ticker) : sprintf('%s matured', $ticker),
-            static function (float $quantity) use ($recovered, $amountPerBond, $face): string {
-                return $recovered
-                    ? sprintf('Your %s bonds were settled at %.1f%% of face, $%s in all.', number_format($quantity), $amountPerBond / $face * 100.0, number_format($quantity * $amountPerBond, 2))
-                    : sprintf('Your %s bonds were repaid at face, $%s in all.', number_format($quantity), number_format($quantity * $amountPerBond, 2));
+            $title,
+            static function (float $quantity) use ($paymentType, $amountPerBond, $face): string {
+                return match ($paymentType) {
+                    CouponPayment::TYPE_RECOVERY => sprintf('Your %s bonds were settled at %.1f%% of face, $%s in all.', number_format($quantity), $amountPerBond / $face * 100.0, number_format($quantity * $amountPerBond, 2)),
+                    CouponPayment::TYPE_CALL => sprintf('Your %s bonds were bought back at %.1f%% of face, $%s in all.', number_format($quantity), $amountPerBond / $face * 100.0, number_format($quantity * $amountPerBond, 2)),
+                    default => sprintf('Your %s bonds were repaid at face, $%s in all.', number_format($quantity), number_format($quantity * $amountPerBond, 2)),
+                };
             },
             PlayerNotifier::assetLink('BOND', $ticker)
         );

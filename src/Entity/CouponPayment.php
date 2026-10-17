@@ -31,6 +31,9 @@ class CouponPayment
     /** What a holder got back when the issuer failed: the claim settled at its recovery, not at face. */
     public const TYPE_RECOVERY = 'RECOVERY';
 
+    /** What a holder got when the issuer bought the issue back before maturity: the market price, which also closes out the holding. */
+    public const TYPE_CALL = 'CALL';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]

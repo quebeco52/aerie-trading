@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market\Bond;
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Entity\Stock;
+use App\Service\Market\Bond\BondLedgerService;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\CorporateBondDesk;
 use App\Service\Math\FinancialConstants;
@@ -24,12 +25,13 @@ use PHPUnit\Framework\TestCase;
  */
 class CorporateBondDeskTest extends TestCase
 {
-    private function desk(): CorporateBondDesk
+    private function desk(?BondLedgerService $ledger = null): CorporateBondDesk
     {
 
         return new CorporateBondDesk(
             $this->createStub(EntityManagerInterface::class),
             new BondPricingEngine(),
+            $ledger ?? $this->createStub(BondLedgerService::class),
         );
     }
 
@@ -66,6 +68,48 @@ class CorporateBondDeskTest extends TestCase
         $this->desk()->issue($stock, $this->curve(), 1.0, 5.0, 5.0e8);
 
         $this->assertEqualsWithDelta($before, (float) $stock->getWholesaleDebt(), 1e-6);
+    }
+
+    /**
+     * The tranche follows the debt down. A firm that has repaid half of what it owed buys back the issues nearest
+     * maturity at the market price until its listed face is within one minimum issue of its public share again, and
+     * never leaves more listed than it owes. A firm in payment default buys nothing back: its holders are paid with
+     * the estate.
+     */
+    public function testDeleveragingRetiresTheExcessListedFace(): void
+    {
+        $stock = $this->issuer(4.0e9);
+        $issues = [];
+        foreach ([3.0, 5.0, 7.0] as $tenor) {
+            $issues[] = $this->desk()->issue($stock, $this->curve(), 0.0, $tenor, 6.5e8);
+        }
+        $stock->setWholesaleDebt('2000000000');
+
+        $engine = new BondPricingEngine();
+        $paid = [];
+        $ledger = $this->createMock(BondLedgerService::class);
+        $ledger->expects($this->exactly(2))->method('processCall')->willReturnCallback(
+            function (Bond $bond, float $price) use (&$paid): void {
+                $paid[$bond->getTicker()] = $price;
+            }
+        );
+
+        $called = $this->desk($ledger)->retireExcess($stock, $issues, $this->curve(), 1.0);
+
+        $this->assertSame([$issues[0], $issues[1]], $called, 'the nearest maturities go first');
+        foreach ($called as $bond) {
+            $this->assertSame(Bond::STATUS_CALLED, $bond->getStatus());
+            $this->assertEqualsWithDelta($engine->value($bond, $this->curve(), 1.0, 0.015)->dirtyPrice, $paid[$bond->getTicker()], 1e-9, 'bought back at the market price');
+        }
+        $listed = (float) $issues[2]->getOutstandingFace();
+        $this->assertLessThanOrEqual($this->desk()->listedFaceCeiling($stock), $listed);
+        $this->assertLessThanOrEqual((float) $stock->getWholesaleDebt(), $listed);
+
+        $defaulted = $this->issuer(4.0e9);
+        $owed = [$this->desk()->issue($defaulted, $this->curve(), 0.0, 3.0, 2.0e9)];
+        $defaulted->setWholesaleDebt('1000000000');
+        $defaulted->setPaymentDefault(true);
+        $this->assertSame([], $this->desk()->retireExcess($defaulted, $owed, $this->curve(), 1.0));
     }
 
     public function testTheTargetListedFaceIsAShareOfWhatTheFirmAlreadyOwes(): void

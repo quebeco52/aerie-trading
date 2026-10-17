@@ -61,6 +61,16 @@ final class CorporateDefaultService
     }
 
     /**
+     * What a defaulted claim recovers in the market as a share of face: its seniority's base recovery in the default
+     * cycle it is settled into. The cycle is the EMA, not the instantaneous rate: what depresses a recovery is a
+     * SUSTAINED wave of defaults competing for the same buyers, not one bad quarter.
+     */
+    public static function marketRecovery(?string $seniority, float $corporateDefaultRateEma): float
+    {
+        return CreditRisk::calculateRecoveryGivenDefault(self::baseRecoveryFor($seniority), $corporateDefaultRateEma);
+    }
+
+    /**
      * Settles every listed issue of a failed company.
      *
      * A liquidation settles at the market's recovery for the claim's seniority and the cycle. A confirmed
@@ -82,20 +92,13 @@ final class CorporateDefaultService
             return [];
         }
 
-        // The cycle the estate is being liquidated into, not the long-run average. Reading the EMA rather
-        // than the instantaneous rate is deliberate: what depresses a recovery is a SUSTAINED wave of
-        // defaults competing for the same buyers, not one bad quarter.
-        $defaultRate = $macroState->corporateDefaultRateEma;
         $planRecoveries = $plan !== null ? self::planRecoveries($bonds, $plan) : null;
         $settled = [];
 
         foreach ($bonds as $bond) {
             $recovery = $planRecoveries !== null
                 ? $planRecoveries[self::seniorityClass($bond->getSeniority())]
-                : CreditRisk::calculateRecoveryGivenDefault(
-                    self::baseRecoveryFor($bond->getSeniority()),
-                    $defaultRate
-                );
+                : self::marketRecovery($bond->getSeniority(), $macroState->corporateDefaultRateEma);
 
             $face = (float) $bond->getFaceValue();
             $recoveredPerBond = $recovery * $face;

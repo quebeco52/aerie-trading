@@ -472,7 +472,8 @@ class CapitalAllocationEngineTest extends TestCase
 
     /**
      * Managers raise external funds before they cut (Brav, Graham, Harvey & Michaely 2005). A payer whose quarter
-     * leaves its treasury below its operating floor borrows the dividend it holds while its lenders will fund it.
+     * leaves its treasury below its operating floor borrows the dividend it holds while its lenders will fund it, and
+     * only the dividend: refilling the floor is the liquidity pass's, revolver first.
      */
     public function testAPayerBorrowsRatherThanCutWhenAQuartersCashFallsShort(): void
     {
@@ -480,6 +481,8 @@ class CapitalAllocationEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(1.00, $peer['dividend_paid'], 1e-9);
         $this->assertCount(1, $borrowed);
+        // The quarter leaves it below its operating floor: it borrows the dividend, and the floor is the liquidity pass's.
+        $this->assertEqualsWithDelta(1_000_000.0, $borrowed[0], 1.0, 'It borrows the $1m dividend, not the floor gap beside it.');
     }
 
     /**

@@ -176,8 +176,8 @@ class BondLifecycleTest extends TestCase
                 continue;
             }
 
-            // One fewer than the full schedule: the final coupon is part of the redemption cash flow.
-            $expected = (int) round(((float) $bond->getTenorYears()) * FinancialConstants::BOND_COUPON_FREQUENCY) - 1;
+            // The full schedule: the final coupon falls on the maturity date and is paid with the face, as the price discounts it.
+            $expected = (int) round(((float) $bond->getTenorYears()) * FinancialConstants::BOND_COUPON_FREQUENCY);
 
             $this->assertCount(
                 $expected,

@@ -8,6 +8,7 @@ use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -20,7 +21,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * rewriting all of them. It is a TRANCHE of it: the balance sheet still carries the whole obligation, and the
  * issues here are the publicly traded share of exactly that obligation.
  *
- * Three consequences follow, and all three are the point rather than a compromise:
+ * Four consequences follow, and all four are the point rather than a compromise:
  *
  *   - Issuing a bond creates NO new debt. The desk reconciles what is listed against a share of what the firm
  *     already owes; it never adds to the scalar. If it did, every deal would double-count the borrowing and
@@ -32,6 +33,9 @@ use Doctrine\ORM\EntityManagerInterface;
  *     it is precisely what DebtEngine::rollMaturities() models when a firm has primary market access — the
  *     principal survives and only its coupon reprices. The desk then relists to refill the tranche, which is
  *     the same firm rolling the same debt in public.
+ *   - The tranche follows the scalar down as well as up. Debt the firm repays or sheds is bought back from the
+ *     public at the market price (retireExcess()), and a maturity it defaults on is not redeemed: the issue stays
+ *     outstanding past due, worth its recovery, until the default is cured or settled with the estate.
  *
  * Who gets to issue is the market's rule, not a modelling convenience: a firm needs enough debt for a tranche
  * to be worth one deal, and it needs the primary market to be open to it at all — the same rating floor
@@ -50,6 +54,7 @@ final class CorporateBondDesk
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly BondPricingEngine $pricingEngine,
+        private readonly BondLedgerService $ledger,
     ) {}
 
     /** Ticks between reconciliations, given a tick rate. */
@@ -70,7 +75,16 @@ final class CorporateBondDesk
         $issued = [];
 
         foreach ($stocks as $stock) {
-            $bond = $this->bringDeal($stock, $curve, $currentTime, $outstanding[$stock->getId()] ?? ['face' => 0.0, 'count' => 0]);
+            $listed = $outstanding[$stock->getId()] ?? ['face' => 0.0, 'count' => 0];
+            if ($listed['face'] > $this->listedFaceCeiling($stock)) {
+                $issues = $this->em->getRepository(Bond::class)->findBy(['issuer' => $stock, 'status' => Bond::STATUS_ACTIVE], ['maturesAtTime' => 'ASC']);
+                // A firm buying its paper back does not bring a new deal the same quarter.
+                if ($this->retireExcess($stock, $issues, $curve, $currentTime) !== []) {
+                    continue;
+                }
+            }
+
+            $bond = $this->bringDeal($stock, $curve, $currentTime, $listed);
 
             if ($bond !== null) {
                 $issued[] = $bond;
@@ -137,6 +151,60 @@ final class CorporateBondDesk
     public function targetPublicFace(Stock $stock): float
     {
         return max(0.0, (float) $stock->getWholesaleDebt()) * FinancialConstants::CORPORATE_PUBLIC_DEBT_SHARE;
+    }
+
+    /** The most a firm may have listed before it buys paper back: its public share of what it owes, plus one minimum issue. */
+    public function listedFaceCeiling(Stock $stock): float
+    {
+        return $this->targetPublicFace($stock) + FinancialConstants::CORPORATE_MIN_ISSUE_FACE;
+    }
+
+    /**
+     * Buys back listed paper the firm no longer owes in public. Repaying, divesting or restructuring shrinks the debt
+     * the tranche is a share of; a listed face left above it paid holders coupons and face on debt that was gone, and
+     * diluted every real creditor in a restructuring. Past the ceiling the issues nearest maturity are bought back at
+     * the market price, a tender or a make-whole call, until the listed face is back under it. A firm in payment
+     * default or bankrupt buys nothing back: its holders are paid with the estate.
+     *
+     * @param list<Bond> $issues The firm's active issues, nearest maturity first.
+     * @return list<Bond> The issues bought back.
+     */
+    public function retireExcess(Stock $stock, array $issues, SovereignCurveDTO $curve, float $currentTime): array
+    {
+        if ($stock->isBankrupt() || $stock->isPaymentDefault()) {
+            return [];
+        }
+
+        $ceiling = $this->listedFaceCeiling($stock);
+        $listedFace = array_sum(array_map(static fn (Bond $bond): float => max(0.0, (float) $bond->getOutstandingFace()), $issues));
+        $spread = (float) $stock->getDynamicCreditSpread();
+        $now = new \DateTime();
+        $called = [];
+
+        foreach ($issues as $bond) {
+            if ($listedFace <= $ceiling) {
+                break;
+            }
+
+            $price = $this->pricingEngine->value($bond, $curve, $currentTime, $spread)->dirtyPrice;
+            $this->ledger->processCall($bond, $price, $currentTime, $now);
+            $bond->setStatus(Bond::STATUS_CALLED)
+                ->setIsOnTheRun(false)
+                ->setPrice(Decimal::format($price, 8))
+                ->setCleanPrice(Decimal::format($price, 8))
+                ->setAccruedInterest('0.00000000')
+                ->setYieldToMaturity('0.000000')
+                ->setModifiedDuration('0.000000')
+                ->setConvexity('0.000000')
+                ->setUpdatedAt($now);
+            // Bond is mapped DEFERRED_EXPLICIT, so a change reaches the database only through persist().
+            $this->em->persist($bond);
+
+            $listedFace -= max(0.0, (float) $bond->getOutstandingFace());
+            $called[] = $bond;
+        }
+
+        return $called;
     }
 
     /**

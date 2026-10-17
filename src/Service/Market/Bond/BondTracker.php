@@ -113,7 +113,12 @@ class BondTracker
 
             $couponPaid = $this->payDueCoupons($bond, $currentTime, $now);
 
-            if ($bond->isMatured($currentTime)) {
+            // The holders are repaid what the issuer repays. A firm in payment default has not repaid its maturing
+            // principal, so its issue stays outstanding past due, marked at the claim's recovery below, until the
+            // default is cured and the issue redeemed, or the claim is settled with the estate.
+            $pastDue = $bond->isPastDue($currentTime);
+            if ($bond->isMatured($currentTime) && !$pastDue) {
+                $this->payFinalCoupon($bond, $now);
                 $this->ledger->processRedemption($bond, $currentTime, $now);
                 $bond->setStatus(Bond::STATUS_MATURED)
                     ->setIsOnTheRun(false)
@@ -134,7 +139,7 @@ class BondTracker
             }
 
             $ticker = $bond->getTicker();
-            $struck = $mark || $couponPaid || !isset($this->lastMarks[$ticker]);
+            $struck = $mark || $couponPaid || $pastDue || !isset($this->lastMarks[$ticker]);
 
             if ($struck) {
                 // The spread comes from the issuer map the caller already holds rather than from the bond's
@@ -148,7 +153,9 @@ class BondTracker
                         : (float) $bond->getCreditSpread();
                 }
 
-                $valuation = $this->pricingEngine->value($bond, $curve, $currentTime, $spread);
+                $valuation = $pastDue
+                    ? self::claimValuation(CorporateDefaultService::marketRecovery($bond->getSeniority(), $macroState->corporateDefaultRateEma) * (float) $bond->getFaceValue())
+                    : $this->pricingEngine->value($bond, $curve, $currentTime, $spread);
 
                 // Wire precision: what a screen shows, not what the valuation carries. The history row below
                 // keeps the full figure.
@@ -175,7 +182,7 @@ class BondTracker
                 // Written below in bulk; an issue not yet flushed has no row to write to and is picked up
                 // by the next mark, after the flush has given it one. A new issue quoted between marks is
                 // not written: its row still holds the price it was issued at, which is the right one.
-                if (($mark || $couponPaid) && $bond->getId() !== null) {
+                if (($mark || $couponPaid || $pastDue) && $bond->getId() !== null) {
                     $markRows[$bond->getId()] = [
                         (string) $valuation->dirtyPrice,
                         (string) $valuation->cleanPrice,
@@ -220,6 +227,36 @@ class BondTracker
             'matured' => $matured,
             'curve' => $this->sampleCurve($curve),
         ];
+    }
+
+    /**
+     * The last coupon falls on the redemption date and is paid with the face, as the price discounts it: the schedule
+     * above stops short of maturity, and a redemption of face alone kept the final coupon from every holder to maturity.
+     */
+    private function payFinalCoupon(Bond $bond, \DateTimeInterface $now): void
+    {
+        $couponAmount = $bond->couponAmount();
+        $maturity = $bond->getMaturesAtTime();
+
+        if ($couponAmount <= 0.0 || $bond->getLastCouponTime() >= $maturity - FinancialConstants::BOND_MATURITY_EPSILON) {
+            return;
+        }
+
+        $this->ledger->processCouponPayment($bond, $couponAmount, $maturity, $now);
+        $bond->setLastCouponTime($maturity);
+    }
+
+    /** A claim with nothing left to discount, worth what it will recover: no accrual, yield, duration or convexity. */
+    private static function claimValuation(float $price): \App\DTO\BondValuationDTO
+    {
+        return new \App\DTO\BondValuationDTO(
+            dirtyPrice: $price,
+            cleanPrice: $price,
+            accruedInterest: 0.0,
+            yieldToMaturity: 0.0,
+            modifiedDuration: 0.0,
+            convexity: 0.0,
+        );
     }
 
     /**

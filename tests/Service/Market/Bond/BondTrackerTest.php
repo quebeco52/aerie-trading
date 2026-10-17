@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Bond;
 
 use App\Entity\Bond;
+use App\Entity\Stock;
+use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Market\Bond\BondLedgerService;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\BondTracker;
@@ -103,12 +105,12 @@ class BondTrackerTest extends TestCase
         $this->assertEqualsWithDelta(2.0, $bond->getLastCouponTime(), 1e-9);
     }
 
-    public function testTheFinalCouponIsNotPaidSeparatelyFromTheRedemption(): void
+    public function testTheFinalCouponIsPaidWithTheRedemption(): void
     {
-        // The last coupon is part of the redemption cash flow the pricing engine discounts, so paying it
-        // here as well would credit it twice.
+        // The last coupon falls on the redemption date and the price discounts it with the face, so a holder to
+        // maturity is paid all four coupons of a two-year issue and the face, each once.
         $ledger = $this->createMock(BondLedgerService::class);
-        $ledger->expects($this->exactly(3))->method('processCouponPayment');
+        $ledger->expects($this->exactly(4))->method('processCouponPayment');
         $ledger->expects($this->once())->method('processRedemption');
 
         $bond = $this->bond(2.0, 0.05);
@@ -139,6 +141,35 @@ class BondTrackerTest extends TestCase
         // No residual rate risk may be left sitting in a portfolio against a bond that has been cashed out.
         $this->assertEqualsWithDelta((float) $bond->getFaceValue(), (float) $bond->getPrice(), 1e-9);
         $this->assertSame(0.0, (float) $bond->getModifiedDuration());
+    }
+
+    /**
+     * Holders are repaid what the issuer repays. An issue maturing while its issuer is in payment default stays
+     * outstanding past due, quoted and dealt at the claim's market recovery, until the default is cured and it
+     * redeems at face with its last coupon.
+     */
+    public function testAnIssueMaturingIntoItsIssuersDefaultIsHeldPastDueUntilCured(): void
+    {
+        $ledger = $this->createMock(BondLedgerService::class);
+        $ledger->expects($this->once())->method('processRedemption');
+
+        $issuer = (new Stock())->setTicker('LATE');
+        $issuer->setPaymentDefault(true);
+        $bond = $this->bond(2.0, 0.05)->setIssuer($issuer)->setSeniority(Bond::SENIORITY_SENIOR_UNSECURED)->setCreditSpread('0.05');
+        $tracker = $this->tracker($ledger);
+        $macro = $this->macroAt(2.0);
+
+        $result = $tracker->updateBonds([$bond], $macro);
+
+        $recovery = CorporateDefaultService::marketRecovery(Bond::SENIORITY_SENIOR_UNSECURED, $macro->corporateDefaultRateEma) * FinancialConstants::BOND_FACE_VALUE;
+        $this->assertSame(Bond::STATUS_ACTIVE, $bond->getStatus(), 'not redeemed while the issuer owes the principal');
+        $this->assertSame([], $result['matured']);
+        $this->assertEqualsWithDelta($recovery, $result['updates'][0]['price'], 1e-3, 'quoted at the claim\'s recovery');
+        $this->assertEqualsWithDelta($recovery, (new BondPricingEngine())->dealingPrice($bond, $macro), 1e-9, 'and dealt there, not at face');
+
+        $issuer->setPaymentDefault(false);
+        $tracker->updateBonds([$bond], $this->macroAt(2.25));
+        $this->assertSame(Bond::STATUS_MATURED, $bond->getStatus(), 'a cured issuer redeems it');
     }
 
     public function testAMaturedIssueIsSkippedEntirelyOnLaterTicks(): void

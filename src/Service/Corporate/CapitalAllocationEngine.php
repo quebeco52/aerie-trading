@@ -245,13 +245,17 @@ class CapitalAllocationEngine
         // Harvey & Michaely 2005), so a quarter's cash shortfall is not a cut while lenders will fund it.
         $heldDividend = $holdsDividend ? min($ctx->newDividend, $lastDividend) : 0.0;
         $fundedDividend = max($requiredDividend, $heldDividend);
-        // Measured from the operating floor itself, so a treasury below it borrows enough to pay: the cash cap
-        // below reads the same floor.
-        $distributionShortfall = ($fundedDividend * $ctx->sharesOutstanding) - ($ctx->newTreasury - $minOperatingCash);
+        // It borrows what the dividend is short of the cash above its operating floor, and no more: a treasury below the
+        // floor is refilled by the liquidity pass, revolver first and on its own refusal gates, not by debt raised in
+        // the dividend's name. The cash cap below counts what was borrowed for the dividend.
+        $cashAboveFloor = max(0.0, $ctx->newTreasury - $minOperatingCash);
+        $distributionShortfall = ($fundedDividend * $ctx->sharesOutstanding) - $cashAboveFloor;
+        $borrowedForDividend = 0.0;
         if ($fundedDividend > 0.0 && $distributionShortfall > 0.0 && $ctx->health->hasMarketAccess && $ctx->health->hasLeverageHeadroom) {
             $this->debtEngine->issueDebt($stock, $distributionShortfall, $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread()));
             $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
             $ctx->newTreasury += $distributionShortfall;
+            $borrowedForDividend = $distributionShortfall;
 
             if (TreasuryEngine::isNewsworthy($ctx->stock, $distributionShortfall)) {
                 $purpose = $requiredDividend >= $heldDividend ? 'its required REIT distribution' : 'its dividend';
@@ -259,7 +263,7 @@ class CapitalAllocationEngine
             }
         }
 
-        $usableCash = max(0.0, $ctx->newTreasury - $minOperatingCash);
+        $usableCash = $cashAboveFloor + $borrowedForDividend;
         $distributableSurplus = max(0.0, (float) $stock->getRetainedEarnings() + ($ctx->quarterlyEps * $ctx->sharesOutstanding));
 
         $maxCashDividendPerShare = $ctx->sharesOutstanding > 0 ? ($usableCash / $ctx->sharesOutstanding) : 0.0;

@@ -276,6 +276,11 @@ final class BondPricingEngine
      */
     public function dealingPrice(Bond $bond, MacroStateDTO $macro): float
     {
+        // An issue its issuer could not redeem trades as the overdue claim it has become, at the market's recovery.
+        if ($bond->isPastDue($macro->totalTime)) {
+            return CorporateDefaultService::marketRecovery($bond->getSeniority(), $macro->corporateDefaultRateEma) * (float) $bond->getFaceValue();
+        }
+
         $spread = $bond->isSovereign() ? 0.0 : (float) ($bond->getIssuer()?->getDynamicCreditSpread() ?? $bond->getCreditSpread());
 
         return $this->value($bond, $macro->sovereignCurve(), $macro->totalTime, $spread)->dirtyPrice;

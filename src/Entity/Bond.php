@@ -45,6 +45,9 @@ class Bond
     /** The issuer failed; the claim has been settled at its recovery and no longer trades. */
     public const STATUS_DEFAULTED = 'DEFAULTED';
 
+    /** Bought back by its issuer before maturity at the market price, as its debt shrank; holdings have been cashed out. */
+    public const STATUS_CALLED = 'CALLED';
+
     // --- Seniority ---
 
     /** Secured on collateral, which is what puts this claim ahead of the rest. */
@@ -418,6 +421,15 @@ class Bond
     public function isSovereign(): bool
     {
         return $this->issuer === null;
+    }
+
+    /**
+     * Matured but not redeemed: its issuer is in payment default, so the principal is overdue and the issue trades as
+     * the claim it has become until the default is cured, when it is redeemed, or settled at its recovery.
+     */
+    public function isPastDue(float $currentTime): bool
+    {
+        return !$this->isSovereign() && $this->isMatured($currentTime) && ($this->issuer?->isPaymentDefault() ?? false);
     }
 
     public function getSeniority(): ?string
