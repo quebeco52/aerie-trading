@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\View;
 
 use App\Data\Company\StrategicHoldings;
+use App\Data\District\DistrictCalendar;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\Stock;
@@ -73,8 +74,8 @@ class SovereignReservePageBuilder
             'head' => $politics === null || $politics->fundHeadName === '' ? null : [
                 'name' => $politics->fundHeadName,
                 'age' => (int) floor($politics->totalTime - $politics->fundHeadBirth),
-                'sinceLabel' => $politics->fundHeadTermStart < 0.0 ? 'Before Year 1' : GovernmentPageBuilder::simDate($politics->fundHeadTermStart),
-                'termEndsLabel' => GovernmentPageBuilder::simDate(SovereignReserveFund::headTermEnd($politics->totalTime)),
+                'sinceLabel' => $politics->fundHeadTermStart < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($politics->fundHeadTermStart),
+                'termEndsLabel' => DistrictCalendar::quarter(SovereignReserveFund::headTermEnd($politics->totalTime)),
                 'stance' => SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->fundHeadStance)),
                 'equityShare' => SovereignReserveFund::equityShare($politics->fundHeadStance),
                 'opening' => $politics->fundHeadTermStart < 0.0,

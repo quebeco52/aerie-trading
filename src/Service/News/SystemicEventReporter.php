@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\News;
 
+use App\Data\District\DistrictCalendar;
 use App\Data\Politics\AerieCouncil;
 use App\Data\Politics\AerieDiet;
 use App\DTO\MacroStateDTO;
@@ -28,7 +29,6 @@ use App\Service\Politics\SecuritiesCommission;
 use App\Service\Politics\SecurityBureau;
 use App\Service\Politics\SovereignReserveFund;
 use App\Service\Politics\StateGuard;
-use App\Service\View\GovernmentPageBuilder;
 
 /**
  * Publishes the tick's district-wide events as stories on their own desks: the economy's, and the government's (a vote,
@@ -278,7 +278,7 @@ class SystemicEventReporter
             'governor' => $politics->governorName,
             'governor_age' => (string) (int) floor($time - $politics->governorBirth),
             'governor_stance' => $stance($politics->governorStance, max(0.0, $politics->governorSwinger)),
-            'governor_term_ends' => GovernmentPageBuilder::simDate(MonetaryAuthority::governorTermEnd($time)),
+            'governor_term_ends' => DistrictCalendar::quarter(MonetaryAuthority::governorTermEnd($time)),
             'governor_passed_over' => $passedOver($politics->governorPassedOver),
         ];
 
@@ -290,7 +290,7 @@ class SystemicEventReporter
             $context['councillor_age'] = (string) (int) floor($time - $politics->councilBirths[$seat]);
             $context['councillor_stance'] = $stance($politics->councilStances[$seat] ?? 0.0, $politics->councilSwingers[$seat] ?? 0.0);
             $context['councillor_passed_over'] = $passedOver($politics->councillorPassedOver);
-            $context['councillor_term_ends'] = GovernmentPageBuilder::simDate(($politics->councilSince[$seat] ?? $time) + AerieCouncil::TERM_YEARS);
+            $context['councillor_term_ends'] = DistrictCalendar::quarter(($politics->councilSince[$seat] ?? $time) + AerieCouncil::TERM_YEARS);
             if ($politics->lastCouncilVacancyAt === $politics->lastCouncillorSeatedAt && $politics->lastVacancyName !== '') {
                 $context['predecessor'] = $politics->lastVacancyName;
                 $context['vacancy_cause'] = $politics->lastVacancyCause;
@@ -380,7 +380,7 @@ class SystemicEventReporter
             'exchequer_head' => $politics->exchequerHeadName,
             'exchequer_head_age' => (string) (int) floor($politics->totalTime - $politics->exchequerHeadBirth),
             'exchequer_head_stance' => self::DEBT_PHRASES[Exchequer::stanceName($target)],
-            'exchequer_head_term_ends' => GovernmentPageBuilder::simDate(Exchequer::headTermEnd($politics->totalTime)),
+            'exchequer_head_term_ends' => DistrictCalendar::quarter(Exchequer::headTermEnd($politics->totalTime)),
             'exchequer_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have borrowed at {$years(Exchequer::averageMaturity($candidate['debt']))} on average",
                 $politics->exchequerHeadPassedOver,
@@ -413,7 +413,7 @@ class SystemicEventReporter
             'fund_head' => $politics->fundHeadName,
             'fund_head_age' => (string) (int) floor($politics->totalTime - $politics->fundHeadBirth),
             'fund_head_stance' => self::FUND_PHRASES[SovereignReserveFund::stanceName($target)],
-            'fund_head_term_ends' => GovernmentPageBuilder::simDate(SovereignReserveFund::headTermEnd($politics->totalTime)),
+            'fund_head_term_ends' => DistrictCalendar::quarter(SovereignReserveFund::headTermEnd($politics->totalTime)),
             'fund_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have held {$pct(SovereignReserveFund::equityShare($candidate['fund']))} in shares",
                 $politics->fundHeadPassedOver,
@@ -457,7 +457,7 @@ class SystemicEventReporter
             'fair_trading_head' => $politics->fairTradingHeadName,
             'fair_trading_head_age' => (string) (int) floor($politics->totalTime - $politics->fairTradingHeadBirth),
             'fair_trading_head_stance' => self::COMPETITION_PHRASES[FairTradingBoard::stanceName($politics->fairTradingHeadStance)],
-            'fair_trading_head_term_ends' => GovernmentPageBuilder::simDate(FairTradingBoard::headTermEnd($politics->totalTime)),
+            'fair_trading_head_term_ends' => DistrictCalendar::quarter(FairTradingBoard::headTermEnd($politics->totalTime)),
             'fair_trading_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have drawn the line at {$line($candidate['competition'])}",
                 $politics->fairTradingHeadPassedOver,
@@ -495,8 +495,8 @@ class SystemicEventReporter
             'securities_head' => $politics->securitiesHeadName,
             'securities_head_age' => (string) (int) floor($politics->totalTime - $politics->securitiesHeadBirth),
             'securities_head_stance' => self::MARKETS_PHRASES[SecuritiesCommission::stanceName($stance)],
-            'securities_head_term_ends' => GovernmentPageBuilder::simDate(SecuritiesCommission::headTermEnd($politics->totalTime)),
-            'securities_rules_from' => GovernmentPageBuilder::simDate($politics->securitiesHeadTermStart + SecuritiesCommission::RULE_NOTICE_YEARS),
+            'securities_head_term_ends' => DistrictCalendar::quarter(SecuritiesCommission::headTermEnd($politics->totalTime)),
+            'securities_rules_from' => DistrictCalendar::quarter($politics->securitiesHeadTermStart + SecuritiesCommission::RULE_NOTICE_YEARS),
             'securities_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have set margin at {$pct(SecuritiesCommission::initialMargin($candidate['markets']))}",
                 $politics->securitiesHeadPassedOver,
@@ -528,7 +528,7 @@ class SystemicEventReporter
         return [
             'security_director' => $politics->securityDirectorName,
             'security_director_age' => (string) (int) floor($politics->totalTime - $politics->securityDirectorBirth),
-            'security_director_term_ends' => GovernmentPageBuilder::simDate(SecurityBureau::directorTermEnd($politics->totalTime)),
+            'security_director_term_ends' => DistrictCalendar::quarter(SecurityBureau::directorTermEnd($politics->totalTime)),
             'security_director_passed_over' => self::listNames(array_map(static fn(array $candidate): string => $candidate['name'], $politics->securityDirectorPassedOver)),
         ];
     }
@@ -546,12 +546,12 @@ class SystemicEventReporter
         return ($politics->coastGuardCommandantName === '' ? [] : [
             'coast_guard_commandant' => $politics->coastGuardCommandantName,
             'coast_guard_commandant_age' => (string) (int) floor($politics->totalTime - $politics->coastGuardCommandantBirth),
-            'coast_guard_commandant_term_ends' => GovernmentPageBuilder::simDate(CoastGuard::commandantTermEnd($politics->totalTime)),
+            'coast_guard_commandant_term_ends' => DistrictCalendar::quarter(CoastGuard::commandantTermEnd($politics->totalTime)),
             'coast_guard_commandant_passed_over' => $names($politics->coastGuardCommandantPassedOver),
         ]) + ($politics->stateGuardCommanderName === '' ? [] : [
             'state_guard_commander' => $politics->stateGuardCommanderName,
             'state_guard_commander_age' => (string) (int) floor($politics->totalTime - $politics->stateGuardCommanderBirth),
-            'state_guard_commander_term_ends' => GovernmentPageBuilder::simDate(StateGuard::commanderTermEnd($politics->totalTime)),
+            'state_guard_commander_term_ends' => DistrictCalendar::quarter(StateGuard::commanderTermEnd($politics->totalTime)),
             'state_guard_commander_passed_over' => $names($politics->stateGuardCommanderPassedOver),
         ]);
     }
@@ -577,7 +577,7 @@ class SystemicEventReporter
             'regulator' => $politics->regulatorName,
             'regulator_age' => (string) (int) floor($politics->totalTime - $politics->regulatorBirth),
             'regulator_stance' => self::REGULATION_PHRASES[FinancialRegulator::stanceName($target)],
-            'regulator_term_ends' => GovernmentPageBuilder::simDate(FinancialRegulator::headTermEnd($politics->totalTime)),
+            'regulator_term_ends' => DistrictCalendar::quarter(FinancialRegulator::headTermEnd($politics->totalTime)),
             'regulator_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have set {$pct(FinancialRegulator::requirement($candidate['regulation']))}",
                 $politics->regulatorPassedOver,

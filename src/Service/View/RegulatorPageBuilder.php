@@ -21,14 +21,14 @@ final class RegulatorPageBuilder
     private const NEAR_REQUIREMENT_HEADROOM = 0.01;
 
     public function __construct(
-        private readonly GovernmentPageBuilder $government,
+        private readonly DepartmentPageBuilder $departments,
         private readonly EntityManagerInterface $entityManager,
     ) {}
 
     /** @return array<string, mixed> */
     public function build(MacroStateDTO $macro, PoliticsStateDTO $politics): array
     {
-        $panel = $this->government->regulator($politics, $macro);
+        $panel = $this->departments->regulator($politics, $macro);
         if ($panel !== null) {
             // The mortgage limit and calm-years buffer each head's stance brings, beside the capital rule the panel
             // already carries.

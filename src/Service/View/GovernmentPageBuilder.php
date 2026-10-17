@@ -12,8 +12,6 @@ use App\Data\Politics\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
-use App\Entity\ElectionOdds;
-use App\Entity\RateDecision;
 use App\Repository\DietElectionRepository;
 use App\Repository\ElectionOddsRepository;
 use App\Repository\MacroReportHistoryRepository;
@@ -24,8 +22,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -36,13 +33,10 @@ use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\CoastGuard;
 use App\Service\Politics\CouncilAppointments;
 use App\Service\Politics\ElectionForecast;
-use App\Service\Politics\Exchequer;
-use App\Service\Politics\FairTradingBoard;
 use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\PoliticsEngine;
-use App\Service\Politics\SecuritiesCommission;
 use App\Service\Politics\SecurityBureau;
 use App\Service\Politics\SovereignReserveFund;
 use App\Service\Politics\StateGuard;
@@ -58,39 +52,12 @@ use App\Twig\Extension\NumberFormatExtension;
  *
  * The live Diet is read off the politics snapshot (PoliticsEngine keeps it every tick), and the debt, the rate firms
  * pay and the policy uncertainty off the macro snapshot; the history and the parties' past positions off diet_election.
- * The hemicycle and compass geometry is computed here so the template only draws.
+ * The chamber and the compass are drawn by DietChamberDrawing, the rate, odds and poll charts by GovernmentCharts, and
+ * the departments' headlines come from DepartmentPageBuilder.
  */
 class GovernmentPageBuilder
 {
-    // --- Party Colours ---
-    /**
-     * One colour per party, shared by the hemicycle, the compass and the tables, no two hues close enough to confuse.
-     */
-    public const PARTY_COLORS = [
-        AerieDiet::CIVIC => '#dc2626',
-        AerieDiet::VANGUARD => '#2563eb',
-        AerieDiet::IRON_HARBOR => '#78716c',
-        AerieDiet::EXCHANGE => '#0891b2',
-        AerieDiet::CHARTISTS => '#7c3aed',
-        AerieDiet::COMMON_LOT => '#d97706',
-        AerieDiet::TIDELINE => '#16a34a',
-        AerieDiet::NEW_HORIZON => '#ec4899',
-    ];
-
-    // --- Party Labels ---
-    /** Short names for the drawings and narrow columns, where the full names would crowd each other. */
-    public const PARTY_LABELS = [
-        AerieDiet::CIVIC => 'Civic',
-        AerieDiet::VANGUARD => 'Vanguard',
-        AerieDiet::IRON_HARBOR => 'Iron Harbor',
-        AerieDiet::EXCHANGE => 'Exchange',
-        AerieDiet::CHARTISTS => 'Chartists',
-        AerieDiet::COMMON_LOT => 'Common Lot',
-        AerieDiet::TIDELINE => 'Tideline',
-        AerieDiet::NEW_HORIZON => 'New Horizon',
-    ];
-
-    // --- Laws and Polls ---
+    // --- Laws ---
     /** Each law's name and unit on the market's forecast and the law charts, in the budget's order. */
     private const LEVER_DISPLAY = [
         'publicSpending' => ['Public spending, share of GDP', 'pct'],
@@ -119,10 +86,6 @@ class GovernmentPageBuilder
         'mergerReviewLeniency' => ['Merger review line', 'hhi'],
         'capitalRequirement' => ['Core capital requirement', 'pct'],
     ];
-    /** The polls chart's plot area in its 600 by 210 drawing: left, right, top and bottom edges. */
-    private const POLL_CHART_PLOT = [34.0, 590.0, 8.0, 182.0];
-    /** Normal quantile of the band drawn round the poll average: the true share lies inside it 19 times in 20. */
-    private const POLL_BAND_Z = 1.96;
 
     // --- Law History Charts ---
     /** Each law's chart plot area in its 300 by 84 drawing: left, right, top and bottom edges. */
@@ -135,115 +98,14 @@ class GovernmentPageBuilder
     /** Most year labels under a law chart's axis. */
     private const LAW_CHART_YEAR_LABELS = 5;
 
-    // --- Rate Meetings ---
-    /**
-     * Share of a meeting interval within which the clock counts as on a meeting day, for the accumulated rounding of
-     * the sim clock.
-     */
-    private const MEETING_GRID_TOLERANCE = 1e-6;
-    /** Years of meetings the rate chart covers: 48 meetings, few enough to mark each one. */
-    public const RATE_CHART_YEARS = 6.0;
-    /** The rate chart's plot area in its 600 by 172 drawing: left, right, top and bottom edges. */
-    private const RATE_CHART_PLOT = [40.0, 590.0, 14.0, 150.0];
-    /** Gridline steps the rate chart picks from, smallest first: a quarter point up to two points. */
-    private const RATE_CHART_GRID_STEPS = [0.0025, 0.005, 0.01, 0.02];
-    /** Most gridlines across the rate chart's value axis. */
-    private const RATE_CHART_GRIDLINES = 6;
-
-    // --- Election Odds Chart ---
-    /** The odds chart's plot area in its 600 by 160 drawing: left, right, top and bottom edges. */
-    private const ODDS_CHART_PLOT = [34.0, 590.0, 8.0, 132.0];
+    // --- Election Odds ---
     /**
      * How near a forecast's vote must fall to the coming vote's day to count as a forecast of it, in years: a vote is
      * held within a tick of its day, and the next is a term away.
      */
     private const ODDS_VOTE_TOLERANCE = 0.25;
-    /**
-     * Least chance of leading the government a party must have reached for the odds chart and the market panel to show
-     * it.
-     */
-    private const LISTED_LEADER_CHANCE = 0.01;
-    /** Gridline step on the odds chart's axis. */
-    private const ODDS_CHART_STEP = 0.25;
-
-    // --- Hemicycle Geometry ---
-    /** Rows of seats in the chamber drawing. */
-    private const HEMICYCLE_ROWS = 8;
-    /** Innermost row's radius, as a share of the outermost. */
-    private const HEMICYCLE_INNER_RADIUS = 0.40;
-
-    // --- Compass Geometry ---
-    /**
-     * The drawing at each screen width: the half-length of a line running -1 to +1 and the margin either side, in SVG
-     * units, and whether the end words sit beside the line (the margin then fits 'Technocratic') or beneath it (half
-     * the longest label). A phone gets the shorter line, so its labels stay legible.
-     */
-    private const COMPASS_LAYOUTS = [
-        'wide' => [150.0, 56.0, true],
-        'narrow' => [80.0, 24.0, false],
-    ];
-    /** The words at either end of each question's line, short enough for the margin. */
-    private const COMPASS_ROW_ENDS = [
-        AerieDiet::AXIS_STATE => ['Small state', 'Big state'],
-        AerieDiet::AXIS_OPENNESS => ['Closed', 'Open'],
-        AerieDiet::AXIS_COUNCIL => ['Populist', 'Technocratic'],
-        AerieDiet::AXIS_ENVIRONMENT => ['Growth', 'Environment'],
-    ];
-    /** The levers as a question's heading lists them. */
-    private const LEVER_SHORT_NAMES = [
-        'corporateTax' => 'corporate tax',
-        'publicSpending' => 'public spending',
-        'tariff' => 'tariffs',
-        'laborGrowth' => 'immigration',
-        'foreignBuyerTax' => 'foreign buyers',
-        'greenBeltStringency' => 'green belts',
-        'carbonPrice' => 'carbon price',
-        'extractionStringency' => 'extraction rules',
-        'stampDutyRate' => 'stamp duty',
-        'bankLevyRate' => 'bank levy',
-        'reserveDrawShare' => 'reserve draw',
-        'consolidationTaxShare' => 'tax or cuts',
-        'reserveHomeShare' => 'reserves at home',
-        'utilityRateGrant' => 'utility rates',
-        'dividendTax' => 'dividend tax',
-        'debtTarget' => 'debt target',
-        'debtPace' => 'debt pace',
-    ];
-    /** Font size of the end words and party labels, in SVG units. */
-    private const COMPASS_FONT_SIZE = 7.0;
-    /** Advance of a bold label's average character as a share of its font size, to size a label's box. */
-    public const COMPASS_CHARACTER_WIDTH = 0.6;
-    /** Gap kept between a label and its dot, or another label, in SVG units. */
-    private const COMPASS_LABEL_GAP = 1.5;
-    /** Least clearance between the outermost dot or ring and a row of labels beyond the label gap, in SVG units. */
-    private const COMPASS_LABEL_LIFT = 2.0;
-    /** Least rise of a leader line per unit it runs sideways, so a leader never lies along the line. */
-    private const COMPASS_LEADER_SLOPE = 0.4;
-    /** Gap left between a leader line's ends and the dot or label it joins, in SVG units. */
-    private const COMPASS_LEADER_GAP = 0.6;
-    /** Radius of the smallest party's dot, in SVG units. */
-    private const COMPASS_DOT_RADIUS = 2.5;
-    /** Seats that add one SVG unit to a party's dot radius. */
-    private const COMPASS_SEATS_PER_RADIUS = 25.0;
-    /** Past votes whose positions are drawn behind each party, the oldest faintest. */
-    private const COMPASS_TRAIL_VOTES = 6;
-    /** Faintest and strongest opacity of a past position, the oldest drawn and the last vote's. */
-    private const COMPASS_TRAIL_OPACITY = [0.10, 0.40];
-    /** How far the mark where a coalition governs from reaches past the ring of its largest party, in SVG units. */
-    private const COMPASS_HUB_PAD = 2.5;
-    /** Gap between a party's dot and the ring round it, solid in the cabinet and dotted in support, in SVG units. */
-    private const COMPASS_RING_GAP = 1.8;
-    /** Margin kept above and below each question's drawing, in SVG units. */
-    private const COMPASS_ROW_PAD = 2.0;
 
     // --- Policy Questions ---
-    /** The policy questions as the pages name them: the axis, and its two ends. */
-    private const AXIS_NAMES = [
-        AerieDiet::AXIS_STATE => ['name' => 'Size of the state', 'low' => 'Small state', 'high' => 'Big state'],
-        AerieDiet::AXIS_OPENNESS => ['name' => 'Openness', 'low' => 'Closed', 'high' => 'Open'],
-        AerieDiet::AXIS_COUNCIL => ['name' => 'The Council', 'low' => 'Populist', 'high' => 'Technocratic'],
-        AerieDiet::AXIS_ENVIRONMENT => ['name' => 'The environment', 'low' => 'Growth first', 'high' => 'Environment first'],
-    ];
     /** The questions as the table of positions heads its columns. */
     private const AXIS_COLUMNS = [
         AerieDiet::AXIS_STATE => 'Size of state',
@@ -258,6 +120,7 @@ class GovernmentPageBuilder
         private readonly ?StockRepository $stocks = null,
         private readonly ?RateDecisionRepository $decisions = null,
         private readonly ?ElectionOddsRepository $odds = null,
+        private readonly DepartmentPageBuilder $departments = new DepartmentPageBuilder(),
     ) {}
 
     /**
@@ -274,19 +137,19 @@ class GovernmentPageBuilder
         return array_replace($frame['page'], [
             'talks' => $this->talks($politics, $context['talking']),
             'parties' => $context['parties'],
-            'hemicycle' => $this->hemicycle($context['seats'], $context['parties']),
+            'hemicycle' => DietChamberDrawing::hemicycle($context['seats'], $context['parties']),
             'budget' => $this->budget($macro, $politics, $context['coalition'], $context['support'], $context['talking']),
-            'polls' => self::polls($politics, $context['nextElection']),
+            'polls' => GovernmentCharts::polls($politics, $context['nextElection']),
             'market' => self::market($politics),
             'council' => $frame['page']['council'] + ['lean' => self::councilLean($politics)],
             'authority' => $this->authority($politics, false),
-            'regulator' => $this->regulator($politics, $macro),
+            'regulator' => $this->departments->regulator($politics, $macro),
             'mortgageLtvCap' => $macro->mortgageLtvCap,
-            'fundHead' => $this->fundHead($politics, $macro),
-            'exchequer' => $this->exchequer($politics, $macro),
-            'fairTrading' => $this->fairTrading($politics),
-            'securities' => $this->securities($politics, $macro),
-            'tradeOffice' => $this->tradeOffice($politics, $macro),
+            'fundHead' => $this->departments->fundHead($politics, $macro),
+            'exchequer' => $this->departments->exchequer($politics, $macro),
+            'fairTrading' => $this->departments->fairTrading($politics),
+            'securities' => $this->departments->securities($politics, $macro),
+            'tradeOffice' => $this->departments->tradeOffice($politics, $macro),
         ]);
     }
 
@@ -305,8 +168,8 @@ class GovernmentPageBuilder
             'axes' => array_map(static fn(string $axis): array => ['key' => $axis, 'name' => self::AXIS_COLUMNS[$axis]], AerieDiet::AXES),
             'talks' => $this->talks($politics, $context['talking']),
             'parties' => $context['parties'],
-            'hemicycle' => $this->hemicycle($context['seats'], $context['parties']),
-            'compass' => $this->compass($context['parties'], $context['history'], $context['coalitionPosition'], $context['coalition']),
+            'hemicycle' => DietChamberDrawing::hemicycle($context['seats'], $context['parties']),
+            'compass' => DietChamberDrawing::compass($context['parties'], $context['history'], $context['coalitionPosition'], $context['coalition']),
             'history' => array_map(fn(DietElection $election): array => $this->historyRow($election, $macro->totalTime), array_reverse($context['history'])),
         ];
     }
@@ -322,7 +185,7 @@ class GovernmentPageBuilder
         $frame = $this->frame($macro, $politics);
 
         return $frame['page'] + [
-            'polls' => self::polls($politics, $frame['context']['nextElection']),
+            'polls' => GovernmentCharts::polls($politics, $frame['context']['nextElection']),
             'market' => self::market($politics),
             'odds' => $this->oddsHistory($politics),
         ];
@@ -362,9 +225,9 @@ class GovernmentPageBuilder
             'roster' => array_map(static fn(array $seat): array => $seat + [
                 'name' => self::councillorName($politics, $seat),
                 'sinceLabel' => ($politics->councilSeatedAt[$seat['seat'] - 1] ?? $seat['since']) > $seat['since'] + 1e-9
-                    ? self::simDate($politics->councilSeatedAt[$seat['seat'] - 1])
-                    : ($seat['beforeYearOne'] ? 'Before Year 1' : self::simDate($seat['since'])),
-                'termEndsLabel' => self::simDate($seat['termEnds']),
+                    ? DistrictCalendar::quarter($politics->councilSeatedAt[$seat['seat'] - 1])
+                    : ($seat['beforeYearOne'] ? 'Before Year 1' : DistrictCalendar::quarter($seat['since'])),
+                'termEndsLabel' => DistrictCalendar::quarter($seat['termEnds']),
             ] + (isset($politics->councilBirths[$seat['seat'] - 1], $politics->councilStances[$seat['seat'] - 1]) ? [
                 'age' => (int) floor($macro->totalTime - $politics->councilBirths[$seat['seat'] - 1]),
                 'stance' => MonetaryAuthority::typeName($politics->councilStances[$seat['seat'] - 1], $politics->councilSwingers[$seat['seat'] - 1] ?? 0.0),
@@ -404,7 +267,7 @@ class GovernmentPageBuilder
         $heads = [];
         foreach ($posts as $department => [$title, $name, $birth, $termEnd]) {
             if ($name !== '') {
-                $heads[$department] = ['title' => $title, 'name' => $name, 'age' => (int) floor($time - $birth), 'termEndsLabel' => self::simDate($termEnd)];
+                $heads[$department] = ['title' => $title, 'name' => $name, 'age' => (int) floor($time - $birth), 'termEndsLabel' => DistrictCalendar::quarter($termEnd)];
             }
         }
 
@@ -420,7 +283,7 @@ class GovernmentPageBuilder
     public function buildAuthority(MacroStateDTO $macro, PoliticsStateDTO $politics): array
     {
         return [
-            'simDate' => self::simDate($macro->totalTime),
+            'simDate' => DistrictCalendar::quarter($macro->totalTime),
             'authority' => $this->authority($politics, true),
         ];
     }
@@ -451,25 +314,25 @@ class GovernmentPageBuilder
         $member = static fn(string $party): array => [
             'key' => $party,
             'name' => AerieDiet::PARTY_NAMES[$party],
-            'color' => self::PARTY_COLORS[$party],
+            'color' => DietStyle::PARTY_COLORS[$party],
             'seats' => $seats[$party],
         ];
 
         $page = [
-            'simDate' => self::simDate($macro->totalTime),
+            'simDate' => DistrictCalendar::quarter($macro->totalTime),
             'government' => [
                 'members' => array_map($member, $coalition),
                 'support' => array_map($member, $support),
                 'seats' => $coalitionSeats,
                 'supportedSeats' => $coalitionSeats + $sumSeats($support),
                 'minority' => $coalitionSeats < AerieDiet::MAJORITY_SEATS,
-                'formed' => $politics->lastGovernmentFormedAt < 0.0 ? 'Before Year 1' : self::simDate($politics->coalitionFormedAt),
+                'formed' => $politics->lastGovernmentFormedAt < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($politics->coalitionFormedAt),
                 'range' => CoalitionFormation::ideologicalRange($coalition, $politics->partyPositions),
                 'caretaker' => $talking,
                 'primeMinister' => self::primeMinister($politics),
             ] + $coalitionPosition,
             'election' => [
-                'next' => self::simDate($nextElection),
+                'next' => DistrictCalendar::quarter($nextElection),
                 'yearsLeft' => $nextElection - $macro->totalTime,
                 'campaign' => $nextElection - $macro->totalTime <= PoliticsEngine::ELECTION_CAMPAIGN_WINDOW_YEARS,
                 'policyUncertainty' => $macro->policyUncertaintyIndexEma,
@@ -485,8 +348,8 @@ class GovernmentPageBuilder
                 'blocLeaders' => array_map(self::midSentenceName(...), $leaders),
                 'blocSeats' => array_map(
                     static fn(string $leader): array => [
-                        'name' => self::PARTY_LABELS[$leader],
-                        'color' => self::PARTY_COLORS[$leader],
+                        'name' => DietStyle::PARTY_LABELS[$leader],
+                        'color' => DietStyle::PARTY_COLORS[$leader],
                         'seats' => $sumSeats(array_keys(array_filter($blocs, static fn(string $bloc): bool => $bloc === $leader))),
                     ],
                     $leaders,
@@ -494,7 +357,7 @@ class GovernmentPageBuilder
             ],
             'council' => [
                 'nextVacancy' => (static function (array $seat) use ($politics): array {
-                    return $seat + ['name' => self::councillorName($politics, $seat), 'termEndsLabel' => self::simDate($seat['termEnds'])];
+                    return $seat + ['name' => self::councillorName($politics, $seat), 'termEndsLabel' => DistrictCalendar::quarter($seat['termEnds'])];
                 })(AerieCouncil::nextVacancy($macro->totalTime)),
             ],
         ];
@@ -559,8 +422,8 @@ class GovernmentPageBuilder
 
         $leaders = [];
         foreach ($politics->forecastLeaders as $party => $chance) {
-            if ($chance >= self::LISTED_LEADER_CHANCE) {
-                $leaders[] = ['name' => AerieDiet::PARTY_NAMES[$party], 'color' => self::PARTY_COLORS[$party], 'chance' => $chance];
+            if ($chance >= GovernmentCharts::LISTED_LEADER_CHANCE) {
+                $leaders[] = ['name' => AerieDiet::PARTY_NAMES[$party], 'color' => DietStyle::PARTY_COLORS[$party], 'chance' => $chance];
             }
         }
         usort($leaders, static fn(array $a, array $b): int => $b['chance'] <=> $a['chance']);
@@ -579,8 +442,8 @@ class GovernmentPageBuilder
 
         return [
             'talks' => $politics->forecastFor <= $politics->totalTime,
-            'vote' => self::simDate($politics->forecastFor),
-            'takesEffect' => self::simDate(ElectionForecast::takesEffect($politics)),
+            'vote' => DistrictCalendar::quarter($politics->forecastFor),
+            'takesEffect' => DistrictCalendar::quarter(ElectionForecast::takesEffect($politics)),
             'leaders' => $leaders,
             'cabinets' => array_map(static fn(array $option): array => [
                 'cabinet' => $names($option['cabinet']),
@@ -669,10 +532,10 @@ class GovernmentPageBuilder
             $cabinets[] = [
                 'x0' => $x($start),
                 'x1' => $x($end),
-                'color' => self::PARTY_COLORS[$period['leader']],
-                'members' => array_map(static fn(string $party): string => self::PARTY_LABELS[$party], $period['cabinet']),
-                'fromLabel' => $period['from'] < 0.0 && $index === 0 ? 'Before Year 1' : self::simDate($start),
-                'toLabel' => $end >= $now ? 'now' : self::simDate($end),
+                'color' => DietStyle::PARTY_COLORS[$period['leader']],
+                'members' => array_map(static fn(string $party): string => DietStyle::PARTY_LABELS[$party], $period['cabinet']),
+                'fromLabel' => $period['from'] < 0.0 && $index === 0 ? 'Before Year 1' : DistrictCalendar::quarter($start),
+                'toLabel' => $end >= $now ? 'now' : DistrictCalendar::quarter($end),
             ];
         }
 
@@ -684,7 +547,7 @@ class GovernmentPageBuilder
         }
 
         return [
-            'since' => self::simDate($from),
+            'since' => DistrictCalendar::quarter($from),
             'charts' => $charts,
             'cabinets' => $cabinets,
             'years' => $years,
@@ -741,144 +604,6 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The rate each meeting left, oldest first, on a line from meeting to meeting, each meeting marked with its
-     * dissents: a mark above for votes for a higher rate, below for a lower. A dashed line marks a new governor in the
-     * chair. Inflation runs quarter by quarter beside it against the target, and a summary row reads the span off.
-     *
-     * @param list<RateDecision> $decisions The meetings on record over the chart's span, oldest first.
-     * @param list<array{t: float, inflation: float}> $inflation The quarterly record, oldest first; quarters outside
-     *                                                           the span are left off.
-     * @return array<string, mixed>|null Null with fewer than two meetings on record.
-     */
-    public static function rateChart(array $decisions, float $now, array $inflation = []): ?array
-    {
-        if (count($decisions) < 2) {
-            return null;
-        }
-
-        $from = $decisions[0]->getSimTime();
-        $to = max($now, $decisions[array_key_last($decisions)]->getSimTime());
-        $inflation = array_values(array_filter($inflation, static fn(array $quarter): bool => $quarter['t'] >= $from - 1e-9 && $quarter['t'] <= $to + 1e-9));
-        $rates = array_map(static fn(RateDecision $decision): float => $decision->getRate(), $decisions);
-        $values = $inflation === [] ? $rates : [...$rates, ...array_column($inflation, 'inflation'), MacroConstants::TARGET_INFLATION];
-        $step = self::RATE_CHART_GRID_STEPS[array_key_last(self::RATE_CHART_GRID_STEPS)];
-        foreach (self::RATE_CHART_GRID_STEPS as $candidate) {
-            if ((ceil(max($values) / $candidate) - floor(min($values) / $candidate)) <= self::RATE_CHART_GRIDLINES - 1) {
-                $step = $candidate;
-                break;
-            }
-        }
-        $low = floor(min($values) / $step) * $step;
-        $high = max($low + $step, ceil(max($values) / $step) * $step);
-
-        [$left, $right, $top, $bottom] = self::RATE_CHART_PLOT;
-        $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $from) / max(1e-9, $to - $from)), 1);
-        $y = static fn(float $rate): float => round($bottom - (($bottom - $top) * ($rate - $low) / ($high - $low)), 1);
-
-        $meetings = [];
-        $governors = [];
-        $previous = null;
-        foreach ($decisions as $decision) {
-            $higher = $decision->getVotesHigher();
-            $lower = $decision->getVotesLower();
-            $meetings[] = [
-                'x' => $x($decision->getSimTime()),
-                'y' => $y($decision->getRate()),
-                'date' => self::simDate($decision->getSimTime()),
-                'rate' => $decision->getRate(),
-                // Whole basis points, the precision the rate is printed at, as the last decision reads.
-                'moveBp' => (int) round(10000.0 * $decision->getRateChange()),
-                'split' => (count($decision->getVotes()) - $higher - $lower) . '–' . ($higher + $lower),
-                'higher' => $higher,
-                'lower' => $lower,
-            ];
-            if ($previous !== null && $decision->getGovernor() !== $previous) {
-                $governors[] = ['x' => $x($decision->getSimTime()), 'name' => $decision->getGovernor(), 'date' => self::simDate($decision->getSimTime())];
-            }
-            $previous = $decision->getGovernor();
-        }
-
-        $gridlines = [];
-        for ($rate = $low; $rate <= $high + 1e-9; $rate += $step) {
-            $gridlines[] = ['y' => $y($rate), 'rate' => $rate];
-        }
-        $years = [];
-        for ($year = (int) ceil($from); $year <= $to + 1e-9; ++$year) {
-            $years[] = ['x' => $x((float) $year), 'label' => sprintf('Year %d', $year + 1)];
-        }
-
-        $quarters = array_map(static fn(array $quarter): array => [
-            'x' => $x($quarter['t']),
-            'y' => $y($quarter['inflation']),
-            // A row is written as its quarter closes; it describes the quarter that closed.
-            'date' => self::simDate(max(0.0, $quarter['t'] - MacroHistoryPresenter::HALF_QUARTER_YEARS)),
-            'inflation' => $quarter['inflation'],
-        ], $inflation);
-
-        return [
-            'since' => self::simDate($from),
-            'line' => implode(' ', array_map(static fn(array $meeting): string => $meeting['x'] . ',' . $meeting['y'], $meetings)),
-            'meetings' => $meetings,
-            // The rule moves the rate a little at every meeting; a meeting's standard step is what counts as a move.
-            'moves' => count(array_filter($decisions, static fn(RateDecision $decision): bool => abs($decision->getRateChange()) >= MonetaryAuthority::NEWSWORTHY_RATE_MOVE)),
-            'stepBp' => (int) round(10000.0 * MonetaryAuthority::NEWSWORTHY_RATE_MOVE),
-            'split' => count(array_filter($meetings, static fn(array $meeting): bool => $meeting['higher'] + $meeting['lower'] > 0)),
-            'governors' => $governors,
-            'gridlines' => $gridlines,
-            'years' => $years,
-            'plot' => self::RATE_CHART_PLOT,
-            'inflation' => $quarters === [] ? null : [
-                'line' => implode(' ', array_map(static fn(array $quarter): string => $quarter['x'] . ',' . $quarter['y'], $quarters)),
-                'quarters' => $quarters,
-                'target' => MacroConstants::TARGET_INFLATION,
-                'targetY' => $y(MacroConstants::TARGET_INFLATION),
-            ],
-            'summary' => self::rateSummary($decisions, $meetings, $quarters === [] ? null : $quarters[array_key_last($quarters)]['inflation']),
-        ];
-    }
-
-    /**
-     * The rate chart's span in a row: the change over the last year, the range, the largest move and the widest split,
-     * and the rate less the latest inflation.
-     *
-     * @param non-empty-list<RateDecision> $decisions
-     * @param non-empty-list<array{x: float, y: float, date: string, rate: float, moveBp: int, split: string, higher: int, lower: int}> $meetings rateChart()'s meetings, in the same order.
-     * @return array<string, mixed>
-     */
-    private static function rateSummary(array $decisions, array $meetings, ?float $inflation): array
-    {
-        $last = $decisions[array_key_last($decisions)];
-        // The meeting a year before the last, to within half a meeting for the sim clock's rounding.
-        $yearAgo = null;
-        foreach ($decisions as $decision) {
-            if ($decision->getSimTime() <= $last->getSimTime() - 1.0 + 0.5 / MonetaryAuthority::MEETINGS_PER_YEAR) {
-                $yearAgo = $decision;
-            }
-        }
-        $rates = array_column($meetings, 'rate');
-        $largest = null;
-        $widest = null;
-        foreach ($meetings as $meeting) {
-            if ($meeting['moveBp'] !== 0 && ($largest === null || abs($meeting['moveBp']) > abs($largest['moveBp']))) {
-                $largest = $meeting;
-            }
-            if ($meeting['higher'] + $meeting['lower'] > 0 && ($widest === null || $meeting['higher'] + $meeting['lower'] > $widest['higher'] + $widest['lower'])) {
-                $widest = $meeting;
-            }
-        }
-
-        return [
-            'yearChangeBp' => $yearAgo === null ? null : (int) round(10000.0 * ($last->getRate() - $yearAgo->getRate())),
-            'high' => max($rates),
-            'low' => min($rates),
-            'largest' => $largest === null ? null : ['moveBp' => $largest['moveBp'], 'date' => $largest['date']],
-            'widest' => $widest === null ? null : ['split' => $widest['split'], 'date' => $widest['date']],
-            'inflation' => $inflation,
-            'realRate' => $inflation === null ? null : $last->getRate() - $inflation,
-        ];
-    }
-
-    /**
      * The market's odds on who leads the next government, forecast by forecast, for the vote its latest forecast is
      * for.
      *
@@ -890,85 +615,7 @@ class GovernmentPageBuilder
             return null;
         }
 
-        return self::oddsChart($this->odds->findForVote($politics->forecastFor, self::ODDS_VOTE_TOLERANCE), $politics->totalTime, $politics->forecastFor);
-    }
-
-    /**
-     * Each party's chance of leading the next government, held from one forecast to the next as the odds stood and run
-     * on to today, for every party that has reached the listed chance.
-     *
-     * @param list<ElectionOdds> $forecasts The forecasts of one vote, oldest first.
-     * @return array<string, mixed>|null Null with fewer than two.
-     */
-    public static function oddsChart(array $forecasts, float $now, float $voteAt): ?array
-    {
-        if (count($forecasts) < 2) {
-            return null;
-        }
-
-        $from = $forecasts[0]->getSimTime();
-        $to = max($now, $voteAt);
-        [$left, $right, $top, $bottom] = self::ODDS_CHART_PLOT;
-        $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $from) / max(1e-9, $to - $from)), 1);
-        $y = static fn(float $chance): float => round($bottom - (($bottom - $top) * $chance), 1);
-
-        $parties = [];
-        foreach (AerieDiet::PARTIES as $party) {
-            $chances = array_map(static fn(ElectionOdds $forecast): float => (float) ($forecast->getLeaders()[$party] ?? 0.0), $forecasts);
-            if (max($chances) < self::LISTED_LEADER_CHANCE) {
-                continue;
-            }
-            $points = [];
-            foreach ($forecasts as $i => $forecast) {
-                if ($i > 0) {
-                    $points[] = $x($forecast->getSimTime()) . ',' . $y($chances[$i - 1]);
-                }
-                $points[] = $x($forecast->getSimTime()) . ',' . $y($chances[$i]);
-            }
-            $latest = $chances[array_key_last($chances)];
-            $points[] = $x($now) . ',' . $y($latest);
-            $parties[] = [
-                'name' => AerieDiet::PARTY_NAMES[$party],
-                'color' => self::PARTY_COLORS[$party],
-                'chance' => $latest,
-                'first' => $chances[0],
-                'line' => implode(' ', $points),
-                'last' => ['x' => $x($now), 'y' => $y($latest)],
-            ];
-        }
-        usort($parties, static fn(array $a, array $b): int => $b['chance'] <=> $a['chance']);
-
-        $gridlines = [];
-        for ($chance = 0.0; $chance <= 1.0 + 1e-9; $chance += self::ODDS_CHART_STEP) {
-            $gridlines[] = ['y' => $y($chance), 'label' => (string) round($chance * 100) . '%'];
-        }
-        $years = [];
-        for ($year = (int) ceil($from); $year <= $to + 1e-9; ++$year) {
-            $years[] = ['x' => $x((float) $year), 'label' => sprintf('Year %d', $year + 1)];
-        }
-
-        return [
-            'since' => self::simDate($from),
-            'count' => count($forecasts),
-            'parties' => $parties,
-            'gridlines' => $gridlines,
-            'years' => $years,
-            'today' => $x($now),
-            'vote' => $voteAt > $now ? ['x' => $x($voteAt), 'date' => self::simDate($voteAt)] : null,
-            'plot' => self::ODDS_CHART_PLOT,
-        ];
-    }
-
-    /**
-     * When the rate committee next meets: meetings fall on a fixed grid, MonetaryAuthority::MEETINGS_PER_YEAR evenly
-     * spaced.
-     */
-    public static function nextMeeting(float $simTime): float
-    {
-        $meetings = (float) MonetaryAuthority::MEETINGS_PER_YEAR;
-
-        // A meeting held this tick, its boundary a rounding error ahead of the clock, is not the next one.
-        return (floor(($simTime * $meetings) + self::MEETING_GRID_TOLERANCE) + 1.0) / $meetings;
+        return GovernmentCharts::oddsChart($this->odds->findForVote($politics->forecastFor, self::ODDS_VOTE_TOLERANCE), $politics->totalTime, $politics->forecastFor);
     }
 
     /**
@@ -996,128 +643,6 @@ class GovernmentPageBuilder
     }
 
     /**
-     * The polls since the last vote: each party's poll average across the term from the result on the day, with the
-     * band the true share lies in 19 times in 20, the polls themselves as dots, and the seats the market expects at the
-     * vote.
-     *
-     * @param float $nextElection When the next vote falls.
-     * @return array<string, mixed>|null Null before the term's first poll.
-     */
-    private static function polls(PoliticsStateDTO $politics, float $nextElection): ?array
-    {
-        if ($politics->polls === []) {
-            return null;
-        }
-
-        $start = max(0.0, $politics->lastElectionAt);
-        $span = max(1e-9, $nextElection - $start);
-        $averages = self::pollAverages($politics);
-        $latestPoll = $politics->polls[array_key_last($politics->polls)];
-        $latest = $averages[array_key_last($averages)];
-        $margin = static fn(array $point, string $party): float => self::POLL_BAND_Z * sqrt(max(0.0, $point['variance'][$party] ?? 0.0));
-
-        $top = 0.0;
-        foreach ($averages as $point) {
-            foreach (AerieDiet::PARTIES as $party) {
-                $top = max($top, ($point['shares'][$party] ?? 0.0) + $margin($point, $party));
-            }
-        }
-        foreach ($politics->polls as $poll) {
-            foreach ($poll['shares'] as $share) {
-                $top = max($top, $share);
-            }
-        }
-        $step = $top > 0.3 ? 0.1 : 0.05;
-        $scale = ceil(($top + 0.01) / $step) * $step;
-
-        [$left, $right, $topY, $bottom] = self::POLL_CHART_PLOT;
-        $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $start) / $span), 1);
-        $y = static fn(float $share): float => round($bottom - (($bottom - $topY) * max(0.0, $share) / $scale), 1);
-
-        // The market's expected seats while its forecast is for the coming vote; the average's own D'Hondt result
-        // otherwise.
-        $marketSeats = $politics->forecastSeats !== [] && $politics->forecastFor > $politics->totalTime;
-        $expected = $marketSeats ? $politics->forecastSeats : PoliticsEngine::dHondt($latest['shares'], AerieDiet::SEATS);
-        $coalition = AerieDiet::governingParties($politics->governingCoalition);
-        $support = AerieDiet::governingParties($politics->supportParties);
-        $sumSeats = static fn(array $members): float => array_sum(array_map(static fn(string $party): float => (float) ($expected[$party] ?? 0.0), $members));
-
-        $parties = [];
-        foreach (AerieDiet::PARTIES as $party) {
-            $upper = [];
-            $lower = [];
-            foreach ($averages as $point) {
-                $share = $point['shares'][$party] ?? 0.0;
-                $upper[] = $x($point['t']) . ',' . $y($share + $margin($point, $party));
-                $lower[] = $x($point['t']) . ',' . $y($share - $margin($point, $party));
-            }
-            $parties[] = [
-                'name' => AerieDiet::PARTY_NAMES[$party],
-                'label' => self::PARTY_LABELS[$party],
-                'color' => self::PARTY_COLORS[$party],
-                'vote' => $politics->dietVoteShares[$party] ?? 0.0,
-                'average' => $latest['shares'][$party] ?? 0.0,
-                'margin' => $margin($latest, $party),
-                'poll' => $latestPoll['shares'][$party] ?? 0.0,
-                'change' => ($latest['shares'][$party] ?? 0.0) - ($politics->dietVoteShares[$party] ?? 0.0),
-                'seats' => (int) round((float) ($expected[$party] ?? 0.0)),
-                'line' => implode(' ', array_map(static fn(array $point): string => $x($point['t']) . ',' . $y($point['shares'][$party] ?? 0.0), $averages)),
-                'band' => implode(' ', array_merge($upper, array_reverse($lower))),
-                'dots' => array_map(static fn(array $poll): array => ['x' => $x($poll['t']), 'y' => $y($poll['shares'][$party] ?? 0.0)], $politics->polls),
-                'last' => ['x' => $x($latest['t']), 'y' => $y($latest['shares'][$party] ?? 0.0)],
-            ];
-        }
-        usort($parties, static fn(array $a, array $b): int => $b['average'] <=> $a['average']);
-
-        $gridlines = [];
-        for ($share = 0.0; $share <= $scale + 1e-9; $share += $step) {
-            $gridlines[] = ['y' => $y($share), 'label' => (string) round($share * 100) . '%'];
-        }
-        $years = [];
-        for ($year = ceil($start); $year <= $nextElection + 1e-9; $year += 1.0) {
-            $years[] = ['x' => $x($year), 'label' => sprintf('Year %d', (int) $year + 1)];
-        }
-
-        return [
-            'since' => $politics->lastElectionAt < 0.0 ? 'Year 1' : self::simDate($politics->lastElectionAt),
-            'latest' => self::simDate($latestPoll['t']),
-            'count' => count($politics->polls),
-            'parties' => $parties,
-            'gridlines' => $gridlines,
-            'years' => $years,
-            'today' => $x($latest['t']),
-            'plot' => self::POLL_CHART_PLOT,
-            'marketSeats' => $marketSeats,
-            'cabinet' => [
-                'seats' => (int) round($sumSeats($coalition)),
-                'supportedSeats' => (int) round($sumSeats($coalition) + $sumSeats($support)),
-                'hasSupport' => $support !== [],
-            ],
-        ];
-    }
-
-    /**
-     * The market's poll average after each poll of the term, from the result on the day, as ElectionForecast::advance()
-     * pools it: the state keeps only the latest, and replaying the filter over the term's polls gives its path.
-     *
-     * @return non-empty-list<array{t: float, shares: array<string, float>, variance: array<string, float>}>
-     */
-    public static function pollAverages(PoliticsStateDTO $politics): array
-    {
-        $since = max(0.0, $politics->lastElectionAt);
-        $average = $politics->dietVoteShares;
-        $variance = array_fill_keys(AerieDiet::PARTIES, 0.0);
-        $path = [['t' => $since, 'shares' => $average, 'variance' => $variance]];
-        foreach ($politics->polls as $poll) {
-            [$average, $variance] = ElectionForecast::pool($average, $variance, $poll['shares'], $poll['t'] - $since, $politics->normalVoteShares);
-            $since = $poll['t'];
-            $path[] = ['t' => $poll['t'], 'shares' => $average, 'variance' => $variance];
-        }
-
-        return $path;
-    }
-
-    /**
      * A party's page: who it is, where it stands, what it would enact governing alone from there today against what is
      * in force, and its record at the polls since Year 1.
      *
@@ -1135,7 +660,7 @@ class GovernmentPageBuilder
 
         $axes = [];
         foreach (AerieDiet::AXES as $axis) {
-            $axes[] = self::AXIS_NAMES[$axis] + [
+            $axes[] = DietStyle::AXIS_NAMES[$axis] + [
                 'key' => $axis,
                 'value' => $position[$axis],
                 'home' => AerieDiet::HOME_POSITIONS[$party][$axis],
@@ -1154,7 +679,7 @@ class GovernmentPageBuilder
         foreach ($history as $election) {
             $formed = $election->getTakesOfficeAt() <= $macro->totalTime;
             $record[] = [
-                'date' => self::simDate($election->getSimTime()),
+                'date' => DistrictCalendar::quarter($election->getSimTime()),
                 'seats' => (int) ($election->getSeats()[$party] ?? 0),
                 'share' => (float) ($election->getVoteShares()[$party] ?? 0.0),
                 'cabinet' => $formed && in_array($party, $election->getCoalition(), true),
@@ -1164,11 +689,11 @@ class GovernmentPageBuilder
         $votes = array_slice($record, 1);
 
         return [
-            'simDate' => self::simDate($macro->totalTime),
+            'simDate' => DistrictCalendar::quarter($macro->totalTime),
             'party' => $row + AeriePartyProfiles::PROFILES[$party] + [
                 'caretaker' => $talking,
                 'blocLeader' => self::midSentenceName($politics->dietBlocs[$party]),
-                'definedBy' => array_map(static fn(string $axis): string => self::AXIS_NAMES[$axis]['name'], array_keys(AerieDiet::FIXED_POSITIONS[$party])),
+                'definedBy' => array_map(static fn(string $axis): string => DietStyle::AXIS_NAMES[$axis]['name'], array_keys(AerieDiet::FIXED_POSITIONS[$party])),
             ],
             'axes' => $axes,
             'levers' => [
@@ -1195,7 +720,7 @@ class GovernmentPageBuilder
                 return [
                     'share' => $poll['shares'][$party] ?? 0.0,
                     'change' => ($poll['shares'][$party] ?? 0.0) - ($politics->dietVoteShares[$party] ?? 0.0),
-                    'date' => self::simDate($poll['t']),
+                    'date' => DistrictCalendar::quarter($poll['t']),
                 ];
             })($politics->polls[array_key_last($politics->polls)]),
             'record' => $record,
@@ -1239,8 +764,8 @@ class GovernmentPageBuilder
                 'key' => $party,
                 'slug' => AeriePartyProfiles::PROFILES[$party]['slug'],
                 'name' => AerieDiet::PARTY_NAMES[$party],
-                'label' => self::PARTY_LABELS[$party],
-                'color' => self::PARTY_COLORS[$party],
+                'label' => DietStyle::PARTY_LABELS[$party],
+                'color' => DietStyle::PARTY_COLORS[$party],
                 'seats' => $seats[$party],
                 'share' => $politics->dietVoteShares[$party] ?? 0.0,
                 'swing' => $history === [] ? null : ($politics->dietVoteSwings[$party] ?? 0.0),
@@ -1249,8 +774,8 @@ class GovernmentPageBuilder
                 'fixedAxes' => array_keys(AerieDiet::FIXED_POSITIONS[$party]),
                 'leadsBloc' => $blocs[$party] === $party,
                 'blocKey' => $blocs[$party],
-                'bloc' => self::PARTY_LABELS[$blocs[$party]],
-                'blocColor' => self::PARTY_COLORS[$blocs[$party]],
+                'bloc' => DietStyle::PARTY_LABELS[$blocs[$party]],
+                'blocColor' => DietStyle::PARTY_COLORS[$blocs[$party]],
                 'partyLeader' => self::leader($politics, $party),
             ] + $position;
         }
@@ -1277,14 +802,14 @@ class GovernmentPageBuilder
         $leading = null;
         foreach ($politics->formationLog as $attempt => $entry) {
             if ($talking && $entry['day'] > $elapsed) {
-                $leading = ['name' => $names[$entry['formateur']], 'color' => self::PARTY_COLORS[$entry['formateur']], 'attempt' => $attempt + 1];
+                $leading = ['name' => $names[$entry['formateur']], 'color' => DietStyle::PARTY_COLORS[$entry['formateur']], 'attempt' => $attempt + 1];
                 break;
             }
             $entries[] = [
                 'day' => $entry['day'],
                 'attempt' => $attempt + 1,
                 'formateur' => $names[$entry['formateur']],
-                'color' => self::PARTY_COLORS[$entry['formateur']],
+                'color' => DietStyle::PARTY_COLORS[$entry['formateur']],
                 'formed' => $entry['formed'],
                 'cabinet' => array_map(static fn(string $party): string => $names[$party], $entry['cabinet']),
                 'support' => array_map(static fn(string $party): string => $names[$party], $entry['support']),
@@ -1297,7 +822,7 @@ class GovernmentPageBuilder
         return [
             'underWay' => $talking,
             'afterFall' => $afterFall,
-            'startedOn' => self::simDate($startedAt),
+            'startedOn' => DistrictCalendar::quarter($startedAt),
             'day' => $talking ? $elapsed : $last['day'],
             'entries' => $entries,
             'leading' => $leading,
@@ -1319,7 +844,7 @@ class GovernmentPageBuilder
         $standing = PoliticsEngine::standingLevers($politics);
         $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, MacroEngine::recessionDeclared($macro));
         $round = MacroConstants::BUDGET_ROUND_PERIOD_YEARS;
-        $nextRound = self::simDate((floor($macro->totalTime / $round) + 1.0) * $round);
+        $nextRound = DistrictCalendar::quarter((floor($macro->totalTime / $round) + 1.0) * $round);
 
         $status = static function (string $lever) use ($budget, $standing, $talking): string {
             return match (true) {
@@ -1522,7 +1047,7 @@ class GovernmentPageBuilder
             // What the bond market charges on the District's debt for the risk it is not repaid, in basis points.
             'riskSpreadBp' => (int) round(10000.0 * $macro->sovereignRiskSpread),
             'caretaker' => $talking,
-            'lastBudget' => $politics->lastBudgetEnactedAt >= 0.0 ? self::simDate($politics->lastBudgetEnactedAt) : null,
+            'lastBudget' => $politics->lastBudgetEnactedAt >= 0.0 ? DistrictCalendar::quarter($politics->lastBudgetEnactedAt) : null,
             'nextRound' => $nextRound,
         ];
     }
@@ -1537,9 +1062,6 @@ class GovernmentPageBuilder
         return FirmEconomics::calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $stringency) - 1.0;
     }
 
-    /**
-     * A party's name as it reads mid-sentence: "the Vanguard", "the Civic Front".
-     */
     /**
      * The prime minister: the leader of the cabinet's largest party. Null before the leaders are first drawn.
      *
@@ -1567,7 +1089,7 @@ class GovernmentPageBuilder
         return [
             'name' => $politics->leaderNames[$party],
             'age' => (int) floor($politics->totalTime - $politics->leaderBirths[$party]),
-            'sinceLabel' => $politics->leaderSince[$party] < 0.0 ? 'Before Year 1' : self::simDate($politics->leaderSince[$party]),
+            'sinceLabel' => $politics->leaderSince[$party] < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($politics->leaderSince[$party]),
         ];
     }
 
@@ -1578,7 +1100,7 @@ class GovernmentPageBuilder
      */
     private static function leaders(PoliticsStateDTO $politics, string $party): array
     {
-        $label = static fn(float $time): string => $time < 0.0 ? 'Before Year 1' : self::simDate($time);
+        $label = static fn(float $time): string => $time < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($time);
         $leaders = [];
         if (isset($politics->leaderNames[$party], $politics->leaderSince[$party])) {
             $leaders[] = ['name' => $politics->leaderNames[$party], 'fromLabel' => $label($politics->leaderSince[$party]), 'toLabel' => 'today', 'current' => true];
@@ -1593,386 +1115,6 @@ class GovernmentPageBuilder
     private static function midSentenceName(string $party): string
     {
         return 'the ' . (preg_replace('/^The /', '', AerieDiet::PARTY_NAMES[$party]) ?? AerieDiet::PARTY_NAMES[$party]);
-    }
-
-    /** A simulation time as the page names it: the year and the quarter (DistrictCalendar::quarter). */
-    public static function simDate(float $simTime): string
-    {
-        return DistrictCalendar::quarter($simTime);
-    }
-
-    /**
-     * The seats of the chamber drawing, bloc by bloc, each running from the party wanting the largest state to the
-     * smallest.
-     *
-     * Rows hold seats in proportion to their radius so the spacing is even, and seats are dealt out by angle so each
-     * party takes a wedge.
-     *
-     * @param array<string, int>          $seats   Seats by party.
-     * @param list<array<string, mixed>>  $parties Party rows, each marked governing or supporting.
-     * @return list<array{x: float, y: float, color: string, governing: bool, supporting: bool}>
-     */
-    private function hemicycle(array $seats, array $parties): array
-    {
-        $total = array_sum($seats);
-        if ($total <= 0) {
-            return [];
-        }
-
-        $radii = [];
-        for ($row = 0; $row < self::HEMICYCLE_ROWS; ++$row) {
-            $radii[] = self::HEMICYCLE_INNER_RADIUS + ((1.0 - self::HEMICYCLE_INNER_RADIUS) * $row / (self::HEMICYCLE_ROWS - 1));
-        }
-        $radiusSum = array_sum($radii);
-        $perRow = array_map(static fn(float $radius): int => (int) round($total * $radius / $radiusSum), $radii);
-        $perRow[self::HEMICYCLE_ROWS - 1] += $total - array_sum($perRow);
-
-        $slots = [];
-        foreach ($radii as $row => $radius) {
-            $count = $perRow[$row];
-            for ($i = 0; $i < $count; ++$i) {
-                $angle = $count === 1 ? M_PI / 2.0 : M_PI * (1.0 - ($i / ($count - 1)));
-                $slots[] = ['angle' => $angle, 'radius' => $radius];
-            }
-        }
-        usort($slots, static fn(array $a, array $b): int => [$b['angle'], $a['radius']] <=> [$a['angle'], $b['radius']]);
-
-        // Each bloc sits together, the one wanting the larger state on the left; within a bloc, the larger state
-        // leftmost.
-        $blocState = [];
-        foreach ($parties as $party) {
-            $blocState[$party['blocKey']][] = [$seats[$party['key']], $party['state']];
-        }
-        $blocState = array_map(static function (array $members): float {
-            $weight = array_sum(array_column($members, 0));
-
-            return $weight > 0
-                ? array_sum(array_map(static fn(array $member): float => $member[0] * $member[1], $members)) / $weight
-                : array_sum(array_column($members, 1)) / count($members);
-        }, $blocState);
-
-        $order = $parties;
-        usort($order, static fn(array $a, array $b): int => [$blocState[$b['blocKey']], $a['blocKey'], $b['state']]
-            <=> [$blocState[$a['blocKey']], $b['blocKey'], $a['state']]);
-
-        $drawn = [];
-        $slot = 0;
-        foreach ($order as $party) {
-            for ($i = 0; $i < $seats[$party['key']]; ++$i, ++$slot) {
-                $drawn[] = [
-                    'x' => round(cos($slots[$slot]['angle']) * $slots[$slot]['radius'], 4),
-                    'y' => round(sin($slots[$slot]['angle']) * $slots[$slot]['radius'], 4),
-                    'color' => $party['color'],
-                    'governing' => $party['governing'],
-                    'supporting' => $party['supporting'],
-                ];
-            }
-        }
-
-        return $drawn;
-    }
-
-    /**
-     * Where the parties stand: one line per question, from its small-state, closed, populist or growth end on the left,
-     * drawn at each width the page offers. Each party is a dot sized by its seats with its last few positions fading
-     * behind it, and its label set above or below where it crowds nothing, a leader line joining any label moved
-     * sideways off its dot. The cabinet's parties are ringed solid and its supporters dotted; a coalition also has a
-     * mark across the line where it governs from (its parties weighted by seats), drawn behind the dots so it hides
-     * none of them.
-     *
-     * @param non-empty-list<array<string, mixed>> $parties    Party rows.
-     * @param list<DietElection>                   $history    Votes, oldest first.
-     * @param array{state: float, openness: float, council: float, environment: float} $government The cabinet's seat-weighted position.
-     * @param list<string>                         $coalition  The cabinet.
-     * @return array<string, mixed>
-     */
-    private function compass(array $parties, array $history, array $government, array $coalition): array
-    {
-        [$faintest, $strongest] = self::COMPASS_TRAIL_OPACITY;
-        $recent = array_values(array_slice($history, -self::COMPASS_TRAIL_VOTES));
-
-        $dots = [];
-        foreach ($parties as $party) {
-            $past = [];
-            foreach ($recent as $k => $election) {
-                if (isset($election->getPositions()[$party['key']])) {
-                    $past[] = [
-                        'position' => AerieDiet::position($party['key'], $election->getPositions()),
-                        'opacity' => round($faintest + (($strongest - $faintest) * ($k + 1) / count($recent)), 3),
-                    ];
-                }
-            }
-            $dots[] = $party + ['r' => self::COMPASS_DOT_RADIUS + ($party['seats'] / self::COMPASS_SEATS_PER_RADIUS), 'past' => $past];
-        }
-
-        $members = array_values(array_filter($dots, static fn(array $dot): bool => in_array($dot['key'], $coalition, true)));
-        $coalitionMark = count($members) > 1;
-        $hubReach = ($members === [] ? 0.0 : max(array_column($members, 'r'))) + self::COMPASS_RING_GAP + self::COMPASS_HUB_PAD;
-        $outermost = max(array_map(static fn(array $dot): float => $dot['r'] + ($dot['governing'] || $dot['supporting'] ? self::COMPASS_RING_GAP : 0.0), $dots));
-
-        $layouts = [];
-        foreach (self::COMPASS_LAYOUTS as $name => [$scale, $margin, $endsBeside]) {
-            $rows = [];
-            foreach (AerieDiet::AXES as $axis) {
-                $rows[] = self::compassRow($axis, $dots, $coalitionMark ? $government[$axis] : null, $scale, $margin, $endsBeside, $hubReach, $outermost);
-            }
-            $layouts[$name] = [
-                'halfWidth' => $scale,
-                'endsBeside' => $endsBeside,
-                // How far in from the drawing's edge the line ends, so end words set beneath it line up with its ends.
-                'endInset' => round(100.0 * $margin / (2.0 * ($scale + $margin)), 2),
-                'rows' => $rows,
-            ];
-        }
-
-        return [
-            'fontSize' => self::COMPASS_FONT_SIZE,
-            'hubReach' => $hubReach,
-            'ringGap' => self::COMPASS_RING_GAP,
-            'coalitionMark' => $coalitionMark,
-            'layouts' => $layouts,
-        ];
-    }
-
-    /**
-     * One question's line at one width: every party placed and labelled, the mark where a coalition governs from, and
-     * the drawing's extent.
-     *
-     * @param list<array<string, mixed>> $dots     The parties, with their radius and past positions.
-     * @param float|null                 $hub      Where the cabinet governs from on this question; null when one party
-     *                                             governs alone.
-     * @param float                      $hubReach How far the mark reaches either side of the line, in SVG units.
-     * @return array<string, mixed>
-     */
-    private static function compassRow(string $axis, array $dots, ?float $hub, float $scale, float $margin, bool $endsBeside, float $hubReach, float $outermost): array
-    {
-        $size = self::COMPASS_FONT_SIZE;
-        [$low, $high] = self::COMPASS_ROW_ENDS[$axis];
-        $signed = static fn(float $value): string => sprintf('%+.2f', $value);
-
-        $placed = [];
-        foreach ($dots as $i => $dot) {
-            $placed[$i] = $dot + [
-                'x' => round($dot[$axis] * $scale, 2),
-                'trail' => array_map(static fn(array $past): array => ['x' => round($past['position'][$axis] * $scale, 2), 'opacity' => $past['opacity']], $dot['past']),
-            ];
-            unset($placed[$i]['past']);
-        }
-
-        $boxes = [];
-        foreach (self::placeRowLabels($placed, $outermost, $scale, $margin, $endsBeside) as $i => $label) {
-            $placed[$i] += $label;
-            $boxes[] = self::labelBox($placed[$i]['label'], $label['labelX'], $label['labelY'], 'middle');
-        }
-
-        $reach = max($outermost, $hub === null ? 0.0 : $hubReach);
-        $top = min(-$reach, ...array_column($boxes, 1)) - self::COMPASS_ROW_PAD;
-        $bottom = max($reach, ...array_column($boxes, 3)) + self::COMPASS_ROW_PAD;
-
-        return [
-            'axis' => $axis,
-            'name' => self::AXIS_NAMES[$axis]['name'],
-            'laws' => array_map(static fn(string $lever): string => self::LEVER_SHORT_NAMES[$lever], array_keys(PoliticsEngine::LEVER_AXES, $axis, true)),
-            'summary' => sprintf(
-                '%s, from %s on the left to %s on the right: %s%s',
-                self::AXIS_NAMES[$axis]['name'],
-                strtolower($low),
-                strtolower($high),
-                implode(', ', array_map(static fn(array $dot): string => $dot['name'] . ($dot['governing'] ? ' (in the cabinet)' : ($dot['supporting'] ? ' (supporting it)' : '')) . ' at ' . $signed($dot[$axis]), $dots)),
-                $hub === null ? '' : '; the cabinet at ' . $signed($hub),
-            ),
-            'ends' => [
-                ['text' => $low, 'x' => -$scale - 4.0, 'y' => 0.35 * $size, 'anchor' => 'end'],
-                ['text' => $high, 'x' => $scale + 4.0, 'y' => 0.35 * $size, 'anchor' => 'start'],
-            ],
-            'hub' => $hub === null ? null : round($hub * $scale, 2),
-            'parties' => array_values($placed),
-            'viewBox' => [-$scale - $margin, round($top, 2), 2.0 * ($scale + $margin), round($bottom - $top, 2)],
-        ];
-    }
-
-    /**
-     * Where each party's label goes on a question's line: in one row above the line or one below, the larger parties
-     * choosing first and taking the row above unless a label already there is in the way, the side with less in the
-     * way when both are crowded; a row too long for its labels sends its smallest parties across where they fit. Each
-     * row is spread so no label crowds the next, and set back from the line far enough that the leader joining a dot
-     * to a label moved sideways off it rises at least COMPASS_LEADER_SLOPE. No label is centred past the end of its
-     * line when the end words sit beside it, so no leader crosses them.
-     *
-     * @param array<int, array<string, mixed>> $dots       The parties, with their place on the line, radius, label and
-     *                                                     part in the government.
-     * @param float                            $outermost  Furthest any dot or ring reaches from the line, in SVG units.
-     * @param float                            $scale      Half the line's length, in SVG units.
-     * @param float                            $margin     The drawing's margin either side of the line, in SVG units.
-     * @param bool                             $endsBeside Whether the end words sit beside the line's ends.
-     * @return array<int, array{labelX: float, labelY: float, leader: list<float>|null}> By the dots' index.
-     */
-    private static function placeRowLabels(array $dots, float $outermost, float $scale, float $margin, bool $endsBeside): array
-    {
-        $gap = self::COMPASS_LABEL_GAP;
-        $size = self::COMPASS_FONT_SIZE;
-        $order = self::bySeats($dots);
-
-        // Each label wants to sit centred over its dot; its own centre stays where its edge is inside the drawing, and
-        // short of the line's end when the end words sit beside it.
-        $items = [];
-        foreach ($order as $i) {
-            $width = self::labelWidth($dots[$i]['label']);
-            $limit = $endsBeside ? $scale : $scale + $margin - ($width / 2.0);
-            $items[$i] = ['centre' => (float) $dots[$i]['x'], 'width' => $width, 'lo' => -$limit, 'hi' => $limit];
-        }
-        $inTheWay = static function (array $item, array $row) use ($gap): float {
-            $crowding = 0.0;
-            foreach ($row as $other) {
-                $crowding += max(0.0, ($item['width'] + $other['width']) / 2.0 + $gap - abs($item['centre'] - $other['centre']));
-            }
-
-            return $crowding;
-        };
-        // Whether a row's labels fit, in order, between the limits of its first and its last.
-        $fits = static function (array $row) use ($gap): bool {
-            if ($row === []) {
-                return true;
-            }
-            uasort($row, static fn(array $a, array $b): int => $a['centre'] <=> $b['centre']);
-            $first = $row[array_key_first($row)];
-            $last = $row[array_key_last($row)];
-
-            return array_sum(array_column($row, 'width')) + ($gap * (count($row) - 1))
-                <= ($last['hi'] + ($last['width'] / 2.0)) - ($first['lo'] - ($first['width'] / 2.0));
-        };
-
-        // -1 is the row above the line, +1 the row below.
-        $rows = [-1 => [], 1 => []];
-        foreach ($order as $i) {
-            $above = $inTheWay($items[$i], $rows[-1]);
-            $rows[$above <= 0.0 || $above <= $inTheWay($items[$i], $rows[1]) ? -1 : 1][$i] = $items[$i];
-        }
-        foreach ([-1, 1] as $side) {
-            foreach (array_reverse($order) as $i) {
-                if ($fits($rows[$side])) {
-                    break;
-                }
-                if (isset($rows[$side][$i]) && $fits($rows[-$side] + [$i => $rows[$side][$i]])) {
-                    $rows[-$side][$i] = $rows[$side][$i];
-                    unset($rows[$side][$i]);
-                }
-            }
-        }
-
-        $labels = [];
-        foreach ($rows as $side => $row) {
-            uasort($row, static fn(array $a, array $b): int => $a['centre'] <=> $b['centre']);
-            $centres = self::packRow($row);
-            $lift = self::COMPASS_LABEL_LIFT;
-            $moved = [];
-            foreach ($centres as $i => $centre) {
-                $shift = abs($centre - $row[$i]['centre']);
-                if ($shift > $row[$i]['width'] / 4.0) {
-                    $moved[$i] = true;
-                    $lift = max($lift, self::COMPASS_LEADER_SLOPE * $shift);
-                }
-            }
-            // The labels' edge nearest the line, and their baseline.
-            $edge = $side * ($outermost + $gap + $lift);
-            $baseline = $side < 0 ? $edge - (0.2 * $size) : $edge + (0.8 * $size);
-            foreach ($centres as $i => $centre) {
-                $leader = null;
-                if (isset($moved[$i])) {
-                    $x = $row[$i]['centre'];
-                    $endY = $edge - ($side * self::COMPASS_LEADER_GAP);
-                    $length = hypot($centre - $x, $endY);
-                    $reach = $dots[$i]['r'] + ($dots[$i]['governing'] || $dots[$i]['supporting'] ? self::COMPASS_RING_GAP : 0.0) + self::COMPASS_LEADER_GAP;
-                    $leader = [round($x + (($centre - $x) * $reach / $length), 2), round($endY * $reach / $length, 2), round($centre, 2), round($endY, 2)];
-                }
-                $labels[$i] = ['labelX' => round($centre, 2), 'labelY' => round($baseline, 2), 'leader' => $leader];
-            }
-        }
-
-        return $labels;
-    }
-
-    /**
-     * Spreads a row of labels so none comes within the label gap of the next, each as near its wanted centre as the
-     * others allow: labels that would crowd each other are merged into a run set where its labels' wanted centres put
-     * it on average (least squares), held within every label's limits, and runs that then crowd merge in turn.
-     *
-     * @param array<int, array{centre: float, width: float, lo: float, hi: float}> $items Labels in order of their wanted centres, each with the range its centre may take.
-     * @return array<int, float> Each label's centre.
-     */
-    private static function packRow(array $items): array
-    {
-        $gap = self::COMPASS_LABEL_GAP;
-        $left = static fn(array $run): float => max($run['lo'], min($run['hi'], $run['sum'] / count($run['keys'])));
-        // A run's 'sum' adds each label's wanted left edge less its offset in the run, so its best left edge is their
-        // mean; 'lo' and 'hi' bound that edge so every label keeps within its own limits.
-        $runs = [];
-        foreach ($items as $key => $item) {
-            $half = $item['width'] / 2.0;
-            $run = ['keys' => [$key], 'width' => $item['width'], 'sum' => $item['centre'] - $half, 'lo' => $item['lo'] - $half, 'hi' => $item['hi'] - $half];
-            while ($runs !== [] && $left($runs[array_key_last($runs)]) + $runs[array_key_last($runs)]['width'] + $gap > $left($run)) {
-                $last = array_pop($runs);
-                $offset = $last['width'] + $gap;
-                $run = [
-                    'keys' => [...$last['keys'], ...$run['keys']],
-                    'width' => $offset + $run['width'],
-                    'sum' => $last['sum'] + $run['sum'] - ($offset * count($run['keys'])),
-                    'lo' => max($last['lo'], $run['lo'] - $offset),
-                    'hi' => min($last['hi'], $run['hi'] - $offset),
-                ];
-            }
-            $runs[] = $run;
-        }
-
-        $centres = [];
-        foreach ($runs as $run) {
-            $at = $left($run);
-            foreach ($run['keys'] as $key) {
-                $centres[$key] = $at + ($items[$key]['width'] / 2.0);
-                $at += $items[$key]['width'] + $gap;
-            }
-        }
-
-        return $centres;
-    }
-
-    /**
-     * The dots' indexes from the most seats to the fewest, ties in party order.
-     *
-     * @param array<int, array<string, mixed>> $dots
-     * @return list<int>
-     */
-    private static function bySeats(array $dots): array
-    {
-        $order = array_keys($dots);
-        usort($order, static fn(int $a, int $b): int => [$dots[$b]['seats'], $a] <=> [$dots[$a]['seats'], $b]);
-
-        return $order;
-    }
-
-    /**
-     * The box a label covers: its width from its length, from the cap height above its baseline to the descenders.
-     *
-     * @return array{0: float, 1: float, 2: float, 3: float} Left, top, right, bottom.
-     */
-    private static function labelBox(string $text, float $x, float $baseline, string $anchor): array
-    {
-        $width = self::labelWidth($text);
-        $left = match ($anchor) {
-            'start' => $x,
-            'end' => $x - $width,
-            default => $x - ($width / 2.0),
-        };
-
-        return [$left, $baseline - (0.8 * self::COMPASS_FONT_SIZE), $left + $width, $baseline + (0.2 * self::COMPASS_FONT_SIZE)];
-    }
-
-    /**
-     * A label's width at the compass font, from its length.
-     */
-    private static function labelWidth(string $text): float
-    {
-        return mb_strlen($text) * self::COMPASS_FONT_SIZE * self::COMPASS_CHARACTER_WIDTH;
     }
 
     /**
@@ -1990,7 +1132,7 @@ class GovernmentPageBuilder
 
         $time = $politics->totalTime;
         $votes = $politics->lastMeetingVotes;
-        $seated = static fn(float $since): string => $since < 0.0 ? 'Before Year 1' : self::simDate($since);
+        $seated = static fn(float $since): string => $since < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($since);
         $person = static fn(string $name, float $birth, float $stance, float $swing, ?float $vote): array => [
             'name' => $name,
             'age' => (int) floor($time - $birth),
@@ -2004,7 +1146,7 @@ class GovernmentPageBuilder
             $since = $politics->memberSince[$member] ?? 0.0;
             $members[] = $person($name, $politics->memberBirths[$member] ?? $time, $politics->memberStances[$member] ?? 0.0, $politics->memberSwingers[$member] ?? 0.0, $votes[$member + 1] ?? null) + [
                 'sinceLabel' => $seated($since),
-                'termEndsLabel' => self::simDate($since + MonetaryAuthority::MEMBER_TERM_YEARS),
+                'termEndsLabel' => DistrictCalendar::quarter($since + MonetaryAuthority::MEMBER_TERM_YEARS),
             ];
         }
         $higher = count(array_filter($votes, static fn(float $vote): bool => $vote > 0.0));
@@ -2013,7 +1155,7 @@ class GovernmentPageBuilder
         return [
             'governor' => $person($politics->governorName, $politics->governorBirth, $politics->governorStance, max(0.0, $politics->governorSwinger), $votes[0] ?? null) + [
                 'sinceLabel' => $seated($politics->governorTermStart),
-                'termEndsLabel' => self::simDate(MonetaryAuthority::governorTermEnd($time)),
+                'termEndsLabel' => DistrictCalendar::quarter(MonetaryAuthority::governorTermEnd($time)),
                 'passedOver' => array_map(static fn(array $candidate): array => $person($candidate['name'], $candidate['birth'], $candidate['stance'], $candidate['swing'] ?? 0.0, null), $politics->governorPassedOver),
             ],
             'members' => $members,
@@ -2021,7 +1163,7 @@ class GovernmentPageBuilder
                 'majority' => $politics->committeeMajority > 0.0 ? 'hawkish' : ($politics->committeeMajority < 0.0 ? 'dovish' : null),
             ],
             'meeting' => $politics->lastMeetingAt < 0.0 ? null : [
-                'date' => self::simDate($politics->lastMeetingAt),
+                'date' => DistrictCalendar::quarter($politics->lastMeetingAt),
                 'rate' => $politics->lastMeetingRate,
                 'change' => $politics->lastMeetingChange,
                 // Whole basis points, the precision the rate is printed at: a move that changes the printed rate is
@@ -2031,11 +1173,11 @@ class GovernmentPageBuilder
                 'higher' => $higher,
                 'lower' => $lower,
             ],
-            'nextMeeting' => DistrictCalendar::dateline(self::nextMeeting($time)),
-            'decisions' => !$withChart || $this->decisions === null ? null : self::rateChart(
-                $this->decisions->findSince($time - self::RATE_CHART_YEARS),
+            'nextMeeting' => DistrictCalendar::dateline(MonetaryPolicySubsystem::nextMeetingAt($time)),
+            'decisions' => !$withChart || $this->decisions === null ? null : GovernmentCharts::rateChart(
+                $this->decisions->findSince($time - GovernmentCharts::RATE_CHART_YEARS),
                 $time,
-                $this->reports?->inflation((int) ceil(FinancialConstants::QUARTERS_PER_YEAR * self::RATE_CHART_YEARS) + 1) ?? [],
+                $this->reports?->inflation((int) ceil(FinancialConstants::QUARTERS_PER_YEAR * GovernmentCharts::RATE_CHART_YEARS) + 1) ?? [],
             ),
             'rules' => [
                 'governorTermYears' => MonetaryAuthority::GOVERNOR_TERM_YEARS,
@@ -2047,53 +1189,6 @@ class GovernmentPageBuilder
         ];
     }
 
-    /**
-     * The Sovereign Reserve Fund's head: who they are, their stance on the reserves and the equity share they set, whom
-     * the Council passed over for them with the share each would have set, and the fund's mix in force. Null before the
-     * fund has a head.
-     *
-     * @return array<string, mixed>|null
-     */
-    private function fundHead(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
-    {
-        if ($politics->fundHeadName === '') {
-            return null;
-        }
-
-        $time = $politics->totalTime;
-        $share = SovereignReserveFund::equityShare($politics->fundHeadStance);
-
-        return [
-            'name' => $politics->fundHeadName,
-            'age' => (int) floor($time - $politics->fundHeadBirth),
-            'sinceLabel' => $politics->fundHeadTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->fundHeadTermStart),
-            'termEndsLabel' => self::simDate(SovereignReserveFund::headTermEnd($time)),
-            'opening' => $politics->fundHeadTermStart < 0.0,
-            'stance' => SovereignReserveFund::stanceName($share),
-            'equityShare' => $share,
-            'inForce' => $macro->sovereignFundPolicyEquityShare > 0.0 ? $macro->sovereignFundPolicyEquityShare : null,
-            'passedOver' => array_map(static fn(array $candidate): array => [
-                'name' => $candidate['name'],
-                'age' => (int) floor($politics->fundHeadTermStart - $candidate['birth']),
-                'equityShare' => SovereignReserveFund::equityShare($candidate['fund']),
-            ], $politics->fundHeadPassedOver),
-            'rules' => [
-                'termYears' => SovereignReserveFund::HEAD_TERM_YEARS,
-                'shortlist' => CouncilAppointments::SHORTLIST,
-                'mostCautious' => SovereignReserveFund::mostCautious(),
-                'boldest' => SovereignReserveFund::boldest(),
-            ],
-        ];
-    }
-
-    /**
-     * The Exchequer: its head, their stance on the debt and whom the Council passed over for them; the debt, the
-     * average maturity it stands at and the one the head steers it toward, the share of it repricing within the year,
-     * what it pays, and what its maturity adds to the ten-year against the founding book. Null before the Exchequer has
-     * a head.
-     *
-     * @return array<string, mixed>|null
-     */
     /**
      * Who pays the tax on dividends, and what the rate in force does against the founding one: how much more or less
      * companies pay out as dividends, the rest going to buybacks, and what it adds to the budget.
@@ -2132,330 +1227,6 @@ class GovernmentPageBuilder
         }
 
         return $note;
-    }
-
-    /**
-     * The Trade & Migration Office's page: the tariff, the migration regime and the tax on foreign home buyers it
-     * administers, each as in force, as the sitting government's next budget would set it and as the market expects
-     * after the vote, with what each does to the District.
-     *
-     * @return array<string, mixed>
-     */
-    public function tradeOffice(PoliticsStateDTO $politics, MacroStateDTO $macro): array
-    {
-        $law = static fn(string $lever, float $inForce): array => [
-            'inForce' => $inForce,
-            'next' => $politics->sittingLevers[$lever] ?? null,
-            'expected' => $politics->forecastLevers[$lever] ?? null,
-        ];
-        $tariff = $politics->importTariffRate;
-
-        return [
-            'tariff' => $law('tariff', $tariff) + [
-                'retaliation' => MacroConstants::TARIFF_RETALIATION_RATIO * $tariff,
-                'revenueToGdp' => MacroAggregateSubsystem::tariffRevenueToGdp($tariff),
-                'outputCost' => MacroConstants::TARIFF_OUTPUT_LOSS * $tariff,
-                'goodsImportsToGdp' => MacroAggregateSubsystem::goodsImportsToGdp(),
-            ],
-            'migration' => $law('laborGrowth', $politics->laborForceGrowthRate) + [
-                'structural' => MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
-                'natural' => MacroConstants::NATURAL_LABOR_FORCE_GROWTH,
-                'structuralMigration' => MacroConstants::STRUCTURAL_NET_MIGRATION_RATE,
-                'closed' => PoliticsEngine::MIGRATION_CLOSED_REGIME,
-                'open' => PoliticsEngine::MIGRATION_OPEN_REGIME,
-                'populationShift' => $macro->immigrationPopulationShift,
-                'cyclical' => $macro->cyclicalMigrationRate,
-                // Newcomers a year per point (a hundredth) of unemployment under its natural rate.
-                'jobsResponse' => LaborMarketSubsystem::MIGRATION_JOBS_RESPONSE * max(0.0, $politics->laborForceGrowthRate - MacroConstants::NATURAL_LABOR_FORCE_GROWTH) / 100.0,
-            ],
-            'foreignBuyers' => $law('foreignBuyerTax', $politics->foreignBuyerTaxRate) + [
-                'priceEffect' => 1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($politics->foreignBuyerTaxRate),
-                'revenueToGdp' => AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($politics->foreignBuyerTaxRate),
-                'strictest' => PoliticsEngine::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX,
-            ],
-            'expectedFrom' => $politics->forecastLevers === [] ? null : self::simDate(ElectionForecast::takesEffect($politics)),
-        ];
-    }
-
-    public function exchequer(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
-    {
-        if ($politics->exchequerHeadName === '') {
-            return null;
-        }
-
-        $time = $politics->totalTime;
-        $target = Exchequer::averageMaturity($politics->exchequerHeadStance);
-        $maturity = $macro->sovereignDebtAverageMaturity;
-        $billShare = CreditFiscalSubsystem::billShare($maturity);
-        $rate = ($billShare * $macro->policyRate) + ((1.0 - $billShare) * $macro->sovereignCouponRate);
-
-        return [
-            'head' => [
-                'name' => $politics->exchequerHeadName,
-                'age' => (int) floor($time - $politics->exchequerHeadBirth),
-                'sinceLabel' => $politics->exchequerHeadTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->exchequerHeadTermStart),
-                'termEndsLabel' => self::simDate(Exchequer::headTermEnd($time)),
-                'opening' => $politics->exchequerHeadTermStart < 0.0,
-                'stance' => Exchequer::stanceName($target),
-                'maturity' => $target,
-                'passedOver' => array_map(static fn(array $candidate): array => [
-                    'name' => $candidate['name'],
-                    'age' => (int) floor($politics->exchequerHeadTermStart - $candidate['birth']),
-                    'maturity' => Exchequer::averageMaturity($candidate['debt']),
-                ], $politics->exchequerHeadPassedOver),
-            ],
-            'debt' => $macro->sovereignDebtToGdp,
-            'netDebt' => $macro->sovereignNetDebtToGdp,
-            // What the bond market's default premium answers to: the debt less the fund whole.
-            'netLiabilities' => $macro->sovereignNetFinancialLiabilitiesToGdp,
-            'maturity' => $maturity,
-            // A book still more than a month from the head's maturity is moving toward it.
-            'movingTo' => abs($macro->sovereignDebtMaturityTarget - $maturity) > 1.0 / 12.0 ? $macro->sovereignDebtMaturityTarget : null,
-            'repricingShare' => $billShare,
-            'rate' => $rate,
-            'interestToGdp' => CreditFiscalSubsystem::publicAccounts($macro, 0.0)->interest,
-            // What the Monetary Authority pays over a year, and the losses it is still making up first.
-            'remittanceToGdp' => CreditFiscalSubsystem::publicAccounts($macro, 0.0)->centralBankRemittance,
-            'authorityLossesToGdp' => $macro->centralBankDeferredAssetToGdp,
-            'tenYear' => $macro->yield10y,
-            'maturityBp' => (int) round(10000.0 * CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $maturity)),
-            'riskSpreadBp' => (int) round(10000.0 * $macro->sovereignRiskSpread),
-            'councilMaturity' => $politics->councilDebtStances === [] ? null : Exchequer::averageMaturity(CouncilAppointments::median($politics->councilDebtStances)),
-            'rules' => [
-                'termYears' => Exchequer::HEAD_TERM_YEARS,
-                'shortlist' => CouncilAppointments::SHORTLIST,
-                'shortest' => Exchequer::SHORTEST_AVERAGE_MATURITY,
-                'longest' => Exchequer::LONGEST_AVERAGE_MATURITY,
-                'founding' => CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
-            ],
-        ];
-    }
-
-    /**
-     * The Fair Trading Board: its head, their stance on competition and whom the Council passed over for them, the
-     * merger screens in force, and the range a head may set them across. Null before the Board has a head.
-     *
-     * @return array<string, mixed>|null
-     */
-    public function fairTrading(PoliticsStateDTO $politics): ?array
-    {
-        if ($politics->fairTradingHeadName === '') {
-            return null;
-        }
-
-        $time = $politics->totalTime;
-        $screens = static fn(float $stance): array => MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($stance));
-
-        return [
-            'head' => [
-                'name' => $politics->fairTradingHeadName,
-                'age' => (int) floor($time - $politics->fairTradingHeadBirth),
-                'sinceLabel' => $politics->fairTradingHeadTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->fairTradingHeadTermStart),
-                'termEndsLabel' => self::simDate(FairTradingBoard::headTermEnd($time)),
-                'opening' => $politics->fairTradingHeadTermStart < 0.0,
-                'stance' => FairTradingBoard::stanceName($politics->fairTradingHeadStance),
-                'passedOver' => array_map(static fn(array $candidate): array => [
-                    'name' => $candidate['name'],
-                    'age' => (int) floor($politics->fairTradingHeadTermStart - $candidate['birth']),
-                    'line' => $screens($candidate['competition'])['concentrated'],
-                ], $politics->fairTradingHeadPassedOver),
-            ],
-            'screens' => $screens($politics->fairTradingHeadStance),
-            'councilLine' => $politics->councilCompetitionStances === [] ? null : $screens(CouncilAppointments::median($politics->councilCompetitionStances))['concentrated'],
-            'rules' => [
-                'termYears' => FairTradingBoard::HEAD_TERM_YEARS,
-                'shortlist' => CouncilAppointments::SHORTLIST,
-                'lightest' => $screens(-1.0),
-                'strictest' => $screens(1.0),
-            ],
-        ];
-    }
-
-    /**
-     * The Securities Commission: its head, their stance on the markets and whom the Council passed over for them; the
-     * margins and the enforcement on earnings in force and, through a new head's notice, the ones coming; and the range
-     * a head may set them across. Null before the Commission has a head.
-     *
-     * @return array<string, mixed>|null
-     */
-    public function securities(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
-    {
-        if ($politics->securitiesHeadName === '') {
-            return null;
-        }
-
-        $time = $politics->totalTime;
-        $stance = $politics->securitiesHeadStance;
-        $opening = $politics->securitiesHeadTermStart < 0.0;
-        $effective = $politics->securitiesHeadTermStart + SecuritiesCommission::RULE_NOTICE_YEARS;
-
-        return [
-            'head' => [
-                'name' => $politics->securitiesHeadName,
-                'age' => (int) floor($time - $politics->securitiesHeadBirth),
-                'sinceLabel' => $opening ? 'Before Year 1' : self::simDate($politics->securitiesHeadTermStart),
-                'termEndsLabel' => self::simDate(SecuritiesCommission::headTermEnd($time)),
-                'opening' => $opening,
-                'stance' => SecuritiesCommission::stanceName($stance),
-                'passedOver' => array_map(static fn(array $candidate): array => [
-                    'name' => $candidate['name'],
-                    'age' => (int) floor($politics->securitiesHeadTermStart - $candidate['birth']),
-                    'margin' => SecuritiesCommission::initialMargin($candidate['markets']),
-                ], $politics->securitiesHeadPassedOver),
-            ],
-            'inForce' => SecuritiesCommission::margins($macro->initialMarginRequirement) + [
-                'enforcement' => $macro->earningsManagementScale,
-            ],
-            // A new head's rules, announced at their seating, while their notice runs.
-            'coming' => $opening || $time >= $effective ? null : [
-                'fromLabel' => self::simDate($effective),
-                'initial' => SecuritiesCommission::initialMargin($stance),
-                'enforcement' => SecuritiesCommission::earningsManagementScale($stance),
-            ],
-            'councilMargin' => $politics->councilMarketsStances === [] ? null : SecuritiesCommission::initialMargin(CouncilAppointments::median($politics->councilMarketsStances)),
-            'rules' => [
-                'termYears' => SecuritiesCommission::HEAD_TERM_YEARS,
-                'shortlist' => CouncilAppointments::SHORTLIST,
-                'noticeMonths' => (int) round(SecuritiesCommission::RULE_NOTICE_YEARS * 12.0),
-                'lightestMargin' => SecuritiesCommission::LIGHTEST_INITIAL_MARGIN,
-                'strictestMargin' => SecuritiesCommission::STRICTEST_INITIAL_MARGIN,
-                'lightestEnforcement' => SecuritiesCommission::LIGHTEST_EARNINGS_MANAGEMENT_SCALE,
-                'strictestEnforcement' => SecuritiesCommission::STRICTEST_EARNINGS_MANAGEMENT_SCALE,
-            ],
-        ];
-    }
-
-    /**
-     * The Security Bureau: its mandate and its director, and when the director's term ends. The Bureau sets no rule, so
-     * there are no figures. Null before it has a director.
-     *
-     * @return array<string, mixed>|null
-     */
-    public function securityBureau(PoliticsStateDTO $politics): ?array
-    {
-        if ($politics->securityDirectorName === '') {
-            return null;
-        }
-
-        $time = $politics->totalTime;
-
-        return [
-            'mandate' => self::mandate(Institutions::SECURITY_BUREAU),
-            'director' => self::standingPost($politics->securityDirectorName, $politics->securityDirectorBirth, $politics->securityDirectorTermStart, $politics->securityDirectorPassedOver, SecurityBureau::directorTermEnd($time), $time),
-            'rules' => ['termYears' => SecurityBureau::DIRECTOR_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
-        ];
-    }
-
-    /**
-     * The Coast Guard: its mandate, its commandant and when their term ends, and the term the Council names them for.
-     * It sets no rule, so there are no figures. The commandant is null before the first is seated.
-     *
-     * @return array{name: string, mandate: string, headTitle: string, head: array<string, mixed>|null, rules: array{termYears: float, shortlist: int}}
-     */
-    public function coastGuard(PoliticsStateDTO $politics): array
-    {
-        $time = $politics->totalTime;
-
-        return [
-            'name' => Institutions::COAST_GUARD,
-            'mandate' => self::mandate(Institutions::COAST_GUARD),
-            'headTitle' => 'commandant',
-            'head' => $politics->coastGuardCommandantName === '' ? null : self::standingPost($politics->coastGuardCommandantName, $politics->coastGuardCommandantBirth, $politics->coastGuardCommandantTermStart, $politics->coastGuardCommandantPassedOver, CoastGuard::commandantTermEnd($time), $time),
-            'rules' => ['termYears' => CoastGuard::COMMANDANT_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
-        ];
-    }
-
-    /**
-     * The State Guard: its mandate, its commander and when their term ends, and the term the Council names them for.
-     * It sets no rule, so there are no figures. The commander is null before the first is seated.
-     *
-     * @return array{name: string, mandate: string, headTitle: string, head: array<string, mixed>|null, rules: array{termYears: float, shortlist: int}}
-     */
-    public function stateGuard(PoliticsStateDTO $politics): array
-    {
-        $time = $politics->totalTime;
-
-        return [
-            'name' => Institutions::STATE_GUARD,
-            'mandate' => self::mandate(Institutions::STATE_GUARD),
-            'headTitle' => 'commander',
-            'head' => $politics->stateGuardCommanderName === '' ? null : self::standingPost($politics->stateGuardCommanderName, $politics->stateGuardCommanderBirth, $politics->stateGuardCommanderTermStart, $politics->stateGuardCommanderPassedOver, StateGuard::commanderTermEnd($time), $time),
-            'rules' => ['termYears' => StateGuard::COMMANDER_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
-        ];
-    }
-
-    /** A department's mandate as the Council lists it. */
-    private static function mandate(string $department): string
-    {
-        return array_column(AerieCouncil::DEPARTMENTS, 'mandate', 'name')[$department];
-    }
-
-    /**
-     * A head who sets no rule, for their department's page: their name and age, when they were seated and leave, and
-     * whom the Council passed over for them, each at their age then.
-     *
-     * @param list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> $passedOver
-     * @return array{name: string, age: int, sinceLabel: string, termEndsLabel: string, opening: bool, passedOver: list<array{name: string, age: int}>}
-     */
-    private static function standingPost(string $name, float $birth, float $termStart, array $passedOver, float $termEnd, float $time): array
-    {
-        return [
-            'name' => $name,
-            'age' => (int) floor($time - $birth),
-            'sinceLabel' => $termStart < 0.0 ? 'Before Year 1' : self::simDate($termStart),
-            'termEndsLabel' => self::simDate($termEnd),
-            'opening' => $termStart < 0.0,
-            'passedOver' => array_map(static fn(array $candidate): array => [
-                'name' => $candidate['name'],
-                'age' => (int) floor($termStart - $candidate['birth']),
-            ], $passedOver),
-        ];
-    }
-
-    /**
-     * The Financial Regulator: its head, their stance on the banks and whom the Council passed over for them; the core
-     * capital requirement in force and, while a rise phases in, the one it is rising to; the countercyclical buffer on
-     * top; and the range of regimes a head may run. Null before the Regulator has a head.
-     *
-     * @return array<string, mixed>|null
-     */
-    public function regulator(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
-    {
-        if ($politics->regulatorName === '') {
-            return null;
-        }
-
-        $time = $politics->totalTime;
-        $target = FinancialRegulator::requirement($politics->regulatorStance);
-
-        return [
-            'head' => [
-                'name' => $politics->regulatorName,
-                'age' => (int) floor($time - $politics->regulatorBirth),
-                'sinceLabel' => $politics->regulatorTermStart < 0.0 ? 'Before Year 1' : self::simDate($politics->regulatorTermStart),
-                'termEndsLabel' => self::simDate(FinancialRegulator::headTermEnd($time)),
-                'stance' => FinancialRegulator::stanceName($target),
-                'requirement' => $target,
-                'passedOver' => array_map(static fn(array $candidate): array => [
-                    'name' => $candidate['name'],
-                    'age' => (int) floor($politics->regulatorTermStart - $candidate['birth']),
-                    'requirement' => FinancialRegulator::requirement($candidate['regulation']),
-                ], $politics->regulatorPassedOver),
-            ],
-            'inForce' => $politics->bankCapitalRequirement,
-            'buffer' => $macro->countercyclicalBufferRate,
-            'phasing' => $target > $politics->bankCapitalRequirement + 1e-9 ? [
-                'target' => $target,
-                'completeLabel' => self::simDate($politics->requirementPhaseStart + FinancialRegulator::PHASE_IN_YEARS),
-            ] : null,
-            'rules' => [
-                'termYears' => FinancialRegulator::HEAD_TERM_YEARS,
-                'shortlist' => CouncilAppointments::SHORTLIST,
-                'lightest' => FinancialRegulator::lightest(),
-                'strictest' => FinancialRegulator::strictest(),
-                'phaseInMonths' => (int) round(FinancialRegulator::PHASE_IN_YEARS * 12),
-            ],
-        ];
     }
 
     /**
@@ -2509,16 +1280,16 @@ class GovernmentPageBuilder
         $support = $formed ? $election->getSupport() : [];
         $named = static fn(string $party): array => [
             'name' => AerieDiet::PARTY_NAMES[$party],
-            'color' => self::PARTY_COLORS[$party],
+            'color' => DietStyle::PARTY_COLORS[$party],
         ];
 
         return [
-            'date' => self::simDate($election->getSimTime()),
+            'date' => DistrictCalendar::quarter($election->getSimTime()),
             'seats' => array_map(static fn(string $party): array => [
                 'key' => $party,
                 'seats' => (int) ($seats[$party] ?? 0),
                 'swing' => (float) ($election->getVoteSwings()[$party] ?? 0.0),
-                'color' => self::PARTY_COLORS[$party],
+                'color' => DietStyle::PARTY_COLORS[$party],
             ], AerieDiet::PARTIES),
             'formed' => $formed,
             'coalition' => array_map($named, $coalition),
@@ -2535,7 +1306,7 @@ class GovernmentPageBuilder
                 $formed = $fall['fellAt'] + ($fall['formationDays'] / FinancialConstants::DAYS_PER_YEAR) <= $now;
 
                 return [
-                    'date' => self::simDate($fall['fellAt']),
+                    'date' => DistrictCalendar::quarter($fall['fellAt']),
                     'fallen' => array_map($named, $fall['fallen']),
                     'formed' => $formed,
                     'coalition' => $formed ? array_map($named, $fall['cabinet']) : [],

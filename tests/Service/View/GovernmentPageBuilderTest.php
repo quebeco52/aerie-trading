@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
+use App\Data\District\DistrictCalendar;
 use App\Data\Politics\AerieDiet as Diet;
 use App\Data\Politics\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
@@ -19,6 +20,7 @@ use App\Repository\RateDecisionRepository;
 use App\Repository\StockRepository;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
@@ -30,6 +32,9 @@ use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PartyLeaders;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
+use App\Service\View\DietChamberDrawing;
+use App\Service\View\DietStyle;
+use App\Service\View\GovernmentCharts;
 use App\Service\View\GovernmentPageBuilder;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -71,112 +76,6 @@ class GovernmentPageBuilderTest extends TestCase
     }
 
     /**
-     * The Exchequer's panel: nothing before it has a head; then the head's maturity, the book moving toward it, what it
-     * pays at its repricing share, and what its maturity adds to the ten-year.
-     */
-    public function testTheExchequerPanelReadsTheDebtAndItsHead(): void
-    {
-        $this->assertNull($this->builder()->exchequer(new PoliticsStateDTO(), new MacroStateDTO()));
-
-        $politics = new PoliticsStateDTO(
-            totalTime: 13.0,
-            exchequerHeadName: 'Rosalind Tate',
-            exchequerHeadBirth: -38.0,
-            exchequerHeadTermStart: 13.0,
-            exchequerHeadStance: \App\Service\Politics\Exchequer::stance(4.3),
-            councilDebtStances: [-0.5, 0.0, 0.5],
-        );
-        $macro = new MacroStateDTO(
-            sovereignRiskSpread: 0.001,
-            sovereignRiskSpreadEma: 0.001,
-            sovereignDebtToGdp: 0.9,
-            sovereignNetDebtToGdp: 0.75,
-            sovereignNetDebtToGdpEma: 0.75,
-            sovereignDebtAverageMaturity: 4.7,
-            sovereignDebtMaturityTarget: 4.3,
-            policyRate: 0.04,
-            sovereignCouponRate: 0.03,
-        );
-        $panel = $this->builder()->exchequer($politics, $macro);
-
-        $this->assertNotNull($panel);
-        $this->assertSame('Rosalind Tate', $panel['head']['name']);
-        $this->assertSame(51, $panel['head']['age']);
-        $this->assertSame('short', $panel['head']['stance']);
-        $this->assertEqualsWithDelta(4.3, $panel['movingTo'], 1e-12);
-        $share = CreditFiscalSubsystem::billShare(4.7);
-        $this->assertEqualsWithDelta($share, $panel['repricingShare'], 1e-12);
-        $this->assertEqualsWithDelta(($share * 0.04) + ((1.0 - $share) * 0.03), $panel['rate'], 1e-12);
-        $this->assertEqualsWithDelta($panel['rate'] * 0.9, $panel['interestToGdp'], 1e-12);
-        $this->assertLessThan(0, $panel['maturityBp'], 'A book shorter than the founding one takes duration off the ten-year.');
-        $this->assertEqualsWithDelta(\App\Service\Politics\Exchequer::averageMaturity(0.0), $panel['councilMaturity'], 1e-12);
-        $this->assertSame(10, $panel['riskSpreadBp'], 'The default charge the market asks, in basis points.');
-    }
-
-    /**
-     * The Fair Trading Board's panel: nothing before it has a head; then the head's screens, the passed-over
-     * candidates' lines, the Council's median line and the record's two ends.
-     */
-    public function testTheFairTradingPanelReadsTheHeadsScreens(): void
-    {
-        $this->assertNull($this->builder()->fairTrading(new PoliticsStateDTO()));
-
-        $politics = new PoliticsStateDTO(
-            totalTime: 7.0,
-            fairTradingHeadName: 'Odile Farrant',
-            fairTradingHeadBirth: -48.0,
-            fairTradingHeadTermStart: 6.0,
-            fairTradingHeadStance: 0.8,
-            fairTradingHeadPassedOver: [['name' => 'Hal Brennan', 'birth' => -41.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => -1.0, 'markets' => 0.0]],
-            councilCompetitionStances: [-0.2, 0.0, 0.4],
-        );
-        $panel = $this->builder()->fairTrading($politics);
-
-        $this->assertNotNull($panel);
-        $this->assertSame('Odile Farrant', $panel['head']['name']);
-        $this->assertSame(55, $panel['head']['age']);
-        $this->assertSame('strict', $panel['head']['stance']);
-        $this->assertFalse($panel['head']['opening']);
-        $this->assertSame(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency(0.8)), $panel['screens']);
-        $this->assertEqualsWithDelta(0.25, $panel['head']['passedOver'][0]['line'], 1e-12, 'The lightest candidate would draw the 2010 line.');
-        $this->assertEqualsWithDelta(MergerAndAcquisitionEngine::reviewScreens(0.5)['concentrated'], $panel['councilLine'], 1e-12);
-        $this->assertEqualsWithDelta(0.30, $panel['rules']['strictest']['shareCeiling'], 1e-12);
-        $this->assertSame(1.0, $panel['rules']['lightest']['shareCeiling']);
-    }
-
-    /**
-     * The Securities Commission's panel: the rules in force read off the economy, a new head's coming ones through
-     * their notice, and none once it has run.
-     */
-    public function testTheSecuritiesPanelReadsTheRulesInForceAndComing(): void
-    {
-        $this->assertNull($this->builder()->securities(new PoliticsStateDTO(), new MacroStateDTO()));
-
-        $politics = new PoliticsStateDTO(
-            totalTime: 9.6,
-            securitiesHeadName: 'Thea Lindqvist',
-            securitiesHeadBirth: -45.0,
-            securitiesHeadTermStart: 9.5,
-            securitiesHeadStance: 1.0,
-            councilMarketsStances: [-0.5, 0.0, 0.5],
-        );
-        $panel = $this->builder()->securities($politics, new MacroStateDTO(initialMarginRequirement: 0.5));
-
-        $this->assertNotNull($panel);
-        $this->assertSame('strict', $panel['head']['stance']);
-        $this->assertSame(0.5, $panel['inForce']['initial']);
-        $this->assertSame(FinancialConstants::MAINTENANCE_MARGIN_SHORT, $panel['inForce']['short']);
-        $this->assertNotNull($panel['coming']);
-        $this->assertEqualsWithDelta(0.80, $panel['coming']['initial'], 1e-12);
-        $this->assertEqualsWithDelta(0.5, $panel['coming']['enforcement'], 1e-12);
-        $this->assertSame(FinancialConstants::INITIAL_MARGIN_REQUIREMENT, $panel['councilMargin']);
-        $this->assertSame(3, $panel['rules']['noticeMonths']);
-
-        $later = new PoliticsStateDTO(totalTime: 10.0, securitiesHeadName: 'Thea Lindqvist', securitiesHeadTermStart: 9.5, securitiesHeadStance: 1.0);
-        $this->assertNull($this->builder()->securities($later, new MacroStateDTO())['coming'] ?? null, 'Once the notice has run the rules are in force.');
-    }
-
-    /**
      * The Council page lists the Security Bureau's director with its mandate, since the Bureau stands outside the
      * government's menus; the other departments carry none.
      */
@@ -205,46 +104,6 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(['title' => 'Commandant', 'name' => 'Imogen Hale', 'age' => 51, 'termEndsLabel' => self::simDate(7.5)], $coast['head']);
         $this->assertSame('/state-guard', $departments[\App\Data\District\Institutions::STATE_GUARD]['href']);
         $this->assertNull($departments[\App\Data\District\Institutions::STATE_GUARD]['head']);
-    }
-
-    /**
-     * Each guard's page carries its name and mandate before it has a commander, and the commander and whom the Council
-     * passed over once it does.
-     */
-    public function testTheGuardPagesReadTheirCommanders(): void
-    {
-        $empty = $this->builder()->stateGuard(new PoliticsStateDTO());
-        $this->assertSame(\App\Data\District\Institutions::STATE_GUARD, $empty['name']);
-        $this->assertNull($empty['head']);
-        $this->assertStringContainsString('only the Council can call it out', $empty['mandate']);
-
-        $page = $this->builder()->coastGuard(new PoliticsStateDTO(
-            totalTime: 4.0,
-            coastGuardCommandantName: 'Imogen Hale',
-            coastGuardCommandantBirth: -48.0,
-            coastGuardCommandantTermStart: 2.5,
-            coastGuardCommandantPassedOver: [['name' => 'Dorian Shaw', 'birth' => -45.5, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
-        ));
-        $this->assertSame('commandant', $page['headTitle']);
-        $this->assertNotNull($page['head']);
-        $this->assertSame(52, $page['head']['age']);
-        $this->assertSame(self::simDate(2.5), $page['head']['sinceLabel']);
-        $this->assertFalse($page['head']['opening']);
-        $this->assertSame([['name' => 'Dorian Shaw', 'age' => 48]], $page['head']['passedOver']);
-        $this->assertSame(5.0, $page['rules']['termYears']);
-    }
-
-    /** The Security Bureau's page: its mandate and director; nothing before it has one. */
-    public function testTheSecurityBureauPageReadsItsDirector(): void
-    {
-        $this->assertNull($this->builder()->securityBureau(new PoliticsStateDTO()));
-
-        $page = $this->builder()->securityBureau(new PoliticsStateDTO(totalTime: 2.0, securityDirectorName: 'Raymond Okafor', securityDirectorBirth: -50.0, securityDirectorTermStart: -4.0));
-        $this->assertNotNull($page);
-        $this->assertSame('Before Year 1', $page['director']['sinceLabel']);
-        $this->assertTrue($page['director']['opening']);
-        $this->assertSame(52, $page['director']['age']);
-        $this->assertStringContainsString('state police', $page['mandate']);
     }
 
     public function testTheDietAtYearOneIsDrawnSeatForSeat(): void
@@ -285,8 +144,8 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertNotNull($leftmost);
         $this->assertNotNull($rightmost);
 
-        $this->assertContains($leftmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC]]);
-        $this->assertContains($rightmost['color'], [GovernmentPageBuilder::PARTY_COLORS[Diet::VANGUARD]]);
+        $this->assertContains($leftmost['color'], [DietStyle::PARTY_COLORS[Diet::CIVIC]]);
+        $this->assertContains($rightmost['color'], [DietStyle::PARTY_COLORS[Diet::VANGUARD]]);
     }
 
     /**
@@ -314,7 +173,7 @@ class GovernmentPageBuilderTest extends TestCase
         }
 
         $this->assertSame(2, $runs, 'Each bloc is one wedge of the chamber.');
-        $this->assertSame(GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC], $seats[0]['color'], 'The bigger-state bloc sits on the left, its biggest-state party leftmost.');
+        $this->assertSame(DietStyle::PARTY_COLORS[Diet::CIVIC], $seats[0]['color'], 'The bigger-state bloc sits on the left, its biggest-state party leftmost.');
     }
 
     /**
@@ -544,7 +403,7 @@ class GovernmentPageBuilderTest extends TestCase
     {
         $size = $compass['fontSize'];
         $box = static function (string $text, float $x, float $y, string $anchor) use ($size): array {
-            $width = mb_strlen($text) * $size * GovernmentPageBuilder::COMPASS_CHARACTER_WIDTH;
+            $width = mb_strlen($text) * $size * DietChamberDrawing::COMPASS_CHARACTER_WIDTH;
             $left = match ($anchor) {
                 'start' => $x, 'end' => $x - $width, default => $x - ($width / 2.0),
             };
@@ -561,7 +420,7 @@ class GovernmentPageBuilderTest extends TestCase
                 $boxes = $layout['endsBeside'] ? array_map(static fn(array $end): array => $box($end['text'], $end['x'], $end['y'], $end['anchor']), $row['ends']) : [];
                 $lines = [];
                 foreach ($row['parties'] as $party) {
-                    $this->assertSame(GovernmentPageBuilder::PARTY_LABELS[$party['key']], $party['label']);
+                    $this->assertSame(DietStyle::PARTY_LABELS[$party['key']], $party['label']);
                     $label = $box($party['label'], $party['labelX'], $party['labelY'], 'middle');
                     $ring = $party['r'] + ($party['governing'] || $party['supporting'] ? $compass['ringGap'] : 0.0);
                     $this->assertTrue($apart($label, [$party['x'] - $ring, -$ring, $party['x'] + $ring, $ring]), "{$party['label']}'s label covers its dot or ring on {$where}.");
@@ -662,7 +521,7 @@ class GovernmentPageBuilderTest extends TestCase
         foreach ($page['compass']['layouts'] as $name => $layout) {
             $row = array_column($layout['rows'], null, 'axis')[Diet::AXIS_STATE];
             $exchange = array_column($row['parties'], null, 'key')[Diet::EXCHANGE];
-            $halfLabel = mb_strlen($exchange['label']) * $page['compass']['fontSize'] * GovernmentPageBuilder::COMPASS_CHARACTER_WIDTH / 2.0;
+            $halfLabel = mb_strlen($exchange['label']) * $page['compass']['fontSize'] * DietChamberDrawing::COMPASS_CHARACTER_WIDTH / 2.0;
 
             $this->assertGreaterThanOrEqual($row['viewBox'][0], $exchange['labelX'] - $halfLabel);
             if ($name === 'wide') {
@@ -760,7 +619,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.1230, $regulator['head']['requirement'], 1e-12);
         $this->assertEqualsWithDelta(0.1012, $regulator['inForce'], 1e-12);
         $this->assertEqualsWithDelta(0.1230, $regulator['phasing']['target'], 1e-12);
-        $this->assertSame(GovernmentPageBuilder::simDate(8.0), $regulator['phasing']['completeLabel']);
+        $this->assertSame(DistrictCalendar::quarter(8.0), $regulator['phasing']['completeLabel']);
         $this->assertSame('Other One', $regulator['head']['passedOver'][0]['name']);
         $this->assertSame(57, $regulator['head']['passedOver'][0]['age']);
         $this->assertEqualsWithDelta(0.08, $regulator['head']['passedOver'][0]['requirement'], 1e-12);
@@ -768,10 +627,10 @@ class GovernmentPageBuilderTest extends TestCase
 
     public function testSimulationDatesCountFromTheFounding(): void
     {
-        $this->assertSame('Year 1 Q1', GovernmentPageBuilder::simDate(0.0));
-        $this->assertSame('Year 4 Q4', GovernmentPageBuilder::simDate(3.99));
-        $this->assertSame('Year 5 Q1', GovernmentPageBuilder::simDate(4.0));
-        $this->assertSame('Year 41 Q1', GovernmentPageBuilder::simDate(40.0 - 1e-11), 'A vote the accumulated clock holds a hair short of its day.');
+        $this->assertSame('Year 1 Q1', DistrictCalendar::quarter(0.0));
+        $this->assertSame('Year 4 Q4', DistrictCalendar::quarter(3.99));
+        $this->assertSame('Year 5 Q1', DistrictCalendar::quarter(4.0));
+        $this->assertSame('Year 41 Q1', DistrictCalendar::quarter(40.0 - 1e-11), 'A vote the accumulated clock holds a hair short of its day.');
     }
 
     /**
@@ -823,27 +682,6 @@ class GovernmentPageBuilderTest extends TestCase
                 $this->assertCount(3, array_filter($row['parties'], static fn(array $dot): bool => $dot['supporting']), 'The founding Vanguard cabinet has three supporters.');
             }
         }
-    }
-
-    /**
-     * The Trade & Migration Office shows its three laws as in force, as the next budget sets them and as the market
-     * expects them, with what each does.
-     */
-    public function testTheTradeOfficeShowsItsThreeLaws(): void
-    {
-        $politics = new PoliticsStateDTO(importTariffRate: 0.05, foreignBuyerTaxRate: 0.15, sittingLevers: ['tariff' => 0.08], forecastLevers: ['tariff' => 0.02, 'foreignBuyerTax' => 0.0]);
-        $office = $this->builder()->tradeOffice($politics, new MacroStateDTO(immigrationPopulationShift: 0.01));
-
-        $this->assertSame(0.05, $office['tariff']['inForce']);
-        $this->assertSame(0.08, $office['tariff']['next']);
-        $this->assertSame(0.02, $office['tariff']['expected']);
-        $this->assertEqualsWithDelta(MacroConstants::TARIFF_RETALIATION_RATIO * 0.05, $office['tariff']['retaliation'], 1e-12);
-        $this->assertGreaterThan(0.0, $office['tariff']['revenueToGdp']);
-        $this->assertNull($office['migration']['next']);
-        $this->assertSame(0.01, $office['migration']['populationShift']);
-        $this->assertEqualsWithDelta(1.0 - \App\Service\Macro\Subsystem\AssetMarketSubsystem::foreignBuyerPriceFactor(0.15), $office['foreignBuyers']['priceEffect'], 1e-12);
-        $this->assertSame(0.0, $office['foreignBuyers']['expected']);
-        $this->assertNotNull($office['expectedFrom']);
     }
 
     /** Each line names the laws its question sets, and every law is named on exactly one line. */
@@ -952,7 +790,7 @@ class GovernmentPageBuilderTest extends TestCase
         $rows = array_column($polls['parties'], null, 'name');
         $vanguard = $rows[Diet::PARTY_NAMES[Diet::VANGUARD]];
         $this->assertSame(Diet::PARTY_NAMES[Diet::VANGUARD], $polls['parties'][0]['name'], 'Listed by the poll average.');
-        $averages = GovernmentPageBuilder::pollAverages($politics);
+        $averages = GovernmentCharts::pollAverages($politics);
         $average = $averages[array_key_last($averages)]['shares'];
         $this->assertGreaterThan(Diet::SEED_VOTE_SHARES[Diet::VANGUARD], $average[Diet::VANGUARD], 'The polls pull the average up from the result...');
         $this->assertLessThan($latest[Diet::VANGUARD], $average[Diet::VANGUARD], '...but not all the way to one noisy poll.');
@@ -1091,7 +929,7 @@ class GovernmentPageBuilderTest extends TestCase
         }
         $politics = PoliticsStateDTO::fromState($state);
 
-        $averages = GovernmentPageBuilder::pollAverages($politics);
+        $averages = GovernmentCharts::pollAverages($politics);
         $last = $averages[array_key_last($averages)];
         $this->assertCount(5, $averages, 'The result, then the average after each poll.');
         foreach (Diet::PARTIES as $party) {
@@ -1112,11 +950,11 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(-1, $this->builder()->buildAuthority(new MacroStateDTO(totalTime: 3.30), $politics(-0.00006))['authority']['meeting']['moveBp']);
         $this->assertSame(0, $this->builder()->buildAuthority(new MacroStateDTO(totalTime: 3.30), $politics(0.00004))['authority']['meeting']['moveBp'], 'Under half a basis point the printed rate does not move.');
 
-        $this->assertEqualsWithDelta(3.375, GovernmentPageBuilder::nextMeeting(3.30), 1e-12);
-        $this->assertEqualsWithDelta(3.375, GovernmentPageBuilder::nextMeeting(3.25), 1e-12, 'On a meeting day the next is a meeting on.');
-        $this->assertEqualsWithDelta(3.375, GovernmentPageBuilder::nextMeeting(3.25 - 1e-12), 1e-12, 'A clock a hair short of the meeting it just held.');
-        $this->assertEqualsWithDelta(3.25, GovernmentPageBuilder::nextMeeting(3.2), 1e-12);
-        $this->assertSame(\App\Data\District\DistrictCalendar::dateline(3.375), $this->builder()->buildAuthority(new MacroStateDTO(totalTime: 3.30), $politics(0.0))['authority']['nextMeeting']);
+        $this->assertEqualsWithDelta(3.375, MonetaryPolicySubsystem::nextMeetingAt(3.30), 1e-12);
+        $this->assertEqualsWithDelta(3.375, MonetaryPolicySubsystem::nextMeetingAt(3.25), 1e-12, 'On a meeting day the next is a meeting on.');
+        $this->assertEqualsWithDelta(3.375, MonetaryPolicySubsystem::nextMeetingAt(3.25 - 1e-12), 1e-12, 'A clock a hair short of the meeting it just held.');
+        $this->assertEqualsWithDelta(3.25, MonetaryPolicySubsystem::nextMeetingAt(3.2), 1e-12);
+        $this->assertSame(DistrictCalendar::dateline(3.375), $this->builder()->buildAuthority(new MacroStateDTO(totalTime: 3.30), $politics(0.0))['authority']['nextMeeting']);
     }
 
     /**
@@ -1161,9 +999,9 @@ class GovernmentPageBuilderTest extends TestCase
         [$before, $after] = $laws['cabinets'];
         $this->assertSame(['Vanguard'], $before['members']);
         $this->assertSame('Before Year 1', $before['fromLabel']);
-        $this->assertSame(GovernmentPageBuilder::PARTY_COLORS[Diet::VANGUARD], $before['color']);
+        $this->assertSame(DietStyle::PARTY_COLORS[Diet::VANGUARD], $before['color']);
         $this->assertSame(['Civic', 'Iron Harbor'], $after['members']);
-        $this->assertSame(GovernmentPageBuilder::PARTY_COLORS[Diet::CIVIC], $after['color'], 'Led by its largest party.');
+        $this->assertSame(DietStyle::PARTY_COLORS[Diet::CIVIC], $after['color'], 'Led by its largest party.');
         $this->assertSame('now', $after['toLabel']);
         $this->assertEqualsWithDelta($left, $before['x0'], 1e-9);
         $this->assertEqualsWithDelta($before['x1'], $after['x0'], 1e-9);
@@ -1178,7 +1016,7 @@ class GovernmentPageBuilderTest extends TestCase
      */
     public function testTheRateChartMarksEachMeetingItsDissentsAndANewGovernor(): void
     {
-        $this->assertNull(GovernmentPageBuilder::rateChart([$this->decision(1.0, 0.03, 0.0, [0.0, 0.0], 'Ada Marsh')], 1.1), 'One meeting is no line.');
+        $this->assertNull(GovernmentCharts::rateChart([$this->decision(1.0, 0.03, 0.0, [0.0, 0.0], 'Ada Marsh')], 1.1), 'One meeting is no line.');
 
         $decisions = [
             $this->decision(1.0, 0.0300, 0.0, [0.0, 0.0, 0.0], 'Ada Marsh'),
@@ -1186,7 +1024,7 @@ class GovernmentPageBuilderTest extends TestCase
             $this->decision(1.25, 0.0326, 0.0001, [0.0, 0.0, -1.0], 'Ben Okafor'),
             $this->decision(1.375, 0.0350, 0.0025, [0.0, 0.0, 0.0], 'Ben Okafor'),
         ];
-        $chart = GovernmentPageBuilder::rateChart($decisions, 1.4);
+        $chart = GovernmentCharts::rateChart($decisions, 1.4);
         $this->assertNotNull($chart);
 
         $this->assertCount(4, $chart['meetings']);
@@ -1227,7 +1065,7 @@ class GovernmentPageBuilderTest extends TestCase
         }
         $inflation = [['t' => 0.75, 'inflation' => 0.09], ['t' => 1.0, 'inflation' => 0.012], ['t' => 1.25, 'inflation' => 0.045], ['t' => 2.0, 'inflation' => 0.025]];
 
-        $chart = GovernmentPageBuilder::rateChart($decisions, 2.2, $inflation);
+        $chart = GovernmentCharts::rateChart($decisions, 2.2, $inflation);
         $this->assertNotNull($chart);
         $this->assertNotNull($chart['inflation']);
         $this->assertSame([0.012, 0.045, 0.025], array_column($chart['inflation']['quarters'], 'inflation'), 'A quarter before the first meeting is off the chart.');
@@ -1252,7 +1090,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.025, $summary['inflation'], 1e-12);
         $this->assertEqualsWithDelta(0.015, $summary['realRate'], 1e-12);
 
-        $bare = GovernmentPageBuilder::rateChart(array_slice($decisions, 0, 2), 1.2);
+        $bare = GovernmentCharts::rateChart(array_slice($decisions, 0, 2), 1.2);
         $this->assertNotNull($bare);
         $this->assertNull($bare['inflation']);
         $this->assertNull($bare['summary']['realRate'], 'No inflation on record, no real rate.');
@@ -1267,9 +1105,9 @@ class GovernmentPageBuilderTest extends TestCase
     {
         $leaders = static fn(float $civic): array => [Diet::CIVIC => $civic, Diet::VANGUARD => 1.0 - $civic - 0.004, Diet::EXCHANGE => 0.004] + array_fill_keys(Diet::PARTIES, 0.0);
         $forecasts = [$this->odds(4.1, $leaders(0.5)), $this->odds(4.2, $leaders(0.6)), $this->odds(4.3, $leaders(0.7))];
-        $this->assertNull(GovernmentPageBuilder::oddsChart([$forecasts[0]], 4.35, 8.0));
+        $this->assertNull(GovernmentCharts::oddsChart([$forecasts[0]], 4.35, 8.0));
 
-        $chart = GovernmentPageBuilder::oddsChart($forecasts, 4.35, 8.0);
+        $chart = GovernmentCharts::oddsChart($forecasts, 4.35, 8.0);
         $this->assertNotNull($chart);
         $this->assertSame([Diet::PARTY_NAMES[Diet::CIVIC], Diet::PARTY_NAMES[Diet::VANGUARD]], array_column($chart['parties'], 'name'), 'Likeliest first; a party under the listed chance throughout is left off.');
 
@@ -1296,7 +1134,7 @@ class GovernmentPageBuilderTest extends TestCase
         $elections = $this->createStub(DietElectionRepository::class);
         $elections->method('findChronological')->willReturn([]);
         $decisions = $this->createMock(RateDecisionRepository::class);
-        $decisions->expects($this->once())->method('findSince')->with(5.3 - GovernmentPageBuilder::RATE_CHART_YEARS)
+        $decisions->expects($this->once())->method('findSince')->with(5.3 - GovernmentCharts::RATE_CHART_YEARS)
             ->willReturn([$this->decision(5.0, 0.04, 0.0, [0.0], 'Ada Marsh'), $this->decision(5.125, 0.0425, 0.0025, [0.0], 'Ada Marsh')]);
         $odds = $this->createMock(ElectionOddsRepository::class);
         $odds->expects($this->once())->method('findForVote')->with(8.0, $this->greaterThan(0.0))
@@ -1343,6 +1181,6 @@ class GovernmentPageBuilderTest extends TestCase
     /** A simulation time as the page names it. */
     private static function simDate(float $time): string
     {
-        return (new \ReflectionMethod(GovernmentPageBuilder::class, 'simDate'))->invoke(null, $time);
+        return DistrictCalendar::quarter($time);
     }
 }

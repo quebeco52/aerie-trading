@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Twig\Extension;
 
-use App\Service\View\GovernmentPageBuilder;
+use App\Data\District\DistrictCalendar;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFilter;
 
@@ -17,7 +17,7 @@ class SimDateExtension extends AbstractExtension
     public function getFilters(): array
     {
         return [
-            new TwigFilter('sim_date', [GovernmentPageBuilder::class, 'simDate']),
+            new TwigFilter('sim_date', [DistrictCalendar::class, 'quarter']),
         ];
     }
 }

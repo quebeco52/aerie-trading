@@ -6,7 +6,7 @@ namespace App\Controller;
 
 use App\Service\Lore\Almanac;
 use App\Service\Politics\PoliticsStateProvider;
-use App\Service\View\GovernmentPageBuilder;
+use App\Service\View\DepartmentPageBuilder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -18,7 +18,7 @@ use Symfony\Component\Routing\Attribute\Route;
 class SecurityBureauController extends AbstractController
 {
     #[Route('/security-bureau', name: 'app_security_bureau', methods: ['GET'])]
-    public function index(PoliticsStateProvider $politicsStateProvider, GovernmentPageBuilder $pageBuilder, Almanac $almanac): Response
+    public function index(PoliticsStateProvider $politicsStateProvider, DepartmentPageBuilder $pageBuilder, Almanac $almanac): Response
     {
         return $this->render('security_bureau/index.html.twig', [
             'bureau' => $pageBuilder->securityBureau($politicsStateProvider->liveState()),

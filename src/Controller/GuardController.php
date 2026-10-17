@@ -6,7 +6,7 @@ namespace App\Controller;
 
 use App\Service\Lore\Almanac;
 use App\Service\Politics\PoliticsStateProvider;
-use App\Service\View\GovernmentPageBuilder;
+use App\Service\View\DepartmentPageBuilder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -18,7 +18,7 @@ use Symfony\Component\Routing\Attribute\Route;
 class GuardController extends AbstractController
 {
     #[Route('/coast-guard', name: 'app_coast_guard', methods: ['GET'])]
-    public function coastGuard(PoliticsStateProvider $politicsStateProvider, GovernmentPageBuilder $pageBuilder, Almanac $almanac): Response
+    public function coastGuard(PoliticsStateProvider $politicsStateProvider, DepartmentPageBuilder $pageBuilder, Almanac $almanac): Response
     {
         return $this->render('guard/index.html.twig', [
             'force' => $pageBuilder->coastGuard($politicsStateProvider->liveState()),
@@ -27,7 +27,7 @@ class GuardController extends AbstractController
     }
 
     #[Route('/state-guard', name: 'app_state_guard', methods: ['GET'])]
-    public function stateGuard(PoliticsStateProvider $politicsStateProvider, GovernmentPageBuilder $pageBuilder, Almanac $almanac): Response
+    public function stateGuard(PoliticsStateProvider $politicsStateProvider, DepartmentPageBuilder $pageBuilder, Almanac $almanac): Response
     {
         return $this->render('guard/index.html.twig', [
             'force' => $pageBuilder->stateGuard($politicsStateProvider->liveState()),
