@@ -2101,8 +2101,6 @@
 								<span class="text-on-surface font-semibold">{{ lifecycleStage.label }}.</span> {{ lifecycleStage.description }}
 								{% if not lifecycleStage.initiatesDistributions %}
 									<span class="block mt-1">Dividends are withheld at this stage: every dollar is reinvested until operations turn cash positive.</span>
-								{% elseif lifecycleStage.isShedding %}
-									<span class="block mt-1">Management is under pressure to divest: shake-out and decline firms sell assets to fund operations.</span>
 								{% endif %}
 							{% endif %}
 						</div>

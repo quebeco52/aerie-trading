@@ -170,6 +170,8 @@ class BondController extends AbstractController
             'userAvgCost' => $userAvgCost,
             'userCouponIncome' => $userCouponIncome,
             'openOrders' => $openOrders,
+            // The ticket starts from the price the desk deals at, off the live curve; the mark above is the day's.
+            'dealingPrice' => $bond->getStatus() === Bond::STATUS_ACTIVE ? $pricingEngine->dealingPrice($bond, $macro) : (float) $bond->getPrice(),
             'curve' => $this->sampleCurve($pricingEngine, $macro),
             'ticksPerYear' => $ticksPerYear,
         ]);

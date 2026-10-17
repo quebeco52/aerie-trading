@@ -26,6 +26,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Market\Trading\TradeExecutionService;
 use App\Service\User\Portfolio;
+use App\Tests\Support\MacroStateBuilder;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Repository\BondRepository;
@@ -1055,6 +1056,49 @@ class TradeExecutionServiceTest extends TestCase
         $this->expectExceptionMessageMatches('/Only equities can be sold short/');
 
         $this->service->executeOrder($user, 'G10-001', 'SHORT', 'MARKET', 1);
+    }
+
+    /**
+     * A bond deals at the value the live curve gives it, not at the morning's mark: the ladder is marked once a trading
+     * day while the curve the screens show moves every tick, so dealing at the mark let a player trade a move the mark
+     * had not caught up with. The ticket's cost preview is struck at the same price.
+     */
+    public function testABondDealsAtTheLiveCurveRatherThanTheMark(): void
+    {
+        $state = MacroStateBuilder::create()->build();
+        $state->totalTime = 3.3;
+        $macro = \App\DTO\MacroStateDTO::fromMacroState($state);
+        $provider = $this->createStub(MacroStateProvider::class);
+        $provider->method('liveState')->willReturn($macro);
+        (new \ReflectionProperty(TradeExecutionService::class, 'macroStates'))->setValue($this->service, $provider);
+        (new \ReflectionProperty(TradeExecutionService::class, 'bondPricing'))->setValue($this->service, new BondPricingEngine());
+
+        $bond = (new Bond())
+            ->setTicker('G10-001')->setName('test issue')->setTenorYears('10')->setCouponRate('0.04')
+            ->setFaceValue((string) FinancialConstants::BOND_FACE_VALUE)
+            ->setIssuedAtTime(1.0)->setMaturesAtTime(11.0)->setLastCouponTime(3.0)
+            ->setPrice('800');
+        $live = (new BondPricingEngine())->dealingPrice($bond, $macro);
+        $this->assertGreaterThan(1.1 * 800.0, $live, 'The fixture needs a mark the curve has left behind.');
+
+        $this->stockRepoStub->method('findOneByTicker')->willReturn(null);
+        $this->etfRepoStub->method('findOneByTicker')->willReturn(null);
+        $this->bondRepoStub->method('findOneByTicker')->willReturn($bond);
+        $this->userBondRepoStub->method('findOneBy')->willReturn(null);
+        $captured = [];
+        $this->emMock->method('persist')->willReturnCallback(static function (object $entity) use (&$captured): void {
+            if ($entity instanceof TradeOrder) {
+                $captured[] = $entity;
+            }
+        });
+
+        $user = new User();
+        $user->setCashBalance('100000.00');
+        $this->service->executeOrder($user, 'G10-001', 'BUY', 'MARKET', 10);
+        $order = end($captured);
+
+        $this->assertEqualsWithDelta($live * (1.0 + LiquidityEngine::BOND_HALF_SPREAD), (float) $order->getExecutionPrice(), 0.01);
+        $this->assertEqualsWithDelta(LiquidityEngine::BOND_HALF_SPREAD, $this->service->previewCosts('G10-001', 'BUY', 10)['spread'] ?? null, 1e-9);
     }
 
     public function testCoveringReturnsTheBorrowAndReducesShortInterest(): void

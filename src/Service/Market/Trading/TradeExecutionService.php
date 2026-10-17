@@ -4,6 +4,7 @@ namespace App\Service\Market\Trading;
 
 use App\DTO\ExecutionQuoteDTO;
 use App\DTO\ResolvedAssetDTO;
+use App\Entity\Bond;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
@@ -11,6 +12,7 @@ use App\Entity\User;
 use App\Entity\UserBond;
 use App\Entity\UserEtf;
 use App\Entity\UserStock;
+use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
@@ -59,7 +61,21 @@ class TradeExecutionService
         private \App\Service\User\CashLedger $cashLedger,
         private ?\App\Service\Macro\MacroStateProvider $macroStates = null,
         private ?\App\Service\Notification\PlayerNotifier $notifier = null,
+        private ?BondPricingEngine $bondPricing = null,
     ) {}
+
+    /**
+     * The price one unit deals at: a bond off the live curve (BondPricingEngine::dealingPrice()), anything else at the
+     * row the ticker writes on every frame. Without a live economy to price against, the row stands in.
+     */
+    private function dealingPrice(ResolvedAssetDTO $asset): float
+    {
+        if ($asset->entity instanceof Bond && $this->bondPricing !== null && $this->macroStates !== null) {
+            return $this->bondPricing->dealingPrice($asset->entity, $this->macroStates->liveState());
+        }
+
+        return (float) $asset->price();
+    }
 
     /**
      * The stamp duty the Diet has in force on each side of a share trade, the founding rate before the ticker has
@@ -87,7 +103,7 @@ class TradeExecutionService
             return null;
         }
 
-        $mid = (float) $asset->price();
+        $mid = $this->dealingPrice($asset);
         if ($mid <= 0.0) {
             return null;
         }
@@ -227,7 +243,7 @@ class TradeExecutionService
             }
 
             $assetType = $asset->type;
-            $livePrice = (float) $asset->price();
+            $livePrice = $this->dealingPrice($asset);
             $quantityStr = (string) $quantity;
             $currentCashStr = (string) $user->getCashBalance();
 
