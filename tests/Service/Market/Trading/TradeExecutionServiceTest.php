@@ -1121,6 +1121,37 @@ class TradeExecutionServiceTest extends TestCase
         $this->assertSame(460.0, (float) $stock->getShortInterestShares());
     }
 
+    /**
+     * Short interest moves by the change in the account's short position, not by the action's name: a buy against a
+     * short returns the stock it closes, and a short sale against shares held borrows only what it sells beyond them.
+     * Counted by action, a round trip through zero left short interest standing on stock nobody had borrowed.
+     */
+    public function testShortInterestFollowsThePositionThroughZero(): void
+    {
+        $user = $this->marginUser();
+        $stock = $this->shortableStock();
+        $stock->setShortInterestShares('500.00');
+        $holding = (new UserStock())->setUser($user)->setStock($stock)->setQuantity(-100);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 150);
+        $this->assertSame(50, (int) $holding->getQuantity());
+        $this->assertSame(400.0, (float) $stock->getShortInterestShares(), 'The buy closed a hundred shares of short.');
+
+        $this->service->executeOrder($user, 'APEX', 'SHORT', 'MARKET', 80);
+        $this->assertSame(-30, (int) $holding->getQuantity());
+        $this->assertSame(430.0, (float) $stock->getShortInterestShares(), 'Only the thirty sold beyond the fifty held were borrowed.');
+    }
+
+    public function testSharesBorrowedIsTheChangeInTheShortPosition(): void
+    {
+        $this->assertSame(30, TradeExecutionService::sharesBorrowed(50, -30));
+        $this->assertSame(-100, TradeExecutionService::sharesBorrowed(-100, 50));
+        $this->assertSame(0, TradeExecutionService::sharesBorrowed(20, 120));
+        $this->assertSame(-40, TradeExecutionService::sharesBorrowed(-100, -60));
+    }
+
     public function testCoveringMoreThanIsShortIsRefused(): void
     {
         $user = $this->marginUser();

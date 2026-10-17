@@ -69,4 +69,25 @@ final class CashLedger
             self::CASH_SCALE
         ));
     }
+
+    /**
+     * Nets the settled balance against the margin loan, as the two moves above would have: cash pays the loan down,
+     * and a balance below zero becomes borrowing. For the moves written straight to the column in bulk (dividends,
+     * borrow fees, split remnants), which leave cash beside a loan or below zero. Equity is unchanged; what changes is
+     * which rate each dollar earns or pays.
+     */
+    public function net(User $user): void
+    {
+        $net = \bcsub((string) $user->getCashBalance(), (string) $user->getMarginDebit(), self::CASH_SCALE);
+
+        if (\bccomp($net, '0.0000', self::CASH_SCALE) >= 0) {
+            $user->setCashBalance($net);
+            $user->setMarginDebit('0.00');
+
+            return;
+        }
+
+        $user->setCashBalance('0.0000');
+        $user->setMarginDebit(\bcsub('0', $net, self::DEBIT_SCALE));
+    }
 }

@@ -156,6 +156,7 @@ class FailureSweep
         $stock->setCurrentVolatility('0.0000');
         $stock->setCreditRating('D');
 
+        $this->readAccountsFresh($stock);
         $holders = $this->cancelEquity($stock);
         // The options go with the shares they were written on, cash-settled on an underlying worth nothing.
         $this->optionSettlement?->settleCancelledUnderlying($stock);
@@ -209,6 +210,7 @@ class FailureSweep
 
         $holders = [];
         if ($plan->oldEquityShare <= 0.0) {
+            $this->readAccountsFresh($stock);
             $holders = $this->cancelEquity($stock);
             $this->optionSettlement?->settleCancelledUnderlying($stock);
         } elseif ($this->notifier !== null) {
@@ -280,6 +282,30 @@ class FailureSweep
             'SELECT user_id, quantity FROM user_stocks WHERE stock_id = :id AND quantity <> 0',
             ['id' => $stock->getId()]
         );
+    }
+
+    /**
+     * Reads every account the cancellation moves cash for as the database holds it, once, before any of it moves: the
+     * refunds of resting buys and the cash settlement of options on the name. The ticker's copy of an account can be a
+     * day old, and cash moved on it wrote back over every trade the account had made since. Read up front because the
+     * option settlement runs while the refunds are still waiting to be written.
+     */
+    private function readAccountsFresh(Stock $stock): void
+    {
+        $ids = $this->entityManager->getConnection()->fetchFirstColumn(
+            "SELECT o.user_id FROM trade_orders o WHERE o.ticker = :ticker AND o.status = 'OPEN' AND o.action = 'BUY'
+             UNION
+             SELECT uo.user_id FROM user_options uo JOIN option_contracts oc ON oc.id = uo.option_contract_id
+             WHERE oc.stock_id = :stock_id AND oc.status = :active AND uo.quantity <> 0",
+            ['ticker' => $stock->getTicker(), 'stock_id' => $stock->getId(), 'active' => \App\Entity\OptionContract::STATUS_ACTIVE]
+        );
+
+        foreach ($ids as $id) {
+            $user = $this->entityManager->find(\App\Entity\User::class, $id);
+            if ($user !== null) {
+                $this->entityManager->refresh($user);
+            }
+        }
     }
 
     /**

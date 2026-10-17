@@ -13,6 +13,7 @@ use App\Entity\UserStock;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -51,6 +52,9 @@ final class OptionSettlementEngine
     /** Intrinsic value per share at which a contract is exercised by exception at expiry. The clearing house exercises anything in the money by a tick unless the holder says otherwise, so a contract a cent in the money is delivered, not abandoned. */
     public const OPTION_EXERCISE_THRESHOLD = 0.01;
 
+    /** @var array<string, true> Accounts and holdings read fresh this pass (readFresh()). */
+    private array $fresh = [];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly \App\Service\User\CashLedger $cashLedger,
@@ -78,6 +82,7 @@ final class OptionSettlementEngine
      */
     public function settle(float $currentTime): array
     {
+        $this->fresh = [];
         $connection = $this->em->getConnection();
 
         $rows = $connection->fetchAllAssociative(
@@ -150,6 +155,9 @@ final class OptionSettlementEngine
      * is worthless and a put is worth its full strike. Left alone, the contracts would have expired later
      * against the NEW equity's price and physically delivered shares of a company their writers never
      * referenced.
+     *
+     * The caller reads the accounts fresh first (FailureSweep), since the buy escrow it refunds is still waiting to be
+     * written when this runs, and a read here would discard it.
      *
      * @return int Contracts settled.
      */
@@ -237,6 +245,28 @@ final class OptionSettlementEngine
                 array_merge($params, array_keys($chunk))
             );
         }
+    }
+
+    /**
+     * Reads an account or a holding as the database holds it before an expiry moves cash or shares on it, once a pass,
+     * and locks it until the tick commits. The ticker's copy can be a day old: cash moved on it wrote back over every
+     * trade the account had made since, and a stale holding failed its version check at the flush. Read twice in a
+     * pass, the second read would discard the first move.
+     */
+    private function readFresh(User|UserStock $entity): void
+    {
+        $id = $entity->getId();
+        $key = ($entity instanceof User ? 'user:' : 'holding:') . $id;
+
+        if ($id === null || isset($this->fresh[$key])) {
+            return;
+        }
+
+        $this->fresh[$key] = true;
+        if ($this->em->getConnection()->isTransactionActive()) {
+            $this->em->lock($entity, LockMode::PESSIMISTIC_WRITE);
+        }
+        $this->em->refresh($entity);
     }
 
     /**
@@ -348,6 +378,7 @@ final class OptionSettlementEngine
         }
 
         $user = $position->getUser();
+        $this->readFresh($user);
         $strike = (float) $contract->getStrike();
 
         $shareDelta = self::shareDelta($contracts, $contract->isCall());
@@ -391,7 +422,9 @@ final class OptionSettlementEngine
     {
         $holding = $this->em->getRepository(UserStock::class)->findOneBy(['user' => $user, 'stock' => $stock]);
 
-        if ($holding === null) {
+        if ($holding !== null) {
+            $this->readFresh($holding);
+        } else {
             $holding = (new UserStock())->setUser($user)->setStock($stock)->setQuantity(0);
             $this->em->persist($holding);
         }
