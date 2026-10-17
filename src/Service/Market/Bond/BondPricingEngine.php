@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Bond;
 
 use App\DTO\BondValuationDTO;
+use App\DTO\MacroStateDTO;
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Service\Macro\MacroEngine;
@@ -266,6 +267,18 @@ final class BondPricingEngine
             modifiedDuration: FixedIncome::calculateModifiedDuration($macaulay),
             convexity: FixedIncome::calculateConvexity($flows, $ytm),
         );
+    }
+
+    /**
+     * The dirty price a bond deals at now: off the curve as it stands, at its issuer's spread as it stands. The ladder
+     * is marked once a trading day while the curve moves every tick, so a desk dealing at the mark dealt at a price the
+     * curve had already left.
+     */
+    public function dealingPrice(Bond $bond, MacroStateDTO $macro): float
+    {
+        $spread = $bond->isSovereign() ? 0.0 : (float) ($bond->getIssuer()?->getDynamicCreditSpread() ?? $bond->getCreditSpread());
+
+        return $this->value($bond, $macro->sovereignCurve(), $macro->totalTime, $spread)->dirtyPrice;
     }
 
     /**

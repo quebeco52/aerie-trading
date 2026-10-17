@@ -206,6 +206,39 @@ final class PortfolioEscrowTest extends TestCase
     }
 
     /**
+     * A buy stop commits no cash until it fires (TradeExecutionService), so no valuation of the open book holds one at
+     * its limit. Held there, a buy stop-limit that could never fire put its whole notional on the leaderboard, in the
+     * season record and in buying power; a split refunded escrow it never posted.
+     */
+    public function testABuyStopIsHeldAtNothing(): void
+    {
+        $sources = [
+            'src/Service/User/Portfolio.php',
+            'src/Service/Corporate/CorporateLedgerService.php',
+            'src/Service/Market/Index/EtfTracker.php',
+        ];
+
+        $checked = 0;
+        foreach ($sources as $relativePath) {
+            preg_match_all("/WHEN\\s+o\\.action\\s*=\\s*'BUY'(.*?)THEN([^\\n]*)/s", $this->read($relativePath), $matches, PREG_SET_ORDER);
+
+            foreach ($matches as [, $condition, $then]) {
+                if (str_contains($then, 'limit_price')) {
+                    $checked++;
+                    $this->assertStringContainsString("o.order_type NOT IN ('STOP', 'STOP_LIMIT')", $condition, "{$relativePath} values a buy stop's cash at its limit.");
+                }
+            }
+        }
+
+        $this->assertGreaterThanOrEqual(3, $checked, 'The buy-side valuations have moved; this guard is no longer reaching them.');
+        $this->assertStringContainsString(
+            'Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL',
+            $this->read('src/Controller/DashboardController.php'),
+            'The dashboard values the open book on the same definition as net worth.'
+        );
+    }
+
+    /**
      * Every place that values an open order by its side must name the two sides that hold something.
      *
      * This is the guard the constant already had and the copies did not. PortfolioEscrowTest checked

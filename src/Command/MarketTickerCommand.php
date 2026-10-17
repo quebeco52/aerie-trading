@@ -32,6 +32,7 @@ use App\Service\Market\Ticker\IndexFundPhase;
 use App\Service\Market\Ticker\RestingOrderWatch;
 use App\Service\Market\Ticker\SimulationClockService;
 use App\Service\Market\Ticker\StockBarBook;
+use App\Service\Market\Ticker\EtfTickColumns;
 use App\Service\Market\Ticker\StockTickColumns;
 use App\Service\Market\Ticker\TickCadence;
 use App\Service\Market\Ticker\TickProfiler;
@@ -464,6 +465,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         [$stocks, $indexFunds, $bonds] = $this->loadWorkingSet();
                         $profiler->lap('reload');
                     }
+                } elseif ($isFrameTick) {
+                    // A frame shows this tick's prices, so the rows fills and net worth are struck at carry them too:
+                    // written on bars alone, a desk filled at a price the screens had moved past.
+                    StockTickColumns::write($conn, $stocks);
+                    EtfTickColumns::write($conn, $indexFunds);
+                    $profiler->lap('stock marks');
                 }
 
                 // A frame carries each quote's past-month change, read back from the buffers just written.

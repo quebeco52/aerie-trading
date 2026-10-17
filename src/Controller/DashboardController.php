@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use App\Entity\User;
 use App\Service\Math\FinancialConstants;
+use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -278,14 +279,7 @@ class DashboardController extends AbstractController
         // net worth falls the moment an order is placed and jumps back when it is cancelled.
         $conn = $entityManager->getConnection();
         $escrowRow = $conn->fetchAssociative(
-            "SELECT
-                COALESCE(SUM(CASE WHEN o.action = 'BUY' THEN COALESCE(o.limit_price, 0) * o.quantity ELSE 0 END), 0) AS escrowed_cash,
-                COALESCE(SUM(CASE WHEN o.action = 'SELL' THEN o.quantity * COALESCE(s.price, e.price, b.price, 0) ELSE 0 END), 0) AS escrowed_shares
-             FROM trade_orders o
-             LEFT JOIN stocks s ON s.ticker = o.ticker AND o.asset_type = 'STOCK'
-             LEFT JOIN etfs   e ON e.ticker = o.ticker AND o.asset_type = 'ETF'
-             LEFT JOIN bonds  b ON b.ticker = o.ticker AND o.asset_type = 'BOND'
-             WHERE o.user_id = :user_id AND o.status = 'OPEN'",
+            'SELECT d.escrow_cash AS escrowed_cash, d.escrow_long AS escrowed_shares FROM (' . Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL . ') d WHERE d.user_id = :user_id',
             ['user_id' => $user->getId()]
         ) ?: ['escrowed_cash' => 0.0, 'escrowed_shares' => 0.0];
 
