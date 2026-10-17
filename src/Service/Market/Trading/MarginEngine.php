@@ -137,13 +137,17 @@ final class MarginEngine
         // richer by the premium it collected, for as long as the position stayed open.
         $equity = $cash + $longMarketValue + $optionLongValue - $marginDebit - $shortMarketValue - $optionShortValue;
 
+        // A long contract has no loan value: it is paid for in full, so the whole of it is required against itself, and
+        // it backs nothing else. Counted in equity with no requirement, it lent its full value to the rest of the book.
         $margins = $this->margins();
         $maintenance = ($margins['long'] * $longMarketValue)
             + ($margins['short'] * $shortMarketValue)
+            + $optionLongValue
             + $optionRequirement;
 
         // Buying power: free equity above initial requirement scaled by the initial margin, less open buy commitments.
         $initialRequirement = ($margins['initial'] * ($longMarketValue + $shortMarketValue))
+            + $optionLongValue
             + $optionRequirement;
         $buyingPower = max(0.0, ($equity - $initialRequirement) / $margins['initial'] - $openBuyCommitment);
 
@@ -179,28 +183,36 @@ final class MarginEngine
     }
 
     /**
-     * Currency of long positions that must be sold to clear a margin call.
+     * Currency of positions on one side that must be closed to clear a margin call.
      *
-     * Selling a long reduces the market value and pays down the debit by the same amount, so equity is
-     * unchanged by the sale itself while the requirement falls with the position. Solving equity >= rate x
-     * (LMV - X) for X gives LMV - equity/rate.
+     * Selling a long pays down the debit and covering a short spends the proceeds it posted, so equity is unchanged
+     * by the trade itself while the requirement falls by the position's margin. The account is taken to its
+     * requirement plus a buffer on every open position, so the value to close is that shortfall over the side's
+     * margin plus the buffer; for a book of longs alone it is LMV - equity/(margin + buffer). A long contract, held
+     * against itself in full and outside the buffer, closes at a rate of one.
      *
-     * The rate liquidated to is the maintenance requirement plus a buffer, not the requirement itself.
-     * Restoring exactly the minimum leaves the account one tick of adverse movement from being called
-     * again, and again after that, which is a worse outcome for the holder than selling slightly more once.
+     * The buffer is there because restoring exactly the minimum leaves the account one tick of adverse movement
+     * from being called again, and again after that, which is a worse outcome for the holder than closing slightly
+     * more once.
+     *
+     * @param string $side 'long', 'short' or 'option'.
      */
-    public function liquidationNotional(MarginStatusDTO $status): float
+    public function liquidationNotional(MarginStatusDTO $status, string $side = 'long'): float
     {
         if (!$status->isCalled()) {
             return 0.0;
         }
 
-        $targetRate = $this->margins()['long'] + self::LIQUIDATION_EQUITY_BUFFER;
-        $required = $status->longMarketValue - ($status->equity / max(0.01, $targetRate));
+        $margins = $this->margins();
+        $buffer = self::LIQUIDATION_EQUITY_BUFFER;
+        $shortfall = $status->maintenanceRequirement + ($buffer * ($status->longMarketValue + $status->shortMarketValue)) - $status->equity;
 
-        return min(
-            $status->longMarketValue * self::MAX_LIQUIDATION_FRACTION,
-            max(0.0, $required)
-        );
+        [$rate, $held] = match ($side) {
+            'short' => [$margins['short'] + $buffer, $status->shortMarketValue],
+            'option' => [1.0, $status->optionLongValue],
+            default => [$margins['long'] + $buffer, $status->longMarketValue],
+        };
+
+        return min($held * self::MAX_LIQUIDATION_FRACTION, max(0.0, $shortfall / $rate));
     }
 }

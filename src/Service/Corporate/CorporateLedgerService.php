@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Service\Market\Ticker\NestedTransaction;
+use App\Entity\OptionContract;
 use App\Entity\Stock;
+use App\Service\Market\Option\OptionChainService;
+use App\Service\Math\Decimal;
+use App\Service\Math\FinancialConstants;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -164,6 +169,7 @@ class CorporateLedgerService
         // as a double one past the column's range: the overflow guard itself failed the statement.
         $factor = (int) round($splitFactor);
         $factorType = ['factor' => ParameterType::INTEGER];
+        $optionHolders = [];
 
         $conn->beginTransaction();
 
@@ -326,6 +332,16 @@ class CorporateLedgerService
                 );
             }
 
+            $optionHolders = $this->restateOptionsForSplit($conn, $stock, $factor, $isReverse);
+
+            // The name's own share counts move with it: the stock it still has to put through the market, and its short
+            // interest, read back from the positions just restated, since a reverse split rounds each short toward zero.
+            $stock->setCorporateFlowBacklog($isReverse ? $stock->getCorporateFlowBacklog() / $factor : $stock->getCorporateFlowBacklog() * $factor);
+            $stock->setShortInterestShares(Decimal::format((float) $conn->fetchOne(
+                'SELECT COALESCE(-SUM(quantity), 0) FROM user_stocks WHERE stock_id = :stock_id AND quantity < 0',
+                ['stock_id' => $stock->getId()]
+            ), 2));
+
             PriceAlertService::restateForSplit($conn, $stock->getTicker(), $factor, $isReverse);
 
             // Restate historical event descriptions so per-share metrics (EPS, dividends, prices) reflect post-split scale.
@@ -353,7 +369,123 @@ class CorporateLedgerService
                 ),
                 PlayerNotifier::assetLink('STOCK', $ticker)
             );
+            $this->notifier->queueForHolders(
+                $optionHolders,
+                $ticker,
+                sprintf('Your %s options were adjusted for the %s', $ticker, $isReverse ? sprintf('1-for-%d consolidation', $factor) : sprintf('%d-for-1 split', $factor)),
+                static fn (float $quantity): string => $isReverse
+                    ? sprintf('Strikes were multiplied by %d and contracts divided by %d; any fraction of a contract was settled in cash.', $factor, $factor)
+                    : sprintf('Strikes were divided by %d and contracts multiplied by %d, so each position is worth what it was.', $factor, $factor),
+                PlayerNotifier::assetLink('STOCK', $ticker)
+            );
         }
+    }
+
+    /**
+     * Restates the listed options on a split so every holder keeps the same claim, as a clearing house adjusts them: a
+     * forward split divides each strike and premium by the factor and multiplies the contracts, a reverse split the
+     * other way, with the fraction of a contract it leaves settled in cash at the pre-split mark. Left alone, a
+     * four-for-one put every call out of the money and handed every put holder three quarters of its strike.
+     *
+     * Contracts are renamed in strike order, the direction the strikes move, so no new symbol is taken while the
+     * contract holding it is still waiting its turn.
+     *
+     * @return list<array{user_id: int|string, quantity: int|string}> One row per account holding options on the name, before the restatement.
+     */
+    private function restateOptionsForSplit(\Doctrine\DBAL\Connection $conn, Stock $stock, int $factor, bool $isReverse): array
+    {
+        $contracts = $conn->fetchAllAssociative(
+            'SELECT id, option_type, strike, expiry_serial, price FROM option_contracts
+             WHERE stock_id = :stock_id AND status = :active ORDER BY strike ' . ($isReverse ? 'DESC' : 'ASC'),
+            ['stock_id' => $stock->getId(), 'active' => OptionContract::STATUS_ACTIVE]
+        );
+
+        if ($contracts === []) {
+            return [];
+        }
+
+        $ids = array_map(static fn (array $contract): int => (int) $contract['id'], $contracts);
+        $idList = ['ids' => $ids];
+        $idTypes = ['ids' => ArrayParameterType::INTEGER];
+
+        /** @var list<array{user_id: int|string, quantity: int|string}> $holders */
+        $holders = $conn->fetchAllAssociative(
+            'SELECT user_id, SUM(ABS(quantity)) AS quantity FROM user_options
+             WHERE option_contract_id IN (:ids) AND quantity <> 0 GROUP BY user_id',
+            $idList,
+            $idTypes
+        );
+
+        if ($isReverse) {
+            // The fraction of a new contract a position leaves is old contracts at the old mark, rounding toward zero
+            // as the shares do, so a writer pays for the fraction it no longer owes and a holder is paid for its own.
+            $positions = $conn->fetchAllAssociative(
+                'SELECT uo.user_id, uo.quantity, oc.price FROM user_options uo
+                 JOIN option_contracts oc ON oc.id = uo.option_contract_id
+                 WHERE uo.option_contract_id IN (:ids) AND uo.quantity <> 0',
+                $idList,
+                $idTypes
+            );
+
+            foreach ($positions as $position) {
+                $quantity = (int) $position['quantity'];
+                $remnant = $quantity - (intdiv($quantity, $factor) * $factor);
+
+                if ($remnant !== 0) {
+                    $conn->executeStatement(
+                        'UPDATE users SET cash_balance = cash_balance + :cashout WHERE id = :user_id',
+                        ['cashout' => round($remnant * (float) $position['price'] * FinancialConstants::OPTION_CONTRACT_MULTIPLIER, 4), 'user_id' => $position['user_id']]
+                    );
+                }
+            }
+
+            $conn->executeStatement(
+                'UPDATE user_options SET quantity = TRUNCATE(quantity / :factor, 0), average_premium = average_premium * :factor, version = version + 1
+                 WHERE option_contract_id IN (:ids)',
+                $idList + ['factor' => $factor],
+                $idTypes + ['factor' => ParameterType::INTEGER]
+            );
+            $conn->executeStatement('DELETE FROM user_options WHERE option_contract_id IN (:ids) AND quantity = 0', $idList, $idTypes);
+        } else {
+            $conn->executeStatement(
+                'UPDATE user_options SET quantity = quantity * :factor, average_premium = average_premium / :factor, version = version + 1
+                 WHERE option_contract_id IN (:ids)',
+                $idList + ['factor' => $factor],
+                $idTypes + ['factor' => ParameterType::INTEGER]
+            );
+        }
+
+        // Per share, a premium and its vega and theta scale with the price; delta does not, and gamma, per dollar of
+        // the underlying, moves the other way. The public's book scales with the contract count.
+        $scale = $isReverse ? (float) $factor : 1.0 / $factor;
+
+        foreach ($contracts as $contract) {
+            $strike = (float) $contract['strike'] * $scale;
+
+            $conn->executeStatement(
+                'UPDATE option_contracts
+                 SET ticker = :ticker, strike = :strike, price = price * :scale, vega = vega * :scale, theta = theta * :scale,
+                     gamma = gamma / :scale, structural_open_interest = ROUND(structural_open_interest / :scale)
+                 WHERE id = :id',
+                [
+                    'ticker' => OptionChainService::contractTicker($stock->getTicker(), (int) $contract['expiry_serial'], (string) $contract['option_type'], $strike),
+                    'strike' => number_format($strike, 8, '.', ''),
+                    'scale' => $scale,
+                    'id' => (int) $contract['id'],
+                ]
+            );
+        }
+
+        // The players' open interest is the sum of their positions, read back so a reverse split's rounding is in it.
+        $conn->executeStatement(
+            'UPDATE option_contracts oc
+             SET oc.open_interest = (SELECT COALESCE(SUM(uo.quantity), 0) FROM user_options uo WHERE uo.option_contract_id = oc.id)
+             WHERE oc.id IN (:ids)',
+            $idList,
+            $idTypes
+        );
+
+        return $holders;
     }
 
     /**

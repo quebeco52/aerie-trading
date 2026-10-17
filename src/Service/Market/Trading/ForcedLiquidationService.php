@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Entity\TradeOrder;
 use App\Entity\User;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Notification\PlayerNotifier;
+use App\Service\User\CashLedger;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -36,6 +38,7 @@ final class ForcedLiquidationService
         private readonly TradeExecutionService $tradeExecution,
         private readonly LoggerInterface $logger,
         private readonly ?PlayerNotifier $notifier = null,
+        private readonly CashLedger $cashLedger = new CashLedger(),
     ) {}
 
     /** @var array<int, array<string, list<string>>> Forced orders filled this sweep, by account and origin. */
@@ -59,6 +62,8 @@ final class ForcedLiquidationService
             return ['interest' => 0.0, 'borrowFees' => 0.0, 'liquidated' => 0, 'boughtIn' => 0];
         }
 
+        $this->restateShortInterest();
+        $this->netCashAgainstLoans();
         $interest = $this->accrueMarginInterest($policyRate, $dt);
         $borrowFees = $this->accrueBorrowFees($dt);
 
@@ -78,6 +83,66 @@ final class ForcedLiquidationService
             'liquidated' => $liquidated,
             'boughtIn' => $boughtIn,
         ];
+    }
+
+    /**
+     * Puts every name's short interest back to what its accounts are short, before the fees and buy-ins priced off it.
+     * Fills move the total as they go, but the web process and the ticker each move their own copy of the stock, so the
+     * running figure drifts between them; read from the positions once a sweep, the drift never outlives the week.
+     */
+    public function restateShortInterest(): void
+    {
+        $shorted = $this->entityManager->getConnection()->fetchAllKeyValue(
+            'SELECT s.id, COALESCE(-SUM(us.quantity), 0)
+             FROM stocks s
+             LEFT JOIN user_stocks us ON us.stock_id = s.id AND us.quantity < 0
+             GROUP BY s.id'
+        );
+
+        foreach ($shorted as $stockId => $shares) {
+            $stock = $this->entityManager->getRepository(Stock::class)->find($stockId);
+            $restated = Decimal::format((float) $shares, 2);
+
+            if ($stock instanceof Stock && $stock->getShortInterestShares() !== $restated) {
+                $stock->setShortInterestShares($restated);
+            }
+        }
+
+        $this->entityManager->getConnection()->executeStatement(
+            'UPDATE stocks s
+             LEFT JOIN (SELECT stock_id, -SUM(quantity) AS shorted FROM user_stocks WHERE quantity < 0 GROUP BY stock_id) us
+                ON us.stock_id = s.id
+             SET s.short_interest_shares = COALESCE(us.shorted, 0)'
+        );
+    }
+
+    /**
+     * Nets every account whose cash sits beside its margin loan or below zero (CashLedger::net()), before the loan is
+     * charged: the moves written to cash in bulk skip the ledger, so a dividend landed as cash while a debit was still
+     * owed and a borrow fee drove cash negative, where it was charged nothing. Each account is locked and read fresh,
+     * as a trade on it is.
+     */
+    private function netCashAgainstLoans(): void
+    {
+        $connection = $this->entityManager->getConnection();
+        $ids = $connection->fetchFirstColumn('SELECT id FROM users WHERE cash_balance < 0 OR (cash_balance > 0 AND margin_debit > 0)');
+
+        foreach ($ids as $id) {
+            $connection->beginTransaction();
+            try {
+                $user = $this->entityManager->find(User::class, $id);
+                if ($user instanceof User) {
+                    $this->entityManager->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
+                    $this->entityManager->refresh($user);
+                    $this->cashLedger->net($user);
+                    $this->entityManager->flush();
+                }
+                $connection->commit();
+            } catch (\Throwable $e) {
+                $connection->rollBack();
+                $this->logger->warning('Could not net an account against its margin loan', ['user' => $id, 'error' => $e->getMessage()]);
+            }
+        }
     }
 
     /** The annual rate charged on borrowed cash: the policy rate (floored at zero) plus the brokerage's spread. */
@@ -241,10 +306,13 @@ final class ForcedLiquidationService
     }
 
     /**
-     * Sells enough of an account's longs to clear a maintenance call.
+     * Closes enough of an account to clear a maintenance call: written contracts first, then whatever it holds, largest
+     * position first, each sized to what is still short (MarginEngine::liquidationNotional()) and the account re-marked
+     * after every order. Shares, funds, bonds and long contracts are sold and short stock is bought back: selling longs
+     * alone left an account short nothing but stock to run on to any negative equity.
      *
-     * Largest position first, because each sale pays its own execution cost and a call cleared in one trade
-     * costs the account less than the same notional worked across five.
+     * Largest first, because each order pays its own execution cost and a call cleared in one trade costs the account
+     * less than the same notional worked across five.
      */
     private function processMarginCall(User $user): int
     {
@@ -263,52 +331,68 @@ final class ForcedLiquidationService
         // Written contracts are bought back first to eliminate short option assignment and naked margin risk.
         $closed = $this->closeWrittenOptions($user);
 
-        if ($closed > 0) {
+        foreach ($this->openPositions($user) as $position) {
             $status = $this->marginEngine->status($user);
-
             if (!$status->isCalled()) {
-                return $closed;
-            }
-        }
-
-        $remaining = $this->marginEngine->liquidationNotional($status);
-        if ($remaining <= 0.0) {
-            return $closed;
-        }
-
-        $positions = $this->entityManager->getConnection()->fetchAllAssociative(
-            'SELECT s.ticker, us.quantity, s.price
-             FROM user_stocks us
-             JOIN stocks s ON us.stock_id = s.id
-             WHERE us.user_id = :user_id AND us.quantity > 0
-             ORDER BY (us.quantity * s.price) DESC',
-            ['user_id' => $user->getId()]
-        );
-
-        $sold = $closed;
-
-        foreach ($positions as $position) {
-            if ($remaining <= 0.0) {
                 break;
             }
 
-            $price = (float) $position['price'];
-            if ($price <= 0.0) {
+            $unitValue = (float) $position['unit_value'];
+            $held = (int) $position['quantity'];
+            if ($unitValue <= 0.0 || $held === 0) {
                 continue;
             }
 
-            $quantity = (int) min((float) $position['quantity'], ceil($remaining / $price));
+            $side = $position['side'];
+            $notional = $this->marginEngine->liquidationNotional($status, $side);
+            $quantity = (int) min(abs($held), ceil($notional / $unitValue));
             if ($quantity <= 0) {
                 continue;
             }
 
-            if ($this->forceOrder($user, (string) $position['ticker'], 'SELL', $quantity, TradeOrder::ORIGIN_MARGIN_CALL)) {
-                $remaining -= $quantity * $price;
-                $sold++;
+            if ($this->forceOrder($user, (string) $position['ticker'], $side === 'short' ? 'COVER' : 'SELL', $quantity, TradeOrder::ORIGIN_MARGIN_CALL)) {
+                $closed++;
             }
         }
 
-        return $sold;
+        return $closed;
+    }
+
+    /**
+     * Everything an account holds that a margin call can close, largest first: long and short stock, funds, bonds still
+     * trading, and long contracts, each with the value of one unit and the side it is closed from.
+     *
+     * @return list<array{ticker: string, quantity: int|string, unit_value: float|string, side: string}>
+     */
+    private function openPositions(User $user): array
+    {
+        /** @var list<array{ticker: string, quantity: int|string, unit_value: float|string, side: string}> */
+        return $this->entityManager->getConnection()->fetchAllAssociative(
+            "SELECT p.ticker, p.quantity, p.unit_value, p.side FROM (
+                 SELECT s.ticker, us.quantity, s.price AS unit_value, IF(us.quantity < 0, 'short', 'long') AS side
+                 FROM user_stocks us JOIN stocks s ON us.stock_id = s.id
+                 WHERE us.user_id = :user_id AND us.quantity <> 0
+                 UNION ALL
+                 SELECT e.ticker, ue.quantity, e.price, 'long'
+                 FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id
+                 WHERE ue.user_id = :user_id AND ue.quantity > 0
+                 UNION ALL
+                 SELECT b.ticker, ub.quantity, b.price, 'long'
+                 FROM user_bonds ub JOIN bonds b ON ub.bond_id = b.id
+                 WHERE ub.user_id = :user_id AND ub.quantity > 0 AND b.status = :bond_active
+                 UNION ALL
+                 SELECT oc.ticker, uo.quantity, oc.price * :multiplier, 'option'
+                 FROM user_options uo JOIN option_contracts oc ON uo.option_contract_id = oc.id
+                 WHERE uo.user_id = :user_id AND uo.quantity > 0 AND oc.status = :option_active
+             ) p
+             ORDER BY ABS(p.quantity * p.unit_value) DESC",
+            [
+                'user_id' => $user->getId(),
+                'bond_active' => \App\Entity\Bond::STATUS_ACTIVE,
+                'option_active' => \App\Entity\OptionContract::STATUS_ACTIVE,
+                'multiplier' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER,
+            ]
+        );
     }
 
     /**

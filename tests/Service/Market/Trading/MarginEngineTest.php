@@ -192,6 +192,26 @@ class MarginEngineTest extends TestCase
         $this->assertTrue($justBelow->isCalled());
     }
 
+    /**
+     * A long contract is paid for in full and backs nothing else: it counts in equity and is required against itself.
+     * Counted with no requirement, $10,000 of calls carried a $16,000 loan on $20,000 of stock that is called without
+     * them, and bought $20,000 of new exposure on their own.
+     */
+    public function testALongContractHasNoLoanValue(): void
+    {
+        $withCalls = $this->engine->evaluate(cash: 0.0, longMarketValue: 20000.0, shortMarketValue: 0.0, marginDebit: 16000.0, optionLongValue: 10000.0);
+
+        $this->assertSame(14000.0, $withCalls->equity);
+        $this->assertTrue($withCalls->isCalled(), 'The calls do not hold up the loan.');
+        // Requirement 0.25 x 20,000 + 10,000 and the buffer on the stock, against 14,000 of equity: 2,000 of calls sold
+        // takes 2,000 off the requirement and leaves equity where it was.
+        $this->assertEqualsWithDelta(2000.0, $this->engine->liquidationNotional($withCalls, 'option'), 1e-9);
+
+        $callsAlone = $this->engine->evaluate(cash: 0.0, longMarketValue: 0.0, shortMarketValue: 0.0, marginDebit: 0.0, optionLongValue: 10000.0);
+        $this->assertSame(0.0, $callsAlone->buyingPower);
+        $this->assertFalse($callsAlone->isCalled());
+    }
+
     public function testTheCallAmountIsTheEquityShortfall(): void
     {
         $status = $this->engine->evaluate(cash: 0.0, longMarketValue: 20000.0, shortMarketValue: 0.0, marginDebit: 16000.0);

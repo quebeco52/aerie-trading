@@ -122,6 +122,29 @@ class CashLedgerTest extends TestCase
         }
     }
 
+    // --- Netting ---
+
+    /**
+     * Netting leaves equity where it was and puts each dollar where the ledger would have: cash beside a loan pays it
+     * down, and a balance a bulk move drove below zero becomes borrowing.
+     */
+    public function testNettingPaysTheLoanDownAndTurnsNegativeCashIntoBorrowing(): void
+    {
+        foreach ([
+            ['500.0000', '200.00', '300.0000', '0.00'],
+            ['150.0000', '400.00', '0.0000', '250.00'],
+            ['-150.0000', '100.00', '0.0000', '250.00'],
+            ['80.0000', '0.00', '80.0000', '0.00'],
+        ] as [$cash, $debit, $netCash, $netDebit]) {
+            $user = $this->account($cash, $debit);
+
+            $this->ledger->net($user);
+
+            $this->assertSame(0, \bccomp((string) $user->getCashBalance(), $netCash, 4), "cash from {$cash}/{$debit}");
+            $this->assertSame(0, \bccomp((string) $user->getMarginDebit(), $netDebit, 2), "debit from {$cash}/{$debit}");
+        }
+    }
+
     public function testFractionalConsiderationIsCarriedAtCashPrecision(): void
     {
         $user = $this->account('10.0000');

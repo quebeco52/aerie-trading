@@ -427,8 +427,8 @@ class TradeExecutionService
 
             $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
 
-            if ($action === 'COVER' && $stock !== null) {
-                $this->adjustShortInterest($stock, -$quantity);
+            if ($stock !== null) {
+                $this->adjustShortInterest($stock, $held, $held + $quantity);
             }
 
             return $userAsset;
@@ -446,7 +446,7 @@ class TradeExecutionService
             }
 
             $available = $this->lendingDesk->availableToBorrow($stock);
-            if ($quantity > $available) {
+            if (self::sharesBorrowed($held, $held - $quantity) > $available) {
                 throw new \Exception(sprintf(
                     'Only %s shares of %s are available to borrow.',
                     number_format(floor($available)),
@@ -461,7 +461,7 @@ class TradeExecutionService
             $this->cashLedger->credit($user, $totalValue);
             $this->payStampDuty($user, $stampDuty);
             $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
-            $this->adjustShortInterest($stock, $quantity);
+            $this->adjustShortInterest($stock, $held, $held - $quantity);
 
             return $userAsset;
         }
@@ -552,14 +552,37 @@ class TradeExecutionService
     }
 
     /**
-     * Moves a name's total short interest, which is what prices its borrow for everyone.
-     *
-     * @param int $delta Shares added to (positive) or removed from (negative) the total.
+     * Moves a name's total short interest, which is what prices its borrow for everyone, by the change in one account's
+     * short position, whatever action moved it: a buy against a short returns the stock as a cover does, and a short
+     * sale against shares held borrows only what it sells beyond them. Counted by action instead, round trips through
+     * zero left short interest standing on stock nobody had borrowed.
      */
-    private function adjustShortInterest(Stock $stock, int $delta): void
+    private function adjustShortInterest(Stock $stock, int $heldBefore, int $heldAfter): void
     {
+        $delta = self::sharesBorrowed($heldBefore, $heldAfter);
+        if ($delta === 0) {
+            return;
+        }
+
         $updated = max(0.0, (float) $stock->getShortInterestShares() + $delta);
         $stock->setShortInterestShares(Decimal::format($updated, 2));
+    }
+
+    /** Adds a resting buy's fill to the holding, returning to the lender whatever part of it closes a short. */
+    private function addToRestingHolding(User $user, ResolvedAssetDTO $asset, UserStock|UserEtf|UserBond|null $userAsset, ?Stock $stock, int $quantity): void
+    {
+        $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
+        $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
+
+        if ($stock !== null) {
+            $this->adjustShortInterest($stock, $held, $held + $quantity);
+        }
+    }
+
+    /** Shares newly borrowed (positive) or returned (negative) when a position moves from one size to another. */
+    public static function sharesBorrowed(int $heldBefore, int $heldAfter): int
+    {
+        return max(0, -$heldAfter) - max(0, -$heldBefore);
     }
 
     /**
@@ -751,7 +774,7 @@ class TradeExecutionService
                 $this->payStampDuty($user, $stampDutyStr);
 
                 if ($stock !== null) {
-                    $this->adjustShortInterest($stock, -$quantity);
+                    $this->adjustShortInterest($stock, $held, $held + $quantity);
                 }
 
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
@@ -767,7 +790,7 @@ class TradeExecutionService
 
                 $this->cashLedger->debit($user, $considerationStr);
                 $this->payStampDuty($user, $stampDutyStr);
-                $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
+                $this->addToRestingHolding($user, $asset, $userAsset, $stock, $quantity);
 
             } elseif ($action === 'BUY') {
                 // Cash was escrowed at the limit. A better fill refunds the difference, paying down any
@@ -780,13 +803,14 @@ class TradeExecutionService
                 // The escrow was the limit price alone, so the duty is paid on top when the order fills.
                 $this->payStampDuty($user, $stampDutyStr);
 
-                $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
+                $this->addToRestingHolding($user, $asset, $userAsset, $stock, $quantity);
 
             } elseif ($action === 'SHORT') {
                 // Nothing was escrowed, so the borrow is located and the margin checked now. Either can
                 // have gone against the order while it rested, and a short opened without a locate is a
                 // position the desk cannot actually deliver.
-                if ($stock === null || $quantity > $this->lendingDesk->availableToBorrow($stock)) {
+                $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
+                if ($stock === null || self::sharesBorrowed($held, $held - $quantity) > $this->lendingDesk->availableToBorrow($stock)) {
                     $this->em->getConnection()->rollBack();
                     return;
                 }
@@ -799,7 +823,7 @@ class TradeExecutionService
                 $this->cashLedger->credit($user, $considerationStr);
                 $this->payStampDuty($user, $stampDutyStr);
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
-                $this->adjustShortInterest($stock, $quantity);
+                $this->adjustShortInterest($stock, $held, $held - $quantity);
 
             } else { // SELL
                 // Shares were already escrowed. Just give them the cash from the sale, less the duty on it.

@@ -175,10 +175,10 @@ class CorporateLedgerServiceTest extends TestCase
         $this->connectionMock->expects($this->once())->method('commit');
 
         // Mock 2 users: user 1 has 15 shares (15 / 10 = 1 share, 5 remnant -> cashout), user 2 has 20 shares (0 remnant).
-        // The second fetch is the event feed, which is empty here.
-        $this->connectionMock->expects($this->exactly(2))
+        // The other fetches are the name's listed options and the event feed, both empty here.
+        $this->connectionMock->expects($this->exactly(3))
             ->method('fetchAllAssociative')
-            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [] : [
+            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') || str_contains($sql, 'option_contracts') ? [] : [
                 ['id' => 1, 'user_id' => 101, 'quantity' => 15],
                 ['id' => 2, 'user_id' => 102, 'quantity' => 20],
             ]);
@@ -276,6 +276,120 @@ class CorporateLedgerServiceTest extends TestCase
      * shares short rather than ten — half a share of extra exposure the borrower never sold and was never
      * paid for. The cashout loop beside it only looked at quantity > 0, so nothing compensated them either.
      */
+    /** @var list<array{sql: string, params: array<string, mixed>}> Every statement a split sent, with its parameters. */
+    private array $statements = [];
+
+    /**
+     * Captures every statement a split sends in $statements, and answers the option queries with this chain.
+     *
+     * @param list<array<string, mixed>> $contracts
+     * @param list<array<string, mixed>> $positions
+     */
+    private function splitWithOptions(array $contracts, array $positions): void
+    {
+        $this->statements = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []): int {
+                $this->statements[] = ['sql' => $sql, 'params' => $params];
+
+                return 1;
+            });
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(static fn (string $sql): array => match (true) {
+                str_contains($sql, 'ORDER BY strike') => $contracts,
+                str_contains($sql, 'JOIN option_contracts') => $positions,
+                str_contains($sql, 'FROM user_options') => array_map(static fn (array $p): array => ['user_id' => $p['user_id'], 'quantity' => abs($p['quantity'])], $positions),
+                default => [],
+            });
+    }
+
+    /**
+     * A split restates every listed option as a clearing house does: each holder keeps the same claim. Four-for-one
+     * divides strikes and premiums by four and multiplies the contracts by four, renaming in rising strike order so no
+     * symbol is taken while its holder is still waiting to move.
+     */
+    public function testAForwardSplitRestatesTheListedOptions(): void
+    {
+        $stock = (new Stock())->setTicker('TALL');
+        (new \ReflectionProperty(Stock::class, 'id'))->setValue($stock, 9);
+        $this->splitWithOptions(
+            [
+                ['id' => 8, 'option_type' => 'PUT', 'strike' => '100.00000000', 'expiry_serial' => 12, 'price' => '2.00000000'],
+                ['id' => 7, 'option_type' => 'CALL', 'strike' => '400.00000000', 'expiry_serial' => 12, 'price' => '20.00000000'],
+            ],
+            [['user_id' => 101, 'quantity' => 3, 'price' => '20.00000000']]
+        );
+
+        $this->service->processStockSplit($stock, 4.0, false);
+
+        $sqls = array_column($this->statements, 'sql');
+        $positions = array_values(array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], 'UPDATE user_options')));
+        $this->assertCount(1, $positions);
+        $this->assertStringContainsString('quantity = quantity * :factor', $positions[0]['sql']);
+        $this->assertStringContainsString('average_premium = average_premium / :factor', $positions[0]['sql']);
+        $this->assertSame(4, $positions[0]['params']['factor']);
+
+        $renames = array_values(array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], 'SET ticker = :ticker')));
+        $this->assertSame(['TALL-12P25', 'TALL-12C100'], array_map(static fn (array $s): string => $s['params']['ticker'], $renames), 'Renamed in rising strike order.');
+        $this->assertSame(['25.00000000', '100.00000000'], array_map(static fn (array $s): string => $s['params']['strike'], $renames));
+        $this->assertEqualsWithDelta(0.25, $renames[0]['params']['scale'], 1e-12, 'Premium, vega and theta per share scale with the price.');
+        $this->assertNotEmpty(array_filter($sqls, static fn (string $sql): bool => str_contains($sql, 'SET oc.open_interest')), 'Open interest is read back from the positions.');
+        $this->assertEmpty(array_filter($sqls, static fn (string $sql): bool => str_contains($sql, ':cashout') && str_contains($sql, 'cash_balance')), 'A forward split leaves no fraction to settle.');
+    }
+
+    /**
+     * One-for-ten multiplies strikes by ten and divides the contracts by ten, toward zero as the shares are; the fraction
+     * left over is old contracts at the old mark, so a holder is paid for its own and a writer pays for what it no longer
+     * owes. Renamed in falling strike order, the way the strikes move.
+     */
+    public function testAReverseSplitRestatesTheListedOptionsAndSettlesTheFraction(): void
+    {
+        $stock = (new Stock())->setTicker('TINY');
+        (new \ReflectionProperty(Stock::class, 'id'))->setValue($stock, 9);
+        $this->splitWithOptions(
+            [
+                ['id' => 7, 'option_type' => 'CALL', 'strike' => '3.00000000', 'expiry_serial' => 12, 'price' => '0.30000000'],
+                ['id' => 8, 'option_type' => 'CALL', 'strike' => '1.50000000', 'expiry_serial' => 12, 'price' => '0.60000000'],
+            ],
+            [
+                ['user_id' => 101, 'quantity' => 15, 'price' => '0.30000000'],
+                ['user_id' => 102, 'quantity' => -25, 'price' => '0.30000000'],
+            ]
+        );
+
+        $this->service->processStockSplit($stock, 10.0, true, 1.20);
+
+        $cashouts = [];
+        foreach ($this->statements as $s) {
+            if (str_contains($s['sql'], 'UPDATE users SET cash_balance = cash_balance + :cashout')) {
+                $cashouts[(int) $s['params']['user_id']] = (float) $s['params']['cashout'];
+            }
+        }
+        $this->assertEqualsWithDelta(150.0, $cashouts[101] ?? null, 1e-9, 'Five old contracts at 0.30 a share, a hundred shares each.');
+        $this->assertEqualsWithDelta(-150.0, $cashouts[102] ?? null, 1e-9, 'The writer pays for the five it no longer owes.');
+
+        $positions = array_values(array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], 'UPDATE user_options')));
+        $this->assertStringContainsString('TRUNCATE(quantity / :factor, 0)', $positions[0]['sql']);
+
+        $renames = array_values(array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], 'SET ticker = :ticker')));
+        $this->assertSame(['TINY-12C30', 'TINY-12C15'], array_map(static fn (array $s): string => $s['params']['ticker'], $renames), 'Renamed in falling strike order.');
+    }
+
+    /** A split restates the name's own share counts: the stock it still has to put through the market, and its short interest read back from the restated positions. */
+    public function testASplitRestatesTheBacklogAndShortInterest(): void
+    {
+        $stock = (new Stock())->setTicker('TALL')->setCorporateFlowBacklog(1500.0)->setShortInterestShares('100.00');
+        $this->splitWithOptions([], []);
+        $this->connectionMock->method('fetchOne')->willReturnCallback(
+            static fn (string $sql): string => str_contains($sql, 'user_stocks') ? '400' : '0'
+        );
+
+        $this->service->processStockSplit($stock, 4.0, false);
+
+        $this->assertSame(6000.0, $stock->getCorporateFlowBacklog());
+        $this->assertSame('400.00', $stock->getShortInterestShares());
+    }
+
     public function testReverseSplitSettlesShortFractionsAndRoundsThemTowardZero(): void
     {
         $stock = new Stock();
@@ -292,7 +406,7 @@ class CorporateLedgerServiceTest extends TestCase
         $fetched = null;
         $this->connectionMock->method('fetchAllAssociative')
             ->willReturnCallback(function (string $sql, array $params = []) use (&$fetched): array {
-                if (str_contains($sql, 'stock_events')) {
+                if (!str_contains($sql, 'user_stocks')) {
                     return [];
                 }
                 $fetched = $sql;
