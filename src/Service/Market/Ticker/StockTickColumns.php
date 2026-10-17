@@ -22,7 +22,8 @@ use Doctrine\DBAL\Connection;
  * them, the setters still keep the in-process entity current, but an UPDATE never carries them, and a stock
  * whose only changes are these nine is not written at all. Whatever flushes the working set must write them
  * here first, in a few bulk statements, or the database keeps yesterday's price. The ticker does so on
- * every history tick, before its flush; anything else that flushes stocks after ticking them must do the
+ * every history tick, before its flush, and on every other tick a frame goes out, so a fill is never struck
+ * at a price the screens have moved past; anything else that flushes stocks after ticking them must do the
  * same. A stock without an id has no row yet and is left to the INSERT, which carries every column.
  */
 final class StockTickColumns

@@ -22,7 +22,8 @@ class Portfolio
      * placing an order destroyed net worth on the chart and on the leaderboard, and cancelling it created
      * net worth back — so every ranking was really a ranking of who had no orders working. A BUY is held at
      * the price the cash was committed at; a SELL is held at the asset's live price, exactly as the shares
-     * would have been valued had they still been in the holdings table.
+     * would have been valued had they still been in the holdings table. A buy stop commits no cash until it
+     * fires, so it is held at nothing: valued at its limit, one that could never fire was free net worth.
      *
      * The price joins are keyed on asset_type, not on the ticker alone: a ticker present in both tables
      * would otherwise match twice and count its escrow twice over.
@@ -33,7 +34,7 @@ class Portfolio
      */
     public const OPEN_ORDER_ESCROW_DETAIL_SQL = "
         SELECT o.user_id,
-               SUM(CASE WHEN o.action = 'BUY'
+               SUM(CASE WHEN o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')
                         THEN COALESCE(o.limit_price, 0) * o.quantity
                         ELSE 0
                    END) AS escrow_cash,
@@ -197,19 +198,7 @@ class Portfolio
                 COALESCE((SELECT SUM(ue.quantity * e.price) FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id WHERE ue.user_id = :user_id), 0) +
                 COALESCE((SELECT SUM(ub.quantity * b.price) FROM user_bonds ub JOIN bonds b ON ub.bond_id = b.id WHERE ub.user_id = :user_id), 0) +
                 COALESCE((SELECT SUM(uo.quantity * oc.price * " . FinancialConstants::OPTION_CONTRACT_MULTIPLIER . ") FROM user_options uo JOIN option_contracts oc ON uo.option_contract_id = oc.id WHERE uo.user_id = :user_id), 0) +
-                COALESCE((
-                    SELECT SUM(CASE WHEN o.action = 'BUY'
-                                    THEN COALESCE(o.limit_price, 0) * o.quantity
-                                    WHEN o.action = 'SELL'
-                                    THEN o.quantity * COALESCE(s2.price, e2.price, b2.price, 0)
-                                    ELSE 0
-                               END)
-                    FROM trade_orders o
-                    LEFT JOIN stocks s2 ON s2.ticker = o.ticker AND o.asset_type = 'STOCK'
-                    LEFT JOIN etfs   e2 ON e2.ticker = o.ticker AND o.asset_type = 'ETF'
-                    LEFT JOIN bonds  b2 ON b2.ticker = o.ticker AND o.asset_type = 'BOND'
-                    WHERE o.user_id = :user_id AND o.status = 'OPEN'
-                ), 0)
+                COALESCE((SELECT escrow.escrow_val FROM (" . self::OPEN_ORDER_ESCROW_SQL . ") escrow WHERE escrow.user_id = :user_id), 0)
             ) as total_val
         ";
 

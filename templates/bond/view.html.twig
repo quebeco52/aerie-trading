@@ -187,7 +187,7 @@
 						<form action="/trade/execute" method="POST" class="space-y-3"
 									  data-controller="trade-form"
 									  data-trade-form-ticker-value="{{ bond.ticker }}"
-									  data-trade-form-price-value="{{ bond.price }}"
+									  data-trade-form-price-value="{{ dealingPrice }}"
 									  data-action="submit->trade-form#onSubmit">
 							<input type="hidden" name="ticker" value="{{ bond.ticker }}">
 							<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
@@ -216,7 +216,7 @@
 
 							<div id="limit-price-group" class="hidden space-y-1" data-trade-form-target="limitGroup">
 								<label for="limitPrice" class="text-sm font-semibold text-on-surface-variant">Limit price ($, dirty)</label>
-								<input type="number" step="0.01" min="0.01" id="limitPrice" name="limitPrice" placeholder="{{ bond.price|number_format(2, '.', '') }}" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none" data-trade-form-target="limitPrice" data-action="input->trade-form#render">
+								<input type="number" step="0.01" min="0.01" id="limitPrice" name="limitPrice" placeholder="{{ dealingPrice|number_format(2, '.', '') }}" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none" data-trade-form-target="limitPrice" data-action="input->trade-form#render">
 							</div>
 
 							<div class="space-y-1">
