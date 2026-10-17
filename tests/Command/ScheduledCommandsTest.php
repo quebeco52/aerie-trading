@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Command;
 
-use App\Service\Market\Ticker\HistoryPruner;
 use App\Command\PruneHistoryCommand;
 use App\Scheduler\Schedule;
+use App\Service\Market\Ticker\HistoryPruner;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -78,8 +78,8 @@ class ScheduledCommandsTest extends TestCase
     public function testNightlyPruneKeepsTheDefaultRetentionInSimulatedYears(): void
     {
         $prune = $this->commands()['app:prune-history'];
-        $lines = array_map(static fn (RunCommandMessage $m): string => $m->input, $this->scheduledCommandMessages());
-        $pruneLines = array_values(array_filter($lines, static fn (string $line): bool => str_starts_with($line, 'app:prune-history')));
+        $lines = array_map(static fn(RunCommandMessage $m): string => $m->input, $this->scheduledCommandMessages());
+        $pruneLines = array_values(array_filter($lines, static fn(string $line): bool => str_starts_with($line, 'app:prune-history')));
         $this->assertCount(1, $pruneLines);
 
         $input = new StringInput($pruneLines[0]);

@@ -30,7 +30,7 @@ class FinancialDataBusinessModelTest extends TestCase
             ->method('generateStandardNormal')
             ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5);
 
-        $macroState = \App\DTO\MacroStateDTO::fromArray([]);
+        $macroState = MacroStateDTO::fromArray([]);
         $result = $model->computeActualFinancials(
             $stock,
             1000.0,
@@ -38,7 +38,7 @@ class FinancialDataBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // Operating leverage shift = -0.020 * 2.0 * 0.15 = -0.006
@@ -56,8 +56,8 @@ class FinancialDataBusinessModelTest extends TestCase
                 0.20,
                 0.50,
                 8.0,
-                3.0
-            )
+                3.0,
+            ),
         );
 
         // ICR < 6.0 -> False
@@ -66,8 +66,8 @@ class FinancialDataBusinessModelTest extends TestCase
                 0.20,
                 0.50,
                 5.0,
-                3.0
-            )
+                3.0,
+            ),
         );
     }
 
@@ -84,14 +84,14 @@ class FinancialDataBusinessModelTest extends TestCase
         $normalMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             macroCreditSpreadEma: 0.020,
-            marketVolatilityEma: 0.15
+            marketVolatilityEma: 0.15,
         );
 
         // Boom & Volatility macro: tight credit spreads (0.010 = +100bps DCM syndication boom), positive output gap (+2%), and high VIX (0.35)
         $boomMacro = new MacroStateDTO(
             outputGapEma: 0.02,
             macroCreditSpreadEma: 0.010,
-            marketVolatilityEma: 0.35
+            marketVolatilityEma: 0.35,
         );
 
         $normalResult = $model->computeActualFinancials($stock, 1000.0, 0.35, 50.0, 0.0, $normalMacro, $mathUtility);
@@ -100,7 +100,7 @@ class FinancialDataBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $normalResult->streamRevenue['transaction'],
             $boomResult->streamRevenue['transaction'],
-            'Tight credit spreads and elevated VIX volatility must expand transaction/rating revenue.'
+            'Tight credit spreads and elevated VIX volatility must expand transaction/rating revenue.',
         );
     }
 
@@ -127,7 +127,7 @@ class FinancialDataBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             1.0 - 0.05 * FinancialDataBusinessModel::MARKET_DATA_VOLATILITY_SENSITIVITY,
             $quiet->streamRevenue['transaction'] / $atAnchor->streamRevenue['transaction'],
-            1e-9
+            1e-9,
         );
     }
 

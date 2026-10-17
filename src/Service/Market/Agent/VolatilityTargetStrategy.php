@@ -43,7 +43,7 @@ final class VolatilityTargetStrategy implements AgentStrategyInterface
 
         $leverage = min(
             self::AGENT_VOL_TARGET_MAX_LEVERAGE,
-            self::AGENT_VOL_TARGET_VOLATILITY / $realized
+            self::AGENT_VOL_TARGET_VOLATILITY / $realized,
         );
 
         return max(0.0, min(1.0, self::AGENT_VOL_TARGET_BASE_SHARE * $leverage));

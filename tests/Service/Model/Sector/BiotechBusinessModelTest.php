@@ -77,13 +77,13 @@ class BiotechBusinessModelTest extends TestCase
         self::assertEqualsWithDelta(
             (0.85 * BiotechBusinessModel::MARKETED_STOCK_COMPENSATION_INTENSITY) + (0.15 * BiotechBusinessModel::PIPELINE_STOCK_COMPENSATION_INTENSITY),
             $model->getStockCompensationIntensity($ibis),
-            1e-12
+            1e-12,
         );
         self::assertEqualsWithDelta(
             (BiotechBusinessModel::ESTABLISHED_DRUG_WEIGHT * BiotechBusinessModel::MARKETED_STOCK_COMPENSATION_INTENSITY)
                 + (BiotechBusinessModel::PIPELINE_DRUG_WEIGHT * BiotechBusinessModel::PIPELINE_STOCK_COMPENSATION_INTENSITY),
             $model->getStockCompensationIntensity($this->makeStock()),
-            1e-12
+            1e-12,
         );
         self::assertLessThan(0.03, $model->getStockCompensationIntensity($ibis), 'a big pharma does not pay like a clinical-stage biotech');
     }
@@ -136,11 +136,11 @@ class BiotechBusinessModelTest extends TestCase
         // A fully off-patent (generic) manufacturer: no revenue under exclusivity.
         $generic = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_SHARE => 0.0]);
         $this->assertEqualsWithDelta(BiotechBusinessModel::genericSecularGrowthRate(), $model->getSecularGrowthRate($generic), 1e-15);
-        $this->assertEqualsWithDelta(\App\Service\Macro\MacroEngine::TREND_REAL_GROWTH + (log(0.00502 / 0.00518) / 8.0), BiotechBusinessModel::genericSecularGrowthRate(), 1e-15, 'Generic spending lost share of GDP 2010-2018.');
+        $this->assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH + (log(0.00502 / 0.00518) / 8.0), BiotechBusinessModel::genericSecularGrowthRate(), 1e-15, 'Generic spending lost share of GDP 2010-2018.');
 
         $branded = $this->makeStock([BiotechBusinessModel::STATE_PROTECTED_SHARE => 1.0]);
         $this->assertEqualsWithDelta(BiotechBusinessModel::patentedSecularGrowthRate(), $model->getSecularGrowthRate($branded), 1e-15);
-        $this->assertEqualsWithDelta(\App\Service\Macro\MacroEngine::TREND_REAL_GROWTH + (log(0.01729 / 0.01190) / 19.0), BiotechBusinessModel::patentedSecularGrowthRate(), 1e-15, 'Prescription spending gained share of GDP 2000-2019.');
+        $this->assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH + (log(0.01729 / 0.01190) / 19.0), BiotechBusinessModel::patentedSecularGrowthRate(), 1e-15, 'Prescription spending gained share of GDP 2000-2019.');
     }
 
     public function testContinuousPipelineProgressImpactsVariableCosts(): void
@@ -158,14 +158,13 @@ class BiotechBusinessModelTest extends TestCase
             self::FIXED_COSTS,
             0.20,
             new MacroStateDTO(),
-            $math
+            $math,
         );
 
         // Continuous pipeline shift = -0.015 * 1.5 * 0.30 = -0.00675
         $this->assertEqualsWithDelta(0.29325, $result->clampedMargin, 0.0001);
         $this->assertNull($result->eventType);
     }
-
 
     /** Cumulative Bass adoption after `quarters`, from the closed form on the model's own constants. */
     private function bassAdoption(float $quarters): float
@@ -317,7 +316,7 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             self::EXPECTED_REVENUE * BiotechBusinessModel::PIPELINE_DRUG_WEIGHT * (1.0 + (BiotechBusinessModel::READOUT_MILESTONE_SWING * (1.0 - $this->successRate()))),
             $approvalQuarter->streamRevenue['pipeline_licensing_milestones'],
-            1.0
+            1.0,
         );
         // The launch itself earns nothing yet, so marketed revenue is untouched.
         $this->assertEqualsWithDelta(self::EXPECTED_REVENUE * BiotechBusinessModel::ESTABLISHED_DRUG_WEIGHT, $approvalQuarter->streamRevenue['commercial_therapeutics'], 1.0);
@@ -350,7 +349,7 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             (BiotechBusinessModel::DEFAULT_PATENT_PROTECTED_SHARE + ($peak * $this->bassAdoption(1.0))) / $launched,
             $nextQuarter->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE],
-            1e-12
+            1e-12,
         );
     }
 
@@ -376,7 +375,7 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             self::EXPECTED_REVENUE * BiotechBusinessModel::PIPELINE_DRUG_WEIGHT * (1.0 - (BiotechBusinessModel::READOUT_MILESTONE_SWING * $this->successRate())),
             $result->streamRevenue['pipeline_licensing_milestones'],
-            1.0
+            1.0,
         );
 
         // ...but a drug that never reached the market cannot cut marketed prescription revenue.
@@ -435,7 +434,7 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             self::EXPECTED_REVENUE * BiotechBusinessModel::ESTABLISHED_DRUG_WEIGHT * (1.0 - $eroded),
             $result->streamRevenue['commercial_therapeutics'],
-            1.0
+            1.0,
         );
 
         // Price concessions defending the brand: 0.30 + 0.04 * 0.35 * 0.70 = 0.3098
@@ -474,7 +473,7 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             1.0 - $weight + ($weight * $nextMarketed),
             $state[BiotechBusinessModel::STATE_STRUCTURAL_MULTIPLIER] * (1.0 + $state[BiotechBusinessModel::STATE_KNOWN_COMMERCIAL_SHIFT]),
-            1e-12
+            1e-12,
         );
         $this->assertEqualsWithDelta(0.0, $state[BiotechBusinessModel::STATE_KNOWN_COMMERCIAL_SHIFT], 1e-12);
 
@@ -597,7 +596,7 @@ class BiotechBusinessModelTest extends TestCase
             fixedCosts: self::FIXED_COSTS,
             baselineVol: self::BASELINE_VOL,
             macroState: new MacroStateDTO(),
-            mathUtility: $math
+            mathUtility: $math,
         );
 
         // Commercial shock = 1.0 * (0.10 * 0.15) = +0.015 (+1.5%)
@@ -621,7 +620,7 @@ class BiotechBusinessModelTest extends TestCase
             fixedCosts: self::FIXED_COSTS,
             baselineVol: self::BASELINE_VOL,
             macroState: new MacroStateDTO(), // Baseline reimbursementRateGrowth (0.014)
-            mathUtility: $mathBaseline
+            mathUtility: $mathBaseline,
         );
 
         $mathUplift = $this->mockMath([0.0, 0.0]);
@@ -632,25 +631,25 @@ class BiotechBusinessModelTest extends TestCase
             fixedCosts: self::FIXED_COSTS,
             baselineVol: self::BASELINE_VOL,
             macroState: new MacroStateDTO(reimbursementRateGrowth: 0.04), // +4% reimbursement update vs 1.4% baseline
-            mathUtility: $mathUplift
+            mathUtility: $mathUplift,
         );
 
         // Branded commercial stream expands with reimbursement rate growth above baseline (+2.6%)
         $this->assertGreaterThan(
             $baseResult->streamRevenue['commercial_therapeutics'],
-            $upliftResult->streamRevenue['commercial_therapeutics']
+            $upliftResult->streamRevenue['commercial_therapeutics'],
         );
         $expectedUplift = 1.0 + (0.04 - (MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET));
         $this->assertEqualsWithDelta(
             $baseResult->streamRevenue['commercial_therapeutics'] * $expectedUplift,
             $upliftResult->streamRevenue['commercial_therapeutics'],
-            1.0
+            1.0,
         );
         // Pipeline milestone licensing stream is unaffected by healthcare reimbursement updates
         $this->assertEqualsWithDelta(
             $baseResult->streamRevenue['pipeline_licensing_milestones'],
             $upliftResult->streamRevenue['pipeline_licensing_milestones'],
-            1.0
+            1.0,
         );
     }
 }

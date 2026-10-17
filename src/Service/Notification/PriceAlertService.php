@@ -61,7 +61,7 @@ class PriceAlertService
 
         $open = (int) $this->entityManager->getConnection()->fetchOne(
             'SELECT COUNT(*) FROM price_alerts WHERE user_id = :u AND triggered_at IS NULL',
-            ['u' => $user->getId()]
+            ['u' => $user->getId()],
         );
         if ($open >= PriceAlert::MAX_OPEN_PER_USER) {
             throw new \InvalidArgumentException(sprintf('You can have %d alerts waiting at once.', PriceAlert::MAX_OPEN_PER_USER));
@@ -73,7 +73,7 @@ class PriceAlertService
             $instrument->getTicker(),
             PriceAlert::directionFor($target, $price),
             number_format($target, 4, '.', ''),
-            number_format($price, 4, '.', '')
+            number_format($price, 4, '.', ''),
         );
         $this->entityManager->persist($alert);
         $this->entityManager->flush();
@@ -121,7 +121,7 @@ class PriceAlertService
             "SELECT id, user_id, direction, target_price, price_at_creation FROM price_alerts
              WHERE ticker = :ticker AND triggered_at IS NULL
                AND ((direction = 'ABOVE' AND target_price <= :price) OR (direction = 'BELOW' AND target_price >= :price))",
-            ['ticker' => $ticker, 'price' => $price]
+            ['ticker' => $ticker, 'price' => $price],
         );
 
         if ($rows !== []) {
@@ -130,9 +130,9 @@ class PriceAlertService
                 [
                     'now' => (new \DateTime())->format('Y-m-d H:i:s'),
                     'price' => number_format($price, 4, '.', ''),
-                    'ids' => array_map(static fn (array $row): int => (int) $row['id'], $rows),
+                    'ids' => array_map(static fn(array $row): int => (int) $row['id'], $rows),
                 ],
-                ['ids' => ArrayParameterType::INTEGER]
+                ['ids' => ArrayParameterType::INTEGER],
             );
 
             foreach ($rows as $row) {
@@ -145,10 +145,10 @@ class PriceAlertService
                     sprintf(
                         'Now $%s%s.',
                         number_format($price, 2),
-                        $from > 0.0 ? sprintf(', %+.1f%% since you set the alert', ($price / $from - 1.0) * 100.0) : ''
+                        $from > 0.0 ? sprintf(', %+.1f%% since you set the alert', ($price / $from - 1.0) * 100.0) : '',
                     ),
                     $ticker,
-                    '/stock/' . rawurlencode($ticker)
+                    '/stock/' . rawurlencode($ticker),
                 );
             }
             $this->notifier->publish();
@@ -166,7 +166,7 @@ class PriceAlertService
             "SELECT MIN(CASE WHEN direction = 'ABOVE' THEN target_price END) AS above,
                     MAX(CASE WHEN direction = 'BELOW' THEN target_price END) AS below
              FROM price_alerts WHERE ticker = :ticker AND triggered_at IS NULL",
-            ['ticker' => $ticker]
+            ['ticker' => $ticker],
         );
 
         $above = $row === false || $row['above'] === null ? null : (float) $row['above'];
@@ -198,7 +198,7 @@ class PriceAlertService
                  triggered_price = ROUND(triggered_price {$op} :factor, 4)
              WHERE ticker = :ticker",
             ['factor' => $factor, 'ticker' => $ticker],
-            ['factor' => ParameterType::INTEGER]
+            ['factor' => ParameterType::INTEGER],
         );
     }
 
@@ -211,7 +211,7 @@ class PriceAlertService
             return;
         }
 
-        $scale = static fn (mixed $bound): ?float => $bound === null ? null : round((float) $bound * $priceFactor, 4);
+        $scale = static fn(mixed $bound): ?float => $bound === null ? null : round((float) $bound * $priceFactor, 4);
         $redis->hSet(self::REDIS_KEY, $ticker, (string) json_encode([
             'above' => $scale($bounds['above'] ?? null),
             'below' => $scale($bounds['below'] ?? null),
@@ -223,7 +223,7 @@ class PriceAlertService
     {
         $this->redis->del(self::REDIS_KEY);
         $tickers = $this->entityManager->getConnection()->fetchFirstColumn(
-            'SELECT DISTINCT ticker FROM price_alerts WHERE triggered_at IS NULL'
+            'SELECT DISTINCT ticker FROM price_alerts WHERE triggered_at IS NULL',
         );
         foreach ($tickers as $ticker) {
             $this->rebuildBounds((string) $ticker);

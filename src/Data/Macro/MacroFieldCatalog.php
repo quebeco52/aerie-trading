@@ -214,8 +214,8 @@ final class MacroFieldCatalog
             if (is_string($field) && isset(self::FIELDS[$field])) {
                 $driver['label'] = self::FIELDS[$field]['label'];
                 $driver['readings'] = array_map(
-                    static fn (array $reading): array => isset(self::FIELDS[$reading['field'] ?? '']) ? ['label' => self::FIELDS[$reading['field']]['label']] + $reading : $reading,
-                    $driver['readings']
+                    static fn(array $reading): array => isset(self::FIELDS[$reading['field'] ?? '']) ? ['label' => self::FIELDS[$reading['field']]['label']] + $reading : $reading,
+                    $driver['readings'],
                 );
             } elseif (($driver['type'] ?? null) === 'momentum' && is_string($driver['label'] ?? null)) {
                 $driver['label'] = ucfirst(mb_strtolower($driver['label']));

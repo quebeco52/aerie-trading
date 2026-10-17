@@ -19,7 +19,7 @@ class ShockEvent
     public const CAPTURED_NEW_DEPOSITS = 'captured_new_deposits';
     public const PERFORMANCE_FEE_SURGE = 'performance_fee_surge';
     public const FUND_OUTFLOWS = 'fund_outflows';
-    
+
     // --- Systemic Macroeconomic Events (Published against the LBI index) ---
     /** Central bank emergency Quantitative Easing and asset purchases during contraction near zero lower bound. */
     public const TITAN_INTERVENTION = 'titan_intervention';
@@ -127,7 +127,7 @@ class ShockEvent
     public const GEOPOLITICAL_EXPORT_BAN = 'geopolitical_export_ban';
     public const GEOPOLITICAL_SANCTIONS = 'geopolitical_sanctions';
     public const REINSURANCE_ATTACHMENT_BREACH = 'reinsurance_attachment_breach';
-    
+
     public const LITIGATION_SETTLEMENT_WIN = 'litigation_settlement_win';
     public const LITIGATION_SETTLEMENT_LOSS = 'litigation_settlement_loss';
 
@@ -178,6 +178,3 @@ class ShockEvent
 
     public const CONGLOMERATE_SUBSIDIARY_WRITEDOWN = 'conglomerate_subsidiary_writedown';
 }
-
-
-

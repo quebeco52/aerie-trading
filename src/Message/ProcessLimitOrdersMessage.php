@@ -6,7 +6,7 @@ class ProcessLimitOrdersMessage
 {
     public function __construct(
         private string $ticker,
-        private float $currentPrice
+        private float $currentPrice,
     ) {}
 
     public function getTicker(): string

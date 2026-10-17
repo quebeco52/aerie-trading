@@ -6,9 +6,9 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\MedicalCareFacilityBusinessModel;
-use App\Service\Macro\MacroEngine;
 use PHPUnit\Framework\TestCase;
 
 class MedicalCareFacilityBusinessModelTest extends TestCase
@@ -37,7 +37,7 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.08,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('inpatient_care', $result->streamRevenue);
@@ -75,7 +75,7 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
             fixedCosts: 15_000_000.0,
             baselineVol: 0.00, // zero volatility to verify baseline weights
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         // CRAN tuned weights: 50% Inpatient, 30% Outpatient, 20% Insurance Arbitrage
@@ -100,7 +100,7 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
             fixedCosts: 15_000_000.0,
             baselineVol: 0.00,
             macroState: $normalMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $inflatedResult = $this->model->computeActualFinancials(
@@ -110,16 +110,15 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
             fixedCosts: 15_000_000.0,
             baselineVol: 0.00,
             macroState: $highInflationMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         // Insurance arbitrage stream revenue expands under high inflation
         $this->assertGreaterThan(
             $normalResult->streamRevenue['insurance_arbitrage'],
-            $inflatedResult->streamRevenue['insurance_arbitrage']
+            $inflatedResult->streamRevenue['insurance_arbitrage'],
         );
     }
-
 
     /**
      * Job loss ends employer coverage, so unemployment above the natural rate must defer elective outpatient

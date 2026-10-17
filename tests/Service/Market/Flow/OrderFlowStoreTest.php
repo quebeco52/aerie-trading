@@ -98,7 +98,7 @@ class OrderFlowStoreTest extends TestCase
                 $sent->append([$key, $ticker, $quantity]);
 
                 return $quantity;
-            }
+            },
         );
         $redis->expects($this->once())->method('exec')->willReturn([]);
 

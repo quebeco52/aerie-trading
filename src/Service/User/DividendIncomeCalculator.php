@@ -19,7 +19,7 @@ use Doctrine\ORM\EntityManagerInterface;
 final class DividendIncomeCalculator
 {
     public function __construct(
-        private EntityManagerInterface $entityManager
+        private EntityManagerInterface $entityManager,
     ) {}
 
     /**
@@ -37,7 +37,7 @@ final class DividendIncomeCalculator
              FROM dividend_payment
              WHERE user_id = :user_id
              GROUP BY ticker',
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         );
 
         $totals = [];
@@ -61,7 +61,7 @@ final class DividendIncomeCalculator
              WHERE user_id = :user_id
              ORDER BY paid_at DESC, id DESC
              LIMIT ' . max(1, $limit),
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         );
 
         $payments = [];

@@ -39,9 +39,7 @@ final class IndependentPowerBusinessModelTest extends TestCase
             private int $call = 0;
 
             /** @param list<float> $zs */
-            public function __construct(private readonly array $zs, private readonly bool $exits)
-            {
-            }
+            public function __construct(private readonly array $zs, private readonly bool $exits) {}
 
             public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
             {
@@ -121,7 +119,7 @@ final class IndependentPowerBusinessModelTest extends TestCase
     {
         $this->assertSame(
             ['wholesale' => 0.80, 'capacity' => 0.20, 'gas_fleet' => 0.50, 'hedge_ratio' => 0.60],
-            $this->model->resolveRevenueMix($this->generator('DIPR'))
+            $this->model->resolveRevenueMix($this->generator('DIPR')),
         );
 
         $default = $this->model->resolveRevenueMix($this->generator('GEN_IPP'));

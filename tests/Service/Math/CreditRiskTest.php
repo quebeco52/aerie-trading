@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Service\Math;
 
 use App\Service\Macro\MacroEngine;
+use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
 use PHPUnit\Framework\TestCase;
-use App\Service\Market\Bond\CorporateDefaultService;
 
 /**
  * Corporate credit primitives. Both of these exist to stop the same mistake — pricing a risky claim as if
@@ -23,7 +23,7 @@ class CreditRiskTest extends TestCase
     {
         $recovery = CreditRisk::calculateRecoveryGivenDefault(
             CorporateDefaultService::RECOVERY_SENIOR_UNSECURED,
-            CreditRisk::RECOVERY_BASELINE_DEFAULT_RATE
+            CreditRisk::RECOVERY_BASELINE_DEFAULT_RATE,
         );
 
         $this->assertEqualsWithDelta(CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $recovery, 1e-12);
@@ -76,11 +76,11 @@ class CreditRiskTest extends TestCase
         // A catastrophic default year, and an implausibly quiet one.
         $this->assertGreaterThanOrEqual(
             CreditRisk::MIN_RECOVERY_RATE,
-            CreditRisk::calculateRecoveryGivenDefault(0.28, 0.99)
+            CreditRisk::calculateRecoveryGivenDefault(0.28, 0.99),
         );
         $this->assertLessThanOrEqual(
             CreditRisk::MAX_RECOVERY_RATE,
-            CreditRisk::calculateRecoveryGivenDefault(0.62, 1.0e-9)
+            CreditRisk::calculateRecoveryGivenDefault(0.62, 1.0e-9),
         );
     }
 
@@ -197,7 +197,7 @@ class CreditRiskTest extends TestCase
      */
     public function testMertonAssetVolatilityInvertsTheEquityCall(): void
     {
-        $normal = fn (float $x): float => Distributions::calculateNormalCDF($x);
+        $normal = fn(float $x): float => Distributions::calculateNormalCDF($x);
         $rate = 0.03;
         $horizon = 5.0;
 
@@ -251,7 +251,7 @@ class CreditRiskTest extends TestCase
         $normalProb = CreditRisk::calculateEstrellaMishkinProbability(
             slope: 0.015,
             termPremium: 0.003,
-            fci: 0.0
+            fci: 0.0,
         );
         $this->assertLessThan(0.20, $normalProb, 'Normal steep yield curve must indicate low recession risk.');
         $this->assertGreaterThan(0.001, $normalProb);
@@ -260,7 +260,7 @@ class CreditRiskTest extends TestCase
         $invertedProb = CreditRisk::calculateEstrellaMishkinProbability(
             slope: -0.015,
             termPremium: -0.005,
-            fci: 1.50
+            fci: 1.50,
         );
         $this->assertGreaterThan(0.70, $invertedProb, 'Deeply inverted yield curve with tight financial conditions must predict high recession probability.');
         $this->assertLessThanOrEqual(0.999, $invertedProb);
@@ -271,13 +271,13 @@ class CreditRiskTest extends TestCase
         // Neutral conditions (macro Z = 0) sit at the Vasicek median, below the 1.6% mean: Moody's all-rated
         // record since 1983 has its median year near 1.2%.
         $baselineDefault = CreditRisk::calculateCorporateDefaultRate(
-            macroZ: 0.0
+            macroZ: 0.0,
         );
         $this->assertEqualsWithDelta(0.012, $baselineDefault, 0.001);
 
         // Crisis conditions (deep recession macro Z = -2.5)
         $crisisDefault = CreditRisk::calculateCorporateDefaultRate(
-            macroZ: -2.5
+            macroZ: -2.5,
         );
         $this->assertGreaterThan(0.06, $crisisDefault, 'Severe recession credit shock must sharply elevate corporate defaults.');
         $this->assertLessThanOrEqual(0.18, $crisisDefault);
@@ -291,7 +291,7 @@ class CreditRiskTest extends TestCase
             outputGap: -0.03,             // Recession
             excessCreditSpread: 0.040,   // Wide credit spread (+400bps above baseline 0.02)
             dt: 0.25,
-            dW: 0.0
+            dW: 0.0,
         );
         $this->assertGreaterThan(0.10, $tightened, 'Recession and wide credit spreads must drive bank lending standards to tighten.');
         $this->assertLessThanOrEqual(0.85, $tightened);
@@ -302,7 +302,7 @@ class CreditRiskTest extends TestCase
             outputGap: 0.02,
             excessCreditSpread: -0.005,
             dt: 0.50,
-            dW: 0.0
+            dW: 0.0,
         );
         $this->assertLessThan(0.20, $eased, 'Benign conditions must cause bank lending standards to ease.');
     }
@@ -338,14 +338,14 @@ class CreditRiskTest extends TestCase
             MacroEngine::BASE_CREDIT_SPREAD,
             0.0,
             MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
-            0.0
+            0.0,
         );
         $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD, $neutral['ig'], 0.0000001, 'A closed gap leaves the IG spread at its base.');
         $this->assertEqualsWithDelta(
             MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
             $neutral['hy'],
             0.0000001,
-            'With no contraction the HY tranche is a flat multiple of IG.'
+            'With no contraction the HY tranche is a flat multiple of IG.',
         );
 
         // Vol below the threshold contributes nothing: the excess term is one-sided.
@@ -357,7 +357,7 @@ class CreditRiskTest extends TestCase
             MacroEngine::BASE_CREDIT_SPREAD,
             0.0,
             MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD + 0.10,
-            0.05
+            0.05,
         );
         $this->assertEqualsWithDelta(
             MacroEngine::BASE_CREDIT_SPREAD
@@ -365,7 +365,7 @@ class CreditRiskTest extends TestCase
                 + 0.05 * MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
             $stressed['ig'],
             0.0000001,
-            'Vol and contagion must add linearly onto the cycle spread.'
+            'Vol and contagion must add linearly onto the cycle spread.',
         );
 
         // A contraction widens IG through distance-to-default, and HY keeps its multiple of it.
@@ -429,7 +429,7 @@ class CreditRiskTest extends TestCase
     {
         $ig = MacroEngine::BASE_CREDIT_SPREAD;
         $hy = $ig * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
-        $curve = array_map(static fn (string $r): float => CreditRisk::calculateRatingClassSpread($r, $ig, $hy), ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC']);
+        $curve = array_map(static fn(string $r): float => CreditRisk::calculateRatingClassSpread($r, $ig, $hy), ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC']);
 
         for ($i = 1; $i < count($curve); $i++) {
             $this->assertGreaterThan($curve[$i - 1], $curve[$i], "grade {$i} must trade wider than the one above it");
@@ -447,7 +447,7 @@ class CreditRiskTest extends TestCase
                 3.0 * CreditRisk::calculateRatingClassSpread($rating, 0.013, 0.043),
                 CreditRisk::calculateRatingClassSpread($rating, 0.039, 0.043),
                 1e-15,
-                "{$rating} reads the IG index"
+                "{$rating} reads the IG index",
             );
         }
         foreach (['BB', 'B', 'CCC'] as $rating) {
@@ -455,7 +455,7 @@ class CreditRiskTest extends TestCase
                 3.0 * CreditRisk::calculateRatingClassSpread($rating, 0.013, 0.043),
                 CreditRisk::calculateRatingClassSpread($rating, 0.013, 0.129),
                 1e-15,
-                "{$rating} reads the HY index"
+                "{$rating} reads the HY index",
             );
         }
     }
@@ -469,7 +469,7 @@ class CreditRiskTest extends TestCase
     {
         $ig = MacroEngine::BASE_CREDIT_SPREAD;
         $hy = $ig * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
-        $class = static fn (string $r): float => CreditRisk::calculateRatingClassSpread($r, $ig, $hy);
+        $class = static fn(string $r): float => CreditRisk::calculateRatingClassSpread($r, $ig, $hy);
 
         foreach (['AAA', 'A', 'BBB', 'BB', 'CCC'] as $rating) {
             $this->assertEqualsWithDelta(1.0, CreditRisk::calculateIssuerSpreadMultiple($class($rating), $ig, $hy), 1e-12, "seeded on {$rating}");

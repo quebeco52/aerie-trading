@@ -9,11 +9,8 @@ use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Entity\Stock;
 use App\Service\Model\BusinessModelInterface;
-use App\Service\Model\Sector\BaseFinancialBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
-use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
-use App\Service\Model\Sector\TechBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class BusinessModelThresholdsAndPolymorphismTest extends TestCase
@@ -136,7 +133,7 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
             rawMetrics: $metrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->assertEquals(0.08, $corp->getHurdleRate($health));

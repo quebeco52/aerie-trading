@@ -17,7 +17,7 @@ class SectorPhysicsResultTest extends TestCase
             observableShockZ: -0.5,
             eventType: 'SUPPLY_CHAIN_CRUNCH',
             eventContext: ['region' => 'Asia'],
-            isPublicEvent: true
+            isPublicEvent: true,
         );
 
         $this->assertSame(1000.0, $result->actualRevenue);

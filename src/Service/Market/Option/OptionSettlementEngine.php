@@ -90,7 +90,7 @@ final class OptionSettlementEngine
              FROM option_contracts o
              JOIN stocks s ON s.id = o.stock_id
              WHERE o.status = :status AND o.expires_at_time <= :now',
-            ['status' => OptionContract::STATUS_ACTIVE, 'now' => $currentTime]
+            ['status' => OptionContract::STATUS_ACTIVE, 'now' => $currentTime],
         );
 
         if ($rows === []) {
@@ -98,7 +98,7 @@ final class OptionSettlementEngine
         }
 
         $positions = $this->positionsByContract(
-            array_map(static fn (array $row): int => (int) $row['id'], $rows)
+            array_map(static fn(array $row): int => (int) $row['id'], $rows),
         );
 
         $stamp = (new \DateTime())->format('Y-m-d H:i:s');
@@ -168,7 +168,7 @@ final class OptionSettlementEngine
         $rows = $connection->fetchAllAssociative(
             'SELECT o.id, o.ticker, o.option_type, o.strike FROM option_contracts o
              WHERE o.status = :status AND o.stock_id = :stock',
-            ['status' => OptionContract::STATUS_ACTIVE, 'stock' => $stock->getId()]
+            ['status' => OptionContract::STATUS_ACTIVE, 'stock' => $stock->getId()],
         );
 
         if ($rows === []) {
@@ -176,7 +176,7 @@ final class OptionSettlementEngine
         }
 
         $positions = $this->positionsByContract(
-            array_map(static fn (array $row): int => (int) $row['id'], $rows)
+            array_map(static fn(array $row): int => (int) $row['id'], $rows),
         );
         $expiryRows = [];
 
@@ -242,7 +242,7 @@ final class OptionSettlementEngine
                 . ' SET status = ?, open_interest = 0, delta = ?, gamma = ?, vega = ?, theta = ?, updated_at = ?,'
                 . ' price = CASE id' . $cases . ' END'
                 . ' WHERE id IN (' . implode(', ', array_fill(0, count($chunk), '?')) . ')',
-                array_merge($params, array_keys($chunk))
+                array_merge($params, array_keys($chunk)),
             );
         }
     }
@@ -290,7 +290,7 @@ final class OptionSettlementEngine
         $held = $this->em->createQuery(
             'SELECT uo, c, s FROM ' . UserOption::class . ' uo
              JOIN uo.contract c JOIN c.stock s
-             WHERE c.id IN (:contracts)'
+             WHERE c.id IN (:contracts)',
         )
             ->setParameter('contracts', $contractIds)
             ->getResult();
@@ -351,7 +351,7 @@ final class OptionSettlementEngine
                 $shares > 0 ? 'Bought' : 'Sold',
                 number_format(abs($shares)),
                 $underlying,
-                number_format((float) $contract->getStrike(), 2)
+                number_format((float) $contract->getStrike(), 2),
             );
         } else {
             $title = sprintf('%s %s%s expired worthless', number_format(abs($contracts)), $written ? 'written ' : '', $series);

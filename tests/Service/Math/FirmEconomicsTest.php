@@ -28,21 +28,21 @@ class FirmEconomicsTest extends TestCase
         // Neutral conditions (0 output gap, 0 overhang)
         $baselineCu = FirmEconomics::calculateCapacityUtilization(
             outputGap: 0.0,
-            capitalStockOverhang: 0.0
+            capitalStockOverhang: 0.0,
         );
         $this->assertEqualsWithDelta(0.785, $baselineCu, 0.0001, 'Neutral conditions must match Fed G.17 baseline utilization.');
 
         // Economic boom (+3% output gap, 0 overhang)
         $boomCu = FirmEconomics::calculateCapacityUtilization(
             outputGap: 0.03,
-            capitalStockOverhang: 0.0
+            capitalStockOverhang: 0.0,
         );
         $this->assertGreaterThan($baselineCu, $boomCu, 'Positive output gap must increase capacity utilization.');
 
         // Heavy capital overhang (+10% overhang, 0 output gap)
         $slackCu = FirmEconomics::calculateCapacityUtilization(
             outputGap: 0.0,
-            capitalStockOverhang: 0.10
+            capitalStockOverhang: 0.10,
         );
         $this->assertLessThan($baselineCu, $slackCu, 'Excess capital stock overhang must depress capacity utilization.');
 
@@ -63,7 +63,7 @@ class FirmEconomicsTest extends TestCase
             energyInventoryIndex: 100.0,
             dt: 0.25,
             dW: 0.0,
-            baselineCrack: 22.0
+            baselineCrack: 22.0,
         );
         $this->assertGreaterThan(15.0, $nextSpread, 'Crack spread below equilibrium must revert upwards.');
         $this->assertLessThanOrEqual(22.0, $nextSpread);
@@ -75,7 +75,7 @@ class FirmEconomicsTest extends TestCase
             energyInventoryIndex: 70.0,
             dt: 0.25,
             dW: 0.0,
-            baselineCrack: 22.0
+            baselineCrack: 22.0,
         );
         $this->assertGreaterThan(22.0, $boomSpread, 'Strong distillate demand with tight energy inventory expands crack spread.');
 
@@ -86,7 +86,7 @@ class FirmEconomicsTest extends TestCase
             energyInventoryIndex: 150.0,
             dt: 0.25,
             dW: -5.0,
-            baselineCrack: 22.0
+            baselineCrack: 22.0,
         );
         $this->assertGreaterThanOrEqual(4.0, $floored, 'Refining crack spread must not fall below $4.00/bbl floor.');
     }
@@ -100,7 +100,7 @@ class FirmEconomicsTest extends TestCase
             0.016,
             0.016,
             1.0,
-            MacroEngine::INTERBANK_BASELINE_SPREAD
+            MacroEngine::INTERBANK_BASELINE_SPREAD,
         );
 
         $this->assertEqualsWithDelta(0.0, $neutral['dso'], 0.0000001, 'At the spread\'s usual level receivables do not age, wherever that level sits.');
@@ -112,7 +112,7 @@ class FirmEconomicsTest extends TestCase
             0.026,
             0.016,
             1.0,
-            MacroEngine::INTERBANK_BASELINE_SPREAD
+            MacroEngine::INTERBANK_BASELINE_SPREAD,
         );
         $this->assertEqualsWithDelta(0.010 * FirmEconomics::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $creditStress['dso'], 0.0000001, 'DSO must track the credit spread.');
         $this->assertEqualsWithDelta(0.0, $creditStress['dio'], 0.0000001, 'A credit shock must not move inventory days.');
@@ -125,7 +125,7 @@ class FirmEconomicsTest extends TestCase
             0.016,
             0.016,
             0.80,
-            MacroEngine::INTERBANK_BASELINE_SPREAD
+            MacroEngine::INTERBANK_BASELINE_SPREAD,
         );
         $this->assertEqualsWithDelta(0.20 * FirmEconomics::CCC_DIO_CAPACITY_SENSITIVITY, $slack['dio'], 0.0000001, 'DIO must track idle capacity.');
         $this->assertEqualsWithDelta(0.0, $slack['dso'], 0.0000001, 'Idle capacity must not move receivable days.');
@@ -135,7 +135,7 @@ class FirmEconomicsTest extends TestCase
             0.016,
             0.016,
             1.0,
-            MacroEngine::INTERBANK_BASELINE_SPREAD + 0.004
+            MacroEngine::INTERBANK_BASELINE_SPREAD + 0.004,
         );
         $this->assertEqualsWithDelta(-0.004 * FirmEconomics::CCC_DPO_LIQUIDITY_SENSITIVITY, $liquidityStress['dpo'], 0.0000001, 'DPO must contract under interbank stress.');
         $this->assertLessThan(0.0, $liquidityStress['dpo'], 'Vendors demanding faster payment shortens the payable cycle.');
@@ -153,7 +153,7 @@ class FirmEconomicsTest extends TestCase
             0.4 * 0.03 / 0.15 * (1.0 - $decay) / 0.5,
             FirmEconomics::calculateInventoryCycleStep(0.0, -0.03, 0.0, 0.5, 0.4, 0.25, 0.15),
             1e-12,
-            'An unexpected demand miss must build inventory by the closed form, in the inventory-to-sales ratio.'
+            'An unexpected demand miss must build inventory by the closed form, in the inventory-to-sales ratio.',
         );
         $this->assertLessThan(0.0, FirmEconomics::calculateInventoryCycleStep(0.0, 0.03, 0.0, 0.5, 0.4, 0.25, 1.0), 'Unexpectedly strong demand must deplete inventory.');
 
@@ -303,12 +303,12 @@ class FirmEconomicsTest extends TestCase
     /** A new ladder opens as though always struck on today's curve; a step in the curve reaches delivery a tranche a quarter. */
     public function testTheHedgeLadderDeliversLastYearsForwardsOneTrancheAQuarter(): void
     {
-        $flat = static fn (int $quarters): float => 1.0;
+        $flat = static fn(int $quarters): float => 1.0;
         $opened = FirmEconomics::rollHedgeLadder([0.0, 0.0, 0.0, 0.0], $flat);
         $this->assertSame(1.0, $opened['strike']);
         $this->assertSame([4.0, 3.0, 2.0, 1.0], $opened['sums']);
 
-        $stepped = static fn (int $quarters): float => 2.0;
+        $stepped = static fn(int $quarters): float => 2.0;
         $sums = $opened['sums'];
         $delivered = [];
         for ($q = 0; $q < 5; $q++) {
@@ -318,7 +318,7 @@ class FirmEconomicsTest extends TestCase
         }
 
         $this->assertSame([1.0, 1.25, 1.5, 1.75, 2.0], $delivered);
-        $this->assertSame(['strike' => 3.0, 'sums' => []], FirmEconomics::rollHedgeLadder([], static fn (int $q): float => 3.0));
+        $this->assertSame(['strike' => 3.0, 'sums' => []], FirmEconomics::rollHedgeLadder([], static fn(int $q): float => 3.0));
     }
 
     /** At baseline gas a gas-fired MWh spends about half its price on fuel; carbon adds its cost, and the uplift's worth falls with the gas share. */
@@ -339,7 +339,7 @@ class FirmEconomicsTest extends TestCase
     {
         $blend = FirmEconomics::blendWorkingCapitalShares(
             [3.0, 1.0],
-            [['receivables' => 0.04, 'inventory' => 0.08, 'payables' => 0.0], ['receivables' => 0.0, 'inventory' => 0.0, 'payables' => 0.12]]
+            [['receivables' => 0.04, 'inventory' => 0.08, 'payables' => 0.0], ['receivables' => 0.0, 'inventory' => 0.0, 'payables' => 0.12]],
         );
 
         $this->assertEqualsWithDelta(0.03, $blend['receivables'], 1e-12);

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Render;
 
-use App\Data\Politics\AerieDiet;
 use App\Data\Company\InitialMarket;
+use App\Data\Politics\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
+use App\Entity\ElectionOdds;
+use App\Entity\RateDecision;
 use App\Entity\Stock;
 use App\Repository\ElectionOddsRepository;
 use App\Repository\MacroReportHistoryRepository;
@@ -17,13 +19,11 @@ use App\Repository\StockRepository;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
-use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -32,15 +32,15 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Service\News\NarrativeEngine;
 use App\Service\Politics\ElectionRecorder;
 use App\Service\Politics\PoliticsEngine;
-use App\Service\View\GovernmentPageBuilder;
 use App\Service\Politics\PoliticsHistoryRecorder;
-use App\Entity\ElectionOdds;
-use App\Entity\RateDecision;
+use App\Service\View\GovernmentPageBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -79,8 +79,17 @@ final class GovernmentRenderTest extends KernelTestCase
                 return true;
             }
         };
-        $economy = new MacroEngine($math, $redis, new MacroSnapshotRecorder(), new MonetaryPolicySubsystem($math), new LaborMarketSubsystem(),
-            new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math));
+        $economy = new MacroEngine(
+            $math,
+            $redis,
+            new MacroSnapshotRecorder(),
+            new MonetaryPolicySubsystem($math),
+            new LaborMarketSubsystem(),
+            new MacroAggregateSubsystem($math),
+            new CommodityLogisticsSubsystem($math),
+            new AssetMarketSubsystem($math),
+            new CreditFiscalSubsystem($math),
+        );
         $engine = new PoliticsEngine(MathUtility::ownStream($seed), $redis);
 
         $elections = new InMemoryDietElections();
@@ -142,7 +151,7 @@ final class GovernmentRenderTest extends KernelTestCase
             $math,
             $metrics,
             $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine()
+            new MarketConsensusEngine(),
         );
         $board = [];
         foreach (InitialMarket::STOCKS as $row) {
@@ -157,12 +166,12 @@ final class GovernmentRenderTest extends KernelTestCase
         $decisions = $this->createStub(RateDecisionRepository::class);
         $decisions->method('findSince')->willReturnCallback(static fn(float $since): array => array_values(array_filter(
             $written,
-            static fn(object $row): bool => $row instanceof RateDecision && $row->getSimTime() >= $since
+            static fn(object $row): bool => $row instanceof RateDecision && $row->getSimTime() >= $since,
         )));
         $odds = $this->createStub(ElectionOddsRepository::class);
         $odds->method('findForVote')->willReturnCallback(static fn(float $voteAt, float $tolerance): array => array_values(array_filter(
             $written,
-            static fn(object $row): bool => $row instanceof ElectionOdds && abs($row->getVoteAt() - $voteAt) <= $tolerance
+            static fn(object $row): bool => $row instanceof ElectionOdds && abs($row->getVoteAt() - $voteAt) <= $tolerance,
         )));
         $builder = new GovernmentPageBuilder($elections, $reports, $stocks, $decisions, $odds);
 

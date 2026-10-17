@@ -78,7 +78,7 @@ class DebtEngine
         private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
         private ?CreditRatingAgency $creditRatingAgency = null,
-        private ?MarketEventPublisher $marketEventPublisher = null
+        private ?MarketEventPublisher $marketEventPublisher = null,
     ) {}
 
     /**
@@ -92,7 +92,7 @@ class DebtEngine
      * @param bool  $advanceMaturity Whether this is the quarter's report, on which the agency reviews the rating.
      * @return \App\DTO\DebtMetricsDTO
      */
-    public function calculateInterestExpense(Stock $stock, \App\DTO\MacroStateDTO $macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
+    public function calculateInterestExpense(Stock $stock, MacroStateDTO $macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
     {
         $debt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
@@ -159,7 +159,7 @@ class DebtEngine
                 $depreciation,
                 $ebitda,
                 $this->resolveCreditSpread($stock, $macroState, null, true),
-                self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState)
+                self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState),
             );
         }
 
@@ -231,12 +231,12 @@ class DebtEngine
             $depreciation,
             $ebitda,
             $this->resolveCreditSpread($stock, $macroState, null, true),
-            self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState)
+            self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState),
         );
     }
 
     /** The credit index a rating class trades off: IG for an investment-grade rating, HY below it. */
-    private static function resolveMarketIndexSpread(string $rating, \App\DTO\MacroStateDTO $macroState): float
+    private static function resolveMarketIndexSpread(string $rating, MacroStateDTO $macroState): float
     {
         $ranks = CreditRatingAgency::RATING_RANKS;
 
@@ -256,7 +256,7 @@ class DebtEngine
      * @param string|null $rating          Rating to price at; the firm's own when null (a pro-forma one for a deal).
      * @param bool        $throughTheCycle The spread with the indices at their measured trend and no volatility premium.
      */
-    public function resolveCreditSpread(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?string $rating = null, bool $throughTheCycle = false): float
+    public function resolveCreditSpread(Stock $stock, MacroStateDTO $macroState, ?string $rating = null, bool $throughTheCycle = false): float
     {
         $igSpread = $macroState->macroCreditSpreadEma;
         $hySpread = $macroState->highYieldCreditSpreadEma;
@@ -272,7 +272,7 @@ class DebtEngine
             MacroEngine::BASE_CREDIT_SPREAD,
             MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
             $lossGivenDefault,
-            self::CLASS_CURVE_LOSS_GIVEN_DEFAULT
+            self::CLASS_CURVE_LOSS_GIVEN_DEFAULT,
         );
         $classSpread = CreditRisk::calculateRatingClassSpread($rating ?? $stock->getCreditRating(), $igSpread, $hySpread);
         $spread = CreditRisk::calculateRecoveryAdjustedSpread($classSpread, $lossGivenDefault, self::CLASS_CURVE_LOSS_GIVEN_DEFAULT) * $issuerMultiple;
@@ -292,7 +292,7 @@ class DebtEngine
      *
      * @return bool Whether the rating moved.
      */
-    public function seedCreditRating(Stock $stock, \App\DTO\MacroStateDTO $macroState): bool
+    public function seedCreditRating(Stock $stock, MacroStateDTO $macroState): bool
     {
         if ($this->creditRatingAgency === null) {
             return false;
@@ -343,7 +343,7 @@ class DebtEngine
      * obligations the model is judged on, at the firm's de-levered asset volatility. The rating agency grades
      * on it and the stock page quotes it, so both read this one calculation.
      */
-    public function resolveDistanceToDefault(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    public function resolveDistanceToDefault(Stock $stock, MacroStateDTO $macroState): float
     {
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
         $totalDebtObligations = max(0.01, $strategy->getDeleveragingEvaluationDebt((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt()));
@@ -355,7 +355,7 @@ class DebtEngine
             $totalDebtObligations,
             $this->resolveAssetVolatility($stock, $marketCap, $totalDebtObligations, $policyRate),
             $policyRate,
-            self::MERTON_HORIZON_YEARS
+            self::MERTON_HORIZON_YEARS,
         );
     }
 
@@ -391,7 +391,7 @@ class DebtEngine
             $spotVolatility,
             $structuralVolatility,
             \App\Service\Market\Pricing\MarketEngine::varianceReversionSpeed((float) $stock->getJumpIntensity()),
-            self::MERTON_HORIZON_YEARS
+            self::MERTON_HORIZON_YEARS,
         ));
 
         $equityShare = $equityValue / max(1.0, $equityValue + $debtValue);
@@ -435,7 +435,7 @@ class DebtEngine
             max(0.05, (float) $stock->getVolatility()),
             max(0.0, $debtValue),
             $riskFreeRate,
-            self::MERTON_HORIZON_YEARS
+            self::MERTON_HORIZON_YEARS,
         );
         if ($assetVolatility <= 0.0) {
             return null;
@@ -505,7 +505,7 @@ class DebtEngine
             $this->resolveAssetVolatility($stock, $equityValue, $debtValue, $riskFreeRate),
             $debtValue,
             $riskFreeRate,
-            self::MERTON_HORIZON_YEARS
+            self::MERTON_HORIZON_YEARS,
         );
 
         // The claims are the debt the asset value was struck against. A deposit-taker's value is struck on its
@@ -531,7 +531,7 @@ class DebtEngine
      * @param MacroStateDTO $macroState The current macroeconomic state.
      * @return \App\DTO\DebtHealthDTO
      */
-    public function analyzeDebtHealth(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtHealthDTO
+    public function analyzeDebtHealth(Stock $stock, MacroStateDTO $macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtHealthDTO
     {
         $currentDebt = (float) $stock->getTotalDebt();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
@@ -708,7 +708,7 @@ class DebtEngine
             $ebitdaCovenantLimit,
             $currentDebtRatio,
             $strategy->getLeverageTarget($managerDebtTolerance),
-            $this->hasPrimaryMarketAccess($stock, $debtMetrics, $interestCoverage)
+            $this->hasPrimaryMarketAccess($stock, $debtMetrics, $interestCoverage),
         );
     }
 
@@ -756,7 +756,7 @@ class DebtEngine
 
     /**
      * Calculates the Altman Z''-Score (Double Prime) for modern, non-manufacturing corporate bankruptcy prediction.
-     * 
+     *
      * Evaluates working capital, retained earnings, operating income, and book equity to
      * determine if the company is at imminent risk of insolvency.
      *
@@ -799,7 +799,7 @@ class DebtEngine
             return [
                 'z_score' => $zScore,
                 'zone' => $zone,
-                'is_bankrupt' => $zScore < $bankruptThreshold
+                'is_bankrupt' => $zScore < $bankruptThreshold,
             ];
         }
 
@@ -877,9 +877,8 @@ class DebtEngine
         Stock $stock,
         \App\DTO\DebtHealthDTO $health,
         float $availableCash,
-        float $cashFloor = 0.0
-    ): \App\DTO\MaturityRollDTO
-    {
+        float $cashFloor = 0.0,
+    ): \App\DTO\MaturityRollDTO {
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         if ($wholesaleDebt <= 0.0) {
             return new \App\DTO\MaturityRollDTO(0.0, true, 0.0, 0.0);
@@ -923,8 +922,8 @@ class DebtEngine
     {
         $historicalRate = (float) $stock->getHistoricalFixedRate();
         $turnover = max(0.0, min(1.0, $refinancedShare));
-        $isSpeculativeGrade = (\App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS[(string) $stock->getCreditRating()] ?? \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS['BBB'])
-            < \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS['BBB'];
+        $isSpeculativeGrade = (CreditRatingAgency::RATING_RANKS[(string) $stock->getCreditRating()] ?? CreditRatingAgency::RATING_RANKS['BBB'])
+            < CreditRatingAgency::RATING_RANKS['BBB'];
         if ($isSpeculativeGrade && $marketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
             $turnover = max($turnover, self::ACCELERATED_DEBT_TURNOVER);
         }
@@ -960,7 +959,7 @@ class DebtEngine
 
         // An operating firm's Z'' is read against its zones with the agency's hysteresis, so a score on an edge does
         // not cap and release the rating on alternate quarters.
-        $scored['zone'] = \App\Service\Market\Bond\CreditRatingAgency::altmanZoneWithHysteresis($scored['z_score'], (string) $stock->getCreditRating());
+        $scored['zone'] = CreditRatingAgency::altmanZoneWithHysteresis($scored['z_score'], (string) $stock->getCreditRating());
 
         return $scored;
     }
@@ -1007,7 +1006,7 @@ class DebtEngine
             $basis['net_debt'],
             $basis['ebitda'],
             $isUtility,
-            $isUtility ? CreditRatingAgency::MEDIAL_VOLATILITY_DEBT_TO_EBITDA_BOUNDS : CreditRatingAgency::FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS
+            $isUtility ? CreditRatingAgency::MEDIAL_VOLATILITY_DEBT_TO_EBITDA_BOUNDS : CreditRatingAgency::FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS,
         );
     }
 
@@ -1066,7 +1065,7 @@ class DebtEngine
             return false;
         }
 
-        $ranks = \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS;
+        $ranks = CreditRatingAgency::RATING_RANKS;
 
         return ($ranks[$stock->getCreditRating()] ?? $ranks['BBB'])
             >= ($ranks[self::REFINANCING_RATING_FLOOR] ?? 1);
@@ -1074,14 +1073,16 @@ class DebtEngine
 
     /**
      * Issues new wholesale debt and recalculates the blended historical fixed rate.
-     * 
+     *
      * @param Stock $stock         The stock entity issuing debt.
      * @param float $amountIssued  The amount of new debt issued.
      * @param float $costOfNewDebt The fixed interest rate for the newly issued debt.
      */
     public function issueDebt(Stock $stock, float $amountIssued, float $costOfNewDebt): void
     {
-        if ($amountIssued <= 0.0) return;
+        if ($amountIssued <= 0.0) {
+            return;
+        }
 
         $currentWholesaleDebt = (float) $stock->getWholesaleDebt();
         $newWholesaleDebt = $currentWholesaleDebt + $amountIssued;

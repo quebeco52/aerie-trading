@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use App\Service\Model\Sector\ConstructionBusinessModel;
+use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use App\Service\Model\Sector\LawFirmBusinessModel;
 use App\Service\Model\Sector\LuxuryBusinessModel;
@@ -84,7 +84,6 @@ final class SectorCalibrationMatrixTest extends TestCase
         return $models;
     }
 
-
     /**
      * The financial models, whose earnings are a spread on a balance sheet rather than a price on a product.
      *
@@ -94,7 +93,7 @@ final class SectorCalibrationMatrixTest extends TestCase
     {
         return array_filter(
             self::sectorModelProvider(),
-            static fn (array $row): bool => (new $row[0]())->isFinancial()
+            static fn(array $row): bool => (new $row[0]())->isFinancial(),
         );
     }
 
@@ -126,7 +125,6 @@ final class SectorCalibrationMatrixTest extends TestCase
         $this->assertGreaterThan(0, $declared, "{$modelClass} declares no calibration constants at all, so nothing pins its sector identity.");
     }
 
-
     /**
      * Financial models are excluded from the operating-physics constants by design: a bank's earnings come
      * from a spread on a balance sheet, not from a price it charges against an input basket. This pins that
@@ -138,7 +136,7 @@ final class SectorCalibrationMatrixTest extends TestCase
         foreach (['PRICING_POWER_INDEX', 'PRICE_ELASTICITY_OF_DEMAND'] as $constant) {
             $this->assertFalse(
                 defined("{$modelClass}::{$constant}"),
-                "{$modelClass} is a financial model and must not declare {$constant}: its earnings are a spread, not a price."
+                "{$modelClass} is a financial model and must not declare {$constant}: its earnings are a spread, not a price.",
             );
         }
     }
@@ -187,32 +185,32 @@ final class SectorCalibrationMatrixTest extends TestCase
         $this->assertLessThan(
             ShippingBusinessModel::OPERATING_CYCLICALITY,
             UtilityBusinessModel::OPERATING_CYCLICALITY,
-            'A regulated utility must be far less cyclical than a shipping line.'
+            'A regulated utility must be far less cyclical than a shipping line.',
         );
         // Groceries are bought in a recession; casino floors and new cars are not.
         $this->assertLessThan(
             LuxuryBusinessModel::OPERATING_CYCLICALITY,
             ConsumerStaplesBusinessModel::OPERATING_CYCLICALITY,
-            'Staples must be more defensive than luxury goods.'
+            'Staples must be more defensive than luxury goods.',
         );
         // Multi-year appropriated programmes do not track the private cycle.
         $this->assertLessThan(
             SemiconductorBusinessModel::OPERATING_CYCLICALITY,
             DefenseContractorBusinessModel::OPERATING_CYCLICALITY,
-            'A defence contractor on appropriated programmes must be less cyclical than the memory cycle.'
+            'A defence contractor on appropriated programmes must be less cyclical than the memory cycle.',
         );
         // Long leases insulate a landlord from the quarter its tenants are having.
         $this->assertLessThan(
             RestaurantBusinessModel::OPERATING_CYCLICALITY,
             ReitBusinessModel::OPERATING_CYCLICALITY,
-            'A leased property book must be steadier than the restaurants inside it.'
+            'A leased property book must be steadier than the restaurants inside it.',
         );
         // A producer sells every barrel into a global pool at the going price; a refinery's runs follow the
         // fuel demand of the economy it supplies.
         $this->assertLessThan(
             RefiningBusinessModel::OPERATING_CYCLICALITY,
             OilGasProducerBusinessModel::OPERATING_CYCLICALITY,
-            'An oil producer\'s volume must answer the domestic cycle less than a refinery\'s runs do.'
+            'An oil producer\'s volume must answer the domestic cycle less than a refinery\'s runs do.',
         );
 
         // The whole non-financial cross-section has to sit around unit cyclicality rather than drifting.
@@ -227,7 +225,6 @@ final class SectorCalibrationMatrixTest extends TestCase
         $this->assertLessThan(1.30, $mean, 'The market as a whole cannot be systematically more cyclical than the cycle.');
     }
 
-
     /**
      * Substitutability, lease intensity and labour share each encode a structural fact about the sector,
      * and each has an unambiguous extreme that pins the scale.
@@ -239,7 +236,7 @@ final class SectorCalibrationMatrixTest extends TestCase
         $this->assertGreaterThan(
             (float) UtilityBusinessModel::INDUSTRY_SUBSTITUTABILITY,
             (float) TelecomBusinessModel::INDUSTRY_SUBSTITUTABILITY,
-            'Telecom growth is almost entirely share taken from carriers.'
+            'Telecom growth is almost entirely share taken from carriers.',
         );
         // "Conglomerates" is a listing convention, not a product market: listed groups sell nothing to each other's customers.
         $this->assertSame(0.0, (float) \App\Service\Model\Sector\ConglomerateBusinessModel::INDUSTRY_SUBSTITUTABILITY, 'Unrelated groups take no share from one another.');
@@ -249,12 +246,12 @@ final class SectorCalibrationMatrixTest extends TestCase
         $this->assertGreaterThan(
             (float) ReitBusinessModel::LEASE_LIABILITY_INTENSITY,
             (float) RestaurantBusinessModel::LEASE_LIABILITY_INTENSITY,
-            'A restaurant estate is a lease book.'
+            'A restaurant estate is a lease book.',
         );
         $this->assertGreaterThan(
             (float) UtilityBusinessModel::LEASE_LIABILITY_INTENSITY,
             (float) RestaurantBusinessModel::LEASE_LIABILITY_INTENSITY,
-            'A utility owns its grid; a restaurant rents its sites.'
+            'A utility owns its grid; a restaurant rents its sites.',
         );
 
         // A law firm is people; a property book is capital with a small management team on top. Both shares are
@@ -262,7 +259,7 @@ final class SectorCalibrationMatrixTest extends TestCase
         $this->assertGreaterThan(
             (float) ReitBusinessModel::INPUT_COST_EXPOSURES['labor'],
             (float) LawFirmBusinessModel::INPUT_COST_EXPOSURES['labor'],
-            'Professional services are payroll; a property book is capital.'
+            'Professional services are payroll; a property book is capital.',
         );
         $this->assertGreaterThan(0.5, (float) LawFirmBusinessModel::INPUT_COST_EXPOSURES['labor'], 'Most of what a law firm spends is pay.');
         $this->assertLessThan(0.2, (float) ReitBusinessModel::INPUT_COST_EXPOSURES['labor'], 'Property upkeep is bought in, not staffed.');
@@ -277,18 +274,18 @@ final class SectorCalibrationMatrixTest extends TestCase
         $this->assertGreaterThan(
             (float) SemiconductorBusinessModel::DEMAND_LAG_YEARS,
             (float) ConstructionBusinessModel::DEMAND_LAG_YEARS,
-            'A construction backlog outlasts a semiconductor order book by a wide margin.'
+            'A construction backlog outlasts a semiconductor order book by a wide margin.',
         );
         $this->assertGreaterThan(
             (float) SemiconductorBusinessModel::DEMAND_LAG_YEARS,
             (float) ReitBusinessModel::DEMAND_LAG_YEARS,
-            'A signed lease ladder transmits the cycle more slowly than a chip order.'
+            'A signed lease ladder transmits the cycle more slowly than a chip order.',
         );
 
         // A restaurant is the spot case: it declares no lag at all and reads the macro gap directly.
         $this->assertFalse(
             defined(RestaurantBusinessModel::class . '::DEMAND_LAG_YEARS'),
-            'A restaurant is a spot business and must read the cycle contemporaneously.'
+            'A restaurant is a spot business and must read the cycle contemporaneously.',
         );
     }
 }

@@ -5,19 +5,19 @@ declare(strict_types=1);
 namespace App\Service\Model\Trait;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Model\ModelParam;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
-use App\Service\Corporate\Industry\IndustryRegimeView;
 use App\Entity\Stock;
+use App\Service\Corporate\Industry\IndustryRegimeView;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
-use App\Service\Math\FinancialConstants;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\TimeSeries;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 trait StandardOperatingPhysicsTrait
 {
@@ -63,7 +63,7 @@ trait StandardOperatingPhysicsTrait
             $this->getSecularGrowthRate($stock),
             MacroEngine::TREND_REAL_GROWTH,
             $simYears,
-            FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS
+            FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS,
         );
     }
 
@@ -78,7 +78,7 @@ trait StandardOperatingPhysicsTrait
     }
 
     /** Most firms budget against the domestic business cycle. */
-    public function getCapexCycleSignal(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float
     {
         return $macroState->outputGapEma;
     }
@@ -129,7 +129,7 @@ trait StandardOperatingPhysicsTrait
         return new SectorCoverageProfile(
             baseVisibility: min(1.0, $visibility),
             errorStdDev: $error,
-            minVisibility: min(1.0, $minVis)
+            minVisibility: min(1.0, $minVis),
         );
     }
 
@@ -201,7 +201,6 @@ trait StandardOperatingPhysicsTrait
         return 0.0;
     }
 
-
     /** A firm no rule costs productivity carries its committed base at the inputs and wages it is priced at. */
     public function getFixedCostFactor(MacroStateDTO $macroState): float
     {
@@ -249,7 +248,7 @@ trait StandardOperatingPhysicsTrait
     {
         $streams->registerState(
             FinancialConstants::STATE_PUBLIC_SPENDING_EARNINGS_SHARE,
-            $actualRevenue > 0.0 ? $revenuePerUnit * (1.0 - $variableCostRatio) / $actualRevenue : 0.0
+            $actualRevenue > 0.0 ? $revenuePerUnit * (1.0 - $variableCostRatio) / $actualRevenue : 0.0,
         );
     }
 
@@ -269,7 +268,7 @@ trait StandardOperatingPhysicsTrait
         $factor = FirmEconomics::calculateExtractionCostFactor($macroState->extractionStringency);
         $streams->registerState(
             FinancialConstants::STATE_EXTRACTION_COST_SHARE,
-            FirmEconomics::calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative) + ($actualRevenue > 0.0 ? $fixedCosts / $factor / $actualRevenue : 0.0)
+            FirmEconomics::calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative) + ($actualRevenue > 0.0 ? $fixedCosts / $factor / $actualRevenue : 0.0),
         );
 
         return $perUnitCostRatio * $factor;
@@ -380,16 +379,16 @@ trait StandardOperatingPhysicsTrait
     public function resolveInputPriceDeviations(MacroStateDTO $macroState): array
     {
         return [
-            'energy'  => $macroState->energyCostPushLag / \App\Service\Macro\MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
+            'energy'  => $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
             'gas'     => ($macroState->naturalGasPriceIndexEma - 100.0) / 100.0,
-            'electricity' => ($macroState->wholesalePowerPriceIndexEma - \App\Service\Macro\MacroEngine::WHOLESALE_POWER_BASELINE) / \App\Service\Macro\MacroEngine::WHOLESALE_POWER_BASELINE,
+            'electricity' => ($macroState->wholesalePowerPriceIndexEma - MacroEngine::WHOLESALE_POWER_BASELINE) / MacroEngine::WHOLESALE_POWER_BASELINE,
             'metals'  => ($macroState->industrialMetalsIndexEma - 100.0) / 100.0,
             'agri'    => ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0,
             'freight' => ($macroState->freightRateIndexEma - 100.0) / 100.0,
             // PPI is a rate. A price level's gap to its H-year EMA trend is H times its growth smoothed over H, so the
             // rate over target times the PPI's own one-year window is the wholesale price level against its trend.
-            'ppi'     => \App\Service\Macro\MacroEngine::COMMODITY_TREND_HORIZON_YEARS
-                * ($macroState->producerPriceInflationEma - \App\Service\Macro\MacroEngine::TARGET_INFLATION),
+            'ppi'     => MacroEngine::COMMODITY_TREND_HORIZON_YEARS
+                * ($macroState->producerPriceInflationEma - MacroEngine::TARGET_INFLATION),
             'labor'   => $macroState->realWageGap,
             'imports' => $macroState->importPriceDeviation(),
         ];
@@ -429,7 +428,7 @@ trait StandardOperatingPhysicsTrait
             $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_RECOVERY, 0.0),
             $this->resolveInputCostDeviation($macroState),
             $recoveredShare,
-            $costLagYears
+            $costLagYears,
         );
 
         $streams->registerState(FinancialConstants::STATE_INPUT_COST_LEVEL, $costLevel);
@@ -465,7 +464,7 @@ trait StandardOperatingPhysicsTrait
                 $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_RECOVERY_PREFIX . $channel, 0.0),
                 (float) $share * ($gaps[$channel] ?? 0.0),
                 $recoveredShare,
-                $costLagYears
+                $costLagYears,
             );
             $streams->registerState(FinancialConstants::STATE_INPUT_COST_LEVEL_PREFIX . $channel, $level);
             $streams->registerState(FinancialConstants::STATE_INPUT_COST_RECOVERY_PREFIX . $channel, $recovery);
@@ -501,7 +500,7 @@ trait StandardOperatingPhysicsTrait
         $booked = max(-self::MAX_INPUT_COST_DRAG, min(self::MAX_INPUT_COST_DRAG, $total));
         if ($total !== 0.0 && $booked !== $total) {
             $scale = $booked / $total;
-            $parts = array_map(static fn (float $part): float => $part * $scale, $parts);
+            $parts = array_map(static fn(float $part): float => $part * $scale, $parts);
         }
 
         return $parts;
@@ -525,7 +524,7 @@ trait StandardOperatingPhysicsTrait
             $this->resolveInputCostDeviation($macroState),
             (float) ($state[FinancialConstants::STATE_INPUT_COST_RECOVERED_SHARE]
                 ?? max(0.0, min(1.0, $this->resolvePricingPower($stock))) * self::MAX_INPUT_COST_PASS_THROUGH),
-            $this->resolveInputCostLagYears($stock)
+            $this->resolveInputCostLagYears($stock),
         );
 
         return $costLevel - $recovery;
@@ -562,13 +561,13 @@ trait StandardOperatingPhysicsTrait
             currentLaggedValue: $costLevel,
             targetValue: $deviation,
             dt: $dt,
-            lagTimeConstant: $costLagYears
+            lagTimeConstant: $costLagYears,
         );
         $nextRecovery = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $recovery,
             targetValue: $nextLevel * $recoveredShare,
             dt: $dt,
-            lagTimeConstant: $this->getInputPassThroughLagYears()
+            lagTimeConstant: $this->getInputPassThroughLagYears(),
         );
 
         return [$nextLevel, $nextRecovery];
@@ -609,7 +608,6 @@ trait StandardOperatingPhysicsTrait
             default                     => $macroState->tipsBreakevenEma,
         };
     }
-
 
     /** Pricing power index for this stock: ticker override, then the sector's PRICING_POWER_INDEX, then the median 0.5. */
     protected function resolvePricingPower(Stock $stock): float
@@ -737,9 +735,7 @@ trait StandardOperatingPhysicsTrait
      * plant times turnover), so the stable margin does not also move with the reinvestment ratio. A model whose
      * spend buys a separate output, such as a biotech's pipeline, reads the ratio here.
      */
-    public function recordReinvestmentRatio(Stock $stock, float $reinvestmentRatio, float $dt): void
-    {
-    }
+    public function recordReinvestmentRatio(Stock $stock, float $reinvestmentRatio, float $dt): void {}
 
     public function getMarginReversionSpeed(): float
     {

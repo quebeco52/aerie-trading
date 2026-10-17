@@ -56,7 +56,7 @@ class OutputGapChannelsTest extends TestCase
             $this->assertSame(
                 1,
                 $grouped[$channel] ?? 0,
-                sprintf('%s is in %d families; every drift channel belongs to exactly one', $channel, $grouped[$channel] ?? 0)
+                sprintf('%s is in %d families; every drift channel belongs to exactly one', $channel, $grouped[$channel] ?? 0),
             );
         }
     }
@@ -70,7 +70,7 @@ class OutputGapChannelsTest extends TestCase
                 $this->assertContains(
                     $channel,
                     $recorded,
-                    sprintf('Family "%s" names %s, which no longer reaches the drift', $key, $channel)
+                    sprintf('Family "%s" names %s, which no longer reaches the drift', $key, $channel),
                 );
             }
         }
@@ -91,7 +91,7 @@ class OutputGapChannelsTest extends TestCase
         $this->assertNotContains(
             OutputGapChannels::RESIDUAL_COLOUR,
             $colours,
-            'The residual is not a demand channel and must not wear a channel colour'
+            'The residual is not a demand channel and must not wear a channel colour',
         );
     }
 

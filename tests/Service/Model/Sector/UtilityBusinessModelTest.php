@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
+use App\DTO\ActualFinancialsDTO;
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\StreamContext;
-use App\Service\Event\ShockEvent;
-use App\DTO\ActualFinancialsDTO;
-use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -39,7 +39,7 @@ class UtilityBusinessModelTest extends TestCase
             ->method('generateStandardNormal')
             ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5, 0.0);
 
-        $macroState = \App\DTO\MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
+        $macroState = MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
         $result = $model->computeActualFinancials(
             $stock,
             1000.0,
@@ -47,7 +47,7 @@ class UtilityBusinessModelTest extends TestCase
             100.0,
             0.20,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // More merchant generation at the same wholesale price is more revenue
@@ -119,8 +119,8 @@ class UtilityBusinessModelTest extends TestCase
                 0.30,
                 0.60,
                 3.0,
-                2.0
-            )
+                2.0,
+            ),
         );
 
         // ICR < 2.5 -> False
@@ -129,8 +129,8 @@ class UtilityBusinessModelTest extends TestCase
                 0.30,
                 0.60,
                 2.0,
-                2.0
-            )
+                2.0,
+            ),
         );
     }
     public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void
@@ -147,7 +147,7 @@ class UtilityBusinessModelTest extends TestCase
             // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
+            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
             $math->method('checkProbability')->willReturn($exits);
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
@@ -179,7 +179,7 @@ class UtilityBusinessModelTest extends TestCase
     public function testRisingTreasuryYieldsRaiseTheAuthorisedReturnAtTheNextOrders(): void
     {
         $model = new UtilityBusinessModel();
-        $roeAt = static fn (float $yield): float => UtilityBusinessModel::ALLOWED_ROE_INTERCEPT + (UtilityBusinessModel::ALLOWED_ROE_YIELD_SLOPE * $yield);
+        $roeAt = static fn(float $yield): float => UtilityBusinessModel::ALLOWED_ROE_INTERCEPT + (UtilityBusinessModel::ALLOWED_ROE_YIELD_SLOPE * $yield);
         $run = function (float $yield) use ($model, $roeAt): ActualFinancialsDTO {
             $stock = new Stock();
             $stock->setTicker('UTIL');
@@ -231,7 +231,6 @@ class UtilityBusinessModelTest extends TestCase
         $rebuilding = $run([StreamContext::REGIME_STATE_PREFIX . UtilityBusinessModel::REGIME_INFRASTRUCTURE_LIABILITY => 2.0]);
         $this->assertEqualsWithDelta(100_000_000.0 * 4.0 * UtilityBusinessModel::GRID_HARDENING_CAPEX_RATIO, $rebuilding->scheduledCapex, 1.0);
     }
-
 
     private function merchantQuarter(string $ticker, float $gasIndexEma, float $powerIndexEma): ActualFinancialsDTO
     {
@@ -340,7 +339,6 @@ class UtilityBusinessModelTest extends TestCase
         // Zero-fuel renewables keep the whole 30% price rise; gas is no cost to them.
         $this->assertEqualsWithDelta(0.30, (new UtilityBusinessModel())->describeMerchantPowerImpact($stock, $macro), 1e-12);
     }
-
 
     public function testADistrictStormOpensTheGridLiabilityRegimeWithoutAFailureOfItsOwn(): void
     {

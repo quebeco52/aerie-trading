@@ -58,7 +58,7 @@ class OptionSettlementTest extends TestCase
     {
         $this->assertSame(
             5 * OptionSettlementEngine::shareDelta(1, true),
-            OptionSettlementEngine::shareDelta(5, true)
+            OptionSettlementEngine::shareDelta(5, true),
         );
     }
 
@@ -111,12 +111,12 @@ class OptionSettlementTest extends TestCase
         // Exercise by exception: the clearing house does not ask, it delivers anything worth a cent.
         $this->assertGreaterThanOrEqual(
             OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD,
-            $call->intrinsicValue(100.0 + OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD)
+            $call->intrinsicValue(100.0 + OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD),
         );
 
         $this->assertLessThan(
             OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD,
-            $call->intrinsicValue(100.0 + (OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD / 2.0))
+            $call->intrinsicValue(100.0 + (OptionSettlementEngine::OPTION_EXERCISE_THRESHOLD / 2.0)),
         );
     }
 

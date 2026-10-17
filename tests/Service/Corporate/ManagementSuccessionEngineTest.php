@@ -67,7 +67,7 @@ final class ManagementSuccessionEngineTest extends TestCase
         $this->assertLessThan(
             $atCostOfCapital,
             $engine->resolveAnnualHazard($settled, 0.10),
-            'Economic profit has to lower the hazard, not merely fail to raise it.'
+            'Economic profit has to lower the hazard, not merely fail to raise it.',
         );
     }
 
@@ -79,11 +79,11 @@ final class ManagementSuccessionEngineTest extends TestCase
         $this->assertSame(
             ManagementSuccessionEngine::BASE_DEPARTURE_HAZARD,
             $engine->resolveAnnualHazard(0.5, -0.20),
-            'Inside the grace period only the baseline applies, however bad the inherited spread.'
+            'Inside the grace period only the baseline applies, however bad the inherited spread.',
         );
         $this->assertGreaterThan(
             ManagementSuccessionEngine::BASE_DEPARTURE_HAZARD,
-            $engine->resolveAnnualHazard(ManagementSuccessionEngine::GRACE_PERIOD_YEARS + 0.01, -0.20)
+            $engine->resolveAnnualHazard(ManagementSuccessionEngine::GRACE_PERIOD_YEARS + 0.01, -0.20),
         );
     }
 
@@ -126,14 +126,14 @@ final class ManagementSuccessionEngineTest extends TestCase
         $this->assertSame(
             ManagementStyle::Steward,
             $corrects->drawSuccessor(ManagementStyle::EmpireBuilder, true),
-            'Capital went out below its cost, so the mandate is to stop and return it.'
+            'Capital went out below its cost, so the mandate is to stop and return it.',
         );
 
         $seeksGrowth = $this->engine($this->drawing([0.10, 0.0]));
         $this->assertSame(
             ManagementStyle::EmpireBuilder,
             $seeksGrowth->drawSuccessor(ManagementStyle::Steward, true),
-            'A custodian that stopped growing is answered with someone told to grow.'
+            'A custodian that stopped growing is answered with someone told to grow.',
         );
 
         // A board that could not agree on a direction hires a safe pair of hands.
@@ -159,7 +159,7 @@ final class ManagementSuccessionEngineTest extends TestCase
         $this->assertSame(
             0.0,
             $result['shock'],
-            'The policy change is priced by the engines downstream; striking a shock here would charge the price twice for one piece of news.'
+            'The policy change is priced by the engines downstream; striking a shock here would charge the price twice for one piece of news.',
         );
     }
 
@@ -239,7 +239,7 @@ final class ManagementSuccessionEngineTest extends TestCase
         $this->assertGreaterThan(
             ManagementSuccessionEngine::GRACE_PERIOD_YEARS,
             max($drawn),
-            'Some firms must open the simulation already past the grace period.'
+            'Some firms must open the simulation already past the grace period.',
         );
         $this->assertLessThan(ManagementSuccessionEngine::GRACE_PERIOD_YEARS, min($drawn));
     }
@@ -256,12 +256,12 @@ final class ManagementSuccessionEngineTest extends TestCase
         $mathUtility->method('generateUniform')->willReturnCallback(
             static function () use (&$sequence): float {
                 return array_shift($sequence) ?? 0.999;
-            }
+            },
         );
         $mathUtility->method('checkProbability')->willReturnCallback(
             static function (float $probability) use (&$sequence): bool {
                 return (array_shift($sequence) ?? 0.999) < $probability;
-            }
+            },
         );
 
         return $mathUtility;

@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\Service\Model\ModelParam;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReitBusinessModel;
@@ -26,7 +24,7 @@ class ReitBusinessModelTest extends TestCase
         float $outputGap = 0.0,
         float $yield10y = 0.04,
         float $equityRiskPremium = 0.05,
-        float $policyRate = 0.04
+        float $policyRate = 0.04,
     ): MacroStateDTO {
         return new MacroStateDTO(
             outputGap: $outputGap,
@@ -162,7 +160,7 @@ class ReitBusinessModelTest extends TestCase
             fixedCosts: 100000.0,
             baselineVol: 0.20,
             macroState: $macroState,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Defaults: 85% lease, 15% hospitality
@@ -192,7 +190,7 @@ class ReitBusinessModelTest extends TestCase
             fixedCosts: 100000.0,
             baselineVol: 0.20,
             macroState: $macroState,
-            mathUtility: $mathMockPlza
+            mathUtility: $mathMockPlza,
         );
 
         // leaseRevenue = 800,000 * (1.034 + v) = 827,200 + 800,000 v
@@ -221,7 +219,7 @@ class ReitBusinessModelTest extends TestCase
             fixedCosts: 100000.0,
             baselineVol: 0.10,
             macroState: $macroState,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Securitization shock = 2.0 * 0.10 * 2.00 = 0.40
@@ -250,7 +248,7 @@ class ReitBusinessModelTest extends TestCase
             fixedCosts: 100000.0,
             baselineVol: 0.10,
             macroState: $macroState,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Longevity shock = -2.0 * 0.10 * 0.25 = -0.05
@@ -272,14 +270,14 @@ class ReitBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('REIT_VACANCY');
         $macroState = $this->createMacroState(yield10y: 0.04);
-        $run = fn (float $tenantZ) => $model->computeActualFinancials(
+        $run = fn(float $tenantZ) => $model->computeActualFinancials(
             $stock,
             expectedRevenue: 1000000.0,
             realizedVariableMargin: 0.30,
             fixedCosts: 100000.0,
             baselineVol: 0.10,
             macroState: $macroState,
-            mathUtility: $this->createMathUtilityMock([0.0, 0.0, $tenantZ])
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, $tenantZ]),
         );
         $lease = 1000000.0 * 0.85;
         // Net of the vacancy an average draw takes: 0.08 phi(1.5) - 0.015 E[max(0, Z - 1)], about 0.9% of the roll.
@@ -344,7 +342,7 @@ class ReitBusinessModelTest extends TestCase
             fixedCosts: 100000.0,
             baselineVol: 0.10,
             macroState: $lowYield,
-            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0])
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0]),
         );
         $resultHigh = $model->computeActualFinancials(
             $stock,
@@ -353,14 +351,14 @@ class ReitBusinessModelTest extends TestCase
             fixedCosts: 100000.0,
             baselineVol: 0.10,
             macroState: $highYield,
-            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0])
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0]),
         );
 
         $this->assertEqualsWithDelta(0.30, $resultLow->clampedMargin, 0.001);
         $this->assertEqualsWithDelta($resultLow->clampedMargin, $resultHigh->clampedMargin, 1e-9);
         $this->assertLessThan(
             (new StandardCorporateBusinessModel())->getDebtMaturityRolloverRate(),
-            $model->getDebtMaturityRolloverRate()
+            $model->getDebtMaturityRolloverRate(),
         );
     }
 
@@ -376,7 +374,7 @@ class ReitBusinessModelTest extends TestCase
             $stock,
             quarterlyEps: 1.50,
             investedCapital: 800000000.0,
-            depRate: 0.05
+            depRate: 0.05,
         );
         $this->assertEqualsWithDelta(1.50, $sustainableBase, 0.0001);
 
@@ -389,7 +387,7 @@ class ReitBusinessModelTest extends TestCase
             earningsValue: 60.0,
             pbFairValue: 50.0,
             normalizedEps: 2.0,
-            dividendSupportValue: 70.0
+            dividendSupportValue: 70.0,
         );
         $this->assertEqualsWithDelta(61.5, $fairValue, 0.0001);
     }
@@ -452,7 +450,7 @@ class ReitBusinessModelTest extends TestCase
             $metrics,
             $debtEngine,
             $math,
-            $treasuryEngine
+            $treasuryEngine,
         );
 
         $stock = new Stock();
@@ -488,7 +486,7 @@ class ReitBusinessModelTest extends TestCase
                 (float) $stock->getPrice(),
                 (float) $stock->getSharesOutstanding(),
                 $macro,
-                $quarterlyNopat
+                $quarterlyNopat,
             );
         }
 
@@ -556,11 +554,11 @@ class ReitBusinessModelTest extends TestCase
                 ebit: 30.0,
                 revenue: 100.0,
                 depreciation: 5.0,
-                ebitda: 35.0
+                ebitda: 35.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
     }
 
@@ -630,7 +628,7 @@ class ReitBusinessModelTest extends TestCase
             corporateTaxRate: 0.0,
             wacc: 0.15,
             costOfEquity: 0.18,
-            macroState: $macro
+            macroState: $macro,
         );
 
         $newTtm = (float) $stock->getRoicTtm();

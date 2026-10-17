@@ -9,11 +9,11 @@ use App\Service\Market\Agent\AgentFlowEngine;
 use App\Service\Market\Agent\AgentPopulation;
 use App\Service\Market\Agent\FundamentalistStrategy;
 use App\Service\Market\Agent\InMemoryAgentStateStore;
-use App\Service\Market\Option\DealerGammaEngine;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
+use App\Service\Market\Option\DealerGammaEngine;
 use App\Service\Market\Option\InMemoryDealerGammaStore;
-use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Option\OptionDeskService;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
@@ -70,7 +70,7 @@ class OrderFlowBatchWiringTest extends TestCase
         $this->assertSame(
             array_merge(['begin'], array_fill(0, $records, 'record'), ['commit']),
             $calls,
-            'Every record falls between one beginBatch() and one commitBatch().'
+            'Every record falls between one beginBatch() and one commitBatch().',
         );
     }
 
@@ -84,7 +84,7 @@ class OrderFlowBatchWiringTest extends TestCase
      */
     private function spy(): OrderFlowStoreInterface
     {
-        return new class () implements OrderFlowStoreInterface {
+        return new class implements OrderFlowStoreInterface {
             /** @var list<string> */
             public array $calls = [];
 

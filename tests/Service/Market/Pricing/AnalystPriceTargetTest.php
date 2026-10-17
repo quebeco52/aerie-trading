@@ -39,7 +39,7 @@ final class AnalystPriceTargetTest extends TestCase
                 $this->published[] = [$type, $description];
 
                 return ['type' => $type, 'description' => $description];
-            }
+            },
         );
 
         $this->tracker = (new ReflectionClass(StockTracker::class))->newInstanceWithoutConstructor();
@@ -76,7 +76,7 @@ final class AnalystPriceTargetTest extends TestCase
         self::assertEqualsWithDelta(
             100.0 * (1.0 + StockTracker::ANALYST_TARGET_OPTIMISM),
             (float) $stock->getAnalystPriceTarget(),
-            1e-6
+            1e-6,
         );
     }
 
@@ -138,7 +138,7 @@ final class AnalystPriceTargetTest extends TestCase
                 $captured = $changePercent;
 
                 return [];
-            }
+            },
         );
         (new ReflectionProperty(StockTracker::class, 'eventService'))->setValue($this->tracker, $publisher);
 
@@ -203,7 +203,7 @@ final class AnalystPriceTargetTest extends TestCase
         self::assertGreaterThan(
             1.0 - Stock::ANALYST_RATING_UNDERPERFORM,
             Stock::ANALYST_RATING_OUTPERFORM - 1.0,
-            'It takes more upside to say buy than downside to say sell.'
+            'It takes more upside to say buy than downside to say sell.',
         );
     }
 }

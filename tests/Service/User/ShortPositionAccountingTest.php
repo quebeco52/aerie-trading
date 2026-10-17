@@ -132,11 +132,11 @@ class ShortPositionAccountingTest extends TestCase
             $this->assertMatchesRegularExpression(
                 '/margin_debit|getMarginDebit|NET_WORTH_SQL/',
                 $contents,
-                "{$source} totals a user's net worth and must subtract borrowed cash."
+                "{$source} totals a user's net worth and must subtract borrowed cash.",
             );
         }
 
-        $this->assertStringContainsString('u.cash_balance - u.margin_debit', \App\Service\User\Portfolio::NET_WORTH_SQL);
+        $this->assertStringContainsString('u.cash_balance - u.margin_debit', Portfolio::NET_WORTH_SQL);
     }
 
     public function testTheEscrowFragmentStillValuesEveryAssetClass(): void

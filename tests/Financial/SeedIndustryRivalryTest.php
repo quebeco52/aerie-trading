@@ -58,7 +58,7 @@ final class SeedIndustryRivalryTest extends TestCase
             $investedCapital = $metrics->calculateLiveInvestedCapital(
                 (float) ($row['total_equity'] ?? 0.0),
                 (float) ($row['wholesale_debt'] ?? 0.0),
-                (float) ($row['corporate_treasury'] ?? 0.0)
+                (float) ($row['corporate_treasury'] ?? 0.0),
             );
             $share = $metrics->calculateScaleRatio($investedCapital, 1.0, (float) ($row['sam_ratio'] ?? 1.00));
             $checked++;
@@ -72,8 +72,8 @@ final class SeedIndustryRivalryTest extends TestCase
                     . 'its balance sheet, or cut the balance sheet.',
                     $row['ticker'],
                     100 * $share,
-                    100 * $threshold
-                )
+                    100 * $threshold,
+                ),
             );
         }
 
@@ -108,8 +108,8 @@ final class SeedIndustryRivalryTest extends TestCase
                         . 'is trading share between two copies of one firm. Give the newer name its own stream mix.',
                         $ticker,
                         $seen[$signature] ?? '',
-                        $industry
-                    )
+                        $industry,
+                    ),
                 );
 
                 $seen[$signature] = $ticker;

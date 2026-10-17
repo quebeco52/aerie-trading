@@ -96,8 +96,8 @@ class TimestepNeutralityTest extends TestCase
                 'A year of diffusion carries %.5f of its variance at %d ticks against %d. The shock is not scaling as sqrt(dt).',
                 $ratio,
                 self::FINE_TICKS_PER_YEAR,
-                self::COARSE_TICKS_PER_YEAR
-            )
+                self::COARSE_TICKS_PER_YEAR,
+            ),
         );
     }
 
@@ -124,7 +124,7 @@ class TimestepNeutralityTest extends TestCase
                     etaUp: 25.0,
                     etaDown: 20.0,
                     muV: 0.0,
-                    dt: $dt
+                    dt: $dt,
                 );
 
                 if ($jump['shock_pct'] !== null) {
@@ -141,7 +141,7 @@ class TimestepNeutralityTest extends TestCase
                 0.8,
                 $perYear,
                 0.08,
-                sprintf('At %d ticks a year the market jumps %.3f times a year against the 0.8 it was asked for.', $ticksPerYear, $perYear)
+                sprintf('At %d ticks a year the market jumps %.3f times a year against the 0.8 it was asked for.', $ticksPerYear, $perYear),
             );
         }
     }
@@ -167,7 +167,7 @@ class TimestepNeutralityTest extends TestCase
                     currentLaggedValue: $value,
                     targetValue: 1.0,
                     dt: $dt,
-                    lagTimeConstant: $horizonYears
+                    lagTimeConstant: $horizonYears,
                 );
             }
 
@@ -182,7 +182,7 @@ class TimestepNeutralityTest extends TestCase
                 $expected,
                 $level,
                 1e-9,
-                sprintf('At %d ticks a year the lag reached %.9f against the %.9f one year implies.', $ticksPerYear, $level, $expected)
+                sprintf('At %d ticks a year the lag reached %.9f against the %.9f one year implies.', $ticksPerYear, $level, $expected),
             );
         }
     }

@@ -71,12 +71,12 @@ final class Distributions
 
         if ($z >= 0.0) {
             $t = 1.0 / (1.0 + $p * $z);
-            return (1.0 - $c * exp(-$z * $z / 2.0) * $t *
-                ($t * ($t * ($t * ($t * $b5 + $b4) + $b3) + $b2) + $b1));
+            return (1.0 - $c * exp(-$z * $z / 2.0) * $t
+                * ($t * ($t * ($t * ($t * $b5 + $b4) + $b3) + $b2) + $b1));
         } else {
             $t = 1.0 / (1.0 - $p * $z);
-            return ($c * exp(-$z * $z / 2.0) * $t *
-                ($t * ($t * ($t * ($t * $b5 + $b4) + $b3) + $b2) + $b1));
+            return ($c * exp(-$z * $z / 2.0) * $t
+                * ($t * ($t * ($t * ($t * $b5 + $b4) + $b3) + $b2) + $b1));
         }
     }
 
@@ -183,22 +183,22 @@ final class Distributions
         if ($p < $pLow) {
             // Rational approximation for lower tail
             $q = sqrt(-2.0 * log($p));
-            return (((((($c1 * $q + $c2) * $q + $c3) * $q + $c4) * $q + $c5) * $q + $c6) /
-                (((($d1 * $q + $d2) * $q + $d3) * $q + $d4) * $q + 1.0));
+            return (((((($c1 * $q + $c2) * $q + $c3) * $q + $c4) * $q + $c5) * $q + $c6)
+                / (((($d1 * $q + $d2) * $q + $d3) * $q + $d4) * $q + 1.0));
         }
 
         if ($p <= $pHigh) {
             // Rational approximation for central region
             $q = $p - 0.5;
             $r = $q * $q;
-            return (((((($a1 * $r + $a2) * $r + $a3) * $r + $a4) * $r + $a5) * $r + $a6) * $q) /
-                (((((($b1 * $r + $b2) * $r + $b3) * $r + $b4) * $r + $b5) * $r + 1.0));
+            return (((((($a1 * $r + $a2) * $r + $a3) * $r + $a4) * $r + $a5) * $r + $a6) * $q)
+                / (((((($b1 * $r + $b2) * $r + $b3) * $r + $b4) * $r + $b5) * $r + 1.0));
         }
 
         // Rational approximation for upper tail
         $q = sqrt(-2.0 * log(1.0 - $p));
-        return - (((((($c1 * $q + $c2) * $q + $c3) * $q + $c4) * $q + $c5) * $q + $c6) /
-            (((($d1 * $q + $d2) * $q + $d3) * $q + $d4) * $q + 1.0));
+        return - (((((($c1 * $q + $c2) * $q + $c3) * $q + $c4) * $q + $c5) * $q + $c6)
+            / (((($d1 * $q + $d2) * $q + $d3) * $q + $d4) * $q + 1.0));
     }
 
     /**

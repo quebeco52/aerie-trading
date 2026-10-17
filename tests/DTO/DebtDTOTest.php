@@ -22,7 +22,7 @@ class DebtDTOTest extends TestCase
             ebit: 5000.0,
             revenue: 20000.0,
             depreciation: 1000.0,
-            ebitda: 6000.0
+            ebitda: 6000.0,
         );
 
         $this->assertSame(1000.0, $metrics->interestExpense);
@@ -49,7 +49,7 @@ class DebtDTOTest extends TestCase
             ebit: 5000.0,
             revenue: 20000.0,
             depreciation: 1000.0,
-            ebitda: 6000.0
+            ebitda: 6000.0,
         );
 
         $health = new DebtHealthDTO(
@@ -68,7 +68,7 @@ class DebtDTOTest extends TestCase
             rawMetrics: $metrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->assertSame(0.05, $health->grossCost);

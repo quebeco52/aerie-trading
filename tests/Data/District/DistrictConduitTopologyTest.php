@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Data\District;
 
-use App\Data\District\DistrictMap;
 use App\Data\Company\Sectors;
+use App\Data\District\DistrictMap;
 use App\DTO\MacroStateDTO;
 use App\Service\District\DistrictConduitResolver;
 use App\Service\Model\BusinessModelInterface;
@@ -78,7 +78,7 @@ class DistrictConduitTopologyTest extends TestCase
             $this->assertContains(
                 $field,
                 $dtoFields,
-                sprintf('"%s" declares operating field "%s", which does not exist on MacroStateDTO::toArray()', $businessModel, $field)
+                sprintf('"%s" declares operating field "%s", which does not exist on MacroStateDTO::toArray()', $businessModel, $field),
             );
         }
     }
@@ -115,7 +115,7 @@ class DistrictConduitTopologyTest extends TestCase
         $this->assertSame($expected, $conduits, sprintf(
             '"%s" derives conduits that drift from its non-ubiquitous fields [%s].',
             $businessModel,
-            implode(', ', $ownFields)
+            implode(', ', $ownFields),
         ));
     }
 
@@ -128,7 +128,7 @@ class DistrictConduitTopologyTest extends TestCase
                 $this->assertContains(
                     $field,
                     $dtoFields,
-                    sprintf('Institution "%s" declares field "%s", which does not exist on MacroStateDTO.', $institutionId, $field)
+                    sprintf('Institution "%s" declares field "%s", which does not exist on MacroStateDTO.', $institutionId, $field),
                 );
             }
         }
@@ -142,25 +142,25 @@ class DistrictConduitTopologyTest extends TestCase
         foreach (DistrictMap::INSTITUTIONS as $institutionId => $institution) {
             $this->assertNotEmpty(
                 $institution['readouts'] ?? [],
-                sprintf('Institution "%s" prints no readouts — it would show only a name and a stress pulse.', $institutionId)
+                sprintf('Institution "%s" prints no readouts — it would show only a name and a stress pulse.', $institutionId),
             );
 
             foreach ($institution['readouts'] as $readout) {
                 $this->assertContains(
                     $readout['field'],
                     $institution['fields'],
-                    sprintf('Institution "%s" prints readout field "%s", which it does not declare in its own "fields".', $institutionId, $readout['field'])
+                    sprintf('Institution "%s" prints readout field "%s", which it does not declare in its own "fields".', $institutionId, $readout['field']),
                 );
                 $this->assertContains(
                     $readout['field'],
                     $dtoFields,
-                    sprintf('Institution "%s" readout field "%s" does not exist on MacroStateDTO.', $institutionId, $readout['field'])
+                    sprintf('Institution "%s" readout field "%s" does not exist on MacroStateDTO.', $institutionId, $readout['field']),
                 );
                 $this->assertNotEmpty($readout['label'], sprintf('Institution "%s" has a readout with no label.', $institutionId));
                 $this->assertContains(
                     $readout['unit'],
                     $validUnits,
-                    sprintf('Institution "%s" readout for "%s" has an invalid unit.', $institutionId, $readout['field'])
+                    sprintf('Institution "%s" readout for "%s" has an invalid unit.', $institutionId, $readout['field']),
                 );
             }
         }
@@ -192,7 +192,7 @@ class DistrictConduitTopologyTest extends TestCase
             $this->assertArrayHasKey(
                 $institutionId,
                 $wired,
-                sprintf('Institution "%s" has no business model wired to it anywhere.', $institutionId)
+                sprintf('Institution "%s" has no business model wired to it anywhere.', $institutionId),
             );
         }
     }
@@ -206,7 +206,7 @@ class DistrictConduitTopologyTest extends TestCase
      */
     public function testNoInstitutionExceedsSixtyPercentFanIn(): void
     {
-        $businessModels = array_map(static fn (array $case) => $case[0], self::businessModelProvider());
+        $businessModels = array_map(static fn(array $case) => $case[0], self::businessModelProvider());
         $total = count($businessModels);
 
         foreach (array_keys(DistrictMap::INSTITUTIONS) as $institutionId) {
@@ -220,7 +220,7 @@ class DistrictConduitTopologyTest extends TestCase
             $this->assertLessThanOrEqual(
                 0.60,
                 $wiredCount / $total,
-                sprintf('Institution "%s" is wired to %d/%d (%.0f%%) of business models — likely a field needs to join UBIQUITOUS_MACRO_FIELDS.', $institutionId, $wiredCount, $total, 100 * $wiredCount / $total)
+                sprintf('Institution "%s" is wired to %d/%d (%.0f%%) of business models — likely a field needs to join UBIQUITOUS_MACRO_FIELDS.', $institutionId, $wiredCount, $total, 100 * $wiredCount / $total),
             );
         }
     }
@@ -232,7 +232,7 @@ class DistrictConduitTopologyTest extends TestCase
      */
     public function testEveryUbiquitousFieldIsGenuinelyReadByAMajorityOfModels(): void
     {
-        $businessModels = array_map(static fn (array $case) => $case[0], self::businessModelProvider());
+        $businessModels = array_map(static fn(array $case) => $case[0], self::businessModelProvider());
         $total = count($businessModels);
 
         foreach (DistrictMap::UBIQUITOUS_MACRO_FIELDS as $field) {
@@ -246,7 +246,7 @@ class DistrictConduitTopologyTest extends TestCase
             $this->assertGreaterThan(
                 $total / 2,
                 $readers,
-                sprintf('"%s" is listed as ubiquitous but only %d/%d models read it.', $field, $readers, $total)
+                sprintf('"%s" is listed as ubiquitous but only %d/%d models read it.', $field, $readers, $total),
             );
         }
     }

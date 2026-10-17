@@ -3,25 +3,25 @@
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Repository\UserRepository;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use Symfony\Component\Routing\Attribute\Route;
-use SymfonyCasts\Bundle\VerifyEmail\VerifyEmailHelperInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Email;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Routing\Attribute\Route;
 use SymfonyCasts\Bundle\VerifyEmail\Exception\VerifyEmailExceptionInterface;
-use App\Repository\UserRepository;
-use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use SymfonyCasts\Bundle\VerifyEmail\VerifyEmailHelperInterface;
 
 class RegistrationController extends AbstractController
 {
     #[Route('/register', name: 'app_register', methods: ['GET', 'POST'])]
     public function register(
-        Request $request, 
-        UserPasswordHasherInterface $userPasswordHasher, 
+        Request $request,
+        UserPasswordHasherInterface $userPasswordHasher,
         EntityManagerInterface $entityManager,
         VerifyEmailHelperInterface $verifyEmailHelper,
         MailerInterface $mailer,
@@ -29,7 +29,7 @@ class RegistrationController extends AbstractController
         \App\Service\Season\SeasonService $seasons,
     ): Response {
         if ($this->getUser()) {
-            return $this->redirectToRoute('app_dashboard'); 
+            return $this->redirectToRoute('app_dashboard');
         }
 
         if ($request->isMethod('POST')) {
@@ -69,14 +69,14 @@ class RegistrationController extends AbstractController
                     'app_verify_email',
                     (string) $user->getId(),
                     (string) $user->getEmail(),
-                    ['id' => $user->getId()]
+                    ['id' => $user->getId()],
                 );
 
                 $email = (new Email())
                     ->from('noreply@trade.lakebird.org')
                     ->to($user->getEmail())
                     ->subject('Please Confirm your Email')
-                    ->html('<p>Click this link to verify your email:</p><a href="'.$signatureComponents->getSignedUrl().'">Verify Email</a>');
+                    ->html('<p>Click this link to verify your email:</p><a href="' . $signatureComponents->getSignedUrl() . '">Verify Email</a>');
 
                 $mailer->send($email);
 

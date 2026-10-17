@@ -61,7 +61,7 @@ final class EarningsPreAnnouncementTest extends TestCase
 
                 // Mirrors the real publisher: one event shape, which the caller wraps into a list.
                 return ['type' => $type, 'ticker' => 'ZZZZ', 'description' => $description, 'change_percent' => $changePercent];
-            }
+            },
         );
 
         $math = new MathUtility();
@@ -80,14 +80,14 @@ final class EarningsPreAnnouncementTest extends TestCase
             $math,
             $metrics,
             $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine()
+            new MarketConsensusEngine(),
         );
     }
 
     private function makeStock(
         float $accrualBank = 0.0,
         float $costLevel = 0.0,
-        float $recovered = 0.0
+        float $recovered = 0.0,
     ): Stock {
         $stock = new Stock();
         $stock->setTicker('ZZZZ');
@@ -290,8 +290,8 @@ final class EarningsPreAnnouncementTest extends TestCase
         $debt = new DebtEngine(new MathUtility(), new CorporateMetrics());
         $market = new \App\Service\Market\Pricing\MarketEngine(new MathUtility());
         $anchors = new \App\Service\Corporate\Holdings\AnchorStakeLedger();
-        $strike = static fn (Stock $s): float => $market->strikeFairValue(
-            \App\DTO\MarketPricingContext::forStock($s, $macro, $debt->analyzeDebtHealth($s, $macro), $anchors)
+        $strike = static fn(Stock $s): float => $market->strikeFairValue(
+            \App\DTO\MarketPricingContext::forStock($s, $macro, $debt->analyzeDebtHealth($s, $macro), $anchors),
         )['perceived_fair_value'];
 
         $expected = EarningsEngine::reportPriceGap($strike($before), $strike($after), 0.0, 0.0);
@@ -325,7 +325,7 @@ final class EarningsPreAnnouncementTest extends TestCase
         $this->assertLessThan(
             EarningsEngine::resolveReportingTick('ZZZZ', self::TICKS_PER_YEAR),
             EarningsEngine::resolvePreAnnouncementTick('ZZZZ', self::TICKS_PER_YEAR),
-            'A pre-announcement that arrives after the report is not a pre-announcement.'
+            'A pre-announcement that arrives after the report is not a pre-announcement.',
         );
     }
 

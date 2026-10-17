@@ -7,8 +7,8 @@ namespace App\Service\Market\Option;
 use App\DTO\OptionQuoteDTO;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
-use App\Service\Math\FinancialConstants;
 use App\Service\Market\Pricing\LiquidityEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * The flow an option desk is forced to trade in the underlying to stay flat.

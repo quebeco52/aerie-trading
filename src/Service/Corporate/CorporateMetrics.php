@@ -3,10 +3,10 @@
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\TimeSeries;
-use App\Service\Corporate\Industry\IndustryShareLedger;
 
 /**
  * A firm's measures read off its Stock: operating base, invested and revenue-generating capital, scale and saturation
@@ -96,7 +96,7 @@ class CorporateMetrics
         return max(0.0, (float) $stock->getCorporateTreasury() - $strategy->calculateTargetOperatingCash(
             self::getInstance()->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity()),
             (float) $stock->getCustomerDeposits(),
-            (float) $stock->getWholesaleDebt()
+            (float) $stock->getWholesaleDebt(),
         ));
     }
 
@@ -217,7 +217,7 @@ class CorporateMetrics
         $marginalRevenueFactor = FirmEconomics::calculateCournotMarginalRevenueFactor(
             $marketShare,
             FinancialConstants::COURNOT_DEMAND_ELASTICITY,
-            $substitutability
+            $substitutability,
         );
         $assetTurnover = $revenue / $investedCapital;
 
@@ -316,12 +316,12 @@ class CorporateMetrics
         float $netWorkingCapital,
         float $goodwill,
         float $constructionInProgress,
-        float $assetAgeRatio = FinancialConstants::SEED_ASSET_AGE_RATIO
+        float $assetAgeRatio = FinancialConstants::SEED_ASSET_AGE_RATIO,
     ): void {
         $capital = abs($investedCapital);
         $netPpe = max(
             $capital * self::MIN_PPE_SHARE_OF_CAPITAL,
-            $capital - $netWorkingCapital - max(0.0, $goodwill) - max(0.0, $constructionInProgress)
+            $capital - $netWorkingCapital - max(0.0, $goodwill) - max(0.0, $constructionInProgress),
         );
 
         $age = min(0.90, max(0.0, $assetAgeRatio));
@@ -348,7 +348,7 @@ class CorporateMetrics
             (float) $stock->getTotalEquity()
             + (float) $stock->getTotalDebt()
             - max(0.0, (float) $stock->getCorporateTreasury())
-            - max(0.0, (float) $stock->getGoodwill())
+            - max(0.0, (float) $stock->getGoodwill()),
         );
         $rate = max(0.0, min(0.50, $lifetimeLossRate));
         $grossBook = $netBook / (1.0 - $rate);

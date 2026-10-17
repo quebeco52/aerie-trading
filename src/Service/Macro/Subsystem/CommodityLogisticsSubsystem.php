@@ -196,7 +196,7 @@ class CommodityLogisticsSubsystem
     public function __construct(
         private readonly MathUtility $mathUtility,
         /** Logs the jumps this subsystem draws. Null in a test or a headless harness, off everywhere the ticker is not. */
-        private readonly ?MacroDiagnosticsProbe $diagnostics = null
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
     /**
@@ -229,7 +229,7 @@ class CommodityLogisticsSubsystem
             theta: self::resolveEnergyProcessTheta($equilibriumPrice),
             sigma: MacroEngine::ENERGY_VOLATILITY,
             dt: $dt,
-            dW: $dW
+            dW: $dW,
         );
         // Merton (1976) jump in the log price: it lands in the level and decays at the reversion speed like any
         // other move, so a year of shocks carries the same weight at every step size.
@@ -237,7 +237,7 @@ class CommodityLogisticsSubsystem
             lambda: self::ENERGY_JUMP_PROBABILITY,
             jumpMean: self::ENERGY_JUMP_MEAN,
             jumpVol: self::ENERGY_JUMP_VOL,
-            dt: $dt
+            dt: $dt,
         );
         $state->energyBasePrice = max(10.0, min(350.0, $baseProcess * $jumpData['multiplier']));
         if ($jumpData['exponent'] !== null) {
@@ -253,7 +253,7 @@ class CommodityLogisticsSubsystem
         // Working (1949) theory of storage non-linear convenience yield backwardation.
         $convenienceYield = StochasticProcesses::calculateConvenienceYield(
             inventoryLevel: $state->energyInventoryIndex,
-            minBufferStock: self::COMMODITY_MIN_BUFFER_STOCK
+            minBufferStock: self::COMMODITY_MIN_BUFFER_STOCK,
         );
         $conveniencePricePremium = MacroEngine::ENERGY_BASELINE * $convenienceYield;
 
@@ -326,7 +326,7 @@ class CommodityLogisticsSubsystem
             self::GAS_OIL_RATIO_KAPPA,
             StochasticProcesses::schwartzThetaForMean(1.0, self::GAS_OIL_RATIO_KAPPA, self::GAS_OIL_RATIO_SIGMA),
             self::GAS_OIL_RATIO_SIGMA,
-            $years
+            $years,
         );
     }
 
@@ -394,14 +394,14 @@ class CommodityLogisticsSubsystem
             theta: $ratioTarget,
             sigma: self::GAS_OIL_RATIO_SIGMA,
             dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal()
+            dW: $this->mathUtility->generateStandardNormal(),
         );
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
             lambda: self::GAS_JUMP_PROBABILITY,
             jumpMean: self::GAS_JUMP_MEAN,
             jumpVol: self::GAS_JUMP_VOL,
-            dt: $dt
+            dt: $dt,
         );
 
         $state->gasOilRatioLog = max(-2.0, min(2.0, log($ratio * $jumpData['multiplier'])));
@@ -433,7 +433,7 @@ class CommodityLogisticsSubsystem
             theta: StochasticProcesses::schwartzThetaForMean(1.0, self::POWER_HEAT_RATE_KAPPA, self::POWER_HEAT_RATE_SIGMA),
             sigma: self::POWER_HEAT_RATE_SIGMA,
             dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal()
+            dW: $this->mathUtility->generateStandardNormal(),
         );
         $state->powerHeatRateLog = max(-3.0, min(3.0, log($heatRate)));
 
@@ -466,9 +466,9 @@ class CommodityLogisticsSubsystem
     public static function smoothedPowerSeason(float $totalTime): float
     {
         return TimeSeries::exponentiallySmoothedSignal(
-            static fn (float $t): float => self::gasPowerPassThrough(self::gasSeasonalFactor($t)) * self::resolvePowerSeasonalFactor($t),
+            static fn(float $t): float => self::gasPowerPassThrough(self::gasSeasonalFactor($t)) * self::resolvePowerSeasonalFactor($t),
             $totalTime,
-            MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS
+            MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS,
         );
     }
 
@@ -544,7 +544,7 @@ class CommodityLogisticsSubsystem
         $equilibrium = self::resolveGoldEquilibriumPrice(
             $state->yield10yEma - $state->tipsBreakevenEma,
             $state->tipsBreakevenEma,
-            $state->consumerSentimentIndexEma
+            $state->consumerSentimentIndexEma,
         );
 
         $gold = StochasticProcesses::calculateSchwartz1Factor(
@@ -553,7 +553,7 @@ class CommodityLogisticsSubsystem
             theta: StochasticProcesses::schwartzThetaForMean($equilibrium, self::GOLD_MEAN_REVERSION, self::GOLD_VOLATILITY),
             sigma: self::GOLD_VOLATILITY,
             dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal()
+            dW: $this->mathUtility->generateStandardNormal(),
         );
 
         $state->goldPriceIndex = max(self::MIN_GOLD_INDEX, min(self::MAX_GOLD_INDEX, $gold));
@@ -583,7 +583,7 @@ class CommodityLogisticsSubsystem
             sigChi: self::METALS_SHORT_TERM_SIGMA,
             sigXi: self::METALS_LONG_TERM_SIGMA,
             rho: self::METALS_RHO,
-            dt: $dt
+            dt: $dt,
         );
 
         $state->metalsChi = $result['chi'];
@@ -617,14 +617,14 @@ class CommodityLogisticsSubsystem
             sigChi: self::AGRI_SHORT_TERM_SIGMA,
             sigXi: self::AGRI_LONG_TERM_SIGMA,
             rho: self::AGRI_RHO,
-            dt: $dt
+            dt: $dt,
         );
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
             lambda: self::AGRI_WEATHER_JUMP_PROBABILITY,
             jumpMean: self::AGRI_WEATHER_JUMP_MEAN,
             jumpVol: self::AGRI_WEATHER_JUMP_VOL,
-            dt: $dt
+            dt: $dt,
         );
 
         $chi = $result['chi'];
@@ -669,7 +669,7 @@ class CommodityLogisticsSubsystem
             theta: StochasticProcesses::schwartzThetaForMean($equilibriumRate, self::FREIGHT_MEAN_REVERSION, self::FREIGHT_VOLATILITY),
             sigma: self::FREIGHT_VOLATILITY,
             dt: $dt,
-            dW: $dW
+            dW: $dW,
         );
 
         $state->freightRateIndex = max(20.0, min(500.0, $newFreight));
@@ -700,7 +700,7 @@ class CommodityLogisticsSubsystem
             self::DELIVERY_REVERSION_KAPPA,
             self::DELIVERY_STATIONARY_SD,
             $dt,
-            $this->mathUtility->generateStandardNormal()
+            $this->mathUtility->generateStandardNormal(),
         );
     }
 
@@ -738,7 +738,7 @@ class CommodityLogisticsSubsystem
             dW: $this->mathUtility->generateStandardNormal(),
             baselineCrack: MacroEngine::CRACK_SPREAD_BASELINE,
             kappa: self::CRACK_SPREAD_KAPPA,
-            sigma: self::CRACK_SPREAD_SIGMA
+            sigma: self::CRACK_SPREAD_SIGMA,
         );
 
         $state->refiningCrackSpread = max(4.0, min(80.0, $nextBase * self::resolveCrackSeasonalFactor($state->totalTime)));

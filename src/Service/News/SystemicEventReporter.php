@@ -59,8 +59,7 @@ class SystemicEventReporter
         private readonly NarrativeEngine $narrativeEngine,
         private readonly MarketEventPublisher $marketEvent,
         private readonly PriceChangeFeed $priceChangeFeed,
-    ) {
-    }
+    ) {}
 
     /**
      * Every story the tick carries: the economy's, the government's, and a rate decision that made news when the
@@ -118,11 +117,11 @@ class SystemicEventReporter
 
         $monthMove = $this->priceChangeFeed->changeForTicker((string) $benchmark->getTicker(), (float) $benchmark->getPrice());
 
-        return array_map(fn (array $story): array => $this->marketEvent->publishDistrict(
+        return array_map(fn(array $story): array => $this->marketEvent->publishDistrict(
             $story[0],
             $story[1],
             $this->narrativeEngine->generateLore($story[1], $context),
-            $monthMove === null ? null : 100.0 * $monthMove
+            $monthMove === null ? null : 100.0 * $monthMove,
         ), $stories);
     }
 
@@ -270,7 +269,7 @@ class SystemicEventReporter
             . ($swing > 0.0 && $stance !== 0.0 ? ($stance > 0.0 ? ' leaning hawkish' : ' leaning dovish') : '');
         $passedOver = static fn(array $candidates): string => self::listNames(array_map(
             static fn(array $candidate): string => "{$candidate['name']}, {$stance($candidate['stance'], $candidate['swing'] ?? 0.0)}",
-            $candidates
+            $candidates,
         ));
         $context = [
             'governor' => $politics->governorName,
@@ -300,7 +299,7 @@ class SystemicEventReporter
         $counts = array_count_values(array_map(static fn(float $stance, int $key): string => MonetaryAuthority::typeName($stance, $swingers[$key] ?? 0.0), $stances, array_keys($stances)));
         $context['committee_counts'] = self::listNames(array_values(array_filter(array_map(
             static fn(string $type): ?string => isset($counts[$type]) ? self::countWord($counts[$type]) . ' ' . self::STANCE_PLURALS[$type][$counts[$type] === 1 ? 0 : 1] : null,
-            ['hawk', 'swing', 'dove']
+            ['hawk', 'swing', 'dove'],
         ))));
         $context['committee_majority'] = match (true) {
             $politics->committeeMajority > 0.0 => 'hawkish',
@@ -381,7 +380,7 @@ class SystemicEventReporter
             'exchequer_head_term_ends' => GovernmentPageBuilder::simDate(Exchequer::headTermEnd($politics->totalTime)),
             'exchequer_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have borrowed at {$years(Exchequer::averageMaturity($candidate['debt']))} on average",
-                $politics->exchequerHeadPassedOver
+                $politics->exchequerHeadPassedOver,
             )),
             'debt_maturity_change' => match (true) {
                 abs($target - $current) < 0.05 => "keeps the debt's average maturity near {$years($current)}",
@@ -414,7 +413,7 @@ class SystemicEventReporter
             'fund_head_term_ends' => GovernmentPageBuilder::simDate(SovereignReserveFund::headTermEnd($politics->totalTime)),
             'fund_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have held {$pct(SovereignReserveFund::equityShare($candidate['fund']))} in shares",
-                $politics->fundHeadPassedOver
+                $politics->fundHeadPassedOver,
             )),
             'fund_equity_target' => $pct($target),
         ];
@@ -458,7 +457,7 @@ class SystemicEventReporter
             'fair_trading_head_term_ends' => GovernmentPageBuilder::simDate(FairTradingBoard::headTermEnd($politics->totalTime)),
             'fair_trading_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have drawn the line at {$line($candidate['competition'])}",
-                $politics->fairTradingHeadPassedOver
+                $politics->fairTradingHeadPassedOver,
             )),
             'merger_review_change' => match (true) {
                 abs($politics->fairTradingHeadStance - $politics->fairTradingPriorStance) < 0.05 => "keeps merger review where it stood, with {$screens}",
@@ -497,7 +496,7 @@ class SystemicEventReporter
             'securities_rules_from' => GovernmentPageBuilder::simDate($politics->securitiesHeadTermStart + SecuritiesCommission::RULE_NOTICE_YEARS),
             'securities_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have set margin at {$pct(SecuritiesCommission::initialMargin($candidate['markets']))}",
-                $politics->securitiesHeadPassedOver
+                $politics->securitiesHeadPassedOver,
             )),
             'securities_rules_change' => sprintf(
                 '%s and %s',
@@ -506,7 +505,7 @@ class SystemicEventReporter
                     abs($scale - $scaleBefore) < 0.005 => 'keeps its watch on companies that dress up their results',
                     $scale < $scaleBefore => 'steps up its pursuit of companies that dress up their results',
                     default => 'eases off companies that dress up their results',
-                }
+                },
             ),
         ];
     }
@@ -578,7 +577,7 @@ class SystemicEventReporter
             'regulator_term_ends' => GovernmentPageBuilder::simDate(FinancialRegulator::headTermEnd($politics->totalTime)),
             'regulator_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have set {$pct(FinancialRegulator::requirement($candidate['regulation']))}",
-                $politics->regulatorPassedOver
+                $politics->regulatorPassedOver,
             )),
             'requirement_change' => match (true) {
                 abs($target - $before) < 0.0005 => "holds the banks' core capital requirement at {$pct($target)} of risk-weighted assets",

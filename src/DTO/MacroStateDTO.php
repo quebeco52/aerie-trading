@@ -6,9 +6,9 @@ namespace App\DTO;
 
 use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
@@ -219,11 +219,11 @@ readonly class MacroStateDTO
         /** The tax rate's measured structural level, a decade's exponential average (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateDynamicFiscalPolicy()). */
         public float $corporateTaxRateTrend = MacroEngine::BASE_CORPORATE_TAX_RATE,
         /** The budget's take outside the corporate tax, net of transfers, as a share of GDP: what carries the automatic stabilisers and the fiscal stance. */
-        public float $netTaxRate = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
+        public float $netTaxRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
         /** The discretionary part of net taxes: the founding share plus the structural stance, without the automatic stabilisers' swing. */
-        public float $netTaxStanceRate = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
+        public float $netTaxStanceRate = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
         /** Its decade trend, as corporateTaxRateTrend is the corporate rate's. */
-        public float $netTaxStanceRateTrend = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
+        public float $netTaxStanceRateTrend = CreditFiscalSubsystem::FOUNDING_NET_TAX_RATE,
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         /** Interest rate the coupon stock of the debt pays, repricing toward the 10-year as it rolls (App\Service\Macro\Subsystem\CreditFiscalSubsystem::calculateSovereignDebt()). */
         public float $sovereignCouponRate = self::OPENING_YIELD_10Y,
@@ -657,7 +657,7 @@ readonly class MacroStateDTO
                 $resolve('energyPriceIndexEma'),
                 $resolve('industrialMetalsIndexEma'),
                 $resolve('marketVolatilityEma'),
-                $resolve('sovereignRiskSpreadEma')
+                $resolve('sovereignRiskSpreadEma'),
             );
         }
 
@@ -673,7 +673,7 @@ readonly class MacroStateDTO
             $carriedFinance = $resolve('financeOutputGap');
             $args['financeOutputGap'] = MacroAggregateSubsystem::financeOutputGapAt(
                 MacroAggregateSubsystem::creditBalanceGap($resolve('creditToGdpGap'), $resolve('creditToGdpTrend')),
-                MacroAggregateSubsystem::dealActivityGap($resolve('dealActivityIndexEma'), $resolve('dealActivityIndexTrend'))
+                MacroAggregateSubsystem::dealActivityGap($resolve('dealActivityIndexEma'), $resolve('dealActivityIndexTrend')),
             );
             if (isset($data[$fields['financeOutputGap']], $args['domesticDemandGapEma'])) {
                 $args['domesticDemandGapEma'] += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $args['financeOutputGap'] - $carriedFinance);

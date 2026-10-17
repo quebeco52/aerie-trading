@@ -185,7 +185,7 @@ final class PriceFormationInvariantTest extends TestCase
             $beta,
             $realised,
             0.05 * max(1.0, abs($beta)),
-            sprintf('Configured beta %.2f realised as %.3f.', $beta, $realised)
+            sprintf('Configured beta %.2f realised as %.3f.', $beta, $realised),
         );
     }
 
@@ -202,7 +202,7 @@ final class PriceFormationInvariantTest extends TestCase
             $beta,
             $realised,
             0.10 * max(1.0, abs($beta)),
-            sprintf('In a crisis, configured beta %.2f realised as %.3f.', $beta, $realised)
+            sprintf('In a crisis, configured beta %.2f realised as %.3f.', $beta, $realised),
         );
     }
 
@@ -225,7 +225,7 @@ final class PriceFormationInvariantTest extends TestCase
             $volatility,
             $realised,
             $volatility * 0.20,
-            sprintf('Configured volatility %.2f realised as %.4f.', $volatility, $realised)
+            sprintf('Configured volatility %.2f realised as %.4f.', $volatility, $realised),
         );
     }
 
@@ -246,8 +246,8 @@ final class PriceFormationInvariantTest extends TestCase
             sprintf(
                 'Jump intensity is moving the level a name trades at against fair value: calm %.4f vs jumpy %.4f.',
                 $calmRatio,
-                $jumpyRatio
-            )
+                $jumpyRatio,
+            ),
         );
     }
 }

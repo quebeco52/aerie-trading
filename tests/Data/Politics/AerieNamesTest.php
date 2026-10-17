@@ -98,7 +98,7 @@ class AerieNamesTest extends TestCase
         $weight = static fn(array $row): float => array_sum(array_map(
             static fn(int $group, float $share): float => $row[0] * $share * (AerieNames::OFFICEHOLDERS[$group] / array_sum(AerieNames::OFFICEHOLDERS)) / ($bearers[$group] / array_sum($bearers)),
             array_keys(array_slice($row, 1)),
-            array_slice($row, 1)
+            array_slice($row, 1),
         ));
         $this->assertEqualsWithDelta($weight(Tables::SURNAMES['Smith']) / array_sum(array_map($weight, Tables::SURNAMES)), $counts['Smith'] / $steps, 0.0005);
         $this->assertCount(count(Tables::SURNAMES), $counts, 'Every listed surname can be drawn.');

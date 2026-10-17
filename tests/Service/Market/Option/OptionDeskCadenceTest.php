@@ -7,8 +7,8 @@ namespace App\Tests\Service\Market\Option;
 use App\Entity\OptionContract;
 use App\Service\Market\Option\DealerGammaEngine;
 use App\Service\Market\Option\InMemoryDealerGammaStore;
-use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Option\OptionDeskService;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
@@ -52,7 +52,7 @@ class OptionDeskCadenceTest extends TestCase
         for ($pass = 0; $pass < 40; $pass++) {
             $this->assertSame(
                 OptionDeskService::sweepSlice($pass * $interval, $interval),
-                OptionDeskService::sweepSlice(($pass + $slices) * $interval, $interval)
+                OptionDeskService::sweepSlice(($pass + $slices) * $interval, $interval),
             );
         }
     }
@@ -122,9 +122,18 @@ class OptionDeskCadenceTest extends TestCase
             ->setStructuralOpenInterest(2000);
 
         $quotes = ['VANE-13C100' => new \App\DTO\OptionQuoteDTO(
-            mark: 5.0, bid: 4.9, ask: 5.1, impliedVolatility: 0.30,
-            delta: 0.5, gamma: 0.0002, vega: 20.0, theta: -8.0, rho: 15.0,
-            timeToExpiry: 0.25, riskFreeRate: 0.04, dividendYield: 0.0,
+            mark: 5.0,
+            bid: 4.9,
+            ask: 5.1,
+            impliedVolatility: 0.30,
+            delta: 0.5,
+            gamma: 0.0002,
+            vega: 20.0,
+            theta: -8.0,
+            rho: 15.0,
+            timeToExpiry: 0.25,
+            riskFreeRate: 0.04,
+            dividendYield: 0.0,
         )];
 
         $engine->refresh($stock, [$contract], $quotes);
@@ -200,7 +209,7 @@ class OptionDeskCadenceTest extends TestCase
         $this->assertEqualsWithDelta(
             10_000.0 * 1.0 * DealerGammaEngine::DEALER_HEDGE_RATIO,
             $engine->hedgeMarket([$stock], self::TICK_YEARS)['VANE'],
-            1e-6
+            1e-6,
         );
     }
 }

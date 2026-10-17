@@ -45,7 +45,7 @@ class EtfTickColumnsTest extends TestCase
 
         $this->assertMatchesRegularExpression(
             '/elseif \(\$isFrameTick\) \{(?:(?!\n {16}\}).)*StockTickColumns::write\(\$conn, \$stocks\);(?:(?!\n {16}\}).)*EtfTickColumns::write\(\$conn, \$indexFunds\);/s',
-            $source
+            $source,
         );
     }
 }

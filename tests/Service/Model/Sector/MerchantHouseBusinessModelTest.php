@@ -71,12 +71,18 @@ class MerchantHouseBusinessModelTest extends TestCase
     public function testReportsAMerchantPortfolioAndNoFactory(): void
     {
         $result = $this->model->computeActualFinancials(
-            $this->ravn(), 100_000_000.0, 0.80, 10_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath()
+            $this->ravn(),
+            100_000_000.0,
+            0.80,
+            10_000_000.0,
+            0.0,
+            $this->neutralMacro(),
+            $this->deterministicMath(),
         );
 
         $this->assertSame(
             ['merchant_trading', 'defensive_staples', 'financial_investments'],
-            array_keys($result->streamRevenue)
+            array_keys($result->streamRevenue),
         );
 
         $this->assertEqualsWithDelta(55_000_000.0, $result->streamRevenue['merchant_trading'], 1.0);
@@ -204,7 +210,6 @@ class MerchantHouseBusinessModelTest extends TestCase
 
         $this->assertLessThan($calm->streamRevenue['financial_investments'], $atZero->streamRevenue['financial_investments']);
     }
-
 
     public function testTheCostBaseFollowsTonnageAndTerminalTrafficNotCargoPrices(): void
     {

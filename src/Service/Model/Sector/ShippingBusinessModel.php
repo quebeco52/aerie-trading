@@ -5,21 +5,20 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Global Maritime Shipping and Freight Logistics.
- * 
+ *
  * Financial Physics:
  * - Hyper-Cyclical Spot-Rate Operational Leverage: Revenues are violently levered to global GDP and the macro output gap.
  * - During economic expansions (+Output Gap), spot freight rates surge exponentially against fixed fleet overhead, producing massive Free Cash Flow explosions.
@@ -56,8 +55,14 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.75;
     public const BASE_COVERAGE_ERROR = 0.10;
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.50;
-        public function getReversionSpeed(): float { return 0.3; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
+    public function getReversionSpeed(): float
+    {
+        return 0.3;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.125;
+    }
 
     public function getSeasonalityFactors(): array
     {
@@ -166,7 +171,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         return ($this->resolveLaggedOutputGap($macroState) * $this->getOperatingCyclicality($stock) * self::MACRO_DEMAND_SCALAR) + $tradeShift;
     }
 
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::SpotCharterWeight->value     => self::SPOT_CHARTER_WEIGHT,
@@ -256,7 +261,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-                    kpis: ['contract_book_to_bill' => $contractBook['book_to_bill'], 'contract_backlog_quarters' => $contractBook['backlog_quarters']],
+            kpis: ['contract_book_to_bill' => $contractBook['book_to_bill'], 'contract_backlog_quarters' => $contractBook['backlog_quarters']],
             priceRevenue: $priceRevenue,
         );
     }

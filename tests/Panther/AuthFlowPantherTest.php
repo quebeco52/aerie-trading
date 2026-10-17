@@ -2,8 +2,6 @@
 
 namespace App\Tests\Panther;
 
-use Symfony\Component\Panther\PantherTestCase;
-
 class AuthFlowPantherTest extends BasePantherTestCase
 {
     public function testLoginPageLoads(): void

@@ -31,7 +31,7 @@ class DistrictRosterTest extends TestCase
         $this->store = [];
 
         $redis = $this->createMock(\Redis::class);
-        $redis->method('get')->willReturnCallback(fn (string $key) => $this->store[$key] ?? false);
+        $redis->method('get')->willReturnCallback(fn(string $key) => $this->store[$key] ?? false);
         $redis->method('set')->willReturnCallback(function (string $key, string $value): bool {
             $this->store[$key] = $value;
 

@@ -148,6 +148,6 @@ final class RedisOrderFlowStore implements OrderFlowStoreInterface
             $flow[$key] = ($flow[$key] ?? 0.0) + $signed;
         }
 
-        return array_filter($flow, static fn (float $signed): bool => $signed !== 0.0);
+        return array_filter($flow, static fn(float $signed): bool => $signed !== 0.0);
     }
 }

@@ -66,7 +66,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $parent = new ConglomerateBusinessModel();
         $this->assertGreaterThan(
             $parent->calculateFairValue(1.0, $nav, -40.0),
-            $parent->calculateFairValue(2_000.0, $nav, 90.0)
+            $parent->calculateFairValue(2_000.0, $nav, 90.0),
         );
     }
 
@@ -198,12 +198,18 @@ class InvestmentCompanyBusinessModelTest extends TestCase
     public function testReportsAHoldingPortfolioAndNoFactory(): void
     {
         $result = $this->model->computeActualFinancials(
-            $this->brkw(), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath()
+            $this->brkw(),
+            100_000_000.0,
+            0.08,
+            3_000_000.0,
+            0.0,
+            $this->neutralMacro(),
+            $this->deterministicMath(),
         );
 
         $this->assertSame(
             ['wholly_owned', 'listed_portfolio', 'financial_investments'],
-            array_keys($result->streamRevenue)
+            array_keys($result->streamRevenue),
         );
         $this->assertArrayNotHasKey('industrial_manufacturing', $result->streamRevenue);
 
@@ -214,7 +220,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $result->streamRevenue['listed_portfolio'],
             $result->streamRevenue['wholly_owned'],
-            'The revenue mix must invert the asset mix; that inversion is the whole point of the model.'
+            'The revenue mix must invert the asset mix; that inversion is the whole point of the model.',
         );
 
         $expected = $this->expectedStreamShares($this->brkw());
@@ -229,7 +235,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $sphere->getInvestedCapital() + 250_000_000_000.0,
             $consolidated + $this->fixturePortfolio() + 250_000_000_000.0,
-            1.0
+            1.0,
         );
 
         // A calm quarter charges nothing beyond the cost base it was handed.
@@ -255,7 +261,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         ];
         $total = array_sum($weights);
 
-        return array_map(static fn (float $w): float => $total > 0.0 ? $w / $total : 0.0, $weights);
+        return array_map(static fn(float $w): float => $total > 0.0 ? $w / $total : 0.0, $weights);
     }
 
     /** Once marked, the listed sleeve is READ from the balance sheet and nothing else has a say in it. */
@@ -277,7 +283,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertLessThan(
             $fullShare,
             $smallShare,
-            'A portfolio worth half as much must upstream a smaller share of the group income.'
+            'A portfolio worth half as much must upstream a smaller share of the group income.',
         );
 
         // A smaller portfolio hands the subsidiaries a LARGER share of the book: they did not lose value,
@@ -286,7 +292,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $this->expectedStreamShares($atMarket)['wholly_owned'],
             $this->expectedStreamShares($halved)['wholly_owned'],
-            'A halved portfolio must leave the subsidiaries a bigger share of the book, not the same one.'
+            'A halved portfolio must leave the subsidiaries a bigger share of the book, not the same one.',
         );
     }
 
@@ -302,11 +308,17 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertNull($bare->getListedStakesCarrying());
         $this->assertNull(
             $this->model->getOpeningInvestmentAssets($bare),
-            'A declared sphere with no price for its stakes must refuse, so the plant ledger stays closed.'
+            'A declared sphere with no price for its stakes must refuse, so the plant ledger stays closed.',
         );
 
         $result = $this->model->computeActualFinancials(
-            $bare, 100_000_000.0, 0.08, 3_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath()
+            $bare,
+            100_000_000.0,
+            0.08,
+            3_000_000.0,
+            0.0,
+            $this->neutralMacro(),
+            $this->deterministicMath(),
         );
 
         $this->assertArrayNotHasKey('listed_portfolio', $result->streamRevenue);
@@ -323,7 +335,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $noHoldings->getInvestedCapital(),
             $this->model->getPlantCapital($noHoldings, $noHoldings->getInvestedCapital()),
-            1.0
+            1.0,
         );
     }
 
@@ -347,9 +359,9 @@ class InvestmentCompanyBusinessModelTest extends TestCase
                 $stock,
                 0.25,
                 $stock->getInvestedCapital(),
-                $this->neutralMacro()
+                $this->neutralMacro(),
             ),
-            'A trust takes no marginal-revenue haircut: it has no marginal unit to sell.'
+            'A trust takes no marginal-revenue haircut: it has no marginal unit to sell.',
         );
     }
 
@@ -405,13 +417,19 @@ class InvestmentCompanyBusinessModelTest extends TestCase
             $stock->setTotalEquity((string) (1_880_000_000_000.0 + ($gain * 0.79)));
 
             $result = $this->model->computeActualFinancials(
-                $stock, 100_000_000.0, 0.08, 3_000_000.0, 0.0, $macro, $math
+                $stock,
+                100_000_000.0,
+                0.08,
+                3_000_000.0,
+                0.0,
+                $macro,
+                $math,
             );
 
             $this->assertArrayHasKey(
                 'wholly_owned',
                 $result->streamRevenue,
-                "The consolidated stream vanished at {$multiple}x the portfolio."
+                "The consolidated stream vanished at {$multiple}x the portfolio.",
             );
 
             $balances[] = $stock->getInvestedCapital() - (float) $stock->getListedStakesCarrying();
@@ -438,7 +456,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
             $investedCapital - $this->fixturePortfolio(),
             $this->model->getPlantCapital($stock, $investedCapital),
             1.0,
-            'Plant must be what is left after the portfolio, not the whole balance sheet.'
+            'Plant must be what is left after the portfolio, not the whole balance sheet.',
         );
     }
 
@@ -452,7 +470,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $stock->getInvestedCapital() - 900_000_000_000.0,
             $this->model->getPlantCapital($stock, $stock->getInvestedCapital()),
-            1.0
+            1.0,
         );
     }
 
@@ -477,7 +495,13 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $stock->setListedStakesCarrying((string) (1_880_000_000_000.0 - 250_000_000_000.0));
 
         $result = $this->model->computeActualFinancials(
-            $stock, 100_000_000.0, 0.08, 3_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath()
+            $stock,
+            100_000_000.0,
+            0.08,
+            3_000_000.0,
+            0.0,
+            $this->neutralMacro(),
+            $this->deterministicMath(),
         );
 
         $this->assertSame(['listed_portfolio', 'financial_investments'], array_keys($result->streamRevenue));
@@ -507,12 +531,18 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             0.0,
             (new ConglomerateBusinessModel())->calculateInterestIncome($stock, $macro, $math),
-            'If the parent stopped paying interest income, this override would be silently pointless.'
+            'If the parent stopped paying interest income, this override would be silently pointless.',
         );
 
         // And the income the stream books in its place is real.
         $result = $this->model->computeActualFinancials(
-            $stock, 100_000_000.0, 0.08, 3_000_000.0, 0.0, $macro, $this->deterministicMath()
+            $stock,
+            100_000_000.0,
+            0.08,
+            3_000_000.0,
+            0.0,
+            $macro,
+            $this->deterministicMath(),
         );
         $this->assertGreaterThan(0.0, $result->streamRevenue['financial_investments']);
     }
@@ -540,7 +570,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         // And the operating half picks up the slack rather than the group simply shrinking.
         $this->assertGreaterThan(
             $full->streamRevenue['wholly_owned'] / array_sum($full->streamRevenue),
-            $spent->streamRevenue['wholly_owned'] / array_sum($spent->streamRevenue)
+            $spent->streamRevenue['wholly_owned'] / array_sum($spent->streamRevenue),
         );
     }
 
@@ -553,11 +583,23 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $slump = $this->neutralMacro(outputGapEma: -0.030);
 
         $result = $this->model->computeActualFinancials(
-            $this->brkw(), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $slump, $this->deterministicMath()
+            $this->brkw(),
+            100_000_000.0,
+            0.08,
+            3_000_000.0,
+            0.0,
+            $slump,
+            $this->deterministicMath(),
         );
 
         $calm = $this->model->computeActualFinancials(
-            $this->brkw(), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath()
+            $this->brkw(),
+            100_000_000.0,
+            0.08,
+            3_000_000.0,
+            0.0,
+            $this->neutralMacro(),
+            $this->deterministicMath(),
         );
 
         $ownedHit  = 1.0 - ($result->streamRevenue['wholly_owned'] / $calm->streamRevenue['wholly_owned']);
@@ -577,10 +619,22 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $costPush = $this->neutralMacro(realWageGap: 0.03);
 
         $withPush = $this->model->computeActualFinancials(
-            $this->brkw(), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $costPush, $this->deterministicMath()
+            $this->brkw(),
+            100_000_000.0,
+            0.08,
+            3_000_000.0,
+            0.0,
+            $costPush,
+            $this->deterministicMath(),
         );
         $calm = $this->model->computeActualFinancials(
-            $this->brkw(), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath()
+            $this->brkw(),
+            100_000_000.0,
+            0.08,
+            3_000_000.0,
+            0.0,
+            $this->neutralMacro(),
+            $this->deterministicMath(),
         );
 
         $charged = $withPush->clampedMargin - $calm->clampedMargin;
@@ -603,11 +657,11 @@ class InvestmentCompanyBusinessModelTest extends TestCase
     {
         $this->assertInstanceOf(
             InvestmentCompanyBusinessModel::class,
-            Sectors::getBusinessModelStrategy('investment_company')
+            Sectors::getBusinessModelStrategy('investment_company'),
         );
         $this->assertSame(
             'investment_company',
-            Sectors::INDUSTRY_METRICS['Investment Companies']['business_model']
+            Sectors::INDUSTRY_METRICS['Investment Companies']['business_model'],
         );
     }
 
@@ -642,12 +696,11 @@ class InvestmentCompanyBusinessModelTest extends TestCase
             $this->assertSame(
                 max(FinancialConstants::MIN_INTRINSIC_PB, min(FinancialConstants::MAX_INTRINSIC_PB, $roic / max(0.01, $hurdle))),
                 $model->getIntrinsicPbMultiple($roic, $hurdle),
-                $modelClass . ' no longer prices book the way MarketEngine did.'
+                $modelClass . ' no longer prices book the way MarketEngine did.',
             );
             $this->assertSame(0.0, $model->getStructuralValuationDiscount($this->neutralMacro(-0.03)));
         }
     }
-
 
     public function testTheCostBaseFollowsTheConsolidatedSubsidiariesAlone(): void
     {

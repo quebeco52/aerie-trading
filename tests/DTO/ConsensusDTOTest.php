@@ -14,7 +14,7 @@ class ConsensusDTOTest extends TestCase
         $dto = new ConsensusDTO(
             analystExpectedRevenue: 1050.0,
             analystExpectedVariableCosts: 420.0,
-            dynamicVisibility: 0.75
+            dynamicVisibility: 0.75,
         );
 
         $this->assertSame(1050.0, $dto->analystExpectedRevenue);

@@ -36,28 +36,28 @@ class CoalitionFormationTest extends TestCase
             $majority + Formation::FORMATION_STATUS_QUO_UTILITY,
             Formation::utility($right, [], $seats, $positions, [Diet::NEW_HORIZON, Diet::CHARTISTS, Diet::VANGUARD, Diet::EXCHANGE], Diet::VANGUARD, Diet::SEED_BLOCS),
             1e-12,
-            'The outgoing cabinet, in whatever order it is written, has the incumbency term.'
+            'The outgoing cabinet, in whatever order it is written, has the incumbency term.',
         );
 
         $this->assertEqualsWithDelta(
             Formation::FORMATION_MINORITY_UTILITY + Formation::FORMATION_PARTY_UTILITY + Formation::FORMATION_LARGEST_PARTY_UTILITY,
             Formation::utility([Diet::VANGUARD], [], $seats, $positions, [], Diet::VANGUARD, Diet::SEED_BLOCS),
             1e-12,
-            'One party alone spans no range, holds no majority and makes no pact.'
+            'One party alone spans no range, holds no majority and makes no pact.',
         );
         $this->assertEqualsWithDelta(
             Formation::FORMATION_MINORITY_UTILITY + Formation::FORMATION_PARTY_UTILITY + Formation::FORMATION_LARGEST_PARTY_UTILITY
                 + (Formation::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions)) + Formation::FORMATION_PACT_UTILITY,
             Formation::utility([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON], $seats, $positions, [], Diet::VANGUARD, Diet::SEED_BLOCS),
             1e-12,
-            'Carried by its own bloc, a one-party cabinet is a pact whose range runs over its supporters, who pay no anti-system cost.'
+            'Carried by its own bloc, a one-party cabinet is a pact whose range runs over its supporters, who pay no anti-system cost.',
         );
         $this->assertEqualsWithDelta(
             Formation::FORMATION_MINORITY_UTILITY + Formation::FORMATION_PARTY_UTILITY
                 + (Formation::FORMATION_RANGE_UTILITY * Formation::ideologicalRange($right, $positions)),
             Formation::utility([Diet::NEW_HORIZON], [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], $seats, $positions, [], Diet::VANGUARD, Diet::SEED_BLOCS),
             1e-12,
-            'A bloc that props up one of its smaller parties in office instead of its leader keeps no pact.'
+            'A bloc that props up one of its smaller parties in office instead of its leader keeps no pact.',
         );
 
         $grand = [Diet::CIVIC, Diet::VANGUARD];
@@ -69,7 +69,7 @@ class CoalitionFormationTest extends TestCase
                 + (Formation::FORMATION_ANTISYSTEM_UTILITY * 0.4),
             Formation::utility($grand, [], $seats, $positions, [], Diet::VANGUARD, Diet::SEED_BLOCS),
             1e-12,
-            'The two bloc leaders together are an anti-pact and no pact.'
+            'The two bloc leaders together are an anti-pact and no pact.',
         );
     }
 
@@ -196,7 +196,7 @@ class CoalitionFormationTest extends TestCase
             }
             $distance = static fn(string $party, string $leader): float => sqrt(array_sum(array_map(
                 static fn(string $axis): float => ($positions[$party][$axis] - $centres[$leader][$axis]) ** 2,
-                Diet::BLOC_AXES
+                Diet::BLOC_AXES,
             )));
             foreach (Diet::PARTIES as $party) {
                 $other = $leaders[0] === $blocs[$party] ? $leaders[1] : $leaders[0];
@@ -238,7 +238,7 @@ class CoalitionFormationTest extends TestCase
             // Vanguard and the Chartists: 0.25 apart on the state, 0.5 on openness, 0.5 on the Council, 0.28 on the environment.
             sqrt((0.25 ** 2) + (0.5 ** 2) + (0.5 ** 2) + (0.28 ** 2)),
             Formation::ideologicalRange([Diet::VANGUARD, Diet::CHARTISTS], $positions),
-            1e-12
+            1e-12,
         );
         $this->assertEqualsWithDelta(1.6, Formation::ideologicalRange([Diet::CHARTISTS, Diet::COMMON_LOT, Diet::VANGUARD], $positions) >= 1.6 ? 1.6 : 0.0, 1e-12);
         $this->assertSame(0.0, Formation::ideologicalRange([Diet::CIVIC], $positions));
@@ -379,8 +379,14 @@ class CoalitionFormationTest extends TestCase
         $draws = new class extends MathUtility {
             /** @var list<float> */
             public array $uniforms = [0.0, 0.9999999, 0.99999999, 0.9999999, 0.0, 0.0];
-            public function generateExponential(float $rate = 1.0): float { return 1.0; }
-            public function generateUniform(): float { return (float) array_shift($this->uniforms); }
+            public function generateExponential(float $rate = 1.0): float
+            {
+                return 1.0;
+            }
+            public function generateUniform(): float
+            {
+                return (float) array_shift($this->uniforms);
+            }
         };
 
         $talks = Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $draws);

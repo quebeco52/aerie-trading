@@ -68,7 +68,7 @@ class CreditFiscalSubsystemTest extends TestCase
         for ($i = 0; $i < 360 * 40; $i++) {
             $subsystem->calculateGovernmentSpending($state, 1.0 / 360.0);
         }
-        $share = static fn (float $index): float => log($index / $state->governmentSpendingIndex) / log(125.0 / $state->governmentSpendingIndex);
+        $share = static fn(float $index): float => log($index / $state->governmentSpendingIndex) / log(125.0 / $state->governmentSpendingIndex);
         $this->assertGreaterThan(0.5, $share($paths[0][2]), 'More than half of a spending surge is still there after two years.');
         $this->assertLessThan(0.5, $share($paths[0][3]), 'Less than half is left after three.');
         $this->assertGreaterThan(0.25, $share($paths[0][4]), 'A quarter is still there after four years.');
@@ -277,7 +277,7 @@ class CreditFiscalSubsystemTest extends TestCase
             0.02 * MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
             $stressed->macroCreditSpread - $neutral->macroCreditSpread,
             1e-9,
-            'Contagion must flow through the engine constant, not a literal inside the formula.'
+            'Contagion must flow through the engine constant, not a literal inside the formula.',
         );
         $this->assertLessThanOrEqual(1.0, MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY, '2008: +430 bps TED moved IG OAS by ~+450 bps.');
     }
@@ -304,7 +304,7 @@ class CreditFiscalSubsystemTest extends TestCase
             CreditFiscalSubsystem::INTERBANK_CRISIS_RUN * exp(-1.0),
             CreditFiscalSubsystem::interbankSpreadAt(0.0, CreditFiscalSubsystem::INTERBANK_RUN_DECAY_YEARS) - MacroEngine::INTERBANK_BASELINE_SPREAD,
             1e-15,
-            'and decays on its time constant.'
+            'and decays on its time constant.',
         );
         $this->assertGreaterThan(MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.0, 0.0), 'A crisis day reads as a freeze.');
     }
@@ -364,7 +364,6 @@ class CreditFiscalSubsystemTest extends TestCase
             $this->assertEqualsWithDelta($debt + (($deficitToGdp + ((0.05 - 0.03) * $debt)) * $dt), $state->sovereignDebtToGdp, 1e-12, 'Debt moves by the deficit and r - g, nothing beside them.');
         }
     }
-
 
     /**
      * The Diet splits a consolidation between tax and purchases; the surplus is the same either way, and a planned
@@ -567,7 +566,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(0.05, $state->sloosTighteningIndex, 'A repricing of credit risk must trigger net bank tightening.');
     }
 
-
     public function testCreditSpreadsSpanBoomTightnessToCrisisBlowout(): void
     {
         $boom = new MacroState();
@@ -623,7 +621,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(100.0 * (1.0 + $state->reimbursementRateGrowth), $state->reimbursementRateIndex, 1e-9);
     }
 
-
     /** A standing consolidation lowers health prices once and holds them there; when the budget restores the money, they come back. */
     public function testAConsolidationCutsHealthPricesOnceAndItsEndRestoresThem(): void
     {
@@ -667,15 +664,20 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame(100.0, $state->reimbursementRateIndex);
     }
 
-
     // --- Economic Policy Uncertainty ---
 
     /** Deterministic subsystem: no diffusion draw, no jump arrival. */
     private function quietSubsystem(): CreditFiscalSubsystem
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
 
         return new CreditFiscalSubsystem($math);
@@ -747,7 +749,6 @@ class CreditFiscalSubsystemTest extends TestCase
         }
     }
 
-
     // --- Sovereign Risk Premium ---
 
     /** Runs the repricing lag to its target so the level, not the speed, is under test; a sovereign with no fund, net = gross. */
@@ -763,9 +764,6 @@ class CreditFiscalSubsystemTest extends TestCase
 
         return $state->sovereignRiskSpread;
     }
-
-
-
 
     /** The default premium is near nothing at the debt the District opened with and rises steeply toward the fiscal limit, never past the loss in a default. */
     public function testTheDefaultPremiumIsNearNothingAtTheOpeningDebtAndRisesSteeply(): void
@@ -852,7 +850,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, CreditFiscalSubsystem::fiscalStance($state), 'The budget answers to the gross debt it borrowed, whatever the fund holds.');
     }
 
-
     /**
      * Durbin & Ng (2005): a corporate yield carries the sovereign spread at the pass-through share. The District curve
      * carries all of it at the ten-year point, so the spread over that curve carries the share less one, and the
@@ -879,7 +876,7 @@ class CreditFiscalSubsystemTest extends TestCase
             CreditFiscalSubsystem::SOVEREIGN_CEILING_PASSTHROUGH * 0.008,
             ($stressedCurve['yield_10y'] + $stressed->macroCreditSpread) - ($soundCurve['yield_10y'] + $sound->macroCreditSpread),
             1e-9,
-            'The corporate ten-year yield loads the sovereign spread once, at the pass-through share.'
+            'The corporate ten-year yield loads the sovereign spread once, at the pass-through share.',
         );
         $this->assertEqualsWithDelta($stressed->macroCreditSpread - $sound->macroCreditSpread, $stressed->highYieldCreditSpread - $sound->highYieldCreditSpread, 1e-12, 'The sovereign share is the same for every rating.');
     }
@@ -946,7 +943,7 @@ class CreditFiscalSubsystemTest extends TestCase
             ($retired - 0.005) * $dollarsPerGdp * $atFloor->nominalGdpIndex,
             $atFloor->sovereignFundBudgetInflow,
             1e-3,
-            'What the floor stops from retiring debt is paid into the fund.'
+            'What the floor stops from retiring debt is paid into the fund.',
         );
     }
 
@@ -962,19 +959,6 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     // --- Fund-financed stabilisation (IMF Norway 2025, Table 5) ---
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /** One tick that crosses the budget round at $time. */
     // --- The Diet's levers in the budget ---
@@ -1067,7 +1051,7 @@ class CreditFiscalSubsystemTest extends TestCase
             MacroEngine::PUBLIC_PURCHASES_TO_GDP * ((1.0 / 0.97) - 1.0),
             $spendingSlump->primaryDeficitToGdp - $spending->primaryDeficitToGdp,
             1e-12,
-            'Purchases on trend are a larger share of a GDP 3% under it.'
+            'Purchases on trend are a larger share of a GDP 3% under it.',
         );
     }
 
@@ -1111,7 +1095,6 @@ class CreditFiscalSubsystemTest extends TestCase
 
         return $state->nominalGdpGrowth * $dt;
     }
-
 
     /** A budget at neutral spending and tax with output at trend. */
     private function neutralBudget(float $debtToGdp, float $nominalGdpIndex = 1.0): MacroState
@@ -1164,7 +1147,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             (CreditFiscalSubsystem::SOVEREIGN_DEBT_BILL_SHARE * 0.01) + ((1.0 - CreditFiscalSubsystem::SOVEREIGN_DEBT_BILL_SHARE) * 0.05),
             CreditFiscalSubsystem::sovereignEffectiveRate($state),
-            1e-6
+            1e-6,
         );
     }
 
@@ -1204,7 +1187,6 @@ class CreditFiscalSubsystemTest extends TestCase
         // the Authority's paper backing the currency earns of it and pays back.
         $this->assertEqualsWithDelta(0.04 * (1.0 - MonetaryPolicySubsystem::CURRENCY_TO_GDP) * 0.01, $repriced->sovereignDebtToGdp - $locked->sovereignDebtToGdp, 2e-5);
     }
-
 
     // --- Household credit cycle (Mian & Sufi 2018; BIS DSR; Basel III CCyB) ---
 
@@ -1308,7 +1290,7 @@ class CreditFiscalSubsystemTest extends TestCase
             MacroEngine::HOUSEHOLD_DEBT_TO_INCOME_BASELINE,
             $settled->householdDebtToIncome,
             1e-9,
-            'Prices at their own trend are not a collateral shock, whatever the nominal index reads.'
+            'Prices at their own trend are not a collateral shock, whatever the nominal index reads.',
         );
     }
 
@@ -1524,8 +1506,14 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testACrisisReleasesTheWholeBufferOnTheDay(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return true; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return true;
+            }
             public function calculateJumpDiffusion(float $lambda, float $jumpMean, float $jumpVol, float $dt): array
             {
                 return ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null];
@@ -1642,7 +1630,10 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $math = new class extends MathUtility {
             public float $draw = -1.0;
-            public function generateStandardNormal(): float { return $this->draw; }
+            public function generateStandardNormal(): float
+            {
+                return $this->draw;
+            }
         };
         $subsystem = new CreditFiscalSubsystem($math);
 
@@ -1753,10 +1744,10 @@ class CreditFiscalSubsystemTest extends TestCase
         };
         $opening = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT;
 
-        $calm = $year(static fn (int $i): float => $opening);
-        $atOnce = $year(static fn (int $i): float => $opening + 0.01);
-        $phased = $year(static fn (int $i): float => $opening + (0.01 * $i / 252.0));
-        $lowered = $year(static fn (int $i): float => $opening - 0.01);
+        $calm = $year(static fn(int $i): float => $opening);
+        $atOnce = $year(static fn(int $i): float => $opening + 0.01);
+        $phased = $year(static fn(int $i): float => $opening + (0.01 * $i / 252.0));
+        $lowered = $year(static fn(int $i): float => $opening - 0.01);
 
         $this->assertEqualsWithDelta(-$cut * 0.01 * exp(-CreditFiscalSubsystem::CREDIT_MEAN_REVERSION), log($atOnce->householdDebtToIncome) - log($calm->householdDebtToIncome), 2e-5, 'A point cuts ~0.86% of the stock, less what a year of reversion makes up.');
         $this->assertLessThan($calm->householdDebtToIncome, $atOnce->householdDebtToIncome);
@@ -1818,7 +1809,7 @@ class CreditFiscalSubsystemTest extends TestCase
             1.0 / (1.0 + exp(-(CreditFiscalSubsystem::CREDIT_CRISIS_LOGIT_INTERCEPT + CreditFiscalSubsystem::DISTRICT_FUNDING_CRISIS_LOGIT_SHIFT))),
             $calm->creditCrisisHazard,
             1e-12,
-            'With no boom the hazard is the District\'s base rate: the panel\'s, shifted for its wholesale funding.'
+            'With no boom the hazard is the District\'s base rate: the panel\'s, shifted for its wholesale funding.',
         );
 
         $recovering = new MacroState();
@@ -1832,8 +1823,14 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testACrisisBooksADragScaledByTheBoomAndForcesTheFundingRun(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return true; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return true;
+            }
             public function calculateJumpDiffusion(float $lambda, float $jumpMean, float $jumpVol, float $dt): array
             {
                 return ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null];
@@ -1852,13 +1849,13 @@ class CreditFiscalSubsystemTest extends TestCase
                 * (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE + (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_PER_GAP * 0.10)),
             $state->creditCrisisDrag,
             1e-9,
-            'Credit bites back: the drag is the base loss plus a share of the boom behind it, deepened by thin capital.'
+            'Credit bites back: the drag is the base loss plus a share of the boom behind it, deepened by thin capital.',
         );
         $this->assertEqualsWithDelta(
             -CreditFiscalSubsystem::CRISIS_POTENTIAL_SCAR * CreditFiscalSubsystem::thinCapitalDragScale(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT),
             $state->crisisScarPending,
             1e-12,
-            'The crisis books a scar for potential to take, deeper on thin capital.'
+            'The crisis books a scar for potential to take, deeper on thin capital.',
         );
 
         $state->excessBondPremium = 0.0;
@@ -1882,7 +1879,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             -CreditFiscalSubsystem::crisisHouseholdRepayment(0.06) * $dt,
             $crisis->householdDebtToIncome - $calm->householdDebtToIncome,
-            1e-9
+            1e-9,
         );
         $this->assertEqualsWithDelta(0.25 * 0.06, CreditFiscalSubsystem::crisisHouseholdRepayment(0.06), 1e-15);
         $this->assertEqualsWithDelta(0.06, CreditFiscalSubsystem::crisisDirectDrag(0.06) + (CreditFiscalSubsystem::crisisHouseholdRepayment(0.06) * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING), 1e-15, 'Nothing lost, nothing counted twice.');
@@ -1902,7 +1899,10 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testThinCapitalDeepensEveryCrisisDrag(): void
     {
         $math = new class extends MathUtility {
-            public function checkProbability(float $probability): bool { return true; }
+            public function checkProbability(float $probability): bool
+            {
+                return true;
+            }
         };
         $state = new MacroState();
         $state->totalTime = 12.5;
@@ -1912,7 +1912,7 @@ class CreditFiscalSubsystemTest extends TestCase
             1.0946 * CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE,
             $state->creditCrisisDrag,
             1e-4 * CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE,
-            'With equity 4.9% of assets against the US 7.6%, a crisis with no boom behind it still lands 9.5% harder (JRST 2021, Table 8).'
+            'With equity 4.9% of assets against the US 7.6%, a crisis with no boom behind it still lands 9.5% harder (JRST 2021, Table 8).',
         );
     }
 
@@ -1929,13 +1929,16 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             CreditFiscalSubsystem::thinCapitalDragScale($opening) - ((0.86 / 24.55) * 100.0 * 0.01 * 0.639),
             CreditFiscalSubsystem::thinCapitalDragScale($opening + 0.01),
-            1e-12
+            1e-12,
         );
         $this->assertEqualsWithDelta(1.0, CreditFiscalSubsystem::thinCapitalDragScale(\App\Service\Politics\FinancialRegulator::STRICTEST_REQUIREMENT), 0.025, 'The strictest head leaves the District near the US.');
         $this->assertGreaterThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(0.0843));
 
         $math = new class extends MathUtility {
-            public function checkProbability(float $probability): bool { return true; }
+            public function checkProbability(float $probability): bool
+            {
+                return true;
+            }
         };
         $strict = new MacroState();
         $strict->totalTime = 12.5;
@@ -1980,12 +1983,12 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan(
             0.20,
             $surviving,
-            'Five years on, a credit-boom recession is still depressing output in the JST panel.'
+            'Five years on, a credit-boom recession is still depressing output in the JST panel.',
         );
         $this->assertLessThan(
             0.60,
             $surviving,
-            'It is a transitory deleveraging drag, not permanent scarring; the economy does recover.'
+            'It is a transitory deleveraging drag, not permanent scarring; the economy does recover.',
         );
     }
 
@@ -1997,8 +2000,14 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testACrisisTightensLendingStandardsThroughThePremiumItBooks(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return true; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return true;
+            }
         };
         $subsystem = new CreditFiscalSubsystem($math);
         $quiet = $this->quietSubsystem();
@@ -2026,7 +2035,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(
             $crisis->creditCrisisDrag / $bookedDrag,
             $remaining,
-            'Two years on, standards have unwound further than the deleveraging drag has: they follow the premium, not the drag.'
+            'Two years on, standards have unwound further than the deleveraging drag has: they follow the premium, not the drag.',
         );
     }
 
@@ -2036,7 +2045,7 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testThePremiumDecaysAtItsOwnRateWhateverTheGapLevel(): void
     {
         $subsystem = $this->quietSubsystem();
-        $logGap = static fn (float $premium): float => log($premium + CreditFiscalSubsystem::EBP_DISPLACEMENT) - CreditFiscalSubsystem::EBP_LOG_MEAN;
+        $logGap = static fn(float $premium): float => log($premium + CreditFiscalSubsystem::EBP_DISPLACEMENT) - CreditFiscalSubsystem::EBP_LOG_MEAN;
         $halfLife = log(2.0) / CreditFiscalSubsystem::EBP_MEAN_REVERSION;
 
         foreach ([1.0 / 360.0, 4.0 / 360.0] as $dt) {
@@ -2073,7 +2082,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             CreditFiscalSubsystem::EBP_LOG_GAP_SPEED_SENSITIVITY * CreditFiscalSubsystem::EBP_MAINLAND_GAP_SHARE * 0.01,
             $step(0.0, -0.01) - $calm,
-            1e-12
+            1e-12,
         );
         $this->assertEqualsWithDelta($step(-0.01, 0.0) - $calm, ($step(-0.01, -0.01) - $calm) * (1.0 - CreditFiscalSubsystem::EBP_MAINLAND_GAP_SHARE), 1e-12, 'Both falling at once is the whole sensitivity.');
     }
@@ -2124,7 +2133,7 @@ class CreditFiscalSubsystemTest extends TestCase
             (0.03 + $shift) / $shift,
             ($alreadyHigh->excessBondPremium - 0.03) / $falling->excessBondPremium,
             1e-6,
-            'The same fall adds more to a premium that is already high.'
+            'The same fall adds more to a premium that is already high.',
         );
     }
 
@@ -2132,8 +2141,14 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testAShockMovesAHighPremiumFurtherThanALowOne(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 1.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 1.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $subsystem = new CreditFiscalSubsystem($math);
         $shift = CreditFiscalSubsystem::EBP_DISPLACEMENT;
@@ -2151,8 +2166,14 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testThePremiumCannotFallThroughItsDisplacement(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return -8.0; }
-            public function checkProbability(float $probability): bool { return true; }
+            public function generateStandardNormal(): float
+            {
+                return -8.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return true;
+            }
         };
         $subsystem = new CreditFiscalSubsystem($math);
 
@@ -2167,8 +2188,14 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testACrisisBooksThe2008PremiumJump(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return true; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return true;
+            }
         };
         $subsystem = new CreditFiscalSubsystem($math);
 
@@ -2191,8 +2218,14 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testTheCreditBlockHasNoLoop(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $credit = new CreditFiscalSubsystem($math);
         $assets = new AssetMarketSubsystem($math);
@@ -2223,8 +2256,14 @@ class CreditFiscalSubsystemTest extends TestCase
     public function testSpreadsAndStandardsFadeWhileTheGapStaysDeep(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
             public function calculateSVJJJumps(float $lambda, float $pUp, float $etaUp, float $etaDown, float $muV, float $dt): array
             {
                 return ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0];
@@ -2344,7 +2383,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0) * $carried, $state->carbonPowerUpliftEmbodied, 1e-2 * CommodityLogisticsSubsystem::carbonPowerPriceUplift(40.0));
     }
 
-
     /**
      * The tax on dividends adds revenue only as far as it departs from the founding rate, levied on taxable holders'
      * dividends, which shrink as it rises; the budget books it.
@@ -2388,11 +2426,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(-AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp(0.20), $taxed->primaryDeficitToGdp - $none->primaryDeficitToGdp, 1e-12, 'The budget books it.');
     }
     // --- Bank rescues ---
-
-
-
-
-
 
     // --- The Exchequer's accounts ---
 
@@ -2572,7 +2605,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->foreignBuyerTaxRate = 0.15;
         $state->dividendTaxRate = 0.20;
         $base = CreditFiscalSubsystem::publicAccounts($state, 0.25);
-        $lines = static fn (\App\DTO\PublicAccountsDTO $a): array => [$a->netTaxes, $a->corporateTax, $a->tariffs, $a->carbonPrice, $a->dividendTax, $a->foreignBuyerTax, $a->centralBankRemittance];
+        $lines = static fn(\App\DTO\PublicAccountsDTO $a): array => [$a->netTaxes, $a->corporateTax, $a->tariffs, $a->carbonPrice, $a->dividendTax, $a->foreignBuyerTax, $a->centralBankRemittance];
 
         $biggerBoard = clone $state;
         $biggerBoard->boardBankLevy *= 2.0;
@@ -2586,7 +2619,5 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($base->bankLevy, $economy->bankLevy, 1e-15, 'Read as a share of the GDP it is set against.');
         $this->assertSame($lines($base), $lines($economy), 'The economy-wide lines are shares of GDP already.');
     }
-
-
 
 }

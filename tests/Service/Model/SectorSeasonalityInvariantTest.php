@@ -72,14 +72,14 @@ class SectorSeasonalityInvariantTest extends TestCase
             $this->assertCount(
                 4,
                 $factors,
-                sprintf('Business model "%s" must provide exactly 4 quarterly seasonality factors.', $modelKey)
+                sprintf('Business model "%s" must provide exactly 4 quarterly seasonality factors.', $modelKey),
             );
 
             foreach ($factors as $qIndex => $factor) {
                 $this->assertGreaterThan(
                     0.0,
                     $factor,
-                    sprintf('Quarter %d factor for business model "%s" must be strictly positive.', $qIndex + 1, $modelKey)
+                    sprintf('Quarter %d factor for business model "%s" must be strictly positive.', $qIndex + 1, $modelKey),
                 );
             }
 
@@ -88,7 +88,7 @@ class SectorSeasonalityInvariantTest extends TestCase
                 4.0,
                 $sum,
                 1e-4,
-                sprintf('Seasonality factors for business model "%s" must sum to 4.00, got %.4f.', $modelKey, $sum)
+                sprintf('Seasonality factors for business model "%s" must sum to 4.00, got %.4f.', $modelKey, $sum),
             );
         }
     }

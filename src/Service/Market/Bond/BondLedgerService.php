@@ -22,7 +22,7 @@ class BondLedgerService
     public function __construct(
         private EntityManagerInterface $entityManager,
         /** Tells each holder the issue has closed and what it paid; null (unit tests) tells no one. */
-        private ?PlayerNotifier $notifier = null
+        private ?PlayerNotifier $notifier = null,
     ) {}
 
     /**
@@ -84,7 +84,7 @@ class BondLedgerService
         Bond $bond,
         float $recoveryPerBond,
         float $simulationTime,
-        \DateTimeInterface $paidAt
+        \DateTimeInterface $paidAt,
     ): void {
         $this->closeOut($bond, max(0.0, $recoveryPerBond), CouponPayment::TYPE_RECOVERY, $simulationTime, $paidAt);
     }
@@ -109,7 +109,7 @@ class BondLedgerService
         float $amountPerBond,
         string $paymentType,
         float $simulationTime,
-        \DateTimeInterface $paidAt
+        \DateTimeInterface $paidAt,
     ): void {
         $conn = $this->entityManager->getConnection();
 
@@ -140,7 +140,7 @@ class BondLedgerService
                 'paid_at' => $paidAt->format('Y-m-d H:i:s'),
                 'order_type' => TradeOrder::TYPE_SETTLEMENT,
                 'origin' => TradeOrder::ORIGIN_SETTLEMENT,
-            ]
+            ],
         );
 
         // Refund the cash escrowed behind open BUYs before the orders are dropped, otherwise the escrow is
@@ -154,18 +154,18 @@ class BondLedgerService
                     AND o.status = 'OPEN'
                     AND o.action = 'BUY'
              SET u.cash_balance = u.cash_balance + (o.limit_price * (o.quantity - o.filled_quantity))",
-            ['ticker' => $bond->getTicker()]
+            ['ticker' => $bond->getTicker()],
         );
 
         $conn->executeStatement(
             "UPDATE trade_orders SET status = 'CANCELLED'
              WHERE ticker = :ticker AND asset_type = 'BOND' AND status = 'OPEN'",
-            ['ticker' => $bond->getTicker()]
+            ['ticker' => $bond->getTicker()],
         );
 
         $conn->executeStatement(
             'DELETE FROM user_bonds WHERE bond_id = :bond_id',
-            ['bond_id' => $bond->getId()]
+            ['bond_id' => $bond->getId()],
         );
     }
 
@@ -186,7 +186,7 @@ class BondLedgerService
                  WHERE ticker = :ticker AND asset_type = 'BOND' AND status = 'OPEN' AND action = 'SELL'
              ) held
              GROUP BY user_id",
-            ['bond_id' => $bond->getId(), 'ticker' => $bond->getTicker()]
+            ['bond_id' => $bond->getId(), 'ticker' => $bond->getTicker()],
         );
         $ticker = $bond->getTicker();
         $face = max(0.01, (float) $bond->getFaceValue());
@@ -206,7 +206,7 @@ class BondLedgerService
                     default => sprintf('Your %s bonds were repaid at face, $%s in all.', number_format($quantity), number_format($quantity * $amountPerBond, 2)),
                 };
             },
-            PlayerNotifier::assetLink('BOND', $ticker)
+            PlayerNotifier::assetLink('BOND', $ticker),
         );
     }
 
@@ -256,7 +256,7 @@ class BondLedgerService
                 'bond_id' => $bond->getId(),
                 'simulation_time' => $simulationTime,
                 'paid_at' => $paidAtStr,
-            ]
+            ],
         );
 
         $conn->executeStatement(
@@ -267,7 +267,7 @@ class BondLedgerService
                     AND c.paid_at = :paid_at
                     AND c.payment_type = :payment_type
              SET u.cash_balance = u.cash_balance + c.amount",
-            ['ticker' => $bond->getTicker(), 'paid_at' => $paidAtStr, 'payment_type' => $paymentType]
+            ['ticker' => $bond->getTicker(), 'paid_at' => $paidAtStr, 'payment_type' => $paymentType],
         );
     }
 }

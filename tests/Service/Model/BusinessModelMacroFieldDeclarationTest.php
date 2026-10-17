@@ -173,7 +173,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             "%s declares operating macro fields that drift from its source.\nRead but not declared: [%s]\nDeclared but never read: [%s]",
             $modelClass,
             implode(', ', array_diff($actual, $declared)),
-            implode(', ', array_diff($declared, $actual))
+            implode(', ', array_diff($declared, $actual)),
         ));
     }
 

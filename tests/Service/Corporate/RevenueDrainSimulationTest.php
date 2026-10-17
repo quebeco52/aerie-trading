@@ -5,20 +5,19 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate;
 
 use App\Data\Company\IndustryBetas;
-use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
+use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\TestCase;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
@@ -87,8 +86,8 @@ class RevenueDrainSimulationTest extends TestCase
         $this->assertGreaterThan($peak * 0.60, $troughAfterHikes, 'a margin squeeze must not collapse physical revenue capacity');
 
         $seeds = [1, 2, 3, 4, 5, 6, 7, 8];
-        $hikedRoic = array_sum(array_map(fn (int $seed): float => $simulate(true, $seed)['roic'], $seeds)) / count($seeds);
-        $controlRoic = array_sum(array_map(fn (int $seed): float => $simulate(false, $seed)['roic'], $seeds)) / count($seeds);
+        $hikedRoic = array_sum(array_map(fn(int $seed): float => $simulate(true, $seed)['roic'], $seeds)) / count($seeds);
+        $controlRoic = array_sum(array_map(fn(int $seed): float => $simulate(false, $seed)['roic'], $seeds)) / count($seeds);
         $this->assertLessThan($controlRoic, $hikedRoic, 'the squeeze itself still shows up in trailing ROIC, below the same firm left at the starting rate');
     }
 
@@ -148,19 +147,19 @@ class RevenueDrainSimulationTest extends TestCase
         };
 
         $runs = array_map($simulate, range(1, 30));
-        $mean = static fn (string $key): float => array_sum(array_column($runs, $key)) / count($runs);
+        $mean = static fn(string $key): float => array_sum(array_column($runs, $key)) / count($runs);
         $priceGrowth = $runs[0]['price'];
 
         // Nominal capital and revenue must at least hold their real value against the price level.
         $this->assertGreaterThanOrEqual(
             $priceGrowth,
             $mean('capital'),
-            'invested capital fell behind the price level, so real capacity is shrinking'
+            'invested capital fell behind the price level, so real capacity is shrinking',
         );
         $this->assertGreaterThanOrEqual(
             $priceGrowth,
             $mean('revenue'),
-            'nominal revenue capacity fell behind the price level'
+            'nominal revenue capacity fell behind the price level',
         );
 
         // The plant is being replaced at current prices, so its vintage tracks the price level up on every path.
@@ -181,7 +180,7 @@ class RevenueDrainSimulationTest extends TestCase
             $corporateMetrics,
             $debtEngine,
             $mathUtility,
-            $treasuryEngine
+            $treasuryEngine,
         );
 
         return new EarningsEngine(
@@ -193,7 +192,7 @@ class RevenueDrainSimulationTest extends TestCase
             $mathUtility,
             $corporateMetrics,
             $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine()
+            new MarketConsensusEngine(),
         );
     }
 

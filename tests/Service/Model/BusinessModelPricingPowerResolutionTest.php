@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\RailroadBusinessModel;
-use App\Service\Model\Sector\TechBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Service\Model\Sector\TechBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -68,7 +68,7 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
         $this->assertSame(
             $declared,
             $resolve->invoke($model, $stock),
-            sprintf('%s declares PRICING_POWER_INDEX = %.2f but resolves to a different value.', $modelClass, $declared)
+            sprintf('%s declares PRICING_POWER_INDEX = %.2f but resolves to a different value.', $modelClass, $declared),
         );
     }
 
@@ -96,7 +96,7 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
             $expected,
             $model->getMacroPhysics($stock, $macro)['macro_demand_shift'],
             1e-12,
-            'Tech declares pricing power 0.75; the inherited macro demand shift must use 0.5 + 0.75, not the median 0.5 + 0.5.'
+            'Tech declares pricing power 0.75; the inherited macro demand shift must use 0.5 + 0.75, not the median 0.5 + 0.5.',
         );
     }
 
@@ -123,7 +123,7 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
             [],
             $offenders,
             'These files default PricingPowerIndex inline instead of calling resolvePricingPower(), which discards the sector PRICING_POWER_INDEX: '
-                . implode(', ', $offenders)
+                . implode(', ', $offenders),
         );
     }
 
@@ -141,7 +141,7 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
         $this->assertArrayNotHasKey(
             ModelParam::PricingPowerIndex->value,
             \App\Data\Company\StockModelTuning::OVERRIDES[self::UNTUNED_TICKER] ?? [],
-            'The fixture ticker must stay untuned for this test to prove sector-constant fallthrough.'
+            'The fixture ticker must stay untuned for this test to prove sector-constant fallthrough.',
         );
     }
 }

@@ -15,13 +15,13 @@ use App\Entity\UserStock;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\BondTracker;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
+use App\Service\Market\Option\OptionTradeService;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Market\Option\OptionTradeService;
-use App\Service\Market\Pricing\LiquidityEngine;
 
 class TradeExecutionService
 {
@@ -61,7 +61,7 @@ class TradeExecutionService
         private OptionTradeService $optionTradeService,
         private \App\Service\User\CashLedger $cashLedger,
         private ?\App\Service\Macro\MacroStateProvider $macroStates = null,
-        private ?\App\Service\Notification\PlayerNotifier $notifier = null,
+        private ?PlayerNotifier $notifier = null,
         private ?BondPricingEngine $bondPricing = null,
     ) {}
 
@@ -137,8 +137,8 @@ class TradeExecutionService
             $action,
             $quantity,
             $mid,
-            $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign(),
-            $this->pendingFlow($stock)
+            $asset->entity instanceof Bond && !$asset->entity->isSovereign(),
+            $this->pendingFlow($stock),
         );
         $consideration = $mid * $quantity;
 
@@ -281,7 +281,7 @@ class TradeExecutionService
                     throw new \Exception(sprintf(
                         'Order exceeds available liquidity in %s. The desk will take up to %s shares at once; work larger positions in pieces.',
                         $asset->ticker(),
-                        number_format(floor($maximum))
+                        number_format(floor($maximum)),
                     ));
                 }
             }
@@ -294,8 +294,8 @@ class TradeExecutionService
                 $action,
                 $quantity,
                 $livePrice,
-                $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign(),
-                $this->pendingFlow($stock)
+                $asset->entity instanceof Bond && !$asset->entity->isSovereign(),
+                $this->pendingFlow($stock),
             );
             $livePriceStr = Decimal::format($quote->executionPrice, 4);
             $totalValueStr = \bcmul($livePriceStr, $quantityStr, 4);
@@ -388,7 +388,7 @@ class TradeExecutionService
                     }
                     $order->setStatus(TradeOrder::STATUS_OPEN);
                 }
-                
+
                 $this->em->persist($order);
             }
 
@@ -437,7 +437,7 @@ class TradeExecutionService
         int $quantity,
         string $totalValue,
         ?Stock $stock,
-        string $stampDuty = '0.0000'
+        string $stampDuty = '0.0000',
     ): UserStock|UserEtf|UserBond {
         $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
 
@@ -477,7 +477,7 @@ class TradeExecutionService
                 throw new \Exception(sprintf(
                     'Only %s shares of %s are available to borrow.',
                     number_format(floor($available)),
-                    $stock->getTicker()
+                    $stock->getTicker(),
                 ));
             }
 
@@ -773,8 +773,8 @@ class TradeExecutionService
                 $order->getAction(),
                 $quantity,
                 $executionPrice,
-                $asset->entity instanceof \App\Entity\Bond && !$asset->entity->isSovereign(),
-                $this->pendingFlow($stock)
+                $asset->entity instanceof Bond && !$asset->entity->isSovereign(),
+                $this->pendingFlow($stock),
             );
 
             // Enforce limit price cap on resting limit orders, while plain stop orders accept market quote.
@@ -877,7 +877,7 @@ class TradeExecutionService
                     PlayerNotifier::fillLine($order->getAction(), $quantity, $ticker, $fillPrice),
                     sprintf('Your %s order filled.', strtolower(str_replace('_', '-', (string) $order->getOrderType()))),
                     $ticker,
-                    PlayerNotifier::assetLink($asset->type, $ticker)
+                    PlayerNotifier::assetLink($asset->type, $ticker),
                 );
                 $this->notifier->publish();
             }
@@ -921,7 +921,7 @@ class TradeExecutionService
         // 'sell' as "dispatch if it rose to here", which is what both now mean for every order type.
         $this->redis->set("limit_bounds:$ticker", json_encode([
             'buy' => $touchFromAbove,
-            'sell' => $touchFromBelow
+            'sell' => $touchFromBelow,
         ]));
     }
 

@@ -5,23 +5,21 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Automobile Manufacturers & Vertically Integrated Mobility Syndicates.
- * 
+ *
  * Financial Physics:
  * - Operating Leverage & Predatory Fleet Pricing: Mass-market commuter fleets are priced aggressively low
  *   as a Trojan horse, bearing heavy fixed-cost operating leverage and high sensitivity to policy interest rates.
@@ -81,7 +79,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             errorStdDev: self::BASE_COVERAGE_ERROR,
             minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
             eventBaseVisibility: 0.80,
-            eventMinVisibility: 0.40
+            eventMinVisibility: 0.40,
         );
     }
 
@@ -106,7 +104,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const SUPPLY_CHAIN_PRESSURE_COST_SCALAR = 0.019;
     /** Sensitivity of mass-market manufacturing throughput to aggregate industrial capacity utilization (Fed G.17). */
     public const CAPACITY_UTILIZATION_THROUGHPUT_SCALAR = 0.40;
-
 
     // --- Stream Volatility Scalars ---
     /** Volatility multiplier for mass-market fleet volume. */
@@ -151,7 +148,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
     /** Auto loan provisions per unit of household debt service over its trend, relative to the neutral ratio, both ways. */
     public const SHOCK_WEIGHT_DSR_DEFAULT = 0.08;
-
 
     // --- Demand Transmission Lag ---
     /** Years for a move in the output gap to reach the assembly line: dealer stock runs about two to three months of sales, so build schedules follow showroom demand within a quarter. */
@@ -207,8 +203,14 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Duration sensitivity scalar converting yield curve inversion into NIM compression. */
     public const YIELD_CURVE_INVERSION_SENSITIVITY = 15.0;
 
-        public function getReversionSpeed(): float { return 0.08; }
-    public function getMoatSpread(): float { return 0.015; }
+    public function getReversionSpeed(): float
+    {
+        return 0.08;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
 
     /** Vehicle purchases: the durable stock-adjustment response to the gap, the real rate stance and confidence. */
     protected function resolveCycleDemandShift(Stock $stock, MacroStateDTO $macroState): float
@@ -241,7 +243,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::AutoSalesWeight->value        => self::AUTO_SALES_WEIGHT,
@@ -338,7 +340,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $cycleShares = MacroTransmission::allocateDemandShift(
             ['mass_market_sales' => $salesWeight, 'apex_luxury' => $apexWeight, 'software_telematics' => $softwareWeight, 'captive_finance' => $captiveWeight],
             ['mass_market_sales' => 1.0, 'apex_luxury' => 1.0, 'software_telematics' => self::SOFTWARE_CYCLE_LOADING, 'captive_finance' => self::CAPTIVE_FINANCE_CYCLE_LOADING],
-            $this->resolveCycleDemandShift($stock, $macroState)
+            $this->resolveCycleDemandShift($stock, $macroState),
         );
 
         $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock + $cuShift + $cycleShares['mass_market_sales']) * $salesMultiplier);
@@ -386,10 +388,10 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // Observable shock blending
         $strikeShock = ($salesMultiplier - 1.0) * $salesWeight;
 
-        $observableShockZ = ($salesShock * $salesWeight * 0.60) +
-            ($apexShock * $apexWeight * 0.40) +
-            ((($softwareShock * $softwareWeight) + ($captiveShock * $captiveWeight)) * 0.20) +
-            ($strikeShock * 0.80);
+        $observableShockZ = ($salesShock * $salesWeight * 0.60)
+            + ($apexShock * $apexWeight * 0.40)
+            + ((($softwareShock * $softwareWeight) + ($captiveShock * $captiveWeight)) * 0.20)
+            + ($strikeShock * 0.80);
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
         $specialCharge = $recallPenalty * $salesRevenue;

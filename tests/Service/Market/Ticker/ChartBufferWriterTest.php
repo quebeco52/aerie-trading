@@ -35,7 +35,7 @@ class ChartBufferWriterTest extends TestCase
         $redis = new PipelineRedisFake();
         $length = ChartRange::bufferLength(TickCadence::equityBufferEntriesPerYear(self::TICKS_PER_YEAR));
         // Newest first: 90, 91, ... so after this tick's push and the trim the oldest kept is entry $length - 2.
-        $redis->lists['chart_buffer:LAKE'] = array_map(static fn (int $i) => self::entry(90.0 + $i), range(0, $length + 4));
+        $redis->lists['chart_buffer:LAKE'] = array_map(static fn(int $i) => self::entry(90.0 + $i), range(0, $length + 4));
 
         $changes = (new ChartBufferWriter($redis))->write([['ticker' => 'LAKE', 'price' => 110.0]], [], self::trimTick(), self::TICKS_PER_YEAR, true);
 

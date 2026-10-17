@@ -141,7 +141,7 @@ class SimulationClockTest extends TestCase
                 $this->sent[] = [$sql, $params];
 
                 return 1;
-            }
+            },
         );
 
         $this->service(null)->advance($connection, 8_773, 0.60944);

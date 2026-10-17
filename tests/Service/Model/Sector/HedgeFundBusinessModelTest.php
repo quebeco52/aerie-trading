@@ -160,7 +160,7 @@ class HedgeFundBusinessModelTest extends TestCase
             10.0,
             0.10,
             $panicMacro,
-            $mathMock
+            $mathMock,
         );
 
         $this->assertSame(ShockEvent::HF_QUANT_ALPHA_SURGE, $result->eventType);
@@ -197,7 +197,7 @@ class HedgeFundBusinessModelTest extends TestCase
             10.0,
             0.10,
             $creditFreezeMacro,
-            $mathMock
+            $mathMock,
         );
 
         $this->assertSame(ShockEvent::HF_MARGIN_CALL, $result->eventType);
@@ -236,7 +236,7 @@ class HedgeFundBusinessModelTest extends TestCase
             10.0,
             0.10,
             $boomMacro,
-            $mathMock
+            $mathMock,
         );
 
         $this->assertSame(ShockEvent::HF_PERFORMANCE_FEE_CRYSTALLIZATION, $result->eventType);
@@ -273,7 +273,7 @@ class HedgeFundBusinessModelTest extends TestCase
             10.0,
             0.10,
             $macro,
-            $mathMock
+            $mathMock,
         );
 
         $this->assertSame(ShockEvent::HF_DIRECTIONAL_BLOWUP, $result->eventType);
@@ -317,7 +317,7 @@ class HedgeFundBusinessModelTest extends TestCase
 
         $this->assertGreaterThan(
             $unleveredResult->streamRevenue['directional_bets'],
-            $leveredResult->streamRevenue['directional_bets']
+            $leveredResult->streamRevenue['directional_bets'],
         );
     }
 
@@ -347,7 +347,7 @@ class HedgeFundBusinessModelTest extends TestCase
             10.0,
             0.10,
             $severeRecession,
-            $this->mathUtility
+            $this->mathUtility,
         );
 
         // Management fee stream should remain positive and provide a floor
@@ -416,11 +416,11 @@ class HedgeFundBusinessModelTest extends TestCase
                 ebit: 30.0,
                 revenue: 100.0,
                 depreciation: 2.0,
-                ebitda: 32.0
+                ebitda: 32.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $frozenHealth = new DebtHealthDTO(
@@ -446,11 +446,11 @@ class HedgeFundBusinessModelTest extends TestCase
                 ebit: 30.0,
                 revenue: 100.0,
                 depreciation: 2.0,
-                ebitda: 32.0
+                ebitda: 32.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $normalCapacity = $this->model->calculateDebtExpansionCapacity(100.0, 50.0, 50.0, $normalHealth, 0.05, 30.0, 2.0);
@@ -482,11 +482,11 @@ class HedgeFundBusinessModelTest extends TestCase
                 ebit: 5.0,
                 revenue: 100.0,
                 depreciation: 2.0,
-                ebitda: 7.0
+                ebitda: 7.0,
             ),
             isLiquidityCrisis: true,
             isLiquidityWarning: true,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
         $criticalCapacity = $this->model->calculateDebtExpansionCapacity(100.0, 50.0, 50.0, $criticalHealth, 0.18, 5.0, 2.0);
         $this->assertSame(0.0, $criticalCapacity);

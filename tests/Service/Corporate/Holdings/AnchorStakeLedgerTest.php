@@ -199,7 +199,7 @@ class AnchorStakeLedgerTest extends TestCase
                 $gap,
                 $sphere->getTotalAssets() - ($sphere->getTotalLiabilities() + (float) $sphere->getTotalEquity()),
                 1.0,
-                'A mark moved the asset side without an equal claim against it.'
+                'A mark moved the asset side without an equal claim against it.',
             );
         }
     }
@@ -269,10 +269,10 @@ class AnchorStakeLedgerTest extends TestCase
 
         // The next tick's board carries the new shares at the same price: still nothing to book.
         $next = array_map(
-            static fn (Stock $stock): Stock => $stock->getTicker() === 'ALBT'
+            static fn(Stock $stock): Stock => $stock->getTicker() === 'ALBT'
                 ? StockBuilder::create('ALBT')->withPrice(200.0)->withSharesOutstanding(1_100_000_000)->build()
                 : $stock,
-            $held
+            $held,
         );
         $this->ledger->beginTick([...$next, $sphere]);
         $this->assertEqualsWithDelta(0.0, $this->ledger->markToMarket($sphere), 1.0);

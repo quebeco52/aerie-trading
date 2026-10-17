@@ -193,7 +193,7 @@ final class CoalitionFormation
         $distances ??= self::distances($positions);
         $outsiders = array_values(array_filter(
             array_diff(AerieDiet::PARTIES, $cabinet),
-            static fn(string $party): bool => array_filter($cabinet, static fn(string $member): bool => self::rulesOut($party, $member, $blocs)) === []
+            static fn(string $party): bool => array_filter($cabinet, static fn(string $member): bool => self::rulesOut($party, $member, $blocs)) === [],
         ));
         $cabinetSeats = self::coalitionSeats($cabinet, $seats);
 
@@ -251,7 +251,7 @@ final class CoalitionFormation
 
         return array_map(
             static fn(array $option): float => self::utilityOn($option['cabinet'], $option['support'], $seats, $positions, $statusQuo, $largest, $blocs, $distances, $median),
-            $options
+            $options,
         );
     }
 

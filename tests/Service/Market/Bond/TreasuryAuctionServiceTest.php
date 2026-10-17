@@ -42,7 +42,7 @@ class TreasuryAuctionServiceTest extends TestCase
                 $this->statements[] = ['sql' => $sql, 'params' => $params];
 
                 return 1;
-            }
+            },
         );
 
         $em = $this->createMock(EntityManagerInterface::class);
@@ -93,7 +93,7 @@ class TreasuryAuctionServiceTest extends TestCase
 
         $demotions = array_values(array_filter(
             $this->statements,
-            static fn (array $statement): bool => str_contains($statement['sql'], 'is_on_the_run = 0')
+            static fn(array $statement): bool => str_contains($statement['sql'], 'is_on_the_run = 0'),
         ));
 
         $this->assertCount(count(TreasuryAuctionService::BOND_AUCTION_TENORS), $demotions);
@@ -188,7 +188,7 @@ class TreasuryAuctionServiceTest extends TestCase
 
         $demotions = array_filter(
             $this->statements,
-            static fn (array $statement): bool => str_contains($statement['sql'], 'is_on_the_run = 0')
+            static fn(array $statement): bool => str_contains($statement['sql'], 'is_on_the_run = 0'),
         );
 
         $this->assertCount(count(TreasuryAuctionService::BOND_AUCTION_TENORS), $demotions);

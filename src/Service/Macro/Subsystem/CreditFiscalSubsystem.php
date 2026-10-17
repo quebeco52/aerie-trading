@@ -7,7 +7,6 @@ use App\DTO\PublicAccountsDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
@@ -18,6 +17,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
+use App\Service\Model\Sector\UtilityBusinessModel;
 
 /**
  * Handles corporate and retail credit spreads, interbank liquidity (TED spread),
@@ -271,7 +271,7 @@ class CreditFiscalSubsystem
     public function __construct(
         private readonly MathUtility $mathUtility,
         /** Logs the jumps this subsystem draws. Null in a test or a headless harness, off everywhere the ticker is not. */
-        private readonly ?MacroDiagnosticsProbe $diagnostics = null
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
     /**
@@ -296,7 +296,7 @@ class CreditFiscalSubsystem
             marketVolEma: $state->marketVolatilityEma,
             interbankStress: $interbankStress,
             excessBondPremium: $state->excessBondPremium,
-            hyBaseMultiplier: MacroEngine::HY_BASE_SPREAD_MULTIPLIER
+            hyBaseMultiplier: MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
         );
 
         // Durbin & Ng (2005): a corporate yield carries the sovereign spread at the pass-through
@@ -342,7 +342,7 @@ class CreditFiscalSubsystem
 
         return min(
             self::INTERBANK_MAX_SPREAD,
-            MacroEngine::INTERBANK_BASELINE_SPREAD + (self::INTERBANK_PREMIUM_COUPLING * max(0.0, $excessBondPremium)) + $run
+            MacroEngine::INTERBANK_BASELINE_SPREAD + (self::INTERBANK_PREMIUM_COUPLING * max(0.0, $excessBondPremium)) + $run,
         );
     }
 
@@ -376,7 +376,7 @@ class CreditFiscalSubsystem
             self::RETAIL_CREDIT_FACTOR_KAPPA,
             self::RETAIL_CREDIT_FACTOR_SD,
             $dt,
-            $this->mathUtility->generateStandardNormal()
+            $this->mathUtility->generateStandardNormal(),
         );
 
         $macroZ = self::RETAIL_CREDIT_INTERCEPT + ($housePriceGap * self::RETAIL_HOUSE_PRICE_SENSITIVITY) - $unemploymentShock - $spreadShock + $state->retailCreditFactor;
@@ -385,7 +385,7 @@ class CreditFiscalSubsystem
             macroZ: $macroZ,
             pdLra: MacroEngine::RETAIL_DEFAULT_BASELINE,
             rho: CreditRisk::RETAIL_ASRF_RHO,
-            lgd: 1.0
+            lgd: 1.0,
         );
 
         $state->retailDefaultRate = max(0.005, min(0.20, $conditionalPd));
@@ -410,7 +410,7 @@ class CreditFiscalSubsystem
             theta: MacroEngine::GOVT_SPENDING_BASELINE * self::purchasesTarget($state->publicSpendingShare, self::requiredPrimaryBalance($state), $state->consolidationTaxShare) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             sigma: self::GOVT_SPENDING_VOLATILITY,
             dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal()
+            dW: $this->mathUtility->generateStandardNormal(),
         );
     }
 
@@ -736,7 +736,7 @@ class CreditFiscalSubsystem
             currentLaggedValue: $state->householdNewBorrowing,
             targetValue: ($state->householdDebtToIncome - $previousLeverage) / $dt,
             dt: $dt,
-            lagTimeConstant: self::HOUSEHOLD_NEW_BORROWING_HORIZON_YEARS
+            lagTimeConstant: self::HOUSEHOLD_NEW_BORROWING_HORIZON_YEARS,
         );
 
         // BIS debt-service ratio annuity calculation (Drehmann, Illes, Juselius & Santos 2015).
@@ -753,7 +753,7 @@ class CreditFiscalSubsystem
             currentLaggedValue: $state->householdDebtServiceTrend,
             targetValue: $state->householdDebtServiceRatio,
             dt: $dt,
-            lagTimeConstant: self::DSR_TREND_HORIZON_YEARS
+            lagTimeConstant: self::DSR_TREND_HORIZON_YEARS,
         );
         $state->householdDebtServiceGap = $state->householdDebtServiceRatio - $state->householdDebtServiceTrend;
 
@@ -764,7 +764,7 @@ class CreditFiscalSubsystem
                 trendSlope: $state->creditToGdpTrendSlope,
                 observation: $state->householdDebtToIncome,
                 levelGain: self::CREDIT_GAP_HP_LEVEL_GAIN,
-                slopeGain: self::CREDIT_GAP_HP_SLOPE_GAIN
+                slopeGain: self::CREDIT_GAP_HP_SLOPE_GAIN,
             );
             $state->creditToGdpTrend = $trend['level'];
             $state->creditToGdpTrendSlope = $trend['slope'];
@@ -785,7 +785,7 @@ class CreditFiscalSubsystem
                 currentLaggedValue: $state->countercyclicalBufferRate,
                 targetValue: $bufferTarget,
                 dt: $dt,
-                lagTimeConstant: self::CCYB_PHASE_IN_YEARS
+                lagTimeConstant: self::CCYB_PHASE_IN_YEARS,
             );
 
         // The capital banks hold follows the requirement and the buffer over the years they take to build to them.
@@ -793,7 +793,7 @@ class CreditFiscalSubsystem
             currentLaggedValue: $state->bankCapitalBuilt,
             targetValue: $state->bankCapitalRequirement + $state->countercyclicalBufferRate,
             dt: $dt,
-            lagTimeConstant: self::REQUIREMENT_BUILD_YEARS
+            lagTimeConstant: self::REQUIREMENT_BUILD_YEARS,
         );
     }
 
@@ -914,7 +914,7 @@ class CreditFiscalSubsystem
         $state->creditCrisisHazard = CreditRisk::calculateSchularickTaylorCrisisHazard(
             creditGap: $state->creditToGdpGapEma,
             beta0: self::CREDIT_CRISIS_LOGIT_INTERCEPT + self::DISTRICT_FUNDING_CRISIS_LOGIT_SHIFT,
-            betaGap: self::CREDIT_CRISIS_LOGIT_GAP
+            betaGap: self::CREDIT_CRISIS_LOGIT_GAP,
         );
 
         if (!$this->mathUtility->checkProbability($state->creditCrisisHazard * $dt)) {
@@ -989,13 +989,13 @@ class CreditFiscalSubsystem
             theta: $target,
             sigma: self::EBP_LOG_VOLATILITY,
             dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal()
+            dW: $this->mathUtility->generateStandardNormal(),
         );
         $jump = $this->mathUtility->calculateJumpDiffusion(
             lambda: self::EBP_JUMP_INTENSITY,
             jumpMean: 0.0,
             jumpVol: self::EBP_JUMP_LOG_VOLATILITY,
-            dt: $dt
+            dt: $dt,
         );
 
         $worldGapChange = ((1.0 - self::EBP_MAINLAND_GAP_SHARE) * $gapChange) + (self::EBP_MAINLAND_GAP_SHARE * $mainlandGapChange);
@@ -1028,14 +1028,14 @@ class CreditFiscalSubsystem
             $state->sovereignNetFinancialLiabilitiesToGdpEma,
             self::FISCAL_LIMIT_NET_LIABILITIES,
             self::FISCAL_LIMIT_SD,
-            self::SOVEREIGN_LOSS_GIVEN_DEFAULT
+            self::SOVEREIGN_LOSS_GIVEN_DEFAULT,
         );
 
         $state->sovereignRiskSpread = TimeSeries::calculateDistributedLag(
             currentLaggedValue: $state->sovereignRiskSpread,
             targetValue: $target,
             dt: $dt,
-            lagTimeConstant: self::SOVEREIGN_RISK_REPRICING_YEARS
+            lagTimeConstant: self::SOVEREIGN_RISK_REPRICING_YEARS,
         );
     }
 
@@ -1059,7 +1059,7 @@ class CreditFiscalSubsystem
         $target = MacroEngine::EPU_BASELINE * exp(
             (self::EPU_ELECTION_LIFT * $state->electionPulse)
                 + (self::EPU_SLACK_LIFT * ($state->unemploymentRate - $state->nairu))
-                - $jumpLogCompensator
+                - $jumpLogCompensator,
         );
 
         // Every reader takes log(EPU / baseline), so it is the log the process centres on the target.
@@ -1069,14 +1069,14 @@ class CreditFiscalSubsystem
             theta: StochasticProcesses::schwartzThetaForLogMean($target, self::EPU_MEAN_REVERSION, self::EPU_VOLATILITY),
             sigma: self::EPU_VOLATILITY,
             dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal()
+            dW: $this->mathUtility->generateStandardNormal(),
         );
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
             lambda: self::EPU_JUMP_PROBABILITY,
             jumpMean: self::EPU_JUMP_MEAN,
             jumpVol: self::EPU_JUMP_VOL,
-            dt: $dt
+            dt: $dt,
         );
 
         $state->policyUncertaintyIndex = max(self::MIN_EPU, min(self::MAX_EPU, $baseProcess * $jumpData['multiplier']));
@@ -1142,7 +1142,7 @@ class CreditFiscalSubsystem
             kappa: self::SLOOS_KAPPA,
             creditSensitivity: self::SLOOS_PREMIUM_SENSITIVITY,
             gapSensitivity: self::SLOOS_GAP_SENSITIVITY,
-            sigma: self::SLOOS_SIGMA
+            sigma: self::SLOOS_SIGMA,
         );
     }
 
@@ -1176,7 +1176,7 @@ class CreditFiscalSubsystem
         $state->corporateDefaultRate = CreditRisk::calculateCorporateDefaultRate(
             macroZ: $macroZ,
             baseDefaultRate: MacroEngine::CORPORATE_DEFAULT_BASELINE,
-            rho: CreditRisk::CORPORATE_DEFAULT_RHO
+            rho: CreditRisk::CORPORATE_DEFAULT_RHO,
         );
     }
 }

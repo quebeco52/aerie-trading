@@ -27,7 +27,7 @@ final class HolderNotificationTest extends TestCase
         $connection = $this->createStub(Connection::class);
         // Holders for the position queries; nothing for the rest (the split's event-history restatement).
         $connection->method('fetchAllAssociative')->willReturnCallback(
-            static fn (string $sql): array => preg_match('/FROM (user_stocks|user_bonds|user_etfs)/', $sql) === 1 ? $holders : []
+            static fn(string $sql): array => preg_match('/FROM (user_stocks|user_bonds|user_etfs)/', $sql) === 1 ? $holders : [],
         );
         $connection->method('executeStatement')->willReturn(1);
         $entityManager = $this->createStub(EntityManagerInterface::class);
@@ -50,8 +50,8 @@ final class HolderNotificationTest extends TestCase
             [['user_id' => '7', 'quantity' => '120'], ['user_id' => 9, 'quantity' => -40]],
             'GULL',
             'GULL was liquidated',
-            static fn (float $quantity): string => $quantity > 0.0 ? 'long ' . $quantity : 'short ' . abs($quantity),
-            '/stock/GULL'
+            static fn(float $quantity): string => $quantity > 0.0 ? 'long ' . $quantity : 'short ' . abs($quantity),
+            '/stock/GULL',
         );
 
         $this->assertSame([7, 9], array_column($notifier->queued, 'user'));
@@ -90,8 +90,8 @@ final class HolderNotificationTest extends TestCase
 
         (new BondLedgerService($entityManager))->processDefaultSettlement($bond, 420.0, 12.0, new \DateTime('2021-01-01'));
 
-        $settle = array_key_first(array_filter($statements, static fn (array $s): bool => str_contains($s[0], 'INSERT INTO trade_orders')));
-        $cancel = array_key_first(array_filter($statements, static fn (array $s): bool => str_contains($s[0], "SET status = 'CANCELLED'")));
+        $settle = array_key_first(array_filter($statements, static fn(array $s): bool => str_contains($s[0], 'INSERT INTO trade_orders')));
+        $cancel = array_key_first(array_filter($statements, static fn(array $s): bool => str_contains($s[0], "SET status = 'CANCELLED'")));
         $this->assertNotNull($settle);
         $this->assertLessThan($cancel, $settle);
         $this->assertSame('420.0000', $statements[$settle][1]['price']);

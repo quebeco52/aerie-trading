@@ -8,9 +8,9 @@ use App\Data\Company\Sectors;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
+use App\Service\Math\FinancialConstants;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
-use App\Service\Math\FinancialConstants;
 
 /**
  * The handful of numbers an analyst reads first off the last report, chosen by what the business is.

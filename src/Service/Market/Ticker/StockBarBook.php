@@ -74,7 +74,7 @@ final class StockBarBook
             $conn->executeStatement(
                 'INSERT INTO stock_history (stock_id, price, open_price, high_price, low_price, volume, recorded_at, sim_time) VALUES '
                 . implode(', ', $insertValues),
-                $params
+                $params,
             );
         }
 

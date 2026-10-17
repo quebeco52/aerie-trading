@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Pure-Play Investment Banks and M&A Advisory Syndicates.

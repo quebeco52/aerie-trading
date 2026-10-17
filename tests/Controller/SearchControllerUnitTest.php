@@ -39,7 +39,7 @@ class SearchControllerUnitTest extends TestCase
             $request,
             $this->stockRepository,
             $this->etfRepository,
-            $this->bondRepository
+            $this->bondRepository,
         );
 
         $this->assertSame(200, $response->getStatusCode());
@@ -69,7 +69,7 @@ class SearchControllerUnitTest extends TestCase
             $request,
             $this->stockRepository,
             $this->etfRepository,
-            $this->bondRepository
+            $this->bondRepository,
         );
 
         $data = json_decode((string) $response->getContent(), true);
@@ -100,7 +100,7 @@ class SearchControllerUnitTest extends TestCase
             $request,
             $this->stockRepository,
             $this->etfRepository,
-            $this->bondRepository
+            $this->bondRepository,
         );
 
         $this->assertInstanceOf(RedirectResponse::class, $response);
@@ -120,7 +120,7 @@ class SearchControllerUnitTest extends TestCase
             $request,
             $this->stockRepository,
             $this->etfRepository,
-            $this->bondRepository
+            $this->bondRepository,
         );
 
         $this->assertInstanceOf(RedirectResponse::class, $response);
@@ -142,7 +142,7 @@ class SearchControllerUnitTest extends TestCase
             $request,
             $this->stockRepository,
             $this->etfRepository,
-            $this->bondRepository
+            $this->bondRepository,
         );
 
         $this->assertInstanceOf(RedirectResponse::class, $response);
@@ -156,7 +156,7 @@ class SearchControllerUnitTest extends TestCase
             $request,
             $this->stockRepository,
             $this->etfRepository,
-            $this->bondRepository
+            $this->bondRepository,
         );
 
         $this->assertInstanceOf(RedirectResponse::class, $response);

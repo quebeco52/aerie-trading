@@ -52,7 +52,7 @@ final class PriceFactorTransmissionTest extends TestCase
         float $sectorZ = 0.0,
         float $marketJumpMultiplier = 1.0,
         float $beta = 1.0,
-        float $currentPrice = 60.0
+        float $currentPrice = 60.0,
     ): float {
         $ctx = new MarketPricingContext(
             currentPrice: $currentPrice,
@@ -72,7 +72,7 @@ final class PriceFactorTransmissionTest extends TestCase
             roicTtm: 0.15,
             revenuePerShare: 50.0,
             liveCostOfEquity: 0.10,
-            baselineRoic: 0.15
+            baselineRoic: 0.15,
         );
 
         return $this->engine->calculateNextPrice($ctx)['price'];
@@ -94,7 +94,7 @@ final class PriceFactorTransmissionTest extends TestCase
             log($up / $flat),
             log($flat / $down),
             1e-9,
-            'The sector shock enters the diffusion linearly, so its effect must be symmetric.'
+            'The sector shock enters the diffusion linearly, so its effect must be symmetric.',
         );
 
         // Magnitude guard: at a 20% share of the non-market residual a four-sigma sector swing is a move of
@@ -125,7 +125,7 @@ final class PriceFactorTransmissionTest extends TestCase
         $this->assertGreaterThan(
             1.0,
             $withJump / $withoutJump,
-            'An inverse-beta hedge must rise when the district gaps down, not merely fall less.'
+            'An inverse-beta hedge must rise when the district gaps down, not merely fall less.',
         );
 
         // Exposure is the beta applied to the common log return.
@@ -145,7 +145,7 @@ final class PriceFactorTransmissionTest extends TestCase
         $this->assertEqualsWithDelta(
             exp(FinancialConstants::MIN_JUMP_LOG_RETURN),
             $withJump / $withoutJump,
-            1e-9
+            1e-9,
         );
     }
 
@@ -189,7 +189,7 @@ final class PriceFactorTransmissionTest extends TestCase
             roicTtm: 0.15,
             revenuePerShare: 50.0,
             liveCostOfEquity: 0.10,
-            baselineRoic: 0.15
+            baselineRoic: 0.15,
         );
     }
 
@@ -204,7 +204,7 @@ final class PriceFactorTransmissionTest extends TestCase
         $dt = 1.0 / 252.0;
         $quarterlyDividend = 1.25;
         $step = function (float $dividend, float $priceOverFairValue) use ($dt): array {
-            $context = fn (float $price): MarketPricingContext => new MarketPricingContext(
+            $context = fn(float $price): MarketPricingContext => new MarketPricingContext(
                 currentPrice: $price,
                 currentVolatility: 0.25,
                 longTermVolatility: 0.25,
@@ -219,7 +219,7 @@ final class PriceFactorTransmissionTest extends TestCase
                 roicTtm: 0.15,
                 revenuePerShare: 50.0,
                 liveCostOfEquity: 0.10,
-                baselineRoic: 0.15
+                baselineRoic: 0.15,
             );
             $fairValue = $this->engine->calculateNextPrice($context(60.0))['perceived_fair_value'];
             $price = $fairValue * $priceOverFairValue;
@@ -238,7 +238,7 @@ final class PriceFactorTransmissionTest extends TestCase
             exp(-$payer['kappa'] * $dt) * $extraYield * $dt,
             $payer['log'] - $nonPayer['log'],
             1e-9,
-            'at half of fair value the payer earns the extra yield on top of the same pull'
+            'at half of fair value the payer earns the extra yield on top of the same pull',
         );
     }
 
@@ -252,7 +252,7 @@ final class PriceFactorTransmissionTest extends TestCase
     {
         $dt = 1.0 / 252.0;
         $logStep = function (float $beta) use ($dt): float {
-            $step = fn (float $price): array => $this->engine->calculateNextPrice(new MarketPricingContext(
+            $step = fn(float $price): array => $this->engine->calculateNextPrice(new MarketPricingContext(
                 currentPrice: $price,
                 currentVolatility: 0.01,
                 longTermVolatility: 0.01,
@@ -266,7 +266,7 @@ final class PriceFactorTransmissionTest extends TestCase
                 roicTtm: 0.15,
                 revenuePerShare: 50.0,
                 liveCostOfEquity: 0.10,
-                baselineRoic: 0.15
+                baselineRoic: 0.15,
             ));
             // Start on fair value so the pull adds nothing; what is left is the drift.
             $fairValue = $step(60.0)['perceived_fair_value'];
@@ -326,7 +326,7 @@ final class PriceFactorTransmissionTest extends TestCase
                 roicTtm: 0.15,
                 revenuePerShare: 50.0,
                 liveCostOfEquity: 0.10,
-                baselineRoic: 0.15
+                baselineRoic: 0.15,
             );
 
             return $this->engine->calculateNextPrice($ctx)['next_volatility'];
@@ -343,7 +343,7 @@ final class PriceFactorTransmissionTest extends TestCase
         $this->assertLessThanOrEqual(
             $calm,
             $jumpy,
-            sprintf('Jump intensity is creating variance rather than displacing it: %.4f vs %.4f.', $calm, $jumpy)
+            sprintf('Jump intensity is creating variance rather than displacing it: %.4f vs %.4f.', $calm, $jumpy),
         );
         $this->assertGreaterThan($calm * 0.90, $jumpy, 'The diffusion gave up more than the jumps can supply.');
 

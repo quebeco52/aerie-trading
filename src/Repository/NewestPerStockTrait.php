@@ -34,7 +34,7 @@ trait NewestPerStockTrait
 
         $ids = $this->getEntityManager()->getConnection()->fetchFirstColumn(
             $sql,
-            ['stocks' => array_map(static fn (Stock $stock): int => (int) $stock->getId(), $stocks), 'perStock' => $perStock],
+            ['stocks' => array_map(static fn(Stock $stock): int => (int) $stock->getId(), $stocks), 'perStock' => $perStock],
             ['stocks' => ArrayParameterType::INTEGER],
         );
 

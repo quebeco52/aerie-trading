@@ -84,7 +84,7 @@ class CostBaseSeesTheCycleTest extends TestCase
         // One channel or the other: utilisation already reads the root shift, so a sector shift on top counts it twice.
         $this->assertFalse(
             abs($root) > 1e-12 && abs($sector) > 1e-12,
-            "{$identifier} hands the cost base the cycle through both the root shift and resolveSectorActivityShift()"
+            "{$identifier} hands the cost base the cycle through both the root shift and resolveSectorActivityShift()",
         );
 
         if (isset(self::ACYCLICAL[$identifier])) {

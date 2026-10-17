@@ -2,14 +2,12 @@
 
 namespace App\Tests\Panther;
 
-use Symfony\Component\Panther\PantherTestCase;
-
 class RegistrationPantherTest extends BasePantherTestCase
 {
     public function testRegistrationPageRendersElements(): void
     {
         $client = static::createPantherClient();
-        
+
         $client->getCookieJar()->clear();
         $client->request('GET', '/logout');
 
@@ -26,7 +24,7 @@ class RegistrationPantherTest extends BasePantherTestCase
     public function testRegistrationWithInvalidEmailShowsHtml5Validation(): void
     {
         $client = static::createPantherClient();
-        
+
         $client->getCookieJar()->clear();
         $client->request('GET', '/logout');
 

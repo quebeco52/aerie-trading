@@ -46,7 +46,7 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             $state->reserveDrawShare * $state->sovereignFundExpectedRealReturn * $fund->fundValue($state),
             $state->sovereignFundAnnualDraw,
-            1e-9 * $state->sovereignFundAnnualDraw
+            1e-9 * $state->sovereignFundAnnualDraw,
         );
         $this->assertSame(SovereignFundSubsystem::RETURN_INDEX_BASE, $state->sovereignFundReturnIndex);
         $this->assertSame(SovereignFundSubsystem::RETURN_INDEX_BASE, $state->sovereignFundRealReturnIndex);
@@ -56,7 +56,7 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             SovereignFundSubsystem::DOMESTIC_OWNERSHIP_OPENING * $state->boardFloatCap / ($state->sovereignFundToGdp * $gdpDollars),
             $state->sovereignFundTargetWeight,
-            1e-12
+            1e-12,
         );
     }
 
@@ -81,7 +81,7 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             $state->naturalRate + MacroEngine::BASE_EQUITY_RISK_PREMIUM - (0.5 * $boardVariance),
             $fund->policyCompoundRealReturn($state, 1.0),
-            1e-15
+            1e-15,
         );
 
         // Diversification: a blend compounds faster than the weighted compound returns of its parts.
@@ -141,7 +141,7 @@ class SovereignFundSubsystemTest extends TestCase
             SovereignFundSubsystem::GPIF_DOMESTIC_EQUITY_DEVIATION_LIMIT,
             $fund->rebalanceBand(SovereignFundSubsystem::GPIF_DOMESTIC_EQUITY_TARGET),
             1e-15,
-            'Carried by the breaching move, the rule reproduces itself at the weight it was written for.'
+            'Carried by the breaching move, the rule reproduces itself at the weight it was written for.',
         );
     }
 
@@ -167,7 +167,7 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             SovereignFundSubsystem::GPIF_GLOBAL_EQUITY_DEVIATION_LIMIT,
             $fund->equityBand(SovereignFundSubsystem::GPIF_GLOBAL_EQUITY_TARGET),
-            1e-15
+            1e-15,
         );
     }
 
@@ -283,7 +283,7 @@ class SovereignFundSubsystemTest extends TestCase
             $this->step($fund, $state, $dt);
             $this->assertLessThanOrEqual(
                 SovereignFundSubsystem::MAX_OWNERSHIP_SHARE + 1e-12,
-                $state->sovereignFundDomesticEquity / $state->boardFloatCap
+                $state->sovereignFundDomesticEquity / $state->boardFloatCap,
             );
         }
         $this->assertEqualsWithDelta(SovereignFundSubsystem::MAX_OWNERSHIP_SHARE, $state->sovereignFundOwnershipShare, 1e-9, 'It stops at the ceiling.');
@@ -463,7 +463,6 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(SovereignFundSubsystem::RETURN_INDEX_BASE, $state->sovereignFundReturnIndex, 1e-9);
     }
 
-
     public function testTheDomesticSleeveEarnsTheBoardsPriceReturn(): void
     {
         $fund = $this->stillFund();
@@ -499,7 +498,7 @@ class SovereignFundSubsystemTest extends TestCase
             SovereignFundSubsystem::RETURN_INDEX_BASE * exp(-0.03 * $ticks * $dt),
             $state->sovereignFundRealReturnIndex,
             1e-9,
-            'The real index loses the District\'s inflation.'
+            'The real index loses the District\'s inflation.',
         );
     }
 
@@ -515,7 +514,7 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             SovereignFundSubsystem::RETURN_INDEX_BASE * (1.0 - (0.10 * $domesticWeight)),
             $state->sovereignFundReturnIndex,
-            1e-9
+            1e-9,
         );
     }
 
@@ -608,7 +607,7 @@ class SovereignFundSubsystemTest extends TestCase
         $expected = MacroEngine::MAINLAND_NEUTRAL_RATE + SovereignFundSubsystem::foreignBondExpectedPremium();
 
         foreach ([72, 720, 7200] as $tpy) {
-            $growth = $this->paperLogGrowthOverAYear($tpy, static fn (float $time): float => MacroEngine::MAINLAND_NEUTRAL_RATE);
+            $growth = $this->paperLogGrowthOverAYear($tpy, static fn(float $time): float => MacroEngine::MAINLAND_NEUTRAL_RATE);
             $this->assertEqualsWithDelta($expected, $growth, 1e-5, "tpy {$tpy}: the paper earns the forward rate, not the yield.");
         }
     }
@@ -616,7 +615,7 @@ class SovereignFundSubsystemTest extends TestCase
     public function testThePaperOverAMovingRateIsTheSameAtAnyTickRate(): void
     {
         // A year of easing from neutral to 150bp below it.
-        $path = static fn (float $time): float => MacroEngine::MAINLAND_NEUTRAL_RATE - (0.015 * min(1.0, $time));
+        $path = static fn(float $time): float => MacroEngine::MAINLAND_NEUTRAL_RATE - (0.015 * min(1.0, $time));
 
         $reference = $this->paperLogGrowthOverAYear(7200, $path);
         foreach ([72, 720] as $tpy) {
@@ -625,7 +624,7 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertGreaterThan(
             MacroEngine::MAINLAND_NEUTRAL_RATE + SovereignFundSubsystem::foreignBondExpectedPremium(),
             $reference,
-            'Paper rallies while the foreign rate falls.'
+            'Paper rallies while the foreign rate falls.',
         );
     }
 
@@ -827,7 +826,7 @@ class SovereignFundSubsystemTest extends TestCase
     private function stillFund(bool $flatCurve = true): SovereignFundSubsystem
     {
         if (!$flatCurve) {
-            return new class($this->stillMarket()) extends SovereignFundSubsystem {
+            return new class ($this->stillMarket()) extends SovereignFundSubsystem {
                 protected function foreignEquityIndexStep(MacroState $state, float $dt): float
                 {
                     return $state->foreignEquityIndex;
@@ -835,7 +834,7 @@ class SovereignFundSubsystemTest extends TestCase
             };
         }
 
-        return new class($this->stillMarket()) extends SovereignFundSubsystem {
+        return new class ($this->stillMarket()) extends SovereignFundSubsystem {
             protected function foreignEquityIndexStep(MacroState $state, float $dt): float
             {
                 return $state->foreignEquityIndex;
@@ -854,7 +853,7 @@ class SovereignFundSubsystemTest extends TestCase
     /** Every normal draw at zero. */
     private function stillMarket(): MathUtility
     {
-        return new class() extends MathUtility {
+        return new class extends MathUtility {
             public function generateStandardNormal(): float
             {
                 return 0.0;

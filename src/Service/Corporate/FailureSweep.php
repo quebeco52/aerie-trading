@@ -5,13 +5,13 @@ namespace App\Service\Corporate;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
-use Doctrine\ORM\EntityManagerInterface;
-use Psr\Log\LoggerInterface;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Market\Option\OptionSettlementEngine;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\User\CashLedger;
+use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * The failure sweep: decides which listed companies fail this pass and carries the failure through —
@@ -20,18 +20,17 @@ use App\Service\User\CashLedger;
  */
 class FailureSweep
 {
-
     public function __construct(
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
         private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine,
         /** Industry roster and capacity balance; null (unit tests) leaves a failed firm's plant to age out of it. */
-        private ?\App\Service\Corporate\Industry\IndustryShareLedger $industryShareLedger = null,
+        private ?Industry\IndustryShareLedger $industryShareLedger = null,
         /** Settles the failed firm's listed debt; null (unit tests without a bond desk) leaves its issues alone. */
         private ?CorporateDefaultService $corporateDefault = null,
         /** Puts a confirmed Chapter 11 plan into effect; stateless, so a unit test gets the real one. */
-        private \App\Service\Corporate\ReorganizationEngine $reorganizationEngine = new \App\Service\Corporate\ReorganizationEngine(),
+        private ReorganizationEngine $reorganizationEngine = new ReorganizationEngine(),
         /** Cash-settles the options on shares a plan cancels; null (unit tests without an options layer) leaves them. */
         private ?OptionSettlementEngine $optionSettlement = null,
         /** Refunds buy escrow the way a player's own cancel does: the margin loan is repaid first. */
@@ -39,7 +38,7 @@ class FailureSweep
         /** Tells each holder what happened to the position; null (unit tests) tells no one. */
         private ?PlayerNotifier $notifier = null,
         /** Settles an anchor holder's part when a plan issues or cancels the shares it holds. */
-        private AnchorStakeLedger $anchorStakes = new AnchorStakeLedger()
+        private AnchorStakeLedger $anchorStakes = new AnchorStakeLedger(),
     ) {}
 
     /**
@@ -64,7 +63,9 @@ class FailureSweep
             $totalMarketCap += ((float) $stock->getPrice()) * ((int) $stock->getSharesOutstanding());
         }
         // Fallback to prevent division by zero in case of total economic collapse
-        if ($totalMarketCap <= 0) $totalMarketCap = 1;
+        if ($totalMarketCap <= 0) {
+            $totalMarketCap = 1;
+        }
 
         foreach ($stocks as $stock) {
             if ($stock->isBankrupt()) {
@@ -130,7 +131,7 @@ class FailureSweep
             return $this->liquidate(
                 $stock,
                 $macroState,
-                "{$name} ({$stock->getTicker()}) failed to cure an event of default, and with a business that no longer covers its cash operating costs it was liquidated under Chapter 7."
+                "{$name} ({$stock->getTicker()}) failed to cure an event of default, and with a business that no longer covers its cash operating costs it was liquidated under Chapter 7.",
             );
         }
 
@@ -164,10 +165,10 @@ class FailureSweep
             $holders,
             $stock->getTicker(),
             sprintf('%s was liquidated', $stock->getTicker()),
-            static fn (float $quantity): string => $quantity > 0.0
+            static fn(float $quantity): string => $quantity > 0.0
                 ? sprintf('Your %s shares were cancelled. Shareholders receive nothing from the estate.', number_format($quantity))
                 : sprintf('Your short position of %s shares was closed with nothing to return.', number_format(abs($quantity))),
-            PlayerNotifier::assetLink('STOCK', $stock->getTicker())
+            PlayerNotifier::assetLink('STOCK', $stock->getTicker()),
         );
 
         // Industry consolidation: the failed firm's plant leaves the capacity balance, its demand does not,
@@ -190,7 +191,7 @@ class FailureSweep
         $eventDesc = $filing . ' Shareholder equity wiped to 0 and trading permanently halted.' . $this->describeSettledIssues($settledIssues);
 
         return [
-            $this->marketEvent->publish($stock, 'BANKRUPTCY', $eventDesc, -100.00)
+            $this->marketEvent->publish($stock, 'BANKRUPTCY', $eventDesc, -100.00),
         ];
     }
 
@@ -214,7 +215,7 @@ class FailureSweep
             $holders = $this->cancelEquity($stock);
             $this->optionSettlement?->settleCancelledUnderlying($stock);
         } elseif ($this->notifier !== null) {
-            $holders = array_map(static fn (array $row): array => ['user_id' => (int) $row['user_id'], 'quantity' => (int) $row['quantity']], $this->holdersOf($stock));
+            $holders = array_map(static fn(array $row): array => ['user_id' => (int) $row['user_id'], 'quantity' => (int) $row['quantity']], $this->holdersOf($stock));
         }
 
         $sharesBefore = (float) $stock->getSharesOutstanding();
@@ -241,7 +242,7 @@ class FailureSweep
             $name,
             $stock->getTicker(),
             number_format($plan->convertedClaims / 1_000_000_000, 2),
-            number_format($plan->exitDebt / 1_000_000_000, 2)
+            number_format($plan->exitDebt / 1_000_000_000, 2),
         );
         $eventDesc .= match (true) {
             $plan->oldEquityShare <= 0.0 => ' The old shares were cancelled and the creditors now own the company.',
@@ -255,14 +256,14 @@ class FailureSweep
             $holders,
             $stock->getTicker(),
             sprintf('%s was reorganised', $stock->getTicker()),
-            static fn (float $quantity): string => match (true) {
+            static fn(float $quantity): string => match (true) {
                 $retained <= 0.0 => $quantity > 0.0
                     ? sprintf('Your %s shares were cancelled and the creditors now own the company.', number_format($quantity))
                     : sprintf('Your short position of %s shares was closed with nothing to return.', number_format(abs($quantity))),
                 $retained >= 1.0 => sprintf('Your %s shares are unchanged; the creditors were repaid in full.', number_format(abs($quantity))),
                 default => sprintf('You keep your %s shares; the old shareholders now own %.1f%% of the company.', number_format(abs($quantity)), $retained * 100.0),
             },
-            PlayerNotifier::assetLink('STOCK', $stock->getTicker())
+            PlayerNotifier::assetLink('STOCK', $stock->getTicker()),
         );
 
         $changePercent = $plan->oldEquityShare <= 0.0
@@ -270,7 +271,7 @@ class FailureSweep
             : (($openingPrice / max(0.01, $priceBefore)) - 1.0) * 100.0;
 
         return [
-            $this->marketEvent->publish($stock, 'REORGANIZATION', $eventDesc, $changePercent)
+            $this->marketEvent->publish($stock, 'REORGANIZATION', $eventDesc, $changePercent),
         ];
     }
 
@@ -280,7 +281,7 @@ class FailureSweep
         /** @var list<array{user_id: int|string, quantity: int|string}> */
         return $this->entityManager->getConnection()->fetchAllAssociative(
             'SELECT user_id, quantity FROM user_stocks WHERE stock_id = :id AND quantity <> 0',
-            ['id' => $stock->getId()]
+            ['id' => $stock->getId()],
         );
     }
 
@@ -297,7 +298,7 @@ class FailureSweep
              UNION
              SELECT uo.user_id FROM user_options uo JOIN option_contracts oc ON oc.id = uo.option_contract_id
              WHERE oc.stock_id = :stock_id AND oc.status = :active AND uo.quantity <> 0",
-            ['ticker' => $stock->getTicker(), 'stock_id' => $stock->getId(), 'active' => \App\Entity\OptionContract::STATUS_ACTIVE]
+            ['ticker' => $stock->getTicker(), 'stock_id' => $stock->getId(), 'active' => \App\Entity\OptionContract::STATUS_ACTIVE],
         );
 
         foreach ($ids as $id) {
@@ -354,13 +355,13 @@ class FailureSweep
                 $stock->getTicker(),
                 $quantity > 0 ? 'SELL' : 'COVER',
                 abs($quantity),
-                '0.0000'
+                '0.0000',
             ));
         }
 
         $this->entityManager->getConnection()->executeStatement(
             'DELETE FROM user_stocks WHERE stock_id = :id',
-            ['id' => $stock->getId()]
+            ['id' => $stock->getId()],
         );
 
         return $holders;
@@ -382,8 +383,8 @@ class FailureSweep
         $totalFace = array_sum(array_column($settledIssues, 'face'));
         $recovery = $totalFace > 0.0
             ? (array_sum(array_map(
-                static fn (array $issue): float => $issue['recovery'] * $issue['face'],
-                $settledIssues
+                static fn(array $issue): float => $issue['recovery'] * $issue['face'],
+                $settledIssues,
             )) / $totalFace) * 100.0
             : $settledIssues[0]['recovery'] * 100.0;
 
@@ -391,7 +392,7 @@ class FailureSweep
             ' %d listed bond issue%s settled at %.1f cents on the dollar.',
             count($settledIssues),
             count($settledIssues) === 1 ? '' : 's',
-            $recovery
+            $recovery,
         );
     }
 }

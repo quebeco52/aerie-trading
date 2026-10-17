@@ -6,20 +6,19 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
 
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Brokerages & Capital Markets.
- * 
+ *
  * Financial Physics:
  * - Highly leveraged, transaction-driven business model.
  * - Revenue scales off trading volume, investment banking advisory, and margin loans.
@@ -35,7 +34,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Sales and trading compensation is the largest overhead line of a brokerage. */
     public const FIXED_COST_LABOR_SHARE = 0.60;
 
-
     // --- Loss Provisions & Analyst Coverage ---
     /** Base coverage visibility for brokerages. */
     public const BASE_COVERAGE_VISIBILITY = 0.30;
@@ -50,8 +48,14 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     /** Sensitivity of the trading stream to M2 growth over trend; it enters that stream only, not the root demand shift. */
     public const M2_RETAIL_TRADING_SENSITIVITY = 0.40;
 
-        public function getWholesaleLeverageLimit(): float { return 8.0; }
-    public function getMoatSpread(): float { return 0.005; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 8.0;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.005;
+    }
     // --- Dual-Stream Brokerage Architecture ---
     /** Baseline fraction of revenue derived from trading desks, market making, and execution commissions. */
     public const TRADING_REVENUE_WEIGHT  = 0.60;
@@ -79,7 +83,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     // --- Revenue & Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in transaction-driven markets. */
     public const REVENUE_VARIANCE_SCALAR = 0.20;
-
 
     // --- Structural Yield Rails ---
     /** Minimum structural operating EBIT floor as a fraction of earning assets. */
@@ -145,7 +148,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $dutyVolumeFactor = MacroTransmission::calculateStampDutyVolumeFactor($macroState->stampDutyRate);
         $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * $dutyVolumeFactor * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus + $m2Shift));
         $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $advisoryDealBonus));
-        
+
         $streamRevenues = [
             'trading'  => $tradingRevenue,
             'advisory' => $advisoryRevenue,
@@ -161,7 +164,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         // market prices a change in the duty against (annualStampDutyTurnoverBase()).
         $streams->registerState(
             FinancialConstants::STATE_STAMP_DUTY_TURNOVER_SHARE,
-            $actualRevenue > 0.0 ? $tradingRevenue / $dutyVolumeFactor * (1.0 - $clampedMargin) / $actualRevenue : 0.0
+            $actualRevenue > 0.0 ? $tradingRevenue / $dutyVolumeFactor * (1.0 - $clampedMargin) / $actualRevenue : 0.0,
         );
 
         $eventType = null;
@@ -260,7 +263,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
         return [
             'invested_capital' => $earningAssets,
-            'baseline_roic' => ($grossYield * $stableMargin) * (1.0 - $taxRate)
+            'baseline_roic' => ($grossYield * $stableMargin) * (1.0 - $taxRate),
         ];
     }
 
@@ -342,7 +345,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * Brokerages and Investment Banks do not dump their treasury into 60/40 mutual funds.
-     * Their excess cash must remain highly liquid to satisfy clearinghouse margin requirements 
+     * Their excess cash must remain highly liquid to satisfy clearinghouse margin requirements
      * and strict regulatory capital constraints. They earn standard risk-free money market yields.
      */
     public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
@@ -352,7 +355,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * Brokerages require significantly higher liquidity than standard asset managers.
-     * They must hold massive cash reserves against their wholesale debt to satisfy 
+     * They must hold massive cash reserves against their wholesale debt to satisfy
      * clearinghouse margin requirements and facilitate high-frequency trade settlements.
      */
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float

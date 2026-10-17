@@ -70,7 +70,7 @@ class StockTickColumnsTest extends TestCase
                 $sent[] = [$sql, $params];
 
                 return 1;
-            }
+            },
         );
 
         $stocks = [];

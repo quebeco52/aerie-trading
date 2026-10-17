@@ -243,4 +243,3 @@ class StockInfoTest extends TestCase
         }
     }
 }
-

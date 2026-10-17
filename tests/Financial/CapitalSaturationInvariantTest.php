@@ -12,14 +12,14 @@ use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
+use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
@@ -77,7 +77,7 @@ final class CapitalSaturationInvariantTest extends TestCase
             $math,
             $metrics,
             $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine()
+            new MarketConsensusEngine(),
         );
     }
 
@@ -96,7 +96,7 @@ final class CapitalSaturationInvariantTest extends TestCase
             nominalGdpIndex: $nominalGdpIndex,
             marketVolatilityEma: 0.15,
             macroCreditSpreadEma: 0.015,
-            interbankLiquiditySpreadEma: 0.0010
+            interbankLiquiditySpreadEma: 0.0010,
         );
     }
 
@@ -204,7 +204,7 @@ final class CapitalSaturationInvariantTest extends TestCase
     #[DataProvider('seedRowProvider')]
     public function testMatureCapitalTracksTheEconomyRatherThanCompounding(array $row): void
     {
-        $runs = array_map(fn (int $seed): array => $this->runMatureHalf($row, $seed), self::SEEDS);
+        $runs = array_map(fn(int $seed): array => $this->runMatureHalf($row, $seed), self::SEEDS);
 
         $capitalCagrs = array_column($runs, 'capital_cagr');
         sort($capitalCagrs);
@@ -214,14 +214,14 @@ final class CapitalSaturationInvariantTest extends TestCase
         $this->assertLessThan(
             $gdpCagr * self::MAX_MATURE_GROWTH_MULTIPLE,
             $medianCagr,
-            sprintf('%s compounded capital at a median %.2f%%/yr over its mature half against a %.2f%% economy: the growth gate is not firing.', $row['ticker'], 100 * $medianCagr, 100 * $gdpCagr)
+            sprintf('%s compounded capital at a median %.2f%%/yr over its mature half against a %.2f%% economy: the growth gate is not firing.', $row['ticker'], 100 * $medianCagr, 100 * $gdpCagr),
         );
 
         foreach ($runs as $index => $run) {
             $this->assertLessThan(
                 self::MAX_TERMINAL_SHARE,
                 $run['terminal_share'],
-                sprintf('%s finished with capital at %.2fx the market it serves on seed %d; growth never stopped.', $row['ticker'], $run['terminal_share'], self::SEEDS[$index])
+                sprintf('%s finished with capital at %.2fx the market it serves on seed %d; growth never stopped.', $row['ticker'], $run['terminal_share'], self::SEEDS[$index]),
             );
         }
     }

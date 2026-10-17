@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Service\Market\Index;
 
 use App\Entity\Stock;
-use App\Service\Math\FinancialConstants;
 use App\Service\Market\Pricing\LiquidityEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Decides who is in each index and in what weight, and keeps its level continuous when that changes.
@@ -375,7 +375,7 @@ final class IndexCommittee
 
             $multiples[$ticker] = min(
                 self::INDEX_MAX_PASSIVE_OWNERSHIP_MULTIPLE,
-                ($held[$ticker] ?? 0.0) / $marketWeight
+                ($held[$ticker] ?? 0.0) / $marketWeight,
             );
         }
 
@@ -477,7 +477,7 @@ final class IndexCommittee
             $previousFactors,
             $capByTicker,
             $weights,
-            $stockByTicker
+            $stockByTicker,
         );
 
         $this->store->store($index, $tick, $tickers, $added, $deleted, $weights, $factors);
@@ -522,7 +522,7 @@ final class IndexCommittee
         array $previousFactors,
         ?float $previousDivisor,
         array $capByTicker,
-        ?float $lastKnownLevel
+        ?float $lastKnownLevel,
     ): float {
         if ($previousMembers === [] || $previousDivisor === null || $previousDivisor <= 0.0) {
             return $lastKnownLevel !== null && $lastKnownLevel > 0.0 ? $lastKnownLevel : 0.0;
@@ -579,7 +579,7 @@ final class IndexCommittee
         array $previousFactors,
         array $capByTicker,
         array $weights,
-        array $stockByTicker
+        array $stockByTicker,
     ): array {
         $nothing = ['turnover' => 0.0, 'cost' => 0.0];
 
@@ -718,7 +718,7 @@ final class IndexCommittee
         }
 
         $members = array_keys($candidates);
-        usort($members, static fn (string $a, string $b): int => $rankOf[$a] <=> $rankOf[$b]);
+        usort($members, static fn(string $a, string $b): int => $rankOf[$a] <=> $rankOf[$b]);
 
         // More claims than seats: the weakest of them lose, which is how an addition displaces someone.
         $members = array_slice($members, 0, $target);
@@ -743,7 +743,7 @@ final class IndexCommittee
             }
         }
 
-        usort($members, static fn (string $a, string $b): int => $rankOf[$a] <=> $rankOf[$b]);
+        usort($members, static fn(string $a, string $b): int => $rankOf[$a] <=> $rankOf[$b]);
 
         return $members;
     }
@@ -767,7 +767,7 @@ final class IndexCommittee
                 // an unfloored estimate lets one briefly-still name take the whole fund.
                 IndexWeighting::InverseVolatility => 1.0 / max(
                     self::INDEX_MINIMUM_WEIGHT_VOLATILITY,
-                    $volByTicker[$ticker] ?? self::INDEX_MINIMUM_WEIGHT_VOLATILITY
+                    $volByTicker[$ticker] ?? self::INDEX_MINIMUM_WEIGHT_VOLATILITY,
                 ),
             };
         }

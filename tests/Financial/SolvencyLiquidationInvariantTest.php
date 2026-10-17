@@ -8,12 +8,11 @@ use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Entity\TradeOrder;
 use App\Repository\TradeOrderRepository;
-use App\Service\Corporate\DebtEngine;
-use App\Service\Event\MarketEventPublisher;
-use App\Service\Corporate\FailureSweep;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\FailureSweep;
+use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\MathUtility;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -46,7 +45,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
     {
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->method('getRepository')->willReturn(
-            $this->createConfiguredStub(TradeOrderRepository::class, ['findOpenByTicker' => []])
+            $this->createConfiguredStub(TradeOrderRepository::class, ['findOpenByTicker' => []]),
         );
         $entityManager->method('getConnection')->willReturn($this->createStub(Connection::class));
 
@@ -57,7 +56,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
             $entityManager,
             $this->createStub(LoggerInterface::class),
             $publisher,
-            new DebtEngine(new MathUtility(), CorporateMetrics::getInstance())
+            new DebtEngine(new MathUtility(), CorporateMetrics::getInstance()),
         );
     }
 
@@ -116,8 +115,8 @@ final class SolvencyLiquidationInvariantTest extends TestCase
                     '%s was liquidated with $%.1fB of equity and $%.1fB of retained earnings because its treasury was empty',
                     $row['ticker'],
                     (float) $row['total_equity'] / 1e9,
-                    (float) $row['retained_earnings'] / 1e9
-                )
+                    (float) $row['retained_earnings'] / 1e9,
+                ),
             );
             $this->assertGreaterThan(0.0, (float) $stock->getPrice(), "{$row['ticker']} had its equity wiped");
         }

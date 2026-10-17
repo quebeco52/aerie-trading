@@ -122,7 +122,7 @@ class TreasuryAuctionService
     {
         $this->entityManager->getConnection()->executeStatement(
             'UPDATE bonds SET is_on_the_run = 0 WHERE tenor_years = :tenor AND is_on_the_run = 1',
-            ['tenor' => $tenor]
+            ['tenor' => $tenor],
         );
 
         foreach ($outstanding as $bond) {
@@ -149,7 +149,7 @@ class TreasuryAuctionService
     {
         $existing = (int) $this->entityManager->getConnection()->fetchOne(
             'SELECT COUNT(*) FROM bonds WHERE tenor_years = :tenor',
-            ['tenor' => $tenor]
+            ['tenor' => $tenor],
         );
 
         return sprintf('G%02d-%03d', (int) $tenor, $existing + 1);

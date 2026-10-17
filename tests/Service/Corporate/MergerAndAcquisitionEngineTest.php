@@ -4,20 +4,19 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
+use App\Data\Company\ManagementStyle;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
-use App\Data\Company\ManagementStyle;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
-use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
@@ -41,7 +40,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             $this->marketEventPublisherMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,
-            $this->corporateMetricsMock
+            $this->corporateMetricsMock,
         );
     }
 
@@ -64,7 +63,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $macroState = new MacroStateDTO(
             policyRateEma: 0.03,
             corporateTaxRate: 0.21,
-            yield5yEma: 0.035
+            yield5yEma: 0.035,
         );
 
         $debtMetricsMock = new DebtMetricsDTO(
@@ -77,7 +76,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             ebit: 5000000000.0,
             revenue: 20000000000.0,
             depreciation: 500000000.0,
-            ebitda: 5500000000.0
+            ebitda: 5500000000.0,
         );
 
         $debtHealthMock = new DebtHealthDTO(
@@ -96,7 +95,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             rawMetrics: $debtMetricsMock,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
@@ -155,7 +154,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             ebit: 5000000000.0,
             revenue: 20000000000.0,
             depreciation: 500000000.0,
-            ebitda: 5500000000.0
+            ebitda: 5500000000.0,
         );
         $debtHealthMock = new DebtHealthDTO(
             grossCost: 0.05,
@@ -173,7 +172,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             rawMetrics: $debtMetricsMock,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
@@ -199,7 +198,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             (($preDealCapital * 2.0) + $acquiredRevenue) / ($preDealCapital + $netAssets),
             (float) $stock->getAssetTurnover(),
-            1e-9
+            1e-9,
         );
     }
 
@@ -221,12 +220,12 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $stock->setManagementStyle(ManagementStyle::Steward);
         $stock->setAssetTurnover('1.5000');
 
-        $revenueCapital = static fn (Stock $s): float => CorporateMetrics::revenueGeneratingCapital(
+        $revenueCapital = static fn(Stock $s): float => CorporateMetrics::revenueGeneratingCapital(
             $s->getInvestedCapital(),
             $s->getTotalCipAmount(),
-            (float) $s->getGoodwill()
+            (float) $s->getGoodwill(),
         );
-        $operatingIncome = static fn (Stock $s): float => $revenueCapital($s) * (float) $s->getAssetTurnover() * (float) $s->getOperatingMargin();
+        $operatingIncome = static fn(Stock $s): float => $revenueCapital($s) * (float) $s->getAssetTurnover() * (float) $s->getOperatingMargin();
 
         $before = $operatingIncome($stock);
         $result = $this->engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
@@ -262,7 +261,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             (($preDealCapital * 0.15) + ($spent * $targetReturn)) / ($preDealCapital + $spent),
             (float) $stock->getBaselineRoic(),
-            1e-9
+            1e-9,
         );
     }
 
@@ -301,7 +300,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             ebit: 5000000000.0,
             revenue: 20000000000.0,
             depreciation: 500000000.0,
-            ebitda: 5500000000.0
+            ebitda: 5500000000.0,
         );
         $debtHealthMock = new DebtHealthDTO(
             grossCost: 0.05,
@@ -319,7 +318,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             rawMetrics: $debtMetricsMock,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
@@ -371,7 +370,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             policyRateEma: 0.04,
             corporateTaxRate: 0.20,
             yield5yEma: 0.04,
-            nominalGdpIndex: 1.0
+            nominalGdpIndex: 1.0,
         );
 
         $debtMetricsMock = new DebtMetricsDTO(
@@ -384,7 +383,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             ebit: -1500000.0,
             revenue: 30000000.0,
             depreciation: 1000000.0,
-            ebitda: -500000.0
+            ebitda: -500000.0,
         );
 
         $debtHealthMock = new DebtHealthDTO(
@@ -403,7 +402,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             rawMetrics: $debtMetricsMock,
             isLiquidityCrisis: true,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
@@ -524,7 +523,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->debtEngineMock->method('issueDebt')->willReturnCallback(
             static function (Stock $borrower, float $amount): void {
                 $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
-            }
+            },
         );
 
         $treasuryBefore = (float) $stock->getCorporateTreasury();
@@ -562,14 +561,14 @@ class MergerAndAcquisitionEngineTest extends TestCase
                 ++$consulted;
 
                 return $assetVolatility;
-            }
+            },
         );
         $borrowed = [];
         $this->debtEngineMock->method('issueDebt')->willReturnCallback(
             static function (Stock $borrower, float $amount, float $cost) use (&$borrowed): void {
                 $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
                 $borrowed[] = $cost;
-            }
+            },
         );
         $graded = [];
         $this->debtEngineMock->method('resolveProFormaRating')->willReturnCallback(
@@ -577,10 +576,10 @@ class MergerAndAcquisitionEngineTest extends TestCase
                 $graded[] = $distanceToDefault;
 
                 return 'BB';
-            }
+            },
         );
         $this->debtEngineMock->method('resolveCreditSpread')->willReturnCallback(
-            static fn (Stock $acquirer, MacroStateDTO $macro, ?string $rating = null): float => $rating === 'BB' ? 0.03 : 0.0
+            static fn(Stock $acquirer, MacroStateDTO $macro, ?string $rating = null): float => $rating === 'BB' ? 0.03 : 0.0,
         );
         $dealPricedAt = function (float $volatility) use (&$assetVolatility, &$borrowed, $macroState): float {
             $assetVolatility = $volatility;
@@ -744,7 +743,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertGreaterThan(
             $disciplinedGoodwillRate,
             $hubristicGoodwillRate,
-            'Overpaying must show up as goodwill per dollar spent, or the hubris is free.'
+            'Overpaying must show up as goodwill per dollar spent, or the hubris is free.',
         );
 
         // The cheque still equals the assets that came in, premium and all.
@@ -787,14 +786,14 @@ class MergerAndAcquisitionEngineTest extends TestCase
             $disciplinedYield / (1.0 + ManagementStyle::EmpireBuilder->hubrisPremium()),
             $hubristicYield,
             1e-9,
-            'The premium buys no revenue at all, so the yield on the price paid falls by exactly (1 + premium).'
+            'The premium buys no revenue at all, so the yield on the price paid falls by exactly (1 + premium).',
         );
 
         // And the capital that bought nothing drags the acquirer's own structural return down with it.
         $this->assertLessThan(
             (float) $disciplined->getBaselineRoic(),
             (float) $hubristic->getBaselineRoic(),
-            'Goodwill sits in invested capital and earns nothing; the blended return has to reflect that.'
+            'Goodwill sits in invested capital and earns nothing; the blended return has to reflect that.',
         );
     }
 
@@ -844,7 +843,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->debtEngineMock->method('issueDebt')->willReturnCallback(
             static function (Stock $borrower, float $amount): void {
                 $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
-            }
+            },
         );
     }
 
@@ -865,7 +864,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->primeHealthyDeal(operatingBase: 15_000_000_000.0, canIssueDebt: true, hasLeverageHeadroom: true);
         $banked = $this->buildLedgeredAcquirer('EMPA', $treasury, 1_000_000_000.0, 100_000_000.0);
-        $banked->setManagementStyle(\App\Data\Company\ManagementStyle::EmpireBuilder);
+        $banked->setManagementStyle(ManagementStyle::EmpireBuilder);
         $levered = $this->engine->evaluatePrivateAcquisition($banked, $this->healthyMacro(), 1.0);
         $this->assertIsArray($levered, 'The control deal must execute, or the comparison proves nothing.');
         $this->assertGreaterThan($treasury, (float) $levered['spent'], 'The control must actually be drawing on borrowing capacity.');
@@ -873,7 +872,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->setUp();
         $this->primeHealthyDeal(operatingBase: 15_000_000_000.0, canIssueDebt: false, hasLeverageHeadroom: true);
         $shutOut = $this->buildLedgeredAcquirer('EMPB', $treasury, 1_000_000_000.0, 100_000_000.0);
-        $shutOut->setManagementStyle(\App\Data\Company\ManagementStyle::EmpireBuilder);
+        $shutOut->setManagementStyle(ManagementStyle::EmpireBuilder);
         $cashOnly = $this->engine->evaluatePrivateAcquisition($shutOut, $this->healthyMacro(), 1.0);
 
         $spent = is_array($cashOnly) ? (float) $cashOnly['spent'] : 0.0;
@@ -949,7 +948,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             $this->assertLessThanOrEqual(
                 100_000_000_000.0 * MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP + 1.0,
                 (float) $result['spent'],
-                "A {$style->value} bank must not spend more than the capital cap allows."
+                "A {$style->value} bank must not spend more than the capital cap allows.",
             );
         }
     }
@@ -980,7 +979,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
     {
         $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
         $this->corporateMetricsMock->method('calculateLeaseLiability')->willReturnCallback(
-            static fn (float $revenue, float $intensity): float => max(0.0, $revenue) * max(0.0, $intensity)
+            static fn(float $revenue, float $intensity): float => max(0.0, $revenue) * max(0.0, $intensity),
         );
         $bank = $this->cashRichBank(wholesaleDebt: 1_500_000_000_000.0);
         $capitalBase = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
@@ -1064,7 +1063,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
     {
         $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
         $this->bookIssuedDebt();
-        $ledger = new \App\Service\Corporate\Industry\IndustryShareLedger(new \App\Service\Corporate\Industry\InMemoryIndustryShareStore());
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
         $engine = new MergerAndAcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
 
         $stock = $this->buildLedgeredAcquirer('PLNT', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
@@ -1080,7 +1079,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             1.0,
             $ledger->resolveIndustryCapacityRatio($stock, 20_000_000_000.0 + $acquiredRevenue, 0.05, 1.0, 0.0, 0.0, 73, 252),
-            1e-9
+            1e-9,
         );
     }
 
@@ -1380,7 +1379,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertSame(3.0, $stock->getEarningsMomentumZ()[MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE]);
         $plantAfterSale = $stock->getNetPpe();
         // The proceeds are spent, so no cash buffer stands between the firm and a second sale but the episode.
-        $spendProceeds = static fn () => $stock->setCorporateTreasury('1000000000');
+        $spendProceeds = static fn() => $stock->setCorporateTreasury('1000000000');
         $spendProceeds();
 
         $this->assertNull($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0), 'the same episode does not sell again');
@@ -1574,7 +1573,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             ebit: $ebit,
             revenue: 20000000000.0,
             depreciation: 500000000.0,
-            ebitda: $ebit + 500000000.0
+            ebitda: $ebit + 500000000.0,
         );
         $health = new DebtHealthDTO(
             grossCost: 0.05,
@@ -1595,7 +1594,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             isUnderLeveraged: false,
             hasLeverageHeadroom: $hasLeverageHeadroom,
             netDebtToEbitda: $hasLeverageHeadroom ? 0.2 : 4.0,
-            ebitdaCovenantLimit: 2.0
+            ebitdaCovenantLimit: 2.0,
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
@@ -1603,7 +1602,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         // The capital a financial acquirer is held to is balance-sheet arithmetic, read off the real engine.
         $capitalBase = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
         $this->debtEngineMock->method('resolveTangibleCapitalBase')->willReturnCallback(
-            static fn (Stock $stock, float $revenue): array => $capitalBase->resolveTangibleCapitalBase($stock, $revenue)
+            static fn(Stock $stock, float $revenue): array => $capitalBase->resolveTangibleCapitalBase($stock, $revenue),
         );
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
         $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
@@ -1611,7 +1610,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
         // The announcement comes back as published, so a test can read what the deal said about itself.
         $this->marketEventPublisherMock->method('publish')->willReturnCallback(
-            static fn (mixed $asset, string $type, string $description, float $changePercent): array => ['type' => $type, 'description' => $description, 'change_percent' => $changePercent]
+            static fn(mixed $asset, string $type, string $description, float $changePercent): array => ['type' => $type, 'description' => $description, 'change_percent' => $changePercent],
         );
     }
 
@@ -1627,7 +1626,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             ebit: -1500000000.0,
             revenue: 20000000000.0,
             depreciation: 1000000000.0,
-            ebitda: -500000000.0
+            ebitda: -500000000.0,
         );
         $health = new DebtHealthDTO(
             grossCost: 0.05,
@@ -1645,7 +1644,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: true,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);

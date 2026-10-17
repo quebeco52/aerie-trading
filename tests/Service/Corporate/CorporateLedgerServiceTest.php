@@ -6,8 +6,8 @@ namespace App\Tests\Service\Corporate;
 
 use App\Entity\Stock;
 use App\Entity\StockEvent;
-use App\Service\News\EventPresenter;
 use App\Service\Corporate\CorporateLedgerService;
+use App\Service\News\EventPresenter;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -160,7 +160,7 @@ class CorporateLedgerServiceTest extends TestCase
             ->method('executeStatement')
             ->with(
                 $this->stringContains('UPDATE'),
-                $this->arrayHasKey('factor')
+                $this->arrayHasKey('factor'),
             );
 
         $this->service->processStockSplit($stock, 2.0, false);
@@ -178,7 +178,7 @@ class CorporateLedgerServiceTest extends TestCase
         // The other fetches are the name's listed options and the event feed, both empty here.
         $this->connectionMock->expects($this->exactly(3))
             ->method('fetchAllAssociative')
-            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') || str_contains($sql, 'option_contracts') ? [] : [
+            ->willReturnCallback(static fn(string $sql): array => str_contains($sql, 'stock_events') || str_contains($sql, 'option_contracts') ? [] : [
                 ['id' => 1, 'user_id' => 101, 'quantity' => 15],
                 ['id' => 2, 'user_id' => 102, 'quantity' => 20],
             ]);
@@ -210,11 +210,11 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->service->processStockSplit($stock, 2.0, false);
 
-        $openOrders = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], "status = 'OPEN'")));
+        $openOrders = array_values(array_filter($statements, static fn(array $s): bool => str_contains($s[0], "status = 'OPEN'")));
         $this->assertCount(1, $openOrders);
         $this->assertStringContainsString('stop_price = ROUND(stop_price / :factor, 4)', $openOrders[0][0]);
 
-        $alerts = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], 'price_alerts')));
+        $alerts = array_values(array_filter($statements, static fn(array $s): bool => str_contains($s[0], 'price_alerts')));
         $this->assertCount(1, $alerts);
         $this->assertStringContainsString('target_price = ROUND(target_price / :factor, 4)', $alerts[0][0]);
         $this->assertSame(2, $alerts[0][1]['factor']);
@@ -237,15 +237,15 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->service->processStockSplit($stock, 10.0, true, 2.50);
 
-        $refund = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], 'remnant_value')));
+        $refund = array_values(array_filter($statements, static fn(array $s): bool => str_contains($s[0], 'remnant_value')));
         $this->assertCount(1, $refund);
         $this->assertStringContainsString("o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')", $refund[0][0]);
 
-        $restate = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], 'SET limit_price = ROUND(limit_price * :factor, 4)')));
+        $restate = array_values(array_filter($statements, static fn(array $s): bool => str_contains($s[0], 'SET limit_price = ROUND(limit_price * :factor, 4)')));
         $this->assertCount(1, $restate);
         $this->assertStringContainsString('stop_price = ROUND(stop_price * :factor, 4)', $restate[0][0]);
 
-        $alerts = array_values(array_filter($statements, static fn (array $s): bool => str_contains($s[0], 'price_alerts')));
+        $alerts = array_values(array_filter($statements, static fn(array $s): bool => str_contains($s[0], 'price_alerts')));
         $this->assertStringContainsString('target_price = ROUND(target_price * :factor, 4)', $alerts[0][0]);
         $this->assertSame(10, $alerts[0][1]['factor']);
     }
@@ -295,10 +295,10 @@ class CorporateLedgerServiceTest extends TestCase
                 return 1;
             });
         $this->connectionMock->method('fetchAllAssociative')
-            ->willReturnCallback(static fn (string $sql): array => match (true) {
+            ->willReturnCallback(static fn(string $sql): array => match (true) {
                 str_contains($sql, 'ORDER BY strike') => $contracts,
                 str_contains($sql, 'JOIN option_contracts') => $positions,
-                str_contains($sql, 'FROM user_options') => array_map(static fn (array $p): array => ['user_id' => $p['user_id'], 'quantity' => abs($p['quantity'])], $positions),
+                str_contains($sql, 'FROM user_options') => array_map(static fn(array $p): array => ['user_id' => $p['user_id'], 'quantity' => abs($p['quantity'])], $positions),
                 default => [],
             });
     }
@@ -317,24 +317,24 @@ class CorporateLedgerServiceTest extends TestCase
                 ['id' => 8, 'option_type' => 'PUT', 'strike' => '100.00000000', 'expiry_serial' => 12, 'price' => '2.00000000'],
                 ['id' => 7, 'option_type' => 'CALL', 'strike' => '400.00000000', 'expiry_serial' => 12, 'price' => '20.00000000'],
             ],
-            [['user_id' => 101, 'quantity' => 3, 'price' => '20.00000000']]
+            [['user_id' => 101, 'quantity' => 3, 'price' => '20.00000000']],
         );
 
         $this->service->processStockSplit($stock, 4.0, false);
 
         $sqls = array_column($this->statements, 'sql');
-        $positions = array_values(array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], 'UPDATE user_options')));
+        $positions = array_values(array_filter($this->statements, static fn(array $s): bool => str_contains($s['sql'], 'UPDATE user_options')));
         $this->assertCount(1, $positions);
         $this->assertStringContainsString('quantity = quantity * :factor', $positions[0]['sql']);
         $this->assertStringContainsString('average_premium = average_premium / :factor', $positions[0]['sql']);
         $this->assertSame(4, $positions[0]['params']['factor']);
 
-        $renames = array_values(array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], 'SET ticker = :ticker')));
-        $this->assertSame(['TALL-12P25', 'TALL-12C100'], array_map(static fn (array $s): string => $s['params']['ticker'], $renames), 'Renamed in rising strike order.');
-        $this->assertSame(['25.00000000', '100.00000000'], array_map(static fn (array $s): string => $s['params']['strike'], $renames));
+        $renames = array_values(array_filter($this->statements, static fn(array $s): bool => str_contains($s['sql'], 'SET ticker = :ticker')));
+        $this->assertSame(['TALL-12P25', 'TALL-12C100'], array_map(static fn(array $s): string => $s['params']['ticker'], $renames), 'Renamed in rising strike order.');
+        $this->assertSame(['25.00000000', '100.00000000'], array_map(static fn(array $s): string => $s['params']['strike'], $renames));
         $this->assertEqualsWithDelta(0.25, $renames[0]['params']['scale'], 1e-12, 'Premium, vega and theta per share scale with the price.');
-        $this->assertNotEmpty(array_filter($sqls, static fn (string $sql): bool => str_contains($sql, 'SET oc.open_interest')), 'Open interest is read back from the positions.');
-        $this->assertEmpty(array_filter($sqls, static fn (string $sql): bool => str_contains($sql, ':cashout') && str_contains($sql, 'cash_balance')), 'A forward split leaves no fraction to settle.');
+        $this->assertNotEmpty(array_filter($sqls, static fn(string $sql): bool => str_contains($sql, 'SET oc.open_interest')), 'Open interest is read back from the positions.');
+        $this->assertEmpty(array_filter($sqls, static fn(string $sql): bool => str_contains($sql, ':cashout') && str_contains($sql, 'cash_balance')), 'A forward split leaves no fraction to settle.');
     }
 
     /**
@@ -354,7 +354,7 @@ class CorporateLedgerServiceTest extends TestCase
             [
                 ['user_id' => 101, 'quantity' => 15, 'price' => '0.30000000'],
                 ['user_id' => 102, 'quantity' => -25, 'price' => '0.30000000'],
-            ]
+            ],
         );
 
         $this->service->processStockSplit($stock, 10.0, true, 1.20);
@@ -368,11 +368,11 @@ class CorporateLedgerServiceTest extends TestCase
         $this->assertEqualsWithDelta(150.0, $cashouts[101] ?? null, 1e-9, 'Five old contracts at 0.30 a share, a hundred shares each.');
         $this->assertEqualsWithDelta(-150.0, $cashouts[102] ?? null, 1e-9, 'The writer pays for the five it no longer owes.');
 
-        $positions = array_values(array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], 'UPDATE user_options')));
+        $positions = array_values(array_filter($this->statements, static fn(array $s): bool => str_contains($s['sql'], 'UPDATE user_options')));
         $this->assertStringContainsString('TRUNCATE(quantity / :factor, 0)', $positions[0]['sql']);
 
-        $renames = array_values(array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], 'SET ticker = :ticker')));
-        $this->assertSame(['TINY-12C30', 'TINY-12C15'], array_map(static fn (array $s): string => $s['params']['ticker'], $renames), 'Renamed in falling strike order.');
+        $renames = array_values(array_filter($this->statements, static fn(array $s): bool => str_contains($s['sql'], 'SET ticker = :ticker')));
+        $this->assertSame(['TINY-12C30', 'TINY-12C15'], array_map(static fn(array $s): string => $s['params']['ticker'], $renames), 'Renamed in falling strike order.');
     }
 
     /** A split restates the name's own share counts: the stock it still has to put through the market, and its short interest read back from the restated positions. */
@@ -381,7 +381,7 @@ class CorporateLedgerServiceTest extends TestCase
         $stock = (new Stock())->setTicker('TALL')->setCorporateFlowBacklog(1500.0)->setShortInterestShares('100.00');
         $this->splitWithOptions([], []);
         $this->connectionMock->method('fetchOne')->willReturnCallback(
-            static fn (string $sql): string => str_contains($sql, 'user_stocks') ? '400' : '0'
+            static fn(string $sql): string => str_contains($sql, 'user_stocks') ? '400' : '0',
         );
 
         $this->service->processStockSplit($stock, 4.0, false);
@@ -438,7 +438,7 @@ class CorporateLedgerServiceTest extends TestCase
         // And the rewrite rounds toward zero, so the debit above matches the position that survives.
         $rewrites = array_values(array_filter(
             $statements,
-            static fn (array $s): bool => str_contains($s['sql'], 'UPDATE user_stocks SET quantity')
+            static fn(array $s): bool => str_contains($s['sql'], 'UPDATE user_stocks SET quantity'),
         ));
         $this->assertCount(1, $rewrites);
         $this->assertStringContainsString('TRUNCATE(quantity / :factor, 0)', $rewrites[0]['sql']);
@@ -472,7 +472,7 @@ class CorporateLedgerServiceTest extends TestCase
 
         $refunds = array_values(array_filter(
             $statements,
-            static fn (array $s): bool => str_contains($s['sql'], 'remnant_value')
+            static fn(array $s): bool => str_contains($s['sql'], 'remnant_value'),
         ));
         $this->assertCount(1, $refunds, 'A reverse split refunds escrow remnants exactly once.');
         $sql = $refunds[0]['sql'];
@@ -482,7 +482,7 @@ class CorporateLedgerServiceTest extends TestCase
         $this->assertMatchesRegularExpression(
             '/ELSE\s+0\b/',
             $sql,
-            'Every other side — SHORT and COVER — escrows nothing and must be refunded nothing.'
+            'Every other side — SHORT and COVER — escrows nothing and must be refunded nothing.',
         );
     }
 
@@ -501,7 +501,7 @@ class CorporateLedgerServiceTest extends TestCase
         $stock->setTicker('FEED');
 
         $this->connectionMock->method('fetchAllAssociative')
-            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [
+            ->willReturnCallback(static fn(string $sql): array => str_contains($sql, 'stock_events') ? [
                 ['id' => 7, 'description' => "Q-Earnings: $11.75 (Beat expectations by $0.32 | +$80.92B EVA).\n• Paid $0.60/share div ($27.64B total, 1.97% yield).\n• Bought back 410,288,930 shares."],
                 ['id' => 8, 'description' => "Q-Earnings: $1.00 (Met expectations exactly | +$5.00M EVA).\n• Launched next-gen AI platform."],
             ] : []);
@@ -521,11 +521,11 @@ class CorporateLedgerServiceTest extends TestCase
         $this->assertSame(
             "Q-Earnings: $2.94 (Beat expectations by $0.08 | +$80.92B EVA).\n• Paid $0.15/share div ($27.64B total, 1.97% yield).\n• Bought back 1,641,155,720 shares.",
             $rewrites[7] ?? null,
-            'EPS, surprise and dividend divide by the factor, the buyback count multiplies, EVA and totals are untouched.'
+            'EPS, surprise and dividend divide by the factor, the buyback count multiplies, EVA and totals are untouched.',
         );
         $this->assertSame(
             "Q-Earnings: $0.25 (Met expectations exactly | +$5.00M EVA).\n• Launched next-gen AI platform.",
-            $rewrites[8] ?? null
+            $rewrites[8] ?? null,
         );
 
         // The restated text must still be readable by the feed's parser, or the restatement has traded a
@@ -549,7 +549,7 @@ class CorporateLedgerServiceTest extends TestCase
         $stock->setTicker('REVFEED');
 
         $this->connectionMock->method('fetchAllAssociative')
-            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [
+            ->willReturnCallback(static fn(string $sql): array => str_contains($sql, 'stock_events') ? [
                 ['id' => 3, 'description' => "Q-Earnings: -$0.45 (Missed expectations by $0.10 | -$15.00M EVA).\n• Bought back 1,000 shares."],
             ] : []);
 
@@ -567,7 +567,7 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->assertSame(
             "Q-Earnings: -$4.50 (Missed expectations by $1.00 | -$15.00M EVA).\n• Bought back 100 shares.",
-            $rewrites[3] ?? null
+            $rewrites[3] ?? null,
         );
     }
 
@@ -578,7 +578,7 @@ class CorporateLedgerServiceTest extends TestCase
         $stock->setTicker('QUIET');
 
         $this->connectionMock->method('fetchAllAssociative')
-            ->willReturnCallback(static fn (string $sql): array => str_contains($sql, 'stock_events') ? [
+            ->willReturnCallback(static fn(string $sql): array => str_contains($sql, 'stock_events') ? [
                 ['id' => 1, 'description' => 'Issued $18.31B in bonds for expansion.'],
             ] : []);
 

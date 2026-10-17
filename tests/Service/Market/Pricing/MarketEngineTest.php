@@ -2,20 +2,20 @@
 
 namespace App\Tests\Service\Market\Pricing;
 
+use App\DTO\MacroStateDTO;
+use App\DTO\MarketPricingContext;
+use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\PolicyCapitalization;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
-use PHPUnit\Framework\TestCase;
-use App\Service\Macro\MacroEngine;
-use App\Service\Market\Pricing\MarketEngine;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Market\Pricing\PolicyCapitalization;
-use App\Service\Math\MathUtility;
-use App\Service\Math\FinancialConstants;
-use App\DTO\MarketPricingContext;
-use App\DTO\MacroStateDTO;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class MarketEngineTest extends TestCase
@@ -43,7 +43,7 @@ class MarketEngineTest extends TestCase
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
             dt: 1.0,
-            lambda: 0.0 // lambda = 0 means NO jump
+            lambda: 0.0, // lambda = 0 means NO jump
         );
 
         $result = $this->engine->calculateNextPrice($ctx);
@@ -76,7 +76,7 @@ class MarketEngineTest extends TestCase
             longTermVolatility: 0.2,
             dt: 1.0,
             lambda: 1000.0, // massive lambda guarantees checkProbability triggers
-            jumpVol: 0.05
+            jumpVol: 0.05,
         );
 
         $result = $this->engine->calculateNextPrice($ctx);
@@ -99,11 +99,12 @@ class MarketEngineTest extends TestCase
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
             dt: 1.0,
-            lambda: 0.0,            reversionSpeed: 0.5,
+            lambda: 0.0,
+            reversionSpeed: 0.5,
             bookValuePerShare: 50.0,
             currentRoic: 0.10,
             roicTtm: 0.10,
-            revenuePerShare: 50.0
+            revenuePerShare: 50.0,
         );
 
         $result = $this->engine->calculateNextPrice($ctx);
@@ -121,12 +122,13 @@ class MarketEngineTest extends TestCase
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
             dt: 1.0,
-            lambda: 0.0,            reversionSpeed: 0.25,
+            lambda: 0.0,
+            reversionSpeed: 0.25,
             bookValuePerShare: 25.0,
             currentRoic: 0.08,
             roicTtm: 0.08,
             revenuePerShare: 32.0,  // high revenue
-            businessModel: 'standard'
+            businessModel: 'standard',
         );
 
         $result = $this->engine->calculateNextPrice($ctx);
@@ -148,7 +150,7 @@ class MarketEngineTest extends TestCase
             dt: 1.0,
             lambda: 0.0,
             reversionSpeed: 0.5,
-            macroState: new MacroStateDTO(outputGap: 0.0, inflation: 0.02)
+            macroState: new MacroStateDTO(outputGap: 0.0, inflation: 0.02),
         );
         $normalResult = $this->engine->calculateNextPrice($normalCtx);
 
@@ -160,14 +162,14 @@ class MarketEngineTest extends TestCase
             dt: 1.0,
             lambda: 0.0,
             reversionSpeed: 0.5,
-            macroState: new MacroStateDTO(outputGap: -0.10, inflation: 0.08)
+            macroState: new MacroStateDTO(outputGap: -0.10, inflation: 0.08),
         );
         $stressedResult = $this->engine->calculateNextPrice($stressedCtx);
 
         $this->assertLessThan(
             $normalResult['dynamic_reversion'],
             $stressedResult['dynamic_reversion'],
-            'Brunnermeier-Pedersen funding liquidity dampener must reduce reversion speed during high systemic stress.'
+            'Brunnermeier-Pedersen funding liquidity dampener must reduce reversion speed during high systemic stress.',
         );
     }
 
@@ -176,10 +178,17 @@ class MarketEngineTest extends TestCase
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-        $fair = fn (float $inflation, float $breakeven): float => $this->engine->calculateNextPrice(new MarketPricingContext(
-            currentPrice: 100.0, currentVolatility: 0.2, longTermVolatility: 0.2, dt: 1.0 / 252.0, lambda: 0.0,
+        $fair = fn(float $inflation, float $breakeven): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
             macroState: new MacroStateDTO(inflation: $inflation, tipsBreakeven: $breakeven),
-            bookValuePerShare: 40.0, currentRoic: 0.12, roicTtm: 0.12, liveCostOfEquity: 0.09,
+            bookValuePerShare: 40.0,
+            currentRoic: 0.12,
+            roicTtm: 0.12,
+            liveCostOfEquity: 0.09,
         ))['perceived_fair_value'];
 
         $anchored = $fair(0.02, 0.02);
@@ -201,14 +210,30 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $levy = PolicyCapitalization::LONG_RUN_BANK_LEVY_RATE;
-        $value = fn (float $expectedLevy): float => $this->engine->calculateNextPrice(new MarketPricingContext(
-            currentPrice: 100.0, currentVolatility: 0.2, longTermVolatility: 0.2, dt: 1.0 / 252.0, lambda: 0.0, beta: 2.0,
+        $value = fn(float $expectedLevy): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
+            beta: 2.0,
             macroState: new MacroStateDTO(
-                totalTime: 6.0, inflation: 0.12, tipsBreakeven: 0.12, outputGap: 0.03, bankLevyRate: $levy, bankLevyEmbodied: $levy,
-                expectedLevers: ['bankLevyRate' => $expectedLevy], expectedPolicyFrom: 8.5,
-                previousExpectedLevers: ['bankLevyRate' => $expectedLevy], previousExpectedPolicyFrom: 8.5,
+                totalTime: 6.0,
+                inflation: 0.12,
+                tipsBreakeven: 0.12,
+                outputGap: 0.03,
+                bankLevyRate: $levy,
+                bankLevyEmbodied: $levy,
+                expectedLevers: ['bankLevyRate' => $expectedLevy],
+                expectedPolicyFrom: 8.5,
+                previousExpectedLevers: ['bankLevyRate' => $expectedLevy],
+                previousExpectedPolicyFrom: 8.5,
             ),
-            bookValuePerShare: 60.0, currentRoic: 0.12, roicTtm: 0.12, businessModel: 'commercial_bank', liveCostOfEquity: 0.10,
+            bookValuePerShare: 60.0,
+            currentRoic: 0.12,
+            roicTtm: 0.12,
+            businessModel: 'commercial_bank',
+            liveCostOfEquity: 0.10,
             policyBasesPerShare: ['bankLevyRate' => 400.0],
         ))['perceived_fair_value'];
 
@@ -231,15 +256,29 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $carbon = 80.0;
-        $priced = fn (float $expected, float $previous, float $return = 0.06): array => $this->engine->calculateNextPrice(new MarketPricingContext(
-            currentPrice: 20.0, currentVolatility: 0.2, longTermVolatility: 0.2, dt: 1.0 / 252.0, lambda: 0.0, beta: 0.4,
+        $priced = fn(float $expected, float $previous, float $return = 0.06): array => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 20.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
+            beta: 0.4,
             macroState: new MacroStateDTO(
-                totalTime: 6.0, carbonPrice: $carbon, carbonPowerUpliftEmbodied: CommodityLogisticsSubsystem::carbonPowerPriceUplift($carbon),
-                expectedLevers: ['carbonPrice' => $expected], expectedPolicyFrom: 6.5,
-                previousExpectedLevers: ['carbonPrice' => $previous], previousExpectedPolicyFrom: 6.5,
+                totalTime: 6.0,
+                carbonPrice: $carbon,
+                carbonPowerUpliftEmbodied: CommodityLogisticsSubsystem::carbonPowerPriceUplift($carbon),
+                expectedLevers: ['carbonPrice' => $expected],
+                expectedPolicyFrom: 6.5,
+                previousExpectedLevers: ['carbonPrice' => $previous],
+                previousExpectedPolicyFrom: 6.5,
             ),
-            bookValuePerShare: 50.0, currentRoic: $return, roicTtm: $return, revenuePerShare: 10.0, businessModel: 'independent_power',
-            liveCostOfEquity: 0.10, policyBasesPerShare: ['carbonPrice' => 10.0],
+            bookValuePerShare: 50.0,
+            currentRoic: $return,
+            roicTtm: $return,
+            revenuePerShare: 10.0,
+            businessModel: 'independent_power',
+            liveCostOfEquity: 0.10,
+            policyBasesPerShare: ['carbonPrice' => 10.0],
         ));
 
         $kept = $priced($carbon, $carbon)['perceived_fair_value'];
@@ -257,10 +296,22 @@ class MarketEngineTest extends TestCase
     public function testSurplusCashIsWorthItsFace(): void
     {
         foreach (['tech', 'utility', 'restaurant'] as $model) {
-            $fair = fn (float $paid): float => $this->engine->strikeFairValue(new MarketPricingContext(
-                currentPrice: 50.0, currentVolatility: 0.25, longTermVolatility: 0.25, dt: 1.0 / 252.0, lambda: 0.0,
-                macroState: new MacroStateDTO(), bookValuePerShare: 30.0 - $paid, currentRoic: 0.12, roicTtm: 0.12, revenuePerShare: 40.0,
-                businessModel: $model, liveCostOfEquity: 0.09, netDebtPerShare: 10.0, investedCapitalPerShare: 40.0, baselineRoic: 0.12,
+            $fair = fn(float $paid): float => $this->engine->strikeFairValue(new MarketPricingContext(
+                currentPrice: 50.0,
+                currentVolatility: 0.25,
+                longTermVolatility: 0.25,
+                dt: 1.0 / 252.0,
+                lambda: 0.0,
+                macroState: new MacroStateDTO(),
+                bookValuePerShare: 30.0 - $paid,
+                currentRoic: 0.12,
+                roicTtm: 0.12,
+                revenuePerShare: 40.0,
+                businessModel: $model,
+                liveCostOfEquity: 0.09,
+                netDebtPerShare: 10.0,
+                investedCapitalPerShare: 40.0,
+                baselineRoic: 0.12,
                 excessCashPerShare: 5.0 - $paid,
             ))['perceived_fair_value'];
 
@@ -274,14 +325,25 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $longRun = PolicyCapitalization::LONG_RUN_DIVIDEND_TAX_RATE;
-        $value = fn (float $expectedRate, float $payout): float => $this->engine->calculateNextPrice(new MarketPricingContext(
-            currentPrice: 100.0, currentVolatility: 0.2, longTermVolatility: 0.2, dt: 1.0 / 252.0, lambda: 0.0,
+        $value = fn(float $expectedRate, float $payout): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
             macroState: new MacroStateDTO(
-                totalTime: 6.0, dividendTaxRate: $longRun,
-                expectedLevers: ['dividendTax' => $expectedRate], expectedPolicyFrom: 8.5,
-                previousExpectedLevers: ['dividendTax' => $expectedRate], previousExpectedPolicyFrom: 8.5,
+                totalTime: 6.0,
+                dividendTaxRate: $longRun,
+                expectedLevers: ['dividendTax' => $expectedRate],
+                expectedPolicyFrom: 8.5,
+                previousExpectedLevers: ['dividendTax' => $expectedRate],
+                previousExpectedPolicyFrom: 8.5,
             ),
-            bookValuePerShare: 60.0, currentRoic: 0.12, roicTtm: 0.12, businessModel: 'tech', liveCostOfEquity: 0.10,
+            bookValuePerShare: 60.0,
+            currentRoic: 0.12,
+            roicTtm: 0.12,
+            businessModel: 'tech',
+            liveCostOfEquity: 0.10,
             targetPayoutRatio: $payout,
         ))['perceived_fair_value'];
 
@@ -291,7 +353,7 @@ class MarketEngineTest extends TestCase
         $this->assertSame($value($longRun, 0.0), $value(0.396, 0.0), 'A firm paying none prices none.');
     }
 
-        public function testARevisedForecastMovesThePriceWithTheTarget(): void
+    public function testARevisedForecastMovesThePriceWithTheTarget(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
@@ -309,7 +371,7 @@ class MarketEngineTest extends TestCase
             previousExpectedLevers: ['corporateTax' => $previousTax, 'bankLevyRate' => $previousLevy, 'extractionStringency' => $expectedRules],
             previousExpectedPolicyFrom: 8.5,
         );
-        $priced = fn (MacroStateDTO $state, string $model, array $bases): array => $this->engine->calculateNextPrice(new MarketPricingContext(
+        $priced = fn(MacroStateDTO $state, string $model, array $bases): array => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 100.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
@@ -350,7 +412,7 @@ class MarketEngineTest extends TestCase
             $priced($macro($inForce, $levy, $inForce, $levy, 0.0), 'mining', [])['perceived_fair_value'],
             $priced($macro($inForce, $levy, $inForce, $levy, 1.0), 'mining', [])['perceived_fair_value'],
             1e-9,
-            'A miner with no reported cost base prices no rules.'
+            'A miner with no reported cost base prices no rules.',
         );
     }
 
@@ -369,7 +431,7 @@ class MarketEngineTest extends TestCase
             businessModel: $businessModel,
             liveCostOfEquity: 0.08,
             targetPayoutRatio: $targetPayout,
-            dividendAdjustmentSpeed: $speed
+            dividendAdjustmentSpeed: $speed,
         );
     }
 
@@ -401,10 +463,17 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $spread = function (float $fundVariance): float {
-            $at = fn (float $z): float => log($this->engine->calculateNextPrice(new MarketPricingContext(
-                currentPrice: 100.0, currentVolatility: 0.25, longTermVolatility: 0.25,
-                dt: 1.0 / 252.0, lambda: 0.0, beta: 1.2, marketZ: $z, marketVol: 0.15, bookValuePerShare: 50.0,
-                fundImpactVariance: $fundVariance
+            $at = fn(float $z): float => log($this->engine->calculateNextPrice(new MarketPricingContext(
+                currentPrice: 100.0,
+                currentVolatility: 0.25,
+                longTermVolatility: 0.25,
+                dt: 1.0 / 252.0,
+                lambda: 0.0,
+                beta: 1.2,
+                marketZ: $z,
+                marketVol: 0.15,
+                bookValuePerShare: 50.0,
+                fundImpactVariance: $fundVariance,
             ))['price']);
 
             return $at(1.0) - $at(-1.0);
@@ -424,10 +493,17 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $spread = function (?float $priorVol, float $vol): float {
-            $at = fn (float $z): float => log($this->engine->calculateNextPrice(new MarketPricingContext(
-                currentPrice: 100.0, currentVolatility: 0.25, longTermVolatility: 0.25,
-                dt: 1.0 / 252.0, lambda: 0.0, beta: 1.2, marketZ: $z, marketVol: $vol, bookValuePerShare: 50.0,
-                priorMarketVol: $priorVol
+            $at = fn(float $z): float => log($this->engine->calculateNextPrice(new MarketPricingContext(
+                currentPrice: 100.0,
+                currentVolatility: 0.25,
+                longTermVolatility: 0.25,
+                dt: 1.0 / 252.0,
+                lambda: 0.0,
+                beta: 1.2,
+                marketZ: $z,
+                marketVol: $vol,
+                bookValuePerShare: 50.0,
+                priorMarketVol: $priorVol,
             ))['price']);
 
             return $at(1.0) - $at(-1.0);
@@ -448,9 +524,17 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $dt = 1.0 / 252.0;
         $step = function (float $vol, float $beta, float $lambda) use ($dt): float {
-            $context = fn (float $price): MarketPricingContext => new MarketPricingContext(
-                currentPrice: $price, currentVolatility: $vol, longTermVolatility: $vol, dt: $dt, lambda: $lambda, beta: $beta,
-                marketVol: 0.15, priorMarketVol: 0.15, bookValuePerShare: 50.0, liveCostOfEquity: 0.09
+            $context = fn(float $price): MarketPricingContext => new MarketPricingContext(
+                currentPrice: $price,
+                currentVolatility: $vol,
+                longTermVolatility: $vol,
+                dt: $dt,
+                lambda: $lambda,
+                beta: $beta,
+                marketVol: 0.15,
+                priorMarketVol: 0.15,
+                bookValuePerShare: 50.0,
+                liveCostOfEquity: 0.09,
             );
             // Fair value reads the price weakly, so strike it where it reproduces itself and the pull is exactly zero.
             $fair = 100.0;
@@ -466,7 +550,7 @@ class MarketEngineTest extends TestCase
             MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP,
             MacroEngine::SYSTEMIC_JUMP_ETA_UP / 1.2,
             MacroEngine::SYSTEMIC_JUMP_ETA_DOWN / 1.2,
-            ...$caps
+            ...$caps,
         );
         $eta = MarketEngine::calibratedJumpParameters(0.45, 0.0, 1.0, 0.05);
         $idiosyncraticLogMean = 1.0 * StochasticProcesses::kouTruncatedMean(0.40, $eta['eta_up'], $eta['eta_down'], ...$caps);
@@ -488,7 +572,7 @@ class MarketEngineTest extends TestCase
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-        $income = fn (float $dividend, float $payout, float $speed): float => $this->engine->calculateNextPrice($this->incomeContext($dividend, $payout, $speed))['analyst_targets']['income_analyst'];
+        $income = fn(float $dividend, float $payout, float $speed): float => $this->engine->calculateNextPrice($this->incomeContext($dividend, $payout, $speed))['analyst_targets']['income_analyst'];
 
         $atOnce = $income(1.0, 0.5, 1.0);
         $this->assertGreaterThan(1.0, $atOnce);
@@ -513,7 +597,7 @@ class MarketEngineTest extends TestCase
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-        $fairValue = fn (float $dividend, float $payout): float => $this->engine->calculateNextPrice($this->incomeContext($dividend, $payout, 0.05, 'tech'))['perceived_fair_value'];
+        $fairValue = fn(float $dividend, float $payout): float => $this->engine->calculateNextPrice($this->incomeContext($dividend, $payout, 0.05, 'tech'))['perceived_fair_value'];
 
         $paying = $fairValue(1.0, 0.5);
         $this->assertEqualsWithDelta($paying, $fairValue(0.0, 0.5), 1e-9, 'The cheque itself is no input.');
@@ -538,7 +622,7 @@ class MarketEngineTest extends TestCase
             roicTtm: 0.25,
             liveCostOfEquity: 0.09, // All equity: the WACC is the cost of equity.
             revenuePerShare: 50.0,
-            businessModel: 'tech'
+            businessModel: 'tech',
         );
         $techResult = $this->engine->calculateNextPrice($techCtx);
 
@@ -558,7 +642,7 @@ class MarketEngineTest extends TestCase
                 longTermVolatility: 0.15,
                 dt: 1.0 / 252.0,
                 lambda: 2.0,
-                jumpVol: 0.10
+                jumpVol: 0.10,
             );
 
             $result = $this->engine->calculateNextPrice($ctx);
@@ -583,7 +667,7 @@ class MarketEngineTest extends TestCase
             dt: 1.0 / 252.0,
             lambda: 0.15,
             jumpVol: 0.06,
-            beta: 0.20
+            beta: 0.20,
         );
 
         for ($i = 0; $i < 200; $i++) {
@@ -607,7 +691,7 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
 
-        $valueAnalyst = fn (float $roe, ?float $tangibleBook, string $model = 'commercial_bank'): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+        $valueAnalyst = fn(float $roe, ?float $tangibleBook, string $model = 'commercial_bank'): float => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 50.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
@@ -618,7 +702,7 @@ class MarketEngineTest extends TestCase
             roicTtm: $roe,
             liveCostOfEquity: 0.10,
             businessModel: $model,
-            tangibleBookValuePerShare: $tangibleBook
+            tangibleBookValuePerShare: $tangibleBook,
         ))['analyst_targets']['value_analyst'];
 
         // Interior: 15% on $100 of book is 37.5% on $40 of tangible book, and both are worth $150.
@@ -641,7 +725,7 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
 
-        $priced = fn (float $costOfEquity): array => $this->engine->calculateNextPrice(new MarketPricingContext(
+        $priced = fn(float $costOfEquity): array => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 80.0,
             currentVolatility: 0.25,
             longTermVolatility: 0.25,
@@ -669,7 +753,7 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(false);
 
-        $fairValue = fn (float $trailing, ?float $longRun): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+        $fairValue = fn(float $trailing, ?float $longRun): float => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 80.0,
             currentVolatility: 0.25,
             longTermVolatility: 0.25,
@@ -690,7 +774,7 @@ class MarketEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $fairValue(TimeSeries::persistentEquivalentReturn(0.20, 0.12, 0.10), null),
             $fairValue(0.20, 0.12),
-            1e-9
+            1e-9,
         );
     }
 }

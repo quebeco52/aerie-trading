@@ -6,8 +6,8 @@ namespace App\Tests\Service\Market\Ticker;
 
 use App\Service\Market\Ticker\NestedTransaction;
 use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Exception\NoActiveTransaction;
 use Doctrine\DBAL\Exception\DeadlockException;
+use Doctrine\DBAL\Exception\NoActiveTransaction;
 use PHPUnit\Framework\TestCase;
 
 /**

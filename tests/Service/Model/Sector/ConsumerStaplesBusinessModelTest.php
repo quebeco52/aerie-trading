@@ -88,7 +88,7 @@ class ConsumerStaplesBusinessModelTest extends TestCase
                 (-0.04 * ConsumerStaplesBusinessModel::OPERATING_CYCLICALITY) + $this->model->resolveFxDemandShift($slump),
                 $this->model->getMacroPhysics(self::stock($ticker), $slump)['macro_demand_shift'],
                 1e-12,
-                $ticker
+                $ticker,
             );
         }
     }

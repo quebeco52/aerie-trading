@@ -36,7 +36,7 @@ class LawFirmBusinessModelTest extends TestCase
             fixedCosts: 15_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('corporate_retainers', $result->streamRevenue);
@@ -75,7 +75,7 @@ class LawFirmBusinessModelTest extends TestCase
             10_000_000.0,
             0.0,
             $normalMacro,
-            $this->mathUtility
+            $this->mathUtility,
         );
 
         $distressResult = $this->model->computeActualFinancials(
@@ -85,13 +85,13 @@ class LawFirmBusinessModelTest extends TestCase
             10_000_000.0,
             0.0,
             $distressMacro,
-            $this->mathUtility
+            $this->mathUtility,
         );
 
         // Restructuring advisory billing explodes when default rates and credit spreads widen
         $this->assertGreaterThan(
             $normalResult->streamRevenue['restructuring_advisory'],
-            $distressResult->streamRevenue['restructuring_advisory']
+            $distressResult->streamRevenue['restructuring_advisory'],
         );
     }
 
@@ -114,7 +114,7 @@ class LawFirmBusinessModelTest extends TestCase
             10_000_000.0,
             0.0,
             $macro,
-            $mathMock
+            $mathMock,
         );
 
         // CLAW: 40% Retainers, 35% Litigation, 25% Restructuring
@@ -136,21 +136,21 @@ class LawFirmBusinessModelTest extends TestCase
             outputGapEma: 0.0,
             dealActivityIndexEma: 100.0,
             corporateDefaultRateEma: 0.020,
-            macroCreditSpread: 0.015
+            macroCreditSpread: 0.015,
         );
 
         $dealBoomMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             dealActivityIndexEma: 150.0, // Active M&A deal making
             corporateDefaultRateEma: 0.020,
-            macroCreditSpread: 0.015
+            macroCreditSpread: 0.015,
         );
 
         $defaultSurgeMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             dealActivityIndexEma: 100.0,
             corporateDefaultRateEma: 0.060, // Surging corporate default wave
-            macroCreditSpread: 0.015
+            macroCreditSpread: 0.015,
         );
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 10_000_000.0, 0.0, $baselineMacro, $mathMock);
@@ -160,13 +160,13 @@ class LawFirmBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $baseResult->streamRevenue['corporate_retainers'],
             $dealResult->streamRevenue['corporate_retainers'],
-            'Active M&A deal activity expands corporate advisory and retainer billing.'
+            'Active M&A deal activity expands corporate advisory and retainer billing.',
         );
 
         $this->assertGreaterThan(
             $baseResult->streamRevenue['restructuring_advisory'],
             $defaultResult->streamRevenue['restructuring_advisory'],
-            'Surging corporate default waves expand Chapter 11 bankruptcy restructuring billing.'
+            'Surging corporate default waves expand Chapter 11 bankruptcy restructuring billing.',
         );
     }
     public function testBillingRatesPriceOffServicesInflationNotGoodsBreakevens(): void

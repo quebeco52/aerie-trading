@@ -27,7 +27,7 @@ if (!class_exists('Redis')) {
         /** @param list<string> $keys */
         public function mGet(array $keys): array
         {
-            return array_map(fn (string $key): mixed => $this->storage[$key] ?? false, $keys);
+            return array_map(fn(string $key): mixed => $this->storage[$key] ?? false, $keys);
         }
 
         public function hGet(string $key, string $field): mixed

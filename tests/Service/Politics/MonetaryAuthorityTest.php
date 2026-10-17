@@ -7,7 +7,6 @@ namespace App\Tests\Service\Politics;
 use App\Data\Politics\AerieCouncil;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
-use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CouncilAppointments as Appointments;
 use App\Service\Politics\FinancialRegulator;
@@ -186,7 +185,7 @@ class MonetaryAuthorityTest extends TestCase
                 $this->assertSame($t, $state->lastMajorityShiftAt);
                 $this->assertTrue(
                     $state->memberSince !== $members || $state->governorTermStart !== $governor || $stances !== [$state->governorStance, ...$state->memberStances],
-                    'Only an appointment or a change of camp moves the majority.'
+                    'Only an appointment or a change of camp moves the majority.',
                 );
             }
         }

@@ -12,8 +12,6 @@ use App\Twig\Extension\NumberFormatExtension;
 use App\Twig\Extension\SimDateExtension;
 use App\Twig\WebSocketTicketExtension;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\SecurityBundle\Security;
 

@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Company\AnchorHoldings;
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 
 /**
@@ -88,7 +86,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     /** Revenue the treasury books per unit of its value: blended yield on cash, short sovereign paper and the credit book. */
     public const TREASURY_INCOME_YIELD = 0.040;
 
-
     // --- Stream Volatility Scalars ---
     /** Volatility multiplier for consolidated subsidiary sales: real operating businesses, priced as such. */
     public const WHOLLY_OWNED_VARIANCE_SCALAR = 0.30;
@@ -164,7 +161,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
         ]);
@@ -202,7 +199,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             $macroState->outputGapEma,
             $macroState->macroCreditSpreadEma,
             $macroState->macroCreditSpread - $macroState->macroCreditSpreadEma,
-            max(0.0, $dealActivityShift) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR
+            max(0.0, $dealActivityShift) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR,
         );
 
         // --- Tail risk: a subsidiary written down, which is the one event a trust reports itself ---
@@ -238,12 +235,12 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $ppiCostDrag);
 
-        $observableShockZ = ($ownedShock * $ownedWeight * self::WHOLLY_OWNED_OBSERVABLE_DISCOUNT) +
-            ($listedShock * $listedWeight * self::LISTED_DIVIDEND_OBSERVABLE_DISCOUNT) +
-            ($floatShock * $floatWeight * self::FLOAT_OBSERVABLE_DISCOUNT) +
-            ($ownedMacroBoost * $ownedWeight * self::WHOLLY_OWNED_OBSERVABLE_DISCOUNT) +
-            ($listedMacroBoost * $listedWeight * self::LISTED_DIVIDEND_OBSERVABLE_DISCOUNT) +
-            ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
+        $observableShockZ = ($ownedShock * $ownedWeight * self::WHOLLY_OWNED_OBSERVABLE_DISCOUNT)
+            + ($listedShock * $listedWeight * self::LISTED_DIVIDEND_OBSERVABLE_DISCOUNT)
+            + ($floatShock * $floatWeight * self::FLOAT_OBSERVABLE_DISCOUNT)
+            + ($ownedMacroBoost * $ownedWeight * self::WHOLLY_OWNED_OBSERVABLE_DISCOUNT)
+            + ($listedMacroBoost * $listedWeight * self::LISTED_DIVIDEND_OBSERVABLE_DISCOUNT)
+            + ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
@@ -395,7 +392,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             self::MAX_NAV_DISCOUNT,
             self::NAV_DISCOUNT_BASE
                 - ($macroState->outputGapEma * self::NAV_DISCOUNT_CYCLE_SCALAR)
-                - ($sentimentGap * self::NAV_DISCOUNT_SENTIMENT_SCALAR)
+                - ($sentimentGap * self::NAV_DISCOUNT_SENTIMENT_SCALAR),
         ));
     }
 }

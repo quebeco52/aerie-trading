@@ -5,19 +5,18 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
+use App\DTO\MacroStateDTO;
 
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Tools & Accessories (Precision Tooling, Hardware).
- * 
+ *
  * Financial Physics:
  * - Premium B2B: Ultra-high precision industrial tooling. Extremely sticky, low variance, massive margins.
  * - Retail Liquidations: Manufacturing scrap sold to prosumers. Highly cyclical and volatile.
@@ -92,8 +91,14 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Hand and power tools are sourced and sold across borders against import-competing brands. */
     public const FX_REVENUE_EXPOSURE = 0.10;
 
-        public function getReversionSpeed(): float { return 0.08; }
-    public function getMoatSpread(): float { return 0.03; }
+    public function getReversionSpeed(): float
+    {
+        return 0.08;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.03;
+    }
 
     /**
      * The cycle reaches each stream once inside the sector physics (commercial on the gap and the PMI, consumer on
@@ -246,7 +251,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // B2B precision tooling orders are opaque and hard for retail analysts to track.
         return new \App\DTO\SectorCoverageProfile(
@@ -254,7 +259,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
             errorStdDev: 0.05,
             minVisibility: 0.0,
             eventBaseVisibility: 0.50,
-            eventMinVisibility: 0.20
+            eventMinVisibility: 0.20,
         );
     }
 

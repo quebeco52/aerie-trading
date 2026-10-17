@@ -160,7 +160,7 @@ class MacroDiagnosticsProbeTest extends TestCase
         $this->assertEqualsWithDelta(
             $window['change'],
             $window['drift'] + $window['diffusion'] + $window['clamp'] + $window['external'] + $window['unexplained'],
-            1e-15
+            1e-15,
         );
     }
 

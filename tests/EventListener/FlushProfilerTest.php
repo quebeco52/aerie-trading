@@ -36,7 +36,7 @@ class FlushProfilerTest extends TestCase
         array $insertions,
         array $updates = [],
         array $deletions = [],
-        array $changed = ['ticker' => null]
+        array $changed = ['ticker' => null],
     ): void {
         $unitOfWork = $this->createStub(UnitOfWork::class);
         $unitOfWork->method('getScheduledEntityInsertions')->willReturn($insertions);

@@ -118,7 +118,7 @@ final class OutputGapProbe
         float $openingGap,
         float $preClampGap,
         float $closingGap,
-        float $dt
+        float $dt,
     ): void {
         if (!$this->enabled) {
             return;

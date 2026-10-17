@@ -8,11 +8,11 @@ use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
-use App\Service\Model\BusinessModelInterface;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
+use App\Service\Model\BusinessModelInterface;
 
 /**
  * Where a company sits in its market, on two denominators that answer different questions.
@@ -92,7 +92,7 @@ class IndustryPositionBuilder
                 'secular_excess_growth' => IndustryShareLedger::secularExcessGrowth($strategy, $stock),
             ] : null,
             $tick,
-            $this->ticksPerYear
+            $this->ticksPerYear,
         );
 
         $kpis = $this->reports->findLatestFor($stock)?->getReportedKpis() ?? [];
@@ -109,7 +109,7 @@ class IndustryPositionBuilder
         $evaluationCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
         $addressableShare = $stock->isBankrupt() ? 0.0 : min(
             FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
-            $this->corporateMetrics->calculateAddressableShare($stock, $evaluationCapital, $macroState)
+            $this->corporateMetrics->calculateAddressableShare($stock, $evaluationCapital, $macroState),
         );
 
         // What that reach costs. The penalty is margin friction in return points; severity is the share of
@@ -180,7 +180,7 @@ class IndustryPositionBuilder
             $macroState,
             IndustryShareLedger::secularExcessGrowth($strategy, $stock),
             $tick,
-            $this->ticksPerYear
+            $this->ticksPerYear,
         );
         if ($market === null) {
             return null;

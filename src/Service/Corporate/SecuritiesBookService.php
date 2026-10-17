@@ -85,7 +85,7 @@ final class SecuritiesBookService
             self::MIN_SECURITIES_CARRYING_YIELD,
             $curve->level > 0.0
                 ? $this->bondPricingEngine->zeroYield($curve, max(0.25, $effectiveDuration))
-                : $fallbackYield
+                : $fallbackYield,
         );
 
         if ($book <= 0.0 || $effectiveDuration <= 0.0) {

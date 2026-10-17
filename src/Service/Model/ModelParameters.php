@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
-
 /**
  * Strongly-typed parameter bag for business model physics tuning.
  * Provides type-safe parameter resolution with fallback defaults and ArrayAccess support.
@@ -17,7 +16,7 @@ class ModelParameters implements \ArrayAccess, \Countable
      * @param array<string, float> $parameters
      */
     public function __construct(
-        private array $parameters = []
+        private array $parameters = [],
     ) {}
 
     /**

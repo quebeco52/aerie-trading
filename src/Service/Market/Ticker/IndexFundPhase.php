@@ -65,7 +65,7 @@ final class IndexFundPhase
                     $stocks,
                     $tickCount,
                     // The index level itself, excluding the fund's fee drag and accrued income.
-                    $fund?->getIndexLevel()
+                    $fund?->getIndexLevel(),
                 );
 
                 // The rebalance is traded whether or not membership changed: reweighting alone turns the book.
@@ -81,7 +81,7 @@ final class IndexFundPhase
                     '<info>%s reconstitution: +%s / -%s</info>',
                     $index->value,
                     implode(',', $reconstitution['added']) ?: 'none',
-                    implode(',', $reconstitution['deleted']) ?: 'none'
+                    implode(',', $reconstitution['deleted']) ?: 'none',
                 );
 
                 if ($fund !== null) {
@@ -89,7 +89,7 @@ final class IndexFundPhase
                         $fund,
                         'INDEX',
                         self::describeReconstitution($reconstitution['added'], $reconstitution['deleted']),
-                        0.0
+                        0.0,
                     );
                 }
             }
@@ -124,9 +124,9 @@ final class IndexFundPhase
                         sprintf(
                             '%s distributed $%s per share of income collected from its constituents.',
                             $fund->getName(),
-                            number_format($paid, 2)
+                            number_format($paid, 2),
                         ),
-                        0.0
+                        0.0,
                     );
                 }
             }
@@ -144,7 +144,7 @@ final class IndexFundPhase
                 $this->indexCommittee->memberDividendPoints($index, $board['dividend_points']),
                 $dt,
                 $fundFlowShares * (float) $fund->getPrice(),
-                $this->indexCommittee->memberWeightedHalfSpread($index, $board['float_caps'], $board['half_spreads'])
+                $this->indexCommittee->memberWeightedHalfSpread($index, $board['float_caps'], $board['half_spreads']),
             );
 
             $updates[] = $fundUpdate;
@@ -157,7 +157,7 @@ final class IndexFundPhase
                 $basket = $this->authorizedParticipant->basketOrders(
                     $creationValue,
                     $this->indexCommittee->memberWeights($index, $board['float_caps']),
-                    $memberPrices
+                    $memberPrices,
                 );
 
                 foreach ($basket as $memberTicker => $shares) {

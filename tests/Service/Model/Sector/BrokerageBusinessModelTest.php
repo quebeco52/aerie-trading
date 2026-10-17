@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\Service\Math\MacroTransmission;
-use PHPUnit\Framework\TestCase;
-use App\Service\Model\Sector\BrokerageBusinessModel;
-use App\Service\Math\MathUtility;
-use App\Entity\Stock;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\BrokerageBusinessModel;
+use PHPUnit\Framework\TestCase;
 
 class BrokerageBusinessModelTest extends TestCase
 {
@@ -71,7 +71,7 @@ class BrokerageBusinessModelTest extends TestCase
             fixedCosts: 100.0,
             baselineVol: 0.20,
             macroState: $macroState,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // ROOK custom tuning overrides: trading_weight = 0.85, advisory_weight = 0.15
@@ -103,7 +103,7 @@ class BrokerageBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             1.0 - 0.05 * BrokerageBusinessModel::VIX_REVENUE_SCALAR,
             $quietReport->streamRevenue['trading'] / $atAnchor->streamRevenue['trading'],
-            1e-9
+            1e-9,
         );
     }
 
@@ -117,14 +117,14 @@ class BrokerageBusinessModelTest extends TestCase
         $atTrend = new MacroStateDTO(marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR);
         $flush = new MacroStateDTO(
             marketVolatilityEma: MacroEngine::MACRO_VOL_BASE_ANCHOR,
-            moneySupplyGrowthEma: MacroEngine::M2_BASE_GROWTH + $deviation
+            moneySupplyGrowthEma: MacroEngine::M2_BASE_GROWTH + $deviation,
         );
 
         $this->assertEqualsWithDelta(
             $this->model->getMacroPhysics($stock, $atTrend)['macro_demand_shift'],
             $this->model->getMacroPhysics($stock, $flush)['macro_demand_shift'],
             1e-12,
-            'The root demand shift does not carry M2.'
+            'The root demand shift does not carry M2.',
         );
 
         $base = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, $atTrend, $mathMock);
@@ -200,13 +200,13 @@ class BrokerageBusinessModelTest extends TestCase
         $this->assertSame(
             (float) $allTermNotes->getTotalDebt(),
             (float) $partlyOnTheRevolver->getTotalDebt(),
-            'fixture guard: both brokerages must carry the same total funding'
+            'fixture guard: both brokerages must carry the same total funding',
         );
 
         $this->assertEqualsWithDelta(
             $this->model->calculateInterestIncome($allTermNotes, $macroState, $this->mathUtility),
             $this->model->calculateInterestIncome($partlyOnTheRevolver, $macroState, $this->mathUtility),
-            1.0
+            1.0,
         );
     }
 
@@ -273,12 +273,12 @@ class BrokerageBusinessModelTest extends TestCase
 
         $baselineMacro = new MacroStateDTO(
             dealActivityIndexEma: 100.0,
-            marketVolatilityEma: 0.20
+            marketVolatilityEma: 0.20,
         );
 
         $boomMacro = new MacroStateDTO(
             dealActivityIndexEma: 140.0, // +40% surge in M&A/capital markets deal flow
-            marketVolatilityEma: 0.20
+            marketVolatilityEma: 0.20,
         );
 
         $baseResult = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, $baselineMacro, $mathMock);
@@ -287,10 +287,9 @@ class BrokerageBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $baseResult->streamRevenue['advisory'],
             $boomResult->streamRevenue['advisory'],
-            'Elevated capital markets deal activity must boost brokerage advisory and underwriting revenue.'
+            'Elevated capital markets deal activity must boost brokerage advisory and underwriting revenue.',
         );
     }
-
 
     /** A sweep pays its own beta, not the banking system's: the system's deposit pass-through does not reach the broker's spread. */
     public function testClientSweepPaysItsOwnBetaWhateverTheSystemPassesThrough(): void
@@ -307,7 +306,7 @@ class BrokerageBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $this->model->calculateInterestIncome($stock, $lowBeta, $this->mathUtility),
             $this->model->calculateInterestIncome($stock, $highBeta, $this->mathUtility),
-            1e-6
+            1e-6,
         );
     }
 
@@ -336,7 +335,7 @@ class BrokerageBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
         $duty = \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE + 0.001;
-        $contribution = static fn (\App\DTO\ActualFinancialsDTO $report): float => $report->actualRevenue - $report->actualVariableCosts;
+        $contribution = static fn(\App\DTO\ActualFinancialsDTO $report): float => $report->actualRevenue - $report->actualVariableCosts;
 
         $founding = $this->model->computeActualFinancials((new Stock())->setTicker('ROOK'), 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20), $mathMock);
         $taxed = $this->model->computeActualFinancials((new Stock())->setTicker('ROOK'), 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20, stampDutyRate: $duty), $mathMock);
@@ -345,7 +344,7 @@ class BrokerageBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $contribution($taxed) - $contribution($founding),
             $this->model->annualStampDutyTurnoverBase($stock) / 4.0 * (MacroTransmission::calculateStampDutyVolumeFactor($duty) - 1.0),
-            1e-6
+            1e-6,
         );
         $this->assertSame(0.0, $this->model->annualStampDutyTurnoverBase($stock->setEarningsMomentumZ(null)), 'Before its first report nothing is known to move with turnover.');
     }

@@ -6,7 +6,6 @@ namespace App\Tests\Service\Model\Trait;
 
 use App\Service\Math\FinancialConstants;
 use App\Tests\Support\Model\BareStandardModel;
-use App\Tests\Support\Model\ConfiguredStandardModel;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -78,7 +77,7 @@ final class StandardValuationTraitTest extends TestCase
             100.0 * FinancialConstants::TARGET_OPERATING_CASH_RATIO * 0.50,
             $crushed,
             0.0000001,
-            'Interest cannot push structural EPS below the yield on the cash the firm must hold.'
+            'Interest cannot push structural EPS below the yield on the cash the firm must hold.',
         );
         $this->assertGreaterThan(0.0, $crushed, 'Structural EPS never goes negative.');
 

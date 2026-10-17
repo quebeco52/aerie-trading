@@ -4,9 +4,9 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
@@ -213,7 +213,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $gap,
             MacroTransmission::calculateCapacityUtilizationShift($boom->capacityUtilizationRate, MacroEngine::CU_BASELINE, 1.0),
             0.0001,
-            'At unit sensitivity the shift is the utilization gap itself, in the units the subsystem publishes'
+            'At unit sensitivity the shift is the utilization gap itself, in the units the subsystem publishes',
         );
 
         // A three-point gap is what the semiconductor fab-shortage gate is calibrated to, and a 3% output
@@ -221,7 +221,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertGreaterThan(
             SemiconductorBusinessModel::BOOM_CAPACITY_UTILIZATION_THRESHOLD,
             $gap,
-            'A boom must be able to trip the fab shortage gate'
+            'A boom must be able to trip the fab shortage gate',
         );
 
         $glut = new MacroState();
@@ -232,7 +232,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan(
             SemiconductorBusinessModel::GLUT_CAPACITY_UTILIZATION_THRESHOLD,
             $glut->capacityUtilizationRate - MacroEngine::CU_BASELINE,
-            'A slump with idle plant must be able to trip the fab glut gate'
+            'A slump with idle plant must be able to trip the fab glut gate',
         );
     }
 
@@ -398,7 +398,6 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan($gapBaseline, $gapHighEra, 'The neutral is structural: a premium era that lifts the five-year is a real tightening of business borrowing, which the Taylor rule long-rate offset, not the IS curve, is there to lean against.');
     }
 
-
     public function testGovernmentSpendingAboveBaselineLiftsOutputGapDrift(): void
     {
         $baseline = new MacroState();
@@ -418,7 +417,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $expectedImpulse,
             $gapStimulus - $gapBaseline,
             1e-9,
-            'A 10% public spending increase must add the calibrated demand impulse to the output gap drift.'
+            'A 10% public spending increase must add the calibrated demand impulse to the output gap drift.',
         );
     }
 
@@ -455,20 +454,20 @@ class MacroAggregateSubsystemTest extends TestCase
             -MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CAPITAL_DRAG * $overhang * 0.25,
             $gapExcess - $gapNeutral,
             1e-9,
-            'Excess capacity must subtract its calibrated drag from the output gap drift.'
+            'Excess capacity must subtract its calibrated drag from the output gap drift.',
         );
 
         $this->assertEqualsWithDelta(
             MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CAPITAL_REBOUND_DRAG * $overhang * 0.25,
             $gapShortfall - $gapNeutral,
             1e-9,
-            'A capital shortfall must return demand at its own, slower rate.'
+            'A capital shortfall must return demand at its own, slower rate.',
         );
 
         $this->assertLessThan(
             abs($gapExcess - $gapNeutral),
             abs($gapShortfall - $gapNeutral),
-            'An equal and opposite shortfall must not hand back as much demand as the excess took away: that symmetry is the spring that pays a deep bust straight back as a bigger boom.'
+            'An equal and opposite shortfall must not hand back as much demand as the excess took away: that symmetry is the spring that pays a deep bust straight back as a bigger boom.',
         );
     }
 
@@ -487,7 +486,7 @@ class MacroAggregateSubsystemTest extends TestCase
             -0.20 * MacroAggregateSubsystem::AGRI_COST_PUSH_TRANSMISSION,
             $state->agriCostPushLag,
             0.0005,
-            'After two years the distributed lag must have converged to the full symmetric pass-through.'
+            'After two years the distributed lag must have converged to the full symmetric pass-through.',
         );
     }
 
@@ -529,7 +528,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan(
             MacroAggregateSubsystem::KALDOR_WEALTH_EFFECT_ELASTICITY,
             MacroAggregateSubsystem::KALDOR_EQUITY_WEALTH_ELASTICITY,
-            'The MPC out of financial wealth is the smaller one.'
+            'The MPC out of financial wealth is the smaller one.',
         );
     }
 
@@ -605,13 +604,13 @@ class MacroAggregateSubsystemTest extends TestCase
             $this->gapWithEquityAt(1.00),
             $this->gapWithEquityAt(1.60, 1.60),
             1e-12,
-            'Once it is normal, a 60% richer board moves demand no more than an ordinary one.'
+            'Once it is normal, a 60% richer board moves demand no more than an ordinary one.',
         );
         $this->assertNotEqualsWithDelta(
             $this->gapWithEquityAt(1.00),
             $this->gapWithEquityAt(1.60),
             1e-6,
-            'While it is still news, it must move demand.'
+            'While it is still news, it must move demand.',
         );
     }
 
@@ -637,7 +636,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertGreaterThan(
             $this->gapWithHousingAt(100.0, 100.0),
             $this->gapWithHousingAt(130.0, 100.0),
-            'A 30% dearer housing stock must move demand while it is still news.'
+            'A 30% dearer housing stock must move demand while it is still news.',
         );
 
         $state = $this->neutralBorrowingState();
@@ -654,7 +653,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $this->gapWithHousingAt(100.0, 100.0),
             $this->gapWithHousingAt(130.0, 130.0),
             1e-12,
-            'Once it is normal, a 30% dearer housing stock moves demand no more than an ordinary one.'
+            'Once it is normal, a 30% dearer housing stock moves demand no more than an ordinary one.',
         );
     }
 
@@ -676,7 +675,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $this->gapWithEquityAt(1.00),
             $this->subsystem->calculateOutputGap($unreported, 0.03, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0),
             1e-12,
-            'An unreported market must move demand exactly as much as a board at its trend: not at all.'
+            'An unreported market must move demand exactly as much as a board at its trend: not at all.',
         );
     }
 
@@ -719,7 +718,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $mean = array_sum($annualGrowth) / count($annualGrowth);
             $realizedVolatility = sqrt(
                 array_sum(array_map(static fn(float $g): float => ($g - $mean) ** 2, $annualGrowth))
-                    / count($annualGrowth)
+                    / count($annualGrowth),
             );
 
             $this->assertEqualsWithDelta(
@@ -730,8 +729,8 @@ class MacroAggregateSubsystemTest extends TestCase
                     'At %d ticks/year the index grew %.3f%%/yr, not the %.3f%% it is parameterized for.',
                     $ticksPerYear,
                     $mean * 100,
-                    $expectedGrowth * 100
-                )
+                    $expectedGrowth * 100,
+                ),
             );
 
             $this->assertEqualsWithDelta(
@@ -742,8 +741,8 @@ class MacroAggregateSubsystemTest extends TestCase
                     'At %d ticks/year the index realized %.4f volatility against a TFP_VOLATILITY of %.4f.',
                     $ticksPerYear,
                     $realizedVolatility,
-                    MacroAggregateSubsystem::TFP_VOLATILITY
-                )
+                    MacroAggregateSubsystem::TFP_VOLATILITY,
+                ),
             );
         }
     }
@@ -801,7 +800,7 @@ class MacroAggregateSubsystemTest extends TestCase
             MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt),
             $impulse,
             1e-9,
-            'A unit innovation scales by sigma * sqrt(dt).'
+            'A unit innovation scales by sigma * sqrt(dt).',
         );
 
         // Half a reversion half-life later the disturbance must still be most of the way there.
@@ -815,7 +814,7 @@ class MacroAggregateSubsystemTest extends TestCase
             0.5 * $impulse,
             $state->demandShock - $base->demandShock,
             0.02 * $impulse,
-            'After one half-life the disturbance must retain half the impulse, not have been redrawn away.'
+            'After one half-life the disturbance must retain half the impulse, not have been redrawn away.',
         );
     }
 
@@ -926,7 +925,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $favorable->excessBondPremiumTrend = 0.004;
         $base = $this->neutralBorrowingState();
 
-        $run = fn (MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapNeutral = $run($neutral);
 
         $this->assertEqualsWithDelta($run($base), $gapNeutral, 1e-12, 'A premium at its trend is no credit shock.');
@@ -943,13 +942,13 @@ class MacroAggregateSubsystemTest extends TestCase
         $over = $this->neutralBorrowingState();
         $over->bankCapitalBuilt = $over->bankCapitalRequirement + 0.01;
 
-        $run = fn (MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $run = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapBuilt = $run($built);
 
         $this->assertEqualsWithDelta(
             -MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CREDIT_PREMIUM_DRAG * MacroAggregateSubsystem::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01 * 0.25,
             $run($short) - $gapBuilt,
-            1e-12
+            1e-12,
         );
         $this->assertEqualsWithDelta(0.0, $run($over) - $gapBuilt, 1e-12, 'Capital held beyond the requirement rations nothing.');
     }
@@ -1009,7 +1008,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $freshRise = $this->neutralBorrowingState();
         $freshRise->corporateTaxRate = MacroEngine::PUBLIC_PURCHASES_TO_GDP + 0.04;
 
-        $gap = fn (MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
+        $gap = fn(MacroState $state): float => $this->subsystem->calculateOutputGap($state, 0.035, MacroEngine::BASE_NATURAL_RATE, MacroEngine::TARGET_INFLATION, 0.25, 1.0);
         $gapNeutral = $gap($neutral);
 
         $this->assertEqualsWithDelta($gapNeutral, $gap($heldHigh), 1e-12, 'A stance the trend has caught up with leaves the gap alone.');
@@ -1175,7 +1174,6 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $gapHalved - $gapNeutral, 1e-9, 'A halving does not stimulate: uncertainty drag is one-sided.');
     }
 
-
     /** Noy (2009): destruction is a supply loss on impact; an average year is no drag at all. */
     public function testCatastropheLossesDragOutputOnlyAboveAnAverageYear(): void
     {
@@ -1193,7 +1191,6 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($gapAverage, $gapQuiet, 1e-12, 'A quiet season is not a boom.');
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CATASTROPHE_DRAG * 2.0 * $dt, $gapStormy - $gapAverage, 1e-9);
     }
-
 
     /**
      * Senhadji & Montenegro (1999): exports follow partner income by partial adjustment, a year bringing the short-run
@@ -1296,7 +1293,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             ($retaliatedExportShare * MacroAggregateSubsystem::goodsExportVolumeGap(0.0, 0.0, $duty)) - ($homeGoodsImportShare * MacroAggregateSubsystem::goodsImportVolumeGap(0.0, 0.0, $duty)),
             MacroAggregateSubsystem::netExportGapAt(0.0, 0.0, 0.0, $duty),
-            1e-15
+            1e-15,
         );
         $this->assertLessThan(0.0, MacroAggregateSubsystem::goodsImportVolumeGap(0.0, 0.0, $duty), 'A duty costs imports.');
         $this->assertLessThan(0.0, MacroAggregateSubsystem::goodsExportVolumeGap(0.0, 0.0, $duty), 'Retaliation costs exports.');
@@ -1417,7 +1414,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::OUTPUT_GAP_DIFFUSION_SIGMA * sqrt($dt),
             $diffusionGap - $neutralGap,
-            1e-12
+            1e-12,
         );
 
         // First draw only: the disturbance takes it whole and reaches the gap only through the drift.
@@ -1492,7 +1489,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
     private function probedSubsystem(OutputGapProbe $probe, float $normal): MacroAggregateSubsystem
     {
-        $math = new class($normal) extends MathUtility {
+        $math = new class ($normal) extends MathUtility {
             public function __construct(private readonly float $normal) {}
 
             public function generateStandardNormal(): float
@@ -1521,7 +1518,6 @@ class MacroAggregateSubsystemTest extends TestCase
         return $state;
     }
 
-
     /**
      * The founding draw is in the baseline; the part a budget draws above the founding share is new spending, and
      * reaches demand as the stabilisation does.
@@ -1545,7 +1541,7 @@ class MacroAggregateSubsystemTest extends TestCase
             MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_GOVT_SPENDING_MULTIPLIER * (0.012 * 0.1 / 0.6) / MacroEngine::PUBLIC_PURCHASES_TO_GDP,
             $contribution(0.6),
             1e-15,
-            'A sixth of a draw at 60% is the spending above the founding half.'
+            'A sixth of a draw at 60% is the spending above the founding half.',
         );
     }
 
@@ -1584,7 +1580,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $window['change'],
             $window['drift'] + $window['diffusion'] + $window['clamp'] + $window['unexplained'],
             1e-12,
-            'The decomposition must reconstruct the gap it decomposes'
+            'The decomposition must reconstruct the gap it decomposes',
         );
 
         // Every channel in the drift is named, so the panel cannot silently drop one.
@@ -1680,7 +1676,6 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $probe->snapshot()['current']['contributions']['crisisScar']);
     }
 
-
     /**
      * The shock is a driftless random walk at the fitted volatility and is the whole of the index's departure
      * from its trend path: Fernald's utilization-adjusted TFP has no fat tails, so no jump rides on top. Checked
@@ -1708,7 +1703,7 @@ class MacroAggregateSubsystemTest extends TestCase
             }
 
             $mean = array_sum($ends) / count($ends);
-            $sd = sqrt(array_sum(array_map(static fn (float $v): float => ($v - $mean) ** 2, $ends)) / count($ends));
+            $sd = sqrt(array_sum(array_map(static fn(float $v): float => ($v - $mean) ** 2, $ends)) / count($ends));
             $this->assertEqualsWithDelta(0.0, $mean, 3.0 * $expectedSd / sqrt(count($ends)), "At {$ticksPerYear} ticks/year the shock drifted.");
             $this->assertEqualsWithDelta($expectedSd, $sd, 0.10 * $expectedSd, "At {$ticksPerYear} ticks/year the shock spread at the wrong rate.");
         }
@@ -1796,7 +1791,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertSame(
             'crisisDeleveragingDrag',
             array_key_first($contributions),
-            'The crisis is the heaviest drag on a state built around it'
+            'The crisis is the heaviest drag on a state built around it',
         );
     }
 
@@ -1838,7 +1833,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             $window['change'],
             $window['drift'] + $window['diffusion'] + $window['clamp'] + $window['unexplained'],
-            1e-12
+            1e-12,
         );
     }
 
@@ -1902,7 +1897,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $gapAtBaseline,
             $gapWeakButSettled,
             1e-12,
-            'A currency sitting at its own trend is this economy\'s normal, not a devaluation.'
+            'A currency sitting at its own trend is this economy\'s normal, not a devaluation.',
         );
     }
 
@@ -1968,7 +1963,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_CREDIT_SHARE * log(1.10),
             $boom->financeOutputGap,
-            1e-12
+            1e-12,
         );
     }
 
@@ -1983,7 +1978,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * MacroAggregateSubsystem::FINANCE_DEAL_SHARE * log(1.20),
             $boom->financeOutputGap,
-            1e-12
+            1e-12,
         );
     }
 
@@ -1997,7 +1992,7 @@ class MacroAggregateSubsystemTest extends TestCase
             1.0,
             (MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT / (1.0 - MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE))
                 + (MacroAggregateSubsystem::FINANCE_GAP_WEIGHT * (MacroAggregateSubsystem::FINANCE_CREDIT_SHARE + MacroAggregateSubsystem::FINANCE_DEAL_SHARE)),
-            1e-15
+            1e-15,
         );
         $this->assertGreaterThan(0.2, MacroAggregateSubsystem::FINANCE_GAP_WEIGHT);
         $this->assertLessThan(MacroAggregateSubsystem::DISTRICT_FINANCE_SHARE, MacroAggregateSubsystem::FINANCE_GAP_WEIGHT);
@@ -2013,7 +2008,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * (MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE - MacroAggregateSubsystem::DEMAND_EQUATION_IMPORT_SHARE),
             MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE,
-            1e-15
+            1e-15,
         );
         $this->assertEqualsWithDelta(0.196, MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE, 0.001, 'Imports (27.5% of GDP) less the quarter of the exports that is passed-through imports.');
         $this->assertGreaterThan(0.0, MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE, 'A bit more than the equation\'s own share for home use leaks;');
@@ -2072,12 +2067,12 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan(
             0.30,
             $followed,
-            'Over half a currency swing the trend must still read most of that swing as a deviation.'
+            'Over half a currency swing the trend must still read most of that swing as a deviation.',
         );
         $this->assertGreaterThan(
             0.0,
             $followed,
-            'The trend must follow a genuinely new level eventually, or it is just another constant.'
+            'The trend must follow a genuinely new level eventually, or it is just another constant.',
         );
     }
 
@@ -2088,7 +2083,10 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testACarbonPriceStepsThePriceLevelByElectricitysWeight(): void
     {
         $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         };
         $subsystem = new MacroAggregateSubsystem($quiet);
         $free = new MacroState();
@@ -2146,12 +2144,24 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testInflationAndProducerPricesCarryNoTickRateNoise(): void
     {
         $high = new MacroAggregateSubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float { return 3.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 3.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         });
         $low = new MacroAggregateSubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float { return -3.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return -3.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         });
 
         foreach ([0.25, 1.0 / 54000.0] as $dt) {
@@ -2164,7 +2174,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $this->assertSame(
                 $high->calculateInflation($up, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt),
                 $low->calculateInflation($down, MacroEngine::TARGET_INFLATION, MacroEngine::TFP_DRIFT, $dt),
-                "Headline inflation draws no noise at dt {$dt}."
+                "Headline inflation draws no noise at dt {$dt}.",
             );
             $high->calculateProducerPriceInflation($up, MacroEngine::TFP_DRIFT, $dt);
             $low->calculateProducerPriceInflation($down, MacroEngine::TFP_DRIFT, $dt);
@@ -2243,7 +2253,7 @@ class MacroAggregateSubsystemTest extends TestCase
             (1.0 - MacroAggregateSubsystem::IMPORTED_SHARE_OF_GOODS) * $energyPush / MacroAggregateSubsystem::domesticDeflatorWeight(),
             $oilShock->domesticInflation - $reference->domesticInflation,
             1e-15,
-            'The fuel made at home carries the world price into the deflator.'
+            'The fuel made at home carries the world price into the deflator.',
         );
 
         $untaxed = clone $taxed;
@@ -2266,7 +2276,7 @@ class MacroAggregateSubsystemTest extends TestCase
             1.0,
             MacroEngine::PPI_METALS_WEIGHT + MacroEngine::PPI_ENERGY_WEIGHT + MacroAggregateSubsystem::PPI_AGRI_WEIGHT
                 + MacroAggregateSubsystem::PPI_ULC_WEIGHT + MacroAggregateSubsystem::PPI_OTHER_COST_WEIGHT,
-            1e-12
+            1e-12,
         );
 
         $tfpGrowth = 0.012;
@@ -2330,7 +2340,7 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testTwoFallingQuartersDeclareARecessionAndTwoRisingEndIt(): void
     {
         // Flat for two years, falling 1% a quarter for a year, then recovering 3% a quarter.
-        $gapAt = static fn (float $t): float => $t < 2.0 ? 0.0 : ($t < 3.0 ? -0.04 * ($t - 2.0) : -0.04 + (0.12 * ($t - 3.0)));
+        $gapAt = static fn(float $t): float => $t < 2.0 ? 0.0 : ($t < 3.0 ? -0.04 * ($t - 2.0) : -0.04 + (0.12 * ($t - 3.0)));
         $expected = [false, false, false, false, false, false, false, false, false, true, true, true, true, false, false, false];
         foreach ([12, 48, 180] as $ticksPerYear) {
             $this->assertSame($expected, $this->recessionCalls($ticksPerYear, $gapAt, 16), "At {$ticksPerYear} ticks a year.");
@@ -2340,7 +2350,7 @@ class MacroAggregateSubsystemTest extends TestCase
     /** A single falling quarter is no recession, and growth in a deep slump ends one: the call reads the change, not the level. */
     public function testOneFallingQuarterIsNoRecession(): void
     {
-        $dip = static fn (float $t): float => ($t > 1.05 && $t < 1.2) ? -0.02 : 0.0;
+        $dip = static fn(float $t): float => ($t > 1.05 && $t < 1.2) ? -0.02 : 0.0;
         $this->assertNotContains(true, $this->recessionCalls(48, $dip, 12));
     }
 

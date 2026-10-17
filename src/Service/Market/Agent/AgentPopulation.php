@@ -70,7 +70,7 @@ final class AgentPopulation
         if ($total <= 0.0 || !is_finite($total)) {
             $even = 1.0 / count($fitness);
 
-            return array_map(static fn (): float => $even, $fitness);
+            return array_map(static fn(): float => $even, $fitness);
         }
 
         $shares = [];
@@ -190,7 +190,7 @@ final class AgentPopulation
         float $logReturn,
         float $dt,
         float $riskFreeRate,
-        float $variance
+        float $variance,
     ): array {
         if ($dt <= 0.0) {
             return $fitness;
@@ -233,7 +233,7 @@ final class AgentPopulation
             $variance,
             $logReturn,
             $dt,
-            self::AGENT_REALIZED_VOLATILITY_HORIZON_YEARS
+            self::AGENT_REALIZED_VOLATILITY_HORIZON_YEARS,
         );
     }
 }

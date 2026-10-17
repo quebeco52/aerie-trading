@@ -46,10 +46,14 @@ final class TradeVolumeIsNotTheTradeBalanceTest extends TestCase
         $stock->setBeta('1.2');
         $quiet = $this->createStub(MathUtility::class);
 
-        $revenue = static fn (float $tradeBalance): float => $model->computeActualFinancials(
-            $stock, 1000.0, 0.40, 50.0, 0.15,
+        $revenue = static fn(float $tradeBalance): float => $model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.40,
+            50.0,
+            0.15,
             new MacroStateDTO(outputGapEma: -0.02, tradeBalanceToGdpEma: $tradeBalance),
-            $quiet
+            $quiet,
         )->actualRevenue;
 
         $this->assertSame($revenue(MacroEngine::TRADE_BALANCE_BASELINE), $revenue(MacroEngine::TRADE_BALANCE_BASELINE + 0.02));

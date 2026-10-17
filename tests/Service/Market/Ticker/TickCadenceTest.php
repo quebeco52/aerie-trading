@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Ticker;
 
-use App\Service\Market\Ticker\TickCadence;
 use App\Service\Market\Option\OptionDeskService;
+use App\Service\Market\Ticker\TickCadence;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,7 +23,7 @@ class TickCadenceTest extends TestCase
         $this->assertEqualsWithDelta(
             TickCadence::WORKING_SET_RELOADS_PER_YEAR,
             self::reloadsPerYear($ticksPerYear),
-            TickCadence::WORKING_SET_RELOADS_PER_YEAR * 0.1
+            TickCadence::WORKING_SET_RELOADS_PER_YEAR * 0.1,
         );
     }
 
@@ -41,7 +41,7 @@ class TickCadenceTest extends TestCase
                 TickCadence::WORKING_SET_RELOADS_PER_YEAR,
                 self::reloadsPerYear($ticksPerYear),
                 TickCadence::WORKING_SET_RELOADS_PER_YEAR * 0.1,
-                "The working set does not reload once a trading day at {$ticksPerYear} ticks/year."
+                "The working set does not reload once a trading day at {$ticksPerYear} ticks/year.",
             );
         }
     }
@@ -85,7 +85,7 @@ class TickCadenceTest extends TestCase
         $this->assertEqualsWithDelta(
             TickCadence::BOND_MARKS_PER_YEAR,
             $rows,
-            TickCadence::BOND_MARKS_PER_YEAR * 0.1
+            TickCadence::BOND_MARKS_PER_YEAR * 0.1,
         );
     }
 
@@ -124,7 +124,7 @@ class TickCadenceTest extends TestCase
                 if (TickCadence::isReloadTick($tick, $ticksPerYear)) {
                     $this->assertTrue(
                         TickCadence::isHistoryTick($tick, $ticksPerYear),
-                        "Tick {$tick} reloads the working set without having flushed at {$ticksPerYear} ticks/year."
+                        "Tick {$tick} reloads the working set without having flushed at {$ticksPerYear} ticks/year.",
                     );
                 }
             }
@@ -139,7 +139,7 @@ class TickCadenceTest extends TestCase
                 if (TickCadence::isBondMarkTick($tick, $ticksPerYear)) {
                     $this->assertTrue(
                         TickCadence::isHistoryTick($tick, $ticksPerYear),
-                        "Tick {$tick} marks the ladder off the bar grid at {$ticksPerYear} ticks/year."
+                        "Tick {$tick} marks the ladder off the bar grid at {$ticksPerYear} ticks/year.",
                     );
                 }
             }
@@ -233,7 +233,7 @@ class TickCadenceTest extends TestCase
             $this->assertSame(
                 [$ticksPerYear, 2 * $ticksPerYear, 3 * $ticksPerYear],
                 $fired,
-                "Year boundary miscounted at {$ticksPerYear} ticks/year."
+                "Year boundary miscounted at {$ticksPerYear} ticks/year.",
             );
         }
     }

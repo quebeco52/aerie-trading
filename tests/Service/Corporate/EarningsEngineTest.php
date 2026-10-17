@@ -4,36 +4,35 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
-use App\Data\Macro\CapitalGoodsPrices;
-use App\Service\Event\EarningsReportedEvent;
-use App\Service\Math\Distributions;
-use App\Service\Math\FirmEconomics;
-use Symfony\Component\EventDispatcher\EventDispatcher;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use App\Service\Model\Sector\CommercialBankBusinessModel;
-use App\Service\Model\Sector\HomebuilderBusinessModel;
-use PHPUnit\Framework\TestCase;
 use App\Data\Company\LifecycleStage;
 use App\Data\Company\Sectors;
-use App\Entity\Stock;
+use App\Data\Macro\CapitalGoodsPrices;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\TreasuryEngine;
-use App\Service\Corporate\DebtEngine;
+use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
+use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\TreasuryEngine;
+use App\Service\Event\EarningsReportedEvent;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Macro\MacroEngine;
+use App\Service\Market\Pricing\MarketConsensusEngine;
+use App\Service\Math\Distributions;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
-use App\Service\Corporate\CorporateMetrics;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\HomebuilderBusinessModel;
 use App\Service\News\NarrativeEngine;
-use App\Service\Event\MarketEventPublisher;
-use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Corporate\Industry\IndustryShareLedger;
-use App\Service\Math\FinancialConstants;
-use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
-use App\Service\Macro\MacroEngine;
+use PHPUnit\Framework\TestCase;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 class EarningsEngineTest extends TestCase
@@ -62,7 +61,7 @@ class EarningsEngineTest extends TestCase
             $corporateMetrics,
             $debtEngine,
             $capExEngine,
-            $this->mathUtility
+            $this->mathUtility,
         );
 
         $capitalAllocationEngine = new CapitalAllocationEngine(
@@ -70,7 +69,7 @@ class EarningsEngineTest extends TestCase
             $corporateMetrics,
             $debtEngine,
             $this->mathUtility,
-            $treasuryEngine
+            $treasuryEngine,
         );
 
         return new EarningsEngine(
@@ -83,7 +82,7 @@ class EarningsEngineTest extends TestCase
             $corporateMetrics,
             $narrativeEngineMock,
             $marketConsensusEngine,
-            $industryShareLedger
+            $industryShareLedger,
         );
     }
 
@@ -197,7 +196,7 @@ class EarningsEngineTest extends TestCase
                 0.0,
                 0.0,
                 0,
-                $ticksPerYear
+                $ticksPerYear,
             );
 
             $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('BHND', $ticksPerYear), $ticksPerYear);
@@ -230,7 +229,7 @@ class EarningsEngineTest extends TestCase
                 corporateTaxRate: 0.21,
                 policyRateEma: 0.04,
                 yield5yEma: 0.045,
-                sectorDemandZ: [$firm->getSector() => $sectorZ]
+                sectorDemandZ: [$firm->getSector() => $sectorZ],
             );
 
             $engine->calculate($firm, $macro, EarningsEngine::resolveReportingTick('SECT', 252), 252);
@@ -265,7 +264,9 @@ class EarningsEngineTest extends TestCase
             $captured = null;
             $dispatcher = $this->createStub(EventDispatcherInterface::class);
             $dispatcher->method('dispatch')->willReturnCallback(function (object $event) use (&$captured) {
-                if ($event instanceof \App\Service\Event\EarningsReportedEvent) { $captured = $event->getContext(); }
+                if ($event instanceof EarningsReportedEvent) {
+                    $captured = $event->getContext();
+                }
                 return $event;
             });
             $engine = $this->buildEngine($dispatcher);
@@ -317,21 +318,21 @@ class EarningsEngineTest extends TestCase
             policyRateEma: 0.05,
             yield5yEma: 0.05,
             macroCreditSpreadEma: 0.04,
-            interbankLiquiditySpreadEma: 0.01
+            interbankLiquiditySpreadEma: 0.01,
         );
-        
+
         $stock->setPreviousRevenue('80000000000.0000'); // $80B annualized
-        
+
         // Quarter 1: Severe contraction
         $this->earningsEngine->calculate($stock, $macroState, 1);
-        
+
         $marginQ1 = (float) $stock->getStructuralVariableMargin();
         // The structural margin should remain stable around 0.10, not collapse to 0.01
         $this->assertGreaterThan(0.08, $marginQ1, "Structural margin dropped too aggressively in Q1 due to cost stickiness overwrite.");
-        
+
         // Quarter 2: Continued contraction (let the engine use previousRevenue updated by Q1)
         $this->earningsEngine->calculate($stock, $macroState, 2);
-        
+
         $marginQ2 = (float) $stock->getStructuralVariableMargin();
         // Even after back-to-back recessions, structural margin must not enter a death spiral
         $this->assertGreaterThan(0.07, $marginQ2, "Structural margin collapsed in Q2. Cost stickiness is causing a death spiral.");
@@ -371,14 +372,14 @@ class EarningsEngineTest extends TestCase
             policyRateEma: 0.03,
             yield5yEma: 0.035,
             macroCreditSpreadEma: 0.015,
-            interbankLiquiditySpreadEma: 0.001
+            interbankLiquiditySpreadEma: 0.001,
         );
 
         // Run 4 consecutive quarters in a boom
         for ($q = 1; $q <= 4; $q++) {
             $events = $this->earningsEngine->calculate($stock, $boomMacro, $q);
             $eventDesc = $events[0]['description'] ?? '';
-            
+
             // In a boom with massive profits, company must NOT be forced into emergency borrowing or dilutive stock offerings
             $this->assertStringNotContainsString('Forced to borrow', $eventDesc, "Quarter {$q} triggered false emergency borrowing during an economic boom.");
             $this->assertStringNotContainsString('emergency stock offering', $eventDesc, "Quarter {$q} triggered false emergency stock offering during an economic boom.");
@@ -412,7 +413,7 @@ class EarningsEngineTest extends TestCase
         $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger($store))->calculate($joined, $macro, $tick, 252);
         $this->assertSame(1.0, ($joined->getEarningsMomentumZ() ?? [])[$regimeKey] ?? null);
 
-        $strategy = \App\Data\Company\Sectors::strategyFor('Telecom Services');
+        $strategy = Sectors::strategyFor('Telecom Services');
         $this->assertNull((new \ReflectionProperty(\App\Service\Model\Sector\StandardCorporateBusinessModel::class, 'industryRegimes'))->getValue($strategy), 'no view outlives the report');
 
         // A carrier whose own draw starts one books it for the industry from its report tick, in whole quarters.
@@ -521,7 +522,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('SAAS', 252));
 
         $this->assertNotNull($captured);
-        $intensity = \App\Data\Company\Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity($stock);
+        $intensity = Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity($stock);
         $this->assertGreaterThan(0.05, $intensity, 'software pays a material share of revenue in equity');
         $this->assertEqualsWithDelta($captured->actualRevenue * $intensity, $captured->stockCompensation, 1.0);
 
@@ -570,12 +571,13 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE] * ($kpis['input_cost_level'] - $kpis['input_cost_recovery']),
             $kpis['input_cost_drag'],
-            1e-12
-        );        $this->assertEqualsWithDelta(
+            1e-12,
+        );
+        $this->assertEqualsWithDelta(
             $kpis['input_cost_drag'],
             $kpis['input_drag_metals'] + $kpis['input_drag_labor'] + $kpis['input_drag_earlier'],
             1e-12,
-            'the drag split by input sums to the drag filed'
+            'the drag split by input sums to the drag filed',
         );
     }
 
@@ -605,7 +607,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('CAPD', 252));
 
         $this->assertNotNull($captured);
-        $expense = $captured->actualRevenue * \App\Data\Company\Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity($stock);
+        $expense = $captured->actualRevenue * Sectors::getBusinessModelStrategy('tech')->getStockCompensationIntensity($stock);
         $grantable = EarningsEngine::EQUITY_BURN_RATE_CAP_BY_SECTOR['Information Technology'] * 0.25 * $sharesBefore * 50.0;
 
         $this->assertGreaterThan($grantable, $expense, 'the fixture only means anything while the bill exceeds the cap');
@@ -615,7 +617,7 @@ class EarningsEngineTest extends TestCase
             ((float) $captured->allocation['new_shares']) + ($grantable / 50.0),
             (float) $stock->getSharesOutstanding(),
             1.0,
-            'dilution stops at the burn-rate cap'
+            'dilution stops at the burn-rate cap',
         );
     }
 
@@ -679,7 +681,7 @@ class EarningsEngineTest extends TestCase
      */
     public function testDepreciationRateReclassifiesCostWithoutRedefiningTheMargin(): void
     {
-        $run = function (string $rate): \App\DTO\EarningsSimulationContext {
+        $run = function (string $rate): EarningsSimulationContext {
             $captured = null;
             $dispatcher = new EventDispatcher();
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
@@ -713,7 +715,7 @@ class EarningsEngineTest extends TestCase
             $reclassified,
             $heavy->ebitda - $light->ebitda,
             $reclassified * 0.15,
-            'a heavier charge must move cost out of the cash base and into depreciation'
+            'a heavier charge must move cost out of the cash base and into depreciation',
         );
 
         // EBIT barely moves, because operatingMargin is an EBIT margin and the carve-out is self-cancelling
@@ -721,7 +723,7 @@ class EarningsEngineTest extends TestCase
         $this->assertLessThan(
             ($heavy->ebitda - $light->ebitda) * 0.25,
             abs($heavy->ebit - $light->ebit),
-            'more than doubling the depreciation rate must not redefine the firm structural EBIT margin'
+            'more than doubling the depreciation rate must not redefine the firm structural EBIT margin',
         );
     }
 
@@ -784,7 +786,7 @@ class EarningsEngineTest extends TestCase
      */
     public function testGoodwillIsNotDepreciated(): void
     {
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy('auto_manufacturer');
+        $strategy = Sectors::getBusinessModelStrategy('auto_manufacturer');
 
         $clean = $this->buildMatureIndustrial('CLEAN');
         $clean->setGrossPpe('40000000000');
@@ -799,7 +801,7 @@ class EarningsEngineTest extends TestCase
             $strategy->getDepreciableBase($clean),
             $strategy->getDepreciableBase($acquisitive),
             1.0,
-            'a firm carrying goodwill must not depreciate more than an identical firm without it'
+            'a firm carrying goodwill must not depreciate more than an identical firm without it',
         );
     }
 
@@ -912,7 +914,7 @@ class EarningsEngineTest extends TestCase
      */
     public function testMaintenanceCapexIsPricedAtReplacementCostNotHistoricalCost(): void
     {
-        $run = function (float $deflator): \App\DTO\EarningsSimulationContext {
+        $run = function (float $deflator): EarningsSimulationContext {
             $captured = null;
             $dispatcher = new EventDispatcher();
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
@@ -953,7 +955,7 @@ class EarningsEngineTest extends TestCase
      */
     public function testReplacementAndCapacityFollowTheIndustrysCapitalGoodsPrice(): void
     {
-        $run = function (float $years, float $ppeRelativePrice): \App\DTO\EarningsSimulationContext {
+        $run = function (float $years, float $ppeRelativePrice): EarningsSimulationContext {
             $captured = null;
             $dispatcher = new EventDispatcher();
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
@@ -1053,7 +1055,7 @@ class EarningsEngineTest extends TestCase
             $this->buildEngine($dispatcher, $ledger)->calculate(
                 $stock,
                 new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, sectorDemandZ: ['Consumer Discretionary' => $sectorDraw]),
-                EarningsEngine::resolveReportingTick('SECT', 252)
+                EarningsEngine::resolveReportingTick('SECT', 252),
             );
             $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
             $this->assertCount(1, $ledger->gains);
@@ -1149,7 +1151,7 @@ class EarningsEngineTest extends TestCase
         $this->assertLessThanOrEqual(
             abs($retainedGrowth) + max(0.0, (float) $stock->getTotalRevenue()) * 0.05 + 1.0,
             abs($equityGrowth),
-            'inflation must not write equity up on its own'
+            'inflation must not write equity up on its own',
         );
     }
 
@@ -1189,7 +1191,7 @@ class EarningsEngineTest extends TestCase
         $this->assertLessThan(
             EarningsEngine::INVENTORY_NRV_UTILIZATION_TRIGGER,
             $captured->capacityUtilization,
-            'fixture must be running below the writedown trigger for this test to mean anything'
+            'fixture must be running below the writedown trigger for this test to mean anything',
         );
         $this->assertGreaterThan(0.0, $captured->inventoryWriteDown, 'unsold stock must be written down to net realizable value');
 
@@ -1229,7 +1231,7 @@ class EarningsEngineTest extends TestCase
             MarketConsensusEngine::ANALYST_EPS_WALKDOWN_SURPRISE_SDS * MarketConsensusEngine::TYPICAL_EARNINGS_SURPRISE_SD * $first->analystExpectedRevenue,
             $first->consensusWalkDown,
             1e-6,
-            'no record: walked down as a typical firm'
+            'no record: walked down as a typical firm',
         );
 
         $record = $stock->getEarningsMomentumZ() ?? [];
@@ -1245,7 +1247,7 @@ class EarningsEngineTest extends TestCase
             MarketConsensusEngine::ANALYST_EPS_WALKDOWN_SURPRISE_SDS * sqrt($squares / $weight) * $second->analystExpectedRevenue,
             $second->consensusWalkDown,
             1e-6,
-            'the second report reads the record the first left'
+            'the second report reads the record the first left',
         );
     }
 
@@ -1273,7 +1275,7 @@ class EarningsEngineTest extends TestCase
 
         $this->assertGreaterThanOrEqual(
             EarningsEngine::INVENTORY_NRV_UTILIZATION_TRIGGER,
-            $captured->capacityUtilization / max(0.01, $captured->seasonalFactor)
+            $captured->capacityUtilization / max(0.01, $captured->seasonalFactor),
         );
         $this->assertEquals(0.0, $captured->inventoryWriteDown);
     }
@@ -1320,7 +1322,7 @@ class EarningsEngineTest extends TestCase
             $openingNetPpe + $captured->totalReportedCapex + $captured->completedCip - $captured->quarterlyDepreciation - $captured->plantImpairment,
             $impaired->getNetPpe(),
             1.0,
-            'the plant carries the land at its written-down value'
+            'the plant carries the land at its written-down value',
         );
         $this->assertEqualsWithDelta(
             $captured->actualQuarterlyNetIncome + $captured->quarterlyDepreciation + $captured->stockCompensation
@@ -1328,7 +1330,7 @@ class EarningsEngineTest extends TestCase
                 + $captured->deferredTaxExpense - $captured->deltaWorkingCapital,
             $captured->operatingCashFlow,
             1.0,
-            'the write-down is non-cash, and so is the tax benefit the loss it causes books'
+            'the write-down is non-cash, and so is the tax benefit the loss it causes books',
         );
 
         // Land at its normal share recovers its cost and is not written down.
@@ -1370,7 +1372,7 @@ class EarningsEngineTest extends TestCase
             $captured->actualRevenue - $captured->actualVariableCosts - $captured->fixedCosts - $captured->eventCharge - $captured->restructuringCharge - $captured->impairmentCharges,
             $captured->ebitda,
             1.0,
-            'GAAP EBITDA carries the charge'
+            'GAAP EBITDA carries the charge',
         );
         $costRatio = $captured->actualVariableCosts / $captured->actualRevenue;
         $this->assertEqualsWithDelta(
@@ -1378,7 +1380,7 @@ class EarningsEngineTest extends TestCase
                 - $captured->quarterlyDepreciation - ($captured->impairmentCharges - $captured->plantImpairment),
             $captured->seasonallyAdjustedEbit,
             1.0,
-            'the run rate leaves it out'
+            'the run rate leaves it out',
         );
         $history = $stock->getQuarterlyOperatingHistory() ?? [];
         $this->assertEqualsWithDelta($captured->ebit + $captured->specialCharges, end($history)['ebit'], 1.0, 'lenders add it back');
@@ -1420,7 +1422,7 @@ class EarningsEngineTest extends TestCase
         $this->assertLessThan(
             $captured[0]->receivablesProvision,
             abs($captured[1]->receivablesProvision),
-            'a persistent default rate must not re-charge the same loss every quarter'
+            'a persistent default rate must not re-charge the same loss every quarter',
         );
         // The allowance is a real contra-asset: what the firm expects to collect is gross less allowance.
         $allowance = (float) $stock->getReceivablesAllowance();
@@ -1428,7 +1430,7 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             (float) $stock->getReceivables() - $allowance,
             $stock->getNetReceivables(),
-            1.0
+            1.0,
         );
     }
 
@@ -1659,7 +1661,7 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $retainedBefore + $captured->actualQuarterlyNetIncome - (float) ($captured->allocation['total_paid'] ?? 0.0) + $captured->cumulativeEffectAdjustment,
             (float) $stock->getRetainedEarnings(),
-            1.0
+            1.0,
         );
     }
 
@@ -1693,13 +1695,13 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.21 * (float) $stock->getNetOperatingLoss(), $stock->getDeferredTaxAsset(), 1.0, 'the carryforward is carried at the rate');
         $this->assertGreaterThan(0.21 * 1_000_000_000.0, $stock->getDeferredTaxAsset());
 
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::businessModelFor('Auto Manufacturers'));
+        $strategy = Sectors::getBusinessModelStrategy(Sectors::businessModelFor('Auto Manufacturers'));
         $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
         $this->assertEqualsWithDelta(
             $stock->getTotalAssets($lease),
             $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity(),
             max(1.0, $stock->getTotalAssets($lease) * 1e-6),
-            'the asset and the equity it backs moved together'
+            'the asset and the equity it backs moved together',
         );
         $this->assertNotEquals($equityBefore, (float) $stock->getTotalEquity());
     }
@@ -1841,7 +1843,7 @@ class EarningsEngineTest extends TestCase
             -0.05 * 10.0e9,
             $risen->expectedQuarterlyNetIncome - $same->expectedQuarterlyNetIncome,
             1.0,
-            'the law is public, so the estimate carries the re-strike, and the walk-down is struck on revenue it does not move'
+            'the law is public, so the estimate carries the re-strike, and the walk-down is struck on revenue it does not move',
         );
         $this->assertSame($rate, ($risenStock->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_PLANT_DEFERRED_TAX_RATE] ?? null);
     }
@@ -1887,7 +1889,7 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $withoutDeferral->getInvestedCapital() + 5_000_000_000.0,
             $withDeferral->getInvestedCapital(),
-            1.0
+            1.0,
         );
     }
 
@@ -1944,7 +1946,7 @@ class EarningsEngineTest extends TestCase
                     + (float) $allocation['equity_raised'] - (float) $allocation['total_cash_spent'] - (float) $allocation['total_paid'],
                 $captured->financingCashFlow,
                 1.0,
-                "financing section is not the sum of its cash legs in Q{$quarter}"
+                "financing section is not the sum of its cash legs in Q{$quarter}",
             );
         }
     }
@@ -1978,7 +1980,7 @@ class EarningsEngineTest extends TestCase
             (float) $stock->getCorporateTreasury() - $cashBefore,
             $captured->operatingCashFlow + $captured->investingCashFlow + $captured->financingCashFlow,
             1.0,
-            'the sweep is cash that left through financing'
+            'the sweep is cash that left through financing',
         );
     }
 
@@ -2077,8 +2079,8 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $impairment, 'a reporting unit carried above its fair value is impaired');
         $this->assertLessThan(3_000_000_000.0, $impairment, 'the charge stops at fair value: it cannot write equity off below what the unit is worth');
 
-        $businessModel = \App\Data\Company\Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model'] ?? 'none';
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
+        $businessModel = Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model'] ?? 'none';
+        $strategy = Sectors::getBusinessModelStrategy($businessModel);
         $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
         $assets = $stock->getTotalAssets($lease);
         $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
@@ -2158,7 +2160,7 @@ class EarningsEngineTest extends TestCase
      */
     public function testAJumpInThePriceLevelReachesRevenueCapacityThroughThePlant(): void
     {
-        $run = function (float $deflator): \App\DTO\EarningsSimulationContext {
+        $run = function (float $deflator): EarningsSimulationContext {
             $captured = null;
             $dispatcher = new EventDispatcher();
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
@@ -2291,7 +2293,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('WCRL', 252));
         $this->assertNotNull($captured);
 
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model']);
+        $strategy = Sectors::getBusinessModelStrategy(Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model']);
         $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
         $assets = $stock->getTotalAssets($lease);
         $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
@@ -2364,14 +2366,14 @@ class EarningsEngineTest extends TestCase
             array_sum($lastFour),
             (float) $stock->getTotalNetIncome(),
             1.0,
-            'Trailing net income must equal the sum of the last four reported quarters.'
+            'Trailing net income must equal the sum of the last four reported quarters.',
         );
 
         // EPS is derived from that figure over current shares, so the screener reads real trailing earnings.
         $this->assertEqualsWithDelta(
             array_sum($lastFour) / (float) $stock->getSharesOutstanding(),
             (float) $stock->getEarningsPerShare(),
-            1e-6
+            1e-6,
         );
     }
 
@@ -2429,7 +2431,7 @@ class EarningsEngineTest extends TestCase
         $this->buildEngine($dispatcher)->calculate(
             $stock,
             new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04),
-            EarningsEngine::resolveReportingTick('ANNV', 252)
+            EarningsEngine::resolveReportingTick('ANNV', 252),
         );
 
         $this->assertNotNull($captured);
@@ -2439,7 +2441,7 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $weight * (log(1.0 + $captured->totalShockPct) ** 2) / EarningsEngine::REPORT_INTERVAL_YEARS,
             (float) $stock->getAnnouncementVarianceEma(),
-            1e-12
+            1e-12,
         );
     }
 
@@ -2483,7 +2485,7 @@ class EarningsEngineTest extends TestCase
         $withOutlier = array_merge($ordinary, [2.0]);
 
         $robust = Distributions::calculateMeanAbsoluteScale($withOutlier);
-        $sumOfSquares = sqrt(array_sum(array_map(static fn (float $x): float => $x * $x, $withOutlier)) / count($withOutlier));
+        $sumOfSquares = sqrt(array_sum(array_map(static fn(float $x): float => $x * $x, $withOutlier)) / count($withOutlier));
 
         $this->assertLessThan($sumOfSquares, $robust);
         $this->assertEqualsWithDelta(0.0, Distributions::calculateMeanAbsoluteScale([]), 1e-12);
@@ -2491,9 +2493,9 @@ class EarningsEngineTest extends TestCase
 
     private function pricingPowerMultiplier(Stock $stock, MacroStateDTO $macroState): float
     {
-        $businessModel = \App\Data\Company\Sectors::INDUSTRY_METRICS[$stock->getIndustry()]['business_model'] ?? 'none';
+        $businessModel = Sectors::INDUSTRY_METRICS[$stock->getIndustry()]['business_model'] ?? 'none';
 
-        return \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel)->getMacroPhysics($stock, $macroState)['pricing_power_multiplier'];
+        return Sectors::getBusinessModelStrategy($businessModel)->getMacroPhysics($stock, $macroState)['pricing_power_multiplier'];
     }
 
     /**
@@ -2505,8 +2507,15 @@ class EarningsEngineTest extends TestCase
     public function testBankOpensAnEarningAssetLedgerAndItsBalanceSheetBalances(): void
     {
         $macroState = new MacroStateDTO(
-            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
-            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+            corporateTaxRate: 0.21,
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield2yEma: 0.04,
+            yield5yEma: 0.042,
+            yield10yEma: 0.045,
+            equityRiskPremium: 0.05,
+            nominalGdpIndex: 1.0,
+            macroCreditSpreadEma: 0.015,
         );
 
         $captured = null;
@@ -2542,7 +2551,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('LEND', 252));
         $this->assertNotNull($captured);
 
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy('commercial_bank');
+        $strategy = Sectors::getBusinessModelStrategy('commercial_bank');
         $this->assertTrue($stock->hasEarningAssetLedger(), 'the first report opens the loan book');
         $this->assertNull($stock->getGrossPpe(), 'a bank never opens a plant ledger');
         $this->assertEqualsWithDelta(0.0, (float) $stock->getCipBalance(), 1.0, 'loans are originated, not queued as construction');
@@ -2571,7 +2580,7 @@ class EarningsEngineTest extends TestCase
             (float) $stock->getCorporateTreasury() - 5_000_000_000.0,
             $captured->operatingCashFlow + $captured->investingCashFlow + $captured->financingCashFlow,
             max(1.0, abs($assets) * 1e-6),
-            'operating, investing and financing flows reconcile to the change in cash'
+            'operating, investing and financing flows reconcile to the change in cash',
         );
     }
 
@@ -2592,14 +2601,21 @@ class EarningsEngineTest extends TestCase
             $stock->setIndustry('Banks - Diversified');
             mt_srand(20261006);
             $this->buildEngine($dispatcher)->calculate($stock, new MacroStateDTO(
-                corporateTaxRate: 0.21, policyRate: $policyRate, policyRateEma: $policyRate, yield2yEma: $policyRate, yield5yEma: $policyRate + 0.002,
-                yield10yEma: $policyRate + 0.005, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+                corporateTaxRate: 0.21,
+                policyRate: $policyRate,
+                policyRateEma: $policyRate,
+                yield2yEma: $policyRate,
+                yield5yEma: $policyRate + 0.002,
+                yield10yEma: $policyRate + 0.005,
+                equityRiskPremium: 0.05,
+                nominalGdpIndex: 1.0,
+                macroCreditSpreadEma: 0.015,
             ), EarningsEngine::resolveReportingTick('RATE', 252));
             $this->assertNotNull($captured);
 
             return $captured;
         };
-        $structuralCost = static fn (EarningsSimulationContext $ctx): float => ($ctx->fixedCosts / $ctx->committedCostScale)
+        $structuralCost = static fn(EarningsSimulationContext $ctx): float => ($ctx->fixedCosts / $ctx->committedCostScale)
             + ($ctx->baselineVariableMargin * $ctx->structuralRevenue) + $ctx->structuralDepreciation;
 
         $low = $run(0.01);
@@ -2619,8 +2635,15 @@ class EarningsEngineTest extends TestCase
     public function testCardLenderAllowanceHoldsAtItsLifetimeTargetWithoutDollarChargeOffs(): void
     {
         $macroState = new MacroStateDTO(
-            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
-            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+            corporateTaxRate: 0.21,
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield2yEma: 0.04,
+            yield5yEma: 0.042,
+            yield10yEma: 0.045,
+            equityRiskPremium: 0.05,
+            nominalGdpIndex: 1.0,
+            macroCreditSpreadEma: 0.015,
         );
         $captured = null;
         $dispatcher = new EventDispatcher();
@@ -2631,7 +2654,7 @@ class EarningsEngineTest extends TestCase
 
         $stock = $this->buildCardLender('CARD');
 
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy('credit_services');
+        $strategy = Sectors::getBusinessModelStrategy('credit_services');
         $lifetimeRate = $strategy->getThroughTheCycleCreditLossRate() * $strategy->getCreditLossHorizonYears();
 
         mt_srand(20260909);
@@ -2654,8 +2677,15 @@ class EarningsEngineTest extends TestCase
     public function testAnalystsCarryTheThroughTheCycleProvisionOfALender(): void
     {
         $macroState = new MacroStateDTO(
-            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
-            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+            corporateTaxRate: 0.21,
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield2yEma: 0.04,
+            yield5yEma: 0.042,
+            yield10yEma: 0.045,
+            equityRiskPremium: 0.05,
+            nominalGdpIndex: 1.0,
+            macroCreditSpreadEma: 0.015,
         );
         $captured = null;
         $dispatcher = new EventDispatcher();
@@ -2665,7 +2695,7 @@ class EarningsEngineTest extends TestCase
         $engine = $this->buildEngine($dispatcher);
 
         $lender = $this->buildCardLender('CARD');
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy('credit_services');
+        $strategy = Sectors::getBusinessModelStrategy('credit_services');
 
         mt_srand(20260912);
         $engine->calculate($lender, $macroState, EarningsEngine::resolveReportingTick('CARD', 252));
@@ -2676,7 +2706,7 @@ class EarningsEngineTest extends TestCase
             $strategy->getThroughTheCycleCreditLossRate() / 4.0 * $openingBook,
             $captured->expectedCreditLossProvision,
             $captured->expectedCreditLossProvision * 0.05,
-            'the estimate carries one quarter of the through-the-cycle charge on the opening book'
+            'the estimate carries one quarter of the through-the-cycle charge on the opening book',
         );
         $this->assertGreaterThan(0.0, $captured->expectedCreditLossProvision);
 
@@ -2695,8 +2725,15 @@ class EarningsEngineTest extends TestCase
     public function testCardLenderEarnsItsTargetRoeAndDoesNotMissEveryQuarterInACalmMacro(): void
     {
         $macroState = new MacroStateDTO(
-            corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
-            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+            corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield2yEma: 0.04,
+            yield5yEma: 0.042,
+            yield10yEma: 0.045,
+            equityRiskPremium: 0.05,
+            nominalGdpIndex: 1.0,
+            macroCreditSpreadEma: 0.015,
         );
         $surprises = [];
         $dispatcher = new EventDispatcher();
@@ -2731,14 +2768,28 @@ class EarningsEngineTest extends TestCase
     public function testForwardReserveIsBuiltOnceAndReleasedOnceRatherThanChargedEveryQuarter(): void
     {
         $calm = new MacroStateDTO(
-            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
-            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.013,
-            recessionProbabilityEma: 0.15
+            corporateTaxRate: 0.21,
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield2yEma: 0.04,
+            yield5yEma: 0.042,
+            yield10yEma: 0.045,
+            equityRiskPremium: 0.05,
+            nominalGdpIndex: 1.0,
+            macroCreditSpreadEma: 0.013,
+            recessionProbabilityEma: 0.15,
         );
         $stressed = new MacroStateDTO(
-            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
-            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.013,
-            recessionProbabilityEma: 0.65
+            corporateTaxRate: 0.21,
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield2yEma: 0.04,
+            yield5yEma: 0.042,
+            yield10yEma: 0.045,
+            equityRiskPremium: 0.05,
+            nominalGdpIndex: 1.0,
+            macroCreditSpreadEma: 0.013,
+            recessionProbabilityEma: 0.65,
         );
 
         $captured = null;
@@ -2748,7 +2799,7 @@ class EarningsEngineTest extends TestCase
         });
         $engine = $this->buildEngine($dispatcher);
         $stock = $this->buildCardLender('CARD');
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy('credit_services');
+        $strategy = Sectors::getBusinessModelStrategy('credit_services');
 
         $excessProvision = [];
         $regimes = [$calm, $calm, $stressed, $stressed, $stressed, $stressed, $calm, $calm];
@@ -2819,8 +2870,15 @@ class EarningsEngineTest extends TestCase
     public function testReportedCreditProvisionEqualsTheChargeThatActuallyReachedEbit(): void
     {
         $macroState = new MacroStateDTO(
-            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
-            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+            corporateTaxRate: 0.21,
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield2yEma: 0.04,
+            yield5yEma: 0.042,
+            yield10yEma: 0.045,
+            equityRiskPremium: 0.05,
+            nominalGdpIndex: 1.0,
+            macroCreditSpreadEma: 0.015,
         );
         $captured = [];
         $dispatcher = new EventDispatcher();
@@ -2848,7 +2906,7 @@ class EarningsEngineTest extends TestCase
                     -$ctx->creditLossProvision + $ctx->netLoanOriginations,
                     $closingNetBook - $openingNetBook,
                     max(1.0, abs($ctx->creditLossProvision) * 1e-6),
-                    "Q{$quarter}: the net book must move by originations less the provision, and nothing else."
+                    "Q{$quarter}: the net book must move by originations less the provision, and nothing else.",
                 );
             }
 
@@ -2862,7 +2920,7 @@ class EarningsEngineTest extends TestCase
                 $ctx->impairmentCharges,
                 $ctx->creditLossProvision,
                 max(1.0, abs($ctx->creditLossProvision) * 1e-9),
-                "Q{$quarter}: the provision added back to cash must be the provision charged to EBIT."
+                "Q{$quarter}: the provision added back to cash must be the provision charged to EBIT.",
             );
         }
     }
@@ -2889,9 +2947,17 @@ class EarningsEngineTest extends TestCase
         // A deep demand shortfall: utilization well under the NRV trigger, and a default outlook that
         // forces a receivable provision.
         $macroState = new MacroStateDTO(
-            corporateTaxRate: 0.21, outputGapEma: -0.08, policyRate: 0.01, policyRateEma: 0.01,
-            yield2yEma: 0.04, yield5yEma: 0.02, yield10yEma: 0.01, nominalGdpIndex: 0.90,
-            marketVolatilityEma: 0.45, macroCreditSpreadEma: 0.07, corporateDefaultRateEma: 0.08
+            corporateTaxRate: 0.21,
+            outputGapEma: -0.08,
+            policyRate: 0.01,
+            policyRateEma: 0.01,
+            yield2yEma: 0.04,
+            yield5yEma: 0.02,
+            yield10yEma: 0.01,
+            nominalGdpIndex: 0.90,
+            marketVolatilityEma: 0.45,
+            macroCreditSpreadEma: 0.07,
+            corporateDefaultRateEma: 0.08,
         );
 
         $stock = $this->buildMatureIndustrial('IMPR');
@@ -2923,19 +2989,19 @@ class EarningsEngineTest extends TestCase
                 $beforeCharges - ($captured->impairmentCharges - $captured->plantImpairment),
                 $captured->seasonallyAdjustedEbit,
                 max(1.0, abs($beforeCharges) * 1e-9),
-                "Q{$quarter}: the seasonally adjusted run-rate must be struck after impairments."
+                "Q{$quarter}: the seasonally adjusted run-rate must be struck after impairments.",
             );
             $this->assertEqualsWithDelta(
                 $captured->seasonallyAdjustedEbit / max(1.0, $captured->seasonallyAdjustedRevenue),
                 (float) $stock->getReportedOperatingMargin(),
                 1e-9,
-                "Q{$quarter}: and that impaired run-rate is what gets persisted for the spread and solvency tests."
+                "Q{$quarter}: and that impaired run-rate is what gets persisted for the spread and solvency tests.",
             );
             $this->assertEqualsWithDelta(
                 $captured->inventoryWriteDown + $captured->receivablesProvision,
                 $captured->impairmentCharges,
                 1.0,
-                "Q{$quarter}: an operating company's impairments are the write-down and the receivable provision."
+                "Q{$quarter}: an operating company's impairments are the write-down and the receivable provision.",
             );
         }
 
@@ -2967,7 +3033,7 @@ class EarningsEngineTest extends TestCase
         $stock->setPayables('2000000000');
         $reportingTick = EarningsEngine::resolveReportingTick('NRVA', 252);
 
-        $grossNwc = static fn (Stock $s): float => (float) $s->getReceivables() + (float) $s->getInventory() - (float) $s->getPayables();
+        $grossNwc = static fn(Stock $s): float => (float) $s->getReceivables() + (float) $s->getInventory() - (float) $s->getPayables();
 
         // Quarter 1: a depression collapses volumes below the NRV trigger.
         $depression = new MacroStateDTO(outputGapEma: -0.12, corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
@@ -2984,7 +3050,7 @@ class EarningsEngineTest extends TestCase
             $grossNwc($stock) - $grossBefore,
             $captured->deltaWorkingCapital,
             1.0,
-            'the write-down is non-cash: the working capital build is the change in the gross trade balances alone'
+            'the write-down is non-cash: the working capital build is the change in the gross trade balances alone',
         );
 
         // Quarter 2: demand recovers, the impaired stock turns, and its replacement is what costs cash.
@@ -3000,7 +3066,7 @@ class EarningsEngineTest extends TestCase
             ($grossNwc($stock) - $grossBefore) + $released,
             $captured->deltaWorkingCapital,
             1.0,
-            'replacing the cleared stock is a working capital build: the cash the write-down foretold leaves now'
+            'replacing the cleared stock is a working capital build: the cash the write-down foretold leaves now',
         );
     }
 
@@ -3021,7 +3087,7 @@ class EarningsEngineTest extends TestCase
             ResponseCurves::calculateConvexPenalty(0.10, EarningsEngine::CAPACITY_OVERTIME_CONVEXITY, EarningsEngine::CAPACITY_OVERTIME_SCALAR),
             EarningsEngine::overtimePremium(($threshold + 0.10) * $holiday, $holiday),
             1e-12,
-            'overtime is the overshoot of the deseasonalized run rate, not of the seasonal peak'
+            'overtime is the overshoot of the deseasonalized run rate, not of the seasonal peak',
         );
     }
 
@@ -3116,11 +3182,11 @@ class EarningsEngineTest extends TestCase
 
         $this->earningsEngine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('LRUN', 252));
 
-        $trailing = \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getTrueReturn($stock);
+        $trailing = Sectors::strategyFor($stock->getIndustry())->getTrueReturn($stock);
         $this->assertEqualsWithDelta(
             0.05 + ((1.0 - exp(-0.25 / 5.0)) * ($trailing - 0.05)),
             (float) $stock->getLongRunReturn(),
-            1e-4
+            1e-4,
         );
     }
 }

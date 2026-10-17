@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\FirmEconomics;
-use App\Service\Math\MacroTransmission;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Consumer Staples (Food, Beverage, Tobacco, Household Goods).
@@ -100,8 +100,14 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** One-off charge on the quarter's branded sales for a regulator's fine and legal fees (3%). */
     public const RECALL_MODERATE_PENALTY = 0.03;
 
-    public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.015; }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
 
     // --- Secular Demand ---
     /** Spending on food and beverages for off-premises consumption as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures). */
@@ -201,7 +207,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::BrandedStaplesWeight->value    => self::BRANDED_STAPLES_WEIGHT,

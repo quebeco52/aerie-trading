@@ -2,10 +2,10 @@
 
 use Symfony\Component\Dotenv\Dotenv;
 
-require dirname(__DIR__).'/vendor/autoload.php';
+require dirname(__DIR__) . '/vendor/autoload.php';
 
 if (method_exists(Dotenv::class, 'bootEnv')) {
-    (new Dotenv())->bootEnv(dirname(__DIR__).'/.env');
+    (new Dotenv())->bootEnv(dirname(__DIR__) . '/.env');
 }
 
 if ($_SERVER['APP_DEBUG']) {
@@ -14,32 +14,69 @@ if ($_SERVER['APP_DEBUG']) {
 
 // Bypass missing php-redis extension in CLI for tests
 if (!class_exists('Redis')) {
-    class Redis {
+    class Redis
+    {
         // Mirrors the real extension's pipeline mode flag; services select it by name.
         public const PIPELINE = 2;
         public const MULTI = 1;
 
         public function connect($host, $port = 6379, $timeout = 0.0, $reserved = null, $retry_interval = 0, $read_timeout = 0.0) {}
         public function get($key) {}
-        public function mGet(array $keys) { return array_fill(0, count($keys), false); }
+        public function mGet(array $keys)
+        {
+            return array_fill(0, count($keys), false);
+        }
         // Declared with phpredis' real signature: a test that stubs Redis with the extension's own types
         // is only compatible with a parent that has them, and a narrower parameter type here is a fatal.
-        public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool { return true; }
-        public function hGet($key, $field) { return false; }
-        public function hSet($key, $field, $value) { return 1; }
-        public function hGetAll($key) { return []; }
-        public function hDel($key, ...$fields) { return 0; }
-        public function hIncrByFloat(string $key, string $field, float $value): \Redis|float|false { return $value; }
+        public function set(string $key, mixed $value, mixed $options = null): Redis|string|bool
+        {
+            return true;
+        }
+        public function hGet($key, $field)
+        {
+            return false;
+        }
+        public function hSet($key, $field, $value)
+        {
+            return 1;
+        }
+        public function hGetAll($key)
+        {
+            return [];
+        }
+        public function hDel($key, ...$fields)
+        {
+            return 0;
+        }
+        public function hIncrByFloat(string $key, string $field, float $value): Redis|float|false
+        {
+            return $value;
+        }
         public function setex($key, $ttl, $val) {}
         public function del($key) {}
         public function lPush($key, $value) {}
         public function lTrim($key, $start, $stop) {}
-        public function lRange($key, $start, $end) { return []; }
+        public function lRange($key, $start, $end)
+        {
+            return [];
+        }
         public function lIndex($key, $index) {}
-        public function multi($mode = self::MULTI) { return $this; }
-        public function exec() { return []; }
-        public function publish($channel, $message) { return 0; }
-        public function flushAll(?bool $sync = null): \Redis|bool { return true; }
+        public function multi($mode = self::MULTI)
+        {
+            return $this;
+        }
+        public function exec()
+        {
+            return [];
+        }
+        public function publish($channel, $message)
+        {
+            return 0;
+        }
+        public function flushAll(?bool $sync = null): Redis|bool
+        {
+            return true;
+        }
     }
 }
 
@@ -57,7 +94,8 @@ if (!function_exists('bcadd')) {
      *
      * @return array{0: int, 1: string, 2: int}
      */
-    function __bcpoly_parse(string $num): array {
+    function __bcpoly_parse(string $num): array
+    {
         // Reject what real bcmath rejects. Stripping the offending characters instead - which is what this
         // did - meant the polyfill answered where the extension throws, and answered WRONGLY: the sole
         // caller of `(string) $someFloat` reaching bcmath hands it "1.0E-5" for 0.00001, which parsed to
@@ -68,7 +106,7 @@ if (!function_exists('bcadd')) {
         }
 
         if (!preg_match('/^[+-]?\d*(\.\d*)?$/', $num) || !preg_match('/\d/', $num)) {
-            throw new \ValueError('is not well-formed');
+            throw new ValueError('is not well-formed');
         }
 
         $sign = 1;
@@ -88,7 +126,8 @@ if (!function_exists('bcadd')) {
     }
 
     /** Compares two unsigned digit strings. */
-    function __bcpoly_cmp_digits(string $a, string $b): int {
+    function __bcpoly_cmp_digits(string $a, string $b): int
+    {
         $a = ltrim($a, '0') ?: '0';
         $b = ltrim($b, '0') ?: '0';
 
@@ -96,7 +135,8 @@ if (!function_exists('bcadd')) {
     }
 
     /** Adds two unsigned digit strings. */
-    function __bcpoly_add_digits(string $a, string $b): string {
+    function __bcpoly_add_digits(string $a, string $b): string
+    {
         $result = '';
         $carry = 0;
         for ($i = strlen($a) - 1, $j = strlen($b) - 1; $i >= 0 || $j >= 0 || $carry > 0; $i--, $j--) {
@@ -109,7 +149,8 @@ if (!function_exists('bcadd')) {
     }
 
     /** Subtracts unsigned digit string $b from $a, which must be the larger. */
-    function __bcpoly_sub_digits(string $a, string $b): string {
+    function __bcpoly_sub_digits(string $a, string $b): string
+    {
         $result = '';
         $borrow = 0;
         for ($i = strlen($a) - 1, $j = strlen($b) - 1; $i >= 0; $i--, $j--) {
@@ -122,7 +163,8 @@ if (!function_exists('bcadd')) {
     }
 
     /** Multiplies two unsigned digit strings (schoolbook). */
-    function __bcpoly_mul_digits(string $a, string $b): string {
+    function __bcpoly_mul_digits(string $a, string $b): string
+    {
         $lenA = strlen($a);
         $lenB = strlen($b);
         $columns = array_fill(0, $lenA + $lenB, 0);
@@ -141,9 +183,10 @@ if (!function_exists('bcadd')) {
     }
 
     /** Integer quotient of two unsigned digit strings (long division). */
-    function __bcpoly_div_digits(string $a, string $b): string {
+    function __bcpoly_div_digits(string $a, string $b): string
+    {
         if (__bcpoly_cmp_digits($b, '0') === 0) {
-            throw new \DivisionByZeroError('Division by zero');
+            throw new DivisionByZeroError('Division by zero');
         }
 
         $quotient = '';
@@ -166,7 +209,8 @@ if (!function_exists('bcadd')) {
      *
      * @param array{0: int, 1: string, 2: int} $value
      */
-    function __bcpoly_format(array $value, int $scale): string {
+    function __bcpoly_format(array $value, int $scale): string
+    {
         [$sign, $digits, $places] = $value;
         $scale = max(0, $scale);
 
@@ -194,7 +238,8 @@ if (!function_exists('bcadd')) {
      * @param array{0: int, 1: string, 2: int} $y
      * @return array{0: int, 1: string, 2: int}
      */
-    function __bcpoly_add_values(array $x, array $y): array {
+    function __bcpoly_add_values(array $x, array $y): array
+    {
         $places = max($x[2], $y[2]);
         $dx = $x[1] . str_repeat('0', $places - $x[2]);
         $dy = $y[1] . str_repeat('0', $places - $y[2]);
@@ -213,30 +258,34 @@ if (!function_exists('bcadd')) {
             : [$y[0], __bcpoly_sub_digits($dy, $dx), $places];
     }
 
-    function bcadd(string $num1, string $num2, int $scale = 0): string {
+    function bcadd(string $num1, string $num2, int $scale = 0): string
+    {
         return __bcpoly_format(__bcpoly_add_values(__bcpoly_parse($num1), __bcpoly_parse($num2)), $scale);
     }
 
-    function bcsub(string $num1, string $num2, int $scale = 0): string {
+    function bcsub(string $num1, string $num2, int $scale = 0): string
+    {
         $y = __bcpoly_parse($num2);
         $y[0] = -$y[0];
 
         return __bcpoly_format(__bcpoly_add_values(__bcpoly_parse($num1), $y), $scale);
     }
 
-    function bcmul(string $num1, string $num2, int $scale = 0): string {
+    function bcmul(string $num1, string $num2, int $scale = 0): string
+    {
         [$sx, $dx, $cx] = __bcpoly_parse($num1);
         [$sy, $dy, $cy] = __bcpoly_parse($num2);
 
         return __bcpoly_format([$sx * $sy, __bcpoly_mul_digits($dx, $dy), $cx + $cy], $scale);
     }
 
-    function bcdiv(string $num1, string $num2, int $scale = 0): string {
+    function bcdiv(string $num1, string $num2, int $scale = 0): string
+    {
         [$sx, $dx, $cx] = __bcpoly_parse($num1);
         [$sy, $dy, $cy] = __bcpoly_parse($num2);
 
         if (__bcpoly_cmp_digits($dy, '0') === 0) {
-            throw new \DivisionByZeroError('Division by zero in bcdiv');
+            throw new DivisionByZeroError('Division by zero in bcdiv');
         }
 
         // (dx / 10^cx) / (dy / 10^cy) at `scale` decimals, truncated: scale the numerator by
@@ -248,7 +297,8 @@ if (!function_exists('bcadd')) {
         return __bcpoly_format([$sx * $sy, __bcpoly_div_digits($numerator, $denominator), $scale], $scale);
     }
 
-    function bccomp(string $num1, string $num2, int $scale = 0): int {
+    function bccomp(string $num1, string $num2, int $scale = 0): int
+    {
         $x = __bcpoly_parse(bcadd($num1, '0', $scale));
         $y = __bcpoly_parse(bcadd($num2, '0', $scale));
 
@@ -264,4 +314,3 @@ if (!function_exists('bcadd')) {
         return __bcpoly_cmp_digits($x[1], $y[1]) * $x[0];
     }
 }
-

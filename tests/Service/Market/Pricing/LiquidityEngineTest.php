@@ -32,7 +32,7 @@ class LiquidityEngineTest extends TestCase
         float $float = 0.90,
         ?float $turnover = 1.20,
         float $volatility = 0.28,
-        ?float $currentVolatility = null
+        ?float $currentVolatility = null,
     ): Stock {
         $stock = new Stock();
         $stock->setTicker('TEST')
@@ -57,7 +57,7 @@ class LiquidityEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             (5.0e8 * 0.90 * 1.20) / FinancialConstants::TRADING_DAYS_PER_YEAR,
             $this->engine->averageDailyVolume($stock),
-            1.0
+            1.0,
         );
     }
 
@@ -208,7 +208,7 @@ class LiquidityEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             (1.0 - FinancialConstants::PERMANENT_IMPACT_SHARE) * 0.03,
             LiquidityEngine::transientImpactAfter(0.0, 0.03, 1.0 / 14400.0),
-            1e-15
+            1e-15,
         );
     }
 
@@ -224,7 +224,7 @@ class LiquidityEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             0.0,
             $this->engine->peakImpact($stock, 10000.0) + $this->engine->peakImpact($stock, -10000.0),
-            1e-15
+            1e-15,
         );
     }
 
@@ -235,7 +235,7 @@ class LiquidityEngineTest extends TestCase
 
         $this->assertGreaterThan(
             $this->engine->peakImpact($liquid, 50000.0),
-            $this->engine->peakImpact($thin, 50000.0)
+            $this->engine->peakImpact($thin, 50000.0),
         );
     }
 
@@ -256,7 +256,7 @@ class LiquidityEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $buy->executionPrice - 100.0,
             100.0 - $sell->executionPrice,
-            1e-9
+            1e-9,
         );
         $this->assertEqualsWithDelta($buy->totalCost(), $sell->totalCost(), 1e-9);
     }
@@ -308,7 +308,7 @@ class LiquidityEngineTest extends TestCase
 
         $this->assertLessThan(
             $this->engine->quote($stock, 'BUY', $quantity, 100.0)->executionPrice,
-            $this->engine->quote($stock, 'BUY', $quantity, 100.0, $selling)->executionPrice
+            $this->engine->quote($stock, 'BUY', $quantity, 100.0, $selling)->executionPrice,
         );
     }
 
@@ -336,7 +336,7 @@ class LiquidityEngineTest extends TestCase
                 $sum += $volume / $expectedDay;
             }
             $mean = array_sum($logs) / count($logs);
-            $variance = array_sum(array_map(static fn (float $x): float => ($x - $mean) ** 2, $logs)) / (count($logs) - 1);
+            $variance = array_sum(array_map(static fn(float $x): float => ($x - $mean) ** 2, $logs)) / (count($logs) - 1);
 
             return ['sd' => sqrt($variance), 'mean_ratio' => $sum / count($logs)];
         };
@@ -401,7 +401,7 @@ class LiquidityEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $this->engine->averageDailyVolume($stock) * LiquidityEngine::MAX_ORDER_ADV_MULTIPLE,
             $this->engine->maximumOrderSize($stock),
-            1e-9
+            1e-9,
         );
     }
 
@@ -479,7 +479,7 @@ class LiquidityEngineTest extends TestCase
             $this->engine->averageDailyVolume($stock),
             $total / 200.0,
             $this->engine->averageDailyVolume($stock) * 0.05,
-            'Lognormal volume must be mean-corrected, not biased high by its own dispersion.'
+            'Lognormal volume must be mean-corrected, not biased high by its own dispersion.',
         );
     }
 

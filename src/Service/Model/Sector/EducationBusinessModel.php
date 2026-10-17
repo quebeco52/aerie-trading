@@ -5,22 +5,20 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
-use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Higher Education, EdTech & Professional Workforce Upskilling.
- * 
+ *
  * Financial Physics:
  * - Counter-Cyclical Enrollment: During economic downturns and recessions, student enrollment
  *   in degrees and professional certifications surges as unemployed workers seek retraining.
@@ -70,14 +68,38 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.40;
     public const BASE_COVERAGE_ERROR = 0.06;
 
-        public function getMinIcr(): float { return 2.5; }
-    public function getWholesaleLeverageLimit(): float { return 2.0; }
-    public function getDividendCrisisIcr(): float { return 1.75; }
-    public function getBuybackMinIcr(): float { return 2.5; }
-    public function getReversionSpeed(): float { return 0.1; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.05; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.2; }
+    public function getMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.0;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 1.75;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.1;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.05;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.2;
+    }
 
     // --- Secular Demand ---
     /** Educational services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -91,8 +113,11 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         return MacroEngine::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-    
-    public function getCapexCyclicality(): float { return 0.10; }
+
+    public function getCapexCyclicality(): float
+    {
+        return 0.10;
+    }
 
     // --- Stream Weights ---
     /** Baseline fraction of revenue derived from degree programs and student tuition. */
@@ -117,7 +142,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     /** Corporate training volume per unit of output gap before cyclicality: training budgets are among the first discretionary cuts. */
     public const ENTERPRISE_TRAINING_GDP_SENSITIVITY = 1.50;
 
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
@@ -159,7 +184,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         return $macroState->outputGapEma * self::ENTERPRISE_TRAINING_GDP_SENSITIVITY * $this->getOperatingCyclicality($stock);
     }
 
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::DegreeTuitionWeight->value      => self::DEGREE_TUITION_WEIGHT,
@@ -200,8 +225,12 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $lmsZ        = $streams->generateZ('digital_lms_licensing', 0.60);
 
         // Tuition is billed at enrollment and recognized ratably over the term from deferred revenue.
-        $tuitionBook = $streams->recognizeBacklog('degree_tuition_enrollment', $expectedRevenue * $tuitionWeight,
-            max(0.0, 1.0 + ($tuitionZ * ($baselineVol * self::TUITION_VARIANCE_SCALAR)) + $counterCyclicalEnrollmentBoost), self::TUITION_RECOGNITION_RATE);
+        $tuitionBook = $streams->recognizeBacklog(
+            'degree_tuition_enrollment',
+            $expectedRevenue * $tuitionWeight,
+            max(0.0, 1.0 + ($tuitionZ * ($baselineVol * self::TUITION_VARIANCE_SCALAR)) + $counterCyclicalEnrollmentBoost),
+            self::TUITION_RECOGNITION_RATE,
+        );
         $tuitionRevenue    = $tuitionBook['revenue'];
         $enterpriseRevenue = max(0.0, $expectedRevenue * $enterpriseWeight * (1.0 + ($enterpriseZ * ($baselineVol * self::ENTERPRISE_VARIANCE_SCALAR)) + $proCyclicalEnterpriseShift));
         $lmsRevenue        = max(0.0, $expectedRevenue * $lmsWeight        * (1.0 + ($lmsZ * ($baselineVol * self::LMS_VARIANCE_SCALAR))));
@@ -220,10 +249,10 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $tuitionWeight * self::TUITION_GOVERNMENT_SPENDING_SENSITIVITY, $clampedMargin, $actualRevenue);
 
-        $observableShockZ = ($tuitionZ * $tuitionWeight * self::TUITION_VARIANCE_SCALAR * $baselineVol) +
-            ($enterpriseZ * $enterpriseWeight * self::ENTERPRISE_VARIANCE_SCALAR * $baselineVol) +
-            ($counterCyclicalEnrollmentBoost * $tuitionWeight) +
-            ($proCyclicalEnterpriseShift * $enterpriseWeight);
+        $observableShockZ = ($tuitionZ * $tuitionWeight * self::TUITION_VARIANCE_SCALAR * $baselineVol)
+            + ($enterpriseZ * $enterpriseWeight * self::ENTERPRISE_VARIANCE_SCALAR * $baselineVol)
+            + ($counterCyclicalEnrollmentBoost * $tuitionWeight)
+            + ($proCyclicalEnterpriseShift * $enterpriseWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -233,7 +262,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-                    kpis: ['enrollment_to_revenue' => $tuitionBook['book_to_bill'], 'deferred_tuition_quarters' => $tuitionBook['backlog_quarters']],
+            kpis: ['enrollment_to_revenue' => $tuitionBook['book_to_bill'], 'deferred_tuition_quarters' => $tuitionBook['backlog_quarters']],
         );
     }
 

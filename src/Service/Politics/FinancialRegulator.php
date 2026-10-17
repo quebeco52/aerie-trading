@@ -73,7 +73,7 @@ final class FinancialRegulator
                 $term,
                 [CouncilAppointments::AXIS_REGULATION => CouncilAppointments::median($state->councilRegulationStances)],
                 CouncilAppointments::reservedNames($state),
-                $math
+                $math,
             );
             self::seatHead($state, $chosen, $term);
             $state->requirementPhaseFrom = $state->bankCapitalRequirement;
@@ -84,7 +84,7 @@ final class FinancialRegulator
         $state->bankCapitalRequirement = self::requirementInForce(
             self::requirement($state->regulatorStance),
             $state->requirementPhaseFrom,
-            $time - $state->requirementPhaseStart
+            $time - $state->requirementPhaseStart,
         );
     }
 
@@ -101,7 +101,7 @@ final class FinancialRegulator
             $term,
             [CouncilAppointments::AXIS_REGULATION => CouncilAppointments::median($state->councilRegulationStances)],
             CouncilAppointments::reservedNames($state),
-            $math
+            $math,
         );
         if ($term < 0.0) {
             $chosen['name'] = AerieCouncil::OPENING_REGULATOR;

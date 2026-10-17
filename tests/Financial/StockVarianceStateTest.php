@@ -58,7 +58,7 @@ final class StockVarianceStateTest extends TestCase
 
         for ($tick = 0; $tick < 504; $tick++) {
             $volatility = $engine->calculateNextPrice(
-                $this->context($volatility, self::CALM_MARKET_VOL, self::CALM_MARKET_VOL, 0.0, 1.0e-6, self::DAILY, $announcementVariance)
+                $this->context($volatility, self::CALM_MARKET_VOL, self::CALM_MARKET_VOL, 0.0, 1.0e-6, self::DAILY, $announcementVariance),
             )['next_volatility'];
         }
 
@@ -79,7 +79,7 @@ final class StockVarianceStateTest extends TestCase
             $this->targetVariance(self::CALM_MARKET_VOL) - ($idiosyncraticTarget * 0.25),
             $this->settledVariance(1.0),
             1.0e-5,
-            'An outsized announcement record is held to a quarter of the idiosyncratic budget.'
+            'An outsized announcement record is held to a quarter of the idiosyncratic budget.',
         );
     }
 
@@ -104,7 +104,7 @@ final class StockVarianceStateTest extends TestCase
         self::assertEqualsWithDelta(
             self::LONG_TERM_VOLATILITY ** 2,
             MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA) + ((self::BETA * $anchor) ** 2) + $jump,
-            1e-12
+            1e-12,
         );
         self::assertSame(0.0, MarketEngine::systemicJumpMoments(0.0)['variance']);
         self::assertEqualsWithDelta($this->targetVariance(self::CALM_MARKET_VOL), $this->settledVariance(0.0), 1.0e-5, 'and the total settles on the configured variance');
@@ -160,7 +160,7 @@ final class StockVarianceStateTest extends TestCase
                 : self::CALM_MARKET_VOL + (($marketVol - self::CALM_MARKET_VOL) * exp(-2.0 * self::DAILY));
 
             $volatility = $engine->calculateNextPrice(
-                $this->context($volatility, $marketVol, $prior, 0.0, 1.0e-6, self::DAILY)
+                $this->context($volatility, $marketVol, $prior, 0.0, 1.0e-6, self::DAILY),
             )['next_volatility'];
 
             $target = $longRunResidual * MarketEngine::commonIdiosyncraticVarianceScale($marketVol);
@@ -230,7 +230,7 @@ final class StockVarianceStateTest extends TestCase
 
             for ($tick = 0; $tick < $ticks; $tick++) {
                 $volatility = $engine->calculateNextPrice(
-                    $this->context($volatility, self::CALM_MARKET_VOL, self::CALM_MARKET_VOL, $lambda, 1.0e-6, self::DAILY)
+                    $this->context($volatility, self::CALM_MARKET_VOL, self::CALM_MARKET_VOL, $lambda, 1.0e-6, self::DAILY),
                 )['next_volatility'];
                 $sum += $volatility * $volatility;
 
@@ -241,14 +241,14 @@ final class StockVarianceStateTest extends TestCase
             }
 
             $mean = array_sum($batchMeans) / count($batchMeans);
-            $spread = array_sum(array_map(static fn (float $m): float => ($m - $mean) ** 2, $batchMeans)) / (count($batchMeans) - 1);
+            $spread = array_sum(array_map(static fn(float $m): float => ($m - $mean) ** 2, $batchMeans)) / (count($batchMeans) - 1);
             $standardError = sqrt($spread / count($batchMeans));
 
             self::assertEqualsWithDelta(
                 $this->targetVariance(self::CALM_MARKET_VOL),
                 $mean,
                 4.0 * $standardError,
-                sprintf('lambda %.1f: stationary variance off target.', $lambda)
+                sprintf('lambda %.1f: stationary variance off target.', $lambda),
             );
         }
     }
@@ -276,7 +276,7 @@ final class StockVarianceStateTest extends TestCase
         self::assertEqualsWithDelta(
             $lambda * $perUnitJump / $kappa,
             MarketEngine::varianceJumpLoad($lambda, $kappa, 1.0e-7),
-            1.0e-6
+            1.0e-6,
         );
     }
 }

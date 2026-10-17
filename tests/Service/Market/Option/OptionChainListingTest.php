@@ -6,8 +6,8 @@ namespace App\Tests\Service\Market\Option;
 
 use App\Entity\OptionContract;
 use App\Entity\Stock;
-use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Option\OptionChainService;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
 use Doctrine\DBAL\Connection;
@@ -44,14 +44,14 @@ class OptionChainListingTest extends TestCase
                 $this->lookupParams[] = $params;
 
                 return $existing;
-            }
+            },
         );
         $connection->method('executeStatement')->willReturnCallback(
             function (string $sql, array $params = []): int {
                 $this->sent[] = [$sql, $params];
 
                 return 1;
-            }
+            },
         );
 
         $em = $this->createStub(EntityManagerInterface::class);
@@ -76,8 +76,8 @@ class OptionChainListingTest extends TestCase
 
     public function testEveryColumnTheTableRequiresIsNamedByTheListingWrite(): void
     {
-        $namer = static fn (string $property): string => strtolower(
-            (string) preg_replace('/([a-z])([A-Z])/', '$1_$2', $property)
+        $namer = static fn(string $property): string => strtolower(
+            (string) preg_replace('/([a-z])([A-Z])/', '$1_$2', $property),
         );
 
         $required = [];
@@ -194,7 +194,7 @@ class OptionChainListingTest extends TestCase
         $this->assertSame(
             OptionChainService::listedSerials($currentTime),
             array_values($this->lookupParams[0]['serials']),
-            'The read must cover exactly the serials the pass can write — no fewer, or a rewind duplicates a symbol.'
+            'The read must cover exactly the serials the pass can write — no fewer, or a rewind duplicates a symbol.',
         );
     }
 

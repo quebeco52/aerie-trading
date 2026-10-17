@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
-use App\Service\Model\Sector\CommercialBankBusinessModel;
 
 class ShadowBankBusinessModelTest extends TestCase
 {
@@ -36,7 +36,7 @@ class ShadowBankBusinessModelTest extends TestCase
             outputGapEma: 0.01,
             policyRateEma: 0.05,
             yield30yEma: 0.065,
-            macroCreditSpreadEma: 0.02
+            macroCreditSpreadEma: 0.02,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -46,7 +46,7 @@ class ShadowBankBusinessModelTest extends TestCase
             fixedCosts: 80_000_000.0,
             baselineVol: 0.12,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('origination_fees', $result->streamRevenue);
@@ -60,7 +60,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $result->actualRevenue,
             $result->streamRevenue['origination_fees'] + $result->streamRevenue['direct_lending'],
-            1.0
+            1.0,
         );
     }
 
@@ -86,7 +86,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             ($book * $bookYield) + ($excessCash * $this->model->calculateCashYield($opening)),
             $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility),
-            1_000.0
+            1_000.0,
         );
     }
 
@@ -141,7 +141,7 @@ class ShadowBankBusinessModelTest extends TestCase
             $this->model->getTargetMetrics($stock, $opening, $this->mathUtility)['baseline_roic'],
             $this->model->getTargetMetrics($stock, $raised, $this->mathUtility)['baseline_roic'],
             1e-12,
-            'the fee target is not re-solved to hold the return'
+            'the fee target is not re-solved to hold the return',
         );
     }
 
@@ -172,7 +172,7 @@ class ShadowBankBusinessModelTest extends TestCase
     {
         $macro = new MacroStateDTO(
             policyRateEma: 0.04,
-            yield30yEma: 0.055
+            yield30yEma: 0.055,
         );
 
         $allTermNotes = new Stock();
@@ -189,13 +189,13 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertSame(
             (float) $allTermNotes->getTotalDebt(),
             (float) $partlyOnTheRevolver->getTotalDebt(),
-            'fixture guard: both lenders must carry the same total funding'
+            'fixture guard: both lenders must carry the same total funding',
         );
 
         $this->assertEqualsWithDelta(
             $this->model->calculateInterestIncome($allTermNotes, $macro, $this->mathUtility),
             $this->model->calculateInterestIncome($partlyOnTheRevolver, $macro, $this->mathUtility),
-            1_000_000.0
+            1_000_000.0,
         );
     }
 
@@ -224,7 +224,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             (1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS) * (0.60 * ShadowBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE + 0.40 * ShadowBankBusinessModel::BUSINESS_CHARGE_OFF_RATE),
             $this->model->getThroughTheCycleCreditLossRate($pool),
-            1e-12
+            1e-12,
         );
         $this->assertEqualsWithDelta($this->model->getThroughTheCycleCreditLossRate($pool), $this->model->getThroughTheCycleCreditLossRate(), 1e-12);
     }
@@ -258,7 +258,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $depressedResult->streamRevenue['origination_fees'],
             $boomResult->streamRevenue['origination_fees'],
-            'Residential property index growth should expand mortgage origination fee volume.'
+            'Residential property index growth should expand mortgage origination fee volume.',
         );
 
         $this->assertGreaterThan($boomRate, $depressedRate, 'Homes below the price they were lent against lose more on each mortgage default (Frye 2000).');
@@ -273,8 +273,14 @@ class ShadowBankBusinessModelTest extends TestCase
         $stock = $this->pool();
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $origination = fn (float $policyRate): float => $this->model->computeActualFinancials(
-            $stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, new MacroStateDTO(policyRateEma: $policyRate), $mathMock
+        $origination = fn(float $policyRate): float => $this->model->computeActualFinancials(
+            $stock,
+            100_000_000.0,
+            0.50,
+            20_000_000.0,
+            0.0,
+            new MacroStateDTO(policyRateEma: $policyRate),
+            $mathMock,
         )->streamRevenue['origination_fees'];
         $neutralPolicyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
 
@@ -306,7 +312,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $this->model->calculateInterestIncome($stock, $calmMacro, $this->mathUtility),
             $this->model->calculateInterestIncome($stock, $tedSpikeMacro, $this->mathUtility),
-            1.0
+            1.0,
         );
     }
 
@@ -328,7 +334,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $neutralResult->streamRevenue['direct_lending'],
             $tighteningResult->streamRevenue['direct_lending'],
-            'Commercial bank credit tightening (SLOOS) drives corporate borrowers to private credit, expanding direct lending volume.'
+            'Commercial bank credit tightening (SLOOS) drives corporate borrowers to private credit, expanding direct lending volume.',
         );
     }
 
@@ -340,12 +346,12 @@ class ShadowBankBusinessModelTest extends TestCase
 
         $benignMacro = new MacroStateDTO(
             corporateDefaultRateEma: 0.018,
-            recessionProbabilityEma: 0.05
+            recessionProbabilityEma: 0.05,
         );
 
         $stressMacro = new MacroStateDTO(
             corporateDefaultRateEma: 0.080,
-            recessionProbabilityEma: 0.65
+            recessionProbabilityEma: 0.65,
         );
 
         [, $benignRate] = $this->chargeOffs($stock, $benignMacro);
@@ -355,7 +361,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $this->model->getForwardCreditLossMultiplier($stock, $benignMacro),
             $this->model->getForwardCreditLossMultiplier($stock, $stressMacro),
-            'Forward recession risk raises the reserve target.'
+            'Forward recession risk raises the reserve target.',
         );
     }
 
@@ -370,7 +376,7 @@ class ShadowBankBusinessModelTest extends TestCase
             recessionProbabilityEma: 0.15, // Baseline 15%
             yield30yEma: 0.055,
             policyRateEma: 0.040,
-            interbankLiquiditySpreadEma: 0.0010
+            interbankLiquiditySpreadEma: 0.0010,
         );
 
         $widenedMacro = new MacroStateDTO(
@@ -378,7 +384,7 @@ class ShadowBankBusinessModelTest extends TestCase
             recessionProbabilityEma: 0.15,
             yield30yEma: 0.055,
             policyRateEma: 0.040,
-            interbankLiquiditySpreadEma: 0.0010
+            interbankLiquiditySpreadEma: 0.0010,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -393,12 +399,12 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $this->model->getForwardCreditLossMultiplier($stock, $neutralMacro),
             $this->model->getForwardCreditLossMultiplier($stock, $widenedMacro),
-            'Widened credit spread must raise the forward lifetime loss estimate above baseline.'
+            'Widened credit spread must raise the forward lifetime loss estimate above baseline.',
         );
         $this->assertEqualsWithDelta(
             0.020 * ShadowBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY,
             $this->model->getForwardCreditLossMultiplier($stock, $widenedMacro) - $this->model->getForwardCreditLossMultiplier($stock, $neutralMacro),
-            1e-9
+            1e-9,
         );
     }
 }

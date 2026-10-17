@@ -28,7 +28,7 @@ class ScreenerController extends AbstractController
              FROM corporate_report cr
              INNER JOIN (
                  SELECT stock_id, MAX(recorded_at) AS latest_at FROM corporate_report GROUP BY stock_id
-             ) latest ON latest.stock_id = cr.stock_id AND latest.latest_at = cr.recorded_at'
+             ) latest ON latest.stock_id = cr.stock_id AND latest.latest_at = cr.recorded_at',
         );
         foreach ($rows as $row) {
             $latestReports[(int) $row['stock_id']] = $row;
@@ -39,7 +39,7 @@ class ScreenerController extends AbstractController
             $price = (float) $stock->getPrice();
             $shares = (float) $stock->getSharesOutstanding();
             $eps = (float) $stock->getEarningsPerShare();
-            
+
             $marketCap = $price * $shares;
             $peRatio = $eps > 0 ? $price / $eps : null;
             $dividendYield = $price > 0 ? (((float) $stock->getLastDividend() * 4) / $price) * 100 : 0.0;
@@ -48,8 +48,8 @@ class ScreenerController extends AbstractController
 
             $businessModel = \App\Data\Company\Sectors::businessModelFor($stock->getIndustry());
             $isFinancial = \App\Data\Company\Sectors::isFinancial($businessModel);
-            $effectiveRoic = $isFinancial 
-                ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
+            $effectiveRoic = $isFinancial
+                ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe())
                 : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
 
             // Net debt to EBITDA is the leverage ratio lenders actually covenant on. Deposits are a bank's
@@ -73,7 +73,7 @@ class ScreenerController extends AbstractController
                 'marketCap'    => $marketCap,
                 'peRatio'      => $peRatio,
                 'eps'          => $eps,
-                'dividendYield'=> $dividendYield,
+                'dividendYield' => $dividendYield,
                 'creditRating' => $stock->getCreditRating(),
                 'dividendAristocrat' => $stock->isDividendAristocrat(),
                 'currentRoic'  => $effectiveRoic,

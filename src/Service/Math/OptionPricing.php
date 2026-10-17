@@ -56,7 +56,7 @@ final class OptionPricing
         float $volatility,
         float $riskFreeRate,
         float $dividendYield,
-        float $timeToExpiry
+        float $timeToExpiry,
     ): ?array {
         if ($spot <= 0.0 || $strike <= 0.0 || $timeToExpiry < self::MIN_OPTION_TIME_TO_EXPIRY) {
             return null;
@@ -101,7 +101,7 @@ final class OptionPricing
         float $riskFreeRate,
         float $dividendYield,
         float $timeToExpiry,
-        bool $isCall
+        bool $isCall,
     ): float {
         $deviates = self::calculateBlackScholesDeviates(
             $spot,
@@ -109,7 +109,7 @@ final class OptionPricing
             $volatility,
             $riskFreeRate,
             $dividendYield,
-            $timeToExpiry
+            $timeToExpiry,
         );
 
         if ($deviates === null) {
@@ -153,7 +153,7 @@ final class OptionPricing
         float $riskFreeRate,
         float $dividendYield,
         float $timeToExpiry,
-        bool $isCall
+        bool $isCall,
     ): array {
         $deviates = self::calculateBlackScholesDeviates(
             $spot,
@@ -161,7 +161,7 @@ final class OptionPricing
             $volatility,
             $riskFreeRate,
             $dividendYield,
-            $timeToExpiry
+            $timeToExpiry,
         );
 
         if ($deviates === null) {
@@ -232,7 +232,7 @@ final class OptionPricing
         float $dividendYield,
         float $timeToExpiry,
         bool $isCall,
-        float $guess = 0.25
+        float $guess = 0.25,
     ): float {
         if ($timeToExpiry < self::MIN_OPTION_TIME_TO_EXPIRY || $spot <= 0.0 || $strike <= 0.0) {
             return self::MIN_OPTION_VOLATILITY;
@@ -342,7 +342,7 @@ final class OptionPricing
         float $pUp,
         float $etaUp,
         float $etaDown,
-        float $horizonYears
+        float $horizonYears,
     ): array {
         return self::calculateMultiJumpDiffusionShape($diffusionVariance, [['lambda' => $lambda, 'p_up' => $pUp, 'eta_up' => $etaUp, 'eta_down' => $etaDown]], $horizonYears);
     }
@@ -412,7 +412,7 @@ final class OptionPricing
         float $atmVolatility,
         float $d1,
         float $skewness,
-        float $excessKurtosis
+        float $excessKurtosis,
     ): float {
         $multiplier = 1.0
             - (($skewness / 6.0) * $d1)
@@ -420,7 +420,7 @@ final class OptionPricing
 
         $multiplier = max(
             1.0 - self::MAX_GRAM_CHARLIER_VOL_DEVIATION,
-            min(1.0 + self::MAX_GRAM_CHARLIER_VOL_DEVIATION, $multiplier)
+            min(1.0 + self::MAX_GRAM_CHARLIER_VOL_DEVIATION, $multiplier),
         );
 
         return max(self::MIN_OPTION_VOLATILITY, min(self::MAX_OPTION_VOLATILITY, $atmVolatility * $multiplier));
@@ -455,7 +455,7 @@ final class OptionPricing
         float $underlyingPrice,
         float $strike,
         float $premium,
-        bool $isCall
+        bool $isCall,
     ): float {
         $outOfTheMoney = $isCall
             ? max(0.0, $strike - $underlyingPrice)
@@ -465,7 +465,7 @@ final class OptionPricing
 
         $charge = max(
             (self::SHORT_OPTION_UNDERLYING_REQUIREMENT * $underlyingPrice) - $outOfTheMoney,
-            self::SHORT_OPTION_MINIMUM_REQUIREMENT * $floorBase
+            self::SHORT_OPTION_MINIMUM_REQUIREMENT * $floorBase,
         );
 
         return max(0.0, $premium) + max(0.0, $charge);
@@ -496,7 +496,7 @@ final class OptionPricing
         float $forward,
         float $atmStrike,
         float $riskFreeRate,
-        float $timeToExpiry
+        float $timeToExpiry,
     ): float {
         $count = count($strip);
 

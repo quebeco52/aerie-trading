@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\District;
 
-use App\Data\District\DistrictMap;
 use App\Data\Company\Sectors;
 use App\Data\Company\StockInfo;
+use App\Data\District\DistrictMap;
 use App\DTO\DistrictCanvasDTO;
 use App\DTO\DistrictHeightEnvelope;
 use App\DTO\DistrictInstitutionDTO;
@@ -35,8 +35,7 @@ class DistrictMapBuilder
 
     public function __construct(
         private readonly DistrictConduitResolver $conduitResolver,
-    ) {
-    }
+    ) {}
 
     /**
      * Assembles the ordered plot list for the street, pairing composed geometry with live stocks.
@@ -345,7 +344,7 @@ class DistrictMapBuilder
             'x' => $run['x'],
             'width' => $run['width'],
             'district' => $run['district'],
-            'sectors' => array_values(array_filter(array_keys($run['sectors']), static fn (string $sector): bool => $sector !== '')),
+            'sectors' => array_values(array_filter(array_keys($run['sectors']), static fn(string $sector): bool => $sector !== '')),
             'label' => $name !== '' && $labelWidth <= $run['width'] ? $name : null,
         ];
     }
@@ -393,7 +392,7 @@ class DistrictMapBuilder
             - (($count - 1) * DistrictMap::FRONTAGE_GAP);
         $width = (int) min(
             DistrictMap::MAX_INSTITUTION_WIDTH,
-            max(DistrictMap::MIN_INSTITUTION_WIDTH, $available / $count)
+            max(DistrictMap::MIN_INSTITUTION_WIDTH, $available / $count),
         );
 
         $institutions = [];
@@ -566,7 +565,7 @@ class DistrictMapBuilder
     public function lightWindows(array $windowKeys, float $litShare): array
     {
         return array_map(
-            static fn (array $row): array => array_map(static fn (float $key): bool => $key < $litShare, $row),
+            static fn(array $row): array => array_map(static fn(float $key): bool => $key < $litShare, $row),
             $windowKeys,
         );
     }

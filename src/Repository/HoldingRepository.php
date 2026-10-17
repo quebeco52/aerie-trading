@@ -74,7 +74,7 @@ class HoldingRepository
     {
         return $this->entityManager
             ->createQuery(
-                'SELECT uo, oc, s FROM ' . UserOption::class . ' uo JOIN uo.contract oc JOIN oc.stock s WHERE uo.user = :user'
+                'SELECT uo, oc, s FROM ' . UserOption::class . ' uo JOIN uo.contract oc JOIN oc.stock s WHERE uo.user = :user',
             )
             ->setParameter('user', $user)
             ->getResult();

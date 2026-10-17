@@ -168,7 +168,7 @@ final class AnchorStakeLedger
         }
 
         $holder->setTotalEquity(
-            \bcsub(\bcadd($holder->getTotalEquity(), $unrealised, 4), self::decimal($deferredChange), 4)
+            \bcsub(\bcadd($holder->getTotalEquity(), $unrealised, 4), self::decimal($deferredChange), 4),
         );
 
         return (float) $unrealised;

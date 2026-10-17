@@ -59,7 +59,7 @@ final class MacroStateCycleLabelTest extends TestCase
             $this->assertStringContainsString(
                 'economicCycleLabel()',
                 $source,
-                "{$path} must name the cycle through the shared definition."
+                "{$path} must name the cycle through the shared definition.",
             );
         }
 
@@ -67,7 +67,7 @@ final class MacroStateCycleLabelTest extends TestCase
             $this->assertStringNotContainsString(
                 "economy_state",
                 (string) file_get_contents($root . $path),
-                'The dead Redis key must not come back.'
+                'The dead Redis key must not come back.',
             );
         }
     }

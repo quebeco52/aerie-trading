@@ -6,7 +6,6 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LogisticsBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -30,13 +29,13 @@ class LogisticsBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             freightRateIndexEma: 100.0,
-            energyPriceIndexEma: 100.0
+            energyPriceIndexEma: 100.0,
         );
 
         $highFreightMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             freightRateIndexEma: 150.0, // 50% freight rate surge
-            energyPriceIndexEma: 100.0
+            energyPriceIndexEma: 100.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -49,7 +48,7 @@ class LogisticsBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $baseMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $highFreightResult = $this->model->computeActualFinancials(
@@ -59,7 +58,7 @@ class LogisticsBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $highFreightMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertArrayHasKey('dedicated_fleet_contracts', $baseResult->streamRevenue);
@@ -83,7 +82,7 @@ class LogisticsBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(
             outputGapEma: 0.02,
             inflationEma: 0.03,
-            tipsBreakevenEma: 0.03
+            tipsBreakevenEma: 0.03,
         );
 
         $physics = $this->model->getMacroPhysics($stock, $macro);

@@ -5,23 +5,22 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
+use App\DTO\MacroStateDTO;
 
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
-use App\Service\Math\MathUtility;
-use App\Service\Math\Distributions;
-use App\Service\Model\StreamContext;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Telecommunications (Wireless, Broadband, Fiber).
- * 
+ *
  * Financial Physics:
  * - High Barrier to Entry / Oligopoly: Revenue is dominated by ultra-sticky recurring subscriptions.
  * - The Churn Wars: Because the market is saturated, growth only comes from stealing competitors' customers via margin-crushing promotions.
@@ -82,7 +81,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
      */
     private static function blendDeviceSeason(float $equipmentShare): array
     {
-        return array_map(static fn (float $season): float => 1.0 + ($equipmentShare * ($season - 1.0)), self::EQUIPMENT_SEASONALITY);
+        return array_map(static fn(float $season): float => 1.0 + ($equipmentShare * ($season - 1.0)), self::EQUIPMENT_SEASONALITY);
     }
 
     // --- Balance Sheet Realism ---
@@ -93,11 +92,26 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.50; // Subscription metrics are reported quarterly
     public const BASE_COVERAGE_ERROR = 0.05;
 
-        public function getWholesaleLeverageLimit(): float { return 2.0; }
-    public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.05; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.25; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.0;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.05;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.25;
+    }
 
     // --- Secular Demand ---
     /** Broadcasting and telecommunications value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -312,7 +326,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $subscriptionCostRatio = $subscriptionWeight > 0.0 ? max(0.0, $realizedVariableMargin - ($equipmentCosts * $equipmentCostScale)) / $subscriptionWeight : 0.0;
         $actualVariableCosts = ($subscriptionVolume * $subscriptionCostRatio) + ($equipmentRevenue * $equipmentCostRatio);
         $effectiveMargin = $actualRevenue > 0.0 ? $actualVariableCosts / $actualRevenue : $realizedVariableMargin;
-        $seasonalCostRatio = static fn (int $q): float => (($subscriptionWeight * $subscriptionCostRatio) + ($equipmentWeight * self::EQUIPMENT_SEASONALITY[$q] * $equipmentCostRatio))
+        $seasonalCostRatio = static fn(int $q): float => (($subscriptionWeight * $subscriptionCostRatio) + ($equipmentWeight * self::EQUIPMENT_SEASONALITY[$q] * $equipmentCostRatio))
             / max(0.01, $subscriptionWeight + ($equipmentWeight * self::EQUIPMENT_SEASONALITY[$q]));
         $seasonalCostRatioShift = $quarter !== null ? $seasonalCostRatio($quarter) - $seasonalCostRatio(($quarter + 3) % 4) : 0.0;
 
@@ -331,8 +345,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
 
         // Net adds are reported every quarter and tracked closely; equipment sales carry standard retail visibility.
         $subscriberMove = ($subscribers / max(0.01, $openingSubscribers)) - 1.0;
-        $observableShockZ = ($subscriberMove * $subscriptionWeight * self::NET_ADDS_VISIBILITY) +
-            ($equipmentZ * $equipmentWeight * self::EQUIPMENT_VARIANCE_SCALAR * self::EQUIPMENT_VISIBILITY * $baselineVol);
+        $observableShockZ = ($subscriberMove * $subscriptionWeight * self::NET_ADDS_VISIBILITY)
+            + ($equipmentZ * $equipmentWeight * self::EQUIPMENT_VARIANCE_SCALAR * self::EQUIPMENT_VISIBILITY * $baselineVol);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

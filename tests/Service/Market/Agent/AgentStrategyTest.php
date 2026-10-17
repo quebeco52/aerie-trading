@@ -31,7 +31,7 @@ class AgentStrategyTest extends TestCase
         float $volatility = 0.0,
         ?float $marketMispricing = null,
         float $passiveOwnership = 1.0,
-        float $recentMonth = 0.0
+        float $recentMonth = 0.0,
     ): AgentMarketViewDTO {
         return new AgentMarketViewDTO(
             ticker: 'TEST',
@@ -120,7 +120,7 @@ class AgentStrategyTest extends TestCase
         $this->assertEqualsWithDelta(
             MomentumStrategy::AGENT_MOMENTUM_GAIN * 0.10,
             $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.0), []),
-            1e-12
+            1e-12,
         );
         $this->assertGreaterThan(0.0, $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.04), []));
     }
@@ -175,7 +175,7 @@ class AgentStrategyTest extends TestCase
         $this->assertEqualsWithDelta(
             $base * (1.0 - IndexFundStrategy::AGENT_INDEX_FLOW_SENSITIVITY),
             $strategy->signal($this->view(conditions: 1.0), []),
-            1e-12
+            1e-12,
         );
     }
 
@@ -221,7 +221,7 @@ class AgentStrategyTest extends TestCase
         $this->assertSame(0.0, $view->withAnnualizedVolatility(0.25)->passiveOwnershipMultiple);
         $this->assertSame(
             0.0,
-            $view->withMarketLogMispricing(0.01)->withAnnualizedVolatility(0.25)->passiveOwnershipMultiple
+            $view->withMarketLogMispricing(0.01)->withAnnualizedVolatility(0.25)->passiveOwnershipMultiple,
         );
     }
 
@@ -333,8 +333,8 @@ class AgentStrategyTest extends TestCase
     public function testEveryStrategyHasItsOwnIdentifier(): void
     {
         $identifiers = array_map(
-            static fn (object $s): string => $s->identifier(),
-            [new FundamentalistStrategy(), new MomentumStrategy(), new IndexFundStrategy(), new MarketMakerStrategy()]
+            static fn(object $s): string => $s->identifier(),
+            [new FundamentalistStrategy(), new MomentumStrategy(), new IndexFundStrategy(), new MarketMakerStrategy()],
         );
 
         $this->assertSame($identifiers, array_unique($identifiers));
@@ -407,7 +407,7 @@ class AgentStrategyTest extends TestCase
         $strategy = new RelativeValueStrategy();
         $prices = [92.0, 97.0, 103.0, 108.0];
 
-        $mispricings = array_map(fn (float $price): float => $this->view(price: $price, fairValue: 100.0)->logMispricing(), $prices);
+        $mispricings = array_map(fn(float $price): float => $this->view(price: $price, fairValue: 100.0)->logMispricing(), $prices);
         $average = array_sum($mispricings) / count($mispricings);
 
         $total = 0.0;

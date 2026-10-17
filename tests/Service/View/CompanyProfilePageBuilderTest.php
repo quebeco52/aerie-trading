@@ -6,8 +6,8 @@ namespace App\Tests\Service\View;
 
 use App\Data\Company\AnchorHoldings;
 use App\Data\Company\CompanyResearch;
-use App\Data\District\Institutions;
 use App\Data\Company\StrategicHoldings;
+use App\Data\District\Institutions;
 use App\Entity\Stock;
 use App\Repository\StockEventRepository;
 use App\Repository\StockRepository;
@@ -29,7 +29,7 @@ class CompanyProfilePageBuilderTest extends TestCase
     private function builder(array $board): CompanyProfilePageBuilder
     {
         $stocks = $this->createMock(StockRepository::class);
-        $stocks->method('findOneByTicker')->willReturnCallback(static fn (string $ticker): ?Stock => $board[$ticker] ?? null);
+        $stocks->method('findOneByTicker')->willReturnCallback(static fn(string $ticker): ?Stock => $board[$ticker] ?? null);
 
         $peers = $this->createMock(PeerTableBuilder::class);
         $peers->method('build')->willReturn(array_fill(0, 9, ['ticker' => 'PEER']));

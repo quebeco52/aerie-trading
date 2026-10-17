@@ -32,9 +32,7 @@ final class PortTerminalBusinessModelTest extends TestCase
     private function draws(float $eventZ = 0.0, bool $settles = false): MathUtility
     {
         return new class ($eventZ, $settles) extends MathUtility {
-            public function __construct(private readonly float $eventZ, private readonly bool $settles)
-            {
-            }
+            public function __construct(private readonly float $eventZ, private readonly bool $settles) {}
 
             public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
             {
@@ -70,7 +68,7 @@ final class PortTerminalBusinessModelTest extends TestCase
             fixedCosts: 0.0,
             baselineVol: 0.20,
             macroState: $macro,
-            mathUtility: $draws ?? $this->draws()
+            mathUtility: $draws ?? $this->draws(),
         );
         $stock->setEarningsMomentumZ($actuals->streamZ);
 

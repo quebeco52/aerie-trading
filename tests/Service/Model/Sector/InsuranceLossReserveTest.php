@@ -224,12 +224,12 @@ final class InsuranceLossReserveTest extends TestCase
         $this->assertEqualsWithDelta(
             ['unearned' => $treatyShare * 0.5, 'loss' => $treatyShare * ReinsuranceBusinessModel::TREATY_LOSS_RESERVE_TO_PREMIUM_RATIO, 'life' => 0.0],
             (new ReinsuranceBusinessModel())->resolveReserveRatios($stock),
-            1e-9
+            1e-9,
         );
         $this->assertEqualsWithDelta(
             ['unearned' => (1.0 - $lifeShare) * 0.5, 'loss' => (1.0 - $lifeShare) * InsuranceBusinessModel::LOSS_RESERVE_TO_PREMIUM_RATIO, 'life' => $lifeShare * RetailInsuranceBusinessModel::LIFE_RESERVE_TO_PREMIUM_RATIO],
             (new RetailInsuranceBusinessModel())->resolveReserveRatios($stock),
-            1e-9
+            1e-9,
         );
     }
 
@@ -317,7 +317,7 @@ final class InsuranceLossReserveTest extends TestCase
                     $result->clampedMargin + $fixedCosts / $premium,
                     $result->kpis['loss_ratio'] + $result->kpis['expense_ratio'],
                     1e-9,
-                    "{$label}: loss and expense reconcile to the cost base."
+                    "{$label}: loss and expense reconcile to the cost base.",
                 );
                 foreach ($carried as $key => $value) {
                     $this->assertSame($value, $momentum[$key], "{$label}: {$key} is carried through the stream map.");
@@ -340,7 +340,7 @@ final class InsuranceLossReserveTest extends TestCase
         $this->assertEqualsWithDelta(
             InsuranceBusinessModel::LOSS_RESERVE_TO_PREMIUM_RATIO / $structuralLossRatio,
             $model->resolveReserveRunoffYears($stock),
-            1e-12
+            1e-12,
         );
     }
 }

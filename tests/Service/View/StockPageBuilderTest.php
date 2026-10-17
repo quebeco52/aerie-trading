@@ -10,16 +10,16 @@ use App\Entity\Stock;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
 use App\Service\Macro\MacroStateProvider;
-use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Chart\PriceChangeFeed;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Math\MathUtility;
 use App\Service\View\AnchorPortfolioBuilder;
 use App\Service\View\BiotechPipelineBuilder;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Service\View\CreditHealthBuilder;
-use App\Service\View\FinancialSummaryBuilder;
 use App\Service\View\EtfCompositionBuilder;
+use App\Service\View\FinancialSummaryBuilder;
 use App\Service\View\IndustryPositionBuilder;
 use App\Service\View\OptionChainBuilder;
 use App\Service\View\PeerTableBuilder;
@@ -52,7 +52,7 @@ class StockPageBuilderTest extends TestCase
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
         'peRatio', 'peers', 'pieData', 'pieLabels', 'pipeline', 'sharesMap', 'shortInterest', 'shortUtilization', 'strategicStake',
         'ticksPerYear', 'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades',
-        'userUnrealizedPnL', 'userUnrealizedPnLPercent'
+        'userUnrealizedPnL', 'userUnrealizedPnLPercent',
     ];
 
     private const TICKS_PER_YEAR = 14400;
@@ -222,7 +222,7 @@ class StockPageBuilderTest extends TestCase
 
         $this->assertNull(
             $this->builder()->build($this->fund(), 'LBI', null)['management'],
-            'A fund has no board and nobody allocating its capital.'
+            'A fund has no board and nobody allocating its capital.',
         );
     }
 

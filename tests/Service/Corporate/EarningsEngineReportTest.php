@@ -2,23 +2,22 @@
 
 namespace App\Tests\Service\Corporate;
 
-use PHPUnit\Framework\TestCase;
 use App\DTO\EarningsSimulationContext;
-use App\Service\Corporate\EarningsEngine;
+use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\DebtEngine;
-use App\Service\Market\Pricing\MarketEngine;
-use App\Service\Math\MathUtility;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\News\NarrativeEngine;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Data\Macro\EconomicCycle;
-use App\Entity\Stock;
+use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Math\MathUtility;
+use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
+use PHPUnit\Framework\TestCase;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -43,7 +42,7 @@ class EarningsEngineReportTest extends TestCase
             'total_paid' => 0.0,
             'total_cash_spent' => 0.0,
             'organic_capex' => 0.0,
-            'events' => []
+            'events' => [],
         ]);
 
         $this->debtEngineMock = $this->createStub(DebtEngine::class);
@@ -57,7 +56,7 @@ class EarningsEngineReportTest extends TestCase
             ebit: 1000.0,
             revenue: 5000.0,
             depreciation: 100.0,
-            ebitda: 1100.0
+            ebitda: 1100.0,
         );
         $this->debtEngineMock->method('calculateInterestExpense')->willReturn($debtMetrics);
         $debtHealth = new \App\DTO\DebtHealthDTO(
@@ -76,24 +75,24 @@ class EarningsEngineReportTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealth);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealth);
 
         $this->marketEventMock = $this->createStub(MarketEventPublisher::class);
-        $this->marketEventMock->method('publish')->willReturnCallback(function($stock, $type, $desc, $pct) {
+        $this->marketEventMock->method('publish')->willReturnCallback(function ($stock, $type, $desc, $pct) {
             return [
                 'type' => $type,
                 'ticker' => $stock->getTicker(),
                 'description' => $desc,
-                'magnitude' => $pct
+                'magnitude' => $pct,
             ];
         });
 
         // 3. Mock MathUtility to control the stochastic Z-scores
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
-        $this->mathUtilityMock->method('generatePersistentZ')->willReturnCallback(function($prev, $phi) {
+        $this->mathUtilityMock->method('generatePersistentZ')->willReturnCallback(function ($prev, $phi) {
             return $this->mathUtilityMock->generateStandardNormal();
         });
         $this->mathUtilityMock->method('calculateJumpDiffusion')->willReturn(['exponent' => 0.0]);
@@ -105,19 +104,19 @@ class EarningsEngineReportTest extends TestCase
         // tests below that measure working capital strain would be measuring an empty ledger.
         $realMetrics = new CorporateMetrics();
         $this->corporateMetricsMock->method('buildWorkingCapitalBalances')->willReturnCallback(
-            fn($stock, $days, $rev, $costs) => $realMetrics->buildWorkingCapitalBalances($stock, $days, $rev, $costs)
+            fn($stock, $days, $rev, $costs) => $realMetrics->buildWorkingCapitalBalances($stock, $days, $rev, $costs),
         );
         $this->corporateMetricsMock->method('seedFixedAssetLedger')->willReturnCallback(
-            fn($stock, $ic, $nwc, $gw, $cip, $age = \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO) => $realMetrics->seedFixedAssetLedger($stock, $ic, $nwc, $gw, $cip, $age)
+            fn($stock, $ic, $nwc, $gw, $cip, $age = \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO) => $realMetrics->seedFixedAssetLedger($stock, $ic, $nwc, $gw, $cip, $age),
         );
         $this->corporateMetricsMock->method('seedReceivablesAllowance')->willReturnCallback(
-            fn($stock, $rate) => $realMetrics->seedReceivablesAllowance($stock, $rate)
+            fn($stock, $rate) => $realMetrics->seedReceivablesAllowance($stock, $rate),
         );
         $this->corporateMetricsMock->method('calculateLeaseLiability')->willReturnCallback(
-            fn($rev, $intensity) => $realMetrics->calculateLeaseLiability($rev, $intensity)
+            fn($rev, $intensity) => $realMetrics->calculateLeaseLiability($rev, $intensity),
         );
         $this->corporateMetricsMock->method('getIndustryDepreciationRate')->willReturnCallback(
-            fn($industry) => $realMetrics->getIndustryDepreciationRate($industry)
+            fn($industry) => $realMetrics->getIndustryDepreciationRate($industry),
         );
 
         $this->narrativeEngineMock = $this->createStub(NarrativeEngine::class);
@@ -134,7 +133,7 @@ class EarningsEngineReportTest extends TestCase
             $this->mathUtilityMock,
             $this->corporateMetricsMock,
             $this->narrativeEngineMock,
-            new MarketConsensusEngine()
+            new MarketConsensusEngine(),
         );
     }
 
@@ -147,12 +146,12 @@ class EarningsEngineReportTest extends TestCase
     {
         $stock = new Stock();
         $stock->setTicker('TEST');
-        
+
         $reportingTick = $this->getReportingTick('TEST', 252);
         $offTick = ($reportingTick + 1) % 63;
         $macroState = new \App\DTO\MacroStateDTO();
         $result = $this->engine->calculate($stock, $macroState, $offTick, 252);
-        
+
         $this->assertNull($result, 'Engine should return null when the earnings probability check fails.');
     }
 
@@ -183,7 +182,7 @@ class EarningsEngineReportTest extends TestCase
         $this->assertArrayHasKey(0, $result);
         $this->assertEquals('EARNINGS', $result[0]['type']);
         $this->assertEquals('TEST', $result[0]['ticker']);
-        
+
         // EPS should have increased
         $this->assertGreaterThan(10.00, (float) $stock->getEarningsPerShare());
     }
@@ -273,7 +272,7 @@ class EarningsEngineReportTest extends TestCase
         $capturedContext = null;
         $this->eventDispatcherMock->expects($this->once())
             ->method('dispatch')
-            ->willReturnCallback(function($event) use (&$capturedContext) {
+            ->willReturnCallback(function ($event) use (&$capturedContext) {
                 if ($event instanceof \App\Service\Event\EarningsReportedEvent) {
                     $capturedContext = $event->getContext();
                 }
@@ -290,18 +289,18 @@ class EarningsEngineReportTest extends TestCase
             $capturedContext->actualRevenue - $capturedContext->operatingCosts,
             $capturedContext->ebitda,
             0.0001,
-            'EBITDA must equal revenue minus the cash operating cost base.'
+            'EBITDA must equal revenue minus the cash operating cost base.',
         );
         $this->assertEqualsWithDelta(
             $capturedContext->ebitda - $capturedContext->quarterlyDepreciation,
             $capturedContext->ebit,
             0.0001,
-            'EBIT must be struck after depreciation (no double-deduction).'
+            'EBIT must be struck after depreciation (no double-deduction).',
         );
         $this->assertLessThan(
             $capturedContext->ebitda,
             $capturedContext->ebit,
-            'A firm that charges depreciation must report EBIT below EBITDA.'
+            'A firm that charges depreciation must report EBIT below EBITDA.',
         );
     }
 
@@ -324,11 +323,11 @@ class EarningsEngineReportTest extends TestCase
 
         $calmMacro = new \App\DTO\MacroStateDTO(
             macroCreditSpreadEma: 0.02,
-            interbankLiquiditySpreadEma: 0.0015
+            interbankLiquiditySpreadEma: 0.0015,
         );
         $stressedMacro = new \App\DTO\MacroStateDTO(
             macroCreditSpreadEma: 0.06, // +400bps credit spread strain (DSO expansion)
-            interbankLiquiditySpreadEma: 0.0100 // +85bps interbank liquidity strain (DPO contraction)
+            interbankLiquiditySpreadEma: 0.0100, // +85bps interbank liquidity strain (DPO contraction)
         );
 
         $reportingTick = $this->getReportingTick('NWCF');
@@ -351,7 +350,7 @@ class EarningsEngineReportTest extends TestCase
         $this->assertLessThan(
             $calmFcfPerShare,
             $stressedFcfPerShare,
-            'Credit spread stress expanding CCC days must drain Free Cash Flow even with flat revenue.'
+            'Credit spread stress expanding CCC days must drain Free Cash Flow even with flat revenue.',
         );
     }
 
@@ -422,13 +421,13 @@ class EarningsEngineReportTest extends TestCase
         $this->assertLessThan(
             75_000_000.0,
             $totalFcf,
-            'Free Cash Flow should not be massively inflated by a false negative NWC delta caused by annualized previous revenue mismatch.'
+            'Free Cash Flow should not be massively inflated by a false negative NWC delta caused by annualized previous revenue mismatch.',
         );
     }
 
     public function testARealWageAboveItsProductivityPathSqueezesEarningsAndWageGrowthAloneDoesNot(): void
     {
-        $createStock = function(): Stock {
+        $createStock = function (): Stock {
             $stock = new Stock();
             $stock->setTicker('WAGE_TEST');
             $stock->setIndustry('Technology');
@@ -506,7 +505,7 @@ class EarningsEngineReportTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $positiveMacro = new \App\DTO\MacroStateDTO(
-            outputGapEma: 0.05 // Persistent 500bps positive output gap
+            outputGapEma: 0.05, // Persistent 500bps positive output gap
         );
 
         $reportingTick = $this->getReportingTick('ANCHOR_TEST');
@@ -521,7 +520,7 @@ class EarningsEngineReportTest extends TestCase
             $this->engine->calculate($stock, $positiveMacro, $tick, 252);
             // The stored anchor is the posterior BEFORE the walkdown, so it cannot compound through the
             // next estimate; the number analysts PUBLISH is the anchor shaded by the walkdown.
-            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue() * (1.0 - \App\Service\Market\Pricing\MarketConsensusEngine::ANALYST_WALKDOWN_BIAS);
+            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue() * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS);
             $actualRevenues[] = (float) $stock->getTotalRevenue() / 4.0;
         }
 
@@ -534,7 +533,7 @@ class EarningsEngineReportTest extends TestCase
             $this->assertGreaterThan(
                 $consensusRevenues[$i],
                 $actualRevenues[$i],
-                "Actual revenue should beat anchored analyst consensus in quarter {$i}."
+                "Actual revenue should beat anchored analyst consensus in quarter {$i}.",
             );
         }
     }
@@ -570,7 +569,7 @@ class EarningsEngineReportTest extends TestCase
         $this->assertLessThan(
             (float) $stockNormal->getEarningsPerShare(),
             (float) $stockShocked->getEarningsPerShare(),
-            'Cyclical margin compression must reduce EPS and produce an earnings miss.'
+            'Cyclical margin compression must reduce EPS and produce an earnings miss.',
         );
     }
 
@@ -607,7 +606,7 @@ class EarningsEngineReportTest extends TestCase
         $this->assertGreaterThan(
             $q1Revenue * 1.30,
             $q4Revenue,
-            'Seasonal holiday quarter (Q4) revenue must exceed off-peak quarter (Q1) for Internet Retail.'
+            'Seasonal holiday quarter (Q4) revenue must exceed off-peak quarter (Q1) for Internet Retail.',
         );
 
         // ...while the seasonally adjusted run-rate is the same structural capacity in both quarters: the
@@ -667,7 +666,7 @@ class EarningsEngineReportTest extends TestCase
 
         // Extreme boom to test utilization clamping
         $boomMacro = new \App\DTO\MacroStateDTO(
-            outputGapEma: 0.50 // Massive overheating
+            outputGapEma: 0.50, // Massive overheating
         );
 
         $reportingTick = $this->getReportingTick('CAP_CLAMP');
@@ -773,7 +772,7 @@ class EarningsEngineReportTest extends TestCase
             $this->mathUtilityMock,
             $this->corporateMetricsMock,
             $this->narrativeEngineMock,
-            new MarketConsensusEngine()
+            new MarketConsensusEngine(),
         );
 
         $stock = new Stock();
@@ -929,7 +928,7 @@ class EarningsEngineReportTest extends TestCase
             $this->corporateMetricsMock,
             $this->narrativeEngineMock,
             new MarketConsensusEngine(),
-            marketEngine: $marketEngine
+            marketEngine: $marketEngine,
         );
 
         $stock = (new Stock())->setTicker('VANE')->setIndustry('Software - Application')->setPrice('50.00')->setSharesOutstanding('1000');

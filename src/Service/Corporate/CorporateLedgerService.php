@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
-use App\Service\Market\Ticker\NestedTransaction;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Service\Market\Option\OptionChainService;
+use App\Service\Market\Ticker\NestedTransaction;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Notification\PlayerNotifier;
@@ -17,7 +17,7 @@ use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
- * Service responsible for executing raw SQL updates related to corporate actions 
+ * Service responsible for executing raw SQL updates related to corporate actions
  * (Dividends, Splits, Reverse Splits). Separates domain logic from persistence.
  */
 class CorporateLedgerService
@@ -25,7 +25,7 @@ class CorporateLedgerService
     public function __construct(
         private EntityManagerInterface $entityManager,
         /** Tells each holder their post-split position; null (unit tests) tells no one. */
-        private ?PlayerNotifier $notifier = null
+        private ?PlayerNotifier $notifier = null,
     ) {}
 
     /**
@@ -79,7 +79,7 @@ class CorporateLedgerService
                 'dividend' => $dividendPerShare,
                 'stock_id' => $stock->getId(),
                 'paid_at' => $paidAtStr,
-            ]
+            ],
         );
 
         // Credit cash from the rows just written. The unique index on (user_id, ticker, paid_at) both makes
@@ -92,7 +92,7 @@ class CorporateLedgerService
                     AND d.ticker  = :ticker
                     AND d.paid_at = :paid_at
              SET u.cash_balance = u.cash_balance + d.amount",
-            ['ticker' => $stock->getTicker(), 'paid_at' => $paidAtStr]
+            ['ticker' => $stock->getTicker(), 'paid_at' => $paidAtStr],
         );
 
         $this->chargeShortDividends($stock, $dividendPerShare, $paidAtStr);
@@ -135,7 +135,7 @@ class CorporateLedgerService
                 'dividend' => $dividendPerShare,
                 'stock_id' => $stock->getId(),
                 'paid_at' => $paidAtStr,
-            ]
+            ],
         );
 
         // The rows just written carry a negative amount, so the same addition that credits a holder debits
@@ -148,13 +148,13 @@ class CorporateLedgerService
                     AND d.paid_at = :paid_at
                     AND d.amount < 0
              SET u.cash_balance = u.cash_balance + d.amount",
-            ['ticker' => $stock->getTicker(), 'paid_at' => $paidAtStr]
+            ['ticker' => $stock->getTicker(), 'paid_at' => $paidAtStr],
         );
     }
 
     /**
      * Adjusts ledgers and history for a stock split or reverse split.
-     * 
+     *
      * @param Stock $stock The stock entity.
      * @param float $splitFactor The multiplier or divisor for the split.
      * @param bool $isReverse Whether it is a reverse split (where shares divide and price multiplies).
@@ -181,7 +181,7 @@ class CorporateLedgerService
                 // quantity > 0 left the short's fraction unsettled while the rewrite below still rescaled it.
                 $holdings = $conn->fetchAllAssociative(
                     'SELECT id, user_id, quantity FROM user_stocks WHERE stock_id = :stock_id AND quantity <> 0',
-                    ['stock_id' => $stock->getId()]
+                    ['stock_id' => $stock->getId()],
                 );
 
                 // Settle fractional remnant in cash at pre-split price, rounding toward zero to preserve exposure.
@@ -197,7 +197,7 @@ class CorporateLedgerService
 
                         $conn->executeStatement(
                             'UPDATE users SET cash_balance = cash_balance + :cashout WHERE id = :user_id',
-                            ['cashout' => $cashoutValue, 'user_id' => $holding['user_id']]
+                            ['cashout' => $cashoutValue, 'user_id' => $holding['user_id']],
                         );
                     }
                 }
@@ -219,14 +219,14 @@ class CorporateLedgerService
                      ) remnants ON remnants.user_id = u.id
                      SET u.cash_balance = u.cash_balance + remnants.remnant_value",
                     ['factor' => $factor, 'ticker' => $stock->getTicker(), 'old_price' => $oldPrice ?? 0.0],
-                    $factorType
+                    $factorType,
                 );
 
                 // 4. Perform bulk SQL updates for quantities and prices
                 $conn->executeStatement(
                     "UPDATE trade_orders SET limit_price = ROUND(limit_price * :factor, 4), stop_price = ROUND(stop_price * :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
                     ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType
+                    $factorType,
                 );
 
                 // TRUNCATE, not FLOOR: it rounds toward zero for both signs, so a long keeps the behaviour it
@@ -235,23 +235,23 @@ class CorporateLedgerService
                 $conn->executeStatement(
                     'UPDATE user_stocks SET quantity = TRUNCATE(quantity / :factor, 0), version = version + 1 WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
-                    $factorType
+                    $factorType,
                 );
 
                 $conn->executeStatement(
                     'DELETE FROM user_stocks WHERE stock_id = :stock_id AND quantity = 0',
-                    ['stock_id' => $stock->getId()]
+                    ['stock_id' => $stock->getId()],
                 );
 
                 $conn->executeStatement(
                     "UPDATE trade_orders SET quantity = FLOOR(quantity / :factor) WHERE ticker = :ticker AND status = 'OPEN'",
                     ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType
+                    $factorType,
                 );
 
                 $conn->executeStatement(
                     "UPDATE trade_orders SET status = 'CANCELLED' WHERE ticker = :ticker AND status = 'OPEN' AND quantity = 0",
-                    ['ticker' => $stock->getTicker()]
+                    ['ticker' => $stock->getTicker()],
                 );
 
                 // The whole bar is restated, not just the close. Leaving open, high and low in pre-split
@@ -268,13 +268,13 @@ class CorporateLedgerService
                          volume = FLOOR(volume / :factor)
                      WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
-                    $factorType
+                    $factorType,
                 );
 
                 $conn->executeStatement(
                     'UPDATE corporate_report SET shares = FLOOR(shares / :factor) WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
-                    $factorType
+                    $factorType,
                 );
 
                 // Restate executed order history to maintain cost basis consistency post-split.
@@ -286,13 +286,13 @@ class CorporateLedgerService
                          limit_price = ROUND(limit_price * :factor, 4)
                      WHERE ticker = :ticker AND status = 'FILLED'",
                     ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType
+                    $factorType,
                 );
             } else {
                 $conn->executeStatement(
                     'UPDATE user_stocks SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), version = version + 1 WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
-                    $factorType
+                    $factorType,
                 );
 
                 $conn->executeStatement(
@@ -304,19 +304,19 @@ class CorporateLedgerService
                          volume = IF(volume > 9223372036854775807 / :factor, 9223372036854775807, volume * :factor)
                      WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
-                    $factorType
+                    $factorType,
                 );
 
                 $conn->executeStatement(
                     'UPDATE corporate_report SET shares = IF(shares > 9223372036854775807 / :factor, 9223372036854775807, shares * :factor) WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
-                    $factorType
+                    $factorType,
                 );
 
                 $conn->executeStatement(
                     "UPDATE trade_orders SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), limit_price = ROUND(limit_price / :factor, 4), stop_price = ROUND(stop_price / :factor, 4) WHERE ticker = :ticker AND status = 'OPEN'",
                     ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType
+                    $factorType,
                 );
 
                 // Restate executed order history to maintain cost basis consistency post-split.
@@ -328,7 +328,7 @@ class CorporateLedgerService
                          limit_price = ROUND(limit_price / :factor, 4)
                      WHERE ticker = :ticker AND status = 'FILLED'",
                     ['factor' => $factor, 'ticker' => $stock->getTicker()],
-                    $factorType
+                    $factorType,
                 );
             }
 
@@ -339,7 +339,7 @@ class CorporateLedgerService
             $stock->setCorporateFlowBacklog($isReverse ? $stock->getCorporateFlowBacklog() / $factor : $stock->getCorporateFlowBacklog() * $factor);
             $stock->setShortInterestShares(Decimal::format((float) $conn->fetchOne(
                 'SELECT COALESCE(-SUM(quantity), 0) FROM user_stocks WHERE stock_id = :stock_id AND quantity < 0',
-                ['stock_id' => $stock->getId()]
+                ['stock_id' => $stock->getId()],
             ), 2));
 
             PriceAlertService::restateForSplit($conn, $stock->getTicker(), $factor, $isReverse);
@@ -357,26 +357,26 @@ class CorporateLedgerService
             $this->notifier->queueForHolders(
                 $conn->fetchAllAssociative(
                     'SELECT user_id, quantity FROM user_stocks WHERE stock_id = :stock_id AND quantity <> 0',
-                    ['stock_id' => $stock->getId()]
+                    ['stock_id' => $stock->getId()],
                 ),
                 $ticker,
                 $isReverse ? sprintf('%s consolidated its shares 1-for-%d', $ticker, $factor) : sprintf('%s split its shares %d-for-1', $ticker, $factor),
-                static fn (float $quantity): string => sprintf(
+                static fn(float $quantity): string => sprintf(
                     '%s %s shares%s.',
                     $quantity < 0.0 ? 'Your short position is now' : 'You now hold',
                     number_format(abs($quantity)),
-                    $isReverse ? '; any fraction left over was paid in cash' : ''
+                    $isReverse ? '; any fraction left over was paid in cash' : '',
                 ),
-                PlayerNotifier::assetLink('STOCK', $ticker)
+                PlayerNotifier::assetLink('STOCK', $ticker),
             );
             $this->notifier->queueForHolders(
                 $optionHolders,
                 $ticker,
                 sprintf('Your %s options were adjusted for the %s', $ticker, $isReverse ? sprintf('1-for-%d consolidation', $factor) : sprintf('%d-for-1 split', $factor)),
-                static fn (float $quantity): string => $isReverse
+                static fn(float $quantity): string => $isReverse
                     ? sprintf('Strikes were multiplied by %d and contracts divided by %d; any fraction of a contract was settled in cash.', $factor, $factor)
                     : sprintf('Strikes were divided by %d and contracts multiplied by %d, so each position is worth what it was.', $factor, $factor),
-                PlayerNotifier::assetLink('STOCK', $ticker)
+                PlayerNotifier::assetLink('STOCK', $ticker),
             );
         }
     }
@@ -397,14 +397,14 @@ class CorporateLedgerService
         $contracts = $conn->fetchAllAssociative(
             'SELECT id, option_type, strike, expiry_serial, price FROM option_contracts
              WHERE stock_id = :stock_id AND status = :active ORDER BY strike ' . ($isReverse ? 'DESC' : 'ASC'),
-            ['stock_id' => $stock->getId(), 'active' => OptionContract::STATUS_ACTIVE]
+            ['stock_id' => $stock->getId(), 'active' => OptionContract::STATUS_ACTIVE],
         );
 
         if ($contracts === []) {
             return [];
         }
 
-        $ids = array_map(static fn (array $contract): int => (int) $contract['id'], $contracts);
+        $ids = array_map(static fn(array $contract): int => (int) $contract['id'], $contracts);
         $idList = ['ids' => $ids];
         $idTypes = ['ids' => ArrayParameterType::INTEGER];
 
@@ -413,7 +413,7 @@ class CorporateLedgerService
             'SELECT user_id, SUM(ABS(quantity)) AS quantity FROM user_options
              WHERE option_contract_id IN (:ids) AND quantity <> 0 GROUP BY user_id',
             $idList,
-            $idTypes
+            $idTypes,
         );
 
         if ($isReverse) {
@@ -424,7 +424,7 @@ class CorporateLedgerService
                  JOIN option_contracts oc ON oc.id = uo.option_contract_id
                  WHERE uo.option_contract_id IN (:ids) AND uo.quantity <> 0',
                 $idList,
-                $idTypes
+                $idTypes,
             );
 
             foreach ($positions as $position) {
@@ -434,7 +434,7 @@ class CorporateLedgerService
                 if ($remnant !== 0) {
                     $conn->executeStatement(
                         'UPDATE users SET cash_balance = cash_balance + :cashout WHERE id = :user_id',
-                        ['cashout' => round($remnant * (float) $position['price'] * FinancialConstants::OPTION_CONTRACT_MULTIPLIER, 4), 'user_id' => $position['user_id']]
+                        ['cashout' => round($remnant * (float) $position['price'] * FinancialConstants::OPTION_CONTRACT_MULTIPLIER, 4), 'user_id' => $position['user_id']],
                     );
                 }
             }
@@ -443,7 +443,7 @@ class CorporateLedgerService
                 'UPDATE user_options SET quantity = TRUNCATE(quantity / :factor, 0), average_premium = average_premium * :factor, version = version + 1
                  WHERE option_contract_id IN (:ids)',
                 $idList + ['factor' => $factor],
-                $idTypes + ['factor' => ParameterType::INTEGER]
+                $idTypes + ['factor' => ParameterType::INTEGER],
             );
             $conn->executeStatement('DELETE FROM user_options WHERE option_contract_id IN (:ids) AND quantity = 0', $idList, $idTypes);
         } else {
@@ -451,7 +451,7 @@ class CorporateLedgerService
                 'UPDATE user_options SET quantity = quantity * :factor, average_premium = average_premium / :factor, version = version + 1
                  WHERE option_contract_id IN (:ids)',
                 $idList + ['factor' => $factor],
-                $idTypes + ['factor' => ParameterType::INTEGER]
+                $idTypes + ['factor' => ParameterType::INTEGER],
             );
         }
 
@@ -472,7 +472,7 @@ class CorporateLedgerService
                     'strike' => number_format($strike, 8, '.', ''),
                     'scale' => $scale,
                     'id' => (int) $contract['id'],
-                ]
+                ],
             );
         }
 
@@ -482,7 +482,7 @@ class CorporateLedgerService
              SET oc.open_interest = (SELECT COALESCE(SUM(uo.quantity), 0) FROM user_options uo WHERE uo.option_contract_id = oc.id)
              WHERE oc.id IN (:ids)',
             $idList,
-            $idTypes
+            $idTypes,
         );
 
         return $holders;
@@ -507,10 +507,10 @@ class CorporateLedgerService
             "SELECT id, description FROM stock_events
              WHERE stock_id = :stock_id
                AND (description LIKE 'Q-Earnings:%' OR description LIKE '%/share div%' OR description LIKE '%Bought back%')",
-            ['stock_id' => $stock->getId()]
+            ['stock_id' => $stock->getId()],
         );
 
-        $money = static fn (string $amount): string => number_format(((float) str_replace(',', '', $amount)) * $priceRatio, 2);
+        $money = static fn(string $amount): string => number_format(((float) str_replace(',', '', $amount)) * $priceRatio, 2);
 
         foreach ($rows as $row) {
             $original = (string) $row['description'];
@@ -519,32 +519,32 @@ class CorporateLedgerService
             // "Q-Earnings: $11.75" / "Q-Earnings: -$3.56": the sign sits outside the dollar sign.
             $restated = preg_replace_callback(
                 '/^(Q-Earnings:\s*-?\$)([\d,]+\.\d{2})/',
-                static fn (array $m): string => $m[1] . $money($m[2]),
-                $restated
+                static fn(array $m): string => $m[1] . $money($m[2]),
+                $restated,
             ) ?? $restated;
 
             $restated = preg_replace_callback(
                 '/((?:Beat|Missed) expectations by\s*\$)([\d,]+\.\d{2})/',
-                static fn (array $m): string => $m[1] . $money($m[2]),
-                $restated
+                static fn(array $m): string => $m[1] . $money($m[2]),
+                $restated,
             ) ?? $restated;
 
             $restated = preg_replace_callback(
                 '/(Paid\s+\$)([\d,]+\.\d{2})(\/share\s+div)/',
-                static fn (array $m): string => $m[1] . $money($m[2]) . $m[3],
-                $restated
+                static fn(array $m): string => $m[1] . $money($m[2]) . $m[3],
+                $restated,
             ) ?? $restated;
 
             $restated = preg_replace_callback(
                 '/(Bought\s+back\s+)([\d,]+)(\s+shares)/',
-                static fn (array $m): string => $m[1] . number_format(round(((float) str_replace(',', '', $m[2])) / $priceRatio)) . $m[3],
-                $restated
+                static fn(array $m): string => $m[1] . number_format(round(((float) str_replace(',', '', $m[2])) / $priceRatio)) . $m[3],
+                $restated,
             ) ?? $restated;
 
             if ($restated !== $original) {
                 $conn->executeStatement(
                     'UPDATE stock_events SET description = :description WHERE id = :id',
-                    ['description' => $restated, 'id' => $row['id']]
+                    ['description' => $restated, 'id' => $row['id']],
                 );
             }
         }

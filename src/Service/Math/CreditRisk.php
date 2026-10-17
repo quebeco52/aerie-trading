@@ -148,7 +148,7 @@ final class CreditRisk
         float $assetVolatility,
         float $debtFaceValue,
         float $riskFreeRate,
-        float $timeToMaturity
+        float $timeToMaturity,
     ): float {
         if ($equityValue <= 0.0) {
             return 0.0;
@@ -203,7 +203,7 @@ final class CreditRisk
         float $equityVolatility,
         float $debtFaceValue,
         float $riskFreeRate,
-        float $timeToMaturity
+        float $timeToMaturity,
     ): float {
         if ($equityValue <= 0.0 || $equityVolatility <= 0.0) {
             return 0.0;
@@ -266,7 +266,7 @@ final class CreditRisk
         float $volThreshold = MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
         float $contagionSens = MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
         float $minIgSpread = MacroEngine::MIN_CREDIT_SPREAD,
-        float $maxIgSpread = MacroEngine::MAX_CREDIT_SPREAD
+        float $maxIgSpread = MacroEngine::MAX_CREDIT_SPREAD,
     ): array {
         $cycleSpread = $baseIgSpread * exp(-$leverageSens * $outputGapEma);
         $excessVol = max(0.0, $marketVolEma - $volThreshold);
@@ -308,7 +308,7 @@ final class CreditRisk
         float $beta0 = MacroEngine::RECESSION_PROBIT_BETA_0,
         float $betaSlope = MacroEngine::RECESSION_PROBIT_BETA_SLOPE,
         float $betaTp = MacroEngine::RECESSION_PROBIT_BETA_TP,
-        float $betaFci = MacroEngine::RECESSION_PROBIT_BETA_FCI
+        float $betaFci = MacroEngine::RECESSION_PROBIT_BETA_FCI,
     ): float {
         $probitIndex = $beta0 + ($betaSlope * $slope) + ($betaTp * $termPremium) + ($betaFci * $fci);
         $probability = Distributions::calculateNormalCDF($probitIndex);
@@ -345,7 +345,7 @@ final class CreditRisk
     public static function calculateSchularickTaylorCrisisHazard(
         float $creditGap,
         float $beta0,
-        float $betaGap
+        float $betaGap,
     ): float {
         $logit = $beta0 + ($betaGap * $creditGap);
         return min(0.99, ResponseCurves::logisticUnitInterval($logit, 0.0, 1.0));
@@ -365,7 +365,7 @@ final class CreditRisk
     public static function calculateCorporateDefaultRate(
         float $macroZ,
         float $baseDefaultRate = MacroEngine::CORPORATE_DEFAULT_BASELINE,
-        float $rho = self::CORPORATE_DEFAULT_RHO
+        float $rho = self::CORPORATE_DEFAULT_RHO,
     ): float {
         $invPd = Distributions::calculateInverseNormalCDF($baseDefaultRate);
         $sqrtRho = sqrt($rho);
@@ -403,7 +403,7 @@ final class CreditRisk
         float $kappa = 1.80,
         float $creditSensitivity = 15.0,
         float $gapSensitivity = 3.0,
-        float $sigma = 0.08
+        float $sigma = 0.08,
     ): float {
         $targetSloos = ($creditSensitivity * $excessCreditSpread) - ($gapSensitivity * $outputGap);
         $drift = $kappa * ($targetSloos - $currentSloos) * $dt;
@@ -429,7 +429,7 @@ final class CreditRisk
     public static function calculateDiminishingDistressMultiplier(
         float $rawDistressSignal,
         float $maxMultiplier = 1.25,
-        float $halfSaturation = 1.0
+        float $halfSaturation = 1.0,
     ): float {
         if ($rawDistressSignal <= 0.0) {
             return 0.0;
@@ -483,7 +483,7 @@ final class CreditRisk
     public static function calculateRecoveryGivenDefault(
         float $baseRecovery,
         float $defaultRate,
-        float $baselineDefaultRate = self::RECOVERY_BASELINE_DEFAULT_RATE
+        float $baselineDefaultRate = self::RECOVERY_BASELINE_DEFAULT_RATE,
     ): float {
         if ($defaultRate <= 0.0 || $baselineDefaultRate <= 0.0) {
             return max(self::MIN_RECOVERY_RATE, min(self::MAX_RECOVERY_RATE, $baseRecovery));
@@ -494,7 +494,7 @@ final class CreditRisk
 
         return max(
             self::MIN_RECOVERY_RATE,
-            min(self::MAX_RECOVERY_RATE, $baseRecovery + $cyclical)
+            min(self::MAX_RECOVERY_RATE, $baseRecovery + $cyclical),
         );
     }
 
@@ -598,17 +598,17 @@ final class CreditRisk
         float $distanceToDefault,
         float $lossGivenDefault,
         float $timeToMaturity,
-        float $illiquidityPremium = self::CORPORATE_ILLIQUIDITY_SPREAD
+        float $illiquidityPremium = self::CORPORATE_ILLIQUIDITY_SPREAD,
     ): float {
         $defaultComponent = self::calculateMertonCreditSpread(
             $distanceToDefault,
             $lossGivenDefault,
-            max(1.0e-6, $timeToMaturity)
+            max(1.0e-6, $timeToMaturity),
         );
 
         return max(0.0, min(
             self::MAX_CORPORATE_SPREAD,
-            $defaultComponent + max(0.0, $illiquidityPremium)
+            $defaultComponent + max(0.0, $illiquidityPremium),
         ));
     }
 
@@ -648,7 +648,7 @@ final class CreditRisk
         float $classSpread,
         float $lossGivenDefault,
         float $referenceLossGivenDefault,
-        float $nonDefaultSpread = self::CORPORATE_ILLIQUIDITY_SPREAD
+        float $nonDefaultSpread = self::CORPORATE_ILLIQUIDITY_SPREAD,
     ): float {
         if ($referenceLossGivenDefault <= 0.0) {
             return $classSpread;

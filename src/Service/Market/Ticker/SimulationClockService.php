@@ -93,7 +93,7 @@ final class SimulationClockService
     {
         $connection->executeStatement(
             'UPDATE simulation_clock SET tick_count = ?, total_time = ?, updated_at = ? WHERE id = ?',
-            [$tickCount, $totalTime, (new \DateTime())->format('Y-m-d H:i:s'), SimulationClock::SINGLETON_ID]
+            [$tickCount, $totalTime, (new \DateTime())->format('Y-m-d H:i:s'), SimulationClock::SINGLETON_ID],
         );
     }
 }

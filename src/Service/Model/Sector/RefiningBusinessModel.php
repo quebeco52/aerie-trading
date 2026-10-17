@@ -9,8 +9,6 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -186,7 +184,7 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

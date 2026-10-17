@@ -100,7 +100,7 @@ class WorkingCapitalByStreamTest extends TestCase
     {
         $this->assertSame(
             FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY,
-            Sectors::strategyFor('Household & Personal Products')->getLeaseIntensity(self::firm('LARK', 'Household & Personal Products'))
+            Sectors::strategyFor('Household & Personal Products')->getLeaseIntensity(self::firm('LARK', 'Household & Personal Products')),
         );
     }
 

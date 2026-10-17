@@ -215,8 +215,8 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         $output = $zeroFuelOutput + $gasOutput;
 
         // --- Prices: the forward ladders and spot ---
-        $powerStrike = $this->rollLadder($streams, self::STATE_POWER_STRIKE_SUM_PREFIX, fn (int $quarters): float => $this->powerForward($macroState, $quarters / 4.0));
-        $gasStrike = $this->rollLadder($streams, self::STATE_GAS_STRIKE_SUM_PREFIX, fn (int $quarters): float => $this->gasForward($macroState, $quarters / 4.0));
+        $powerStrike = $this->rollLadder($streams, self::STATE_POWER_STRIKE_SUM_PREFIX, fn(int $quarters): float => $this->powerForward($macroState, $quarters / 4.0));
+        $gasStrike = $this->rollLadder($streams, self::STATE_GAS_STRIKE_SUM_PREFIX, fn(int $quarters): float => $this->gasForward($macroState, $quarters / 4.0));
         $powerSpot = max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroEngine::WHOLESALE_POWER_BASELINE;
         $gasSpot = max(0.0, $macroState->naturalGasPriceIndexEma) / MacroEngine::NATURAL_GAS_BASELINE;
 
@@ -262,7 +262,7 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
             FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE,
             $actualRevenue > 0.0 && $output > 0.0
                 ? $baseRevenue * $wholesaleWeight * $output * FirmEconomics::carbonUpliftEarningsPerUnit($gasOutput / $output) / $actualRevenue
-                : 0.0
+                : 0.0,
         );
 
         // Prices are public and the hedge book is disclosed, so analysts read them in full; the water is seen at
@@ -341,7 +341,7 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
             $macroState->energyPriceIndexEma,
             $macroState->globalDemandGapEma,
             $macroState->energySupplyEma,
-            $years
+            $years,
         ) / MacroEngine::ENERGY_BASELINE;
 
         return $oil * CommodityLogisticsSubsystem::gasOilRatioForward(exp($macroState->gasOilRatioLog), $years);

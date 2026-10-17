@@ -59,7 +59,7 @@ class LeaderboardController extends AbstractController
                 // Value committed to open limit orders counts: it has left the cash balance (a BUY) or the holdings
                 // table (a SELL), so leaving it out ranked traders by how few orders they had working.
                 return $entityManager->getConnection()->fetchAllAssociative(
-                    \App\Service\User\Portfolio::NET_WORTH_SQL . ' ORDER BY total_value DESC LIMIT ' . self::TABLE_ROWS
+                    \App\Service\User\Portfolio::NET_WORTH_SQL . ' ORDER BY total_value DESC LIMIT ' . self::TABLE_ROWS,
                 );
             });
 
@@ -97,8 +97,8 @@ class LeaderboardController extends AbstractController
                 return array_map(self::rowArray(...), $seasonService->liveTable($season));
             });
 
-            $ranked = array_values(array_filter($rows, static fn (array $r): bool => $r['rank'] !== null));
-            $unranked = array_values(array_filter($rows, static fn (array $r): bool => $r['rank'] === null && !$r['forfeited']));
+            $ranked = array_values(array_filter($rows, static fn(array $r): bool => $r['rank'] !== null));
+            $unranked = array_values(array_filter($rows, static fn(array $r): bool => $r['rank'] === null && !$r['forfeited']));
             $mine = null;
             foreach ($rows as $row) {
                 if ($row['userId'] === $userId) {

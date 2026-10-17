@@ -158,7 +158,7 @@ class SystemicEventTest extends TestCase
         $this->assertSame(
             ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
             $this->fire($state),
-            'The programme starts on one tick and must be reported through the cooldown.'
+            'The programme starts on one tick and must be reported through the cooldown.',
         );
     }
 
@@ -182,7 +182,7 @@ class SystemicEventTest extends TestCase
         $this->assertSame(
             ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
             $this->fire($state),
-            'A funding freeze must outrank the recession it inevitably drags along with it.'
+            'A funding freeze must outrank the recession it inevitably drags along with it.',
         );
     }
 
@@ -235,7 +235,6 @@ class SystemicEventTest extends TestCase
         $this->assertSame([ShockEvent::RECESSION_DECLARED], $headlines, 'The recession the freeze outranked is reported once the cooldown lets it through, and only once.');
     }
 
-
     public function testTheAlarmLatchSurvivesSerializationRoundTrip(): void
     {
         $state = new MacroState();
@@ -265,17 +264,15 @@ class SystemicEventTest extends TestCase
             $state->eventCooldownTimer,
             $restoredState->eventCooldownTimer,
             1e-9,
-            'eventCooldownTimer must survive MacroStateDTO serialization without being dropped.'
+            'eventCooldownTimer must survive MacroStateDTO serialization without being dropped.',
         );
 
         // Tick 2: must NOT fire because cooldown is active
         $this->assertNull(
             $this->fire($restoredState),
-            'Restored state must maintain cooldown and not fire on consecutive ticks.'
+            'Restored state must maintain cooldown and not fire on consecutive ticks.',
         );
     }
-
-
 
     public function testASovereignDowngradeIsReportedBelowACreditSeizureAndAboveARecession(): void
     {
@@ -288,7 +285,6 @@ class SystemicEventTest extends TestCase
         $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
         $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
     }
-
 
     public function testAHeadlineStormIsReportedBelowARecessionAndOnlyOnTheDay(): void
     {
@@ -307,7 +303,6 @@ class SystemicEventTest extends TestCase
         $state->totalTime += 1.0 / self::TICKS_PER_YEAR;
         $this->assertNull($this->fire($state), 'Yesterday\'s storm is not today\'s news.');
     }
-
 
     public function testHouseholdDeleveragingIsReportedBelowAStormAndOnlyWhileCreditContracts(): void
     {
@@ -340,7 +335,7 @@ class SystemicEventTest extends TestCase
         $this->assertSame(
             ShockEvent::NATURAL_CATASTROPHE,
             $this->fire($state),
-            'Edge-triggered catastrophe headlines must not be dropped by an active district cooldown.'
+            'Edge-triggered catastrophe headlines must not be dropped by an active district cooldown.',
         );
     }
 

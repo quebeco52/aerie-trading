@@ -9,9 +9,9 @@ use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
+use App\Service\Market\Ticker\BulkRowUpdate;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Market\Ticker\BulkRowUpdate;
 
 /**
  * Runs the option desk for one tick: settlement, listing, marking, the public's book, and the hedge.
@@ -192,7 +192,7 @@ final class OptionDeskService
                 $quotes,
                 $macroState->marketVolatility,
                 MacroEngine::MACRO_VOL_BASE_ANCHOR,
-                $dt
+                $dt,
             );
 
             // Only a book that actually moved is written. Most of a chain sits still on any one pass, and
@@ -231,7 +231,7 @@ final class OptionDeskService
             'settled' => count($settlements),
             'listed' => $listed,
             'marked' => $marked,
-            'exercised' => count(array_filter($settlements, static fn (array $s): bool => $s['exercised'])),
+            'exercised' => count(array_filter($settlements, static fn(array $s): bool => $s['exercised'])),
             'timing' => $timing,
         ];
     }
@@ -292,9 +292,9 @@ final class OptionDeskService
                 'SELECT DISTINCT o.ticker
                  FROM user_options uo
                  JOIN option_contracts o ON o.id = uo.option_contract_id
-                 WHERE uo.quantity <> 0'
+                 WHERE uo.quantity <> 0',
             ),
-            true
+            true,
         );
     }
 
@@ -376,7 +376,7 @@ final class OptionDeskService
              FROM option_contracts
              WHERE status = :status AND stock_id IN (:stocks)',
             ['status' => OptionContract::STATUS_ACTIVE, 'stocks' => array_keys($byId)],
-            ['stocks' => ArrayParameterType::INTEGER]
+            ['stocks' => ArrayParameterType::INTEGER],
         );
 
         $chains = [];

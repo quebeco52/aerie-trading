@@ -26,9 +26,7 @@ final class MiningBusinessModelTest extends TestCase
     private function fixedDraws(float $z = 0.0): MathUtility
     {
         return new class ($z) extends MathUtility {
-            public function __construct(private readonly float $z)
-            {
-            }
+            public function __construct(private readonly float $z) {}
 
             public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
             {
@@ -62,7 +60,7 @@ final class MiningBusinessModelTest extends TestCase
             fixedCosts: $fixedCosts,
             baselineVol: 0.40,
             macroState: $macro,
-            mathUtility: $this->fixedDraws($z)
+            mathUtility: $this->fixedDraws($z),
         );
     }
 
@@ -254,7 +252,7 @@ final class MiningBusinessModelTest extends TestCase
             $this->assertEqualsWithDelta(
                 ($strict->actualVariableCosts + (40.0 * $factor)) - ($founding->actualVariableCosts + 40.0),
                 $this->model->annualExtractionCostBase($stock) / 4.0 * ($factor - 1.0),
-                1e-6
+                1e-6,
             );
         }
         $this->assertSame(0.0, $this->model->annualExtractionCostBase($this->miner()->setTotalRevenue('400')), 'Before its first report nothing is known to scale.');

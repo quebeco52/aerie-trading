@@ -6,10 +6,10 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
-use App\Service\Macro\MacroEngine;
 use PHPUnit\Framework\TestCase;
 
 class AssetManagementBusinessModelTest extends TestCase
@@ -29,7 +29,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setIndustry('Asset Management');
 
         $mathUtilityMock = $this->createStub(MathUtility::class);
-        $macroState = \App\DTO\MacroStateDTO::fromArray([
+        $macroState = MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.04,
             'yield_5y_ema' => 0.04,
             'corporate_tax_rate' => 0.25,
@@ -66,7 +66,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setIndustry('Private Equity');
 
         $mathUtilityMock = $this->createStub(MathUtility::class);
-        $macroState = \App\DTO\MacroStateDTO::fromArray([
+        $macroState = MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.04,
             'yield_5y_ema' => 0.045,
             'corporate_tax_rate' => 0.25,
@@ -103,7 +103,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setTicker('SHRK');
         $stock->setBeta('1.2');
 
-        $macro = new \App\DTO\MacroStateDTO(outputGapEma: 0.05);
+        $macro = new MacroStateDTO(outputGapEma: 0.05);
         $physics = $model->getMacroPhysics($stock, $macro);
 
         $this->assertEquals(0.0, $physics['macro_demand_shift'], 'Asset management must nullify generic demand shift to avoid double-counting AUM beta.');
@@ -116,7 +116,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setTicker('SHRK');
         $stock->setBeta('1.0');
 
-        $macro = new \App\DTO\MacroStateDTO(outputGapEma: 0.0);
+        $macro = new MacroStateDTO(outputGapEma: 0.0);
 
         // Alpha Z = 2.50 (above 1.50 threshold), BaseFee Z = 0.0
         $mathMock = $this->createStub(MathUtility::class);
@@ -129,7 +129,7 @@ class AssetManagementBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Alpha fee bonus = (2.50 - 1.50) * 0.08 = +0.08
@@ -151,7 +151,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setTicker('SHRK');
         $stock->setBeta('1.0');
 
-        $macro = new \App\DTO\MacroStateDTO(outputGapEma: 0.0);
+        $macro = new MacroStateDTO(outputGapEma: 0.0);
 
         // Alpha Z = -2.50 (severe redemptions below -1.50), BaseFee Z = 0.0
         $mathMock = $this->createStub(MathUtility::class);
@@ -164,7 +164,7 @@ class AssetManagementBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0, // Zero baseline vol to isolate deterministic attrition
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Redemption excess = |-2.50 - (-1.50)| = 1.0
@@ -184,7 +184,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $run = function (\App\DTO\MacroStateDTO $macro) use ($model, $stock, $mathMock): float {
+        $run = function (MacroStateDTO $macro) use ($model, $stock, $mathMock): float {
             return $model->computeActualFinancials(
                 $stock,
                 expectedRevenue: 100_000_000.0,
@@ -192,20 +192,20 @@ class AssetManagementBusinessModelTest extends TestCase
                 fixedCosts: 20_000_000.0,
                 baselineVol: 0.0,
                 macroState: $macro,
-                mathUtility: $mathMock
+                mathUtility: $mathMock,
             )->streamRevenue['base_fee'];
         };
 
         // No market reported: both wealth fields at zero, the term is silent and the base fee is the plain 80M.
-        $noMarket = $run(new \App\DTO\MacroStateDTO(outputGapEma: 0.0));
+        $noMarket = $run(new MacroStateDTO(outputGapEma: 0.0));
         $this->assertEqualsWithDelta(80_000_000.0, $noMarket, 1.0);
 
         // A market 20% above its three-year trend lifts assets, and fees, by 20% x the level beta.
-        $bull = $run(new \App\DTO\MacroStateDTO(outputGapEma: 0.0, equityWealthRatio: 1.20, equityWealthTrend: 1.00));
+        $bull = $run(new MacroStateDTO(outputGapEma: 0.0, equityWealthRatio: 1.20, equityWealthTrend: 1.00));
         $this->assertEqualsWithDelta(80_000_000.0 * (1.0 + (0.20 * AssetManagementBusinessModel::AUM_MARKET_LEVEL_BETA)), $bull, 1.0);
 
         // A crash beyond the cap is clamped, so the fee base cannot be wiped out by a single mark.
-        $crash = $run(new \App\DTO\MacroStateDTO(outputGapEma: 0.0, equityWealthRatio: 0.20, equityWealthTrend: 1.00));
+        $crash = $run(new MacroStateDTO(outputGapEma: 0.0, equityWealthRatio: 0.20, equityWealthTrend: 1.00));
         $this->assertEqualsWithDelta(80_000_000.0 * (1.0 - (AssetManagementBusinessModel::AUM_MARKET_LEVEL_DEVIATION_CAP * AssetManagementBusinessModel::AUM_MARKET_LEVEL_BETA)), $crash, 1.0);
     }
 
@@ -228,7 +228,6 @@ class AssetManagementBusinessModelTest extends TestCase
         $this->assertFalse($peModel->isUnderLeveraged(0.90, 1.0, 5.0, 1.05));
     }
 
-
     public function testMoneyFundMigrationIsFeeEarningInflow(): void
     {
         $model = new AssetManagementBusinessModel();
@@ -246,8 +245,8 @@ class AssetManagementBusinessModelTest extends TestCase
                 realizedVariableMargin: 0.30,
                 fixedCosts: 20_000_000.0,
                 baselineVol: 0.0,
-                macroState: new \App\DTO\MacroStateDTO(outputGapEma: 0.0, moneyMarketFundShare: $share, moneyMarketFundShareEma: $shareEma),
-                mathUtility: $mathMock
+                macroState: new MacroStateDTO(outputGapEma: 0.0, moneyMarketFundShare: $share, moneyMarketFundShareEma: $shareEma),
+                mathUtility: $mathMock,
             )->streamRevenue['base_fee'];
         };
 
@@ -256,7 +255,6 @@ class AssetManagementBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(80_000_000.0 * 0.0125 * AssetManagementBusinessModel::MMF_AUM_INFLOW_SENSITIVITY, $migrating - $steady, 1.0);
         $this->assertEqualsWithDelta($steady, $run(0.14, 0.15), 1.0, 'Share flowing back to deposits is not a fee-earning inflow.');
     }
-
 
     public function testTheCostBaseFollowsClientFlowsNotTheMarketMark(): void
     {
@@ -270,7 +268,7 @@ class AssetManagementBusinessModelTest extends TestCase
             equityWealthTrend: 1.0,
             moneyMarketFundShare: 0.15,
             moneyMarketFundShareEma: 0.15,
-            moneySupplyGrowthEma: \App\Service\Macro\MacroEngine::M2_BASE_GROWTH,
+            moneySupplyGrowthEma: MacroEngine::M2_BASE_GROWTH,
         );
 
         $this->assertEqualsWithDelta(0.0, $model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);

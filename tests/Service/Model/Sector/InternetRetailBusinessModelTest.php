@@ -6,11 +6,11 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\News\NarrativeEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InternetRetailBusinessModel;
+use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\TestCase;
 
 class InternetRetailBusinessModelTest extends TestCase
@@ -86,7 +86,7 @@ class InternetRetailBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertSame(ShockEvent::LABOR_STRIKE, $result->eventType);
@@ -113,7 +113,7 @@ class InternetRetailBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertSame(ShockEvent::REGULATORY_FINE, $result->eventType);
@@ -141,7 +141,7 @@ class InternetRetailBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertSame(ShockEvent::VIRAL_GROWTH, $result->eventType);
@@ -157,7 +157,6 @@ class InternetRetailBusinessModelTest extends TestCase
         $this->assertNotEmpty($lore);
         $this->assertNotSame('Experienced an unexpected market event.', $lore);
     }
-
 
     /**
      * Household confidence moves the discretionary basket before the output gap does, so a sentiment slump

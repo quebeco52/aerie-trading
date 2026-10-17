@@ -26,7 +26,7 @@ class FixedIncomeTest extends TestCase
 
         // A deliberately non-flat curve: if the implementation discounted everything at one rate the two
         // legs would not both land on their own analytic value.
-        $curve = static fn (float $tau): float => 0.03 + (0.005 * $tau);
+        $curve = static fn(float $tau): float => 0.03 + (0.005 * $tau);
 
         $expected = (100.0 * exp(-0.035 * 1.0)) + (1100.0 * exp(-0.04 * 2.0));
 
@@ -41,12 +41,12 @@ class FixedIncomeTest extends TestCase
             ['time' => 1.0, 'amount' => 100.0],
         ];
 
-        $curve = static fn (float $tau): float => 0.04;
+        $curve = static fn(float $tau): float => 0.04;
 
         $this->assertEqualsWithDelta(
             100.0 * exp(-0.04),
             FixedIncome::calculateBondPresentValue($flows, $curve),
-            1e-9
+            1e-9,
         );
     }
 
@@ -95,9 +95,9 @@ class FixedIncomeTest extends TestCase
         $yield = 0.045;
         $bump = 1e-6;
 
-        $priceAt = fn (float $y): float => FixedIncome::calculateBondPresentValue(
+        $priceAt = fn(float $y): float => FixedIncome::calculateBondPresentValue(
             $flows,
-            static fn (float $tau): float => $y
+            static fn(float $tau): float => $y,
         );
 
         // Central difference on -(1/P)(dP/dy) reproduces modified duration if and only if the two are the
@@ -118,9 +118,9 @@ class FixedIncomeTest extends TestCase
         $yield = 0.055;
         $bump = 1e-4;
 
-        $priceAt = fn (float $y): float => FixedIncome::calculateBondPresentValue(
+        $priceAt = fn(float $y): float => FixedIncome::calculateBondPresentValue(
             $flows,
-            static fn (float $tau): float => $y
+            static fn(float $tau): float => $y,
         );
 
         $numeric = ($priceAt($yield + $bump) - (2.0 * $priceAt($yield)) + $priceAt($yield - $bump))
@@ -144,7 +144,7 @@ class FixedIncomeTest extends TestCase
             // Equal present value on every rung: the ladder is even in what it holds, not in what it is paid.
             $flows[] = ['time' => $time, 'amount' => exp($yield * $time)];
         }
-        $priceAt = static fn (float $y): float => FixedIncome::calculateBondPresentValue($flows, static fn (float $tau): float => $y);
+        $priceAt = static fn(float $y): float => FixedIncome::calculateBondPresentValue($flows, static fn(float $tau): float => $y);
 
         $this->assertEqualsWithDelta($duration, FixedIncome::calculateMacaulayDuration($flows, $yield), 1e-9);
         $this->assertEqualsWithDelta(48.0, FixedIncome::calculateConvexity($flows, $yield), 1e-3, 'The ladder convexity, 4D^2/3.');
@@ -169,7 +169,7 @@ class FixedIncomeTest extends TestCase
         foreach ([0.001, 0.02, 0.045, 0.09, 0.25] as $trueYield) {
             $price = FixedIncome::calculateBondPresentValue(
                 $flows,
-                static fn (float $tau): float => $trueYield
+                static fn(float $tau): float => $trueYield,
             );
 
             $this->assertEqualsWithDelta($trueYield, FixedIncome::calculateYieldToMaturity($flows, $price), 1e-8);
@@ -248,7 +248,7 @@ class FixedIncomeTest extends TestCase
                 curvature2: 0.0,
                 tau: $tau,
                 lambda1: $lambda1,
-                lambda2: 0.15
+                lambda2: 0.15,
             );
 
             $this->assertEqualsWithDelta($nsYield, $svenssonYield, 0.00001, "Svensson must equal Nelson-Siegel when beta3=0 for tau=$tau");
@@ -314,7 +314,7 @@ class FixedIncomeTest extends TestCase
             -FixedIncome::calculatePreferredHabitatTermPremiumShift(0.005, 10.0),
             FixedIncome::calculatePreferredHabitatTermPremiumShift(-0.005, 10.0),
             0.0000001,
-            'QT must mirror QE of the same intensity.'
+            'QT must mirror QE of the same intensity.',
         );
 
         $this->assertSame(0.0, FixedIncome::calculatePreferredHabitatTermPremiumShift(0.0, 10.0), 'A flat balance sheet shifts nothing.');

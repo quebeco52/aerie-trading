@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -13,6 +12,7 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for miners, from single-commodity producers to diversified majors.
@@ -192,11 +192,11 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
             'precious_metals' => max(0.0, $params[ModelParam::PreciousMetalsWeight]),
             'energy_minerals' => max(0.0, $params[ModelParam::EnergyMineralsWeight]),
             'fertilizer_minerals' => max(0.0, $params[ModelParam::FertilizerMineralsWeight]),
-        ], static fn (float $weight): bool => $weight > 0.0);
+        ], static fn(float $weight): bool => $weight > 0.0);
         $total = array_sum($weights);
 
         return $total > 0.0
-            ? array_map(static fn (float $weight): float => $weight / $total, $weights)
+            ? array_map(static fn(float $weight): float => $weight / $total, $weights)
             : ['base_metals' => 1.0];
     }
 
@@ -207,7 +207,7 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

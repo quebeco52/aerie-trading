@@ -7,8 +7,8 @@ namespace App\Service\Market\Option;
 use App\DTO\OptionQuoteDTO;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
-use App\Service\Math\FinancialConstants;
 use App\Service\Market\Pricing\LiquidityEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * The public's standing position in a name's option chain.
@@ -72,7 +72,7 @@ final class OptionDemandEngine
         array $quotes,
         float $marketVolatility,
         float $baselineVolatility,
-        float $dt
+        float $dt,
     ): void {
         if ($contracts === [] || $dt <= 0.0) {
             return;
@@ -161,7 +161,7 @@ final class OptionDemandEngine
             return $rungs;
         }
 
-        usort($rungs, static fn (array $a, array $b): int => $a['delta'] <=> $b['delta']);
+        usort($rungs, static fn(array $a, array $b): int => $a['delta'] <=> $b['delta']);
 
         $spread = [];
         $total = 0.0;

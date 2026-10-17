@@ -54,7 +54,7 @@ class AgentFlowEngineTest extends TestCase
                 new VolatilityTargetStrategy(),
                 new RelativeValueStrategy(),
             ],
-            $providers ?? [new MarketMakerStrategy()]
+            $providers ?? [new MarketMakerStrategy()],
         );
     }
 
@@ -67,7 +67,7 @@ class AgentFlowEngineTest extends TestCase
         float $dt = 1.0 / 14400.0,
         float $splitRatio = 1.0,
         float $volatility = 0.0,
-        string $ticker = 'TEST'
+        string $ticker = 'TEST',
     ): AgentMarketViewDTO {
         return new AgentMarketViewDTO(
             ticker: $ticker,
@@ -108,7 +108,7 @@ class AgentFlowEngineTest extends TestCase
             $this->assertLessThanOrEqual(
                 $capacity * $step * 1.001,
                 abs($position),
-                "{$identifier} took more than one adjustment step on its first tick."
+                "{$identifier} took more than one adjustment step on its first tick.",
             );
         }
 
@@ -157,7 +157,7 @@ class AgentFlowEngineTest extends TestCase
             new AgentPopulation(),
             new InMemoryAgentStateStore(),
             new InMemoryOrderFlowStore(),
-            [new FundamentalistStrategy()]
+            [new FundamentalistStrategy()],
         );
 
         for ($tick = 0; $tick < 57; $tick++) {
@@ -313,7 +313,7 @@ class AgentFlowEngineTest extends TestCase
                 price: $price,
                 fairValue: 100.0,
                 momentum: 0.15,
-                logReturn: $logReturn
+                logReturn: $logReturn,
             ))['shares'];
         }
 

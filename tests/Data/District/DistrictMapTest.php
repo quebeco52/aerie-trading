@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Data\District;
 
-use App\Data\District\DistrictMap;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
+use App\Data\District\DistrictMap;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -49,7 +49,7 @@ class DistrictMapTest extends TestCase
         $this->assertSame(
             $flattened,
             array_values(array_unique($flattened)),
-            'A business model trades in exactly one district'
+            'A business model trades in exactly one district',
         );
     }
 
@@ -59,7 +59,7 @@ class DistrictMapTest extends TestCase
             $this->assertContains(
                 $businessModel,
                 DistrictMap::FRONTAGE_ORDER,
-                sprintf('Business model "%s" is carried by a listed company but has no position in FRONTAGE_ORDER — it can never hold frontage.', $businessModel)
+                sprintf('Business model "%s" is carried by a listed company but has no position in FRONTAGE_ORDER — it can never hold frontage.', $businessModel),
             );
         }
     }
@@ -69,7 +69,7 @@ class DistrictMapTest extends TestCase
         $this->assertSame(
             array_unique(DistrictMap::FRONTAGE_ORDER),
             DistrictMap::FRONTAGE_ORDER,
-            'A business model listed twice in FRONTAGE_ORDER would have its second position unreachable.'
+            'A business model listed twice in FRONTAGE_ORDER would have its second position unreachable.',
         );
     }
 
@@ -122,7 +122,7 @@ class DistrictMapTest extends TestCase
         $this->assertLessThan(
             DistrictMap::INSTITUTION_OUTLET_Y,
             $institutionBottom,
-            'Institution structures must not extend below their own conduit outlet.'
+            'Institution structures must not extend below their own conduit outlet.',
         );
 
         // The name, then the readouts each with a sparkline strip under it, all above the outlet.
@@ -145,7 +145,7 @@ class DistrictMapTest extends TestCase
         $this->assertLessThan(
             min(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE) / 2,
             DistrictMap::CONDUIT_DROP_INSET,
-            'The drop inset must leave the narrowest roof some width to spread drops across'
+            'The drop inset must leave the narrowest roof some width to spread drops across',
         );
     }
 
@@ -261,7 +261,7 @@ class DistrictMapTest extends TestCase
             $this->assertArrayHasKey(
                 $sector,
                 DistrictMap::SECTOR_PALETTE,
-                sprintf('Sector "%s" would render with the fallback palette rather than its own hue', $sector)
+                sprintf('Sector "%s" would render with the fallback palette rather than its own hue', $sector),
             );
         }
     }
@@ -276,7 +276,7 @@ class DistrictMapTest extends TestCase
                 $this->assertMatchesRegularExpression(
                     '/^#[0-9a-f]{6}$/',
                     $palette[$key],
-                    sprintf('Palette "%s" for "%s" is not a six-digit hex colour', $key, $sector)
+                    sprintf('Palette "%s" for "%s" is not a six-digit hex colour', $key, $sector),
                 );
             }
         }

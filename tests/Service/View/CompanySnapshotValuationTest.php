@@ -8,10 +8,10 @@ use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Pricing\MarketEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Tests\Support\StockBuilder;
@@ -33,7 +33,7 @@ class CompanySnapshotValuationTest extends TestCase
             new MarketEngine($math),
             new DebtEngine($math, CorporateMetrics::getInstance()),
             new AnchorStakeLedger(),
-            $this->createMock(StockRepository::class)
+            $this->createMock(StockRepository::class),
         );
     }
 

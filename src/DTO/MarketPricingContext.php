@@ -74,7 +74,7 @@ class MarketPricingContext
         /** The firm's measured long-run return (Stock::$longRunReturn); null values it on its trailing return. */
         public ?float $longRunReturn = null,
         /** Cash per share beyond what the business needs to run, valued at face beside it; zero for a financial, whose cash is its business. */
-        public float $excessCashPerShare = 0.0
+        public float $excessCashPerShare = 0.0,
     ) {}
 
     /**
@@ -96,7 +96,7 @@ class MarketPricingContext
         float $maShock = 0.0,
         ?float $priorMarketVol = null,
         float $fundImpactVariance = 0.0,
-        ?float $marketVarianceTrend = null
+        ?float $marketVarianceTrend = null,
     ): self {
         $strategy = Sectors::strategyFor($stock->getIndustry());
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
@@ -161,7 +161,7 @@ class MarketPricingContext
                 'carbonPrice' => $strategy->annualCarbonPowerEarningsBase($stock) / $shares,
                 'publicSpending' => $strategy->annualPublicSpendingEarningsBase($stock) / $shares,
                 'utilityRateGrant' => $strategy->annualUtilityTariffBase($stock) / $shares,
-            ], static fn (float $base): bool => $base !== 0.0)
+            ], static fn(float $base): bool => $base !== 0.0),
         );
     }
 }

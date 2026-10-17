@@ -248,4 +248,3 @@ enum ModelParam: string
     case SpecialtyChemicalsWeight = 'specialty_chemicals_weight';
     case AgrochemicalsWeight = 'agrochemicals_weight';
 }
-

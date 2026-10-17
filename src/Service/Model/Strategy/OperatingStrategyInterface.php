@@ -112,7 +112,7 @@ interface OperatingStrategyInterface
      * @param float $depreciation Quarterly depreciation already deducted from $ebit, for models whose return
      *                             is defined before it (a REIT's cap rate is struck on net operating income).
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float;
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?MacroStateDTO $macroState = null, float $depreciation = 0.0): float;
     /** The sector's secular real growth at the open: trend growth plus its measured demand drift. Read the faded rate below. */
     public function getSecularGrowthRate(Stock $stock): float;
     /** Secular real growth at a simulated time: the opening rate's excess over trend faded toward zero. */

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
-use App\Data\Politics\AerieCouncil;
-use App\Data\Politics\AerieDiet;
 use App\Data\District\DistrictCalendar;
 use App\Data\District\Institutions;
+use App\Data\Politics\AerieCouncil;
+use App\Data\Politics\AerieDiet;
 use App\Data\Politics\AeriePartyProfiles;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
@@ -356,7 +356,7 @@ class GovernmentPageBuilder
             ] : []), AerieCouncil::roster($macro->totalTime)),
             'board' => $politics->boardMembers === [] ? null : self::stanceCounts(
                 array_map(static fn(array $member): float => $member['stance'], $politics->boardMembers),
-                array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers)
+                array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers),
             ) + ['seats' => count($politics->boardMembers), 'median' => MonetaryAuthority::stanceName(CouncilAppointments::boardMedians($politics)[CouncilAppointments::AXIS_MONEY])],
             'lean' => self::councilLean($politics),
             // The Security Bureau and the two guards stand outside the government's menus, so their heads are shown with their mandates.
@@ -466,7 +466,7 @@ class GovernmentPageBuilder
                         'color' => self::PARTY_COLORS[$leader],
                         'seats' => $sumSeats(array_keys(array_filter($blocs, static fn(string $bloc): bool => $bloc === $leader))),
                     ],
-                    $leaders
+                    $leaders,
                 ),
             ],
             'council' => [
@@ -950,7 +950,6 @@ class GovernmentPageBuilder
         return $unit === 'usd_t' ? 2 : 4;
     }
 
-
     /** A law's value as the page shows it: the corporate rate itself, the merger line as an HHI, the green belt as schemes refused, the extraction rules as their cost. */
     private static function leverDisplay(string $lever, float $value): float
     {
@@ -1308,8 +1307,10 @@ class GovernmentPageBuilder
                     'enacted' => $standing['publicSpending'],
                     'status' => $status('publicSpending'),
                     'spending' => true,
-                    'note' => sprintf('Spending on public services runs %.1f%% of GDP today; a budget\'s change reaches it over two to three years',
-                        100.0 * CreditFiscalSubsystem::publicAccounts($macro, 0.0)->purchases),
+                    'note' => sprintf(
+                        'Spending on public services runs %.1f%% of GDP today; a budget\'s change reaches it over two to three years',
+                        100.0 * CreditFiscalSubsystem::publicAccounts($macro, 0.0)->purchases,
+                    ),
                 ],
                 [
                     'name' => 'Corporate tax rate',
@@ -1399,9 +1400,11 @@ class GovernmentPageBuilder
                     'target' => $budget['levers']['stampDutyRate'],
                     'enacted' => $standing['stampDutyRate'],
                     'status' => $status('stampDutyRate'),
-                    'note' => sprintf('Paid by buyer and seller each, into the Sovereign Reserve Fund; turnover runs %.0f%% %s its level at the rate in force at Year 1',
+                    'note' => sprintf(
+                        'Paid by buyer and seller each, into the Sovereign Reserve Fund; turnover runs %.0f%% %s its level at the rate in force at Year 1',
                         abs(100.0 * (MacroTransmission::calculateStampDutyVolumeFactor($standing['stampDutyRate']) - 1.0)),
-                        MacroTransmission::calculateStampDutyVolumeFactor($standing['stampDutyRate']) < 1.0 ? 'below' : 'above'),
+                        MacroTransmission::calculateStampDutyVolumeFactor($standing['stampDutyRate']) < 1.0 ? 'below' : 'above',
+                    ),
                 ],
                 [
                     'name' => 'Bank levy',
@@ -1730,9 +1733,14 @@ class GovernmentPageBuilder
             'axis' => $axis,
             'name' => self::AXIS_NAMES[$axis]['name'],
             'laws' => array_map(static fn(string $lever): string => self::LEVER_SHORT_NAMES[$lever], array_keys(PoliticsEngine::LEVER_AXES, $axis, true)),
-            'summary' => sprintf('%s, from %s on the left to %s on the right: %s%s', self::AXIS_NAMES[$axis]['name'], strtolower($low), strtolower($high),
+            'summary' => sprintf(
+                '%s, from %s on the left to %s on the right: %s%s',
+                self::AXIS_NAMES[$axis]['name'],
+                strtolower($low),
+                strtolower($high),
                 implode(', ', array_map(static fn(array $dot): string => $dot['name'] . ($dot['governing'] ? ' (in the cabinet)' : ($dot['supporting'] ? ' (supporting it)' : '')) . ' at ' . $signed($dot[$axis]), $dots)),
-                $hub === null ? '' : '; the cabinet at ' . $signed($hub)),
+                $hub === null ? '' : '; the cabinet at ' . $signed($hub),
+            ),
             'ends' => [
                 ['text' => $low, 'x' => -$scale - 4.0, 'y' => 0.35 * $size, 'anchor' => 'end'],
                 ['text' => $high, 'x' => $scale + 4.0, 'y' => 0.35 * $size, 'anchor' => 'start'],
@@ -1985,7 +1993,7 @@ class GovernmentPageBuilder
             'decisions' => !$withChart || $this->decisions === null ? null : self::rateChart(
                 $this->decisions->findSince($time - self::RATE_CHART_YEARS),
                 $time,
-                $this->reports?->inflation((int) ceil(FinancialConstants::QUARTERS_PER_YEAR * self::RATE_CHART_YEARS) + 1) ?? []
+                $this->reports?->inflation((int) ceil(FinancialConstants::QUARTERS_PER_YEAR * self::RATE_CHART_YEARS) + 1) ?? [],
             ),
             'rules' => [
                 'governorTermYears' => MonetaryAuthority::GOVERNOR_TERM_YEARS,
@@ -2054,8 +2062,11 @@ class GovernmentPageBuilder
             return $note . ', at the rate set at Year 1';
         }
 
-        return $note . sprintf('; dividends run %+.0f%% against Year 1, buybacks making up the difference, and the budget\'s revenue %+.2f%% of GDP',
-            100.0 * (Valuation::dividendTaxPayoutScale($rate) - 1.0), 100.0 * CreditFiscalSubsystem::dividendTaxRevenueShift($rate));
+        return $note . sprintf(
+            '; dividends run %+.0f%% against Year 1, buybacks making up the difference, and the budget\'s revenue %+.2f%% of GDP',
+            100.0 * (Valuation::dividendTaxPayoutScale($rate) - 1.0),
+            100.0 * CreditFiscalSubsystem::dividendTaxRevenueShift($rate),
+        );
     }
 
     /**

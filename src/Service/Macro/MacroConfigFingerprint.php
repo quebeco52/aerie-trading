@@ -8,10 +8,10 @@ use App\Data\Politics\AerieDiet;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\PoliticsEngine;
 

@@ -42,7 +42,7 @@ final class EarningsFlowRenderTest extends KernelTestCase
         $connection->method('executeQuery')->willReturn($result);
         $entityManager = $this->createStub(EntityManagerInterface::class);
         /** @extends EntityRepository<Stock> */
-        $repository = new class($entityManager, new ClassMetadata(Stock::class), $stock) extends EntityRepository {
+        $repository = new class ($entityManager, new ClassMetadata(Stock::class), $stock) extends EntityRepository {
             /** @param ClassMetadata<Stock> $meta */
             public function __construct(EntityManagerInterface $em, ClassMetadata $meta, private readonly Stock $stock)
             {

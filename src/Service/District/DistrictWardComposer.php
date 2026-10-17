@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\District;
 
-use App\Data\District\DistrictMap;
 use App\Data\Company\Sectors;
+use App\Data\District\DistrictMap;
 use App\Entity\Stock;
 
 /**
@@ -55,7 +55,7 @@ class DistrictWardComposer
         }
 
         // Qualification: the DistrictMap::STREET_ROSTER_SIZE largest by market cap alone.
-        usort($ranked, static fn (array $a, array $b) => $b['marketCap'] <=> $a['marketCap']);
+        usort($ranked, static fn(array $a, array $b) => $b['marketCap'] <=> $a['marketCap']);
         $qualified = array_slice($ranked, 0, DistrictMap::STREET_ROSTER_SIZE);
 
         // Position: re-sort the qualifying tenants into authored frontage order, market cap
@@ -113,7 +113,7 @@ class DistrictWardComposer
      */
     public function rosterOrder(array $stocks): array
     {
-        return array_map(static fn (array $slot) => $slot['ticker'], $this->composeFrontage($stocks)['slots']);
+        return array_map(static fn(array $slot) => $slot['ticker'], $this->composeFrontage($stocks)['slots']);
     }
 
     /**
@@ -151,14 +151,14 @@ class DistrictWardComposer
         // Street rank is the live market-cap position among the tenants; rank 1 is the largest.
         // A bankrupt shell's cap is whatever its last print says, which is the honest reading.
         $byCap = $tenants;
-        usort($byCap, static fn (array $a, array $b) => $b['marketCap'] <=> $a['marketCap']);
+        usort($byCap, static fn(array $a, array $b) => $b['marketCap'] <=> $a['marketCap']);
         $streetRank = [];
         foreach ($byCap as $position => $entry) {
             $streetRank[$entry['stock']->getTicker()] = $position + 1;
         }
 
         $widths = array_map(
-            static fn (array $entry): int => DistrictMap::plotWidthForImportance($entry['stock']->getSystemicImportance()),
+            static fn(array $entry): int => DistrictMap::plotWidthForImportance($entry['stock']->getSystemicImportance()),
             $tenants,
         );
 

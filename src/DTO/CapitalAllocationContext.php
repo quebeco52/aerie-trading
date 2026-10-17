@@ -29,7 +29,7 @@ class CapitalAllocationContext
          * Growth plant the treasury may still fund this quarter, cash or borrowed: what the flexible accelerator
          * allows less what the earnings engine already built. Null where no plant budget applies (a lender).
          */
-        public ?float $expansionBudget = null
+        public ?float $expansionBudget = null,
     ) {}
 
     // Core Business Traits
@@ -46,12 +46,12 @@ class CapitalAllocationContext
     public float $currentTreasury = 0.0;
     public float $operatingBase = 0.0;
     public float $investedCapital = 0.0;
-    
+
     // Profit & Health
     public ?DebtHealthDTO $health = null;
     public float $quarterlyNopat = 0.0;
     public float $retainedEarningsThisQuarter = 0.0;
-    
+
     // Cash Flow & Treasury Tracking
     public float $newTreasury = 0.0;
     public float $targetOperatingCash = 0.0;
@@ -72,7 +72,7 @@ class CapitalAllocationContext
 
     // Valuation
     public float $currentPE = 0.0;
-    
+
     // Dividends
     public float $newDividend = 0.0;
     public float $totalPaid = 0.0;
@@ -87,7 +87,7 @@ class CapitalAllocationContext
     public float $assetSaleLoss = 0.0;
     public ?float $bankApy = null;
     public bool $debtActionTaken = false;
-    
+
     public float $totalCashSpent = 0.0; // buybacks
     /** Cash actually received from shares issued this quarter, net of any offering discount. */
     public float $equityRaised = 0.0;
@@ -96,7 +96,7 @@ class CapitalAllocationContext
     public ?float $openingCapitalRatio = null;
     /** What a regulator's distribution ceiling leaves this quarter for repurchases once the dividend is paid; null when none applies. */
     public ?float $distributionRoom = null;
-    
+
     // Market Events
     public array $events = [];
 }

@@ -6,20 +6,19 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
 
-use App\Service\Math\CreditRisk;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Credit Services (Credit Cards, Consumer Finance).
- * 
+ *
  * Financial Physics:
  * - Hybrid model relying on interest spreads (like a bank) and transaction volume (like a brokerage).
  * - Revenue directly benefits from inflation because interchange/swipe fees are a percentage of total price.
@@ -32,7 +31,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Unsecured card balances and swipe volumes are consumer-cyclical. */
     public const OPERATING_CYCLICALITY = 1.20;
 
-        public function getMoatSpread(): float { return 0.005; }
+    public function getMoatSpread(): float
+    {
+        return 0.005;
+    }
 
     // --- ROE & Target Architecture ---
     /** Minimum lending EBIT floor as a fraction of core debt liabilities. */
@@ -168,7 +170,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             * (1.0 + ($swipeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus));
         // Interchange on a bigger ticket is the same swipe: the inflation bonus is price, not processing volume.
         $priceRevenue = $expectedRevenue * $networkWeight * $inflationBonus;
-        
+
         $streamRevenues = [
             'lending' => $lendingRevenue,
             'swipe'   => $networkRevenue,
@@ -216,8 +218,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             priceRevenue: $priceRevenue,
         );
     }
-
-
 
     /**
      * The card book's calibration yield: the target EBIT plus the book's operating cost over the book, under the APR
@@ -338,12 +338,12 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $householdZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->retailDefaultRateEma,
             $macroState->retailDefaultRateTrend,
-            \App\Service\Math\CreditRisk::RETAIL_ASRF_RHO
+            CreditRisk::RETAIL_ASRF_RHO,
         );
         $pd = static::CONSUMER_CHARGE_OFF_RATE * $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
 
         return [
-            'loss_rate' => CreditRisk::calculateVasicekExpectedLoss($householdZ, $pd, \App\Service\Math\CreditRisk::RETAIL_ASRF_RHO, self::LGD_BASELINE)
+            'loss_rate' => CreditRisk::calculateVasicekExpectedLoss($householdZ, $pd, CreditRisk::RETAIL_ASRF_RHO, self::LGD_BASELINE)
                 * $this->getLoanShareOfEarningAssets(),
             'systematic_z' => $householdZ,
         ];
@@ -373,7 +373,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return max(
             $operatingBase * self::TARGET_CASH_OPERATING_MULT,
             $currentLiability * self::TARGET_CASH_LIABILITY_MULT,
-            $wholesaleDebt * self::TARGET_CASH_WHOLESALE_MULT
+            $wholesaleDebt * self::TARGET_CASH_WHOLESALE_MULT,
         );
     }
 
@@ -382,7 +382,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return max(
             $operatingBase * self::MIN_CASH_OPERATING_MULT,
             $currentLiability * self::MIN_CASH_LIABILITY_MULT,
-            $wholesaleDebt * self::MIN_CASH_WHOLESALE_MULT
+            $wholesaleDebt * self::MIN_CASH_WHOLESALE_MULT,
         );
     }
 

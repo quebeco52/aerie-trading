@@ -5,23 +5,22 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Heavy Engineering, Procurement & Construction (EPC).
- * 
+ *
  * Financial Physics:
  * - Tri-Stream Architecture:
  *   1. Civil & Public Infrastructure: Multi-year sovereign/municipal contracts (bridges, transit, dams).
@@ -108,7 +107,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Facilities O&M volume per unit of lagged output gap before cyclicality: recurring site work flexes at a fifth of private EPC's 1.5. */
     public const MAINTENANCE_GDP_SENSITIVITY = 0.30;
 
-
     // --- Tail Risk & Shock Events ---
     /** Z-score threshold for catastrophic project delays and liquidated damages. */
     public const COST_OVERRUN_Z_SCORE = -2.00;
@@ -128,11 +126,26 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Top-line multiplier boost from a landmark infrastructure contract win. */
     public const MEGA_PROJECT_MULT = 1.15;
 
-        public function getWholesaleLeverageLimit(): float { return 2.5; }
-    public function getReversionSpeed(): float { return 0.1; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.25; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.4; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.1;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.25;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.4;
+    }
 
     public function getSeasonalityFactors(): array
     {
@@ -211,7 +224,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::CivilInfrastructureWeight->value    => self::CIVIL_INFRASTRUCTURE_WEIGHT,
@@ -323,9 +336,9 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $civilWeight * self::CIVIL_GOVERNMENT_SPENDING_SENSITIVITY * $dealMultiplier, $clampedMargin, $actualRevenue);
 
         // Civil infrastructure wins are public tenders; maintenance is recurring; commercial is moderately visible
-        $observableShockZ = ($civilZ * $civilWeight * self::CIVIL_VARIANCE_SCALAR * 0.80) +
-            ($commercialZ * $commercialWeight * self::COMMERCIAL_EPC_VARIANCE_SCALAR * 0.35) +
-            ($maintenanceZ * $maintenanceWeight * self::FACILITIES_MAINTENANCE_VARIANCE_SCALAR * 0.90);
+        $observableShockZ = ($civilZ * $civilWeight * self::CIVIL_VARIANCE_SCALAR * 0.80)
+            + ($commercialZ * $commercialWeight * self::COMMERCIAL_EPC_VARIANCE_SCALAR * 0.35)
+            + ($maintenanceZ * $maintenanceWeight * self::FACILITIES_MAINTENANCE_VARIANCE_SCALAR * 0.90);
         $observableShockZ *= $baselineVol;
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
@@ -339,7 +352,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-                    kpis: ['book_to_bill' => $backlogRevenue > 0.0 ? $backlogOrders / $backlogRevenue : 1.0, 'backlog_quarters' => $backlogQuarters],
+            kpis: ['book_to_bill' => $backlogRevenue > 0.0 ? $backlogOrders / $backlogRevenue : 1.0, 'backlog_quarters' => $backlogQuarters],
             specialCharge: $specialCharge,
         );
     }

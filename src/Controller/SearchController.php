@@ -20,7 +20,7 @@ class SearchController extends AbstractController
     public function autocomplete(Request $request, StockRepository $stocks, EtfRepository $etfs, BondRepository $bonds): JsonResponse
     {
         $query = trim((string) $request->query->get('q', ''));
-        
+
         if (strlen($query) < 1) {
             return new JsonResponse([]);
         }

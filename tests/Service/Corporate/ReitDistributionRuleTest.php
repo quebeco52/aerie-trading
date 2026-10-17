@@ -11,15 +11,15 @@ use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReitBusinessModel;
+use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
@@ -92,7 +92,7 @@ final class ReitDistributionRuleTest extends TestCase
             $stock,
             new MacroStateDTO(corporateTaxRate: 0.21),
             Sectors::getBusinessModelStrategy('reit'),
-            'reit'
+            'reit',
         );
         $ctx->baselineRoic = 0.20;
         $ctx->investedCapital = 85_000_000_000.0;
@@ -120,7 +120,7 @@ final class ReitDistributionRuleTest extends TestCase
             $corporateMetrics,
             $this->createStub(NarrativeEngine::class),
             new MarketConsensusEngine(),
-            null
+            null,
         );
     }
 }

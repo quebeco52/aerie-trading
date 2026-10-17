@@ -2,10 +2,10 @@
 
 namespace App\Controller\Admin;
 
-use App\Service\Market\Ticker\HistoryPruner;
 use App\Data\Macro\OutputGapChannels;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;
+use App\Service\Market\Ticker\HistoryPruner;
 use Doctrine\DBAL\Connection;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -24,7 +24,7 @@ class MacroController extends AbstractController
 
         return $this->render('admin/macroDashboard.html.twig', [
             'macro_state' => $macroState,
-            'live_sectors' => $liveSectors
+            'live_sectors' => $liveSectors,
         ]);
     }
 
@@ -68,7 +68,7 @@ class MacroController extends AbstractController
         $rows = $conn->fetchAllAssociative(
             'SELECT total_time, gap_channels, quarter_diagnostics FROM macro_report
              WHERE gap_channels IS NOT NULL
-             ORDER BY id DESC LIMIT ' . HistoryPruner::MACRO_QUARTERS_KEPT
+             ORDER BY id DESC LIMIT ' . HistoryPruner::MACRO_QUARTERS_KEPT,
         );
 
         $quarters = [];

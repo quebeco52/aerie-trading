@@ -23,7 +23,7 @@ class NotificationRepository extends ServiceEntityRepository
     {
         return (int) $this->getEntityManager()->getConnection()->fetchOne(
             'SELECT COUNT(*) FROM notifications WHERE user_id = :user AND read_at IS NULL',
-            ['user' => $user->getId()]
+            ['user' => $user->getId()],
         );
     }
 
@@ -45,7 +45,7 @@ class NotificationRepository extends ServiceEntityRepository
     {
         return (int) $this->getEntityManager()->getConnection()->fetchOne(
             'SELECT COUNT(*) FROM notifications WHERE user_id = :user',
-            ['user' => $user->getId()]
+            ['user' => $user->getId()],
         );
     }
 
@@ -53,7 +53,7 @@ class NotificationRepository extends ServiceEntityRepository
     {
         $this->getEntityManager()->getConnection()->executeStatement(
             'UPDATE notifications SET read_at = :now WHERE user_id = :user AND read_at IS NULL',
-            ['now' => (new \DateTime())->format('Y-m-d H:i:s'), 'user' => $user->getId()]
+            ['now' => (new \DateTime())->format('Y-m-d H:i:s'), 'user' => $user->getId()],
         );
     }
 }

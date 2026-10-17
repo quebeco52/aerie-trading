@@ -51,6 +51,6 @@ interface IndexMembershipStoreInterface
         array $added = [],
         array $deleted = [],
         array $weights = [],
-        array $factors = []
+        array $factors = [],
     ): void;
 }

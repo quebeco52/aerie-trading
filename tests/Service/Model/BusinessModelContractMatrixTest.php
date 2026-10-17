@@ -72,7 +72,7 @@ class BusinessModelContractMatrixTest extends TestCase
             yield5yEma: 0.04,
             yield10yEma: 0.02,
             marketVolatilityEma: 0.45, // 45% VIX panic
-            macroCreditSpreadEma: 0.06 // 600bps credit spread blowout
+            macroCreditSpreadEma: 0.06, // 600bps credit spread blowout
         );
 
         // 1. Target Metrics
@@ -99,7 +99,7 @@ class BusinessModelContractMatrixTest extends TestCase
             fixedCosts: 50000000.0,
             baselineVol: 0.30,
             macroState: $stressMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertTrue(is_finite($actuals->actualRevenue), "Revenue in {$modelClass} must be finite");
@@ -116,7 +116,7 @@ class BusinessModelContractMatrixTest extends TestCase
             corporateTaxRate: 0.21,
             wacc: 0.08,
             costOfEquity: 0.10,
-            macroState: $stressMacro
+            macroState: $stressMacro,
         );
 
         $this->assertTrue(is_finite($ret), "Return in {$modelClass} must be finite");
@@ -139,7 +139,7 @@ class BusinessModelContractMatrixTest extends TestCase
             policyRate: 0.07,
             equityLimit: 5.0,
             totalEquity: 500000000.0,
-            debt: 1000000000.0
+            debt: 1000000000.0,
         );
 
         $this->assertTrue(is_finite($debtCalc->interestExpense));

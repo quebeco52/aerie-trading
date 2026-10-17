@@ -75,7 +75,7 @@ class SentimentResidualTest extends TestCase
     {
         $math = $this->createStub(MathUtility::class);
         $math->method('generatePersistentZ')->willReturn(0.0);
-        $revenue = fn (float $gap): float => $model->computeActualFinancials(self::stock($ticker), 100.0, 0.30, 10.0, 0.10, self::onTheFit($gap), $math)->streamRevenue[$stream];
+        $revenue = fn(float $gap): float => $model->computeActualFinancials(self::stock($ticker), 100.0, 0.30, 10.0, 0.10, self::onTheFit($gap), $math)->streamRevenue[$stream];
 
         $elasticity = (($revenue(self::GAP) / $revenue(0.0)) - 1.0) / self::GAP;
 

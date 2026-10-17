@@ -102,7 +102,7 @@ final class DemandTransmissionLagTest extends TestCase
         $this->assertSame(
             self::BOOM,
             $model->resolveLaggedOutputGap(new MacroStateDTO(outputGapEma: self::BOOM, outputGapLag12m: self::SLUMP)),
-            'A zero-lag firm must see the macro series untouched.'
+            'A zero-lag firm must see the macro series untouched.',
         );
     }
 
@@ -141,7 +141,7 @@ final class DemandTransmissionLagTest extends TestCase
         $field = MacroAggregateSubsystem::demandTransmissionLagField($lagYears);
         $macroState = MacroStateDTO::fromArray(array_replace(
             (new MacroStateDTO(outputGapEma: self::SLUMP))->toArray(),
-            [MacroFieldRegistry::wireKeys()[$field] => self::BOOM]
+            [MacroFieldRegistry::wireKeys()[$field] => self::BOOM],
         ));
 
         $this->assertSame(self::BOOM, $model->resolveLaggedOutputGap($macroState), $modelClass . ' declares a demand lag but does not read it.');

@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Chart;
 
 use App\Entity\Stock;
-use App\Entity\StockHistory;
 use App\Repository\StockHistoryRepository;
-use App\Service\Market\Ticker\TickCadence;
 use App\Service\Market\Chart\PriceChangeFeed;
+use App\Service\Market\Ticker\TickCadence;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -219,7 +218,7 @@ class PriceChangeFeedTest extends TestCase
         // a row count off the tick rate instead asks for three hundred and silently walks past the window.
         $this->assertSame(
             (int) ceil(TickCadence::historyPointsPerYear(self::TICKS_PER_YEAR) * PriceChangeFeed::LOOKBACK_YEARS),
-            $this->feed->historyRowsPerLookback()
+            $this->feed->historyRowsPerLookback(),
         );
         $this->assertSame(100, $this->feed->historyRowsPerLookback());
     }

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Chart;
 
-use App\Service\Market\Ticker\TickCadence;
 use App\Service\Market\Chart\PriceBarAggregator;
+use App\Service\Market\Ticker\TickCadence;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -97,7 +97,7 @@ class PriceBarAggregatorTest extends TestCase
             self::assertGreaterThan(
                 0,
                 $singleTickRows,
-                "At {$ticksPerYear} ticks/year a stored row spans a single tick and cannot carry a range, so the bar has to be built on read."
+                "At {$ticksPerYear} ticks/year a stored row spans a single tick and cannot carry a range, so the bar has to be built on read.",
             );
         }
     }
@@ -118,7 +118,7 @@ class PriceBarAggregatorTest extends TestCase
         self::assertSame(
             count($bars),
             $withRange,
-            'Every bar aggregates several observations, so every bar has a high above its low.'
+            'Every bar aggregates several observations, so every bar has a high above its low.',
         );
     }
 
@@ -257,12 +257,12 @@ class PriceBarAggregatorTest extends TestCase
             self::assertLessThan(
                 $candleDwell,
                 $lineDwell,
-                sprintf('A %dy line slot must span fewer ticks than the candle slot it replaces.', $years)
+                sprintf('A %dy line slot must span fewer ticks than the candle slot it replaces.', $years),
             );
             self::assertLessThanOrEqual(
                 30.0,
                 $lineDwell,
-                sprintf('A %dy line slot spans %.1f ticks: the tail freezes that long between steps.', $years, $lineDwell)
+                sprintf('A %dy line slot spans %.1f ticks: the tail freezes that long between steps.', $years, $lineDwell),
             );
         }
     }
@@ -281,13 +281,13 @@ class PriceBarAggregatorTest extends TestCase
                 $rowsPerYear,
                 PriceBarAggregator::LINE_TARGET_BARS,
                 PriceBarAggregator::LINE_MIN_ROWS_PER_BAR,
-                $rowsPerYear
+                $rowsPerYear,
             );
 
             self::assertLessThanOrEqual(
                 $ticksPerYear,
                 count($bars),
-                "More slots than ticks at {$ticksPerYear} ticks/year would leave the grid finer than the clock that advances it."
+                "More slots than ticks at {$ticksPerYear} ticks/year would leave the grid finer than the clock that advances it.",
             );
         }
     }
@@ -311,7 +311,7 @@ class PriceBarAggregatorTest extends TestCase
                 $rowCount,
                 PriceBarAggregator::LINE_TARGET_BARS,
                 PriceBarAggregator::LINE_MIN_ROWS_PER_BAR,
-                $rowsPerYear
+                $rowsPerYear,
             ));
 
             self::assertSame($rowCount, $bars, "The {$range} line merged rows it had room to draw.");
@@ -388,7 +388,7 @@ class PriceBarAggregatorTest extends TestCase
         self::assertEqualsWithDelta($newest, $oldest['age'], $result['bar_years'], 'The first weekly row is dated at its own time.');
         self::assertEqualsWithDelta(50.0, $oldest['open_price'], 1e-9);
 
-        $weekly = array_filter($result['bars'], static fn (array $bar): bool => $bar['age'] > 1.0);
+        $weekly = array_filter($result['bars'], static fn(array $bar): bool => $bar['age'] > 1.0);
         self::assertCount(208, $weekly, 'Each thinned row is its own bar, never merged with its neighbours for want of rows.');
     }
 }

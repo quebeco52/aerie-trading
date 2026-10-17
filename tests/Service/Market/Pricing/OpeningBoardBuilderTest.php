@@ -10,11 +10,11 @@ use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 

@@ -53,7 +53,7 @@ class PruneHistoryCommand extends Command
         $io->text(sprintf(
             'Simulation stands at year %.4f; downsampling everything before year %.4f.',
             $report['now'],
-            $report['cutoff']
+            $report['cutoff'],
         ));
 
         foreach ($report['tables'] as $table => $deleted) {
@@ -63,7 +63,7 @@ class PruneHistoryCommand extends Command
         $io->success(sprintf(
             'Cleared %d settled option contracts (expired before year %.4f).',
             $report['options'],
-            $report['optionCutoff']
+            $report['optionCutoff'],
         ));
 
         $io->success($report['macro'] > 0

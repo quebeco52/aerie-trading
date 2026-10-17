@@ -5,21 +5,20 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
+use App\DTO\MacroStateDTO;
 
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Security, Defense & Private Military Contractors (PMCs).
- * 
+ *
  * Financial Physics:
  * - Tri-Stream Engine:
  *      1. Government Contracts: Rock-solid, sovereign cost-plus revenue (0% GDP sensitivity, ultra-low variance).
@@ -69,11 +68,26 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     /** Base analyst forecasting error scalar for obfuscated security operations. */
     public const BASE_COVERAGE_ERROR = 0.10;
 
-        public function getWholesaleLeverageLimit(): float { return 1.5; }
-    public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.025; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.05; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.2; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 1.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.025;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.05;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.2;
+    }
 
     // --- Secular Demand ---
     /** Administrative and support services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -146,7 +160,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // Security is a survival expense. We nullify the global demand shift to prevent double-dipping,
         // allowing each stream to pull directly from its assigned macro variables in calculateSectorPhysics.
         $physics['macro_demand_shift'] = 0.0;
-
 
         return $physics;
     }
@@ -291,10 +304,10 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR, $clampedMargin, $actualRevenue);
 
         // Visibility: Government cost-plus inflation is fully public, Retainers are moderately public, Expeditionary Black Ops are opaque.
-        $observableShockZ = ($govZ * $govWeight * self::GOVERNMENT_VARIANCE_SCALAR * 1.0) +
-            ($retainerZ * $retainerWeight * self::RETAINER_VARIANCE_SCALAR * 0.50) +
-            ($expeditionaryZ * $expeditionaryWeight * self::EXPEDITIONARY_VARIANCE_SCALAR * 0.05) +
-            ($govSpendShift * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR);
+        $observableShockZ = ($govZ * $govWeight * self::GOVERNMENT_VARIANCE_SCALAR * 1.0)
+            + ($retainerZ * $retainerWeight * self::RETAINER_VARIANCE_SCALAR * 0.50)
+            + ($expeditionaryZ * $expeditionaryWeight * self::EXPEDITIONARY_VARIANCE_SCALAR * 0.05)
+            + ($govSpendShift * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR);
         $observableShockZ *= $baselineVol;
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.

@@ -5,26 +5,24 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Model\ModelParameters;
-use App\Service\Model\StreamContext;
-use App\Service\Math\FirmEconomics;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
-use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
+
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Pure-Play Regulated Utilities (Water, Electric, Gas).
- * 
+ *
  * Financial Physics:
  * - Legal Monopolies: "Rate Base" regulation guarantees ROIC, but caps upside.
  * - Weather-Driven Volume: Demand is highly inelastic to the economy but highly elastic to severe weather (heatwaves/freezes).
@@ -66,10 +64,22 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.05;
 
-        public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.12; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.12;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.125;
+    }
 
     // --- Seasonality (calendar-quarter revenue over its annual mean, ratio to a centred 4-quarter moving average) ---
     /** Electric: US retail electricity revenue, all sectors, 2015-2019 (EIA-861M, the data behind Electric Power Monthly Table 5.3); summer cooling load at summer tariffs, Q3 +18%. */
@@ -294,7 +304,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             FinancialConstants::STATE_CARBON_POWER_EARNINGS_SHARE,
             $actualRevenue > 0.0
                 ? $merchantVolumeRevenue * $params[ModelParam::MerchantPowerShare] * FirmEconomics::carbonUpliftEarningsPerUnit($params[ModelParam::MerchantGasFleetShare]) / $actualRevenue
-                : 0.0
+                : 0.0,
         );
 
         // --- Margin Aggregation ---
@@ -307,8 +317,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // Regulated weather volume is perfectly visible via meter data, merchant generation is opaque, and the
         // wholesale price is published daily. Dividing the price leg by the base visibility lets a persistent
         // price level converge to an unbiased consensus.
-        $observableShockZ = ($weatherZ * $regulatedWeight * self::WEATHER_VARIANCE_SCALAR) +
-            ($unregulatedZ * $unregulatedWeight * self::MERCHANT_VARIANCE_SCALAR * 0.2);
+        $observableShockZ = ($weatherZ * $regulatedWeight * self::WEATHER_VARIANCE_SCALAR)
+            + ($unregulatedZ * $unregulatedWeight * self::MERCHANT_VARIANCE_SCALAR * 0.2);
         $observableShockZ *= $baselineVol;
         $observableShockZ += ($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY;
 

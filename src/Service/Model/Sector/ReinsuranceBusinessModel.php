@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Global Reinsurance & Alternative Risk Transfer.
- * 
+ *
  * Financial Physics:
  * - Absorbs extreme, low-frequency high-severity tail risks (hurricanes, earthquakes, industrial disasters).
  * - Revenue is split between Treaty Reinsurance Premiums (proportional quota-share / excess-of-loss)
@@ -113,7 +111,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
 
         $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR))));
         $catBondRevenue = max(0.0, $expectedRevenue * $catBondWeight * (1.0 + ($catBondZ * ($baselineVol * self::CAT_BOND_VARIANCE_SCALAR))) * $catBondMultiplier);
-        
+
         $streamRevenues = [
             'treaty_reinsurance' => $treatyRevenue,
             'catastrophe_bonds'  => $catBondRevenue,

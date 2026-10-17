@@ -8,7 +8,6 @@ use App\Entity\Notification;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
 use App\Entity\User;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Notification\PlayerNotifier;
@@ -96,7 +95,7 @@ final class ForcedLiquidationService
             'SELECT s.id, COALESCE(-SUM(us.quantity), 0)
              FROM stocks s
              LEFT JOIN user_stocks us ON us.stock_id = s.id AND us.quantity < 0
-             GROUP BY s.id'
+             GROUP BY s.id',
         );
 
         foreach ($shorted as $stockId => $shares) {
@@ -112,7 +111,7 @@ final class ForcedLiquidationService
             'UPDATE stocks s
              LEFT JOIN (SELECT stock_id, -SUM(quantity) AS shorted FROM user_stocks WHERE quantity < 0 GROUP BY stock_id) us
                 ON us.stock_id = s.id
-             SET s.short_interest_shares = COALESCE(us.shorted, 0)'
+             SET s.short_interest_shares = COALESCE(us.shorted, 0)',
         );
     }
 
@@ -170,12 +169,12 @@ final class ForcedLiquidationService
 
         $charged = (float) $connection->fetchOne(
             'SELECT COALESCE(SUM(ROUND(margin_debit * :rate, 2)), 0) FROM users WHERE margin_debit > 0',
-            ['rate' => $periodRate]
+            ['rate' => $periodRate],
         );
 
         $connection->executeStatement(
             'UPDATE users SET margin_debit = ROUND(margin_debit * (1 + :rate), 2) WHERE margin_debit > 0',
-            ['rate' => $periodRate]
+            ['rate' => $periodRate],
         );
 
         return $charged;
@@ -193,7 +192,7 @@ final class ForcedLiquidationService
         $connection = $this->entityManager->getConnection();
 
         $shortedStockIds = $connection->fetchFirstColumn(
-            'SELECT DISTINCT stock_id FROM user_stocks WHERE quantity < 0'
+            'SELECT DISTINCT stock_id FROM user_stocks WHERE quantity < 0',
         );
 
         $total = 0.0;
@@ -213,7 +212,7 @@ final class ForcedLiquidationService
 
             $total += (float) $connection->fetchOne(
                 'SELECT COALESCE(SUM(ROUND(-quantity * :fee, 4)), 0) FROM user_stocks WHERE stock_id = :stock_id AND quantity < 0',
-                ['fee' => $periodFee, 'stock_id' => $stockId]
+                ['fee' => $periodFee, 'stock_id' => $stockId],
             );
 
             // The running total on the position is what a holder is shown; the cash leaves immediately,
@@ -221,7 +220,7 @@ final class ForcedLiquidationService
             $connection->executeStatement(
                 'UPDATE user_stocks SET borrow_accrued = borrow_accrued + ROUND(-quantity * :fee, 4)
                  WHERE stock_id = :stock_id AND quantity < 0',
-                ['fee' => $periodFee, 'stock_id' => $stockId]
+                ['fee' => $periodFee, 'stock_id' => $stockId],
             );
 
             $connection->executeStatement(
@@ -229,7 +228,7 @@ final class ForcedLiquidationService
                  INNER JOIN user_stocks us ON us.user_id = u.id
                  SET u.cash_balance = u.cash_balance - ROUND(-us.quantity * :fee, 2)
                  WHERE us.stock_id = :stock_id AND us.quantity < 0',
-                ['fee' => $periodFee, 'stock_id' => $stockId]
+                ['fee' => $periodFee, 'stock_id' => $stockId],
             );
         }
 
@@ -253,7 +252,7 @@ final class ForcedLiquidationService
              FROM users u
              LEFT JOIN user_stocks us ON us.user_id = u.id AND us.quantity < 0
              LEFT JOIN user_options uo ON uo.user_id = u.id AND uo.quantity < 0
-             WHERE u.margin_debit > 0 OR us.id IS NOT NULL OR uo.id IS NOT NULL'
+             WHERE u.margin_debit > 0 OR us.id IS NOT NULL OR uo.id IS NOT NULL',
         );
 
         $users = [];
@@ -281,7 +280,7 @@ final class ForcedLiquidationService
              FROM user_stocks us
              JOIN stocks s ON us.stock_id = s.id
              WHERE us.user_id = :user_id AND us.quantity < 0',
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         );
 
         $boughtIn = 0;
@@ -391,7 +390,7 @@ final class ForcedLiquidationService
                 'bond_active' => \App\Entity\Bond::STATUS_ACTIVE,
                 'option_active' => \App\Entity\OptionContract::STATUS_ACTIVE,
                 'multiplier' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER,
-            ]
+            ],
         );
     }
 
@@ -416,7 +415,7 @@ final class ForcedLiquidationService
                AND uo.quantity < 0
                AND oc.status = :active
              ORDER BY (-uo.quantity * oc.price) DESC',
-            ['user_id' => $user->getId(), 'active' => \App\Entity\OptionContract::STATUS_ACTIVE]
+            ['user_id' => $user->getId(), 'active' => \App\Entity\OptionContract::STATUS_ACTIVE],
         );
 
         $closed = 0;
@@ -464,7 +463,7 @@ final class ForcedLiquidationService
                     $action === 'SELL' ? 'sold' : 'bought back',
                     number_format($quantity),
                     $ticker,
-                    $unit
+                    $unit,
                 );
             }
 
@@ -501,7 +500,7 @@ final class ForcedLiquidationService
                         : 'Margin call: your broker closed positions to meet the maintenance requirement',
                     ucfirst(implode('; ', $lines)) . '.',
                     null,
-                    '/dashboard'
+                    '/dashboard',
                 );
             }
         }

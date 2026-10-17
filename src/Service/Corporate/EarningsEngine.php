@@ -5,24 +5,24 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Data\Macro\CapitalGoodsPrices;
+use App\DTO\EarningsSimulationContext;
+use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Event\EarningsReportedEvent;
 use App\Service\Event\MarketEventPublisher;
+use App\Service\Market\Pricing\MarketConsensusEngine;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\Decimal;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
 use App\Service\Math\StochasticProcesses;
-use App\Service\News\NarrativeEngine;
-use App\Service\Math\FinancialConstants;
-use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Market\Pricing\MarketEngine;
-use App\DTO\MarketPricingContext;
-use App\DTO\EarningsSimulationContext;
-use App\Service\Corporate\Holdings\AnchorStakeLedger;
-use App\Service\Corporate\Industry\IndustryShareLedger;
-use App\Service\Event\EarningsReportedEvent;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
+use App\Service\News\NarrativeEngine;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -263,7 +263,7 @@ class EarningsEngine
         /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
         private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine()),
         /** Strikes fair value before and after a report; its revision is the report's price news. It draws nothing, so a default is safe. */
-        private MarketEngine $marketEngine = new MarketEngine(new MathUtility())
+        private MarketEngine $marketEngine = new MarketEngine(new MathUtility()),
     ) {}
 
     public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
@@ -280,7 +280,7 @@ class EarningsEngine
             $macroState,
             $strategy,
             $businessModel,
-            self::QUARTERLY_TIME_STEP
+            self::QUARTERLY_TIME_STEP,
         );
         $ctx->tickCount = $tickCount;
         $ctx->ticksPerYear = $ticksPerYear;
@@ -448,7 +448,7 @@ class EarningsEngine
             $stock,
             'GUIDANCE',
             sprintf('Guidance cut: management expects to miss consensus by roughly %d%% on cost and accrual pressure already incurred.', (int) round($shortfallRatio * 100)),
-            $reaction * 100
+            $reaction * 100,
         )];
     }
 
@@ -590,7 +590,7 @@ class EarningsEngine
                 $stock,
                 $ctx->strategy->getWorkingCapitalDays($stock),
                 $structuralRevenue,
-                $structuralCashCosts
+                $structuralCashCosts,
             );
 
             // A going concern already carries a credit-loss allowance against its receivables. Opening the
@@ -618,7 +618,7 @@ class EarningsEngine
             $ctx->strategy->getPlantCapital($stock, $ctx->investedCapital),
             $netWorkingCapital,
             (float) $stock->getGoodwill(),
-            $stock->getTotalCipAmount()
+            $stock->getTotalCipAmount(),
         );
     }
 
@@ -700,7 +700,7 @@ class EarningsEngine
         $revenueGeneratingCapital = CorporateMetrics::revenueGeneratingCapital(
             $ctx->investedCapital,
             $stock->getTotalCipAmount(),
-            $strategy->isFinancial() ? 0.0 : (float) $stock->getGoodwill()
+            $strategy->isFinancial() ? 0.0 : (float) $stock->getGoodwill(),
         );
         // Plant is booked at historical cost but sells its output at today's prices. Expected inflation already
         // reaches the book through capex planned at nominal growth, so what the book cannot see is a price level that
@@ -742,7 +742,7 @@ class EarningsEngine
         $ctx->structuralDepreciation = $this->resolveStructuralDepreciation($ctx);
         $cashStructuralCosts = max(
             $structuralCosts * self::MIN_CASH_COST_SHARE,
-            $structuralCosts - $ctx->structuralDepreciation
+            $structuralCosts - $ctx->structuralDepreciation,
         );
 
         // Payroll in the fixed base costs the real wage's gap to trend productivity: a LEVEL, so a real wage that
@@ -857,7 +857,7 @@ class EarningsEngine
         $utilization = ($ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor))
             * max(0.0, 1.0 + $ctx->strategy->resolveSectorActivityShift($ctx->stock, $ctx->macroState));
         $activityGap = log(
-            max(self::MIN_CAPACITY_UTILIZATION, $utilization) / max(self::MIN_CAPACITY_UTILIZATION, $prior)
+            max(self::MIN_CAPACITY_UTILIZATION, $utilization) / max(self::MIN_CAPACITY_UTILIZATION, $prior),
         );
 
         $annualElasticity = FinancialConstants::STICKY_COST_BETA_EXPANSION
@@ -866,7 +866,7 @@ class EarningsEngine
 
         $scale = min(
             1.0,
-            max(FinancialConstants::MIN_COMMITTED_COST_SCALE, $prior * exp($speed * $activityGap))
+            max(FinancialConstants::MIN_COMMITTED_COST_SCALE, $prior * exp($speed * $activityGap)),
         );
 
         $ctx->committedCostScale = $scale;
@@ -898,7 +898,7 @@ class EarningsEngine
             $ctx->macroState->totalTime,
             IndustryShareLedger::secularExcessGrowth($ctx->strategy, $ctx->stock),
             $ctx->tickCount,
-            $ctx->ticksPerYear
+            $ctx->ticksPerYear,
         );
 
         // The roster is priced as dominant firms against a competitive fringe that answers the price: an
@@ -907,7 +907,7 @@ class EarningsEngine
             $capacityRatio,
             $this->industryShareLedger->resolveRosterTrendShare($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear),
             FinancialConstants::COURNOT_DEMAND_ELASTICITY,
-            self::FRINGE_SUPPLY_ELASTICITY
+            self::FRINGE_SUPPLY_ELASTICITY,
         );
         $firmResponse = $substitutability * ($industryPrice - 1.0);
 
@@ -1032,7 +1032,7 @@ class EarningsEngine
         return ResponseCurves::calculateConvexPenalty(
             ($capacityUtilization / max(0.01, $seasonalFactor)) - self::CAPACITY_OVERTIME_THRESHOLD,
             self::CAPACITY_OVERTIME_CONVEXITY,
-            self::CAPACITY_OVERTIME_SCALAR
+            self::CAPACITY_OVERTIME_SCALAR,
         );
     }
 
@@ -1071,7 +1071,7 @@ class EarningsEngine
             $ctx->realizedVariableMargin,
             $ctx->fixedCosts,
             $ctx->baselineVol,
-            $actualStreams
+            $actualStreams,
         );
     }
 
@@ -1142,7 +1142,7 @@ class EarningsEngine
                 $ctx->baselineVol,
                 $ctx->macroState,
                 $this->mathUtility,
-                $ctx->calendarQuarter
+                $ctx->calendarQuarter,
             );
             if ($industryRegimes !== null) {
                 $this->industryShareLedger?->commitIndustryRegimes($ctx->stock, $industryRegimes, $ctx->tickCount, $ctx->ticksPerYear);
@@ -1183,7 +1183,7 @@ class EarningsEngine
             $ctx->realizedVariableMargin,
             $seasonalRatio,
             $priorExpectedRevenue,
-            $ctx->expectedRevenueBeforeShocks
+            $ctx->expectedRevenueBeforeShocks,
         );
         $ctx->analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
@@ -1303,7 +1303,7 @@ class EarningsEngine
             $stock->getLeaseLiability(),
             $ctx->structuralRevenue * self::TTM_QUARTERS,
             $ctx->strategy->getLeaseIntensity($stock),
-            $ctx->dt
+            $ctx->dt,
         ));
 
         $saExpectedRevenue = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
@@ -1356,7 +1356,7 @@ class EarningsEngine
                 $ctx->cumulativeEffectAdjustment += $openingDta;
             }
         }
-        $isAllowanceRequired = static fn (float $quarter): bool => array_sum(array_slice([...$history, $quarter], -self::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS)) < 0.0;
+        $isAllowanceRequired = static fn(float $quarter): bool => array_sum(array_slice([...$history, $quarter], -self::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS)) < 0.0;
         $stock->setPretaxIncomeHistory(array_values(array_map('floatval', array_slice([...$history, $actualEbt], -self::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS))));
 
         // Taxable income is book income less the timing differences the plant opens. Accelerated tax depreciation is
@@ -1416,7 +1416,7 @@ class EarningsEngine
         $record = $stock->getEarningsMomentumZ() ?? [];
         $ctx->consensusWalkDown = MarketConsensusEngine::epsWalkDown(
             $ctx->analystExpectedRevenue,
-            MarketConsensusEngine::surpriseVariance((float) ($record[self::STATE_SURPRISE_SQUARES] ?? 0.0), (float) ($record[self::STATE_SURPRISE_WEIGHT] ?? 0.0))
+            MarketConsensusEngine::surpriseVariance((float) ($record[self::STATE_SURPRISE_SQUARES] ?? 0.0), (float) ($record[self::STATE_SURPRISE_WEIGHT] ?? 0.0)),
         );
         $ctx->expectedQuarterlyNetIncome -= $ctx->consensusWalkDown;
 
@@ -1445,7 +1445,7 @@ class EarningsEngine
             $ctx->health->wacc ?? self::DEFAULT_WACC_FALLBACK,
             $ctx->health->costOfEquity ?? self::DEFAULT_COST_OF_EQUITY_FALLBACK,
             $ctx->macroState,
-            $ctx->quarterlyDepreciation
+            $ctx->quarterlyDepreciation,
         );
 
         // The firm's long-run return, the level its profitability reverts to and its valuation anchors on.
@@ -1454,7 +1454,7 @@ class EarningsEngine
             $priorLongRun !== null ? (float) $priorLongRun : null,
             $ctx->strategy->getTrueReturn($stock),
             self::REPORT_INTERVAL_YEARS,
-            self::LONG_RUN_RETURN_EMA_YEARS
+            self::LONG_RUN_RETURN_EMA_YEARS,
         ));
 
         $this->testGoodwillForImpairment($ctx);
@@ -1587,7 +1587,7 @@ class EarningsEngine
             (float) ($state[self::STATE_SURPRISE_SQUARES] ?? 0.0),
             (float) ($state[self::STATE_SURPRISE_WEIGHT] ?? 0.0),
             ($streetEarnings - $unbiasedEstimate) / $ctx->analystExpectedRevenue,
-            $ctx->dt
+            $ctx->dt,
         );
         $ctx->stock->setEarningsMomentumZ($state);
     }
@@ -1627,7 +1627,7 @@ class EarningsEngine
 
         $trailingNetIncome = max(
             -self::MAX_ABSOLUTE_NET_INCOME,
-            min(self::MAX_ABSOLUTE_NET_INCOME, array_sum($history))
+            min(self::MAX_ABSOLUTE_NET_INCOME, array_sum($history)),
         );
         $stock->setTotalNetIncome((string) $trailingNetIncome);
     }
@@ -1739,7 +1739,7 @@ class EarningsEngine
             $ctx->actualQuarterlyNetIncome,
             $ctx->stockCompensation,
             $ctx->openingCapitalRatio,
-            $ctx->expansionBudget
+            $ctx->expansionBudget,
         );
 
         $stock->setSharesOutstanding((string) $ctx->allocation['new_shares']);
@@ -1771,7 +1771,7 @@ class EarningsEngine
         $ctx->lifecycleStage = \App\Data\Company\LifecycleStage::fromCashFlowSigns(
             $ctx->operatingCashFlow > 0.0,
             $ctx->investingCashFlow > 0.0,
-            $ctx->financingCashFlow > 0.0
+            $ctx->financingCashFlow > 0.0,
         );
         $stock->setLifecycleStage($ctx->lifecycleStage);
 
@@ -1912,13 +1912,13 @@ class EarningsEngine
             creditSpread: $ctx->macroState->macroCreditSpreadEma,
             creditSpreadTrend: $ctx->macroState->macroCreditSpreadTrend,
             capacityUtilization: $deseasonalizedUtilization,
-            interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma
+            interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma,
         );
 
         // A macro shift stretches an existing cycle; it cannot conjure one. A firm that carries no inventory
         // does not start accumulating it because demand fell, and a bank with no trade receivables does not
         // acquire some because credit spreads widened. Only components the model actually declares move.
-        $shiftDays = static fn (float $base, float $shift): float => $base > 0.0 ? max(0.0, $base + $shift) : 0.0;
+        $shiftDays = static fn(float $base, float $shift): float => $base > 0.0 ? max(0.0, $base + $shift) : 0.0;
 
         $dso = $shiftDays($baseDays['dso'] ?? 0.0, $shifts['dso'] ?? 0.0);
         $dio = $shiftDays($baseDays['dio'] ?? 0.0, $shifts['dio'] ?? 0.0);
@@ -1938,7 +1938,7 @@ class EarningsEngine
             $stock,
             ['dso' => $dso, 'dio' => $dio, 'dpo' => $dpo],
             $annualizedRevenue,
-            $annualizedCosts
+            $annualizedCosts,
         );
     }
 
@@ -2072,7 +2072,7 @@ class EarningsEngine
             // Other comprehensive income is inside total equity and outside retained earnings, which is why
             // this is a bcadd on the balance sheet and not a line in the income statement.
             $stock->setTotalEquity(
-                \bcadd($stock->getTotalEquity(), Decimal::format($netOfTax, 4), 4)
+                \bcadd($stock->getTotalEquity(), Decimal::format($netOfTax, 4), 4),
             );
         }
 
@@ -2173,7 +2173,6 @@ class EarningsEngine
         if ($inventory <= 0.0) {
             return 0.0;
         }
-
 
         $trigger = self::INVENTORY_NRV_UTILIZATION_TRIGGER;
         $utilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
@@ -2408,7 +2407,7 @@ class EarningsEngine
         $capitalGap = $this->industryShareLedger?->resolveTrendCapacityGap(
             $stock,
             $ctx->macroState,
-            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock)
+            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock),
         ) ?? 0.0;
         $plantGrowth = Valuation::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, self::CAPITAL_ERROR_CORRECTION_SPEED);
 
@@ -2469,7 +2468,7 @@ class EarningsEngine
             $ctx->fairValueBeforeReport,
             $this->strikeFairValue($stock, $ctx->macroState)[0],
             (float) ($ctx->allocation['dividend_paid'] ?? 0.0),
-            $ctx->costOfEquityBeforeReport
+            $ctx->costOfEquityBeforeReport,
         );
         $ctx->totalShockPct = $ctx->priceGapPct;
         $ctx->corporateActionDescriptions = "";
@@ -2528,7 +2527,7 @@ class EarningsEngine
 
         $evaString = $ctx->quarterlyEconomicProfit >= 0 ? "+{$formattedEva} EVA" : "-{$formattedEva} EVA";
 
-        $money = static fn (float $eps): string => $eps < 0 ? '-$' . number_format(abs($eps), 2) : '$' . number_format($eps, 2);
+        $money = static fn(float $eps): string => $eps < 0 ? '-$' . number_format(abs($eps), 2) : '$' . number_format($eps, 2);
         // The beat or miss is on adjusted earnings; when special items separate the two, the reported figure follows.
         $formattedEps = round($ctx->streetQuarterlyEps, 2) !== round($ctx->actualQuarterlyEps, 2)
             ? $money($ctx->streetQuarterlyEps) . ' adjusted, ' . $money($ctx->actualQuarterlyEps) . ' reported'

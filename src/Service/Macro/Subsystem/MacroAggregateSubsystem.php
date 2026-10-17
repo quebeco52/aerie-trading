@@ -337,7 +337,7 @@ class MacroAggregateSubsystem
         /** Records what moved the gap. Null in a test or a headless harness, off everywhere the ticker is not. */
         private readonly ?OutputGapProbe $gapProbe = null,
         /** Records what set inflation and which shocks were drawn; null and off on the same terms. */
-        private readonly ?MacroDiagnosticsProbe $diagnostics = null
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
     /**
@@ -454,7 +454,7 @@ class MacroAggregateSubsystem
         $state->netExportGap = $netExportGap;
         $financeGap = self::financeOutputGapAt(
             self::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
-            self::dealActivityGap($state->dealActivityIndexEma, $state->dealActivityIndexTrend)
+            self::dealActivityGap($state->dealActivityIndexEma, $state->dealActivityIndexTrend),
         );
         $financeChange = $financeGap - $state->financeOutputGap;
         $state->financeOutputGap = $financeGap;
@@ -567,7 +567,7 @@ class MacroAggregateSubsystem
             etaUp: self::DEMAND_DISASTER_UP_RATE,
             etaDown: self::DEMAND_DISASTER_DOWN_RATE,
             cap: self::DEMAND_DISASTER_CAP,
-            dt: $dt
+            dt: $dt,
         );
         $state->demandShock += $disasterIncrement;
 
@@ -580,7 +580,7 @@ class MacroAggregateSubsystem
             etaUp: self::DEMAND_DISASTER_UP_RATE,
             etaDown: self::DEMAND_DISASTER_DOWN_RATE,
             cap: self::DEMAND_DISASTER_CAP,
-            dt: $dt
+            dt: $dt,
         );
         $disasterJump = $disasterIncrement + $disasterCompensator;
         $state->demandDisasterShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandDisasterShock * $dt) + $disasterJump;
@@ -616,7 +616,7 @@ class MacroAggregateSubsystem
             'demandDisaster' => $state->demandDisasterShock,
             'disasterCompensator' => -$state->demandDisasterCompensation,
         ];
-        $contributions = array_map(static fn (float $rate): float => self::DOMESTIC_GAP_WEIGHT * $rate, $domesticDemand) + [
+        $contributions = array_map(static fn(float $rate): float => self::DOMESTIC_GAP_WEIGHT * $rate, $domesticDemand) + [
             // Basu, Fernald & Kimball (2006): output catches up with a technology gain before potential does.
             'productivitySupply' => $supplyChange / $dt,
             // Obstfeld & Rogoff (1996): the mainland's demand and the real exchange rate move what the district sells abroad.
@@ -640,7 +640,7 @@ class MacroAggregateSubsystem
             openingGap: $openingGap,
             preClampGap: $preClampGap,
             closingGap: $newGap,
-            dt: $dt
+            dt: $dt,
         );
 
         return $newGap;
@@ -664,19 +664,19 @@ class MacroAggregateSubsystem
             $state->mainlandDemandExportLag,
             $state->foreignOutputGapEma,
             $dt,
-            self::exportDemandAdjustmentYears()
+            self::exportDemandAdjustmentYears(),
         );
         $state->realExchangeRateTradeLag = TimeSeries::calculateDistributedLag(
             $state->realExchangeRateTradeLag,
             self::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend),
             $dt,
-            self::TRADE_VOLUME_ADJUSTMENT_YEARS
+            self::TRADE_VOLUME_ADJUSTMENT_YEARS,
         );
         $state->alliedDefenseDeliveryLag = TimeSeries::calculateDistributedLag(
             $state->alliedDefenseDeliveryLag,
             self::alliedDefenseGap($state->alliedDefenseSpendingIndexEma),
             $dt,
-            self::DEFENSE_DELIVERY_LAG_YEARS
+            self::DEFENSE_DELIVERY_LAG_YEARS,
         );
         // A duty reaches volumes as a price does, over the same year.
         $state->tariffTradeLag = TimeSeries::calculateDistributedLag($state->tariffTradeLag, log(1.0 + $state->importTariffRate), $dt, self::TRADE_VOLUME_ADJUSTMENT_YEARS);
@@ -1000,7 +1000,7 @@ class MacroAggregateSubsystem
             outputGap: $state->outputGap - $state->productivitySupplyGap,
             maxCapacity: self::PHILLIPS_MAX_CAPACITY,
             kappa: self::PHILLIPS_CONVEX_KAPPA,
-            downwardRigidityFactor: self::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
+            downwardRigidityFactor: self::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR,
         );
 
         // Shapiro (2022) Sector 1: supercore services, pushed by unit labour cost (wage growth less the productivity growth
@@ -1044,7 +1044,7 @@ class MacroAggregateSubsystem
             currentLaggedValue: $state->energyCostPushLag,
             targetValue: $rawEnergyCostPush,
             dt: $dt,
-            lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS
+            lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS,
         );
 
         // Gelos & Ustyugova (2017) distributed lag agricultural pass-through to food CPI.
@@ -1053,7 +1053,7 @@ class MacroAggregateSubsystem
             currentLaggedValue: $state->agriCostPushLag,
             targetValue: $rawAgriCostPush,
             dt: $dt,
-            lagTimeConstant: self::AGRI_COST_PUSH_LAG_YEARS
+            lagTimeConstant: self::AGRI_COST_PUSH_LAG_YEARS,
         );
 
         // A carbon price reaches the electricity bill as the wholesale price it adds, at the energy lag: a step in the
@@ -1063,7 +1063,7 @@ class MacroAggregateSubsystem
             currentLaggedValue: $priorCarbonLevel,
             targetValue: log(1.0 + (CommodityLogisticsSubsystem::carbonPowerPriceAdder($state->carbonPrice) / self::RESIDENTIAL_ELECTRICITY_PRICE)),
             dt: $dt,
-            lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS
+            lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS,
         );
         $carbonCostPush = self::CPI_ELECTRICITY_WEIGHT * ($state->electricityCarbonPriceLevel - $priorCarbonLevel) / $dt;
         $energyCostPush = ($state->energyCostPushLag - $priorEnergyCostPushLag) / $dt;
@@ -1415,7 +1415,7 @@ class MacroAggregateSubsystem
             capitalStockOverhang: $state->capitalStockOverhang,
             baselineCu: MacroEngine::CU_BASELINE,
             gapSensitivity: MacroEngine::CU_GAP_SENSITIVITY,
-            overhangSensitivity: MacroEngine::CU_OVERHANG_SENSITIVITY
+            overhangSensitivity: MacroEngine::CU_OVERHANG_SENSITIVITY,
         );
     }
 
@@ -1451,7 +1451,7 @@ class MacroAggregateSubsystem
             baseline: MacroEngine::PMI_BASELINE,
             drivers: $drivers,
             min: MacroEngine::MIN_PMI,
-            max: MacroEngine::MAX_PMI
+            max: MacroEngine::MAX_PMI,
         );
 
         // Gillespie (1996) exact Ornstein-Uhlenbeck discretization for PMI diffusion index.
@@ -1499,7 +1499,7 @@ class MacroAggregateSubsystem
             outputGap: $state->outputGap,
             weights: $weights,
             min: self::MIN_PPI_INFLATION,
-            max: MacroEngine::MAX_PPI_INFLATION
+            max: MacroEngine::MAX_PPI_INFLATION,
         );
 
         $state->producerPriceInflation = $targetPpi;

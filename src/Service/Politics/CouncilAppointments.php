@@ -399,7 +399,7 @@ final class CouncilAppointments
     {
         return array_values(array_filter(
             array_merge($state->councilNames, [$state->governorName], $state->memberNames, [$state->regulatorName, $state->fundHeadName, $state->exchequerHeadName, $state->fairTradingHeadName, $state->securitiesHeadName, $state->securityDirectorName, $state->coastGuardCommandantName, $state->stateGuardCommanderName], array_column($state->boardMembers, 'name')),
-            static fn(string $name): bool => $name !== ''
+            static fn(string $name): bool => $name !== '',
         ));
     }
 
@@ -417,7 +417,7 @@ final class CouncilAppointments
             array_values($state->leaderNames),
             $state->formerNames,
             AerieCouncil::OPENING_MEMBERS,
-            [AerieCouncil::OPENING_GOVERNOR, AerieCouncil::OPENING_REGULATOR, AerieCouncil::OPENING_FUND_HEAD, AerieCouncil::OPENING_EXCHEQUER_HEAD, AerieCouncil::OPENING_FAIR_TRADING_HEAD, AerieCouncil::OPENING_SECURITIES_HEAD, AerieCouncil::OPENING_SECURITY_DIRECTOR, AerieCouncil::OPENING_COAST_GUARD_COMMANDANT, AerieCouncil::OPENING_STATE_GUARD_COMMANDER]
+            [AerieCouncil::OPENING_GOVERNOR, AerieCouncil::OPENING_REGULATOR, AerieCouncil::OPENING_FUND_HEAD, AerieCouncil::OPENING_EXCHEQUER_HEAD, AerieCouncil::OPENING_FAIR_TRADING_HEAD, AerieCouncil::OPENING_SECURITIES_HEAD, AerieCouncil::OPENING_SECURITY_DIRECTOR, AerieCouncil::OPENING_COAST_GUARD_COMMANDANT, AerieCouncil::OPENING_STATE_GUARD_COMMANDER],
         );
         foreach ($state->leaderHistory as $leaders) {
             foreach ($leaders as $leader) {
@@ -466,7 +466,7 @@ final class CouncilAppointments
             $aliveAt - $birth,
             self::MORTALITY_LEVEL,
             self::MORTALITY_SLOPE,
-            self::RESIGNATION_RATE
+            self::RESIGNATION_RATE,
         );
 
         return $leaves < $termEnds ? $leaves : -1.0;

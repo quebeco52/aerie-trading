@@ -47,7 +47,7 @@ final class ManagementStyleTest extends TestCase
         $this->assertLessThan(
             $trueHurdle,
             ManagementStyle::EmpireBuilder->appliedHurdle($trueHurdle),
-            'The wedge below the true cost of capital IS the agency cost; without it the style prices nothing.'
+            'The wedge below the true cost of capital IS the agency cost; without it the style prices nothing.',
         );
     }
 
@@ -64,12 +64,12 @@ final class ManagementStyleTest extends TestCase
         $this->assertLessThan(
             $modelTarget,
             ManagementStyle::EmpireBuilder->appliedTargetCash($modelTarget),
-            'Cash is a project waiting to happen for this manager, not a buffer.'
+            'Cash is a project waiting to happen for this manager, not a buffer.',
         );
         $this->assertGreaterThan(
             ManagementStyle::Steward->cashTargetBias(),
             ManagementStyle::Fortress->cashTargetBias(),
-            'A steward distributes what it will not reinvest; a fortress keeps it.'
+            'A steward distributes what it will not reinvest; a fortress keeps it.',
         );
     }
 
@@ -80,7 +80,7 @@ final class ManagementStyleTest extends TestCase
         $this->assertLessThan(1.0, ManagementStyle::Fortress->leverageBias());
         $this->assertGreaterThan(
             ManagementStyle::Steward->leverageBias(),
-            ManagementStyle::EmpireBuilder->leverageBias()
+            ManagementStyle::EmpireBuilder->leverageBias(),
         );
     }
 
@@ -114,7 +114,7 @@ final class ManagementStyleTest extends TestCase
             $this->assertSame(
                 1.0,
                 ManagementStyle::Operator->{$dial}(),
-                sprintf('Operator::%s() must be exactly 1.0 — it is the no-op baseline every unassigned firm runs on.', $dial)
+                sprintf('Operator::%s() must be exactly 1.0 — it is the no-op baseline every unassigned firm runs on.', $dial),
             );
         }
     }
@@ -125,12 +125,12 @@ final class ManagementStyleTest extends TestCase
         $this->assertLessThan(
             1.0,
             ManagementStyle::EmpireBuilder->hurdleBias(),
-            'Jensen (1986): the agency cost is a hurdle below the true cost of capital, not merely a bigger budget.'
+            'Jensen (1986): the agency cost is a hurdle below the true cost of capital, not merely a bigger budget.',
         );
         $this->assertGreaterThan(
             ManagementStyle::EmpireBuilder->hurdleBias(),
             ManagementStyle::Steward->hurdleBias(),
-            'A disciplined manager holds a higher internal hurdle than an empire builder.'
+            'A disciplined manager holds a higher internal hurdle than an empire builder.',
         );
         $this->assertGreaterThan(1.0, ManagementStyle::EmpireBuilder->reinvestmentBias());
     }
@@ -143,7 +143,7 @@ final class ManagementStyleTest extends TestCase
             $this->assertSame(
                 $style->payoutBias() > 1.0,
                 $style->reinvestmentBias() < 1.0,
-                sprintf('%s must not both distribute more and reinvest more from the same cash.', $style->value)
+                sprintf('%s must not both distribute more and reinvest more from the same cash.', $style->value),
             );
         }
     }
@@ -187,7 +187,7 @@ final class ManagementStyleTest extends TestCase
             $assigned++;
             $this->assertNotNull(
                 ManagementStyle::tryFrom($stockData['management_style']),
-                sprintf('%s declares management style "%s", which is not a ManagementStyle case.', $stockData['ticker'], $stockData['management_style'])
+                sprintf('%s declares management style "%s", which is not a ManagementStyle case.', $stockData['ticker'], $stockData['management_style']),
             );
         }
 

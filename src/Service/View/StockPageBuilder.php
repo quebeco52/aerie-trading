@@ -6,9 +6,9 @@ namespace App\Service\View;
 
 use App\Data\Company\CompanyResearch;
 use App\Data\Company\LifecycleStage;
-use App\Data\District\DistrictCalendar;
 use App\Data\Company\StockInfo;
 use App\Data\Company\StrategicHoldings;
+use App\Data\District\DistrictCalendar;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
@@ -17,9 +17,9 @@ use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Index\MarketIndex;
 use App\Service\Market\Pricing\LiquidityEngine;
-use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Math\FinancialConstants;
 
@@ -137,31 +137,31 @@ class StockPageBuilder
             + $this->biotechPipeline->build($stock)
             + ($this->businessMap?->build($stock) ?? ['businessMap' => null])
             + [
-            'peers' => $this->peerTable->build($stock),
-            // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
-            'anchorPortfolio' => $this->anchorPortfolio->build($stock),
-            // The District's own stake in this company, held off the float; zero for every company but its clearinghouse.
-            'strategicStake' => StrategicHoldings::stake($stock->getTicker()),
-            'corporateBonds' => $corporateBonds,
-            'allAssets' => [],
-            'pieLabels' => [],
-            'pieData' => [],
-            'sharesMap' => [],
-            'components' => [],
-            'indexFacts' => null,
-            // Depth and the cost of crossing it. Shown because a page that quotes a price without
-            // saying what size costs is only telling half of what a trade is going to do.
-            'advShares' => $this->liquidityEngine->averageDailyVolume($stock),
-            'halfSpread' => $this->liquidityEngine->halfSpreadFraction($stock),
-            // What it costs to be short this name, and how much of it is left to borrow.
-            'borrowFee' => $this->lendingDesk->borrowFee($stock),
-            'availableToBorrow' => $this->lendingDesk->availableToBorrow($stock),
-            'shortUtilization' => $this->lendingDesk->utilization($stock),
-            'borrowWarnings' => self::borrowWarnings(),
-            'shortInterest' => $stock->isBankrupt() ? null : $this->shortInterest($stock),
-            'nextReport' => $stock->isBankrupt() ? null : $this->nextReport($stock, $macroState),
-            'management' => self::managementSummary($stock),
-        ];
+                'peers' => $this->peerTable->build($stock),
+                // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
+                'anchorPortfolio' => $this->anchorPortfolio->build($stock),
+                // The District's own stake in this company, held off the float; zero for every company but its clearinghouse.
+                'strategicStake' => StrategicHoldings::stake($stock->getTicker()),
+                'corporateBonds' => $corporateBonds,
+                'allAssets' => [],
+                'pieLabels' => [],
+                'pieData' => [],
+                'sharesMap' => [],
+                'components' => [],
+                'indexFacts' => null,
+                // Depth and the cost of crossing it. Shown because a page that quotes a price without
+                // saying what size costs is only telling half of what a trade is going to do.
+                'advShares' => $this->liquidityEngine->averageDailyVolume($stock),
+                'halfSpread' => $this->liquidityEngine->halfSpreadFraction($stock),
+                // What it costs to be short this name, and how much of it is left to borrow.
+                'borrowFee' => $this->lendingDesk->borrowFee($stock),
+                'availableToBorrow' => $this->lendingDesk->availableToBorrow($stock),
+                'shortUtilization' => $this->lendingDesk->utilization($stock),
+                'borrowWarnings' => self::borrowWarnings(),
+                'shortInterest' => $stock->isBankrupt() ? null : $this->shortInterest($stock),
+                'nextReport' => $stock->isBankrupt() ? null : $this->nextReport($stock, $macroState),
+                'management' => self::managementSummary($stock),
+            ];
     }
 
     /**
@@ -198,7 +198,7 @@ class StockPageBuilder
             (string) $stock->getTicker(),
             (int) ($this->redis->get('simulation_tick_count') ?: 0),
             $this->ticksPerYear,
-            $macroState->totalTime
+            $macroState->totalTime,
         );
 
         return [

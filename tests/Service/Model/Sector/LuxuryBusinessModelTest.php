@@ -37,7 +37,7 @@ class LuxuryBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // Veblen pricing cachet reduces variable cost percentage below 35%
@@ -66,10 +66,9 @@ class LuxuryBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertSame(ShockEvent::LUXURY_CULTURAL_DOMINANCE, $result->eventType);
     }
 }
-

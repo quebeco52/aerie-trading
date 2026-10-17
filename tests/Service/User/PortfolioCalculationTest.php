@@ -62,7 +62,9 @@ class PortfolioCalculationTest extends TestCase
 
         foreach ($orders as $order) {
             $ticker = $order->getTicker();
-            if (!$ticker) continue;
+            if (!$ticker) {
+                continue;
+            }
 
             $qty = $order->getFilledQuantity() > 0 ? $order->getFilledQuantity() : $order->getQuantity();
             $price = (float) ($order->getExecutionPrice() ?? $order->getLimitPrice() ?? 0.0);

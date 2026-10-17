@@ -88,7 +88,7 @@ final class BondPricingEngine
             termPremiumHorizonYears: MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS,
             balanceSheetIntensity: $curve->balanceSheetIntensity,
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
-            effectiveLowerBound: MacroEngine::EFFECTIVE_LOWER_BOUND
+            effectiveLowerBound: MacroEngine::EFFECTIVE_LOWER_BOUND,
         );
     }
 
@@ -151,7 +151,7 @@ final class BondPricingEngine
             longEndPremium: $curve->longEndPremium,
             termPremiumHorizonYears: MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS,
             balanceSheetIntensity: $curve->balanceSheetIntensity,
-            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
         );
     }
 
@@ -245,7 +245,7 @@ final class BondPricingEngine
         // charge compound along the schedule the way it actually does: a ten-year bond pays the spread on
         // every coupon it is still waiting for, not once on its redemption.
         $spread = max(0.0, $creditSpread);
-        $discount = fn (float $tau): float => $this->discountZeroYield($curve, $tau) + $spread;
+        $discount = fn(float $tau): float => $this->discountZeroYield($curve, $tau) + $spread;
 
         $dirtyPrice = FixedIncome::calculateBondPresentValue($flows, $discount);
 

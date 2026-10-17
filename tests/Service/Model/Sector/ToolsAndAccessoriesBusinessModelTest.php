@@ -31,14 +31,14 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
             outputGapEma: 0.0,
             exchangeRateIndexEma: 100.0,
             industrialMetalsIndexEma: 100.0,
-            consumerSentimentIndexEma: 100.0
+            consumerSentimentIndexEma: 100.0,
         );
 
         $shockMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             exchangeRateIndexEma: 120.0, // Strong currency export headwind
             industrialMetalsIndexEma: 140.0, // Raw steel/carbide cost drag
-            consumerSentimentIndexEma: 100.0
+            consumerSentimentIndexEma: 100.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -51,7 +51,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $baseMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $shockResult = $this->model->computeActualFinancials(
@@ -61,7 +61,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $shockMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertArrayHasKey('commercial', $baseResult->streamRevenue);
@@ -70,17 +70,17 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         // Commercial and consumer revenue drop under strong dollar export headwind
         $this->assertLessThan(
             $baseResult->streamRevenue['commercial'],
-            $shockResult->streamRevenue['commercial']
+            $shockResult->streamRevenue['commercial'],
         );
         $this->assertLessThan(
             $baseResult->streamRevenue['consumer'],
-            $shockResult->streamRevenue['consumer']
+            $shockResult->streamRevenue['consumer'],
         );
 
         // Variable cost margin expands (clampedMargin increases) under metals cost drag
         $this->assertGreaterThan(
             $baseResult->clampedMargin,
-            $shockResult->clampedMargin
+            $shockResult->clampedMargin,
         );
     }
 
@@ -107,7 +107,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         $expectedRevenue = 100_000_000.0;
 
         // Each gap comes with the confidence it implies, so the sentiment residual is nil and only the gap moves.
-        $stateAt = fn (float $gap): MacroStateDTO => new MacroStateDTO(
+        $stateAt = fn(float $gap): MacroStateDTO => new MacroStateDTO(
             outputGapEma: $gap,
             consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
             exchangeRateIndexEma: 100.0,
@@ -127,7 +127,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $gap * $cyclicality,
             $this->model->resolveSectorActivityShift($stock, $stateAt($gap)) - $this->model->resolveSectorActivityShift($stock, $stateAt(0.0)),
-            1e-9
+            1e-9,
         );
     }
 
@@ -139,14 +139,14 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         $stock->setBeta('1.0');
         $quiet = $this->createStub(MathUtility::class);
 
-        $run = fn (float $sentiment) => $this->model->computeActualFinancials(
+        $run = fn(float $sentiment) => $this->model->computeActualFinancials(
             $stock,
             100_000_000.0,
             0.35,
             20_000_000.0,
             0.10,
             new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: $sentiment, consumerSentimentMood: $sentiment - MacroEngine::SENTIMENT_TREND_LEVEL, exchangeRateIndexEma: 100.0),
-            $quiet
+            $quiet,
         );
         $trend = $run(MacroEngine::SENTIMENT_TREND_LEVEL);
         $gloomy = $run(MacroEngine::SENTIMENT_TREND_LEVEL - 10.0);
@@ -155,7 +155,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             -0.10 * ToolsAndAccessoriesBusinessModel::CONSUMER_SENTIMENT_SENSITIVITY * ToolsAndAccessoriesBusinessModel::OPERATING_CYCLICALITY,
             ($gloomy->streamRevenue['consumer'] / $trend->streamRevenue['consumer']) - 1.0,
-            1e-9
+            1e-9,
         );
     }
 }

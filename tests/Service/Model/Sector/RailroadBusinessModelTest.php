@@ -29,7 +29,7 @@ class RailroadBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(
             outputGapEma: 0.02,
-            energyPriceIndexEma: 110.0
+            energyPriceIndexEma: 110.0,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -39,7 +39,7 @@ class RailroadBusinessModelTest extends TestCase
             fixedCosts: 1_500_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('intermodal_freight', $result->streamRevenue);
@@ -56,7 +56,7 @@ class RailroadBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $result->actualRevenue,
             $result->streamRevenue['intermodal_freight'] + $result->streamRevenue['bulk_commodities'] + $result->streamRevenue['industrial_carloads'],
-            1.0
+            1.0,
         );
     }
 
@@ -68,12 +68,12 @@ class RailroadBusinessModelTest extends TestCase
 
         $baseMacro = new MacroStateDTO(
             freightRateIndexEma: 100.0,
-            agriculturalCommodityIndexEma: 100.0
+            agriculturalCommodityIndexEma: 100.0,
         );
 
         $surgeMacro = new MacroStateDTO(
             freightRateIndexEma: 140.0,
-            agriculturalCommodityIndexEma: 130.0
+            agriculturalCommodityIndexEma: 130.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -96,7 +96,7 @@ class RailroadBusinessModelTest extends TestCase
             fixedCosts: 1_500_000_000.0,
             baselineVol: 0.10,
             macroState: new MacroStateDTO(outputGapEma: 0.02),
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayNotHasKey('transit_subscriptions', $result->streamRevenue);
@@ -124,7 +124,7 @@ class RailroadBusinessModelTest extends TestCase
                 fixedCosts: 1_500_000_000.0,
                 baselineVol: 0.10,
                 macroState: $macro,
-                mathUtility: $this->mathUtility
+                mathUtility: $this->mathUtility,
             )->streamRevenue;
         };
 
@@ -139,7 +139,7 @@ class RailroadBusinessModelTest extends TestCase
         $this->assertLessThan(
             $freightSwing,
             $transitSwing,
-            'Season tickets must ride through the cycle more steadily than intermodal containers.'
+            'Season tickets must ride through the cycle more steadily than intermodal containers.',
         );
     }
 

@@ -6,8 +6,8 @@ namespace App\Service\Model\Trait;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 
 trait StandardTreasuryTrait
 {

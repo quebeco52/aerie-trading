@@ -2,8 +2,6 @@
 
 namespace App\Tests\Panther;
 
-use Symfony\Component\Panther\PantherTestCase;
-
 class GlobalSearchPantherTest extends BasePantherTestCase
 {
     public function testGlobalSearchAutocompleteAndNavigation(): void

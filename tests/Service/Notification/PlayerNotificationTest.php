@@ -67,7 +67,7 @@ final class PlayerNotificationTest extends TestCase
             ->method('executeStatement')
             ->with(
                 $this->stringContains('VALUES (?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?)'),
-                $this->callback(static fn (array $params): bool => count($params) === 16 && $params[0] === 7 && $params[8] === 9 && $params[6] === 12.25)
+                $this->callback(static fn(array $params): bool => count($params) === 16 && $params[0] === 7 && $params[8] === 9 && $params[6] === 12.25),
             );
 
         $pushed = [];

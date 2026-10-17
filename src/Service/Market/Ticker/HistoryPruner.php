@@ -79,7 +79,7 @@ final class HistoryPruner
 
         $now = (float) $conn->fetchOne(
             'SELECT total_time FROM simulation_clock WHERE id = ?',
-            [SimulationClock::SINGLETON_ID]
+            [SimulationClock::SINGLETON_ID],
         );
 
         $cutoff = $now - $years;
@@ -141,7 +141,7 @@ final class HistoryPruner
                 "SELECT COUNT(*) AS total,
                         SUM(CASE WHEN sim_time IS NULL OR sim_time < :cutoff THEN 1 ELSE 0 END) AS old
                  FROM $table WHERE id >= :lo AND id < :hi",
-                $range
+                $range,
             );
 
             $total = $probe === false ? 0 : (int) $probe['total'];
@@ -170,7 +170,7 @@ final class HistoryPruner
                                  kept.high_price = slices.high_price,
                                  kept.low_price = slices.low_price,
                                  kept.volume = slices.volume",
-                            $params
+                            $params,
                         );
                     }
 
@@ -184,7 +184,7 @@ final class HistoryPruner
                                 ON slices.series = h.$seriesColumn AND slices.slice = FLOOR(h.sim_time * :perYear)
                          WHERE h.id >= :lo AND h.id < :hi
                            AND (h.sim_time IS NULL OR (h.sim_time < :cutoff AND h.id <> slices.kept_id))",
-                        $params
+                        $params,
                     );
                 });
             }
@@ -235,7 +235,7 @@ final class HistoryPruner
                    AND NOT EXISTS (
                        SELECT 1 FROM user_options WHERE user_options.option_contract_id = option_contracts.id
                    )',
-                ['lo' => $lo, 'hi' => $hi, 'status' => OptionContract::STATUS_EXPIRED, 'cutoff' => $cutoff]
+                ['lo' => $lo, 'hi' => $hi, 'status' => OptionContract::STATUS_EXPIRED, 'cutoff' => $cutoff],
             );
 
             $lo = $hi;
@@ -248,7 +248,7 @@ final class HistoryPruner
     private function pruneMacroReports(Connection $conn): int
     {
         $cutoffId = $conn->fetchOne(
-            'SELECT id FROM macro_report ORDER BY id DESC LIMIT 1 OFFSET ' . (self::MACRO_QUARTERS_KEPT - 1)
+            'SELECT id FROM macro_report ORDER BY id DESC LIMIT 1 OFFSET ' . (self::MACRO_QUARTERS_KEPT - 1),
         );
 
         if (!$cutoffId) {
@@ -257,7 +257,7 @@ final class HistoryPruner
 
         return (int) $conn->executeStatement(
             'DELETE FROM macro_report WHERE id < :cutoff',
-            ['cutoff' => $cutoffId]
+            ['cutoff' => $cutoffId],
         );
     }
 }

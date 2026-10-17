@@ -8,20 +8,18 @@ use App\DTO\GoingConcernDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
+use App\Entity\User;
 use App\Repository\StockRepository;
 use App\Repository\TradeOrderRepository;
-use App\Entity\User;
-use App\Entity\UserStock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Corporate\FailureSweep;
+use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Market\Trading\TradeExecutionService;
 use App\Service\User\Portfolio;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -100,7 +98,7 @@ class BankruptcyTest extends TestCase
             ->method('executeStatement')
             ->with(
                 $this->stringContains('DELETE FROM user_stocks'),
-                $this->anything()
+                $this->anything(),
             );
 
         $this->marketEventMock->expects($this->once())
@@ -112,7 +110,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock
+            $this->debtEngineMock,
         );
 
         $events = $operator->sweep([$stock], new MacroStateDTO());
@@ -180,7 +178,7 @@ class BankruptcyTest extends TestCase
             return 1;
         });
 
-        $notifier = new class($this->entityManagerMock, $this->createStub(\Redis::class), new \Psr\Log\NullLogger()) extends \App\Service\Notification\PlayerNotifier {
+        $notifier = new class ($this->entityManagerMock, $this->createStub(\Redis::class), new \Psr\Log\NullLogger()) extends \App\Service\Notification\PlayerNotifier {
             /** @var list<array{0: int, 1: string, 2: ?string}> */
             public array $queued = [];
 
@@ -251,7 +249,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock
+            $this->debtEngineMock,
         );
 
         $events = $operator->sweep([$stock], new MacroStateDTO());
@@ -432,7 +430,7 @@ class BankruptcyTest extends TestCase
 
         $this->entityManagerMock->method('getRepository')->willReturn($this->createConfiguredStub(
             TradeOrderRepository::class,
-            ['findOpenByTicker' => []]
+            ['findOpenByTicker' => []],
         ));
 
         $captured = null;
@@ -440,14 +438,14 @@ class BankruptcyTest extends TestCase
             function ($s, $type, $desc, $pct) use (&$captured) {
                 $captured = $desc;
                 return [];
-            }
+            },
         );
 
         $operator = new FailureSweep(
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock
+            $this->debtEngineMock,
         );
 
         $operator->sweep([$stock], new MacroStateDTO());
@@ -502,7 +500,7 @@ class BankruptcyTest extends TestCase
             $this->entityManagerMock,
             $this->loggerMock,
             $this->marketEventMock,
-            $this->debtEngineMock
+            $this->debtEngineMock,
         );
 
         $operator->sweep([$stock], new MacroStateDTO());
@@ -565,7 +563,7 @@ class BankruptcyTest extends TestCase
             new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
             new \App\Service\Market\Trading\MarginEngine(
                 $this->entityManagerMock,
-                new \App\Service\Market\Option\OptionMarginCalculator($this->entityManagerMock)
+                new \App\Service\Market\Option\OptionMarginCalculator($this->entityManagerMock),
             ),
             new \App\Service\Market\Trading\SecuritiesLendingDesk(),
             new \App\Service\Market\Option\OptionTradeService(
@@ -574,11 +572,11 @@ class BankruptcyTest extends TestCase
                 new \App\Service\Macro\MacroStateProvider($redis),
                 new \App\Service\Market\Trading\MarginEngine(
                     $this->entityManagerMock,
-                    new \App\Service\Market\Option\OptionMarginCalculator($this->entityManagerMock)
+                    new \App\Service\Market\Option\OptionMarginCalculator($this->entityManagerMock),
                 ),
-                new \App\Service\User\CashLedger()
+                new \App\Service\User\CashLedger(),
             ),
-            new \App\Service\User\CashLedger()
+            new \App\Service\User\CashLedger(),
         );
 
         $this->expectException(\Exception::class);
@@ -620,14 +618,14 @@ class BankruptcyTest extends TestCase
                 new \App\Service\Market\Agent\AgentPopulation(),
                 new \App\Service\Market\Agent\InMemoryAgentStateStore(),
                 new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-                []
+                [],
             ),
             // Stubbed maths, so checkProbability() is false and no succession fires in tests that
             // are about something else.
             new \App\Service\Corporate\ManagementSuccessionEngine(
-                $this->createStub(\App\Service\Event\MarketEventPublisher::class),
-                $this->createStub(\App\Service\Math\MathUtility::class)
-            )
+                $this->createStub(MarketEventPublisher::class),
+                $this->createStub(\App\Service\Math\MathUtility::class),
+            ),
         );
 
         $result = $tracker->updateStocks([$stock], 0.01, false);
@@ -653,7 +651,7 @@ class BankruptcyTest extends TestCase
         $actionEngine = new \App\Service\Corporate\CorporateActionEngine(
             $ledger,
             $this->marketEventMock,
-            $redis
+            $redis,
         );
 
         $result = $actionEngine->processSplits($stock, 0.0, 1000000.0, 5.0);

@@ -71,7 +71,7 @@ final class CustodyBankBusinessModelTest extends TestCase
             $bank->getThroughTheCycleCreditLossRate() * 0.18 / $bank->getLoanShareOfEarningAssets(),
             $this->model->getThroughTheCycleCreditLossRate(),
             1e-12,
-            'the same loan book, at the custodian\'s loan share'
+            'the same loan book, at the custodian\'s loan share',
         );
     }
 

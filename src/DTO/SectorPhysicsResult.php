@@ -52,6 +52,5 @@ readonly class SectorPhysicsResult
         public float $specialCharge = 0.0,
         /** Revenue move, as a share of expected revenue, that analysts read in full from published figures (a benchmark price, a disclosed rent roll) rather than at coverage visibility. */
         public float $publishedRevenueShift = 0.0,
-    ) {
-    }
+    ) {}
 }

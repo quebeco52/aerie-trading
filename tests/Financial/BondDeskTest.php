@@ -9,12 +9,12 @@ use App\Entity\Bond;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Market\Bond\BondPricingEngine;
+use App\Service\Market\Bond\TreasuryAuctionService;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
 use PHPUnit\Framework\TestCase;
-use App\Service\Market\Bond\TreasuryAuctionService;
 
 /**
  * Financial invariants of the sovereign bond desk.
@@ -92,7 +92,7 @@ class BondDeskTest extends TestCase
                 $yieldData[$key],
                 $this->engine->zeroYield($curve, $tenor),
                 1e-12,
-                "Desk and macro engine disagree on the {$tenor}y zero yield."
+                "Desk and macro engine disagree on the {$tenor}y zero yield.",
             );
         }
     }
@@ -118,7 +118,7 @@ class BondDeskTest extends TestCase
             glob($root . '/src/Service/Market/*.php') ?: [],
             glob($root . '/src/Controller/*.php') ?: [],
             glob($root . '/assets/js/pages/*.js') ?: [],
-            glob($root . '/assets/js/stock/*.js') ?: []
+            glob($root . '/assets/js/stock/*.js') ?: [],
         );
 
         foreach ($sources as $path) {
@@ -136,7 +136,7 @@ class BondDeskTest extends TestCase
         $this->assertSame(
             [],
             $offenders,
-            'Sovereign yields must come from FixedIncome::calculateSovereignZeroYield, not a local copy.'
+            'Sovereign yields must come from FixedIncome::calculateSovereignZeroYield, not a local copy.',
         );
     }
 
@@ -175,9 +175,9 @@ class BondDeskTest extends TestCase
                 $before = $this->engine->value($bond, $base, 0.0);
                 $yield = $before->yieldToMaturity;
 
-                $priceAt = fn (float $y): float => FixedIncome::calculateBondPresentValue(
+                $priceAt = fn(float $y): float => FixedIncome::calculateBondPresentValue(
                     $flows,
-                    static fn (float $tau): float => $y
+                    static fn(float $tau): float => $y,
                 );
 
                 $actual = ($priceAt($yield + $shift) - $priceAt($yield)) / $priceAt($yield);
@@ -192,7 +192,7 @@ class BondDeskTest extends TestCase
                     $predicted,
                     $actual,
                     $thirdOrderBound,
-                    sprintf('%dy bond mispredicted under a %.2f%% yield shift.', $tenor, $shift * 100)
+                    sprintf('%dy bond mispredicted under a %.2f%% yield shift.', $tenor, $shift * 100),
                 );
             }
         }
@@ -234,13 +234,13 @@ class BondDeskTest extends TestCase
             $this->assertLessThan(
                 0.05,
                 $relativeError,
-                sprintf('%dy bond deviates more than 5%% from its duration prediction.', $tenor)
+                sprintf('%dy bond deviates more than 5%% from its duration prediction.', $tenor),
             );
 
             $this->assertGreaterThan(
                 $previousRelativeError,
                 $relativeError,
-                sprintf('%dy bond should deviate more than the shorter issue, not less.', $tenor)
+                sprintf('%dy bond should deviate more than the shorter issue, not less.', $tenor),
             );
 
             $previousRelativeError = $relativeError;

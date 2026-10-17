@@ -23,6 +23,6 @@ class DebtMetricsDTO
         /** The issuer's through-the-cycle spread at its current rating: the credit indices at their trend, no volatility premium. */
         public readonly ?float $baselineSpread = null,
         /** The credit index the issuer's class trades off: the IG index for an investment-grade rating, the HY index below it. */
-        public readonly ?float $marketIndexSpread = null
+        public readonly ?float $marketIndexSpread = null,
     ) {}
 }

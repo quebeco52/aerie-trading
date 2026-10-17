@@ -67,9 +67,9 @@ final class TickProfiler
         $shown = array_slice($phases, 0, self::LAG_PHASES_SHOWN, true);
 
         return implode(', ', array_map(
-            static fn (string $name, float $ms): string => sprintf('%s %.1f', $name, $ms),
+            static fn(string $name, float $ms): string => sprintf('%s %.1f', $name, $ms),
             array_keys($shown),
-            $shown
+            $shown,
         ));
     }
 
@@ -96,9 +96,9 @@ final class TickProfiler
         arsort($this->windowPhases);
         $windowTicks = $this->windowTicks;
         $perTick = implode(', ', array_map(
-            static fn (string $name, float $ms): string => sprintf('%s %.2f', $name, $ms / $windowTicks),
+            static fn(string $name, float $ms): string => sprintf('%s %.2f', $name, $ms / $windowTicks),
             array_keys($this->windowPhases),
-            $this->windowPhases
+            $this->windowPhases,
         ));
 
         $report = [
@@ -110,7 +110,7 @@ final class TickProfiler
                 $budgetMs,
                 $this->windowMaxMs,
                 $this->windowOverruns,
-                100.0 * $this->windowOverruns / $windowTicks
+                100.0 * $this->windowOverruns / $windowTicks,
             ),
             '<info>   ms/tick: ' . $perTick . '</info>',
         ];

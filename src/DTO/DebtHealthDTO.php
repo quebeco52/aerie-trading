@@ -37,6 +37,6 @@ class DebtHealthDTO
         /** The debt-to-equity ratio the firm recapitalizes toward. */
         public readonly float $leverageTarget = 0.0,
         /** Whether the primary market will lend to the issuer at any price (open market, rating above the floor, coverage of one): the gate for funding a shortfall, as canIssueDebt is the gate for borrowing by choice. */
-        public readonly bool $hasMarketAccess = true
+        public readonly bool $hasMarketAccess = true,
     ) {}
 }

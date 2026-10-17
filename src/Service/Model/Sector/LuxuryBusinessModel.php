@@ -5,20 +5,19 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Luxury Goods & Elite Brand Conglomerates.
- * 
+ *
  * Financial Physics:
  * - Veblen Pricing Power: Complete immunity to supply chain inflation penalties. When inflation rises, luxury brands hike prices aggressively without losing sales volume, expanding operating margins.
  * - Ultra-High Gross Margins: Brand equity allows pricing far above physical cost of goods sold.
@@ -54,8 +53,14 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.05;
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.30;
-    public function getReversionSpeed(): float { return 0.1; }
-    public function getMoatSpread(): float { return 0.02; }
+    public function getReversionSpeed(): float
+    {
+        return 0.1;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.02;
+    }
     // --- Secular Demand ---
     /** Spending on jewelry and watches as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures). */
     public const SECULAR_SHARE_1997 = 0.0047;

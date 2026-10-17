@@ -74,7 +74,7 @@ final class EconomyExposureBuilder
                 continue;
             }
             $model = Sectors::strategyFor($stock->getIndustry());
-            $row = static fn (float $value, ?float $detail = null): array => [
+            $row = static fn(float $value, ?float $detail = null): array => [
                 'ticker' => $stock->getTicker(),
                 'name' => $stock->getName(),
                 'value' => $value,
@@ -149,7 +149,7 @@ final class EconomyExposureBuilder
             }
         }
 
-        $list = static fn (string $key, string $label, string $unit, string $format = self::FORMAT_SHARE, ?string $detailUnit = null): array => [
+        $list = static fn(string $key, string $label, string $unit, string $format = self::FORMAT_SHARE, ?string $detailUnit = null): array => [
             'label' => $label,
             'unit' => $unit,
             'format' => $format,
@@ -198,7 +198,7 @@ final class EconomyExposureBuilder
 
         $built = [];
         foreach ($cards as $card) {
-            $card['lists'] = array_values(array_filter($card['lists'], static fn (array $l): bool => $l['rows'] !== []));
+            $card['lists'] = array_values(array_filter($card['lists'], static fn(array $l): bool => $l['rows'] !== []));
             if ($card['lists'] !== []) {
                 $built[] = $card;
             }
@@ -216,11 +216,11 @@ final class EconomyExposureBuilder
      */
     private static function top(array $rows): array
     {
-        usort($rows, static fn (array $a, array $b): int => [$b['value'], $b['size']] <=> [$a['value'], $a['size']]);
+        usort($rows, static fn(array $a, array $b): int => [$b['value'], $b['size']] <=> [$a['value'], $a['size']]);
 
         return array_map(
-            static fn (array $r): array => ['ticker' => $r['ticker'], 'name' => $r['name'], 'value' => $r['value'], 'detail' => $r['detail']],
-            array_slice($rows, 0, self::FIRMS_PER_LIST)
+            static fn(array $r): array => ['ticker' => $r['ticker'], 'name' => $r['name'], 'value' => $r['value'], 'detail' => $r['detail']],
+            array_slice($rows, 0, self::FIRMS_PER_LIST),
         );
     }
 

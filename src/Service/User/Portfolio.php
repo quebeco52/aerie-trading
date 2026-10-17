@@ -2,11 +2,10 @@
 
 namespace App\Service\User;
 
-use App\Service\Math\FixedIncome;
-use App\Entity\User;
-use App\Entity\UserStock;
 use App\Entity\PortfolioHistory;
+use App\Entity\User;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FixedIncome;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -118,7 +117,7 @@ class Portfolio
     ";
 
     public function __construct(
-        private EntityManagerInterface $entityManager
+        private EntityManagerInterface $entityManager,
     ) {}
 
     /**
@@ -147,7 +146,7 @@ class Portfolio
 
         $this->entityManager->getConnection()->executeStatement(
             'UPDATE users SET cash_balance = ROUND(cash_balance * (1 + :rate), 2) WHERE cash_balance > 0',
-            ['rate' => $periodRate]
+            ['rate' => $periodRate],
         );
     }
 
@@ -166,7 +165,7 @@ class Portfolio
         $this->entityManager->getConnection()->executeStatement(
             'INSERT INTO portfolio_history (user_id, total_value, recorded_at)
              SELECT nw.user_id, nw.total_value, :now FROM (' . self::NET_WORTH_SQL . ') nw',
-            ['now' => (new \DateTime())->format('Y-m-d H:i:s')]
+            ['now' => (new \DateTime())->format('Y-m-d H:i:s')],
         );
     }
 
@@ -211,7 +210,7 @@ class Portfolio
         $history->setUser($user);
         $history->setTotalValue((string) $portfolioValue);
         $history->setRecordedAt(new \DateTime());
-        
+
         $this->entityManager->persist($history);
     }
 }

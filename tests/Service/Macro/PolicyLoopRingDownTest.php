@@ -89,8 +89,17 @@ class PolicyLoopRingDownTest extends TestCase
                 }
             };
             $redis = $this->inMemoryRedis();
-            $engine = new MacroEngine($math, $redis, new MacroSnapshotRecorder(), new MonetaryPolicySubsystem($math), new LaborMarketSubsystem(),
-                new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math));
+            $engine = new MacroEngine(
+                $math,
+                $redis,
+                new MacroSnapshotRecorder(),
+                new MonetaryPolicySubsystem($math),
+                new LaborMarketSubsystem(),
+                new MacroAggregateSubsystem($math),
+                new CommodityLogisticsSubsystem($math),
+                new AssetMarketSubsystem($math),
+                new CreditFiscalSubsystem($math),
+            );
             for ($tick = 0; $tick < self::BURN_IN_YEARS * self::TICKS_PER_YEAR; $tick++) {
                 $engine->updateMacroState($dt);
             }
@@ -109,7 +118,7 @@ class PolicyLoopRingDownTest extends TestCase
             $paths[] = $path;
         }
 
-        return array_map(static fn (float $kicked, float $control): float => ($kicked - $control) / $kickSize, $paths[1], $paths[0]);
+        return array_map(static fn(float $kicked, float $control): float => ($kicked - $control) / $kickSize, $paths[1], $paths[0]);
     }
 
     /** The bootstrap's Redis stand-in forgets everything; the engine needs its state back each tick. */

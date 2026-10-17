@@ -146,7 +146,7 @@ class WireFrameTest extends TestCase
                 WireFrame::FRAMES_PER_SECOND,
                 1_000_000 / ($intervalUs * WireFrame::intervalTicks($intervalUs)),
                 WireFrame::FRAMES_PER_SECOND * 0.2,
-                "interval $intervalUs"
+                "interval $intervalUs",
             );
         }
     }

@@ -3,12 +3,12 @@
 namespace App\Controller;
 
 use App\Entity\Stock;
+use App\Repository\EtfRepository;
+use App\Repository\StockRepository;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Chart\PriceChangeFeed;
-use App\Twig\Extension\NumberFormatExtension;
-use App\Repository\EtfRepository;
 use App\Service\Market\Index\MarketIndex;
-use App\Repository\StockRepository;
+use App\Twig\Extension\NumberFormatExtension;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -18,7 +18,6 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 class HomeController extends AbstractController
 {
-
     /**
      * Displays the main landing page and market dashboard.
      *
@@ -63,7 +62,7 @@ class HomeController extends AbstractController
             'etf'     => $etf,
             'indices' => $indices,
             'stocks'  => $marketData,
-            'macro'   => $macroState->toArray()
+            'macro'   => $macroState->toArray(),
         ]);
     }
 
@@ -112,7 +111,7 @@ class HomeController extends AbstractController
         return $this->json([
             'etf'     => ['price' => $etf ? number_format((float) $etf->getPrice(), 2) : '0.00'],
             'indices' => $indices,
-            'stocks'  => $marketData
+            'stocks'  => $marketData,
         ]);
     }
 

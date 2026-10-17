@@ -26,7 +26,7 @@ class MacroFieldCatalogTest extends TestCase
             $this->assertArrayHasKey(
                 $field,
                 $snapshot,
-                "MacroFieldCatalog names '{$field}', which MacroStateDTO::toArray() does not publish."
+                "MacroFieldCatalog names '{$field}', which MacroStateDTO::toArray() does not publish.",
             );
         }
     }
@@ -91,7 +91,7 @@ class MacroFieldCatalogTest extends TestCase
                 $isAcronym = strlen($core) > 1 && (strtoupper($core) === $core);
                 $this->assertTrue(
                     $core === '' || !ctype_upper($core[0]) || $isAcronym || in_array($core, ['Reserve', 'Fund'], true),
-                    "'{$meta['label']}' ({$field}) is not sentence case at '{$word}'."
+                    "'{$meta['label']}' ({$field}) is not sentence case at '{$word}'.",
                 );
             }
         }

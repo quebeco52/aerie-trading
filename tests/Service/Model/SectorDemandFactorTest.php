@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BaseFinancialBusinessModel;
@@ -13,6 +12,7 @@ use App\Service\Model\Sector\BiotechBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HeavyManufacturingBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 

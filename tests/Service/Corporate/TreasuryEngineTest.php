@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
+use App\Data\Company\ManagementStyle;
 use App\DTO\CapitalAllocationContext;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\MaturityRollDTO;
-use App\Data\Company\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\TreasuryEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InvestmentBankBusinessModel;
@@ -51,7 +51,7 @@ class TreasuryEngineTest extends TestCase
             $this->corporateMetrics,
             $this->debtEngine,
             $this->capExEngine,
-            $this->mathUtility
+            $this->mathUtility,
         );
     }
 
@@ -78,7 +78,7 @@ class TreasuryEngineTest extends TestCase
             quarterlyFcfPerShare: 0.25,
             currentPrice: 50.0,
             sharesOutstanding: 100_000_000,
-            actualTotalNetIncome: 25_000_000
+            actualTotalNetIncome: 25_000_000,
         );
 
         $strategy = new InvestmentBankBusinessModel();
@@ -100,7 +100,7 @@ class TreasuryEngineTest extends TestCase
             ebit: 30_000_000.0,
             revenue: 100_000_000.0,
             depreciation: 2_000_000.0,
-            ebitda: 32_000_000.0
+            ebitda: 32_000_000.0,
         );
 
         // Under-leveraged is TRUE, but severe saturation penalty makes marginal return < hurdle
@@ -120,7 +120,7 @@ class TreasuryEngineTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: true
+            isUnderLeveraged: true,
         );
 
         // Saturation penalty drops marginal return below hurdle rate
@@ -150,7 +150,7 @@ class TreasuryEngineTest extends TestCase
         $this->debtEngine->method('issueDebt')->willReturnCallback(
             static function (Stock $stock, float $amount) use (&$issued): void {
                 $issued[$stock->getTicker()] = $amount;
-            }
+            },
         );
         $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(4_187_500_000.0);
         $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.20);
@@ -185,7 +185,7 @@ class TreasuryEngineTest extends TestCase
             quarterlyFcfPerShare: 0.6,
             currentPrice: 40.0,
             sharesOutstanding: 100_000_000,
-            actualTotalNetIncome: 62_500_000
+            actualTotalNetIncome: 62_500_000,
         );
         $ctx->strategy = new InvestmentBankBusinessModel();
         $ctx->businessModel = 'investment_bank';
@@ -217,11 +217,11 @@ class TreasuryEngineTest extends TestCase
                 ebit: 330_000_000.0,
                 revenue: 750_000_000.0,
                 depreciation: 15_000_000.0,
-                ebitda: 345_000_000.0
+                ebitda: 345_000_000.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         return $ctx;
@@ -248,7 +248,7 @@ class TreasuryEngineTest extends TestCase
             quarterlyFcfPerShare: 0.25,
             currentPrice: 50.0,
             sharesOutstanding: 100_000_000,
-            actualTotalNetIncome: 25_000_000
+            actualTotalNetIncome: 25_000_000,
         );
 
         $ctx->strategy = new CommercialBankBusinessModel();
@@ -269,7 +269,7 @@ class TreasuryEngineTest extends TestCase
             ebit: 30_000_000.0,
             revenue: 100_000_000.0,
             depreciation: 2_000_000.0,
-            ebitda: 32_000_000.0
+            ebitda: 32_000_000.0,
         );
 
         $ctx->health = new DebtHealthDTO(
@@ -288,7 +288,7 @@ class TreasuryEngineTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: true
+            isUnderLeveraged: true,
         );
 
         $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(6_000_000_000.0);
@@ -326,7 +326,7 @@ class TreasuryEngineTest extends TestCase
             quarterlyFcfPerShare: 0.25,
             currentPrice: 50.0,
             sharesOutstanding: 100_000_000,
-            actualTotalNetIncome: 25_000_000
+            actualTotalNetIncome: 25_000_000,
         );
 
         $ctx->strategy = new InvestmentBankBusinessModel();
@@ -348,7 +348,7 @@ class TreasuryEngineTest extends TestCase
             ebit: 100_000_000.0,
             revenue: 300_000_000.0,
             depreciation: 5_000_000.0,
-            ebitda: 105_000_000.0
+            ebitda: 105_000_000.0,
         );
 
         $ctx->health = new DebtHealthDTO(
@@ -367,7 +367,7 @@ class TreasuryEngineTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->treasuryEngine->finalizeLiquidity($ctx);
@@ -399,7 +399,7 @@ class TreasuryEngineTest extends TestCase
             quarterlyFcfPerShare: 0.25,
             currentPrice: 50.0,
             sharesOutstanding: 100_000_000,
-            actualTotalNetIncome: 25_000_000
+            actualTotalNetIncome: 25_000_000,
         );
 
         $ctx->strategy = new ShadowBankBusinessModel();
@@ -420,7 +420,7 @@ class TreasuryEngineTest extends TestCase
             ebit: 30_000_000.0,
             revenue: 100_000_000.0,
             depreciation: 2_000_000.0,
-            ebitda: 32_000_000.0
+            ebitda: 32_000_000.0,
         );
 
         $ctx->health = new DebtHealthDTO(
@@ -439,7 +439,7 @@ class TreasuryEngineTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: true
+            isUnderLeveraged: true,
         );
 
         $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
@@ -484,7 +484,7 @@ class TreasuryEngineTest extends TestCase
             quarterlyFcfPerShare: 0.25,
             currentPrice: 50.0,
             sharesOutstanding: 100_000_000,
-            actualTotalNetIncome: 25_000_000
+            actualTotalNetIncome: 25_000_000,
         );
 
         $ctx->strategy = new StandardCorporateBusinessModel();
@@ -505,7 +505,7 @@ class TreasuryEngineTest extends TestCase
             ebit: 50_000_000.0,
             revenue: 200_000_000.0,
             depreciation: 5_000_000.0,
-            ebitda: 55_000_000.0
+            ebitda: 55_000_000.0,
         );
 
         $ctx->health = new DebtHealthDTO(
@@ -524,7 +524,7 @@ class TreasuryEngineTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: true
+            isUnderLeveraged: true,
         );
 
         $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
@@ -613,11 +613,11 @@ class TreasuryEngineTest extends TestCase
             (float) $stock->getSharesOutstanding(),
             $ctx->newShares,
             1e-6,
-            'the share count the engine writes back has to carry the dilution, or the raise is booked with no shares behind it'
+            'the share count the engine writes back has to carry the dilution, or the raise is booked with no shares behind it',
         );
 
         // The offering's announcement return is the measured one, whatever the valuation that prompted it.
-        $offerings = array_values(array_filter($ctx->events, static fn (array $e): bool => str_contains($e['description'] ?? '', 'offering')));
+        $offerings = array_values(array_filter($ctx->events, static fn(array $e): bool => str_contains($e['description'] ?? '', 'offering')));
         $this->assertCount(1, $offerings);
         $this->assertSame(TreasuryEngine::SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT, $offerings[0]['shock'] ?? null);
     }
@@ -637,7 +637,7 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 300_000_000.0, unfundedShortfall: 0.0)
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 300_000_000.0, unfundedShortfall: 0.0),
         );
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
 
@@ -669,12 +669,12 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0),
         );
         $this->debtEngine->method('issueDebt')->willReturnCallback(
             static function (Stock $target, float $amount): void {
                 $target->setWholesaleDebt((string) ((float) $target->getWholesaleDebt() + $amount));
-            }
+            },
         );
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
 
@@ -704,7 +704,7 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0),
         );
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
 
@@ -741,7 +741,7 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0),
         );
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
         $engine->finalizeLiquidity($ctx);
@@ -783,14 +783,14 @@ class TreasuryEngineTest extends TestCase
 
             $debtEngine = $this->createMock(DebtEngine::class);
             $debtEngine->method('rollMaturities')->willReturn(
-                new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+                new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0),
             );
             $debtEngine->method('assessGoingConcern')->willReturn(new \App\DTO\GoingConcernDTO(
                 trailingEbit: 150_000_000.0,
                 trailingEbitda: 170_000_000.0,
                 assetValue: $assetValue,
                 cash: 10_000_000.0,
-                claims: 2_000_000_000.0
+                claims: 2_000_000_000.0,
             ));
             // The subscription draw always clears, so the solvency test is the only thing that can refuse it.
             $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateUniform'])->getMock();
@@ -828,14 +828,14 @@ class TreasuryEngineTest extends TestCase
 
         $debtEngine = $this->createMock(DebtEngine::class);
         $debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0),
         );
         $debtEngine->method('assessGoingConcern')->willReturn(new \App\DTO\GoingConcernDTO(
             trailingEbit: 150_000_000.0,
             trailingEbitda: 170_000_000.0,
             assetValue: 3_010_000_000.0,
             cash: 10_000_000.0,
-            claims: 2_000_000_000.0
+            claims: 2_000_000_000.0,
         ));
         $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateUniform'])->getMock();
         $mathUtility->method('generateUniform')->willReturn(0.0);
@@ -892,7 +892,7 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0)
+            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0),
         );
         $this->debtEngine->expects($this->never())->method('issueDebt');
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
@@ -904,7 +904,7 @@ class TreasuryEngineTest extends TestCase
             1_905_000_000.0,
             (float) $stock->getWholesaleDebt(),
             1.0,
-            'the notes left the ladder and the facility took their place: next quarter rolls a SMALLER wall'
+            'the notes left the ladder and the facility took their place: next quarter rolls a SMALLER wall',
         );
     }
 
@@ -925,7 +925,7 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0)
+            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0),
         );
         // The draw is NOT an issuance: it lands on the facility's own balance, priced at the revolver spread.
         $this->debtEngine->expects($this->never())->method('issueDebt');
@@ -941,7 +941,7 @@ class TreasuryEngineTest extends TestCase
             2_000_000_000.0,
             (float) $stock->getWholesaleDebt() + (float) $stock->getRevolverDrawn(),
             1.0,
-            'the notes were refinanced onto the line, not added to it: total borrowings are unchanged'
+            'the notes were refinanced onto the line, not added to it: total borrowings are unchanged',
         );
         $this->assertEqualsWithDelta(30_000_000.0, $ctx->newTreasury, 1.0, 'the draw passed straight through to the bondholders');
     }
@@ -966,7 +966,7 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 3_000_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 2_990_000_000.0)
+            new MaturityRollDTO(maturingPrincipal: 3_000_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 2_990_000_000.0),
         );
         $this->debtEngine->method('assessGoingConcern')->willReturn($this->goingConcern(assetValue: 15_000_000_000.0, claims: 20_000_000_000.0));
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
@@ -979,7 +979,7 @@ class TreasuryEngineTest extends TestCase
         $this->assertEqualsWithDelta(1_000_000_000.0, (float) $stock->getRevolverCommitment(), 1.0, 'the commitment survives the breach and is not upsized');
         $this->assertContains(
             'Lenders refused a $1.00B draw on its revolving credit facility while it is in breach of its leverage covenant.',
-            array_column($ctx->events, 'description')
+            array_column($ctx->events, 'description'),
         );
     }
 
@@ -1000,7 +1000,7 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0)
+            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0),
         );
         $this->debtEngine->method('assessGoingConcern')->willReturn($this->goingConcern(assetValue: 3_000_000_000.0, claims: 2_000_000_000.0));
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
@@ -1011,7 +1011,7 @@ class TreasuryEngineTest extends TestCase
         $this->assertFalse($stock->isPaymentDefault());
         $this->assertNotContains(
             'Lenders refused a $0.10B draw on its revolving credit facility while it is in breach of its leverage covenant.',
-            array_column($ctx->events, 'description')
+            array_column($ctx->events, 'description'),
         );
     }
 
@@ -1062,13 +1062,13 @@ class TreasuryEngineTest extends TestCase
 
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->debtEngine->method('rollMaturities')->willReturn(
-            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0)
+            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0),
         );
         $ratesIssuedAt = [];
         $this->debtEngine->method('issueDebt')->willReturnCallback(
             static function (Stock $s, float $amount, float $rate) use (&$ratesIssuedAt): void {
                 $ratesIssuedAt[] = $rate;
-            }
+            },
         );
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
 
@@ -1098,7 +1098,7 @@ class TreasuryEngineTest extends TestCase
         $this->debtEngine->method('issueDebt')->willReturnCallback(
             static function (Stock $s, float $amount) use (&$issued): void {
                 $issued += $amount;
-            }
+            },
         );
 
         $this->treasuryEngine->finalizeLiquidity($ctx);
@@ -1108,19 +1108,19 @@ class TreasuryEngineTest extends TestCase
             (float) $stock->getCorporateTreasury() + 400_000_000.0,
             $issued,
             1.0,
-            'the cash the treasury gained is matched by the debt it took on'
+            'the cash the treasury gained is matched by the debt it took on',
         );
     }
 
     /** The same health reading, with every lending door shut: no market will underwrite this credit. */
-    private function healthThatCannotIssue(\App\DTO\DebtHealthDTO $health): \App\DTO\DebtHealthDTO
+    private function healthThatCannotIssue(DebtHealthDTO $health): DebtHealthDTO
     {
         return $this->healthWithAccess($health, canIssueDebt: false, hasMarketAccess: false);
     }
 
-    private function healthWithAccess(\App\DTO\DebtHealthDTO $health, bool $canIssueDebt, bool $hasMarketAccess): \App\DTO\DebtHealthDTO
+    private function healthWithAccess(DebtHealthDTO $health, bool $canIssueDebt, bool $hasMarketAccess): DebtHealthDTO
     {
-        return new \App\DTO\DebtHealthDTO(
+        return new DebtHealthDTO(
             grossCost: $health->grossCost,
             effectiveCost: $health->effectiveCost,
             cashYield: $health->cashYield,
@@ -1137,7 +1137,7 @@ class TreasuryEngineTest extends TestCase
             isLiquidityCrisis: $health->isLiquidityCrisis,
             isLiquidityWarning: $health->isLiquidityWarning,
             isUnderLeveraged: $health->isUnderLeveraged,
-            hasMarketAccess: $hasMarketAccess
+            hasMarketAccess: $hasMarketAccess,
         );
     }
 
@@ -1210,11 +1210,11 @@ class TreasuryEngineTest extends TestCase
     }
 
     /** No market will lend, and net debt / EBITDA stands past the 3.0x covenant. */
-    private function healthInCovenantBreach(\App\DTO\DebtHealthDTO $health): \App\DTO\DebtHealthDTO
+    private function healthInCovenantBreach(DebtHealthDTO $health): DebtHealthDTO
     {
         $shut = $this->healthThatCannotIssue($health);
 
-        return new \App\DTO\DebtHealthDTO(
+        return new DebtHealthDTO(
             grossCost: $shut->grossCost,
             effectiveCost: $shut->effectiveCost,
             cashYield: $shut->cashYield,
@@ -1233,7 +1233,7 @@ class TreasuryEngineTest extends TestCase
             isUnderLeveraged: $shut->isUnderLeveraged,
             hasLeverageHeadroom: false,
             netDebtToEbitda: 5.0,
-            ebitdaCovenantLimit: 3.0
+            ebitdaCovenantLimit: 3.0,
         );
     }
 
@@ -1309,10 +1309,22 @@ class TreasuryEngineTest extends TestCase
             $ctx->debtIssued = $debtRaised ? 100_000_000.0 : 0.0;
             $ctx->expansionBudget = $expansionBudget;
             $ctx->health = new DebtHealthDTO(
-                grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
-                interestCoverage: 15.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.0, wacc: 0.30,
-                costOfEquity: 0.32, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
-                isLiquidityWarning: false, isUnderLeveraged: false
+                grossCost: 0.05,
+                effectiveCost: 0.05,
+                cashYield: 0.04,
+                isNegativeCarry: false,
+                isSevereNegativeCarry: false,
+                interestCoverage: 15.0,
+                wantsToPaydownDebt: false,
+                canIssueDebt: false,
+                debtTolerance: 1.0,
+                wacc: 0.30,
+                costOfEquity: 0.32,
+                leveredBeta: 1.0,
+                rawMetrics: $ctx->health->rawMetrics,
+                isLiquidityCrisis: false,
+                isLiquidityWarning: false,
+                isUnderLeveraged: false,
             );
 
             $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
@@ -1348,7 +1360,7 @@ class TreasuryEngineTest extends TestCase
             currentPrice: $currentPrice,
             sharesOutstanding: 100_000_000,
             actualTotalNetIncome: 100_000_000,
-            stockCompensation: $stockCompensation
+            stockCompensation: $stockCompensation,
         );
 
         $ctx->strategy = new StandardCorporateBusinessModel();
@@ -1373,7 +1385,7 @@ class TreasuryEngineTest extends TestCase
             ebit: 150_000_000.0,
             revenue: 800_000_000.0,
             depreciation: 20_000_000.0,
-            ebitda: 170_000_000.0
+            ebitda: 170_000_000.0,
         );
 
         $ctx->health = new DebtHealthDTO(
@@ -1392,7 +1404,7 @@ class TreasuryEngineTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         return $ctx;
@@ -1468,10 +1480,22 @@ class TreasuryEngineTest extends TestCase
             $ctx->newTreasury = 200_000_000.0; // above the cash target, well short of hoarder territory
             $ctx->debtActionTaken = false;     // no debt this quarter, so nothing forces a deployment
             $ctx->health = new DebtHealthDTO(
-                grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
-                interestCoverage: 15.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.0, wacc: $hurdle,
-                costOfEquity: $hurdle + 0.02, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
-                isLiquidityWarning: false, isUnderLeveraged: false
+                grossCost: 0.05,
+                effectiveCost: 0.05,
+                cashYield: 0.04,
+                isNegativeCarry: false,
+                isSevereNegativeCarry: false,
+                interestCoverage: 15.0,
+                wantsToPaydownDebt: false,
+                canIssueDebt: false,
+                debtTolerance: 1.0,
+                wacc: $hurdle,
+                costOfEquity: $hurdle + 0.02,
+                leveredBeta: 1.0,
+                rawMetrics: $ctx->health->rawMetrics,
+                isLiquidityCrisis: false,
+                isLiquidityWarning: false,
+                isUnderLeveraged: false,
             );
 
             // Saturation has taken the marginal return to 40%: the pacing draw sits at its 95% ceiling either way.
@@ -1519,10 +1543,22 @@ class TreasuryEngineTest extends TestCase
             $ctx->newTreasury = 200_000_000.0;
             $ctx->debtActionTaken = false;
             $ctx->health = new DebtHealthDTO(
-                grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
-                interestCoverage: 15.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.0, wacc: 0.50,
-                costOfEquity: 0.52, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
-                isLiquidityWarning: false, isUnderLeveraged: false
+                grossCost: 0.05,
+                effectiveCost: 0.05,
+                cashYield: 0.04,
+                isNegativeCarry: false,
+                isSevereNegativeCarry: false,
+                interestCoverage: 15.0,
+                wantsToPaydownDebt: false,
+                canIssueDebt: false,
+                debtTolerance: 1.0,
+                wacc: 0.50,
+                costOfEquity: 0.52,
+                leveredBeta: 1.0,
+                rawMetrics: $ctx->health->rawMetrics,
+                isLiquidityCrisis: false,
+                isLiquidityWarning: false,
+                isUnderLeveraged: false,
             );
 
             // The next dollar of plant earns 40%, against a true cost of capital of 50%.
@@ -1541,7 +1577,7 @@ class TreasuryEngineTest extends TestCase
         $this->assertLessThan(
             0.40,
             ManagementStyle::EmpireBuilder->appliedHurdle(0.50),
-            'The fixture only means anything while the empire builder\'s hurdle sits below the marginal return.'
+            'The fixture only means anything while the empire builder\'s hurdle sits below the marginal return.',
         );
 
         $neutral = $deploy(null);
@@ -1578,10 +1614,22 @@ class TreasuryEngineTest extends TestCase
         $ctx->operatingBase = 1_000_000_000.0;
         $ctx->retainedEarningsThisQuarter = 100_000_000.0;
         $ctx->health = new DebtHealthDTO(
-            grossCost: 0.04, effectiveCost: 0.04, cashYield: 0.03, isNegativeCarry: false, isSevereNegativeCarry: false,
-            interestCoverage: 10.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 15.0, wacc: 0.08,
-            costOfEquity: 0.09, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
-            isLiquidityWarning: false, isUnderLeveraged: true
+            grossCost: 0.04,
+            effectiveCost: 0.04,
+            cashYield: 0.03,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 10.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: false,
+            debtTolerance: 15.0,
+            wacc: 0.08,
+            costOfEquity: 0.09,
+            leveredBeta: 1.0,
+            rawMetrics: $ctx->health->rawMetrics,
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: true,
         );
 
         $capExEngine = $this->createMock(CapExEngine::class);
@@ -1620,10 +1668,22 @@ class TreasuryEngineTest extends TestCase
         $ctx->operatingBase = 1_000_000_000.0;
         $ctx->retainedEarningsThisQuarter = 0.0;
         $ctx->health = new DebtHealthDTO(
-            grossCost: 0.04, effectiveCost: 0.04, cashYield: 0.03, isNegativeCarry: false, isSevereNegativeCarry: false,
-            interestCoverage: 10.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 15.0, wacc: 0.08,
-            costOfEquity: 0.09, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
-            isLiquidityWarning: false, isUnderLeveraged: false
+            grossCost: 0.04,
+            effectiveCost: 0.04,
+            cashYield: 0.03,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 10.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: false,
+            debtTolerance: 15.0,
+            wacc: 0.08,
+            costOfEquity: 0.09,
+            leveredBeta: 1.0,
+            rawMetrics: $ctx->health->rawMetrics,
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false,
         );
         $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
 

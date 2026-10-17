@@ -8,10 +8,10 @@ use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\Bond\BondPricingEngine;
+use App\Service\Market\Bond\TreasuryAuctionService;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
 use PHPUnit\Framework\TestCase;
-use App\Service\Market\Bond\TreasuryAuctionService;
 
 /**
  * The sampled discount curve has to BE the curve.
@@ -40,7 +40,7 @@ class BondDiscountGridTest extends TestCase
      */
     private function curves(): array
     {
-        $make = static fn (float $level, float $slope, float $c1, float $c2, float $balanceSheet = 0.0): SovereignCurveDTO
+        $make = static fn(float $level, float $slope, float $c1, float $c2, float $balanceSheet = 0.0): SovereignCurveDTO
             => new SovereignCurveDTO(
                 level: $level,
                 slope: $slope,
@@ -85,7 +85,7 @@ class BondDiscountGridTest extends TestCase
         $this->assertLessThan(
             self::TOLERANCE_BPS / 10000.0,
             $worst,
-            sprintf('Grid drifts %.3f bps from the curve (worst: %s).', $worst * 10000.0, $worstAt)
+            sprintf('Grid drifts %.3f bps from the curve (worst: %s).', $worst * 10000.0, $worstAt),
         );
     }
 
@@ -98,7 +98,7 @@ class BondDiscountGridTest extends TestCase
                     $this->engine->zeroYield($curve, $tenor),
                     $this->engine->discountZeroYield($curve, $tenor),
                     1e-12,
-                    sprintf('The quoted %gy is not exact on the %s curve.', $tenor, $name)
+                    sprintf('The quoted %gy is not exact on the %s curve.', $tenor, $name),
                 );
             }
         }
@@ -122,11 +122,11 @@ class BondDiscountGridTest extends TestCase
 
         $gridPrice = FixedIncome::calculateBondPresentValue(
             $flows,
-            fn (float $tau): float => $this->engine->discountZeroYield($curve, $tau)
+            fn(float $tau): float => $this->engine->discountZeroYield($curve, $tau),
         );
         $exactPrice = FixedIncome::calculateBondPresentValue(
             $flows,
-            fn (float $tau): float => $this->engine->zeroYield($curve, $tau)
+            fn(float $tau): float => $this->engine->zeroYield($curve, $tau),
         );
 
         // A cent on a thousand-unit face, against a coupon struck in eighths of a percent.

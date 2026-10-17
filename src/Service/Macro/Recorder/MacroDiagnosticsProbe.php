@@ -410,6 +410,6 @@ final class MacroDiagnosticsProbe
      */
     private static function divide(array $integrals, float $years): array
     {
-        return array_map(static fn (float $integral): float => $integral / $years, $integrals);
+        return array_map(static fn(float $integral): float => $integral / $years, $integrals);
     }
 }

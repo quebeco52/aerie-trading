@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use PHPUnit\Framework\TestCase;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Model\Sector\ClearingHouseBusinessModel;
-use App\Service\Model\BusinessModelInterface;
 use App\Service\Math\MathUtility;
+use App\Service\Model\BusinessModelInterface;
+use App\Service\Model\Sector\ClearingHouseBusinessModel;
+use PHPUnit\Framework\TestCase;
 
 class ClearingHouseBusinessModelTest extends TestCase
 {
@@ -36,7 +36,7 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     public function testCalculateInterestIncomeOnlyComputesOnOwnCash(): void
     {
-        $stockMock = $this->createStub(\App\Entity\Stock::class);
+        $stockMock = $this->createStub(Stock::class);
         $stockMock->method('getCorporateTreasury')->willReturn('110000000000.0'); // 110B ($10B own cash + $100B margin)
         $stockMock->method('getCustomerDeposits')->willReturn('100000000000.0'); // 100B margin pool
 
@@ -44,9 +44,9 @@ class ClearingHouseBusinessModelTest extends TestCase
 
         // At 5% policy rate:
         // Own cash yield = $10B * 0.05 = $500M
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRateEma: 0.05,
-            yield2yEma: 0.06
+            yield2yEma: 0.06,
         );
         $income = $this->model->calculateInterestIncome($stockMock, $macroState, $mathMock);
 
@@ -56,9 +56,9 @@ class ClearingHouseBusinessModelTest extends TestCase
     public function testCalculateEffectiveCustodySpreadScalesWithRate(): void
     {
         // 5% rate -> 15 bps base + (5% * 15% retention = 75 bps) = 90 bps (0.0090)
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRateEma: 0.05,
-            yield2yEma: 0.06
+            yield2yEma: 0.06,
         );
         $spread = $this->model->calculateEffectiveCustodySpread($macroState);
         $this->assertEqualsWithDelta(0.0090, $spread, 0.0001);
@@ -70,12 +70,12 @@ class ClearingHouseBusinessModelTest extends TestCase
         $stockMock->setTotalEquity('35000000000.0');
         $stockMock->setCustomerDeposits('1300000000000.0');
 
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRate: 0.02,
             equityRiskPremium: 0.05,
             corporateTaxRate: 0.20,
             policyRateEma: 0.02,
-            yield5yEma: 0.03
+            yield5yEma: 0.03,
         );
         $mathMock = $this->createStub(MathUtility::class);
 
@@ -100,7 +100,7 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             (90e9 * $brokerage->getWholesaleLeverageLimit()) - 17e9,
             $brokerage->calculateDebtExpansionCapacity(90e9, 1_317e9, 17e9, $health, 0.05, 20e9, 0.5e9),
-            1.0
+            1.0,
         );
     }
 
@@ -120,7 +120,7 @@ class ClearingHouseBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $this->assertSame(
             $this->model->getTargetMetrics($equityFunded, $macroState, $mathMock),
-            $this->model->getTargetMetrics($borrowed, $macroState, $mathMock)
+            $this->model->getTargetMetrics($borrowed, $macroState, $mathMock),
         );
     }
 
@@ -182,7 +182,7 @@ class ClearingHouseBusinessModelTest extends TestCase
             rawMetrics: new \App\DTO\DebtMetricsDTO(interestExpense: 1e9, blendedRate: 0.05, historicalFixedRate: 0.05, dynamicSpread: 0.005, currentMarketRate: 0.05, wholesaleRate: 0.05, ebit: 20e9, revenue: 40e9, depreciation: 0.5e9, ebitda: 20.5e9),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
     }
 
@@ -252,7 +252,7 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             1.0 + 0.10 * ClearingHouseBusinessModel::VIX_REVENUE_SCALAR,
             $busy->streamRevenue['clearing_fees'] / $calm->streamRevenue['clearing_fees'],
-            1e-9
+            1e-9,
         );
         $this->assertEqualsWithDelta($calm->streamRevenue['custody_float'], $busy->streamRevenue['custody_float'], 1e-9);
         $this->assertEqualsWithDelta($calm->streamRevenue['data_licensing'], $busy->streamRevenue['data_licensing'], 1e-9);
@@ -290,9 +290,9 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     public function testCalculateCashYieldUsesPolicyRate(): void
     {
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRateEma: 0.0525,
-            yield2yEma: 0.0400
+            yield2yEma: 0.0400,
         );
         $yield = $this->model->calculateCashYield($macroState);
 
@@ -357,12 +357,12 @@ class ClearingHouseBusinessModelTest extends TestCase
 
         $calmMacro = new MacroStateDTO(
             corporateDefaultRateEma: 0.020, // Baseline 2.0%
-            marketVolatilityEma: 0.18
+            marketVolatilityEma: 0.18,
         );
 
         $distressMacro = new MacroStateDTO(
             corporateDefaultRateEma: 0.080, // Default wave (8.0%)
-            marketVolatilityEma: 0.18
+            marketVolatilityEma: 0.18,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -374,8 +374,7 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $calmResult->clampedMargin,
             $distressResult->clampedMargin,
-            'Systemic corporate default waves must increase member insolvency risk and default waterfall provisioning.'
+            'Systemic corporate default waves must increase member insolvency risk and default waterfall provisioning.',
         );
     }
 }
-

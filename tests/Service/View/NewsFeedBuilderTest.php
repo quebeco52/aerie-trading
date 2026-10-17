@@ -43,7 +43,7 @@ class NewsFeedBuilderTest extends TestCase
         $districtNews->expects($this->never())->method('findLatest');
         $stockEvents = $this->createMock(StockEventRepository::class);
         $stockEvents->expects($this->once())->method('findLatest')
-            ->with(NewsFeedBuilder::FEED_ROWS, $this->callback(fn (?array $types): bool => $types !== null && in_array('EARNINGS', $types, true) && !in_array('SPLIT', $types, true)))
+            ->with(NewsFeedBuilder::FEED_ROWS, $this->callback(fn(?array $types): bool => $types !== null && in_array('EARNINGS', $types, true) && !in_array('SPLIT', $types, true)))
             ->willReturn([]);
 
         $feed = (new NewsFeedBuilder($districtNews, $stockEvents, $this->createStub(EtfEventRepository::class)))->build('earnings');

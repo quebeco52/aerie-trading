@@ -4,17 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
-use App\Service\Model\Sector\ShadowBankBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\ShadowBankBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -51,7 +49,11 @@ class CommercialBankBusinessModelTest extends TestCase
         $stock->setFloatingDebtRatio('0.40');
 
         $macro = new MacroStateDTO(
-            policyRate: 0.04, policyRateEma: 0.04, yield5yEma: 0.045, corporateTaxRate: 0.21, equityRiskPremium: 0.045
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield5yEma: 0.045,
+            corporateTaxRate: 0.21,
+            equityRiskPremium: 0.045,
         );
 
         $lossFree = new class extends CommercialBankBusinessModel {
@@ -68,7 +70,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $without = $lossFree->getTargetMetrics($stock, $macro, $this->mathUtility);
 
         $this->assertSame($without['invested_capital'], $withLosses['invested_capital']);
-        $grossYield = static fn (array $metrics): float => $metrics['baseline_roic'] / (0.40 * (1.0 - $macro->corporateTaxRate));
+        $grossYield = static fn(array $metrics): float => $metrics['baseline_roic'] / (0.40 * (1.0 - $macro->corporateTaxRate));
         $this->assertEqualsWithDelta($lossRate, $grossYield($withLosses) - $grossYield($without), 1e-9);
     }
 
@@ -87,7 +89,7 @@ class CommercialBankBusinessModelTest extends TestCase
             policyRateEma: 0.04,
             yield2yEma: 0.04,
             yield10yEma: 0.045,
-            macroCreditSpreadEma: 0.02
+            macroCreditSpreadEma: 0.02,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -97,7 +99,7 @@ class CommercialBankBusinessModelTest extends TestCase
             fixedCosts: 200_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('net_interest_income', $result->streamRevenue);
@@ -106,7 +108,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $result->actualRevenue,
             $result->streamRevenue['net_interest_income'] + $result->streamRevenue['fee_income'],
-            1.0
+            1.0,
         );
     }
 
@@ -222,7 +224,7 @@ class CommercialBankBusinessModelTest extends TestCase
                 + (1.0 - CommercialBankBusinessModel::RESIDENTIAL_MORTGAGE_SHARE - CommercialBankBusinessModel::CONSUMER_LOAN_SHARE - CommercialBankBusinessModel::COMMERCIAL_REAL_ESTATE_SHARE) * CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE),
             $ttc,
             1e-12,
-            'securities are marked, never charged off'
+            'securities are marked, never charged off',
         );
         $this->assertEqualsWithDelta(0.0092, $ttc / $loanShare, 0.0002, 'a neutral H.8 loan book loses ~0.92% a year');
     }
@@ -235,7 +237,7 @@ class CommercialBankBusinessModelTest extends TestCase
     public function testInABustTheLowPdSegmentsSwingFurthest(): void
     {
         $z = -2.0;
-        $swing = static fn (float $rate, float $rho): float => CreditRisk::calculateVasicekExpectedLoss($z, $rate / CommercialBankBusinessModel::LGD_BASELINE, $rho, 1.0) / ($rate / CommercialBankBusinessModel::LGD_BASELINE);
+        $swing = static fn(float $rate, float $rho): float => CreditRisk::calculateVasicekExpectedLoss($z, $rate / CommercialBankBusinessModel::LGD_BASELINE, $rho, 1.0) / ($rate / CommercialBankBusinessModel::LGD_BASELINE);
 
         $residential = $swing(CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO);
         $consumer = $swing(CommercialBankBusinessModel::CONSUMER_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO);
@@ -282,7 +284,7 @@ class CommercialBankBusinessModelTest extends TestCase
             ($mortgageLoss * (1.0 - 0.55 * 0.70) + $businessLoss) / ($mortgageLoss * 0.45 + $businessLoss),
             $lossRate($mortgageLender, 70.0) / $lossRate($mortgageLender, 100.0),
             1e-6,
-            'a 30% fall lifts mortgage LGD from 45% to 61.5%'
+            'a 30% fall lifts mortgage LGD from 45% to 61.5%',
         );
         $this->assertEqualsWithDelta($lossRate($businessLender, 100.0), $lossRate($businessLender, 70.0), 1e-15);
 
@@ -488,7 +490,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             0.01 * (1.0 - $loanShare) * $securitiesMove,
             $mortgageLender->resolveInterestYield($stock, $steeper) - $mortgageLender->resolveInterestYield($stock, $opening),
-            1e-9
+            1e-9,
         );
     }
 
@@ -543,7 +545,7 @@ class CommercialBankBusinessModelTest extends TestCase
      */
     public function testRiskWeightsFollowTheLoanBook(): void
     {
-        $lender = static fn (float $residential): CommercialBankBusinessModel => new class ($residential) extends CommercialBankBusinessModel {
+        $lender = static fn(float $residential): CommercialBankBusinessModel => new class ($residential) extends CommercialBankBusinessModel {
             public function __construct(private readonly float $residential) {}
 
             protected function resolveLoanBookMix(Stock $stock): array
@@ -598,8 +600,8 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertGreaterThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $cet1);
         $this->assertLessThan(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + 0.020, $cet1);
 
-        $neutralMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRate: 0.0);
-        $ccybMacro = new \App\DTO\MacroStateDTO(countercyclicalBufferRate: 0.020);
+        $neutralMacro = new MacroStateDTO(countercyclicalBufferRate: 0.0);
+        $ccybMacro = new MacroStateDTO(countercyclicalBufferRate: 0.020);
 
         // Under neutral macro, bank meets CCB and distributions are unrestricted
         $this->assertNull($this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0, $neutralMacro));
@@ -684,7 +686,7 @@ class CommercialBankBusinessModelTest extends TestCase
             policyRateEma: 0.03,
             yield2yEma: 0.03,
             yield10yEma: 0.05,
-            macroCreditSpreadEma: 0.02
+            macroCreditSpreadEma: 0.02,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -694,7 +696,7 @@ class CommercialBankBusinessModelTest extends TestCase
             fixedCosts: 200_000_000.0,
             baselineVol: 0.0,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertSame(ShockEvent::CAPITAL_BELOW_MINIMUM, $result->eventType);
@@ -710,7 +712,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
         $macroEasy = new MacroStateDTO(
             outputGapEma: 0.0,
-            sloosTighteningIndexEma: 0.0
+            sloosTighteningIndexEma: 0.0,
         );
 
         $resultEasy = $this->model->computeActualFinancials(
@@ -720,12 +722,12 @@ class CommercialBankBusinessModelTest extends TestCase
             fixedCosts: 200_000_000.0,
             baselineVol: 0.0,
             macroState: $macroEasy,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $macroTight = new MacroStateDTO(
             outputGapEma: 0.0,
-            sloosTighteningIndexEma: 0.40 // 40% net banks tightening standards
+            sloosTighteningIndexEma: 0.40, // 40% net banks tightening standards
         );
 
         $resultTight = $this->model->computeActualFinancials(
@@ -735,7 +737,7 @@ class CommercialBankBusinessModelTest extends TestCase
             fixedCosts: 200_000_000.0,
             baselineVol: 0.0,
             macroState: $macroTight,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertLessThan($resultEasy->streamRevenue['net_interest_income'], $resultTight->streamRevenue['net_interest_income'], 'SLOOS tightening must dampen NII loan origination revenue.');
@@ -762,27 +764,27 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($resultLowRisk->clampedMargin, $resultHighRisk->clampedMargin, 1e-12, 'the forecast reserve is not a running cost');
 
-        $atBaseRate = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: \App\Service\Macro\MacroEngine::RECESSION_BASE_RATE));
+        $atBaseRate = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: MacroEngine::RECESSION_BASE_RATE));
         $calm = $this->model->getForwardCreditLossMultiplier($bank, $macroLowRisk);
         $stressed = $this->model->getForwardCreditLossMultiplier($bank, $macroHighRisk);
         $this->assertEqualsWithDelta(1.0, $atBaseRate, 1e-9, 'at the base-rate outlook the estimate is the through-the-cycle one');
         $this->assertEqualsWithDelta(
-            1.0 - (\App\Service\Macro\MacroEngine::RECESSION_BASE_RATE - 0.10) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
+            1.0 - (MacroEngine::RECESSION_BASE_RATE - 0.10) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
             $calm,
             1e-9,
-            'a better-than-average outlook releases, as the spread term does, so the average outlook carries no standing build'
+            'a better-than-average outlook releases, as the spread term does, so the average outlook carries no standing build',
         );
         $this->assertEqualsWithDelta(
-            1.0 + (0.70 - \App\Service\Macro\MacroEngine::RECESSION_BASE_RATE) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
+            1.0 + (0.70 - MacroEngine::RECESSION_BASE_RATE) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
             $stressed,
-            1e-9
+            1e-9,
         );
 
         // Spreads: widening lifts the target, a benign market releases part of it, never past the floor.
-        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD + 0.03));
+        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD + 0.03));
         $this->assertEqualsWithDelta(1.0 + 0.03 * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $wide, 1e-9);
         $benign = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: 0.0));
-        $this->assertEqualsWithDelta(1.0 - \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
+        $this->assertEqualsWithDelta(1.0 - MacroEngine::BASE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
         $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::CECL_RESERVE_MULTIPLIER_FLOOR, $benign);
     }
 
@@ -799,7 +801,7 @@ class CommercialBankBusinessModelTest extends TestCase
             totalDebt: $totalDebt,
             customerDeposits: $customerDeposits,
             targetOperatingCash: $targetOperatingCash,
-            currentTreasury: $currentTreasury
+            currentTreasury: $currentTreasury,
         );
 
         $this->assertSame(0.0, $result->probability, 'Deposit-funded bank with adequate cash must not borrow wholesale debt.');
@@ -819,7 +821,7 @@ class CommercialBankBusinessModelTest extends TestCase
             totalDebt: $totalDebt,
             customerDeposits: $customerDeposits,
             targetOperatingCash: $targetOperatingCash,
-            currentTreasury: $currentTreasury
+            currentTreasury: $currentTreasury,
         );
 
         $this->assertGreaterThan(0.50, $result->probability, 'Liquidity shortfall must boost borrowing probability.');
@@ -868,12 +870,12 @@ class CommercialBankBusinessModelTest extends TestCase
             actualTotalNetIncome: $hugeIncome,
             investedCapital: 1_000_000.0,
             ebit: 60_000_000_000.0,
-            corporateTaxRate: 0.21
+            corporateTaxRate: 0.21,
         );
 
-        $this->assertLessThanOrEqual(\App\Service\Math\FinancialConstants::MAX_REPORTED_RETURN, $roic);
-        $this->assertGreaterThanOrEqual(\App\Service\Math\FinancialConstants::MIN_REPORTED_RETURN, $roic);
-        $this->assertEqualsWithDelta(\App\Service\Math\FinancialConstants::MAX_REPORTED_RETURN, (float) $stock->getCurrentRoe(), 0.0001);
+        $this->assertLessThanOrEqual(FinancialConstants::MAX_REPORTED_RETURN, $roic);
+        $this->assertGreaterThanOrEqual(FinancialConstants::MIN_REPORTED_RETURN, $roic);
+        $this->assertEqualsWithDelta(FinancialConstants::MAX_REPORTED_RETURN, (float) $stock->getCurrentRoe(), 0.0001);
     }
 
     /**
@@ -949,7 +951,6 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertTrue(is_finite($result->creditLossProvision));
     }
 
-
     // --- Deposits Channel ---
 
     /**
@@ -962,7 +963,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $stock = $this->creditTestBank('LAKE');
         $opening = new MacroStateDTO();
         $raised = new MacroStateDTO(policyRateEma: $opening->policyRateEma + 0.01);
-        $paid = fn (): float => $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.0, 0.0, 0.0, $raised->policyRateEma, 15.0, 10e9, 90e9, $raised)->interestExpense;
+        $paid = fn(): float => $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.0, 0.0, 0.0, $raised->policyRateEma, 15.0, 10e9, 90e9, $raised)->interestExpense;
         $stock->setWholesaleDebt('0');
 
         $this->carryBook($this->model, $stock, $opening, 1);
@@ -977,7 +978,7 @@ class CommercialBankBusinessModelTest extends TestCase
     /** The cash beside the book earns its own interest below the line, so the franchise's revenue target leaves it out. */
     public function testTheFranchiseCalibrationCountsTheCashBesideTheBook(): void
     {
-        $calibration = static fn (CommercialBankBusinessModel $model, Stock $stock): float => (new \ReflectionMethod($model, 'resolveCalibrationYield'))->invoke($model, $stock, new MacroStateDTO());
+        $calibration = static fn(CommercialBankBusinessModel $model, Stock $stock): float => (new \ReflectionMethod($model, 'resolveCalibrationYield'))->invoke($model, $stock, new MacroStateDTO());
         $cashless = new class extends CommercialBankBusinessModel {
             protected function resolveTreasuryIncome(Stock $stock, MacroStateDTO $macroState): float
             {
@@ -991,7 +992,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $treasuryIncome,
             ($calibration($cashless, $stock) - $calibration($this->model, $stock)) * $this->model->resolveEarningAssets($stock),
-            1e3
+            1e3,
         );
     }
 
@@ -1012,7 +1013,15 @@ class CommercialBankBusinessModelTest extends TestCase
 
         // Utilization = 0 (debt = 0) with 0 customer deposits in ratio gives depositBeta = MAX_DEPOSIT_BETA (0.70)
         $result = $this->model->calculateInterestExpenseAndWholesaleRate(
-            $stock, 0.05, 0.05, 0.05, $policyRate, 15.0, 1000.0, 0.0, $extremeSystem
+            $stock,
+            0.05,
+            0.05,
+            0.05,
+            $policyRate,
+            15.0,
+            1000.0,
+            0.0,
+            $extremeSystem,
         );
 
         // Max deposit rate is 0.70 * 0.06 = 0.042; deposit interest on $1000 is $42.0
@@ -1154,7 +1163,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $long = (100.0e9 * 0.6) + (1000.0e9 * (1.0 - 0.604));
         $this->assertEqualsWithDelta((0.0021 * $short) + (0.00105 * $long), (new CommercialBankBusinessModel())->calculateAnnualBankLevy($bank, $macro), 1.0);
         $this->assertSame(0.0, (new CommercialBankBusinessModel())->calculateAnnualBankLevy($bank, new MacroStateDTO()), 'No levy at the founding.');
-        $this->assertSame(0.0, (new \App\Service\Model\Sector\ShadowBankBusinessModel())->calculateAnnualBankLevy($bank, $macro));
+        $this->assertSame(0.0, (new ShadowBankBusinessModel())->calculateAnnualBankLevy($bank, $macro));
         $this->assertSame(0.0, (new \App\Service\Model\Sector\BrokerageBusinessModel())->calculateAnnualBankLevy($bank, $macro));
         $this->assertSame(0.0, (new \App\Service\Model\Sector\ClearingHouseBusinessModel())->calculateAnnualBankLevy($bank, $macro));
         $this->assertGreaterThan(0.0, (new \App\Service\Model\Sector\InvestmentBankBusinessModel())->calculateAnnualBankLevy($bank, $macro));

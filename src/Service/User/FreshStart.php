@@ -73,7 +73,7 @@ final class FreshStart
             }
             $conn->executeStatement(
                 'UPDATE users SET cash_balance = :cash, margin_debit = 0 WHERE id = :u',
-                ['cash' => $capital, 'u' => $user->getId()]
+                ['cash' => $capital, 'u' => $user->getId()],
             );
         });
 

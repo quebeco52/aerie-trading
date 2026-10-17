@@ -6,15 +6,14 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
 
-use App\Service\Math\TimeSeries;
-use App\Service\Model\BusinessModelInterface;
-
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
+use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Trait\StandardBaseModelTrait;
 use App\Service\Model\Trait\StandardCapitalAllocationTrait;
 use App\Service\Model\Trait\StandardDebtPhysicsTrait;
@@ -25,7 +24,7 @@ use App\Service\Model\Trait\StandardValuationTrait;
 
 /**
  * Earnings strategy for normal, non-financial companies.
- * 
+ *
  * Financial Physics:
  * - Evaluated on Return on Invested Capital (ROIC).
  * - Subject to supply chain inflation and physical depreciation.
@@ -86,7 +85,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public const BASE_COVERAGE_ERROR = 0.06;
 
     /**
-     * Physical businesses evaluate their true structural scale based on Invested Capital 
+     * Physical businesses evaluate their true structural scale based on Invested Capital
      * (Total Equity + Debt - Cash), requiring physical assets to turn a profit.
      */
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
@@ -104,7 +103,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
 
         return [
             'invested_capital' => $stock->getInvestedCapital(),
-            'baseline_roic' => $effectiveRoic
+            'baseline_roic' => $effectiveRoic,
         ];
     }
 
@@ -191,7 +190,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             currentLaggedValue: $stock->getInflationPassThrough() ?? $targetPassThrough,
             targetValue: $targetPassThrough,
             dt: EarningsEngine::QUARTERLY_TIME_STEP,
-            lagTimeConstant: $lagYears ?? (float) static::PRICE_PASS_THROUGH_LAG_YEARS
+            lagTimeConstant: $lagYears ?? (float) static::PRICE_PASS_THROUGH_LAG_YEARS,
         );
 
         $stock->setInflationPassThrough($laggedPassThrough);
@@ -251,7 +250,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        // Standard corporates pay market interest rates on ALL of their debt. 
+        // Standard corporates pay market interest rates on ALL of their debt.
         // They do not get the benefit of cheap customer deposits like banks do.
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;

@@ -310,7 +310,7 @@ class CreditRatingAgency
     private function qualifiesForBracket(float $distanceToDefault, float $bracketThreshold, int $currentRank, int $evaluatingRank): bool
     {
         if ($currentRank === $evaluatingRank) {
-            // ALREADY IN BRACKET: Give them the benefit of the doubt. 
+            // ALREADY IN BRACKET: Give them the benefit of the doubt.
             // They only fall out if they drop BELOW the threshold MINUS the buffer.
             return $distanceToDefault >= ($bracketThreshold - self::HYSTERESIS_BUFFER);
         } elseif ($currentRank < $evaluatingRank) {
@@ -318,7 +318,7 @@ class CreditRatingAgency
             // They must climb ABOVE the threshold PLUS the buffer.
             return $distanceToDefault >= ($bracketThreshold + self::HYSTERESIS_BUFFER);
         } else {
-            // TRYING TO DOWNGRADE: 
+            // TRYING TO DOWNGRADE:
             // If they are currently higher than this rank, we only check the standard threshold.
             // (The hysteresis check happened on the higher bracket above this one).
             return $distanceToDefault >= $bracketThreshold;

@@ -2,24 +2,22 @@
 
 namespace App\Tests\Service\Market\Pricing;
 
-use PHPUnit\Framework\TestCase;
+use App\Entity\Stock;
+use App\Service\Corporate\CorporateActionEngine;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\StockTracker;
+use App\Service\Math\MathUtility;
+use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
-use App\Service\Market\Pricing\StockTracker;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
-use App\Service\Market\Pricing\MarketEngine;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\CorporateActionEngine;
-use App\Service\Corporate\DebtEngine;
-use App\Service\Event\MarketEventPublisher;
-use App\Service\Math\MathUtility;
-use App\Service\Corporate\CorporateMetrics;
-use Doctrine\ORM\EntityManagerInterface;
-use App\Entity\Stock;
-use App\Entity\StockEvent;
-use App\Entity\StockHistory;
 
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class StockTrackerTest extends TestCase
@@ -47,13 +45,13 @@ class StockTrackerTest extends TestCase
         $this->debtEngineMock = $this->createStub(DebtEngine::class);
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
-        
+
         $this->mathUtilityMock->method('calculateSVJJJumps')->willReturn([
             'price_multiplier' => 1.0,
             'var_jump' => 0.0,
-            'shock_pct' => null
+            'shock_pct' => null,
         ]);
-        
+
         $debtMetrics = new \App\DTO\DebtMetricsDTO(
             interestExpense: 0.0,
             blendedRate: 0.05,
@@ -64,7 +62,7 @@ class StockTrackerTest extends TestCase
             ebit: 1000.0,
             revenue: 5000.0,
             depreciation: 100.0,
-            ebitda: 1100.0
+            ebitda: 1100.0,
         );
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn(new \App\DTO\DebtHealthDTO(
             grossCost: 0.05,
@@ -82,9 +80,9 @@ class StockTrackerTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         ));
-        
+
         $this->orderFlow = new \App\Service\Market\Flow\InMemoryOrderFlowStore();
 
         $this->tracker = new StockTracker(
@@ -95,20 +93,20 @@ class StockTrackerTest extends TestCase
             $this->marketEventMock,
             $this->debtEngineMock,
             $this->corporateMetricsMock,
-            new \App\Service\Market\Pricing\LiquidityEngine(new \App\Service\Math\MathUtility()),
+            new \App\Service\Market\Pricing\LiquidityEngine(new MathUtility()),
             $this->orderFlow,
             new \App\Service\Market\Agent\AgentFlowEngine(
                 new \App\Service\Market\Agent\AgentPopulation(),
                 new \App\Service\Market\Agent\InMemoryAgentStateStore(),
                 new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-                []
+                [],
             ),
             // Stubbed maths, so checkProbability() is false and no succession fires in tests that
             // are about something else.
             new \App\Service\Corporate\ManagementSuccessionEngine(
-                $this->createStub(\App\Service\Event\MarketEventPublisher::class),
-                $this->createStub(\App\Service\Math\MathUtility::class)
-            )
+                $this->createStub(MarketEventPublisher::class),
+                $this->createStub(MathUtility::class),
+            ),
         );
     }
 
@@ -125,21 +123,21 @@ class StockTrackerTest extends TestCase
         $stock->setBeta('1.0');
         $stock->setJumpIntensity('2.0'); // Corresponds to lambda
         $stock->setJumpVol('0.10'); // Corresponds to jump_vol
-        
+
         return $stock;
     }
 
     public function testUpdateStocksStandardFlowWithoutEventsOrHistory(): void
     {
         $stock = $this->createDummyStock();
-        
+
         // Mock the engines returning standard, uneventful updates
         $this->marketEngineMock->method('calculateNextPrice')->willReturn([
             'price' => 105.0,
             'shock' => null, // No market shock
             'next_volatility' => 0.21,
             'analyst_targets' => [],
-            'perceived_fair_value' => 100.0
+            'perceived_fair_value' => 100.0,
         ]);
 
         $this->earningsEngineMock->method('calculate')->willReturn(null); // No earnings report
@@ -147,12 +145,12 @@ class StockTrackerTest extends TestCase
         $this->corporateActionEngineMock->method('processSplits')->willReturn([
             'price' => 105.0,
             'shares' => 1000,
-            'event' => null // No split
+            'event' => null, // No split
         ]);
 
         // We no longer flush in the tracker, so expect it to never be called
         $this->entityManagerMock->expects($this->never())->method('flush');
-        
+
         // We passed false to $recordHistory and have no shocks, so persist should never be called
         $this->entityManagerMock->expects($this->never())->method('persist');
 
@@ -161,10 +159,10 @@ class StockTrackerTest extends TestCase
         $this->assertIsArray($result);
         $this->assertCount(1, $result['updates']);
         $this->assertEmpty($result['events']);
-        
+
         // Market cap should be 105.0 * 1000
         $this->assertEquals(105000.0, $result['total_cap']);
-        
+
         // Verify the Doctrine entity was properly mutated
         $this->assertEquals('105', $stock->getPrice());
         $this->assertEquals('0.21', $stock->getCurrentVolatility());
@@ -179,15 +177,15 @@ class StockTrackerTest extends TestCase
             'shock' => -10.0, // Simulate a 10% drop shock
             'next_volatility' => 0.50,
             'analyst_targets' => [],
-            'perceived_fair_value' => 100.0
+            'perceived_fair_value' => 100.0,
         ]);
 
         $this->earningsEngineMock->method('calculate')->willReturn(null);
-        
+
         $this->corporateActionEngineMock->method('processSplits')->willReturn([
             'price' => 90.0,
             'shares' => 1000,
-            'event' => null
+            'event' => null,
         ]);
 
         // The wire line names the company and says what its shares did.
@@ -206,7 +204,7 @@ class StockTrackerTest extends TestCase
         $this->assertCount(1, $result['events']);
         $this->assertEquals('SHOCK', $result['events'][0]['type']);
         $this->assertSame([['SHOCK', 'Test Corp shares drop 10.0% in a sudden move.', -10.0]], $published);
-        
+
         $this->assertIsArray($result['history']);
         $this->assertCount(1, $result['history']);
         $this->assertEquals(90.0, $result['history'][0]['price']);

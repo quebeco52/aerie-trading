@@ -53,7 +53,7 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
         return max(0.0, min(
             1.0,
             self::AGENT_RETAIL_BASE_SHARE
-                + (self::AGENT_RETAIL_MAX_ATTENTION_TILT * $this->attention($view))
+                + (self::AGENT_RETAIL_MAX_ATTENTION_TILT * $this->attention($view)),
         ));
     }
 

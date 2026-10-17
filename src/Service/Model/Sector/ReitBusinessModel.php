@@ -7,19 +7,18 @@ namespace App\Service\Model\Sector;
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\DebtExpansionAppetiteDTO;
 
-use App\Service\Math\Distributions;
-use App\Service\Math\FirmEconomics;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Math\MathUtility;
+
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Real Estate Investment Trusts (REITs).
@@ -64,16 +63,46 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Standard deviation of Wall Street analyst error when estimating REIT revenues. */
     public const BASE_COVERAGE_ERROR = 0.10;
 
-        public function getMinIcr(): float { return 1.05; }
-    public function getBankruptEquityThreshold(): float { return 10.0; }
-    public function getDistressEquityThreshold(): float { return 20.0; }
-    public function getWarningEquityThreshold(): float { return 30.0; }
-    public function getWholesaleLeverageLimit(): float { return 2.0; }
-    public function getDividendCrisisIcr(): float { return 1.05; }
-    public function getBuybackMinIcr(): float { return 1.15; }
-    public function getMoatSpread(): float { return 0.005; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.0; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
+    public function getMinIcr(): float
+    {
+        return 1.05;
+    }
+    public function getBankruptEquityThreshold(): float
+    {
+        return 10.0;
+    }
+    public function getDistressEquityThreshold(): float
+    {
+        return 20.0;
+    }
+    public function getWarningEquityThreshold(): float
+    {
+        return 30.0;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.0;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 1.05;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 1.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.005;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.0;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.125;
+    }
 
     // --- Cap Rate & Portfolio Turnover Rails ---
     /** Fraction of property portfolio acquired/divested per quarter adjusting baseline cap rate. */
@@ -203,7 +232,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         return [
             'invested_capital' => $investedCapital,
-            'baseline_roic' => $effectiveRoic
+            'baseline_roic' => $effectiveRoic,
         ];
     }
 
@@ -330,11 +359,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         // Aggregate observable revenue shock percentage across active streams (MarketConsensusEngine applies coverage
         // visibility). Default rates are published; which tenants fail is not. The rent roll is disclosed in full.
-        $observableShockZ =
-            (($leaseShock + $rentEscalator - $macroTenantVacancy) * $leaseWeight) +
-            ($hospitalityShock * $hospitalityWeight) +
-            ($securitizationShock * $securitizationWeight) +
-            ($longevityShock * $longevityWeight);
+        $observableShockZ
+            = (($leaseShock + $rentEscalator - $macroTenantVacancy) * $leaseWeight)
+            + ($hospitalityShock * $hospitalityWeight)
+            + ($securitizationShock * $securitizationWeight)
+            + ($longevityShock * $longevityWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

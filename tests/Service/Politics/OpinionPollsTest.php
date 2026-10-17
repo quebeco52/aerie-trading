@@ -396,7 +396,10 @@ class OpinionPollsTest extends TestCase
     private function quietMath(): MathUtility
     {
         return new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         };
     }
 

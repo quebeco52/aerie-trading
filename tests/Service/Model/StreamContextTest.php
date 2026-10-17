@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Service\Model\StreamContext;
 use App\Service\Math\MathUtility;
+use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -65,7 +65,7 @@ class StreamContextTest extends TestCase
         $active = $context->resolveActiveStreamWeights(
             $targets,
             adaptationRate: 0.15,
-            reversionSpeed: 0.08
+            reversionSpeed: 0.08,
         );
 
         // Stream C should have drifted above 0.20
@@ -99,7 +99,7 @@ class StreamContextTest extends TestCase
         $active = $context->resolveActiveStreamWeights(
             $targets,
             adaptationRate: 0.15,
-            reversionSpeed: 0.08
+            reversionSpeed: 0.08,
         );
 
         // Stream C active weight should pull back toward 0.20 (below previous 0.40)
@@ -134,7 +134,7 @@ class StreamContextTest extends TestCase
             adaptationRate: 0.50,
             reversionSpeed: 0.00,
             minFloor: 0.05,
-            maxCeiling: 0.85
+            maxCeiling: 0.85,
         );
 
         $this->assertGreaterThanOrEqual(0.05, $active['stream_a']);
@@ -238,7 +238,7 @@ class StreamContextTest extends TestCase
     public function testEvolveRegimeStartsOnOnsetHazardAndCountsQuarters(): void
     {
         $math = $this->createStub(MathUtility::class);
-        $math->method('checkProbability')->willReturnCallback(fn (float $p): bool => $p >= 0.5);
+        $math->method('checkProbability')->willReturnCallback(fn(float $p): bool => $p >= 0.5);
 
         // Inactive with a certain onset: the regime starts this quarter.
         $context = new StreamContext([], $math);

@@ -2,22 +2,22 @@
 
 namespace App\Service\Market\Pricing;
 
-use App\Service\Math\Decimal;
-use App\Service\News\EventPresenter;
 use App\Data\Company\StrategicHoldings;
-use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Market\Flow\OrderFlowStoreInterface;
-use App\Service\Corporate\CorporateMetrics;
-use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
+use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Market\Index\IndexCommittee;
+use App\Service\Math\Decimal;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\TimeSeries;
+use App\Service\News\EventPresenter;
 
 /**
  * Service responsible for tracking and updating stock prices.
@@ -94,7 +94,7 @@ class StockTracker
         /** Standing index membership; null (unit tests without an index) leaves every name a constituent. */
         private ?IndexCommittee $indexCommittee = null,
         /** Listed anchor stakes. Required, not optional: a missing one would price a sphere off its stale filed book with nothing to say so. Holds only a per-tick price map, so a harness builds one free. */
-        private \App\Service\Corporate\Holdings\AnchorStakeLedger $anchorStakes = new \App\Service\Corporate\Holdings\AnchorStakeLedger()
+        private \App\Service\Corporate\Holdings\AnchorStakeLedger $anchorStakes = new \App\Service\Corporate\Holdings\AnchorStakeLedger(),
     ) {}
 
     /**
@@ -111,10 +111,10 @@ class StockTracker
      * @param float   $dt            The time step delta (e.g., in years).
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
-     * 
+     *
      * @return array{updates: array<mixed>, total_cap: float, float_caps: array<string, float>, half_spreads: array<string, float>, fund_flow: array<string, float>, dividend_points: array<string, float>, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_bank_levy: float, strategic_stake_cash: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
-    public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
+    public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
 
         $stockUpdates = [];
@@ -125,7 +125,7 @@ class StockTracker
         $events = [];
 
         // Pull systemic variables from the Macro Engine
-        $macroDTO = $macroState ?? new \App\DTO\MacroStateDTO();
+        $macroDTO = $macroState ?? new MacroStateDTO();
         $marketVol = $macroDTO->marketVolatility;
         // Each name's stored variance was built at last tick's market vol and is stripped at it.
         $priorMarketVol = $this->priorMarketVol;
@@ -135,7 +135,7 @@ class StockTracker
             $this->marketVarianceTrend ?? (MacroEngine::MACRO_VOL_BASE_ANCHOR ** 2),
             $marketVol * $marketVol,
             $dt,
-            MarketEngine::MARKET_VARIANCE_TREND_YEARS
+            MarketEngine::MARKET_VARIANCE_TREND_YEARS,
         );
         // The stamp duty the Diet has in force thins every name's turnover, and so its depth, this tick.
         $this->liquidityEngine->setStampDutyRate($macroDTO->stampDutyRate);
@@ -241,7 +241,7 @@ class StockTracker
             // Computed here rather than there so there is one authority on it: the same figure the firm
             // borrows at is the one its bonds are priced off.
             $stock->setDynamicCreditSpread(
-                Decimal::format($health->rawMetrics->dynamicSpread, 6)
+                Decimal::format($health->rawMetrics->dynamicSpread, 6),
             );
 
             $sharesOutstanding = (float) $stock->getSharesOutstanding();
@@ -259,7 +259,7 @@ class StockTracker
             $successionResult = $this->successionEngine->evaluateSuccession(
                 $stock,
                 $dt,
-                $boardReturn - $strategy->getHurdleRate($health)
+                $boardReturn - $strategy->getHurdleRate($health),
             );
             if ($successionResult) {
                 $events[] = $successionResult['event'];
@@ -318,7 +318,7 @@ class StockTracker
 
                 $impactLogReturn = max(
                     -self::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact + $fundImpact)
+                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact + $fundImpact),
                 );
                 // Impact is linear in the quantity, so the fund's part separates exactly. It hits every name at
                 // once, which makes it SYSTEMATIC: it is charged to the market factor's budget, never the name's
@@ -331,14 +331,14 @@ class StockTracker
                 $corporateLogReturn = $peakImpact !== 0.0 ? $impactLogReturn * ($corporateImpact / $peakImpact) : 0.0;
                 $budgetedImpactLogReturn = (FinancialConstants::PERMANENT_IMPACT_SHARE * max(
                     -self::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact - $corporateImpact)
+                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $flowImpact - $corporateImpact),
                 )) + (self::CORPORATE_FLOW_PERMANENT_IMPACT_SHARE * max(
                     -self::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $corporateImpact)
+                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $corporateImpact),
                 ));
                 $budgetedFundLogReturn = FinancialConstants::PERMANENT_IMPACT_SHARE * max(
                     -self::MAX_TICK_IMPACT_LOG_RETURN,
-                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $fundImpact)
+                    min(self::MAX_TICK_IMPACT_LOG_RETURN, $fundImpact),
                 );
             }
 
@@ -368,7 +368,7 @@ class StockTracker
                     $budgetedImpactLogReturn + $policyLogReturn,
                     $dt,
                     self::IMPACT_MEASUREMENT_YEARS,
-                    self::IMPACT_VARIANCE_EMA_YEARS
+                    self::IMPACT_VARIANCE_EMA_YEARS,
                 );
                 $fundRead = TimeSeries::ewmaWindowedVariance(
                     $this->fundImpactVariance[$ticker] ?? 0.0,
@@ -376,7 +376,7 @@ class StockTracker
                     $budgetedFundLogReturn,
                     $dt,
                     self::IMPACT_MEASUREMENT_YEARS,
-                    self::IMPACT_VARIANCE_EMA_YEARS
+                    self::IMPACT_VARIANCE_EMA_YEARS,
                 );
                 $stock->setImpactVarianceEma($flowRead['variance']);
                 $this->fundImpactVariance[$ticker] = $fundRead['variance'];
@@ -407,7 +407,7 @@ class StockTracker
             // Re-strike on what was filed, so the analysts and agents who act on it this tick read the news.
             if ($generatedEvents !== null || !empty($warning)) {
                 $calculation = array_replace($calculation, $this->marketEngine->strikeFairValue(
-                    \App\DTO\MarketPricingContext::forStock($stock, $macroDTO, $this->debtEngine->analyzeDebtHealth($stock, $macroDTO), $this->anchorStakes, 0.0, 0.0, $priorMarketVol)
+                    \App\DTO\MarketPricingContext::forStock($stock, $macroDTO, $this->debtEngine->analyzeDebtHealth($stock, $macroDTO), $this->anchorStakes, 0.0, 0.0, $priorMarketVol),
                 ));
             }
 
@@ -450,7 +450,7 @@ class StockTracker
                 $momentumPhi = exp(-$dt / self::MOMENTUM_FORMATION_YEARS);
                 $updatedTrend = (($stock->getPriceMomentumTrend() ?? 0.0) * $momentumPhi) + $tickLogReturn;
                 $stock->setPriceMomentumTrend(
-                    max(-self::MAX_MOMENTUM_TREND, min(self::MAX_MOMENTUM_TREND, $updatedTrend))
+                    max(-self::MAX_MOMENTUM_TREND, min(self::MAX_MOMENTUM_TREND, $updatedTrend)),
                 );
             }
 
@@ -460,7 +460,7 @@ class StockTracker
                     $stock->getRealizedVarianceEma() ?? 0.0,
                     $tickLogReturn,
                     $dt,
-                    self::INDEX_TRAILING_VOLATILITY_YEARS
+                    self::INDEX_TRAILING_VOLATILITY_YEARS,
                 ));
             }
 
@@ -481,7 +481,7 @@ class StockTracker
                 $stock,
                 $currentPriceAfterEarnings,
                 $preSplitShares,
-                $macroDTO->totalTime
+                $macroDTO->totalTime,
             );
 
             // Unpack the results
@@ -499,8 +499,8 @@ class StockTracker
             if ($restateForSplit) {
                 $perceivedFairValue /= $splitRatio;
                 $analystTargets = array_map(
-                    static fn (float $target): float => $target / $splitRatio,
-                    $analystTargets
+                    static fn(float $target): float => $target / $splitRatio,
+                    $analystTargets,
                 );
             }
 
@@ -555,7 +555,6 @@ class StockTracker
             // Determine if a fundamental corporate event occurred this tick
             $isFundamentalTick = !empty($generatedEvents) || $maResult || (isset($divestResult) && $divestResult);
 
-
             // Everything below is display data that every connected browser receives on every tick, so
             // it is carried at the precision a screen can show. The full-precision figures live on the
             // entity and in the engines; a fair value with fifteen decimals was a third of the payload.
@@ -576,7 +575,7 @@ class StockTracker
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
                 'credit_rating' => $stock->getCreditRating(),
                 'credit_spread' => (float) $stock->getDynamicCreditSpread(),
-                'analyst_targets' => array_map(static fn (float $target): float => round($target, 2), $analystTargets),
+                'analyst_targets' => array_map(static fn(float $target): float => round($target, 2), $analystTargets),
                 'analyst_price_target' => $stock->getAnalystPriceTarget() !== null ? round((float) $stock->getAnalystPriceTarget(), 2) : null,
                 'analyst_rating' => $stock->getAnalystRating(),
                 'perceived_fair_value' => round($perceivedFairValue, 2),
@@ -586,7 +585,6 @@ class StockTracker
                 'is_bankrupt' => false,
             ];
 
-
             // The headline market share is the firm's reach into its serviceable addressable market — the
             // whole market it sells into, modelled rivals or not, which is what the saturation physics is
             // struck on (IndustryPositionBuilder shows the same figure with the penalty it carries). Only
@@ -595,7 +593,7 @@ class StockTracker
                 $evaluationCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
                 $addressableShare = min(
                     FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
-                    $this->corporateMetrics->calculateAddressableShare($stock, $evaluationCapital, $macroDTO)
+                    $this->corporateMetrics->calculateAddressableShare($stock, $evaluationCapital, $macroDTO),
                 );
 
                 $stockUpdate['market_share'] = round($addressableShare * 100, 2);
@@ -621,7 +619,7 @@ class StockTracker
                 // trading relative to its own normal, and whether anything happened to it. Both are
                 // already computed above for other reasons, so neither costs a second pass.
                 abnormalVolume: $expectedTickVolume > 0.0 ? ($tickVolume / $expectedTickVolume) : 1.0,
-                hasNews: $isFundamentalTick
+                hasNews: $isFundamentalTick,
             ));
 
             $stockUpdates[] = $stockUpdate;
@@ -654,7 +652,7 @@ class StockTracker
             'board_bank_levy' => $boardBankLevy,
             'strategic_stake_cash' => $strategicStakeCash,
             'events' => $events,
-            'market_vol' => $marketVol
+            'market_vol' => $marketVol,
         ];
     }
 
@@ -709,7 +707,7 @@ class StockTracker
             $stock,
             'ANALYST',
             "Sell-side {$direction} its price target on {$stock->getTicker()} to \${$to} from \${$from}.",
-            0.0
+            0.0,
         );
     }
 

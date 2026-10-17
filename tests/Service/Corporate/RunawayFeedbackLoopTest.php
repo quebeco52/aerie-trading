@@ -8,13 +8,13 @@ use App\DTO\CapitalAllocationContext;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
+use App\DTO\MaturityRollDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
-use App\DTO\MaturityRollDTO;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LogisticsBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -42,7 +42,7 @@ class RunawayFeedbackLoopTest extends TestCase
             $this->corporateMetrics,
             $this->debtEngine,
             $this->capExEngine,
-            $this->mathUtility
+            $this->mathUtility,
         );
         // Seeded after the mocks: PHPUnit draws from the same generator to name a mock class the first time it builds
         // one, so a seed set before them gave each test a sequence that depended on which tests had run first.
@@ -76,7 +76,7 @@ class RunawayFeedbackLoopTest extends TestCase
             quarterlyFcfPerShare: 0.0,
             currentPrice: 100.0,
             sharesOutstanding: 1_000_000_000,
-            actualTotalNetIncome: 0.0
+            actualTotalNetIncome: 0.0,
         );
 
         $strategy = new LogisticsBusinessModel();
@@ -98,7 +98,7 @@ class RunawayFeedbackLoopTest extends TestCase
             ebit: 1_000_000_000.0,
             revenue: 50_000_000_000.0,
             depreciation: 2_000_000_000.0,
-            ebitda: 3_000_000_000.0
+            ebitda: 3_000_000_000.0,
         );
 
         $ctx->health = new DebtHealthDTO(
@@ -117,7 +117,7 @@ class RunawayFeedbackLoopTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: true,
             isLiquidityWarning: true,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->treasuryEngine->finalizeLiquidity($ctx);
@@ -145,7 +145,7 @@ class RunawayFeedbackLoopTest extends TestCase
             'total_paid' => 0.0,
             'total_cash_spent' => 0.0,
             'organic_capex' => 0.0,
-            'events' => []
+            'events' => [],
         ]);
 
         $debtEngine = $this->createStub(DebtEngine::class);
@@ -159,7 +159,7 @@ class RunawayFeedbackLoopTest extends TestCase
             ebit: 10_000_000_000.0,
             revenue: 50_000_000_000.0,
             depreciation: 1_000_000_000.0,
-            ebitda: 11_000_000_000.0
+            ebitda: 11_000_000_000.0,
         );
         $debtEngine->method('calculateInterestExpense')->willReturn($debtMetrics);
         $debtEngine->method('analyzeDebtHealth')->willReturn(new DebtHealthDTO(
@@ -178,7 +178,7 @@ class RunawayFeedbackLoopTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         ));
 
         $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
@@ -186,7 +186,7 @@ class RunawayFeedbackLoopTest extends TestCase
         $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
         $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();
 
-        $engine = new \App\Service\Corporate\EarningsEngine(
+        $engine = new EarningsEngine(
             $eventDispatcher,
             $marketEventPublisher,
             $capitalAllocationEngine,
@@ -195,7 +195,7 @@ class RunawayFeedbackLoopTest extends TestCase
             $this->mathUtility,
             $this->corporateMetrics,
             $narrativeEngine,
-            $consensusEngine
+            $consensusEngine,
         );
 
         $stock = new Stock();
@@ -226,7 +226,7 @@ class RunawayFeedbackLoopTest extends TestCase
             macroState: $macro,
             strategy: new LogisticsBusinessModel(),
             businessModel: 'logistics',
-            dt: 0.25
+            dt: 0.25,
         );
 
         $tick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
@@ -248,7 +248,7 @@ class RunawayFeedbackLoopTest extends TestCase
             'total_paid' => 0.0,
             'total_cash_spent' => 0.0,
             'organic_capex' => 0.0,
-            'events' => []
+            'events' => [],
         ]);
 
         $debtEngine = $this->createStub(DebtEngine::class);
@@ -262,7 +262,7 @@ class RunawayFeedbackLoopTest extends TestCase
             ebit: 10_000_000_000.0,
             revenue: 50_000_000_000.0,
             depreciation: 0.0,
-            ebitda: 10_000_000_000.0
+            ebitda: 10_000_000_000.0,
         );
         $debtEngine->method('calculateInterestExpense')->willReturn($debtMetrics);
         $debtEngine->method('analyzeDebtHealth')->willReturn(new DebtHealthDTO(
@@ -281,7 +281,7 @@ class RunawayFeedbackLoopTest extends TestCase
             rawMetrics: $debtMetrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         ));
 
         $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
@@ -289,7 +289,7 @@ class RunawayFeedbackLoopTest extends TestCase
         $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
         $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();
 
-        $engine = new \App\Service\Corporate\EarningsEngine(
+        $engine = new EarningsEngine(
             $eventDispatcher,
             $marketEventPublisher,
             $capitalAllocationEngine,
@@ -298,7 +298,7 @@ class RunawayFeedbackLoopTest extends TestCase
             $this->mathUtility,
             $this->corporateMetrics,
             $narrativeEngine,
-            $consensusEngine
+            $consensusEngine,
         );
 
         $macro = MacroStateDTO::fromArray([

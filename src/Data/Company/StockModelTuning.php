@@ -206,7 +206,7 @@ class StockModelTuning
         // =====================================================================
 
         // --- Aerie Central Clearing (ACC) ---
-        // Systemically important central counterparty clearinghouse (CCP). 
+        // Systemically important central counterparty clearinghouse (CCP).
         'ACC' => [
             ModelParam::ClearingFeeWeight->value      => 0.50,
             ModelParam::CustodyFloatWeight->value     => 0.30,
@@ -795,7 +795,7 @@ class StockModelTuning
         // =====================================================================
 
         // --- Falconet Motor Group (FALC) ---
-        // Vertically integrated tech-auto leviathan. Predatory base models cross-subsidized by 
+        // Vertically integrated tech-auto leviathan. Predatory base models cross-subsidized by
         // ultra-luxury 'Apex Division' and inescapable software/telemetry tollbooths.
         // Extreme pricing power, but terrifyingly sensitive to macroeconomic liquidity crises.
         'FALC' => [

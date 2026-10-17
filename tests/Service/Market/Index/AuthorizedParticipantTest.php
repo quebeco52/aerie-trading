@@ -34,7 +34,7 @@ final class AuthorizedParticipantTest extends TestCase
         self::assertEqualsWithDelta(
             AuthorizedParticipant::ETF_CREATION_FEE + ($spread * AuthorizedParticipant::ETF_BASKET_ROUND_TRIP_MULTIPLE),
             $this->ap->band($spread),
-            1e-9
+            1e-9,
         );
     }
 
@@ -137,7 +137,7 @@ final class AuthorizedParticipantTest extends TestCase
     {
         self::assertSame(
             ['premium' => 0.0, 'creationValue' => 0.0],
-            $this->ap->settle(0.05, 1_000_000.0, 0.0, 0.01, self::ONE_DAY)
+            $this->ap->settle(0.05, 1_000_000.0, 0.0, 0.01, self::ONE_DAY),
         );
     }
 
@@ -150,7 +150,7 @@ final class AuthorizedParticipantTest extends TestCase
         $orders = $this->ap->basketOrders(
             1_000_000.0,
             ['AAA' => 750.0, 'BBB' => 250.0],
-            ['AAA' => 50.0, 'BBB' => 10.0]
+            ['AAA' => 50.0, 'BBB' => 10.0],
         );
 
         self::assertEqualsWithDelta(750_000.0 / 50.0, $orders['AAA'], 1e-6);

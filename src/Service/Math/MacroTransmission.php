@@ -103,7 +103,7 @@ final class MacroTransmission
         float $dW,
         float $kappa = 1.60,
         float $sigma = 0.15,
-        float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE
+        float $policyUncertaintyIndex = MacroEngine::EPU_BASELINE,
     ): float {
         $erpExcess = ($equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM) / 0.015;
         // 500 bps is one cycle-standard-deviation of HY OAS (2000-2024), so a 2008-type +1,500 bps reads as three units of stress.
@@ -139,7 +139,7 @@ final class MacroTransmission
         float $baseline,
         array $drivers,
         float $min = 30.0,
-        float $max = 70.0
+        float $max = 70.0,
     ): float {
         $netAdjustment = 0.0;
         foreach ($drivers as $driver) {
@@ -179,7 +179,7 @@ final class MacroTransmission
         float $outputGap,
         array $weights,
         float $min = -0.06,
-        float $max = 0.25
+        float $max = 0.25,
     ): float {
         $commodityComponent = ($weights['metals'] * $metalsInflation)
             + ($weights['energy'] * $energyInflation)
@@ -223,7 +223,7 @@ final class MacroTransmission
         float $dt,
         float $dW,
         array $params,
-        float $creditGap = 0.0
+        float $creditGap = 0.0,
     ): float {
         $effectiveCost = max(0.20, $replacementCostRatio);
         $tobinsQ = $residentialPriceRatio / $effectiveCost;
@@ -282,7 +282,7 @@ final class MacroTransmission
     public static function calculatePmiDemandShift(
         float $pmi,
         float $baseline = MacroEngine::PMI_BASELINE,
-        float $sensitivity = 0.50
+        float $sensitivity = 0.50,
     ): float {
         $base = max(1.0, $baseline);
         $deviation = ($pmi - $base) / $base;
@@ -333,7 +333,7 @@ final class MacroTransmission
         float $ppi,
         float $targetInflation = MacroEngine::TARGET_INFLATION,
         float $pricingPower = 0.50,
-        float $sensitivity = 0.50
+        float $sensitivity = 0.50,
     ): float {
         $excessPpi = max(0.0, $ppi - $targetInflation);
         $effectivePassThrough = 1.0 - min(1.0, max(0.0, $pricingPower));
@@ -353,7 +353,7 @@ final class MacroTransmission
     public static function calculateHousingStartsShift(
         float $starts,
         float $baseline = MacroEngine::HOUSING_STARTS_BASELINE,
-        float $sensitivity = 0.30
+        float $sensitivity = 0.30,
     ): float {
         $base = max(1.0, $baseline);
         $deviation = ($starts - $base) / $base;
@@ -387,7 +387,7 @@ final class MacroTransmission
     public static function calculateBroadMoneyLiquidityShift(
         float $m2Growth,
         float $baseline,
-        float $sensitivity = 0.50
+        float $sensitivity = 0.50,
     ): float {
         $deviation = $m2Growth - $baseline;
         return max(-0.15, min(0.15, $deviation * $sensitivity));
@@ -409,7 +409,7 @@ final class MacroTransmission
     public static function calculateCapacityUtilizationShift(
         float $cuRate,
         float $baseline = MacroEngine::CU_BASELINE,
-        float $sensitivity = 0.40
+        float $sensitivity = 0.40,
     ): float {
         $deviation = $cuRate - $baseline;
         return max(-0.15, min(0.15, $deviation * $sensitivity));
@@ -437,7 +437,7 @@ final class MacroTransmission
         float $outputGap,
         float $maxCapacity = 0.08,
         float $kappa = 0.020,
-        float $downwardRigidityFactor = 0.35
+        float $downwardRigidityFactor = 0.35,
     ): float {
         if ($outputGap >= 0.0) {
             $effectiveCeiling = max(0.005, $maxCapacity - $outputGap);

@@ -147,7 +147,7 @@ class SeasonService
     /** Entries ranked in a table. */
     public static function rankedCount(array $table): int
     {
-        return count(array_filter($table, static fn (SeasonStanding $row): bool => $row->rank !== null));
+        return count(array_filter($table, static fn(SeasonStanding $row): bool => $row->rank !== null));
     }
 
     /**
@@ -159,10 +159,10 @@ class SeasonService
      */
     public static function rank(array $rows): array
     {
-        $byReturn = static fn (SeasonStanding $a, SeasonStanding $b): int => ($b->return ?? -INF) <=> ($a->return ?? -INF);
+        $byReturn = static fn(SeasonStanding $a, SeasonStanding $b): int => ($b->return ?? -INF) <=> ($a->return ?? -INF);
 
-        $ranked = array_values(array_filter($rows, static fn (SeasonStanding $r): bool => $r->qualified));
-        $rest = array_values(array_filter($rows, static fn (SeasonStanding $r): bool => !$r->qualified));
+        $ranked = array_values(array_filter($rows, static fn(SeasonStanding $r): bool => $r->qualified));
+        $rest = array_values(array_filter($rows, static fn(SeasonStanding $r): bool => !$r->qualified));
         usort($ranked, $byReturn);
         usort($rest, $byReturn);
 
@@ -192,7 +192,7 @@ class SeasonService
             $standings[] = SeasonStanding::fromEntry($entry, $values[(int) $entry->getUser()->getId()] ?? $entry->getLastValue(), $level);
         }
         $standings = self::rank($standings);
-        $qualified = count(array_filter($standings, static fn (SeasonStanding $s): bool => $s->rank !== null));
+        $qualified = count(array_filter($standings, static fn(SeasonStanding $s): bool => $s->rank !== null));
 
         foreach ($standings as $standing) {
             $standing->entry->finalize($standing->value, $level, $standing->rank);
@@ -218,10 +218,10 @@ class SeasonService
                     'The index returned %s over the season. Season %d runs to %s and starts from your current net worth.',
                     self::signedPercent($standing->benchmarkReturn),
                     $next->getNumber(),
-                    DistrictCalendar::quarter($next->getEndTime())
+                    DistrictCalendar::quarter($next->getEndTime()),
                 ),
                 null,
-                '/leaderboard'
+                '/leaderboard',
             );
         }
         $this->notifier->publish();

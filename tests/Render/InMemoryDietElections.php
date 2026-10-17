@@ -13,9 +13,7 @@ final class InMemoryDietElections extends DietElectionRepository
     /** @var list<DietElection> */
     public array $rows = [];
 
-    public function __construct()
-    {
-    }
+    public function __construct() {}
 
     public function findChronological(): array
     {

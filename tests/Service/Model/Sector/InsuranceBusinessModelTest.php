@@ -6,14 +6,14 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
-use App\Service\Model\StreamContext;
 use App\Service\Math\TimeSeries;
 use App\Service\Model\Sector\InsuranceBusinessModel;
+use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
-use App\Service\Corporate\CorporateMetrics;
 
 #[AllowMockObjectsWithoutExpectations]
 class InsuranceBusinessModelTest extends TestCase
@@ -96,7 +96,7 @@ class InsuranceBusinessModelTest extends TestCase
         $mathUtilityMock->method('generateStandardNormal')
             ->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5); // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = -2.5 (Severe catastrophe)
 
-        $macroState = \App\DTO\MacroStateDTO::fromArray([
+        $macroState = MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
             'policy_rate' => 0.05,
             'gdp_growth' => 0.02,
@@ -110,7 +110,7 @@ class InsuranceBusinessModelTest extends TestCase
             2_000_000_000.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // Variable costs (claims) should be significantly elevated due to catastrophe loss
@@ -152,7 +152,7 @@ class InsuranceBusinessModelTest extends TestCase
 
         // $25M quarterly net income -> Annualized ROE = ($25M / $1000M) * 4.0 = 0.10 (10%)
         $return = $model->updateDynamicRoic($stock, 25_000_000.0, 1_000_000_000.0, 30_000_000.0, 0.21, 0.08, 0.10);
-        
+
         $this->assertEquals(0.10, $return);
         $this->assertEquals('0.1', $stock->getCurrentRoe());
         $this->assertNotNull($stock->getRoeTtm());
@@ -176,7 +176,7 @@ class InsuranceBusinessModelTest extends TestCase
             ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.0);
 
         $quietBurden = 0.5;
-        $macroState = \App\DTO\MacroStateDTO::fromArray([
+        $macroState = MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
             'policy_rate' => 0.05,
             'gdp_growth' => 0.02,
@@ -194,7 +194,7 @@ class InsuranceBusinessModelTest extends TestCase
             1_000_000_000.0,
             0.10,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // Claims 0.60 x 0.834 = 0.5004, less half an average year's catastrophe load, less the large-loss
@@ -229,7 +229,7 @@ class InsuranceBusinessModelTest extends TestCase
                 $result->clampedMargin + $fixedCosts / $result->actualRevenue,
                 $result->kpis['loss_ratio'] + $result->kpis['expense_ratio'],
                 1e-9,
-                $label
+                $label,
             );
         }
     }
@@ -246,7 +246,7 @@ class InsuranceBusinessModelTest extends TestCase
             $stock->setTicker('CENT');
             $stock->setBeta('1.0');
             $stock->setTotalEquity('200000000000');
-            $macro = new \App\DTO\MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
+            $macro = new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
 
             return $model->computeActualFinancials($stock, 10_000_000_000.0, 0.60, 1.0e9, 0.10, $macro, $this->scriptedMath())->clampedMargin;
         };
@@ -263,7 +263,7 @@ class InsuranceBusinessModelTest extends TestCase
         $stock->setBeta('1.0');
         $stock->setTotalEquity('10000000000.0');
 
-        $macroState = \App\DTO\MacroStateDTO::fromArray([
+        $macroState = MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
             'policy_rate' => 0.05,
             'gdp_growth' => 0.02,
@@ -290,7 +290,7 @@ class InsuranceBusinessModelTest extends TestCase
             1_000_000_000.0,
             $baselineVol,
             $macroState,
-            $mockNegRevenue
+            $mockNegRevenue,
         );
 
         // 2. Positive Revenue Shock (Revenue expands, expense ratio as % of revenue declines)
@@ -307,7 +307,7 @@ class InsuranceBusinessModelTest extends TestCase
             1_000_000_000.0,
             $baselineVol,
             $macroState,
-            $mockPosRevenue
+            $mockPosRevenue,
         );
 
         $this->assertGreaterThan($expectedRevenue, $resultPos->actualRevenue);
@@ -358,7 +358,7 @@ class InsuranceBusinessModelTest extends TestCase
         $model = new InsuranceBusinessModel();
         $mathUtility = new MathUtility();
         // Rates at the level the book was priced at, so neither the float-yield discount nor the hurdle moves the book.
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
@@ -401,7 +401,7 @@ class InsuranceBusinessModelTest extends TestCase
         $model = new InsuranceBusinessModel();
         // Policy rate at the neutral rate so the Cummins-Danzon float-yield discount is zero and
         // the capacity term is the only thing moving the multiplier.
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRate: 0.035,
             policyRateEma: 0.035,
             perceivedNeutralRate: 0.035,
@@ -415,14 +415,14 @@ class InsuranceBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             1.0 - (0.50 * InsuranceBusinessModel::SOFT_MARKET_CAPACITY_BETA),
             $pricingPower($this->capacityStock(1.50)),
-            0.0001
+            0.0001,
         );
 
         // Price competition has a floor: however overcapitalized, the market does not give cover away.
         $this->assertEqualsWithDelta(
             1.0 - InsuranceBusinessModel::SOFT_MARKET_MAX_DISCOUNT,
             $pricingPower($this->capacityStock(8.00)),
-            0.0001
+            0.0001,
         );
 
         // A rate cut has to reach the combined ratio, which it only does if the cost base is declared
@@ -444,7 +444,7 @@ class InsuranceBusinessModelTest extends TestCase
         $model = new InsuranceBusinessModel();
         $mathUtility = new MathUtility();
         // Policy rate at neutral: the float-yield discount is zero and the capacity glut alone softens rates.
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
@@ -493,12 +493,12 @@ class InsuranceBusinessModelTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
         $mathUtility = new MathUtility();
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
         );
-        $target = static fn(Stock $s, \App\DTO\MacroStateDTO $m): float => $model->resolveTargetWrittenShare($s, $m, $mathUtility, (float) $s->getTotalEquity());
+        $target = static fn(Stock $s, MacroStateDTO $m): float => $model->resolveTargetWrittenShare($s, $m, $mathUtility, (float) $s->getTotalEquity());
 
         // At a rate 4.8% soft the combined ratio is over 100. A firm whose float carries it keeps writing; one
         // with little float sheds more of the same book.
@@ -525,7 +525,7 @@ class InsuranceBusinessModelTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
         $mathUtility = new MathUtility();
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
         );
@@ -556,7 +556,7 @@ class InsuranceBusinessModelTest extends TestCase
     public function testRatesFollowObservedCapitalRatherThanTodaysBalanceSheet(): void
     {
         $model = new InsuranceBusinessModel();
-        $macroState = new \App\DTO\MacroStateDTO(
+        $macroState = new MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
@@ -614,9 +614,9 @@ class InsuranceBusinessModelTest extends TestCase
     public function testHardMarketCapitalTriggerIsMeasuredAgainstTheDesiredBook(): void
     {
         $model = new InsuranceBusinessModel();
-        $regimeKey = \App\Service\Model\StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;
+        $regimeKey = StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;
         $quarterlyPremium = 100_000_000_000.0;
-        $macro = new \App\DTO\MacroStateDTO();
+        $macro = new MacroStateDTO();
 
         // Surplus 30% short of what demand needs, and its book sized from that surplus all the same.
         $impaired = $this->underwriterAtCapacity(0.70);
@@ -644,8 +644,8 @@ class InsuranceBusinessModelTest extends TestCase
     public function testASoftMarketWithCapitalReturnedIsNotAShortage(): void
     {
         $model = new InsuranceBusinessModel();
-        $regimeKey = \App\Service\Model\StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;
-        $macro = new \App\DTO\MacroStateDTO();
+        $regimeKey = StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;
+        $macro = new MacroStateDTO();
 
         // A thin float and a demanding hurdle: the firm wants well under the whole book at par rates, and holds 80%
         // of the capital all of demand would need, more than its desired book needs.
@@ -699,7 +699,7 @@ class InsuranceBusinessModelTest extends TestCase
     public function testTheFirstReportStrikesTheTargetPremiumToSurplus(): void
     {
         $model = new InsuranceBusinessModel();
-        $macro = new \App\DTO\MacroStateDTO();
+        $macro = new MacroStateDTO();
         $stock = $this->underwriter(1_000_000_000_000.0);
         $stock->setEarningsMomentumZ([InsuranceBusinessModel::STATE_WRITTEN_SHARE => 0.90]);
 
@@ -720,7 +720,7 @@ class InsuranceBusinessModelTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
         $math = new MathUtility();
-        $macro = new \App\DTO\MacroStateDTO(
+        $macro = new MacroStateDTO(
             policyRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             policyRateEma: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
             perceivedNeutralRate: InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
@@ -752,7 +752,7 @@ class InsuranceBusinessModelTest extends TestCase
     public function testDemandGrowsWithTrendNominalGdpNotWithRetainedCapital(): void
     {
         $model = new InsuranceBusinessModel();
-        $base = new \App\DTO\MacroStateDTO();
+        $base = new MacroStateDTO();
         $stock = $this->underwriterAtCapacity(1.00);
         $demand = $model->resolvePremiumDemand($stock, $base);
 
@@ -761,10 +761,10 @@ class InsuranceBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($demand, $model->resolvePremiumDemand($retained, $base), $demand * 1e-12);
         $this->assertEqualsWithDelta(2.0, $model->resolveCapacityToDemandRatio($retained, $base), 1e-9);
 
-        $grown = new \App\DTO\MacroStateDTO(potentialGdpIndex: 1.5, gdpDeflator: 1.2);
+        $grown = new MacroStateDTO(potentialGdpIndex: 1.5, gdpDeflator: 1.2);
         $this->assertEqualsWithDelta($demand * 1.8, $model->resolvePremiumDemand($stock, $grown), $demand * 1e-9);
 
-        $boom = new \App\DTO\MacroStateDTO(outputGap: 0.04);
+        $boom = new MacroStateDTO(outputGap: 0.04);
         $this->assertEqualsWithDelta($demand, $model->resolvePremiumDemand($stock, $boom), $demand * 1e-12);
     }
 
@@ -775,7 +775,7 @@ class InsuranceBusinessModelTest extends TestCase
     public function testAFreshBookOpensInBalanceAndRecordsItsFranchise(): void
     {
         $model = new InsuranceBusinessModel();
-        $macro = new \App\DTO\MacroStateDTO();
+        $macro = new MacroStateDTO();
         $stock = $this->underwriter(1_000_000_000_000.0);
         $capacity = InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * 1_000_000_000_000.0;
 
@@ -892,7 +892,6 @@ class InsuranceBusinessModelTest extends TestCase
         return $stock;
     }
 
-
     // --- District Catastrophes ---
 
     /** One district storm season is the same claim for every carrier: the burden shifts each firm's claim draw, so all three books lose together. */
@@ -914,7 +913,7 @@ class InsuranceBusinessModelTest extends TestCase
                 $math->method('generateStandardNormal')->willReturn(0.0);
                 $math->method('generatePersistentZ')->willReturn(0.0);
                 $math->method('checkProbability')->willReturn(false);
-                $macro = new \App\DTO\MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
+                $macro = new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
 
                 return $carrier->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $macro, $math)->actualVariableCosts;
             };
@@ -939,7 +938,7 @@ class InsuranceBusinessModelTest extends TestCase
             $math->method('generateStandardNormal')->willReturn(0.0);
             $math->method('generatePersistentZ')->willReturn(0.0);
             $math->method('checkProbability')->willReturn(false);
-            $macro = new \App\DTO\MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
+            $macro = new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
 
             return $model->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $macro, $math)->streamZ;
         };

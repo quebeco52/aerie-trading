@@ -15,8 +15,7 @@ class Schedule implements ScheduleProviderInterface
 {
     public function __construct(
         private CacheInterface $cache,
-    ) {
-    }
+    ) {}
 
     public function getSchedule(): SymfonySchedule
     {
@@ -34,9 +33,9 @@ class Schedule implements ScheduleProviderInterface
                     new RunCommandMessage(sprintf(
                         'app:prune-history --years=%s --per-year=%d',
                         HistoryPruner::DEFAULT_YEARS_KEPT,
-                        HistoryPruner::THINNED_ROWS_PER_YEAR
-                    ))
-                )
+                        HistoryPruner::THINNED_ROWS_PER_YEAR,
+                    )),
+                ),
             );
     }
 }

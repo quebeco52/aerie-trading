@@ -5,22 +5,20 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Elite Law Firms, White-Shoe Practices & Legal Services.
- * 
+ *
  * Financial Physics:
  * - Asset Light & Human Capital Driven: Ultra-low CapEx, very high cash flow conversion.
  * - Tri-Stream Legal Architecture:
@@ -127,14 +125,38 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     /** Revenue multiplier for a lost major trial or forfeited contingency engagement. */
     public const LITIGATION_LOSS_MULT = 0.75;
 
-        public function getMinIcr(): float { return 3.0; }
-    public function getWholesaleLeverageLimit(): float { return 1.5; }
-    public function getDividendCrisisIcr(): float { return 2.0; }
-    public function getBuybackMinIcr(): float { return 3.0; }
-    public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.05; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.2; }
+    public function getMinIcr(): float
+    {
+        return 3.0;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 1.5;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 2.0;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 3.0;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.05;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.2;
+    }
 
     // --- Secular Demand ---
     /** Legal services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -222,7 +244,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::CorporateRetainerWeight->value     => self::CORPORATE_RETAINER_WEIGHT,
@@ -298,10 +320,10 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Blended observable shock
-        $observableShockZ = ($retainerShock * $retainerWeight) +
-            ($litigationShock * $litigationWeight * 0.50) +
-            ($restructuringShock * $restructuringWeight * 0.50) +
-            ($restructuringSurge * $restructuringWeight * 0.40);
+        $observableShockZ = ($retainerShock * $retainerWeight)
+            + ($litigationShock * $litigationWeight * 0.50)
+            + ($restructuringShock * $restructuringWeight * 0.50)
+            + ($restructuringSurge * $restructuringWeight * 0.40);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

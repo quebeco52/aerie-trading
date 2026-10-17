@@ -4,19 +4,19 @@ namespace App\Controller;
 
 use App\Data\Company\RevenueStreams;
 use App\Data\Macro\MacroFieldCatalog;
+use App\Entity\Etf;
 use App\Entity\Stock;
+use App\Entity\User;
 use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroStateProvider;
-use App\Service\View\ReportCalendar;
-use App\Service\View\CompanyProfilePageBuilder;
-use App\Service\View\StockPageBuilder;
-use App\Entity\Etf;
-use App\Entity\User;
 use App\Service\Market\Chart\ChartRange;
 use App\Service\Market\Chart\PriceBarAggregator;
 use App\Service\Market\Ticker\HistoryPruner;
 use App\Service\Market\Ticker\TickCadence;
+use App\Service\View\CompanyProfilePageBuilder;
+use App\Service\View\ReportCalendar;
+use App\Service\View\StockPageBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Redis;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -80,7 +80,7 @@ class StockController extends AbstractController
      *
      * @param Request                $request       The HTTP request carrying 'ticker', 'range' and the 'style' being drawn.
      * @param EntityManagerInterface $entityManager The entity manager.
-     * @param \Redis                 $redis         The Redis instance for caching short-term data.
+     * @param Redis                 $redis         The Redis instance for caching short-term data.
      *
      * @return JsonResponse Returns a JSON array of historical data points.
      */
@@ -88,15 +88,17 @@ class StockController extends AbstractController
     public function history(
         Request $request,
         EntityManagerInterface $entityManager,
-        \Redis $redis,
+        Redis $redis,
         PriceBarAggregator $barAggregator,
-        #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.ticks_per_year%')] int $ticksPerYear,
-    ): JsonResponse
-    {
+        #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.ticks_per_year%')]
+        int $ticksPerYear,
+    ): JsonResponse {
         $ticker = $request->query->get('ticker');
         $range = (string) $request->query->get('range', ChartRange::DEFAULT_RANGE);
 
-        if (!$ticker) return $this->json([]);
+        if (!$ticker) {
+            return $this->json([]);
+        }
 
         // The line and the candle rendering of a range do not share a bar grid: a candle has a legible
         // minimum width, a line does not, and the finer grid is what keeps the live tail moving rather
@@ -159,7 +161,9 @@ class StockController extends AbstractController
                 $priceColumn = 'price';
             } else {
                 $bond = $entityManager->getRepository(\App\Entity\Bond::class)->findOneByTicker($ticker);
-                if (!$bond) return $this->json([]);
+                if (!$bond) {
+                    return $this->json([]);
+                }
 
                 $targetId = $bond->getId();
                 $tableName = 'bond_history';
@@ -174,11 +178,11 @@ class StockController extends AbstractController
         // written once a bar and bond history once a mark, so no single rows-per-year is right for all three.
         $newestSimTime = $conn->fetchOne(
             sprintf('SELECT MAX(sim_time) FROM %s WHERE %s = :id', $tableName, $foreignKey),
-            ['id' => $targetId]
+            ['id' => $targetId],
         );
         $simTimeFloor = ChartRange::simTimeFloor(
             $range,
-            $newestSimTime === null || $newestSimTime === false ? null : (float) $newestSimTime
+            $newestSimTime === null || $newestSimTime === false ? null : (float) $newestSimTime,
         );
 
         $where = sprintf('%s = :id', $foreignKey);
@@ -194,12 +198,14 @@ class StockController extends AbstractController
                 'SELECT MIN(sim_time) FROM (SELECT sim_time FROM %s WHERE %s ORDER BY sim_time DESC, id DESC LIMIT %d) as sub',
                 $tableName,
                 $where,
-                ChartRange::MAX_ROWS
+                ChartRange::MAX_ROWS,
             ),
-            $params
+            $params,
         );
 
-        if ($oldestSimTime === null || $oldestSimTime === false || $newestSimTime === null || $newestSimTime === false) return $this->json([]);
+        if ($oldestSimTime === null || $oldestSimTime === false || $newestSimTime === null || $newestSimTime === false) {
+            return $this->json([]);
+        }
 
         // Stocks carry a full bar; ETFs and bonds are a single series and select the close alone. Asking
         // for open_price on etf_history would be a SQL error rather than a null.
@@ -214,7 +220,7 @@ class StockController extends AbstractController
             $barColumns,
             $tableName,
             $where,
-            ChartRange::MAX_ROWS
+            ChartRange::MAX_ROWS,
         );
 
         $stmt = $conn->executeQuery($sql, $params);
@@ -235,7 +241,7 @@ class StockController extends AbstractController
             (float) $newestSimTime - (float) $oldestSimTime,
             $rowsPerYear,
             $targetBars,
-            $minRowsPerBar
+            $minRowsPerBar,
         ));
     }
 
@@ -247,15 +253,19 @@ class StockController extends AbstractController
         Request $request,
         EntityManagerInterface $entityManager,
         MacroStateProvider $macroStateProvider,
-        \Redis $redis,
-        #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.ticks_per_year%')] int $ticksPerYear,
-    ): JsonResponse
-    {
+        Redis $redis,
+        #[\Symfony\Component\DependencyInjection\Attribute\Autowire('%app.ticks_per_year%')]
+        int $ticksPerYear,
+    ): JsonResponse {
         $ticker = $request->query->get('ticker');
-        if (!$ticker) return $this->json([]);
+        if (!$ticker) {
+            return $this->json([]);
+        }
 
         $stock = $entityManager->getRepository(Stock::class)->findOneByTicker($ticker);
-        if (!$stock) return $this->json([]); // ETFs don't have corporate reports
+        if (!$stock) {
+            return $this->json([]);
+        } // ETFs don't have corporate reports
 
         $conn = $entityManager->getConnection();
 
@@ -271,13 +281,13 @@ class StockController extends AbstractController
         // The quarter each report covers, from the time it was filed. A report filed before that was recorded is read
         // off the reporting schedule; a delisted company stopped filing at some past quarter the schedule cannot
         // place, so such reports go unlabelled and the charts count back instead.
-        $filingTimes = array_map(static fn (array $row): ?float => is_numeric($row['total_time'] ?? null) ? (float) $row['total_time'] : null, $results);
+        $filingTimes = array_map(static fn(array $row): ?float => is_numeric($row['total_time'] ?? null) ? (float) $row['total_time'] : null, $results);
         $countedBack = $stock->isBankrupt() || !in_array(null, $filingTimes, true) ? null : ReportCalendar::periodLabels(
             (string) $stock->getTicker(),
             (int) ($redis->get('simulation_tick_count') ?: 0),
             $ticksPerYear,
             $macroStateProvider->liveState()->totalTime,
-            count($results)
+            count($results),
         );
         $periods = ReportCalendar::reportLabels($filingTimes, $countedBack);
 
@@ -300,10 +310,14 @@ class StockController extends AbstractController
     public function earningsFlow(Request $request, EntityManagerInterface $entityManager): JsonResponse
     {
         $ticker = $request->query->get('ticker');
-        if (!$ticker) return $this->json([]);
+        if (!$ticker) {
+            return $this->json([]);
+        }
 
         $stock = $entityManager->getRepository(Stock::class)->findOneByTicker($ticker);
-        if (!$stock) return $this->json([]);
+        if (!$stock) {
+            return $this->json([]);
+        }
 
         $conn = $entityManager->getConnection();
 
@@ -312,7 +326,9 @@ class StockController extends AbstractController
         $stmt = $conn->executeQuery($sql, ['id' => $stock->getId()]);
         $latestReport = $stmt->fetchAssociative();
 
-        if (!$latestReport) return $this->json([]);
+        if (!$latestReport) {
+            return $this->json([]);
+        }
 
         $flow = \App\Service\Corporate\EarningsFlowStatement::fromReport($latestReport);
 
@@ -347,7 +363,7 @@ class StockController extends AbstractController
         ];
 
         $links = [];
-        $addLink = function(string $source, string $target, float $value) use (&$links) {
+        $addLink = function (string $source, string $target, float $value) use (&$links) {
             if ($value > 0.0001) {
                 $links[] = ['source' => $source, 'target' => $target, 'value' => round($value, 4)];
             }
@@ -380,7 +396,7 @@ class StockController extends AbstractController
                     $addLink($formattedName, 'Total revenue', $value);
                 }
             }
-            
+
             // If the sum of streams doesn't perfectly match total revenue (due to interest income or rounding),
             // add an 'Other Revenue' or 'Interest Income' node to balance the Sankey
             $streamSum = array_sum($revenueStreams);
@@ -390,7 +406,6 @@ class StockController extends AbstractController
                 $addLink('Other and interest income', 'Total revenue', $difference);
             }
         }
-
 
         $addLink('Total revenue', 'Operating costs', $flow->operatingCosts);
         $addLink('Total revenue', 'Provisions and charges', $flow->provisionsAndCharges);
@@ -419,7 +434,7 @@ class StockController extends AbstractController
 
         // A node nothing flows through this quarter (no impairment, no outside funding) would sit as a bare label.
         $linked = array_flip(array_merge(array_column($links, 'source'), array_column($links, 'target')));
-        $nodes = array_values(array_filter($nodes, static fn (array $node): bool => isset($linked[$node['name']])));
+        $nodes = array_values(array_filter($nodes, static fn(array $node): bool => isset($linked[$node['name']])));
 
         return $this->json(['nodes' => $nodes, 'links' => $links]);
     }

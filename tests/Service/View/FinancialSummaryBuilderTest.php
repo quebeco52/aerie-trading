@@ -7,9 +7,9 @@ namespace App\Tests\Service\View;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\View\FinancialSummaryBuilder;
 use PHPUnit\Framework\TestCase;
-use App\Service\Model\Sector\CommercialBankBusinessModel;
 
 /**
  * The strip leads with what the business is read on, from figures the last report already carries, and then

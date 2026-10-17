@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\EducationBusinessModel;
+use App\Service\Model\StreamContext;
 use PHPUnit\Framework\TestCase;
 
 class EducationBusinessModelTest extends TestCase
@@ -37,7 +37,7 @@ class EducationBusinessModelTest extends TestCase
             fixedCosts: 40_000_000.0,
             baselineVol: 0.08,
             macroState: $recessionMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('degree_tuition_enrollment', $result->streamRevenue);
@@ -54,7 +54,7 @@ class EducationBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $result->actualRevenue,
             $result->streamRevenue['degree_tuition_enrollment'] + $result->streamRevenue['enterprise_b2b_training'] + $result->streamRevenue['digital_lms_licensing'],
-            1.0
+            1.0,
         );
     }
 
@@ -92,10 +92,9 @@ class EducationBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $baseResult->streamRevenue['degree_tuition_enrollment'],
             $surgeResult->streamRevenue['degree_tuition_enrollment'],
-            'Elevated unemployment must drive countercyclical workforce retraining and boost degree tuition enrollment.'
+            'Elevated unemployment must drive countercyclical workforce retraining and boost degree tuition enrollment.',
         );
     }
-
 
     /**
      * This model applies the cycle per stream in calculateSectorPhysics, so the parent's generic demand shift

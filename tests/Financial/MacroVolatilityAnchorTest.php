@@ -96,7 +96,7 @@ class MacroVolatilityAnchorTest extends TestCase
             AssetMarketSubsystem::jumpVarianceDrag(),
             1e-12,
             'The jump compensation must equal lambda * m / kappa, the variance the jump process adds to the '
-            . 'stationary mean. Any other divisor leaves the series reverting off MACRO_VOL_BASE_ANCHOR.'
+            . 'stationary mean. Any other divisor leaves the series reverting off MACRO_VOL_BASE_ANCHOR.',
         );
     }
 
@@ -117,8 +117,8 @@ class MacroVolatilityAnchorTest extends TestCase
                 'The diffusion is left an anchor of %.2f%% volatility against a %.2f%% floor: the jumps are '
                 . 'funding too much of the variance budget and the clamp is setting the level.',
                 100 * $diffusiveAnchorVol,
-                100 * AssetMarketSubsystem::MACRO_VOL_FLOOR
-            )
+                100 * AssetMarketSubsystem::MACRO_VOL_FLOOR,
+            ),
         );
     }
 
@@ -143,8 +143,8 @@ class MacroVolatilityAnchorTest extends TestCase
                 . 'Lower MACRO_VOL_SIGMA to at most %.4f, or leave the diffusion more of the budget.',
                 $feller,
                 $sigmaSquared,
-                sqrt($feller)
-            )
+                sqrt($feller),
+            ),
         );
     }
 
@@ -160,8 +160,8 @@ class MacroVolatilityAnchorTest extends TestCase
             sprintf(
                 'Under neutral macro drivers the series realized %.2f%% volatility against a %.2f%% anchor.',
                 100 * $realized,
-                100 * $anchor
-            )
+                100 * $anchor,
+            ),
         );
     }
 
@@ -181,8 +181,8 @@ class MacroVolatilityAnchorTest extends TestCase
             sprintf(
                 'The volatility floor bound on %.2f%% of ticks: the clamp, not MACRO_VOL_BASE_ANCHOR, is '
                 . 'setting the level of the series.',
-                100 * $floorShare
-            )
+                100 * $floorShare,
+            ),
         );
     }
 
@@ -209,7 +209,7 @@ class MacroVolatilityAnchorTest extends TestCase
         $this->assertGreaterThan(
             $measured['calmTickVarianceRise'] + (0.5 * MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN),
             $measured['jumpTickVarianceRise'],
-            'A market-wide jump must carry its variance jump on the same tick.'
+            'A market-wide jump must carry its variance jump on the same tick.',
         );
     }
 

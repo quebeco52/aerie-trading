@@ -84,7 +84,7 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
         $this->assertGreaterThan(
             $unshocked,
             $shocked,
-            'A firm whose realized cost ratio jumped must be forecast to have higher costs.'
+            'A firm whose realized cost ratio jumped must be forecast to have higher costs.',
         );
     }
 
@@ -97,7 +97,7 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
         $this->assertLessThan(
             self::REVENUE * $realized,
             $this->expectedCosts($this->actuals($realized), $stock),
-            'Perfect cost foresight would leave earnings surprises driven by revenue alone.'
+            'Perfect cost foresight would leave earnings surprises driven by revenue alone.',
         );
     }
 
@@ -139,7 +139,7 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
             $actualCosts,
             $secondQuarter,
             1.0,
-            'With the anchor at the realized ratio, an unchanged cost base is fully in the estimate.'
+            'With the anchor at the realized ratio, an unchanged cost base is fully in the estimate.',
         );
     }
 

@@ -197,7 +197,6 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(100.0, $stateBoom->housingStartsIndex, 'High Tobin Q and affordable mortgage finance must stimulate housing starts');
     }
 
-
     /**
      * Tobin's q reads each leg against the trend it has settled at: the residential index rests near 94, not on the 100
      * it is built from, and the metals index wherever its supercycle stands. At rest, starts sit at their baseline.
@@ -205,7 +204,10 @@ class AssetMarketSubsystemTest extends TestCase
     public function testHousingStartsRestAtTheirBaselineWhenPricesAndCostsSitOnTheirTrends(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         };
         $state = $this->neutralBuildingState();
         $state->riskNeutral10yEma = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
@@ -391,7 +393,7 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(
             $this->settledFx(['marketVolatilityEma' => 0.40]),
             $this->settledFx(['marketVolatilityEma' => 0.60]),
-            'A worse panic bids it harder.'
+            'A worse panic bids it harder.',
         );
     }
 
@@ -554,7 +556,6 @@ class AssetMarketSubsystemTest extends TestCase
         return $state;
     }
 
-
     /** Pastor & Veronesi (2013): political uncertainty is priced as volatility. It enters the anchor, so it is budgeted like every other driver. */
     public function testPolicyUncertaintyLiftsTheVolatilityAnchor(): void
     {
@@ -605,7 +606,7 @@ class AssetMarketSubsystemTest extends TestCase
         };
         $subsystem = new AssetMarketSubsystem($math);
         $drag = AssetMarketSubsystem::jumpVarianceDrag();
-        $anchor = fn (float $vol): float => sqrt(($vol ** 2) + $drag);
+        $anchor = fn(float $vol): float => sqrt(($vol ** 2) + $drag);
 
         $neutral = new MacroState();
         $wideSpread = new MacroState();
@@ -620,10 +621,9 @@ class AssetMarketSubsystemTest extends TestCase
             exp(0.010 * AssetMarketSubsystem::MACRO_VOL_PREMIUM_SENSITIVITY),
             $anchor($subsystem->calculateMarketVolatility($premium, 0.01)) / $anchor($volNeutral),
             0.01,
-            'A 100 bps premium lifts the anchor by the exponential of its loading (~1.37x).'
+            'A 100 bps premium lifts the anchor by the exponential of its loading (~1.37x).',
         );
     }
-
 
     /** Alesina & Perotti (1995): fiscal risk is default and inflation risk, and sells the currency rather than earning carry. */
     public function testFiscalRiskSellsTheCurrency(): void
@@ -635,7 +635,6 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(exp(-0.02 * AssetMarketSubsystem::FX_FISCAL_RISK_SENSITIVITY), $stressed / $neutral, 0.002, 'Two hundred basis points of sovereign premium cost about four percent of the currency.');
     }
 
-
     /**
      * Allied defence spending is its customers' budgets: a build-up fades on the fitted SIPRI half-life
      * (1.4 years) toward a trend set below the baseline by the mobilisations' level shift and the Jensen term.
@@ -643,8 +642,14 @@ class AssetMarketSubsystemTest extends TestCase
     public function testAnAlliedBuildUpFadesOnItsFittedHalfLife(): void
     {
         $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $subsystem = new AssetMarketSubsystem($quiet);
         $state = new MacroState();
@@ -670,12 +675,24 @@ class AssetMarketSubsystemTest extends TestCase
     public function testAnAlliedMobilisationArrivesWhole(): void
     {
         $mobilised = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return true; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return true;
+            }
         };
         $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $war = new MacroState();
         $peace = new MacroState();
@@ -689,7 +706,10 @@ class AssetMarketSubsystemTest extends TestCase
     public function testAStormSeasonDentsTheHousingStock(): void
     {
         $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         };
         $subsystem = new AssetMarketSubsystem($quiet);
 
@@ -703,7 +723,6 @@ class AssetMarketSubsystemTest extends TestCase
         $expectedRatio = 1.0 - (AssetMarketSubsystem::CATASTROPHE_PROPERTY_DAMAGE_SHARE * 2.0);
         $this->assertEqualsWithDelta($expectedRatio, $stormyHousing->residentialPropertyIndex / $averageHousing->residentialPropertyIndex, 0.005, 'Two units of excess burden destroy two percent of the stock.');
     }
-
 
     // --- The Mainland ---
 
@@ -736,12 +755,12 @@ class AssetMarketSubsystemTest extends TestCase
         }
         $count = count($samples);
         $mean = array_sum($samples) / $count;
-        $deviations = array_map(static fn (float $x): float => $x - $mean, $samples);
-        $variance = array_sum(array_map(static fn (float $d): float => $d * $d, $deviations));
+        $deviations = array_map(static fn(float $x): float => $x - $mean, $samples);
+        $variance = array_sum(array_map(static fn(float $d): float => $d * $d, $deviations));
         $covariance = array_sum(array_map(
-            static fn (float $d, float $yearBack): float => $d * $yearBack,
+            static fn(float $d, float $yearBack): float => $d * $yearBack,
             array_slice($deviations, 4),
-            array_slice($deviations, 0, $count - 4)
+            array_slice($deviations, 0, $count - 4),
         ));
 
         $a1 = AssetMarketSubsystem::MAINLAND_GAP_AR1;
@@ -760,7 +779,11 @@ class AssetMarketSubsystemTest extends TestCase
     {
         $draws = new class extends MathUtility {
             public int $calls = 0;
-            public function generateStandardNormal(): float { $this->calls++; return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                $this->calls++;
+                return 0.0;
+            }
         };
         $subsystem = new AssetMarketSubsystem($draws);
         $state = new MacroState();
@@ -827,7 +850,7 @@ class AssetMarketSubsystemTest extends TestCase
                 $mainland[] = $state->foreignOutputGap;
             }
         }
-        $mean = static fn (array $x): float => array_sum($x) / count($x);
+        $mean = static fn(array $x): float => array_sum($x) / count($x);
         $cov = static function (array $x, array $y) use ($mean): float {
             $mx = $mean($x);
             $my = $mean($y);
@@ -939,16 +962,22 @@ class AssetMarketSubsystemTest extends TestCase
             MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY ** 2,
             $deviationQuarterVariance + (AssetMarketSubsystem::EXCHANGE_RATE_FUNDAMENTAL_QUARTERLY_SD ** 2),
             1e-12,
-            'Deviation and fundamental together carry the measured quarterly variance, no more.'
+            'Deviation and fundamental together carry the measured quarterly variance, no more.',
         );
         $this->assertLessThan(MacroEngine::EXCHANGE_RATE_QUARTERLY_VOLATILITY, sqrt($deviationQuarterVariance));
 
         // The step draws on that sigma: a unit draw from parity moves the log deviation by its conditional sd.
         $unitDraw = new AssetMarketSubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float { return 1.0; }
+            public function generateStandardNormal(): float
+            {
+                return 1.0;
+            }
         });
         $flat = new AssetMarketSubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         });
         $up = new MacroState();
         $up->exchangeRateDeviation = 1.0;
@@ -997,7 +1026,7 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             -MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * 0.03,
             $booming->tradeBalanceToGdp - $home->tradeBalanceToGdp,
-            0.0005
+            0.0005,
         );
     }
 
@@ -1034,7 +1063,7 @@ class AssetMarketSubsystemTest extends TestCase
             exp(AssetMarketSubsystem::RESIDENTIAL_PRICE_MOMENTUM * 0.05 * $dt),
             $rising->residentialPropertyIndex / $flat->residentialPropertyIndex,
             1e-12,
-            'Five percent a year of recent growth carries on at the fitted share.'
+            'Five percent a year of recent growth carries on at the fitted share.',
         );
 
         $weight = 1.0 - exp(-$dt / AssetMarketSubsystem::RESIDENTIAL_MOMENTUM_HORIZON_YEARS);
@@ -1088,12 +1117,12 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(
             $neutral->residentialPropertyIndex,
             $boom->residentialPropertyIndex,
-            'A credit stock ten points over trend is bidding for houses, whatever the standards index says.'
+            'A credit stock ten points over trend is bidding for houses, whatever the standards index says.',
         );
         $this->assertLessThan(
             $neutral->residentialPropertyIndex,
             $bust->residentialPropertyIndex,
-            'A deleveraging economy withdraws that bid, which is what makes the bust leg of the loop work.'
+            'A deleveraging economy withdraws that bid, which is what makes the bust leg of the loop work.',
         );
 
         // The size of the effect, not merely its sign: ten points of gap at 0.25 is 2.5% on the fundamental.
@@ -1102,7 +1131,7 @@ class AssetMarketSubsystemTest extends TestCase
             AssetMarketSubsystem::RESIDENTIAL_CREDIT_SUPPLY_ELASTICITY * 0.10,
             $lift,
             0.010,
-            'The house price response must carry the Favara-Imbs elasticity, not just its direction.'
+            'The house price response must carry the Favara-Imbs elasticity, not just its direction.',
         );
     }
 

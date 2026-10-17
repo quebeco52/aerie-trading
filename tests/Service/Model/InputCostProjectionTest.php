@@ -68,17 +68,17 @@ class InputCostProjectionTest extends TestCase
             $booked[FinancialConstants::STATE_INPUT_COST_LEVEL] - ($booked[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0),
             $projected,
             1e-4,
-            "{$identifier}: the projected gap is the one the report books"
+            "{$identifier}: the projected gap is the one the report books",
         );
 
         // And in cost-ratio terms, on the base the model charges the gap to (a refiner's opex share, not its crude).
-        $drag = static fn (array $state): float => (float) $state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE]
+        $drag = static fn(array $state): float => (float) $state[FinancialConstants::STATE_INPUT_COST_DRAG_BASE]
             * ((float) $state[FinancialConstants::STATE_INPUT_COST_LEVEL] - (float) ($state[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0));
         $this->assertEqualsWithDelta(
             $drag($booked) - $drag($opening->streamZ),
             (float) $model->projectInputCostDragChange($stock, $shock),
             1e-4,
-            "{$identifier}: the projected drag change is the one the report books"
+            "{$identifier}: the projected drag change is the one the report books",
         );
     }
 }

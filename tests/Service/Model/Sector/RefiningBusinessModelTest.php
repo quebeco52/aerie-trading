@@ -10,7 +10,6 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\RefiningBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -30,9 +29,7 @@ final class RefiningBusinessModelTest extends TestCase
     private function fixedDraws(float $z = 0.0): MathUtility
     {
         return new class ($z) extends MathUtility {
-            public function __construct(private readonly float $z)
-            {
-            }
+            public function __construct(private readonly float $z) {}
 
             public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
             {
@@ -69,7 +66,7 @@ final class RefiningBusinessModelTest extends TestCase
             fixedCosts: 0.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $this->fixedDraws($z)
+            mathUtility: $this->fixedDraws($z),
         );
     }
 
@@ -107,7 +104,7 @@ final class RefiningBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             100.0 * $this->model->calculateBarrelRealization($spikeCrude, MacroEngine::CRACK_SPREAD_BASELINE) / $this->baselineRealization(),
             $crudeSpike->actualRevenue,
-            1e-9
+            1e-9,
         );
         $this->assertGreaterThan(1.35, $crudeSpike->actualRevenue / $baseline->actualRevenue);
 
@@ -150,7 +147,7 @@ final class RefiningBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $this->report($this->macro())->ebit,
             $this->report($this->macro(macro: ['outputGapEma' => 0.03]))->ebit,
-            1e-9
+            1e-9,
         );
 
         // Throughput answers the cycle at the income elasticity of oil demand.
@@ -176,7 +173,7 @@ final class RefiningBusinessModelTest extends TestCase
                 fixedCosts: 0.0,
                 baselineVol: 0.15,
                 macroState: $this->macro(),
-                mathUtility: $this->fixedDraws()
+                mathUtility: $this->fixedDraws(),
             );
         };
 

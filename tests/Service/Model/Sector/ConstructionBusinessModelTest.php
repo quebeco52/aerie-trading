@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\Service\Model\ModelParam;
-use App\Data\Company\StockModelTuning;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConstructionBusinessModel;
 use App\Service\Model\StreamContext;
-use App\Service\Event\ShockEvent;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -42,7 +40,7 @@ class ConstructionBusinessModelTest extends TestCase
             fixedCosts: 10_000_000.0,
             baselineVol: 0.12,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('civil_infrastructure', $result->streamRevenue);
@@ -76,7 +74,7 @@ class ConstructionBusinessModelTest extends TestCase
             // A neutral real stance, r* plus expected inflation, so the rate moves no orders.
             policyRateEma: \App\Service\Macro\MacroEngine::BASE_NATURAL_RATE + \App\Service\Macro\MacroEngine::TARGET_INFLATION,
             inflationEma: 0.02,
-            energyPriceIndexEma: 100.0
+            energyPriceIndexEma: 100.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -89,7 +87,7 @@ class ConstructionBusinessModelTest extends TestCase
             fixedCosts: 10_000_000.0,
             baselineVol: 0.00, // zero vol to test baseline weights
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // IBHI tuned weights: 60% Civil, 25% Commercial, 15% Maintenance
@@ -111,7 +109,7 @@ class ConstructionBusinessModelTest extends TestCase
             inflationEma: 0.06, // 400bps above 2% target
             energyPriceIndexEma: 140.0, // 40% energy spike
             energyCostPushLag: 0.40 * \App\Service\Macro\MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
-            producerPriceInflationEma: 0.06
+            producerPriceInflationEma: 0.06,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -124,7 +122,7 @@ class ConstructionBusinessModelTest extends TestCase
             fixedCosts: 10_000_000.0,
             baselineVol: 0.0,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Under high material cost inflation, variable cost margin expands (realizedVariableMargin increases)
@@ -141,13 +139,13 @@ class ConstructionBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(
             governmentSpendingIndexEma: 100.0,
             commercialPropertyIndexEma: 100.0,
-            residentialPropertyIndexEma: 100.0
+            residentialPropertyIndexEma: 100.0,
         );
 
         $boostMacro = new MacroStateDTO(
             governmentSpendingIndexEma: 120.0,
             commercialPropertyIndexEma: 110.0,
-            residentialPropertyIndexEma: 110.0
+            residentialPropertyIndexEma: 110.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -168,10 +166,14 @@ class ConstructionBusinessModelTest extends TestCase
         $stock->setBeta('1.0');
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $commercial = fn (float $index, float $trend): float => $this->model->computeActualFinancials(
-            $stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0,
+        $commercial = fn(float $index, float $trend): float => $this->model->computeActualFinancials(
+            $stock,
+            100_000_000.0,
+            0.20,
+            10_000_000.0,
+            0.0,
             new MacroStateDTO(commercialPropertyIndexEma: $index, commercialPropertyIndexTrend: $trend),
-            $mathMock
+            $mathMock,
         )->streamRevenue['commercial_epc'];
 
         $this->assertEqualsWithDelta($commercial(100.0, 100.0), $commercial(110.0, 110.0), 1e-6);
@@ -194,7 +196,7 @@ class ConstructionBusinessModelTest extends TestCase
             $this->assertGreaterThan(
                 $breakEvenFactor,
                 $factor,
-                sprintf('Quarter %d factor (%.2f) must clear break-even factor (%.4f) for diversified EPC.', $quarterIndex + 1, $factor, $breakEvenFactor)
+                sprintf('Quarter %d factor (%.2f) must clear break-even factor (%.4f) for diversified EPC.', $quarterIndex + 1, $factor, $breakEvenFactor),
             );
         }
     }
@@ -212,7 +214,7 @@ class ConstructionBusinessModelTest extends TestCase
             // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
+            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
             $math->method('checkProbability')->willReturn($exits);
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
@@ -236,7 +238,6 @@ class ConstructionBusinessModelTest extends TestCase
         $this->assertSame(0.0, $after->streamZ[$regimeKey]);
         $this->assertEqualsWithDelta($clean->clampedMargin, $after->clampedMargin, 1e-9, 'costs return to baseline once the regime exits');
     }
-
 
     /** Hallegatte (2008): reconstruction after a storm season is civil work, booked through the infrastructure backlog. */
     public function testRateDragIsStruckAgainstTheNominalNeutralNotRealRStar(): void

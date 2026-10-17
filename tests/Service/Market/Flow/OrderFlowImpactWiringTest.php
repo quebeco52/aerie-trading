@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
@@ -17,11 +18,9 @@ use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
-use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -74,11 +73,11 @@ class OrderFlowImpactWiringTest extends TestCase
                 ebit: 1000.0,
                 revenue: 5000.0,
                 depreciation: 100.0,
-                ebitda: 1100.0
+                ebitda: 1100.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
     }
 
@@ -86,7 +85,7 @@ class OrderFlowImpactWiringTest extends TestCase
         ?MarketPricingContext &$captured = null,
         ?\App\Service\Market\Agent\AgentStateStoreInterface $agentStateStore = null,
         ?\Closure $onEarnings = null,
-        ?\Closure $policyRepricing = null
+        ?\Closure $policyRepricing = null,
     ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
@@ -103,16 +102,16 @@ class OrderFlowImpactWiringTest extends TestCase
                     'dynamic_reversion' => 0.0,
                     'policy_repricing' => $policyRepricing !== null ? $policyRepricing() : 1.0,
                 ];
-            }
+            },
         );
 
         $corporateActions = $this->createStub(CorporateActionEngine::class);
         $corporateActions->method('processSplits')->willReturnCallback(
-            static fn (Stock $stock, float $price, float $shares): array => [
+            static fn(Stock $stock, float $price, float $shares): array => [
                 'price' => $price,
                 'shares' => $shares,
                 'event' => null,
-            ]
+            ],
         );
 
         $debtEngine = $this->createStub(DebtEngine::class);
@@ -145,15 +144,15 @@ class OrderFlowImpactWiringTest extends TestCase
             new \App\Service\Market\Agent\AgentFlowEngine(
                 new \App\Service\Market\Agent\AgentPopulation(),
                 $agentStateStore ?? new \App\Service\Market\Agent\InMemoryAgentStateStore(),
-                new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-                []
+                new InMemoryOrderFlowStore(),
+                [],
             ),
             // Stubbed maths, so checkProbability() is false and no succession fires in tests that
             // are about something else.
             new \App\Service\Corporate\ManagementSuccessionEngine(
-                $this->createStub(\App\Service\Event\MarketEventPublisher::class),
-                $this->createStub(\App\Service\Math\MathUtility::class)
-            )
+                $this->createStub(MarketEventPublisher::class),
+                $this->createStub(MathUtility::class),
+            ),
         );
     }
 
@@ -375,7 +374,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta(
             TimeSeries::ewmaAnnualizedVariance(0.0, $stays, $elapsed, StockTracker::IMPACT_VARIANCE_EMA_YEARS),
             $measured,
-            1e-12
+            1e-12,
         );
 
         // The next tick hands the measurement to the price engine, which is where the diffusion gives back
@@ -402,7 +401,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta(
             TimeSeries::ewmaAnnualizedVariance(0.0, log(1.03), $elapsed, StockTracker::IMPACT_VARIANCE_EMA_YEARS),
             $stock->getImpactVarianceEma(),
-            1e-12
+            1e-12,
         );
     }
 
@@ -454,7 +453,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta(
             (($realized * $realized) / $dt) * $weight,
             (float) $stock->getRealizedVarianceEma(),
-            1e-12
+            1e-12,
         );
     }
 
@@ -495,7 +494,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $this->assertEqualsWithDelta(
             $this->liquidity->halfSpreadFraction($stock) * 20000.0,
             $update['spread_bps'],
-            0.01
+            0.01,
         );
     }
 
@@ -565,7 +564,7 @@ class OrderFlowImpactWiringTest extends TestCase
             [$apex, $beta],
             1.0 / 14400.0,
             false,
-            new MacroStateDTO(sovereignFundTrade: $trade, boardFloatCap: $boardFloat)
+            new MacroStateDTO(sovereignFundTrade: $trade, boardFloatCap: $boardFloat),
         );
 
         $this->assertGreaterThan(0.0, $expectedApex);
@@ -582,7 +581,7 @@ class OrderFlowImpactWiringTest extends TestCase
             [$stock],
             1.0 / 14400.0,
             false,
-            new MacroStateDTO(sovereignFundTrade: 0.002 * $boardFloat, boardFloatCap: $boardFloat)
+            new MacroStateDTO(sovereignFundTrade: 0.002 * $boardFloat, boardFloatCap: $boardFloat),
         );
 
         $this->assertGreaterThan(100.0, (float) $stock->getPrice(), 'The fund\'s buying moves the price.');
@@ -640,7 +639,7 @@ class OrderFlowImpactWiringTest extends TestCase
             [$apex, $beta],
             1.0 / 14400.0,
             false,
-            new MacroStateDTO(sovereignFundTrade: 0.002 * $boardFloat, boardFloatCap: $boardFloat)
+            new MacroStateDTO(sovereignFundTrade: 0.002 * $boardFloat, boardFloatCap: $boardFloat),
         );
 
         $apexReturn = ((float) $apex->getPrice() / 100.0) - 1.0;
@@ -687,7 +686,7 @@ class OrderFlowImpactWiringTest extends TestCase
     {
         $clearinghouse = $this->stock()->setTicker('ACC');
         $beta = $this->secondStock();
-        $onEarnings = static fn (Stock $stock): array => [['type' => 'EARNINGS', 'ticker' => $stock->getTicker(), 'dividend_per_share' => 0.50]];
+        $onEarnings = static fn(Stock $stock): array => [['type' => 'EARNINGS', 'ticker' => $stock->getTicker(), 'dividend_per_share' => 0.50]];
 
         $result = $this->tracker(onEarnings: $onEarnings)->updateStocks([$clearinghouse, $beta], 1.0 / 14400.0, false, new MacroStateDTO());
 

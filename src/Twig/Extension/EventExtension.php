@@ -13,9 +13,8 @@ use Twig\TwigFunction;
 class EventExtension extends AbstractExtension
 {
     public function __construct(
-        private EventPresenter $eventPresenter
-    ) {
-    }
+        private EventPresenter $eventPresenter,
+    ) {}
 
     public function getFilters(): array
     {

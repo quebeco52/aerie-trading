@@ -2,8 +2,6 @@
 
 namespace App\Service\Math;
 
-use App\Service\Macro\MacroEngine;
-
 /**
  * The simulation's random source: uniform, normal, Student-t, exponential, Poisson and Pareto draws on the global or a
  * private stream, draw logging and replay, and the steps that make their own draws (jump diffusion, QE variance, SVJJ
@@ -262,7 +260,7 @@ class MathUtility
         float $lambda,
         float $jumpMean,
         float $jumpVol,
-        float $dt
+        float $dt,
     ): array {
         $jumpProb = $lambda * $dt;
 
@@ -277,7 +275,7 @@ class MathUtility
             return [
                 'multiplier' => $jumpMultiplier,
                 'shock_pct'  => $shockPct,
-                'exponent'   => $jumpExponent
+                'exponent'   => $jumpExponent,
             ];
         }
 
@@ -285,7 +283,7 @@ class MathUtility
         return [
             'multiplier' => 1.0,
             'shock_pct'  => null,
-            'exponent'   => null
+            'exponent'   => null,
         ];
     }
 
@@ -376,7 +374,7 @@ class MathUtility
         float $kappa,
         float $sigma,
         float $dt,
-        ?float $varianceShock = null
+        ?float $varianceShock = null,
     ): float {
         $expKappaDt = exp(-$kappa * $dt);
 
@@ -436,7 +434,7 @@ class MathUtility
         float $etaUp,
         float $etaDown,
         float $muV,
-        float $dt
+        float $dt,
     ): array {
         $jumpProb = $lambda * $dt;
 
@@ -463,21 +461,21 @@ class MathUtility
                 $meanVarJump = $isUpJump ? ($muV * StochasticProcesses::VARIANCE_JUMP_UPSIDE_MEAN_SHARE) : $muV;
                 $varJump = min(
                     $this->generateExponential(1.0 / $meanVarJump),
-                    $meanVarJump * StochasticProcesses::MAX_VARIANCE_JUMP_MEAN_MULTIPLE
+                    $meanVarJump * StochasticProcesses::MAX_VARIANCE_JUMP_MEAN_MULTIPLE,
                 );
             }
 
             return [
                 'price_multiplier' => $priceMultiplier,
                 'var_jump'         => $varJump,
-                'shock_pct'        => $shockPct
+                'shock_pct'        => $shockPct,
             ];
         }
 
         return [
             'price_multiplier' => 1.0,
             'var_jump'         => 0.0,
-            'shock_pct'        => null
+            'shock_pct'        => null,
         ];
     }
 
@@ -510,7 +508,7 @@ class MathUtility
         float $etaUp,
         float $etaDown,
         float $cap,
-        float $dt
+        float $dt,
     ): float {
         if ($lambda <= 0.0 || $etaUp <= 0.0 || $etaDown <= 0.0 || $cap <= 0.0 || $dt <= 0.0) {
             return 0.0;
@@ -555,7 +553,7 @@ class MathUtility
         float $rho,
         float $dt,
         ?float $dW1 = null,
-        ?float $dW2 = null
+        ?float $dW2 = null,
     ): array {
         $dW1 ??= $this->generateStandardNormal();
         $dW2 ??= $this->generateStandardNormal();
@@ -616,7 +614,7 @@ class MathUtility
         float $rho,
         float $dt,
         ?float $dW1 = null,
-        ?float $dW2 = null
+        ?float $dW2 = null,
     ): array {
         $dW1 ??= $this->generateStandardNormal();
         $dW2 ??= $this->generateStandardNormal();

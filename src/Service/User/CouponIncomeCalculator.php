@@ -21,7 +21,7 @@ use Doctrine\ORM\EntityManagerInterface;
 final class CouponIncomeCalculator
 {
     public function __construct(
-        private EntityManagerInterface $entityManager
+        private EntityManagerInterface $entityManager,
     ) {}
 
     /**
@@ -39,7 +39,7 @@ final class CouponIncomeCalculator
              FROM coupon_payment
              WHERE user_id = :user_id AND payment_type = 'COUPON'
              GROUP BY ticker",
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         );
 
         $totals = [];
@@ -66,7 +66,7 @@ final class CouponIncomeCalculator
              WHERE user_id = :user_id
              ORDER BY paid_at DESC, id DESC
              LIMIT ' . max(1, $limit),
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         );
 
         $payments = [];

@@ -78,7 +78,7 @@ class WatchlistController extends AbstractController
                 'Alert set: %s %s $%s.',
                 $ticker,
                 $alert->getDirection() === \App\Entity\PriceAlert::ABOVE ? 'rises to' : 'falls to',
-                number_format((float) $alert->getTargetPrice(), 2)
+                number_format((float) $alert->getTargetPrice(), 2),
             ));
         } catch (\InvalidArgumentException $e) {
             $this->addFlash('error', $e->getMessage());

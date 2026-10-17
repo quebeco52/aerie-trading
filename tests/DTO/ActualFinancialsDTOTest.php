@@ -19,7 +19,7 @@ class ActualFinancialsDTOTest extends TestCase
             observableShockZ: 0.50,
             eventType: 'TAIL_RISK_EVENT',
             eventContext: ['severity' => 'high'],
-            isPublicEvent: true
+            isPublicEvent: true,
         );
 
         $this->assertSame(5000.0, $dto->actualRevenue);

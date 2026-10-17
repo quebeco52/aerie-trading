@@ -5,20 +5,19 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Integrated Freight & Contract Logistics (3PL).
- * 
+ *
  * Financial Physics:
  * - Extremely sensitive to global GDP, supply chain flow, and physical trade volumes.
  * - Tri-Stream Logistics Engine:
@@ -55,14 +54,38 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.08;
 
-        public function getMinIcr(): float { return 2.5; }
-    public function getWholesaleLeverageLimit(): float { return 2.0; }
-    public function getDividendCrisisIcr(): float { return 1.75; }
-    public function getBuybackMinIcr(): float { return 2.5; }
-    public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.25; }
+    public function getMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.0;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 1.75;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.15;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.25;
+    }
 
     public function getSeasonalityFactors(): array
     {
@@ -81,8 +104,11 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         return MacroEngine::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-    
-    public function getCapexCyclicality(): float { return 0.60; } // Fleets, sorting hubs, and automated fulfillment centers
+
+    public function getCapexCyclicality(): float
+    {
+        return 0.60;
+    } // Fleets, sorting hubs, and automated fulfillment centers
 
     // --- Stream Weights ---
     /** Baseline fraction of revenue derived from long-term dedicated fleet contracts. */
@@ -196,10 +222,10 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
 
-        $observableShockZ = ($fleetZ * $fleetWeight * self::DEDICATED_VARIANCE_SCALAR * $baselineVol) +
-            ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol) +
-            ($spotFreightBoost * $spotWeight) -
-            ($fuelLagDrag * self::OBSERVABLE_FUEL_DRAG_WEIGHT);
+        $observableShockZ = ($fleetZ * $fleetWeight * self::DEDICATED_VARIANCE_SCALAR * $baselineVol)
+            + ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol)
+            + ($spotFreightBoost * $spotWeight)
+            - ($fuelLagDrag * self::OBSERVABLE_FUEL_DRAG_WEIGHT);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

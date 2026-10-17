@@ -7,11 +7,11 @@ namespace App\Tests\Service\View;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Repository\OptionContractRepository;
-use App\Service\Market\Option\InMemoryDealerGammaStore;
-use App\Service\Market\Pricing\LiquidityEngine;
-use App\Service\Market\Option\OptionPricingEngine;
 use App\Service\Market\Bond\BondPricingEngine;
+use App\Service\Market\Option\InMemoryDealerGammaStore;
 use App\Service\Market\Option\OptionChainService;
+use App\Service\Market\Option\OptionPricingEngine;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
@@ -73,7 +73,7 @@ class OptionChainBuilderTest extends TestCase
         int $serial,
         bool $isCall,
         float $strike,
-        int $structuralOpenInterest = 0
+        int $structuralOpenInterest = 0,
     ): OptionContract {
         return (new OptionContract())
             ->setTicker(OptionChainService::contractTicker($stock->getTicker(), $serial, $isCall ? OptionContract::TYPE_CALL : OptionContract::TYPE_PUT, $strike))
@@ -184,7 +184,7 @@ class OptionChainBuilderTest extends TestCase
         ];
 
         $rows = $this->builder($chain)->build($stock, null, $this->macro(1.0))['optionExpiries'][0]['rows'];
-        $flagged = array_values(array_filter($rows, static fn (array $row): bool => $row['isNearestStrike']));
+        $flagged = array_values(array_filter($rows, static fn(array $row): bool => $row['isNearestStrike']));
 
         $this->assertCount(1, $flagged);
         $this->assertEqualsWithDelta(105.0, $flagged[0]['strike'], 1e-9);
@@ -209,7 +209,7 @@ class OptionChainBuilderTest extends TestCase
             $quotes[$far->getTicker()]->impliedVolatility,
             $quotes[$near->getTicker()]->impliedVolatility,
             1e-6,
-            'the two strikes should not sit at the same volatility, or this proves nothing'
+            'the two strikes should not sit at the same volatility, or this proves nothing',
         );
 
         $payload = $this->builder([$far, $near])->build($stock, null, $this->macro(1.0));
@@ -217,7 +217,7 @@ class OptionChainBuilderTest extends TestCase
         $this->assertEqualsWithDelta(
             $quotes[$near->getTicker()]->impliedVolatility,
             $payload['optionExpiries'][0]['atmVolatility'],
-            1e-9
+            1e-9,
         );
     }
 
@@ -314,7 +314,7 @@ class OptionChainBuilderTest extends TestCase
 
         $this->assertSame(
             FinancialConstants::OPTION_CONTRACT_MULTIPLIER,
-            $this->builder([$this->contract($stock, 13, true, 100.0)])->build($stock, null, $this->macro(1.0))['optionMultiplier']
+            $this->builder([$this->contract($stock, 13, true, 100.0)])->build($stock, null, $this->macro(1.0))['optionMultiplier'],
         );
     }
 }

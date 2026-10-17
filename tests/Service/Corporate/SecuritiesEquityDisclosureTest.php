@@ -46,7 +46,7 @@ class SecuritiesEquityDisclosureTest extends TestCase
         self::assertEqualsWithDelta(
             self::MARK * FinancialConstants::DEFAULT_HTM_BOOK_SHARE,
             $stock->getUnrecognizedSecuritiesMark(),
-            1e-6
+            1e-6,
         );
     }
 
@@ -61,7 +61,7 @@ class SecuritiesEquityDisclosureTest extends TestCase
         self::assertEqualsWithDelta(
             self::EQUITY + (self::MARK * FinancialConstants::DEFAULT_HTM_BOOK_SHARE),
             $stock->getEconomicEquity(),
-            1e-6
+            1e-6,
         );
         self::assertLessThan((float) $stock->getTotalEquity(), $stock->getEconomicEquity());
     }
@@ -76,7 +76,7 @@ class SecuritiesEquityDisclosureTest extends TestCase
             self::EQUITY - (self::MARK * $this->afsShare()),
             $filtered->getRegulatoryEquity(),
             1e-6,
-            'Filtering adds the loss back, so capital stands where it did.'
+            'Filtering adds the loss back, so capital stands where it did.',
         );
         self::assertEqualsWithDelta(self::EQUITY, $included->getRegulatoryEquity(), 1e-6);
         self::assertGreaterThan($included->getRegulatoryEquity(), $filtered->getRegulatoryEquity());
@@ -103,7 +103,7 @@ class SecuritiesEquityDisclosureTest extends TestCase
         self::assertEqualsWithDelta(
             abs(self::MARK * $this->afsShare()) / $rwa,
             $filteredRatio - $includedRatio,
-            1e-9
+            1e-9,
         );
     }
 
@@ -125,7 +125,7 @@ class SecuritiesEquityDisclosureTest extends TestCase
             $marked->getTotalLiabilities(),
             $clean->getTotalLiabilities(),
             1e-6,
-            'A valuation on the asset side is not a new liability.'
+            'A valuation on the asset side is not a new liability.',
         );
     }
 

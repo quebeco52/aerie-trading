@@ -1,11 +1,11 @@
 #!/usr/bin/env php
 <?php
 
-use Workerman\Worker;
-use Workerman\Redis\Client;
-use Workerman\Connection\TcpConnection;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
+use Workerman\Connection\TcpConnection;
+use Workerman\Redis\Client;
+use Workerman\Worker;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -38,14 +38,14 @@ $worker->onWebSocketConnect = function ($connection, $http_buffer) use ($appSecr
         }
 
         if (empty($ticket)) {
-            throw new \Exception("No ticket provided.");
+            throw new Exception("No ticket provided.");
         }
 
         $decoded = JWT::decode($ticket, new Key($appSecret, 'HS256'));
-        
+
         $userId = $decoded->uid ?? null;
         if (!$userId) {
-            throw new \Exception("Missing UID in token payload.");
+            throw new Exception("Missing UID in token payload.");
         }
 
         // Attach the User ID to this specific connection object for future reference
@@ -53,7 +53,7 @@ $worker->onWebSocketConnect = function ($connection, $http_buffer) use ($appSecr
 
         $userLabel = $userId === 'guest' ? 'Guest' : "Authenticated User ID {$userId}";
         echo " [+] {$userLabel} connected! (IP: {$connection->getRemoteIp()})\n";
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
         echo " [!] Rejected connection: " . $e->getMessage() . "\n";
         $connection->close();
     }
@@ -63,10 +63,10 @@ $worker->onWebSocketConnect = function ($connection, $http_buffer) use ($appSecr
 $worker->onWorkerStart = function ($worker) {
     // Ensure correct scheme for Async Redis
     $redisUrl = $_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379';
-    $redisUrl = str_replace('tcp://', 'redis://', $redisUrl); 
-    
+    $redisUrl = str_replace('tcp://', 'redis://', $redisUrl);
+
     $redis = new Client($redisUrl);
-    
+
     // market_updates is the public feed, sent to every connection. player_notifications carries one account's
     // message (App\Service\Notification\PlayerNotifier) and goes only to that account's connections, uid stripped.
     $redis->subscribe(['market_updates', 'player_notifications'], function ($channel, $message) use ($worker) {
@@ -93,7 +93,7 @@ $worker->onWorkerStart = function ($worker) {
             }
         }
     });
-    
+
     echo " [v] Worker {$worker->id} started and subscribed to Redis.\n";
 };
 

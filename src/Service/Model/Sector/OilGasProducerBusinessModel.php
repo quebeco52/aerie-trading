@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for upstream oil and gas producers (exploration & production).
@@ -183,7 +183,7 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         ['liquids_share' => $liquidsShare, 'hedge_ratio' => $hedgeRatio] = $this->resolveProductionProfile($stock);
 
@@ -278,12 +278,12 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
      */
     private function rollHedgeLadder(StreamContext $streams, MacroStateDTO $macroState): float
     {
-        $forward = static fn (int $quartersAhead): float => CommodityLogisticsSubsystem::energyForwardPrice(
+        $forward = static fn(int $quartersAhead): float => CommodityLogisticsSubsystem::energyForwardPrice(
             $macroState->energyBasePrice,
             $macroState->energyPriceIndexEma,
             $macroState->globalDemandGapEma,
             $macroState->energySupplyEma,
-            $quartersAhead / 4.0
+            $quartersAhead / 4.0,
         );
 
         $sums = [];

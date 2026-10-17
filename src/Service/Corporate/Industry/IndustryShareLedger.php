@@ -196,7 +196,7 @@ class IndustryShareLedger
         float $totalTime,
         float $secularExcessGrowth,
         int $tick,
-        int $ticksPerYear
+        int $ticksPerYear,
     ): float {
         $industry = $stock->getIndustry();
         $ticker = $stock->getTicker();
@@ -365,7 +365,7 @@ class IndustryShareLedger
         float $totalTime,
         float $secularExcessGrowth,
         int $tick,
-        int $ticksPerYear
+        int $ticksPerYear,
     ): array {
         $excess = 0.0;
         $installed = 0.0;
@@ -446,7 +446,7 @@ class IndustryShareLedger
         return [
             'market_revenue' => (float) $own['anchor_demand_share'] * $growth,
             'acquirer_share' => min(1.0, $shares[$stock->getTicker()] ?? 0.0),
-            'herfindahl'     => min(1.0, array_sum(array_map(static fn (float $share): float => $share * $share, $shares))),
+            'herfindahl'     => min(1.0, array_sum(array_map(static fn(float $share): float => $share * $share, $shares))),
             'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
         ];
     }
@@ -480,7 +480,7 @@ class IndustryShareLedger
         return [
             'market_revenue' => $marketRevenue,
             'acquirer_share' => $ownShare,
-            'herfindahl'     => min(1.0, array_sum(array_map(static fn (float $share): float => $share * $share, $shares))),
+            'herfindahl'     => min(1.0, array_sum(array_map(static fn(float $share): float => $share * $share, $shares))),
             'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
         ];
     }

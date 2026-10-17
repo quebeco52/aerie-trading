@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\UtilityBusinessModel;
+use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -55,7 +55,7 @@ final class UtilityRateCaseTest extends TestCase
         $math->method('checkProbability')->willReturnCallback(
             static function () use (&$quarter, $decideOn): bool {
                 return in_array($quarter, $decideOn, true);
-            }
+            },
         );
 
         $macro = new MacroStateDTO(inflationEma: $inflation, utilityRateCaseGrantShare: $grantShare);
@@ -158,7 +158,7 @@ final class UtilityRateCaseTest extends TestCase
         $this->assertGreaterThan(
             $model->getMacroPhysics($this->stockWithLag(0.08), $macro)['pricing_power_multiplier'],
             $model->getMacroPhysics($this->stockWithLag(0.01), $macro)['pricing_power_multiplier'],
-            'A utility that has won a rate order must charge more than one still waiting on its case.'
+            'A utility that has won a rate order must charge more than one still waiting on its case.',
         );
     }
 
@@ -179,7 +179,7 @@ final class UtilityRateCaseTest extends TestCase
             $this->assertLessThanOrEqual(
                 $physics['input_cost_multiplier'],
                 $physics['pricing_power_multiplier'],
-                sprintf('A tariff lag of %s produced a selling price above the cost base it recovers.', var_export($lag, true))
+                sprintf('A tariff lag of %s produced a selling price above the cost base it recovers.', var_export($lag, true)),
             );
             $this->assertGreaterThan(0.0, $physics['pricing_power_multiplier'], 'The authorized tariff can lag, but it cannot go negative.');
         }
@@ -195,7 +195,7 @@ final class UtilityRateCaseTest extends TestCase
             $physics['input_cost_multiplier'],
             $physics['pricing_power_multiplier'],
             1e-9,
-            'PRICING_ELASTICITY of 1.0 means a caught-up tariff recovers the cost base in full and no more.'
+            'PRICING_ELASTICITY of 1.0 means a caught-up tariff recovers the cost base in full and no more.',
         );
     }
 
@@ -209,7 +209,7 @@ final class UtilityRateCaseTest extends TestCase
             $physics['input_cost_multiplier'] * (1.0 - UtilityBusinessModel::MAX_TARIFF_SHORTFALL),
             $physics['pricing_power_multiplier'],
             1e-9,
-            'Attrition is capped at the point interim rates are granted.'
+            'Attrition is capped at the point interim rates are granted.',
         );
     }
 
@@ -229,7 +229,7 @@ final class UtilityRateCaseTest extends TestCase
         $this->assertLessThan(
             UtilityBusinessModel::MAX_TARIFF_SHORTFALL,
             $lag,
-            'Ordinary inflation must not drive the utility onto the interim-relief floor.'
+            'Ordinary inflation must not drive the utility onto the interim-relief floor.',
         );
     }
 }

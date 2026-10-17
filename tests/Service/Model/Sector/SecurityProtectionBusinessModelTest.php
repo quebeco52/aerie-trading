@@ -6,7 +6,6 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\News\NarrativeEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SecurityProtectionBusinessModel;
@@ -80,7 +79,7 @@ class SecurityProtectionBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertEquals(ShockEvent::SECURITY_BREACH, $result->eventType);
@@ -146,7 +145,7 @@ class SecurityProtectionBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertEquals(ShockEvent::GEOPOLITICAL_CONFLICT, $result->eventType);
@@ -171,7 +170,7 @@ class SecurityProtectionBusinessModelTest extends TestCase
             50.0,
             0.0,
             $baselineMacro,
-            $mathUtility
+            $mathUtility,
         );
 
         $expansionResult = $this->model->computeActualFinancials(
@@ -181,13 +180,13 @@ class SecurityProtectionBusinessModelTest extends TestCase
             50.0,
             0.0,
             $expansionMacro,
-            $mathUtility
+            $mathUtility,
         );
 
         $this->assertGreaterThan(
             $baselineResult->streamRevenue['government_contracts'],
             $expansionResult->streamRevenue['government_contracts'],
-            'Fiscal appropriations and government spending expansion must increase government contract revenue.'
+            'Fiscal appropriations and government spending expansion must increase government contract revenue.',
         );
     }
 

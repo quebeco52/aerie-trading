@@ -8,9 +8,9 @@ use App\DTO\OptionQuoteDTO;
 use App\DTO\SovereignCurveDTO;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
-use App\Service\Math\Decimal;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Math\Decimal;
 use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
 
@@ -83,7 +83,7 @@ final class OptionPricingEngine
         float $beta,
         float $lambda,
         float $jumpVol,
-        float $timeToExpiry
+        float $timeToExpiry,
     ): array {
         if ($timeToExpiry < OptionPricing::MIN_OPTION_TIME_TO_EXPIRY) {
             return ['atm_volatility' => OptionPricing::MIN_OPTION_VOLATILITY, 'skewness' => 0.0, 'excess_kurtosis' => 0.0];
@@ -94,7 +94,7 @@ final class OptionPricingEngine
             $spotVolatility,
             $longRunVolatility,
             MarketEngine::varianceReversionSpeed($lambda),
-            $timeToExpiry
+            $timeToExpiry,
         );
 
         $atmVolatility = $expectedVolatility * self::OPTION_VARIANCE_RISK_PREMIUM;
@@ -145,7 +145,7 @@ final class OptionPricingEngine
             $leveredBeta ?? $stock->getLeveredBeta() ?? (float) $stock->getBeta(),
             (float) $stock->getJumpIntensity(),
             (float) $stock->getJumpVol(),
-            $timeToExpiry
+            $timeToExpiry,
         );
     }
 
@@ -188,7 +188,7 @@ final class OptionPricingEngine
         array $surface,
         float $riskFreeRate,
         float $dividendYield,
-        float $timeToExpiry
+        float $timeToExpiry,
     ): OptionQuoteDTO {
         $atmVolatility = $surface['atm_volatility'];
 
@@ -201,7 +201,7 @@ final class OptionPricingEngine
             $atmVolatility,
             $riskFreeRate,
             $dividendYield,
-            $timeToExpiry
+            $timeToExpiry,
         );
 
         $volatility = $deviates === null
@@ -210,7 +210,7 @@ final class OptionPricingEngine
                 $atmVolatility,
                 $deviates['d1'],
                 $surface['skewness'],
-                $surface['excess_kurtosis']
+                $surface['excess_kurtosis'],
             );
 
         $mark = OptionPricing::calculateBlackScholesPrice(
@@ -220,7 +220,7 @@ final class OptionPricingEngine
             $riskFreeRate,
             $dividendYield,
             $timeToExpiry,
-            $isCall
+            $isCall,
         );
 
         $greeks = OptionPricing::calculateBlackScholesGreeks(
@@ -230,7 +230,7 @@ final class OptionPricingEngine
             $riskFreeRate,
             $dividendYield,
             $timeToExpiry,
-            $isCall
+            $isCall,
         );
 
         $mark = max(self::OPTION_MIN_PREMIUM, $mark);
@@ -263,7 +263,7 @@ final class OptionPricingEngine
         SovereignCurveDTO $curve,
         float $currentTime,
         ?array $surface = null,
-        ?float $leveredBeta = null
+        ?float $leveredBeta = null,
     ): OptionQuoteDTO {
         $stock = $contract->getStock();
         $timeToExpiry = $contract->timeToExpiry($currentTime);
@@ -275,7 +275,7 @@ final class OptionPricingEngine
             $surface ?? $this->surfaceFor($stock, $timeToExpiry, $leveredBeta),
             $this->riskFreeRate($curve, $timeToExpiry),
             $this->dividendYield($stock),
-            $timeToExpiry
+            $timeToExpiry,
         );
     }
 
@@ -310,7 +310,7 @@ final class OptionPricingEngine
                 $surfaces[$key],
                 $rates[$key],
                 $yields[$key],
-                $timeToExpiry
+                $timeToExpiry,
             );
         }
 
@@ -353,7 +353,7 @@ final class OptionPricingEngine
 
         return max(
             $mark * self::OPTION_MIN_HALF_SPREAD_FRACTION,
-            min($mark * self::OPTION_MAX_HALF_SPREAD_FRACTION, $vegaSpread)
+            min($mark * self::OPTION_MAX_HALF_SPREAD_FRACTION, $vegaSpread),
         );
     }
 }

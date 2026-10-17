@@ -84,7 +84,7 @@ final class SecuritiesForcedSaleTest extends TestCase
             $ctx->assetSaleProceeds / (1.0 - TreasuryEngine::EARNING_ASSET_FIRE_SALE_HAIRCUT)
                 * TreasuryEngine::EARNING_ASSET_FIRE_SALE_HAIRCUT,
             $ctx->assetSaleLoss,
-            1.0
+            1.0,
         );
     }
 
@@ -130,7 +130,7 @@ final class SecuritiesForcedSaleTest extends TestCase
         self::assertLessThan(
             $haircutLoss + abs($realized),
             $ctx->assetSaleLoss,
-            'Charging the whole realized mark would double-bill the available-for-sale half.'
+            'Charging the whole realized mark would double-bill the available-for-sale half.',
         );
     }
 
@@ -200,7 +200,7 @@ final class SecuritiesForcedSaleTest extends TestCase
         self::assertLessThan(
             $haircutLoss,
             $ctx->assetSaleLoss,
-            'The realized gain offsets the haircut instead of being dropped on the floor.'
+            'The realized gain offsets the haircut instead of being dropped on the floor.',
         );
     }
 

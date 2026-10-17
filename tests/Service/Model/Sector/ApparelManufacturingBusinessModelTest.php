@@ -4,16 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ApparelManufacturingBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -61,7 +60,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             exchangeRateIndexEma: 100.0,
             agriculturalCommodityIndexEma: 100.0,
             freightRateIndexEma: 100.0,
-            energyPriceIndexEma: 100.0
+            energyPriceIndexEma: 100.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -74,7 +73,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertArrayHasKey('dtc_retail', $result->streamRevenue);
@@ -98,10 +97,10 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         // Recession: negative output gap (-0.05) and confidence eight points below what that gap alone implies.
         $recessionMacro = new MacroStateDTO(
             outputGapEma: -0.05,
-            consumerSentimentIndexEma: \App\Service\Macro\MacroEngine::SENTIMENT_TREND_LEVEL
+            consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL
                 + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * -0.05) - 8.0,
             consumerSentimentMood: -8.0,
-            inflationEma: 0.02
+            inflationEma: 0.02,
         );
 
         $genericPhysics = $this->model->getMacroPhysics($genericStock, $recessionMacro);
@@ -144,7 +143,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.15,
             macroState: $neutralMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $weakCurrencyResult = $this->model->computeActualFinancials(
@@ -154,13 +153,13 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.15,
             macroState: $weakCurrencyMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Contract textile supply revenue should increase due to export bonus
         $this->assertGreaterThan(
             $neutralResult->streamRevenue['contract_textile_supply'],
-            $weakCurrencyResult->streamRevenue['contract_textile_supply']
+            $weakCurrencyResult->streamRevenue['contract_textile_supply'],
         );
 
         // ...and a strong currency prices the export book out, beyond the firm-wide FX shift every stream carries.
@@ -180,7 +179,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.22, 20_000_000.0, 0.15, $macro, $mathMock);
+        $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.22, 20_000_000.0, 0.15, $macro, $mathMock);
         $base = $run(new MacroStateDTO(agriculturalCommodityIndexEma: 100.0, freightRateIndexEma: 100.0));
         $spike = $run(new MacroStateDTO(agriculturalCommodityIndexEma: 140.0, freightRateIndexEma: 150.0));
         $slump = $run(new MacroStateDTO(agriculturalCommodityIndexEma: 80.0, freightRateIndexEma: 100.0));
@@ -209,7 +208,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertEquals(ShockEvent::APPAREL_SUPPLY_CHAIN_DISRUPTION, $result->eventType);
@@ -238,7 +237,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertEquals(ShockEvent::APPAREL_VIRAL_PRODUCT, $result->eventType);
@@ -274,7 +273,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0, // Zero baseline vol to isolate deterministic macro/bullwhip physics
             macroState: $neutralMacro,
-            mathUtility: $mathUtility
+            mathUtility: $mathUtility,
         );
 
         $mildResult = $this->model->computeActualFinancials(
@@ -284,7 +283,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $mildRecessionMacro,
-            mathUtility: $mathUtility
+            mathUtility: $mathUtility,
         );
 
         $deepResult = $this->model->computeActualFinancials(
@@ -294,7 +293,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $deepRecessionMacro,
-            mathUtility: $mathUtility
+            mathUtility: $mathUtility,
         );
 
         // Neutral wholesale revenue = $40,000,000
@@ -332,7 +331,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $neutralMacro,
-            mathUtility: $mathUtility
+            mathUtility: $mathUtility,
         );
 
         $recessionResult = $this->model->computeActualFinancials(
@@ -342,14 +341,14 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $recessionMacro,
-            mathUtility: $mathUtility
+            mathUtility: $mathUtility,
         );
 
         // Markdown penalty increases variable cost ratio (clampedMargin = raw variable cost margin)
         $this->assertGreaterThan(
             $neutralResult->clampedMargin,
             $recessionResult->clampedMargin,
-            'Recessionary inventory markdown squeeze must raise variable cost margin / destroy gross margins.'
+            'Recessionary inventory markdown squeeze must raise variable cost margin / destroy gross margins.',
         );
     }
 
@@ -360,7 +359,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $stock->setBeta('1.0');
         $mathUtility = new MathUtility();
 
-        $run = fn (float $realWageGap) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, new MacroStateDTO(realWageGap: $realWageGap), $mathUtility);
+        $run = fn(float $realWageGap) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, new MacroStateDTO(realWageGap: $realWageGap), $mathUtility);
         $neutralResult = $run(0.0);
         $shockResult = $run(0.05);
 
@@ -376,8 +375,6 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.20 * ($costLevel - $recovered), $marginIncrease, 0.0001, 'The buying lag must dampen the first-quarter pass-through.');
         $this->assertLessThan(0.20 * $spotDeviation * (1.0 - 0.60 * 0.80), $marginIncrease, 'The first-quarter hit must be smaller than the steady-state squeeze.');
     }
-
-
 
     public function testObservableShockIncludesBullwhipDrag(): void
     {
@@ -396,7 +393,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $recessionMacro,
-            mathUtility: $mathUtility
+            mathUtility: $mathUtility,
         );
 
         // Bullwhip penalty for 10% contraction = (0.10)^2 * 2.0 = 0.02
@@ -405,14 +402,13 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(-0.008, $result->observableShockZ, 0.0001);
     }
 
-
     /**
      * Output is sold into a world market, so a strong domestic currency must reach expected demand through the
      * declared FX exposure rather than being discarded by this model's own macro physics.
      */
     public function testAStrongCurrencyLowersExpectedDemandThroughTheDeclaredFxExposure(): void
     {
-        $shift = fn (float $fxIndex): float => $this->model->getMacroPhysics((new Stock())->setTicker('SHER_FX'), new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: $fxIndex))['macro_demand_shift'];
+        $shift = fn(float $fxIndex): float => $this->model->getMacroPhysics((new Stock())->setTicker('SHER_FX'), new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: $fxIndex))['macro_demand_shift'];
 
         // Ten log points over the trend (DTO default 100).
         $strong = $shift(100.0 * exp(0.10));

@@ -31,7 +31,7 @@ class PruneHistoryCommandTest extends TestCase
         $connection = $this->createMock(Connection::class);
 
         $connection->method('fetchOne')->willReturnCallback(
-            static fn (string $sql) => str_contains($sql, 'simulation_clock') ? '12.0' : false
+            static fn(string $sql) => str_contains($sql, 'simulation_clock') ? '12.0' : false,
         );
         $connection->method('fetchNumeric')->willReturn([1, $batches * self::BATCH]);
         $connection->method('fetchAssociative')->willReturnCallback(
@@ -39,21 +39,21 @@ class PruneHistoryCommandTest extends TestCase
                 [$total, $old] = $probe((int) $params['lo']);
 
                 return ['total' => $total, 'old' => $old];
-            }
+            },
         );
         $connection->method('executeStatement')->willReturnCallback(
             static function (string $sql, array $params = []) use (&$sent): int {
                 $sent[] = [$sql, $params];
 
                 return 150;
-            }
+            },
         );
         $connection->method('transactional')->willReturnCallback(
             static function (\Closure $work) use ($connection, &$sent): mixed {
                 $sent[] = ['BEGIN', []];
 
                 return $work($connection);
-            }
+            },
         );
 
         return $connection;
@@ -74,7 +74,7 @@ class PruneHistoryCommandTest extends TestCase
     {
         $sent = [];
         // One batch per table, every row in it older than the cutoff.
-        $tester = $this->runPrune($this->connection(1, static fn (int $lo): array => [self::BATCH, self::BATCH], $sent));
+        $tester = $this->runPrune($this->connection(1, static fn(int $lo): array => [self::BATCH, self::BATCH], $sent));
 
         $downsampled = $this->deletes($sent);
         $this->assertCount(3, $downsampled);
@@ -98,7 +98,7 @@ class PruneHistoryCommandTest extends TestCase
         // A settled contract is not a chart, so there is nothing to downsample and no ratio to keep: it is
         // deleted, on its own shorter retention, and only when no position still points at it — the row
         // cascades to user_options, so a contract that kept one would take the position with it.
-        $options = array_values(array_filter($sent, static fn (array $call): bool => str_contains($call[0], 'option_contracts')));
+        $options = array_values(array_filter($sent, static fn(array $call): bool => str_contains($call[0], 'option_contracts')));
         $this->assertCount(1, $options);
         $this->assertStringContainsString('DELETE FROM option_contracts', $options[0][0]);
         $this->assertStringContainsString('NOT EXISTS', $options[0][0]);
@@ -137,7 +137,7 @@ class PruneHistoryCommandTest extends TestCase
 
         // Three tables × three old batches; the empty region costs a probe and no DELETE.
         $this->assertCount(9, $deletes);
-        $lows = array_map(static fn (array $call): int => $call[1]['lo'], array_slice($deletes, 0, 3));
+        $lows = array_map(static fn(array $call): int => $call[1]['lo'], array_slice($deletes, 0, 3));
         $this->assertSame([1, 1 + self::BATCH, 1 + 3 * self::BATCH], $lows);
 
         // Ids are assigned in insertion order, so the first populated batch with nothing older than the
@@ -154,10 +154,10 @@ class PruneHistoryCommandTest extends TestCase
     public function testABarTableFoldsTheSliceIntoTheKeptRowInTheSameTransaction(): void
     {
         $sent = [];
-        $this->runPrune($this->connection(1, static fn (int $lo): array => [self::BATCH, self::BATCH], $sent));
+        $this->runPrune($this->connection(1, static fn(int $lo): array => [self::BATCH, self::BATCH], $sent));
 
-        $history = array_values(array_filter($sent, static fn (array $call): bool => !str_contains($call[0], 'option_contracts')));
-        $statements = array_map(static fn (array $call): string => strtok(trim($call[0]), ' ') ?: '', $history);
+        $history = array_values(array_filter($sent, static fn(array $call): bool => !str_contains($call[0], 'option_contracts')));
+        $statements = array_map(static fn(array $call): string => strtok(trim($call[0]), ' ') ?: '', $history);
 
         // stock_history: BEGIN, UPDATE, DELETE; etf_history and bond_history: BEGIN, DELETE.
         $this->assertSame(['BEGIN', 'UPDATE', 'DELETE', 'BEGIN', 'DELETE', 'BEGIN', 'DELETE'], $statements);
@@ -178,7 +178,7 @@ class PruneHistoryCommandTest extends TestCase
      */
     private function deletes(array $sent): array
     {
-        return array_values(array_filter($sent, static fn (array $call): bool => str_starts_with(trim($call[0]), 'DELETE h FROM')));
+        return array_values(array_filter($sent, static fn(array $call): bool => str_starts_with(trim($call[0]), 'DELETE h FROM')));
     }
 
     /**
@@ -196,7 +196,7 @@ class PruneHistoryCommandTest extends TestCase
     {
         $connection = $this->createMock(Connection::class);
         $connection->method('fetchOne')->willReturnCallback(
-            static fn (string $sql) => str_contains($sql, 'simulation_clock') ? '12.0' : false
+            static fn(string $sql) => str_contains($sql, 'simulation_clock') ? '12.0' : false,
         );
         $connection->method('fetchNumeric')->willReturn([null, null]);
         $connection->expects($this->never())->method('fetchAssociative');
@@ -220,9 +220,9 @@ class PruneHistoryCommandTest extends TestCase
         $sent = [];
         // Three batches of ids, and a history probe that ends the history walk on its very first batch so
         // only the option sweep is left to account for.
-        $this->runPrune($this->connection(3, static fn (int $lo): array => [self::BATCH, 0], $sent));
+        $this->runPrune($this->connection(3, static fn(int $lo): array => [self::BATCH, 0], $sent));
 
-        $options = array_values(array_filter($sent, static fn (array $call): bool => str_contains($call[0], 'option_contracts')));
+        $options = array_values(array_filter($sent, static fn(array $call): bool => str_contains($call[0], 'option_contracts')));
         $this->assertCount(3, $options);
 
         foreach ($options as $index => [$sql, $params]) {

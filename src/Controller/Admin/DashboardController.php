@@ -2,7 +2,6 @@
 
 namespace App\Controller\Admin;
 
-
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\MenuItem;
@@ -19,7 +18,7 @@ class DashboardController extends AbstractDashboardController
     public function index(): Response
     {
         $adminUrlGenerator = $this->container->get(AdminUrlGenerator::class);
-        
+
         return $this->redirect($adminUrlGenerator->setController(StockCrudController::class)->generateUrl());
 
         // Option 1. You can make your dashboard redirect to some common page of your backend
@@ -47,17 +46,17 @@ class DashboardController extends AbstractDashboardController
     public function configureMenuItems(): iterable
     {
         yield MenuItem::linkToRoute('Macro Economy', 'fa fa-globe', 'admin_macro');
-        
+
         yield MenuItem::linkToDashboard('Dashboard', 'fa fa-home');
-        
+
         yield MenuItem::section('The Market');
-        
+
         yield MenuItem::linkTo(StockCrudController::class, 'Stocks', 'fas fa-chart-line');
         yield MenuItem::linkTo(EtfCrudController::class, 'ETFs', 'fas fa-globe');
-        
+
         yield MenuItem::section('Accounts');
         yield MenuItem::linkTo(UserCrudController::class, 'Users', 'fas fa-users');
-        
+
         yield MenuItem::section('System');
         yield MenuItem::linkToRoute('Exit to Exchange', 'fas fa-sign-out-alt', 'app_home');
     }

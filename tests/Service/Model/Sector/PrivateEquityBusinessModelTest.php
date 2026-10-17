@@ -129,7 +129,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             10.0,
             0.10,
             $severeMacro,
-            $mathMock
+            $mathMock,
         );
 
         $this->assertSame(ShockEvent::PE_HURDLE_RATE_MISSED, $result->eventType);
@@ -158,7 +158,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             10.0,
             0.05,
             $highRateMacro,
-            $this->mathUtility
+            $this->mathUtility,
         );
 
         // Clamped variable margin should be higher than baseline 0.40 due to rescue capital drag
@@ -202,7 +202,7 @@ class PrivateEquityBusinessModelTest extends TestCase
     {
         $this->assertGreaterThan(
             PrivateEquityBusinessModel::DEAL_FLOW_BOOM_MULT,
-            PrivateEquityBusinessModel::DEAL_FLOW_BUST_MULT
+            PrivateEquityBusinessModel::DEAL_FLOW_BUST_MULT,
         );
         $this->assertSame(3.0, PrivateEquityBusinessModel::DEAL_FLOW_BOOM_MULT);
         $this->assertSame(5.0, PrivateEquityBusinessModel::DEAL_FLOW_BUST_MULT);
@@ -240,11 +240,11 @@ class PrivateEquityBusinessModelTest extends TestCase
                 ebit: 30.0,
                 revenue: 100.0,
                 depreciation: 5.0,
-                ebitda: 35.0
+                ebitda: 35.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $frozenHealth = new DebtHealthDTO(
@@ -270,11 +270,11 @@ class PrivateEquityBusinessModelTest extends TestCase
                 ebit: 30.0,
                 revenue: 100.0,
                 depreciation: 5.0,
-                ebitda: 35.0
+                ebitda: 35.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $normalCapacity = $this->model->calculateDebtExpansionCapacity(100.0, 50.0, 50.0, $normalHealth, 0.05, 30.0, 5.0);
@@ -300,14 +300,33 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertGreaterThan($this->model->getWholesaleLeverageLimit(), $sectorTolerance);
 
         $health = new DebtHealthDTO(
-            grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.03, isNegativeCarry: false, isSevereNegativeCarry: false,
-            interestCoverage: 5.0, wantsToPaydownDebt: false, canIssueDebt: true, debtTolerance: $sectorTolerance,
-            wacc: 0.06, costOfEquity: 0.08, leveredBeta: 1.0,
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.03,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 5.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: $sectorTolerance,
+            wacc: 0.06,
+            costOfEquity: 0.08,
+            leveredBeta: 1.0,
             rawMetrics: new DebtMetricsDTO(
-                interestExpense: 2.5, blendedRate: 0.05, historicalFixedRate: 0.05, dynamicSpread: 0.020, currentMarketRate: 0.05,
-                wholesaleRate: 0.05, ebit: 30.0, revenue: 100.0, depreciation: 5.0, ebitda: 35.0
+                interestExpense: 2.5,
+                blendedRate: 0.05,
+                historicalFixedRate: 0.05,
+                dynamicSpread: 0.020,
+                currentMarketRate: 0.05,
+                wholesaleRate: 0.05,
+                ebit: 30.0,
+                revenue: 100.0,
+                depreciation: 5.0,
+                ebitda: 35.0,
             ),
-            isLiquidityCrisis: false, isLiquidityWarning: false, isUnderLeveraged: false
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false,
         );
 
         // Under-levered means "should borrow", so it must never be true where there is nothing left to borrow:
@@ -339,7 +358,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
-            'deal_activity_index_trend' => \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
         ]);
         $result = $this->model->computeActualFinancials($stock, 100.0, 0.35, 10.0, 0.10, $trend, $mathMock);
 
@@ -348,7 +367,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             100.0 * 0.65 / PrivateEquityBusinessModel::expectedHurdleClearedCarry($shockScale),
             $result->streamRevenue['carried_interest'],
-            1e-6
+            1e-6,
         );
     }
 
@@ -368,7 +387,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
-            'deal_activity_index_trend' => \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $hotDealMacro = MacroStateDTO::fromArray([
@@ -376,7 +395,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE * 1.5,
-            'deal_activity_index_trend' => \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
         ]);
 
         $baselineResult = $this->model->computeActualFinancials(
@@ -386,7 +405,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             10.0,
             0.10,
             $baselineMacro,
-            $mathMock
+            $mathMock,
         );
 
         $hotDealResult = $this->model->computeActualFinancials(
@@ -396,16 +415,15 @@ class PrivateEquityBusinessModelTest extends TestCase
             10.0,
             0.10,
             $hotDealMacro,
-            $mathMock
+            $mathMock,
         );
 
         $this->assertGreaterThan(0.0, $baselineResult->streamRevenue['carried_interest']);
         $this->assertGreaterThan(
             $baselineResult->streamRevenue['carried_interest'],
-            $hotDealResult->streamRevenue['carried_interest']
+            $hotDealResult->streamRevenue['carried_interest'],
         );
     }
-
 
     public function testTheDealTeamsFollowDealFlowNotTheFinancingFreezeOrTheMarks(): void
     {
@@ -417,7 +435,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         $recession = MacroStateDTO::fromArray([
             'output_gap_ema' => -0.03,
             'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
-            'deal_activity_index_trend' => \App\Service\Macro\MacroEngine::DEAL_ACTIVITY_BASELINE,
+            'deal_activity_index_trend' => MacroEngine::DEAL_ACTIVITY_BASELINE,
             'policy_rate_ema' => 0.03,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
         ]);

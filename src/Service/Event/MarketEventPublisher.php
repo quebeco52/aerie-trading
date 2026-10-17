@@ -3,10 +3,10 @@
 namespace App\Service\Event;
 
 use App\Entity\DistrictNews;
-use App\Entity\Stock;
-use App\Entity\StockEvent;
 use App\Entity\Etf;
 use App\Entity\EtfEvent;
+use App\Entity\Stock;
+use App\Entity\StockEvent;
 use App\Service\News\EventPresenter;
 use App\Service\News\NewsDesk;
 use Doctrine\ORM\EntityManagerInterface;
@@ -27,8 +27,7 @@ class MarketEventPublisher
         private \Redis $redis,
         private EventPresenter $presenter = new EventPresenter(),
         private ?\App\Service\Notification\PlayerNotifier $notifier = null,
-    ) {
-    }
+    ) {}
 
     /**
      * Dates every event published from now on to the given simulation time. The ticker and the fast-forward call it
@@ -93,7 +92,7 @@ class MarketEventPublisher
             $asset->getTicker(),
             sprintf('%s: %s', $asset->getTicker(), is_string($headline) && $headline !== '' ? $headline : $description),
             $description,
-            '/stock/' . rawurlencode($asset->getTicker())
+            '/stock/' . rawurlencode($asset->getTicker()),
         );
 
         return $wire;

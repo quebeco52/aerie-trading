@@ -2,13 +2,13 @@
 
 namespace App\Service\Market\Index;
 
+use App\Entity\Etf;
+use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Ticker\NestedTransaction;
+use App\Service\Math\FinancialConstants;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
-use App\Entity\Etf;
-use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Event\MarketEventPublisher;
 
 /**
  * Turns an index into a tradable fund: strikes the level, prices a share of the portfolio off it, and
@@ -36,9 +36,8 @@ class EtfTracker
         /** The arbitrage that keeps the fund near its basket, and the band inside which it does not bother. */
         private AuthorizedParticipant $authorizedParticipant = new AuthorizedParticipant(),
         /** Tells each holder their post-split position; null (unit tests) tells no one. */
-        private ?PlayerNotifier $notifier = null
-    ) {
-    }
+        private ?PlayerNotifier $notifier = null,
+    ) {}
 
     /**
      * Redis key holding an index's divisor. One key per index, because a divisor written in two places is
@@ -117,7 +116,7 @@ class EtfTracker
         float $dividendPoints = 0.0,
         float $dt = 0.0,
         float $netFlowValue = 0.0,
-        float $basketHalfSpread = 0.0
+        float $basketHalfSpread = 0.0,
     ): array {
 
         if ($etf === null) {
@@ -137,7 +136,7 @@ class EtfTracker
             } else {
                 $divisor = $totalMarketCap / FinancialConstants::INDEX_BASE_LEVEL;
             }
-            
+
             $this->redis->set($divisorKey, (string) $divisor);
         }
 
@@ -156,7 +155,7 @@ class EtfTracker
                 $etf,
                 $level,
                 $divisor > 0 ? $dividendPoints / (float) $divisor : 0.0,
-                $dt
+                $dt,
             );
 
             // NAV vs market price: Authorized Participant arbitrage settles price within the arbitrage band.
@@ -167,7 +166,7 @@ class EtfTracker
                 $netFlowValue,
                 $navPerShare * $etf->getSharesOutstanding(),
                 $band,
-                $dt
+                $dt,
             );
 
             $premium = $settled['premium'];
@@ -178,7 +177,7 @@ class EtfTracker
             // which issues shares against nothing and has to restate all of them.
             if ($creationValue !== 0.0 && $navPerShare > 0.0) {
                 $etf->setSharesOutstanding(
-                    max(0.0, $etf->getSharesOutstanding() + ($creationValue / $navPerShare))
+                    max(0.0, $etf->getSharesOutstanding() + ($creationValue / $navPerShare)),
                 );
             }
 
@@ -193,7 +192,7 @@ class EtfTracker
                     $price /= 4.0;
                     $splitFactor *= 4;
                 }
-                
+
                 $divisor *= $splitFactor;
                 $this->redis->set($divisorKey, (string) $divisor);
                 // All three are per-SHARE amounts and there are now more shares. Left alone, a 4-for-1 would
@@ -206,7 +205,7 @@ class EtfTracker
                 $etf->setSharesOutstanding($etf->getSharesOutstanding() * $splitFactor);
                 $navPerShare /= $splitFactor;
                 $this->executeEtfSplit($etf, $splitFactor, 'forward', $price * $splitFactor);
-                
+
             } elseif ($price < 25.0 && $price > 0) {
                 $splitFactor = 1;
                 $preSplitPrice = $price;
@@ -214,7 +213,7 @@ class EtfTracker
                     $price *= 4.0;
                     $splitFactor *= 4;
                 }
-                
+
                 $divisor /= $splitFactor;
                 $this->redis->set($divisorKey, (string) $divisor);
                 $etf->setAccruedIncome($etf->getAccruedIncome() * $splitFactor);
@@ -253,7 +252,7 @@ class EtfTracker
             // fund holds instead of stopping at the fund.
             'creation_value' => $creationValue,
             'name' => $etf ? $etf->getName() : 'Market Index',
-            'is_etf' => true
+            'is_etf' => true,
         ];
     }
 
@@ -271,7 +270,7 @@ class EtfTracker
         $conn = $this->entityManager->getConnection();
         $etfId = $etf->getId();
         $ticker = $etf->getTicker();
-        
+
         // Note: You must ensure you have a 'user_etfs' table or similar structure!
         $userEtfsTableExists = $conn->createSchemaManager()->tablesExist(['user_etfs']);
 
@@ -281,19 +280,19 @@ class EtfTracker
                 if ($userEtfsTableExists) {
                     $conn->executeStatement(
                         'UPDATE user_etfs SET quantity = quantity * :factor, version = version + 1 WHERE etf_id = :etf_id',
-                        ['factor' => $factor, 'etf_id' => $etfId]
+                        ['factor' => $factor, 'etf_id' => $etfId],
                     );
                 }
 
                 // NAV is per share like the price; restating one leaves the archived premium off by the factor.
                 $conn->executeStatement(
                     'UPDATE etf_history SET price = price / :factor, nav = nav / :factor WHERE etf_id = :etf_id',
-                    ['factor' => $factor, 'etf_id' => $etfId]
+                    ['factor' => $factor, 'etf_id' => $etfId],
                 );
 
                 $this->restateOrderBook($conn, $ticker, $factor, false, $preSplitPrice);
                 PriceAlertService::restateForSplit($conn, $ticker, (int) round($factor), false);
-                
+
                 $desc = "{$etf->getName()} has executed a {$factor}-for-1 forward split to maintain liquidity.";
                 $this->marketEvent->publish($etf, 'SPLIT', $desc, 0.0);
 
@@ -312,31 +311,31 @@ class EtfTracker
                          INNER JOIN user_etfs ue ON u.id = ue.user_id
                          SET u.cash_balance = u.cash_balance + ((ue.quantity % :factor) * :pre_split_price)
                          WHERE ue.etf_id = :etf_id',
-                        ['factor' => $factor, 'pre_split_price' => $preSplitPrice, 'etf_id' => $etfId]
+                        ['factor' => $factor, 'pre_split_price' => $preSplitPrice, 'etf_id' => $etfId],
                     );
 
                     $conn->executeStatement(
                         'UPDATE user_etfs SET quantity = FLOOR(quantity / :factor), version = version + 1 WHERE etf_id = :etf_id',
-                        ['factor' => $factor, 'etf_id' => $etfId]
+                        ['factor' => $factor, 'etf_id' => $etfId],
                     );
 
                     $conn->executeStatement(
                         'DELETE FROM user_etfs WHERE etf_id = :etf_id AND quantity = 0',
-                        ['etf_id' => $etfId]
+                        ['etf_id' => $etfId],
                     );
                 }
 
                 $conn->executeStatement(
                     'UPDATE etf_history SET price = price * :factor, nav = nav * :factor WHERE etf_id = :etf_id',
-                    ['factor' => $factor, 'etf_id' => $etfId]
+                    ['factor' => $factor, 'etf_id' => $etfId],
                 );
-                
+
                 $desc = "{$etf->getName()} has executed a 1-for-{$factor} reverse split to maintain value requirements.";
                 $this->marketEvent->publish($etf, 'REVSPLIT', $desc, 0.0);
 
                 $this->adjustRedisBuffer($ticker, $factor, 'multiply');
             }
-            
+
             $conn->commit();
         } catch (\Exception $e) {
             NestedTransaction::rollBackAndRethrow($conn, $e);
@@ -354,12 +353,12 @@ class EtfTracker
                 $conn->fetchAllAssociative('SELECT user_id, quantity FROM user_etfs WHERE etf_id = :etf_id AND quantity <> 0', ['etf_id' => $etfId]),
                 $ticker,
                 $isReverse ? sprintf('%s consolidated its units 1-for-%d', $ticker, $whole) : sprintf('%s split its units %d-for-1', $ticker, $whole),
-                static fn (float $quantity): string => sprintf(
+                static fn(float $quantity): string => sprintf(
                     'You now hold %s units%s.',
                     number_format($quantity),
-                    $isReverse ? '; any fraction left over was paid in cash' : ''
+                    $isReverse ? '; any fraction left over was paid in cash' : '',
                 ),
-                PlayerNotifier::assetLink('ETF', $ticker)
+                PlayerNotifier::assetLink('ETF', $ticker),
             );
         }
     }
@@ -380,7 +379,7 @@ class EtfTracker
         string $ticker,
         float $factor,
         bool $isReverse,
-        float $preSplitPrice
+        float $preSplitPrice,
     ): void {
         if ($isReverse) {
             // Reverse split fractional remnant refund: cash out limit-BUY and SELL escrow remnants before quantity flooring (a buy stop escrowed none).
@@ -399,7 +398,7 @@ class EtfTracker
                      GROUP BY o.user_id
                  ) remnants ON remnants.user_id = u.id
                  SET u.cash_balance = u.cash_balance + remnants.remnant_value",
-                ['factor' => $factor, 'ticker' => $ticker, 'pre_split_price' => $preSplitPrice]
+                ['factor' => $factor, 'ticker' => $ticker, 'pre_split_price' => $preSplitPrice],
             );
 
             $conn->executeStatement(
@@ -408,12 +407,12 @@ class EtfTracker
                      limit_price = ROUND(limit_price * :factor, 4),
                      stop_price = ROUND(stop_price * :factor, 4)
                  WHERE ticker = :ticker AND status = 'OPEN'",
-                ['factor' => $factor, 'ticker' => $ticker]
+                ['factor' => $factor, 'ticker' => $ticker],
             );
 
             $conn->executeStatement(
                 "UPDATE trade_orders SET status = 'CANCELLED' WHERE ticker = :ticker AND status = 'OPEN' AND quantity = 0",
-                ['ticker' => $ticker]
+                ['ticker' => $ticker],
             );
 
             $conn->executeStatement(
@@ -423,7 +422,7 @@ class EtfTracker
                      execution_price = ROUND(execution_price * :factor, 4),
                      limit_price = ROUND(limit_price * :factor, 4)
                  WHERE ticker = :ticker AND status = 'FILLED'",
-                ['factor' => $factor, 'ticker' => $ticker]
+                ['factor' => $factor, 'ticker' => $ticker],
             );
 
             return;
@@ -435,7 +434,7 @@ class EtfTracker
                  limit_price = ROUND(limit_price / :factor, 4),
                  stop_price = ROUND(stop_price / :factor, 4)
              WHERE ticker = :ticker AND status = 'OPEN'",
-            ['factor' => $factor, 'ticker' => $ticker]
+            ['factor' => $factor, 'ticker' => $ticker],
         );
 
         $conn->executeStatement(
@@ -445,7 +444,7 @@ class EtfTracker
                  execution_price = ROUND(execution_price / :factor, 4),
                  limit_price = ROUND(limit_price / :factor, 4)
              WHERE ticker = :ticker AND status = 'FILLED'",
-            ['factor' => $factor, 'ticker' => $ticker]
+            ['factor' => $factor, 'ticker' => $ticker],
         );
     }
 
@@ -460,11 +459,13 @@ class EtfTracker
     {
         $cacheKey = "chart_buffer:{$ticker}";
         $redisData = $this->redis->lRange($cacheKey, 0, -1);
-        
-        if (empty($redisData)) return;
+
+        if (empty($redisData)) {
+            return;
+        }
 
         $this->redis->del($cacheKey);
-        
+
         foreach (array_reverse($redisData) as $jsonStr) {
             $point = json_decode($jsonStr, true);
             if ($operation === 'divide') {
@@ -510,7 +511,7 @@ class EtfTracker
         $this->entityManager->getConnection()->executeStatement(
             'INSERT INTO etf_history (etf_id, price, nav, recorded_at, sim_time) VALUES '
             . implode(', ', $values),
-            $params
+            $params,
         );
     }
 }

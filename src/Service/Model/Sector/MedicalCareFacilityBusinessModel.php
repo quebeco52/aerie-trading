@@ -5,22 +5,20 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Hospital Networks, Health Systems & Medical Care Facilities.
- * 
+ *
  * Financial Physics:
  * - Tri-Stream Architecture:
  *   1. Acute Inpatient Care: Inelastic bed volume (trauma/acute illness). Immune to macroeconomic downturns,
@@ -126,13 +124,34 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     /** Variable cost penalty from regulatory coding audits, clawbacks, and arbitration settlements. */
     public const BILLING_AUDIT_PENALTY = 0.05;
 
-        public function getMinIcr(): float { return 1.8; }
-    public function getWholesaleLeverageLimit(): float { return 2.0; }
-    public function getBuybackMinIcr(): float { return 1.8; }
-    public function getReversionSpeed(): float { return 0.12; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.08; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.35; }
+    public function getMinIcr(): float
+    {
+        return 1.8;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.0;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 1.8;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.12;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.08;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.35;
+    }
 
     // --- Secular Demand ---
     /** Hospitals value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -212,7 +231,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::InpatientCareWeight->value       => self::INPATIENT_CARE_WEIGHT,
@@ -299,9 +318,9 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $inpatientWeight * self::INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY * $spendingMultiplier, $clampedMargin, $actualRevenue);
 
         // Inpatient care and mandatory spending packages are publicly visible; billing arbitrage is opaque
-        $observableShockZ = ($inpatientZ * $inpatientWeight * self::INPATIENT_VARIANCE_SCALAR * 0.70) +
-            ($outpatientZ * $outpatientWeight * self::OUTPATIENT_VARIANCE_SCALAR * 0.40) +
-            ($arbitrageZ * $arbitrageWeight * self::ARBITRAGE_VARIANCE_SCALAR * 0.15);
+        $observableShockZ = ($inpatientZ * $inpatientWeight * self::INPATIENT_VARIANCE_SCALAR * 0.70)
+            + ($outpatientZ * $outpatientWeight * self::OUTPATIENT_VARIANCE_SCALAR * 0.40)
+            + ($arbitrageZ * $arbitrageWeight * self::ARBITRAGE_VARIANCE_SCALAR * 0.15);
         $observableShockZ *= $baselineVol;
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.

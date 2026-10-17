@@ -79,7 +79,7 @@ final class ReitLeaseLadderTest extends TestCase
         $this->assertGreaterThan(
             $afterOneYear['in_place_rent_index'],
             $afterFiveYears['in_place_rent_index'],
-            'Each year of rollover carries in-place rents further toward market.'
+            'Each year of rollover carries in-place rents further toward market.',
         );
         $this->assertGreaterThan(0.0, $afterFiveYears['releasing_spread'], 'Space still rolls up while the gap remains.');
     }

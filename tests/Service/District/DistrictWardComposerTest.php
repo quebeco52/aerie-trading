@@ -57,7 +57,7 @@ class DistrictWardComposerTest extends TestCase
 
         $this->assertCount(DistrictMap::STREET_ROSTER_SIZE, $frontage['slots']);
 
-        $tickers = array_map(static fn (array $slot) => $slot['ticker'], $frontage['slots']);
+        $tickers = array_map(static fn(array $slot) => $slot['ticker'], $frontage['slots']);
         for ($i = 0; $i < DistrictMap::STREET_ROSTER_SIZE; $i++) {
             $this->assertContains(sprintf('T%03d', $i), $tickers, 'The larger-cap tenant should qualify');
         }
@@ -96,7 +96,7 @@ class DistrictWardComposerTest extends TestCase
             $this->makeStock('STRK', 'Credit Services', 10.0, 1_000_000.0),           // credit_services
         ]);
 
-        $tickers = array_map(static fn (array $slot) => $slot['ticker'], $frontage['slots']);
+        $tickers = array_map(static fn(array $slot) => $slot['ticker'], $frontage['slots']);
 
         $this->assertSame(['STRK', 'LAKE', 'RIVR'], $tickers);
     }
@@ -110,7 +110,7 @@ class DistrictWardComposerTest extends TestCase
         $stocks[] = $this->makeStock('TINY', 'Credit Services', 0.01, 1.0);
 
         $frontage = $this->composer->composeFrontage($stocks);
-        $tickers = array_map(static fn (array $slot) => $slot['ticker'], $frontage['slots']);
+        $tickers = array_map(static fn(array $slot) => $slot['ticker'], $frontage['slots']);
 
         $this->assertNotContains('TINY', $tickers);
         $this->assertContains('T000', $tickers);
@@ -124,7 +124,7 @@ class DistrictWardComposerTest extends TestCase
             $this->makeStock('XXXX', 'General', 1_000_000_000.0, 1.0),
         ]);
 
-        $tickers = array_map(static fn (array $slot) => $slot['ticker'], $frontage['slots']);
+        $tickers = array_map(static fn(array $slot) => $slot['ticker'], $frontage['slots']);
         $this->assertNotContains('XXXX', $tickers);
     }
 
@@ -167,7 +167,7 @@ class DistrictWardComposerTest extends TestCase
         ];
         $frontage = $this->composer->composeFrontage($stocks);
 
-        $widths = array_map(static fn (array $slot) => $slot['width'], $frontage['slots']);
+        $widths = array_map(static fn(array $slot) => $slot['width'], $frontage['slots']);
         $total = array_sum($widths) + (count($widths) - 1) * DistrictMap::FRONTAGE_GAP;
 
         $this->assertSame(DistrictMap::FRONTAGE_GUTTER + $total + DistrictMap::FRONTAGE_MARGIN, $frontage['viewboxWidth']);
@@ -191,7 +191,7 @@ class DistrictWardComposerTest extends TestCase
 
         $this->assertSame(DistrictMap::ROW_COUNT, $frontage['rowCount']);
 
-        $rows = array_unique(array_map(static fn (array $slot) => $slot['row'], $frontage['slots']));
+        $rows = array_unique(array_map(static fn(array $slot) => $slot['row'], $frontage['slots']));
         sort($rows);
         $this->assertSame(range(0, DistrictMap::ROW_COUNT - 1), $rows, 'Every row the street claims must be occupied');
     }
@@ -250,7 +250,7 @@ class DistrictWardComposerTest extends TestCase
         $this->assertLessThanOrEqual(
             max(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE) + DistrictMap::FRONTAGE_GAP,
             $widest - $narrowest,
-            'The rows should differ by at most one plot\'s worth of width'
+            'The rows should differ by at most one plot\'s worth of width',
         );
     }
 

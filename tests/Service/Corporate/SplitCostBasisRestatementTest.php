@@ -44,7 +44,7 @@ final class SplitCostBasisRestatementTest extends TestCase
                 $this->statements[] = ['sql' => $sql, 'params' => $params, 'types' => $types];
 
                 return 1;
-            }
+            },
         );
 
         $this->service = new CorporateLedgerService($this->entityManagerMock);
@@ -55,7 +55,7 @@ final class SplitCostBasisRestatementTest extends TestCase
     {
         $matches = array_values(array_filter(
             $this->statements,
-            static fn (array $s): bool => str_contains($s['sql'], 'trade_orders') && str_contains($s['sql'], "status = 'FILLED'")
+            static fn(array $s): bool => str_contains($s['sql'], 'trade_orders') && str_contains($s['sql'], "status = 'FILLED'"),
         ));
 
         $this->assertCount(1, $matches, 'A split must restate filled trade orders exactly once.');
@@ -68,7 +68,7 @@ final class SplitCostBasisRestatementTest extends TestCase
     {
         $matches = array_values(array_filter(
             $this->statements,
-            static fn (array $s): bool => str_contains($s['sql'], 'stock_history')
+            static fn(array $s): bool => str_contains($s['sql'], 'stock_history'),
         ));
 
         $this->assertCount(1, $matches, 'A split must restate price history exactly once.');
@@ -166,7 +166,7 @@ final class SplitCostBasisRestatementTest extends TestCase
             $this->assertStringContainsString(
                 $column . ' =',
                 $sql,
-                sprintf('stock_history.%s is quoted in shares or money and is not restated by a split.', $column)
+                sprintf('stock_history.%s is quoted in shares or money and is not restated by a split.', $column),
             );
         }
     }
@@ -221,7 +221,7 @@ final class SplitCostBasisRestatementTest extends TestCase
             $this->assertSame(
                 $quantityScalesUp,
                 $priceScalesDown,
-                'Quantity and price must move in opposite directions, or the restatement invents or destroys money.'
+                'Quantity and price must move in opposite directions, or the restatement invents or destroys money.',
             );
         }
     }
@@ -240,7 +240,7 @@ final class SplitCostBasisRestatementTest extends TestCase
                     $quantity * $price,
                     $restated,
                     0.0001,
-                    sprintf('A %g-for-1 split moved money on %d shares at $%s.', $factor, $quantity, $price)
+                    sprintf('A %g-for-1 split moved money on %d shares at $%s.', $factor, $quantity, $price),
                 );
             }
         }
@@ -270,7 +270,7 @@ final class SplitCostBasisRestatementTest extends TestCase
             $this->assertGreaterThan(
                 0,
                 max((int) floor($quantity / 10.0), 1),
-                sprintf('%d shares must survive a 1-for-10 as a countable position.', $quantity)
+                sprintf('%d shares must survive a 1-for-10 as a countable position.', $quantity),
             );
         }
     }
@@ -280,8 +280,8 @@ final class SplitCostBasisRestatementTest extends TestCase
     {
         $matches = array_values(array_filter(
             $this->statements,
-            static fn (array $s): bool => str_contains($s['sql'], 'UPDATE users')
-                && str_contains($s['sql'], 'remnant_value')
+            static fn(array $s): bool => str_contains($s['sql'], 'UPDATE users')
+                && str_contains($s['sql'], 'remnant_value'),
         ));
 
         $this->assertCount(1, $matches, 'A reverse split must refund escrow remnants exactly once.');
@@ -339,7 +339,7 @@ final class SplitCostBasisRestatementTest extends TestCase
         $this->assertLessThan(
             $rewriteIndex,
             $refundIndex,
-            'Refunding after the rewrite would pay out at the post-split limit and invent money.'
+            'Refunding after the rewrite would pay out at the post-split limit and invent money.',
         );
     }
 
@@ -361,7 +361,7 @@ final class SplitCostBasisRestatementTest extends TestCase
                     $limit * $quantity,
                     $survivingOrder + $refunded,
                     0.0001,
-                    sprintf('A 1-for-%g split moved escrow on %d shares at $%s.', $factor, $quantity, $limit)
+                    sprintf('A 1-for-%g split moved escrow on %d shares at $%s.', $factor, $quantity, $limit),
                 );
             }
         }
@@ -409,7 +409,7 @@ final class SplitCostBasisRestatementTest extends TestCase
             $stock->setTicker('BIND');
             $this->service->processStockSplit($stock, $factor, $isReverse, 2.50);
 
-            $withFactor = array_filter($this->statements, static fn (array $s): bool => str_contains($s['sql'], ':factor'));
+            $withFactor = array_filter($this->statements, static fn(array $s): bool => str_contains($s['sql'], ':factor'));
             $this->assertNotEmpty($withFactor);
             foreach ($withFactor as $statement) {
                 $this->assertSame((int) $factor, $statement['params']['factor']);

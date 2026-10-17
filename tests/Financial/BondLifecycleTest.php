@@ -96,12 +96,12 @@ class BondLifecycleTest extends TestCase
         $ledger->method('processCouponPayment')->willReturnCallback(
             function (Bond $bond, float $amount, float $time): void {
                 $this->coupons[$bond->getTicker()][] = $time;
-            }
+            },
         );
         $ledger->method('processRedemption')->willReturnCallback(
             function (Bond $bond, float $time): void {
                 $this->redemptions[$bond->getTicker()] = $time;
-            }
+            },
         );
 
         $issuedCounts = [];
@@ -109,7 +109,7 @@ class BondLifecycleTest extends TestCase
         $connection->method('fetchOne')->willReturnCallback(
             static function (string $sql, array $params) use (&$issuedCounts): int {
                 return $issuedCounts[(string) $params['tenor']] ?? 0;
-            }
+            },
         );
         $connection->method('executeStatement')->willReturn(1);
 
@@ -144,10 +144,10 @@ class BondLifecycleTest extends TestCase
 
             // The caller drains matured issues; BondTracker reports them but does not own the working set.
             if ($result['matured'] !== []) {
-                $maturedIds = array_map(static fn (Bond $b): int => spl_object_id($b), $result['matured']);
+                $maturedIds = array_map(static fn(Bond $b): int => spl_object_id($b), $result['matured']);
                 $outstanding = array_values(array_filter(
                     $outstanding,
-                    static fn (Bond $b): bool => !in_array(spl_object_id($b), $maturedIds, true)
+                    static fn(Bond $b): bool => !in_array(spl_object_id($b), $maturedIds, true),
                 ));
             }
 
@@ -182,7 +182,7 @@ class BondLifecycleTest extends TestCase
             $this->assertCount(
                 $expected,
                 $this->coupons[$bond->getTicker()] ?? [],
-                "{$bond->getTicker()} did not pay its scheduled coupons."
+                "{$bond->getTicker()} did not pay its scheduled coupons.",
             );
 
             $audited++;
@@ -225,7 +225,7 @@ class BondLifecycleTest extends TestCase
             $this->assertLessThanOrEqual(
                 $tickLength,
                 $redeemedAt - $bond->getMaturesAtTime(),
-                "{$bond->getTicker()} redeemed more than a tick late."
+                "{$bond->getTicker()} redeemed more than a tick late.",
             );
         }
     }
@@ -261,10 +261,10 @@ class BondLifecycleTest extends TestCase
                 $expected,
                 count($byTenor[$key]),
                 TreasuryAuctionService::BOND_AUCTIONS_PER_YEAR,
-                "The {$tenor}y bucket is not at its steady-state size."
+                "The {$tenor}y bucket is not at its steady-state size.",
             );
 
-            $onTheRun = array_filter($byTenor[$key], static fn (Bond $b): bool => $b->isOnTheRun());
+            $onTheRun = array_filter($byTenor[$key], static fn(Bond $b): bool => $b->isOnTheRun());
             $this->assertCount(1, $onTheRun, "There must be exactly one on-the-run {$tenor}y.");
         }
     }

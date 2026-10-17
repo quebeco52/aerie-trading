@@ -4,19 +4,19 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
+use App\Data\Company\StockModelTuning;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Industry\IndustryRegimeView;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\Sector\TelecomBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use App\Service\Model\StreamContext;
-use App\Data\Company\StockModelTuning;
-use App\Service\Corporate\Industry\IndustryRegimeView;
-use App\Service\Math\Distributions;
-use App\Service\Model\ModelParam;
-use App\Service\Macro\MacroEngine;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -48,7 +48,7 @@ class TelecomBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $macro,
-            mathUtility: $mathStub
+            mathUtility: $mathStub,
         );
 
         $this->assertEqualsWithDelta(1.0, $result->kpis['subscriber_index'], 1e-9);
@@ -100,7 +100,7 @@ class TelecomBusinessModelTest extends TestCase
         $math->method('generatePersistentZ')->willReturn(0.0);
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
 
-        $run = fn (int $quarter) => $this->model->computeActualFinancials((new Stock())->setTicker('TEL')->setBeta('0.8'), 100_000_000.0 * $factors[$quarter], 0.30, 20_000_000.0, 0.0, $macro, $math, $quarter);
+        $run = fn(int $quarter) => $this->model->computeActualFinancials((new Stock())->setTicker('TEL')->setBeta('0.8'), 100_000_000.0 * $factors[$quarter], 0.30, 20_000_000.0, 0.0, $macro, $math, $quarter);
         $q3 = $run(2);
         $q4 = $run(3);
         $q1 = $run(0);
@@ -139,7 +139,7 @@ class TelecomBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $mathStub
+            mathUtility: $mathStub,
         );
 
         $this->assertSame(ShockEvent::TELECOM_PRICE_WAR, $result->eventType);
@@ -169,7 +169,7 @@ class TelecomBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $mathStub
+            mathUtility: $mathStub,
         );
 
         $this->assertSame(ShockEvent::SPECTRUM_AUCTION, $result->eventType);
@@ -199,7 +199,7 @@ class TelecomBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $highYieldMacro,
-            mathUtility: $mathStub
+            mathUtility: $mathStub,
         );
 
         $resultNormal = $this->model->computeActualFinancials(
@@ -209,7 +209,7 @@ class TelecomBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $normalYieldMacro,
-            mathUtility: $mathStub
+            mathUtility: $mathStub,
         );
 
         $this->assertEqualsWithDelta($resultNormal->clampedMargin, $resultHigh->clampedMargin, 1e-9);
@@ -237,7 +237,7 @@ class TelecomBusinessModelTest extends TestCase
             $stock->setBeta('0.8');
             $stock->setEarningsMomentumZ($momentum);
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $eventZ : 0.0);
+            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $eventZ : 0.0);
             $math->method('checkProbability')->willReturn($warEnds);
             return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.45, 20_000_000.0, 0.10, $macro, $math);
         };
@@ -267,7 +267,6 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertGreaterThan($second->kpis['subscriber_index'], $after->kpis['subscriber_index']);
         $this->assertLessThan(1.0, $after->kpis['subscriber_index']);
     }
-
 
     /**
      * Involuntary disconnects rise with job losses, so unemployment above the natural rate must lift churn

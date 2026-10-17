@@ -125,7 +125,7 @@ final class EarningsFlowStatementTest extends TestCase
                 $flow->cashGenerated(),
                 $flow->capitalExpenditures + $flow->dividends + $flow->buybacks + $flow->retainedCash,
                 1e-9,
-                'Cash in must equal cash out.'
+                'Cash in must equal cash out.',
             );
         }
     }

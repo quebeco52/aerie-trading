@@ -123,7 +123,7 @@ class DeferredWriteAuditTest extends TestCase
         $this->assertSame('Stock 1', $audit->summary());
         $this->assertTrue(
             $em->getUnitOfWork()->isScheduledForUpdate($stock),
-            'The point of auditing at preFlush is that the dropped write is put back into this flush.'
+            'The point of auditing at preFlush is that the dropped write is put back into this flush.',
         );
     }
 
@@ -194,11 +194,11 @@ class DeferredWriteAuditTest extends TestCase
 
         $this->assertTrue(
             $em->getClassMetadata(Bond::class)->isChangeTrackingDeferredExplicit(),
-            'Bond carries the policy: its three write sites all persist().'
+            'Bond carries the policy: its three write sites all persist().',
         );
         $this->assertTrue(
             $em->getClassMetadata(Stock::class)->isChangeTrackingDeferredImplicit(),
-            'Stock does NOT: its mutation surface is ~20 services deep and has not been audited.'
+            'Stock does NOT: its mutation surface is ~20 services deep and has not been audited.',
         );
         $this->assertTrue($em->getClassMetadata(Etf::class)->isChangeTrackingDeferredImplicit());
     }

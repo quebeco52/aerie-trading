@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
@@ -31,7 +32,7 @@ trait StandardValuationTrait
     {
         return max(
             FinancialConstants::MIN_INTRINSIC_PB,
-            min(FinancialConstants::MAX_INTRINSIC_PB, $structuralRoic / max(0.01, $hurdleRate))
+            min(FinancialConstants::MAX_INTRINSIC_PB, $structuralRoic / max(0.01, $hurdleRate)),
         );
     }
 
@@ -60,7 +61,6 @@ trait StandardValuationTrait
         return FinancialConstants::FAIR_VALUE_BOOK_WEIGHT;
     }
 
-
     public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, float $afterTaxCostOfDebt, ?float $investedCapitalPerShare = null): float
     {
         // For non-financials, Structural ROIC applies to Invested Capital, not Equity (Book Value). The real
@@ -69,7 +69,7 @@ trait StandardValuationTrait
         // firm's actual net debt, so the interest drag is charged on what it genuinely owes.
         $investedCapitalPerShare ??= max(
             $revenuePerShare * FinancialConstants::STRUCTURAL_INVESTED_CAPITAL_TO_REVENUE,
-            $bookValuePerShare * FinancialConstants::STRUCTURAL_INVESTED_CAPITAL_TO_BOOK
+            $bookValuePerShare * FinancialConstants::STRUCTURAL_INVESTED_CAPITAL_TO_BOOK,
         );
         $investedCapitalPerShare = max(0.01, $investedCapitalPerShare);
 
@@ -112,7 +112,7 @@ trait StandardValuationTrait
     }
 
     /** @return array{costOfEquity: float, equityReturn: float} */
-    public function getEquityValuationRates(\App\Entity\Stock $stock, float $returnOnCapital, \App\DTO\DebtHealthDTO $health, float $corporateTaxRate): array
+    public function getEquityValuationRates(Stock $stock, float $returnOnCapital, \App\DTO\DebtHealthDTO $health, float $corporateTaxRate): array
     {
         $afterTaxCostOfDebt = $health->rawMetrics->currentMarketRate * (1.0 - $this->getEffectiveTaxRate($corporateTaxRate));
 

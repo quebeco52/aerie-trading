@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Entity\Stock;
+use App\Service\Market\Option\OptionMarginCalculator;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Trading\MarginEngine;
-use App\Service\Market\Option\OptionMarginCalculator;
 use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
@@ -146,7 +146,7 @@ class ShortSqueezeDynamicsTest extends TestCase
                 cash: $cash,
                 longMarketValue: 0.0,
                 shortMarketValue: $position * $price,
-                marginDebit: 0.0
+                marginDebit: 0.0,
             );
 
             if (!$status->isCalled() || $position <= 0.0) {
@@ -188,7 +188,7 @@ class ShortSqueezeDynamicsTest extends TestCase
             cash: $shares * 100.0,
             longMarketValue: 0.0,
             shortMarketValue: $shares * 400.0,
-            marginDebit: 0.0
+            marginDebit: 0.0,
         );
 
         $this->assertLessThan(0.0, $shortBlowUp->equity, 'A short can owe more than the account holds.');

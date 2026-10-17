@@ -2,7 +2,6 @@
 
 namespace App\Tests\Service\Math;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
@@ -40,7 +39,7 @@ class MathUtilityTest extends TestCase
             StochasticProcesses::kouTruncatedSecondMoment($pUp, $etaUp, $etaDown, 0.2624, 0.3567),
             $sum / $draws,
             0.0005,
-            'The closed form must agree with the draws the engine actually takes.'
+            'The closed form must agree with the draws the engine actually takes.',
         );
     }
 
@@ -85,7 +84,7 @@ class MathUtilityTest extends TestCase
             StochasticProcesses::kouTruncatedCompensator($pUp, $etaUp, $etaDown, 0.2624, 0.3567),
             $sum / $draws,
             0.001,
-            'The compensator must be the mean of exactly the draws the engine takes.'
+            'The compensator must be the mean of exactly the draws the engine takes.',
         );
     }
 
@@ -167,7 +166,7 @@ class MathUtilityTest extends TestCase
             etaUp: 10.0,
             etaDown: 8.0,
             muV: 0.0,
-            dt: 1.0
+            dt: 1.0,
         );
 
         $this->assertSame(0.0, $jump['var_jump']);
@@ -188,7 +187,7 @@ class MathUtilityTest extends TestCase
             beta: 0.0,
             marketVol: 0.15,
             marketZ: 0.0,
-            w1: 0.0
+            w1: 0.0,
         );
 
         $this->assertEquals(100.0, $price, 'Price should remain unchanged with 0 parameters.');
@@ -208,7 +207,7 @@ class MathUtilityTest extends TestCase
             beta: 0.0,
             marketVol: 0.15,
             marketZ: 0.0,
-            w1: 0.0
+            w1: 0.0,
         );
 
         $this->assertEqualsWithDelta(110.517, $price, 0.001, 'Price should match pure geometric drift.');
@@ -226,7 +225,7 @@ class MathUtilityTest extends TestCase
             beta: 1.0,
             marketVol: 0.20,
             marketZ: 1.0, // +1 Standard Deviation Market Shock
-            w1: 0.0       // No idiosyncratic shock
+            w1: 0.0,       // No idiosyncratic shock
         );
 
         $this->assertGreaterThan(100.0, $price, 'Positive market shock should increase the price.');
@@ -245,7 +244,7 @@ class MathUtilityTest extends TestCase
             beta: 0.0,    // 0 correlation to the market
             marketVol: 0.20,
             marketZ: 1.0, // Positive market shock (should be ignored due to 0 beta)
-            w1: -1.0      // -1 Standard Deviation Individual Shock
+            w1: -1.0,      // -1 Standard Deviation Individual Shock
         );
 
         $this->assertLessThan(100.0, $price, 'Negative idiosyncratic shock should decrease the price.');
@@ -269,7 +268,7 @@ class MathUtilityTest extends TestCase
             beta: $beta,
             marketVol: $marketVol,
             marketZ: 1.0,
-            w1: 0.0
+            w1: 0.0,
         );
 
         $flat = StochasticProcesses::calculateCorrelatedGBM(
@@ -281,7 +280,7 @@ class MathUtilityTest extends TestCase
             beta: $beta,
             marketVol: $marketVol,
             marketZ: 0.0,
-            w1: 0.0
+            w1: 0.0,
         );
 
         $this->assertFalse(is_nan($up), 'Price returned NAN.');
@@ -289,7 +288,7 @@ class MathUtilityTest extends TestCase
             $beta * $marketVol,
             log($up / $flat),
             1.0e-9,
-            'A one-sigma market move must move the log price by exactly beta * marketVol.'
+            'A one-sigma market move must move the log price by exactly beta * marketVol.',
         );
     }
 
@@ -311,7 +310,7 @@ class MathUtilityTest extends TestCase
             marketZ: 0.0,
             w1: 0.0,
             sectorZ: 1.0,
-            sectorVarianceShare: $share
+            sectorVarianceShare: $share,
         ) / 100.0) + (0.5 * $idiosyncraticVol * $idiosyncraticVol);
 
         $idioOnly = log(StochasticProcesses::calculateCorrelatedGBM(
@@ -325,14 +324,14 @@ class MathUtilityTest extends TestCase
             marketZ: 0.0,
             w1: 1.0,
             sectorZ: 0.0,
-            sectorVarianceShare: $share
+            sectorVarianceShare: $share,
         ) / 100.0) + (0.5 * $idiosyncraticVol * $idiosyncraticVol);
 
         $this->assertEqualsWithDelta(
             $idiosyncraticVol * $idiosyncraticVol,
             ($sectorOnly * $sectorOnly) + ($idioOnly * $idioOnly),
             1.0e-12,
-            'Sector and idiosyncratic loadings must carry the residual variance between them.'
+            'Sector and idiosyncratic loadings must carry the residual variance between them.',
         );
     }
 
@@ -349,7 +348,7 @@ class MathUtilityTest extends TestCase
             rho: -0.30,
             dt: 0.25,
             dW1: 0.0,
-            dW2: 0.0
+            dW2: 0.0,
         );
 
         $this->assertArrayHasKey('chi', $result);
@@ -372,7 +371,7 @@ class MathUtilityTest extends TestCase
             rho: 0.0,
             dt: 0.50,
             dW1: 0.0,
-            dW2: 0.0
+            dW2: 0.0,
         );
 
         $this->assertLessThan(0.50, $result['chi'], 'Short-term deviation should mean-revert toward zero.');
@@ -396,7 +395,7 @@ class MathUtilityTest extends TestCase
             rho: 0.0,
             dt: $dt,
             dW1: 0.0,
-            dW2: 0.0
+            dW2: 0.0,
         );
 
         $this->assertEqualsWithDelta($initialXi + ($muXi * $dt), $result['xi'], 0.0001, 'Long-term equilibrium should drift with muXi.');
@@ -427,7 +426,7 @@ class MathUtilityTest extends TestCase
             rho: -0.20,
             dt: $dt,
             dW1: 0.0,
-            dW2: 0.0
+            dW2: 0.0,
         );
 
         $expectedChi = $initialChi * exp(-$kappaChi * $dt) + $thetaChi * (1.0 - exp(-$kappaChi * $dt));
@@ -549,7 +548,7 @@ class MathUtilityTest extends TestCase
             theta: 0.05,
             sigma: 0.02,
             dt: 1.0,
-            dW: 0.0
+            dW: 0.0,
         );
         $this->assertGreaterThan(0.02, $val, 'Value below theta must revert upwards.');
         $this->assertLessThanOrEqual(0.05, $val, 'Value must not overshoot theta without noise.');
@@ -561,7 +560,7 @@ class MathUtilityTest extends TestCase
             theta: 0.01,
             sigma: 0.50,
             dt: 1.0,
-            dW: -10.0
+            dW: -10.0,
         );
         $this->assertGreaterThanOrEqual(0.0001, $floored, 'CIR process must never fall below minimum failsafe floor.');
     }
@@ -582,7 +581,7 @@ class MathUtilityTest extends TestCase
             theta: 0.04,
             kappa: 1.5,
             sigma: 0.05,
-            dt: 0.25
+            dt: 0.25,
         );
         $this->assertGreaterThan(0.0, $nextVarQuad);
         $this->assertTrue(is_finite($nextVarQuad));
@@ -593,7 +592,7 @@ class MathUtilityTest extends TestCase
             theta: 0.04,
             kappa: 0.5,
             sigma: 1.50,
-            dt: 0.25
+            dt: 0.25,
         );
         $this->assertGreaterThanOrEqual(0.0000001, $nextVarExp);
         $this->assertTrue(is_finite($nextVarExp));
@@ -706,7 +705,6 @@ class MathUtilityTest extends TestCase
         }
     }
 
-
     public function testAnOwnStreamIsReproducibleAndLeavesTheGlobalStreamAlone(): void
     {
         mt_srand(4242);
@@ -738,6 +736,6 @@ class MathUtilityTest extends TestCase
         $this->assertGreaterThanOrEqual(1, min($draws));
         // Mean 1 / p = 4, sd sqrt(1 - p) / p = 3.46; the mean of 20,000 has a standard error of 0.024.
         $this->assertEqualsWithDelta(4.0, array_sum($draws) / count($draws), 0.1);
-        $this->assertEqualsWithDelta(0.25, count(array_filter($draws, static fn (int $n): bool => $n === 1)) / count($draws), 0.01);
+        $this->assertEqualsWithDelta(0.25, count(array_filter($draws, static fn(int $n): bool => $n === 1)) / count($draws), 0.01);
     }
 }

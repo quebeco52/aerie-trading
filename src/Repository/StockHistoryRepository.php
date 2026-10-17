@@ -41,6 +41,6 @@ class StockHistoryRepository extends ServiceEntityRepository
             ->getQuery()
             ->getScalarResult();
 
-        return array_map(static fn (array $row): float => (float) ($row['price'] ?? 0.0), $rows);
+        return array_map(static fn(array $row): float => (float) ($row['price'] ?? 0.0), $rows);
     }
 }

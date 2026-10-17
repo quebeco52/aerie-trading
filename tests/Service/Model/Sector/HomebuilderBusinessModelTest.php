@@ -29,7 +29,7 @@ final class HomebuilderBusinessModelTest extends TestCase
     /** Every order draw at zero, so housing starts and the house price are the only things moving. */
     private function quietDraws(): MathUtility
     {
-        return new class () extends MathUtility {
+        return new class extends MathUtility {
             public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
             {
                 return 0.0;
@@ -66,7 +66,7 @@ final class HomebuilderBusinessModelTest extends TestCase
             fixedCosts: 0.0,
             baselineVol: 0.35,
             macroState: $macro,
-            mathUtility: $this->quietDraws()
+            mathUtility: $this->quietDraws(),
         );
         $stock->setEarningsMomentumZ($actuals->streamZ);
 

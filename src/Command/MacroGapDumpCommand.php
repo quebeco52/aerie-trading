@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Service\Market\Ticker\HistoryPruner;
+use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -13,7 +14,6 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Writes the recorded macro run out as newline-delimited JSON, one object per simulated quarter.
@@ -50,7 +50,6 @@ class MacroGapDumpCommand extends Command
     /** Default destination, inside the repo so the file is readable beside the code it is used to change. */
     public const DEFAULT_RELATIVE_PATH = 'var/macro-gap-history.jsonl';
 
-
     /** Columns that are neither part of the macro vector nor a decomposition, and are dropped from the dump. */
     private const NON_SERIES_COLUMNS = ['id', 'recorded_at'];
 
@@ -65,7 +64,8 @@ class MacroGapDumpCommand extends Command
 
     public function __construct(
         private EntityManagerInterface $em,
-        #[Autowire('%kernel.project_dir%')] private string $projectDir
+        #[Autowire('%kernel.project_dir%')]
+        private string $projectDir,
     ) {
         parent::__construct();
     }
@@ -77,14 +77,14 @@ class MacroGapDumpCommand extends Command
             'y',
             InputOption::VALUE_OPTIONAL,
             'Simulated years to dump, counting back from the most recent quarter. 0 dumps everything retained.',
-            '0'
+            '0',
         );
         $this->addOption(
             'output',
             'o',
             InputOption::VALUE_OPTIONAL,
             'Destination file; relative paths resolve against the project root.',
-            self::DEFAULT_RELATIVE_PATH
+            self::DEFAULT_RELATIVE_PATH,
         );
     }
 
@@ -108,7 +108,7 @@ class MacroGapDumpCommand extends Command
             : HistoryPruner::MACRO_QUARTERS_KEPT;
 
         $rows = $conn->fetchAllAssociative(
-            'SELECT * FROM macro_report ORDER BY id DESC LIMIT ' . $limit
+            'SELECT * FROM macro_report ORDER BY id DESC LIMIT ' . $limit,
         );
 
         if ($rows === []) {
@@ -154,7 +154,7 @@ class MacroGapDumpCommand extends Command
             \count($rows),
             ($last - $first) + (1.0 / FinancialConstants::QUARTERS_PER_YEAR),
             sprintf('year %.4f to %.4f', $first, $last),
-            $path
+            $path,
         ));
 
         // A run recorded before the decomposition column existed, or by a ticker with the probe off, is
@@ -164,14 +164,14 @@ class MacroGapDumpCommand extends Command
             $io->note(sprintf(
                 '%d of %d quarters carry no gap decomposition.',
                 \count($rows) - $decomposed,
-                \count($rows)
+                \count($rows),
             ));
         }
         if ($diagnosed < \count($rows)) {
             $io->note(sprintf(
                 '%d of %d quarters carry no inflation, policy or shock diagnostics.',
                 \count($rows) - $diagnosed,
-                \count($rows)
+                \count($rows),
             ));
         }
 
@@ -181,9 +181,9 @@ class MacroGapDumpCommand extends Command
             $io->warning(array_merge(
                 ['The dump spans ' . \count($segments) . ' constant sets; split on config_fingerprint before measuring:'],
                 array_map(
-                    static fn (array $segment): string => sprintf('%s  quarters %d-%d', $segment['fingerprint'] ?? 'unrecorded', $segment['from'], $segment['to']),
-                    $segments
-                )
+                    static fn(array $segment): string => sprintf('%s  quarters %d-%d', $segment['fingerprint'] ?? 'unrecorded', $segment['from'], $segment['to']),
+                    $segments,
+                ),
             ));
         }
 

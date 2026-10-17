@@ -39,7 +39,7 @@ class DividendIncomeCalculatorTest extends TestCase
             ->method('fetchAllAssociative')
             ->with(
                 $this->stringContains('SUM(amount)'),
-                ['user_id' => 7]
+                ['user_id' => 7],
             )
             ->willReturn([
                 ['ticker' => 'AERO', 'total' => '412.50'],
@@ -84,9 +84,9 @@ class DividendIncomeCalculatorTest extends TestCase
             ->with(
                 $this->logicalAnd(
                     $this->stringContains('ORDER BY paid_at DESC'),
-                    $this->stringContains('LIMIT 25')
+                    $this->stringContains('LIMIT 25'),
                 ),
-                ['user_id' => 7]
+                ['user_id' => 7],
             )
             ->willReturn([
                 [

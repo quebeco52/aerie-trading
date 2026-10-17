@@ -6,16 +6,16 @@ namespace App\Controller;
 
 use App\Data\District\DistrictMap;
 use App\Entity\Stock;
+use App\Repository\StockRepository;
 use App\Service\District\DistrictEventFeed;
 use App\Service\District\DistrictHoldingsFeed;
 use App\Service\District\DistrictMapBuilder;
-use App\Service\Market\Bond\CreditRatingAgency;
-use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\District\DistrictRevenueFeed;
 use App\Service\District\DistrictRoster;
 use App\Service\District\DistrictStressEvaluator;
-use App\Repository\StockRepository;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Market\Bond\CreditRatingAgency;
+use App\Service\Market\Chart\PriceChangeFeed;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -64,7 +64,7 @@ class DistrictController extends AbstractController
 
         // Only the tenants that actually took frontage need their change/events/revenue mix fetched.
         $rosterTickers = array_column($frontage['slots'], 'ticker');
-        $onStreet = array_filter($stocks, static fn (Stock $s) => in_array($s->getTicker(), $rosterTickers, true));
+        $onStreet = array_filter($stocks, static fn(Stock $s) => in_array($s->getTicker(), $rosterTickers, true));
 
         $changeByTicker = $priceChangeFeed->changeByTicker($onStreet);
 

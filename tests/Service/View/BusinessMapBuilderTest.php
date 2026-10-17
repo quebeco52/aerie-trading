@@ -154,20 +154,20 @@ final class BusinessMapBuilderTest extends TestCase
     public function testTheQuartersEventShowsOnce(): void
     {
         $report = $this->lenderReport();
-        $report->setStreamDetails(array_map(static fn (array $detail): array => $detail + ['event' => 'Reserve Release'], $report->getStreamDetails() ?? []));
+        $report->setStreamDetails(array_map(static fn(array $detail): array => $detail + ['event' => 'Reserve Release'], $report->getStreamDetails() ?? []));
         $map = $this->builder->fromReports($this->stock('Banks - Diversified'), $report, null);
         $this->assertNotNull($map);
 
-        $tagged = array_filter([...$map['inside'], ...$map['produced']], static fn (array $card): bool => in_array('Reserve release', array_column($card['chips'] ?? [], 'text'), true));
+        $tagged = array_filter([...$map['inside'], ...$map['produced']], static fn(array $card): bool => in_array('Reserve release', array_column($card['chips'] ?? [], 'text'), true));
         $this->assertSame(['reserve'], array_column($tagged, 'id'));
         $this->assertArrayNotHasKey('event', $map);
 
         $factory = $this->report(1100.0, '0.2190', null);
-        $factory->setStreamDetails(array_map(static fn (array $detail): array => $detail + ['event' => 'Product Recall'], $factory->getStreamDetails() ?? []));
+        $factory->setStreamDetails(array_map(static fn(array $detail): array => $detail + ['event' => 'Product Recall'], $factory->getStreamDetails() ?? []));
         $map = $this->builder->fromReports($this->stock('Specialty Industrial Machinery'), $factory, null);
         $this->assertNotNull($map);
         $this->assertSame('Product recall', $map['event']['text']);
-        $this->assertNotContains('Product recall', array_merge(...array_map(static fn (array $card): array => array_column($card['chips'] ?? [], 'text'), $map['inside'])));
+        $this->assertNotContains('Product recall', array_merge(...array_map(static fn(array $card): array => array_column($card['chips'] ?? [], 'text'), $map['inside'])));
     }
 
     /** Interest earned on cash gets its own card, so the shares add up to the revenue the hand-off names. */
@@ -181,7 +181,7 @@ final class BusinessMapBuilderTest extends TestCase
         $other = $this->card($map['produced'], 'other_interest');
         $this->assertSame(25.0, $other['value']);
         $this->assertSame(125.0, $map['handoff']['revenue']);
-        $shares = array_sum(array_map(static fn (array $card): float => $card['share'] ?? 0.0, $map['produced']));
+        $shares = array_sum(array_map(static fn(array $card): float => $card['share'] ?? 0.0, $map['produced']));
         $this->assertEqualsWithDelta(1.0, $shares, 1e-12);
         $this->assertEqualsWithDelta(0.56, $this->card($map['produced'], 'rev:net_interest_income')['share'], 1e-12);
     }
@@ -275,7 +275,7 @@ final class BusinessMapBuilderTest extends TestCase
     public function testEveryLineJoinsTwoCards(): void
     {
         $map = $this->map();
-        $ids = array_column(array_filter([...$map['outside'], ...$map['inside'], ...$map['produced']], static fn (array $c): bool => isset($c['id'])), 'id');
+        $ids = array_column(array_filter([...$map['outside'], ...$map['inside'], ...$map['produced']], static fn(array $c): bool => isset($c['id'])), 'id');
 
         foreach ($map['edges'] as [$from, $to]) {
             $this->assertContains($from, $ids);

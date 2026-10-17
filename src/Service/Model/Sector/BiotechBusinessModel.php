@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Model\ModelParam;
-use App\Service\Model\ModelParameters;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Biotechnology and Specialty Drug Manufacturers.
@@ -281,7 +281,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         if (!isset($momentum[self::STATE_LATE_STAGE_ASSETS])) {
             return null;
         }
-        $state = static fn (string $key, float $default): float => isset($momentum[$key]) ? (float) $momentum[$key] : $default;
+        $state = static fn(string $key, float $default): float => isset($momentum[$key]) ? (float) $momentum[$key] : $default;
         $params = $this->resolveModelParameters($stock, [
             ModelParam::BiologicRevenueShare->value => self::DEFAULT_BIOLOGIC_REVENUE_SHARE,
         ]);
@@ -308,7 +308,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             'franchiseIndex' => $state(self::STATE_FRANCHISE_INDEX, 1.0),
             'rndReplacement' => $state(self::STATE_RND_REPLACEMENT_RATIO, 1.0),
             'offPatentShare' => $marketed > 0.0 ? $offPatent / $marketed : 0.0,
-            'cohorts' => array_map(static fn (array $cohort): array => [
+            'cohorts' => array_map(static fn(array $cohort): array => [
                 'share' => $marketed > 0.0 ? $cohort['level'] / $marketed : 0.0,
                 'adoption' => $cohort['adoption'],
                 'exclusivityQuarters' => $cohort['exclusivityQuarters'],
@@ -689,7 +689,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $knownShift = $streams->getPersistedState(self::STATE_KNOWN_COMMERCIAL_SHIFT, 0.0);
         $baseRevenue = $expectedRevenue / (max(0.1, 1.0 + $knownShift) * $this->getStructuralRevenueMultiplier($stock));
 
-        $reimbursementBaseline = \App\Service\Macro\MacroEngine::TARGET_INFLATION - \App\Service\Macro\MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
+        $reimbursementBaseline = MacroEngine::TARGET_INFLATION - MacroEngine::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
         $reimbursementShift    = $macroState->reimbursementRateGrowth - $reimbursementBaseline;
         $establishedRevenue    = max(0.0, $baseRevenue * $establishedWeight * $measured['marketed'] * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR)) + $reimbursementShift));
         $pipelineRevenue       = max(0.0, $baseRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));
@@ -722,7 +722,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $rndRatio = $streams->getPersistedState(self::STATE_RND_REPLACEMENT_RATIO, 1.0);
         $refillMultiplier = min(
             self::MAX_PIPELINE_REFILL_MULTIPLIER,
-            max(self::MIN_PIPELINE_REFILL_MULTIPLIER, pow(max(0.01, $rndRatio), self::PIPELINE_REFILL_RND_ELASTICITY))
+            max(self::MIN_PIPELINE_REFILL_MULTIPLIER, pow(max(0.01, $rndRatio), self::PIPELINE_REFILL_RND_ELASTICITY)),
         );
         $assets = max(0.0, $assets - $readouts) + ($targetAssets * $this->readoutHazardPerQuarter() * $refillMultiplier);
 
@@ -793,7 +793,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $streams->registerState(self::STATE_STRUCTURAL_MULTIPLIER, $structuralMultiplier);
         $streams->registerState(
             self::STATE_KNOWN_COMMERCIAL_SHIFT,
-            $establishedWeight * ($next['marketed'] - $next['launched']) / $structuralMultiplier
+            $establishedWeight * ($next['marketed'] - $next['launched']) / $structuralMultiplier,
         );
 
         // What was expected of each stream, the known book included: only the draw is a surprise.
@@ -871,7 +871,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     {
         return 0.0;
     }
-
 
     /**
      * Live share of revenue under patent or regulatory exclusivity, tracked by the physics loop and

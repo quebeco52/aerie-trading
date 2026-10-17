@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
-use App\Entity\Stock;
 use App\Data\Company\Sectors;
+use App\Entity\Stock;
 
 class CapExEngine
 {
-
     public function allocateGrowthCapEx(Stock $stock, float $amount): void
     {
         $currentCip = (float) $stock->getCipBalance();

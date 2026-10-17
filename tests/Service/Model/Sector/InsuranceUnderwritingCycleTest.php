@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
+use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -67,7 +67,7 @@ final class InsuranceUnderwritingCycleTest extends TestCase
         $this->assertGreaterThan(
             $soft['pricing_power_multiplier'],
             $hard['pricing_power_multiplier'],
-            'Withdrawn capacity has to show up as higher premium rates.'
+            'Withdrawn capacity has to show up as higher premium rates.',
         );
     }
 
@@ -79,7 +79,7 @@ final class InsuranceUnderwritingCycleTest extends TestCase
     {
         $model = new InsuranceBusinessModel();
         $neutral = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
-        $rate = fn (float $policyRate) => $model->getMacroPhysics($this->makeStock(), MacroStateDTO::fromArray([
+        $rate = fn(float $policyRate) => $model->getMacroPhysics($this->makeStock(), MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
             'policy_rate'   => $policyRate,
             'gdp_growth'    => 0.02,
@@ -143,7 +143,7 @@ final class InsuranceUnderwritingCycleTest extends TestCase
             4.0,
             array_sum(MacroEngine::CATASTROPHE_SEASONALITY),
             1e-9,
-            'The season redistributes losses across the year, it does not add any.'
+            'The season redistributes losses across the year, it does not add any.',
         );
         $this->assertCount(4, MacroEngine::CATASTROPHE_SEASONALITY);
     }
@@ -175,7 +175,7 @@ final class InsuranceUnderwritingCycleTest extends TestCase
             $this->assertSame(
                 $expected,
                 (new MacroStateDTO(totalTime: $totalTime))->calendarQuarter(),
-                sprintf('t=%.2f years should be quarter index %d', $totalTime, $expected)
+                sprintf('t=%.2f years should be quarter index %d', $totalTime, $expected),
             );
         }
     }

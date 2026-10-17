@@ -48,7 +48,7 @@ final class OptionCancelledUnderlyingTest extends TestCase
                 ['id' => 1, 'ticker' => 'OLD-P40', 'option_type' => OptionContract::TYPE_PUT, 'strike' => '40.00000000'],
                 ['id' => 2, 'ticker' => 'OLD-C50', 'option_type' => OptionContract::TYPE_CALL, 'strike' => '50.00000000'],
             ],
-            $positions
+            $positions,
         );
 
         $this->assertSame(2, $engine->settleCancelledUnderlying(new Stock()));
@@ -86,7 +86,7 @@ final class OptionCancelledUnderlyingTest extends TestCase
                 $this->sent[] = [$sql, $params];
 
                 return 1;
-            }
+            },
         );
 
         $query = $this->createStub(Query::class);

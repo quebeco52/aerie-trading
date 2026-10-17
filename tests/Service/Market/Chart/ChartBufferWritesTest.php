@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Chart;
 
-use App\Service\Market\Ticker\TickCadence;
 use App\Service\Market\Chart\ChartRange;
+use App\Service\Market\Ticker\TickCadence;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -37,7 +37,7 @@ final class ChartBufferWritesTest extends TestCase
             $this->assertSame(
                 TickCadence::isBondMarkTick($tick, self::TICKS_PER_YEAR),
                 $bondWritten,
-                "Tick {$tick} buffers bonds off their mark, or misses one."
+                "Tick {$tick} buffers bonds off their mark, or misses one.",
             );
             $written += $bondWritten ? 1 : 0;
         }

@@ -205,7 +205,7 @@ class SovereignReservePageBuilder
             ];
         }
 
-        usort($rows, static fn (array $a, array $b): int => $b['floatCap'] <=> $a['floatCap']);
+        usort($rows, static fn(array $a, array $b): int => $b['floatCap'] <=> $a['floatCap']);
 
         $holdings = [];
         foreach ($rows as $index => $row) {

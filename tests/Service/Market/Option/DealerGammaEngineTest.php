@@ -8,8 +8,8 @@ use App\DTO\OptionQuoteDTO;
 use App\Entity\OptionContract;
 use App\Service\Market\Option\DealerGammaEngine;
 use App\Service\Market\Option\InMemoryDealerGammaStore;
-use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Option\OptionDemandEngine;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
@@ -57,9 +57,18 @@ class DealerGammaEngineTest extends TestCase
     private function quote(float $gamma, float $delta = 0.5): OptionQuoteDTO
     {
         return new OptionQuoteDTO(
-            mark: 5.0, bid: 4.9, ask: 5.1, impliedVolatility: 0.30,
-            delta: $delta, gamma: $gamma, vega: 20.0, theta: -8.0, rho: 15.0,
-            timeToExpiry: 0.25, riskFreeRate: 0.04, dividendYield: 0.0,
+            mark: 5.0,
+            bid: 4.9,
+            ask: 5.1,
+            impliedVolatility: 0.30,
+            delta: $delta,
+            gamma: $gamma,
+            vega: 20.0,
+            theta: -8.0,
+            rho: 15.0,
+            timeToExpiry: 0.25,
+            riskFreeRate: 0.04,
+            dividendYield: 0.0,
         );
     }
 
@@ -137,7 +146,7 @@ class DealerGammaEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $gamma * 2.0 * DealerGammaEngine::DEALER_HEDGE_RATIO,
             $this->engine->hedgeFlow($stock, self::DAY),
-            1e-6
+            1e-6,
         );
     }
 
@@ -245,7 +254,7 @@ class DealerGammaEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             500 * FinancialConstants::OPTION_CONTRACT_MULTIPLIER * 0.5 * DealerGammaEngine::DEALER_HEDGE_RATIO,
             $this->engine->hedgeFlow($stock, self::DAY),
-            1e-6
+            1e-6,
         );
     }
 

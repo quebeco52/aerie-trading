@@ -104,13 +104,25 @@ class GovernmentPolicyTest extends TestCase
     {
         $state = new MacroState();
         $rules = new GovernmentPolicyDTO(
-            publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP, corporateTaxPolicyShift: 0.0, importTariffRate: 0.0,
-            laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE, foreignBuyerTaxRate: 0.0, mergerReviewLeniency: 0.0,
-            greenBeltStringency: 0.0, carbonPrice: 0.0, extractionStringency: 0.0, stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
-            bankLevyRate: 0.0, reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING, consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
-            reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE, utilityRateCaseGrantShare: UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
-            dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE, electionPulse: 0.0,
-            initialMarginRequirement: 0.7, earningsManagementScale: 0.6,
+            publicSpendingShare: MacroEngine::PUBLIC_PURCHASES_TO_GDP,
+            corporateTaxPolicyShift: 0.0,
+            importTariffRate: 0.0,
+            laborForceGrowthRate: MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE,
+            foreignBuyerTaxRate: 0.0,
+            mergerReviewLeniency: 0.0,
+            greenBeltStringency: 0.0,
+            carbonPrice: 0.0,
+            extractionStringency: 0.0,
+            stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
+            bankLevyRate: 0.0,
+            reserveDrawShare: MacroEngine::RESERVE_DRAW_CEILING,
+            consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
+            reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
+            utilityRateCaseGrantShare: UtilityBusinessModel::APPOINTED_COMMISSION_GRANTED_SHARE,
+            dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
+            electionPulse: 0.0,
+            initialMarginRequirement: 0.7,
+            earningsManagementScale: 0.6,
         );
         $this->enactPolicyDto($state, $rules);
         $this->assertSame(0.7, $state->initialMarginRequirement);

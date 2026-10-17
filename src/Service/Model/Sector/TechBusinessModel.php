@@ -5,21 +5,20 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
-use App\Service\Macro\MacroEngine;
-use App\Service\Event\ShockEvent;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Technology & Software companies.
- * 
+ *
  * Financial Physics:
  * - Asset-light, highly scalable revenues. Marginal cost of a new user is near zero.
  * - Mostly immune to physical supply chain inflation, but exposed to wage inflation.
@@ -73,9 +72,18 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.05;
-        public function getReversionSpeed(): float { return 0.1; }
-    public function getMoatSpread(): float { return 0.025; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.5; }
+    public function getReversionSpeed(): float
+    {
+        return 0.1;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.025;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.5;
+    }
     // --- Secular Demand ---
     /** Business and household spending on software as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment and Table 2.4.5). */
     public const SECULAR_SHARE_1997 = 0.0118;
@@ -126,7 +134,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         return FirmEconomics::blendWorkingCapitalShares(
             [$params[ModelParam::SubscriptionRevenueWeight], $params[ModelParam::AdvertisingRevenueWeight], $params[ModelParam::CloudInfrastructureWeight]],
-            [self::SUBSCRIPTION_WORKING_CAPITAL, self::ADVERTISING_WORKING_CAPITAL, self::CLOUD_WORKING_CAPITAL]
+            [self::SUBSCRIPTION_WORKING_CAPITAL, self::ADVERTISING_WORKING_CAPITAL, self::CLOUD_WORKING_CAPITAL],
         );
     }
 
@@ -218,7 +226,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $cycleShares = MacroTransmission::allocateDemandShift(
             $activeWeights,
             ['subscription' => self::SUBSCRIPTION_CYCLE_LOADING, 'advertising' => $adCycleLoading, 'cloud_infrastructure' => self::CLOUD_CYCLE_LOADING],
-            $this->resolveCycleDemandShift($stock, $macroState)
+            $this->resolveCycleDemandShift($stock, $macroState),
         );
 
         // Fat Tail Risk: Data Breaches, Anti-Trust, and Viral Breakthroughs
@@ -244,8 +252,12 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // Subscription ARR has lower baseline volatility (0.6x scalar), whereas Ads take the full swing plus cyclicality
         // Subscriptions are BOOKED as annual contracts and recognized ratably from deferred revenue, so an
         // ARR shock reaches the income statement over the contract term rather than in one quarter.
-        $subscriptionBook = $streams->recognizeBacklog('subscription', $expectedRevenue * $subWeight,
-            max(0.0, 1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.6)) + $cycleShares['subscription']), self::SUBSCRIPTION_RECOGNITION_RATE);
+        $subscriptionBook = $streams->recognizeBacklog(
+            'subscription',
+            $expectedRevenue * $subWeight,
+            max(0.0, 1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.6)) + $cycleShares['subscription']),
+            self::SUBSCRIPTION_RECOGNITION_RATE,
+        );
         $subscriptionRevenue = $subscriptionBook['revenue'];
 
         $viralMultiplier = ($eventType === ShockEvent::VIRAL_GROWTH) ? self::VIRAL_GROWTH_REV_MULT : 1.0;
@@ -297,7 +309,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-                    kpis: ['bookings_to_revenue' => $subscriptionBook['book_to_bill'], 'deferred_revenue_quarters' => $subscriptionBook['backlog_quarters']],
+            kpis: ['bookings_to_revenue' => $subscriptionBook['book_to_bill'], 'deferred_revenue_quarters' => $subscriptionBook['backlog_quarters']],
             specialCharge: $specialCharge,
         );
     }

@@ -61,7 +61,7 @@ final class DistrictRenderTest extends KernelTestCase
         // The roster is taken while every house is solvent; one then fails, and keeps its plot as a shell until the
         // next reconstitution, which is the only way a defunct house stands on the street.
         $roster = $composer->rosterOrder($stocks);
-        $failed = $stocks[array_search($roster[7], array_map(static fn (Stock $s) => $s->getTicker(), $stocks), true)];
+        $failed = $stocks[array_search($roster[7], array_map(static fn(Stock $s) => $s->getTicker(), $stocks), true)];
         $failed->setIsBankrupt(true);
         $failed->setPrice('0');
         $failed->setCreditRating('D');
@@ -126,7 +126,7 @@ final class DistrictRenderTest extends KernelTestCase
             'revenueMix' => [],
             'summary' => [
                 'tenantCount' => count($plots),
-                'totalMarketCap' => array_sum(array_map(static fn ($p) => $p->marketCap, $plots)),
+                'totalMarketCap' => array_sum(array_map(static fn($p) => $p->marketCap, $plots)),
                 'changePercent' => 0.012,
                 'biggestMover' => null,
                 'stressedInstitutions' => count(array_filter($stress)),

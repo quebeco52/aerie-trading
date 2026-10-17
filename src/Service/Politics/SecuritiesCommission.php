@@ -66,7 +66,7 @@ final class SecuritiesCommission
             $term,
             [CouncilAppointments::AXIS_MARKETS => CouncilAppointments::median($state->councilMarketsStances)],
             CouncilAppointments::reservedNames($state),
-            $math
+            $math,
         );
         if ($term < 0.0) {
             $chosen['name'] = AerieCouncil::OPENING_SECURITIES_HEAD;

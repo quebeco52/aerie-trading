@@ -6,18 +6,16 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
 
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Central Counterparty Clearing Houses (CCP).
- * 
+ *
  * Financial Physics:
  * - Revenue scales off transaction volume (benefiting from high VIX / Market Panics).
  * - Holds segregated Initial Margin deposits from members, earning net custody spreads.
@@ -35,10 +33,22 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A matching engine is capital, not payroll, but risk, compliance and member-services staff carry the rest of the overhead. */
     public const FIXED_COST_LABOR_SHARE = 0.55;
 
-        public function getMinIcr(): float { return 1.05; }
-    public function getBankruptEquityThreshold(): float { return 0.5; }
-    public function getDistressEquityThreshold(): float { return 1.25; }
-    public function getWarningEquityThreshold(): float { return 2.5; }
+    public function getMinIcr(): float
+    {
+        return 1.05;
+    }
+    public function getBankruptEquityThreshold(): float
+    {
+        return 0.5;
+    }
+    public function getDistressEquityThreshold(): float
+    {
+        return 1.25;
+    }
+    public function getWarningEquityThreshold(): float
+    {
+        return 2.5;
+    }
 
     /**
      * Member initial and variation margin. The clearinghouse holds it, invests it and keeps the spread,
@@ -54,13 +64,34 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
      * No discretionary corporate borrowing: a CCP funds its general business risk with liquid net assets
      * funded by equity (CPMI-IOSCO PFMI Principle 15). Debt it already carries still refinances.
      */
-    public function getWholesaleLeverageLimit(): float { return 0.0; }
-    public function getDividendCrisisIcr(): float { return 1.05; }
-    public function getBuybackMinIcr(): float { return 1.15; }
-    public function getReversionSpeed(): float { return 0.1; }
-    public function getMoatSpread(): float { return 0.03; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.0; }
-    public function getCapExCompletionRate(Stock $stock): float { return 1.0; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 0.0;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 1.05;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 1.15;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.1;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.03;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.0;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 1.0;
+    }
 
     // --- Fee Revenue Floor ---
     /** Minimum structural EBIT floor as a fraction of equity. Prevents degenerate zero-revenue states. */
@@ -164,7 +195,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // borrowed dollar raise the revenue that paid for it.
         $targetTotalEbit = max(
             $tangibleEquity * self::MIN_EQUITY_EBIT_YIELD,
-            ($tangibleEquity * $baselineRoe) / (1.0 - $taxRate)
+            ($tangibleEquity * $baselineRoe) / (1.0 - $taxRate),
         );
 
         $targetTotalRevenue = $targetTotalEbit / $stableMargin;
@@ -172,7 +203,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
         return [
             'invested_capital' => $tangibleEquity,
-            'baseline_roic'    => ($grossYield * $stableMargin) * (1.0 - $taxRate)
+            'baseline_roic'    => ($grossYield * $stableMargin) * (1.0 - $taxRate),
         ];
     }
 
@@ -323,7 +354,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $ownCash = max(0.0, $cash - $marginPool);
 
         $cashYield = $this->calculateCashYield($macroState);
-        
+
         return $ownCash * $cashYield;
     }
 

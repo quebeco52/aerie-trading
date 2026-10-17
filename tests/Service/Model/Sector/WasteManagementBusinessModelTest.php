@@ -36,7 +36,7 @@ class WasteManagementBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.08,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('residential_collection', $result->streamRevenue);
@@ -47,7 +47,7 @@ class WasteManagementBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $result->actualRevenue,
             $result->streamRevenue['residential_collection'] + $result->streamRevenue['commercial_disposal'] + $result->streamRevenue['recycling_and_rng'],
-            1.0
+            1.0,
         );
     }
 
@@ -59,13 +59,13 @@ class WasteManagementBusinessModelTest extends TestCase
 
         $normalMacro = new MacroStateDTO(
             energyPriceIndexEma: 100.0,
-            industrialMetalsIndexEma: 100.0
+            industrialMetalsIndexEma: 100.0,
         );
 
         $spikeMacro = new MacroStateDTO(
             energyPriceIndexEma: 150.0,
             energyCostPushLag: 0.0050,
-            industrialMetalsIndexEma: 180.0
+            industrialMetalsIndexEma: 180.0,
         );
 
         $normalResult = $this->model->computeActualFinancials(
@@ -75,7 +75,7 @@ class WasteManagementBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $normalMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $spikeResult = $this->model->computeActualFinancials(
@@ -85,13 +85,13 @@ class WasteManagementBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $spikeMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertGreaterThan(
             $normalResult->streamRevenue['recycling_and_rng'],
             $spikeResult->streamRevenue['recycling_and_rng'],
-            'Industrial metals and energy price surges must expand scrap and commodity recycling revenue.'
+            'Industrial metals and energy price surges must expand scrap and commodity recycling revenue.',
         );
     }
 
@@ -111,7 +111,7 @@ class WasteManagementBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $calmResult->clampedMargin,
             $shockResult->clampedMargin,
-            'Energy price spikes cause diesel fuel surcharge lag, expanding variable cost ratio.'
+            'Energy price spikes cause diesel fuel surcharge lag, expanding variable cost ratio.',
         );
     }
 

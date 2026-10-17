@@ -81,7 +81,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             MonetaryPolicySubsystem::TAYLOR_OUTPUT_GAP_WEIGHT * 0.01,
             $this->subsystem->calculateTargetRate($demand, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE) - $base,
-            1e-12
+            1e-12,
         );
     }
 
@@ -181,7 +181,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
         $this->assertEquals(0.00, $newPolicyRate, 'Evans Rule must lock policy rate at 0.00% when at ZLB with elevated unemployment.');
     }
-
 
     public function testEvansRuleDoesNotFireDuringNormalExpansion(): void
     {
@@ -387,7 +386,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan(
             $curveLow['risk_neutral_10y'],
             $curveHigh['risk_neutral_10y'],
-            'ACM risk-neutral rate must increase when central bank hiking expectations (beta2) increase.'
+            'ACM risk-neutral rate must increase when central bank hiking expectations (beta2) increase.',
         );
     }
 
@@ -627,7 +626,10 @@ class MonetaryPolicySubsystemTest extends TestCase
     public function testBroadMoneyGrowsWithTheLabourForce(): void
     {
         $quiet = new MonetaryPolicySubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         });
         $neutralGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
         $structural = new MacroState();
@@ -646,7 +648,10 @@ class MonetaryPolicySubsystemTest extends TestCase
     public function testMoneyGrowthTrendIsADecadesAverageOfTheGrowth(): void
     {
         $quiet = new MonetaryPolicySubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         });
         $neutralGrowth = MacroEngine::TARGET_INFLATION + MacroEngine::TFP_DRIFT + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
         $state = new MacroState();
@@ -662,7 +667,7 @@ class MonetaryPolicySubsystemTest extends TestCase
             $neutralGrowth + ((MacroEngine::M2_BASE_GROWTH - $neutralGrowth) * exp(-10.0 / MonetaryPolicySubsystem::M2_TREND_YEARS)),
             $state->moneySupplyGrowthTrend,
             1e-12,
-            'Ten years at neutral growth close the trend on it at its decade time constant.'
+            'Ten years at neutral growth close the trend on it at its decade time constant.',
         );
     }
 
@@ -757,7 +762,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertLessThan(
             $curveNeutral['yield_10y'] - $curveNeutral['yield_2y'],
             $curve['yield_10y'] - $curve['yield_2y'],
-            'at the baseline premium the stance flattens the curve'
+            'at the baseline premium the stance flattens the curve',
         );
 
         $lowPremium = clone $state;
@@ -788,7 +793,7 @@ class MonetaryPolicySubsystemTest extends TestCase
             $expectedPremiumChange,
             $curveUnanchored['term_premium_10y'] - $curveAnchored['term_premium_10y'],
             0.00001,
-            'Higher breakevens must move the term premium by the inflation risk premium only; the level shift belongs to the risk-neutral rate.'
+            'Higher breakevens must move the term premium by the inflation risk premium only; the level shift belongs to the risk-neutral rate.',
         );
 
         // The model-consistent endpoint carries the breakeven in full; the Kozicki-Tinsley endpoint does not.
@@ -796,7 +801,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan(
             $curveAnchored['risk_neutral_10y'] + 0.5 * $levelShift,
             $curveUnanchored['risk_neutral_10y'],
-            'The expected-inflation share of the level must show up in the ACM risk-neutral ten-year rate.'
+            'The expected-inflation share of the level must show up in the ACM risk-neutral ten-year rate.',
         );
     }
 
@@ -818,7 +823,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThanOrEqual(
             MonetaryPolicySubsystem::MIN_TERM_PREMIUM_10Y - 0.00001,
             $curve['term_premium_10y'],
-            'The term premium must respect the structural floor.'
+            'The term premium must respect the structural floor.',
         );
 
         $extreme = clone $state;
@@ -832,7 +837,10 @@ class MonetaryPolicySubsystemTest extends TestCase
     public function testTermPremiumShockDecaysAndRegimeRevertsToBaselineWithoutInnovations(): void
     {
         $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         };
         $subsystem = new MonetaryPolicySubsystem($quiet);
 
@@ -851,7 +859,10 @@ class MonetaryPolicySubsystemTest extends TestCase
     public function testTermPremiumStatesAreClampedToTheirStructuralBounds(): void
     {
         $extreme = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 40.0; }
+            public function generateStandardNormal(): float
+            {
+                return 40.0;
+            }
         };
         $subsystem = new MonetaryPolicySubsystem($extreme);
 
@@ -1037,7 +1048,7 @@ class MonetaryPolicySubsystemTest extends TestCase
             -MonetaryPolicySubsystem::TAYLOR_LONG_RATE_OFFSET * 0.010,
             $targetHigh - $targetNeutral,
             0.00001,
-            'Bernanke (2006): a 100bps term premium is met with ~50bps easier policy.'
+            'Bernanke (2006): a 100bps term premium is met with ~50bps easier policy.',
         );
     }
 
@@ -1078,7 +1089,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $supplyShift = FixedIncome::calculatePreferredHabitatTermPremiumShift(
             balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction(0.0, 1.30, $indebted->sovereignDebtAverageMaturity),
             tau: 10.0,
-            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
         );
         $this->assertGreaterThan(0.0, $supplyShift, 'More debt is more duration in private hands.');
         $indebted->termPremium10yEma = MacroEngine::NS_BASE_TERM_PREMIUM + 0.005 + $supplyShift;
@@ -1086,7 +1097,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             $this->subsystem->calculateLongRateGap($sound, MacroEngine::BASE_NATURAL_RATE),
             $this->subsystem->calculateLongRateGap($indebted, MacroEngine::BASE_NATURAL_RATE),
-            1e-12
+            1e-12,
         );
 
         $debtOnly = clone $sound;
@@ -1094,7 +1105,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertSame(
             $this->subsystem->calculateYieldCurve($sound, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE)['curvature2'],
             $this->subsystem->calculateYieldCurve($debtOnly, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE)['curvature2'],
-            'Debt reaches the curve through the level of the premium, not its shape.'
+            'Debt reaches the curve through the level of the premium, not its shape.',
         );
     }
 
@@ -1119,7 +1130,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $shift = FixedIncome::calculatePreferredHabitatTermPremiumShift(
             balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction(0.0, 0.90, $heavy->sovereignDebtAverageMaturity),
             tau: 10.0,
-            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
         );
 
         $this->assertGreaterThan(0.002, $shift, 'Thirty points of debt at the founding maturity is tens of basis points.');
@@ -1146,10 +1157,9 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertLessThan(
             $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE),
             $this->subsystem->calculateTargetRate($repriced, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE),
-            'A market pricing neutral above the model endpoint gets easier policy, which then teaches it a lower endpoint.'
+            'A market pricing neutral above the model endpoint gets easier policy, which then teaches it a lower endpoint.',
         );
     }
-
 
     public function testRecessionProbabilityRisesWhenSteepnessIsPremiumDrivenRatherThanExpected(): void
     {
@@ -1172,7 +1182,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThan(
             $expectationsDriven->recessionProbability,
             $premiumDriven->recessionProbability,
-            'A curve held up only by term premium hides an inverted expected policy path and must read more recessionary.'
+            'A curve held up only by term premium hides an inverted expected policy path and must read more recessionary.',
         );
     }
 
@@ -1217,10 +1227,10 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $this->subsystem->applyYieldCurve($state, $this->curveWith($state, 0.041), $dt);
 
-        $expected = sqrt(\App\Service\Math\TimeSeries::ewmaAnnualizedVariance(0.0087 ** 2, 0.001, $dt, MonetaryPolicySubsystem::TREASURY_VOLATILITY_WINDOW_YEARS));
+        $expected = sqrt(TimeSeries::ewmaAnnualizedVariance(0.0087 ** 2, 0.001, $dt, MonetaryPolicySubsystem::TREASURY_VOLATILITY_WINDOW_YEARS));
         $this->assertEqualsWithDelta($expected, $state->treasuryVolatility, 1e-15);
         $this->assertGreaterThan(0.0087, $state->treasuryVolatility, 'A 10bp move in a day is a volatile rates market.');
-        $this->assertEqualsWithDelta(\App\Service\Math\TimeSeries::ewmaLevel(0.0087, $expected, $dt, CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS), $state->treasuryVolatilityTrend, 1e-15);
+        $this->assertEqualsWithDelta(TimeSeries::ewmaLevel(0.0087, $expected, $dt, CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS), $state->treasuryVolatilityTrend, 1e-15);
 
         $this->subsystem->applyYieldCurve($state, $this->curveWith($state, 0.041), $dt);
         $this->assertLessThan($expected, $state->treasuryVolatility, 'A curve that holds still calms the market.');
@@ -1314,7 +1324,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $curveHawkish = $this->subsystem->calculateYieldCurve($hawkish, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
         $lambda = MacroEngine::SVENSSON_LAMBDA_1;
-        $loading = static fn (float $tau): float => ((1.0 - exp(-$lambda * $tau)) / ($lambda * $tau)) - exp(-$lambda * $tau);
+        $loading = static fn(float $tau): float => ((1.0 - exp(-$lambda * $tau)) / ($lambda * $tau)) - exp(-$lambda * $tau);
 
         $move2y = $curveHawkish['yield_2y'] - $curveCalm['yield_2y'];
         $move10y = $curveHawkish['yield_10y'] - $curveCalm['yield_10y'];
@@ -1356,7 +1366,10 @@ class MonetaryPolicySubsystemTest extends TestCase
     public function testExpectedPathShockDecaysAtItsOwnRateAndIsCapped(): void
     {
         $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         };
         $state = new MacroState();
         $state->expectedPathShock = 0.03;
@@ -1364,13 +1377,15 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.03 * exp(-MonetaryPolicySubsystem::EXPECTED_PATH_SHOCK_KAPPA), $state->expectedPathShock, 0.00001, 'Without news the repricing fades at its OU rate, a half-life of months rather than years.');
 
         $extreme = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 40.0; }
+            public function generateStandardNormal(): float
+            {
+                return 40.0;
+            }
         };
         $state = new MacroState();
         (new MonetaryPolicySubsystem($extreme))->updateTermPremiumDynamics($state, 1.0);
         $this->assertEqualsWithDelta(MonetaryPolicySubsystem::EXPECTED_PATH_SHOCK_CAP, $state->expectedPathShock, 0.00001, 'A repricing is capped: it is never a regime change.');
     }
-
 
     /**
      * Pensions and insurers are the marginal buyer past ten years. Below the neutral long-end level they
@@ -1397,14 +1412,13 @@ class MonetaryPolicySubsystemTest extends TestCase
         $belowHurdle = $this->subsystem->calculateYieldCurve($build($hurdle - 0.02), MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
         $aboveHurdle = $this->subsystem->calculateYieldCurve($build($hurdle + 0.02), MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
 
-        $tensThirties = static fn (array $curve): float => $curve['yield_30y'] - $curve['yield_10y'];
+        $tensThirties = static fn(array $curve): float => $curve['yield_30y'] - $curve['yield_10y'];
 
         $this->assertEqualsWithDelta($tensThirties($atHurdle), $tensThirties($belowHurdle), 1e-9, 'Below the hurdle there is no habitat bid to price.');
         $expectedCompression = 0.02 * MonetaryPolicySubsystem::HABITAT_LONG_END_DEMAND_SENSITIVITY * ($scale30y - 1.0);
         $this->assertEqualsWithDelta($expectedCompression, $tensThirties($atHurdle) - $tensThirties($aboveHurdle), 0.0002, 'Two hundred basis points of excess long yield draws in enough duration demand to flatten 10s30s by a quarter of it.');
         $this->assertEqualsWithDelta($atHurdle['yield_10y'], $aboveHurdle['yield_10y'], 1e-9, 'The bid is for the long end only; the ten-year is untouched.');
     }
-
 
     /** Laubach (2009): the fiscal premium is a level the ten-year carries in full and the two-year by its duration share, and it is premium, not expectations. */
     public function testTheSovereignRiskPremiumLiftsTheLongEndAsTermPremiumNotExpectations(): void
@@ -1431,7 +1445,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.01, $curveStressed['base_term_premium'] - $curveSound['base_term_premium'], 1e-9, 'The desk prices off the same premium the curve was fitted with.');
     }
 
-
     // --- Deposits Channel ---
 
     private function settledDepositChannel(float $policyRateEma): MacroState
@@ -1457,7 +1470,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertGreaterThanOrEqual(MonetaryPolicySubsystem::MIN_MMF_SHARE, $floor->moneyMarketFundShare);
     }
 
-
     /**
      * The balance sheet reaches demand through the curve, so the rule does not read it again: a held stock must not
      * pull the target under the rule once the economy has recovered.
@@ -1475,7 +1487,7 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $this->assertSame(
             $this->subsystem->calculateTargetRate($recovered, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE),
-            $this->subsystem->calculateTargetRate($withStock, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE)
+            $this->subsystem->calculateTargetRate($withStock, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE),
         );
     }
 
@@ -1557,7 +1569,7 @@ class MonetaryPolicySubsystemTest extends TestCase
             (MonetaryPolicySubsystem::CURRENCY_TO_GDP * CreditFiscalSubsystem::sovereignEffectiveRate($state))
                 + (MonetaryPolicySubsystem::authorityHoldingsToGdp($state) * ($held - 0.0025)),
             MonetaryPolicySubsystem::authorityNetIncomeToGdp($state),
-            1e-15
+            1e-15,
         );
     }
 }

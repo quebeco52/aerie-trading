@@ -36,7 +36,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('oem_equipment', $result->streamRevenue);
@@ -49,7 +49,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $result->actualRevenue,
             $result->streamRevenue['oem_equipment'] + $result->streamRevenue['aftermarket_mro'],
-            1.0
+            1.0,
         );
     }
 
@@ -60,7 +60,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $stock->setBeta('1.2');
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
+        $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
 
         $baseResult = $run(new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0));
         $strongCurrency = $run(new MacroStateDTO(exchangeRateIndexEma: 120.0, industrialMetalsIndexEma: 100.0));
@@ -89,7 +89,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $overhangResult->streamRevenue['oem_equipment'],
             $scarcityResult->streamRevenue['oem_equipment'],
-            'Industrial capital capacity overhang must dampen OEM equipment demand relative to capital scarcity.'
+            'Industrial capital capacity overhang must dampen OEM equipment demand relative to capital scarcity.',
         );
     }
 
@@ -133,7 +133,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $normalResult->clampedMargin,
             $chokedResult->clampedMargin,
-            'Global supply chain bottlenecks (GSCPI) must increase component procurement costs and variable margin drag.'
+            'Global supply chain bottlenecks (GSCPI) must increase component procurement costs and variable margin drag.',
         );
     }
 }

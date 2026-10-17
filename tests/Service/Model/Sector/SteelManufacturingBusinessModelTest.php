@@ -30,14 +30,14 @@ class SteelManufacturingBusinessModelTest extends TestCase
             outputGapEma: 0.0,
             industrialMetalsIndexEma: 100.0,
             energyPriceIndexEma: 100.0,
-            freightRateIndexEma: 100.0
+            freightRateIndexEma: 100.0,
         );
 
         $metalsSurgeMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             industrialMetalsIndexEma: 150.0, // 50% spike in steel/metals prices
             energyPriceIndexEma: 100.0,
-            freightRateIndexEma: 100.0
+            freightRateIndexEma: 100.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -50,7 +50,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $baseMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $metalsSurgeResult = $this->model->computeActualFinancials(
@@ -60,7 +60,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $metalsSurgeMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertArrayHasKey('contracted_oem_steel', $baseResult->streamRevenue);
@@ -69,7 +69,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
         // Spot HRC revenue surges when industrial metals benchmark rises
         $this->assertGreaterThan(
             $baseResult->streamRevenue['spot_hrc_market'],
-            $metalsSurgeResult->streamRevenue['spot_hrc_market']
+            $metalsSurgeResult->streamRevenue['spot_hrc_market'],
         );
     }
 
@@ -82,7 +82,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $stock->setBeta('1.2');
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
+        $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
 
         $base = $run(new MacroStateDTO(energyPriceIndexEma: 100.0, freightRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0));
         $fuelAndFreight = $run(new MacroStateDTO(energyPriceIndexEma: 150.0, energyCostPushLag: 0.50 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION, freightRateIndexEma: 140.0, industrialMetalsIndexEma: 100.0));
@@ -118,14 +118,14 @@ class SteelManufacturingBusinessModelTest extends TestCase
             outputGapEma: 0.0,
             foreignOutputGapEma: 0.0,
             exchangeRateIndexEma: 100.0,
-            industrialMetalsIndexEma: 100.0
+            industrialMetalsIndexEma: 100.0,
         );
 
         $dumpingMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             foreignOutputGapEma: -0.04, // Foreign recession (-4%)
             exchangeRateIndexEma: 115.0, // Strong currency (+15% FX strength)
-            industrialMetalsIndexEma: 100.0
+            industrialMetalsIndexEma: 100.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -138,7 +138,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $neutralMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $dumpingResult = $this->model->computeActualFinancials(
@@ -148,14 +148,14 @@ class SteelManufacturingBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $dumpingMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Spot HRC revenue drops significantly due to export loss and foreign dumping
         $this->assertLessThan(
             $neutralResult->streamRevenue['spot_hrc_market'],
             $dumpingResult->streamRevenue['spot_hrc_market'],
-            'Foreign recession combined with strong domestic currency must compress spot steel revenue via import dumping.'
+            'Foreign recession combined with strong domestic currency must compress spot steel revenue via import dumping.',
         );
     }
 

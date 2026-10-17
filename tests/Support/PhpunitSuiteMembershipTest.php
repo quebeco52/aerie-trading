@@ -49,7 +49,7 @@ final class PhpunitSuiteMembershipTest extends TestCase
             }
             foreach ($suite->exclude as $exclude) {
                 $prefix = (string) $exclude;
-                $files = array_filter($files, static fn (string $f): bool => $f !== $prefix && !str_starts_with($f, $prefix . '/'));
+                $files = array_filter($files, static fn(string $f): bool => $f !== $prefix && !str_starts_with($f, $prefix . '/'));
             }
             $suites[(string) $suite['name']] = array_values(array_unique($files));
         }

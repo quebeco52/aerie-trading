@@ -189,7 +189,7 @@ class EventPresenter
             }
             $rawSurprise = !empty($matches[3]) ? trim($matches[3]) : null;
             $surpriseVal = $rawSurprise !== null ? (float) preg_replace('/[^\d.]/', '', $rawSurprise) : 0.0;
-            
+
             // Sub-cent difference (< 0.005) is reported as In-Line
             if ($surpriseVal < 0.005) {
                 $surpriseType = 'met';

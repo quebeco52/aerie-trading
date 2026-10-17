@@ -13,7 +13,7 @@ class SectorCoverageProfileTest extends TestCase
     {
         $defaultProfile = new SectorCoverageProfile(
             baseVisibility: 0.60,
-            errorStdDev: 0.05
+            errorStdDev: 0.05,
         );
 
         $this->assertSame(0.60, $defaultProfile->baseVisibility);
@@ -27,7 +27,7 @@ class SectorCoverageProfileTest extends TestCase
             errorStdDev: 0.04,
             minVisibility: 0.05,
             eventBaseVisibility: 0.85,
-            eventMinVisibility: 0.40
+            eventMinVisibility: 0.40,
         );
 
         $this->assertSame(0.10, $eventProfile->baseVisibility);

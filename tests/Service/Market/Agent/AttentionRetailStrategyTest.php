@@ -65,7 +65,7 @@ final class AttentionRetailStrategyTest extends TestCase
         self::assertEqualsWithDelta(
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
             $this->strategy->signal($this->view(), []),
-            1e-9
+            1e-9,
         );
     }
 
@@ -95,7 +95,7 @@ final class AttentionRetailStrategyTest extends TestCase
         self::assertEqualsWithDelta(
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE + AttentionRetailStrategy::AGENT_RETAIL_MAX_ATTENTION_TILT,
             $atSaturation,
-            1e-9
+            1e-9,
         );
     }
 
@@ -122,7 +122,7 @@ final class AttentionRetailStrategyTest extends TestCase
         self::assertEqualsWithDelta(
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE + AttentionRetailStrategy::AGENT_RETAIL_MAX_ATTENTION_TILT,
             $busy,
-            1e-9
+            1e-9,
         );
     }
 
@@ -131,7 +131,7 @@ final class AttentionRetailStrategyTest extends TestCase
         self::assertEqualsWithDelta(
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
             $this->strategy->signal($this->view(abnormalVolume: 0.1), []),
-            1e-9
+            1e-9,
         );
     }
 
@@ -183,12 +183,12 @@ final class AttentionRetailStrategyTest extends TestCase
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
             $this->strategy->signal($this->view(logReturn: 0.5, annualizedVolatility: 0.0), []),
             1e-9,
-            'A name with no volatility measure yet has no scale to call a move extreme against.'
+            'A name with no volatility measure yet has no scale to call a move extreme against.',
         );
         self::assertEqualsWithDelta(
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
             $this->strategy->signal($this->view(logReturn: 0.5, dt: 0.0), []),
-            1e-9
+            1e-9,
         );
     }
 
@@ -241,7 +241,7 @@ final class AttentionRetailStrategyTest extends TestCase
                 self::assertSame(
                     $property->getValue($view),
                     $property->getValue($copy),
-                    "{$wither}() dropped {$name}."
+                    "{$wither}() dropped {$name}.",
                 );
             }
         }

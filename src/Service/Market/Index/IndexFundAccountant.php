@@ -214,7 +214,7 @@ final class IndexFundAccountant
                 'rate' => $perShare,
                 'etf_id' => $fund->getId(),
                 'paid_at' => $paidAtStr,
-            ]
+            ],
         );
 
         // Credited from the rows just written. The unique index on (user_id, ticker, paid_at) both makes
@@ -227,7 +227,7 @@ final class IndexFundAccountant
                     AND d.ticker  = :ticker
                     AND d.paid_at = :paid_at
              SET u.cash_balance = u.cash_balance + d.amount",
-            ['ticker' => $fund->getTicker(), 'paid_at' => $paidAtStr]
+            ['ticker' => $fund->getTicker(), 'paid_at' => $paidAtStr],
         );
     }
 }

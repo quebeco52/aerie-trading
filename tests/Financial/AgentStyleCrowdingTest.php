@@ -50,7 +50,7 @@ class AgentStyleCrowdingTest extends TestCase
             new AgentPopulation(),
             new InMemoryAgentStateStore(),
             new InMemoryOrderFlowStore(),
-            [new FundamentalistStrategy(), new MomentumStrategy()]
+            [new FundamentalistStrategy(), new MomentumStrategy()],
         );
 
         $dt = 1.0 / self::TICKS_PER_YEAR;
@@ -85,7 +85,7 @@ class AgentStyleCrowdingTest extends TestCase
                     financialConditions: 0.0,
                     dt: $dt,
                     riskFreeRate: 0.04,
-                    annualizedVolatility: 0.29
+                    annualizedVolatility: 0.29,
                 ));
 
                 if ($tick >= self::WARMUP_TICKS && $tick % 20 === 0) {
@@ -167,7 +167,7 @@ class AgentStyleCrowdingTest extends TestCase
             $this->assertGreaterThan(
                 $alone + 0.15,
                 $crowded,
-                sprintf('Seed %d: momentum share co-moves at %.2f with the style channel vs %.2f without.', $seed, $crowded, $alone)
+                sprintf('Seed %d: momentum share co-moves at %.2f with the style channel vs %.2f without.', $seed, $crowded, $alone),
             );
         }
     }
@@ -189,7 +189,7 @@ class AgentStyleCrowdingTest extends TestCase
             $this->assertLessThan(
                 $aloneBest,
                 $crowdedBest,
-                sprintf('Seed %d: the best-holding name fell %.3f with the style channel vs %.3f without.', $seed, $crowdedBest, $aloneBest)
+                sprintf('Seed %d: the best-holding name fell %.3f with the style channel vs %.3f without.', $seed, $crowdedBest, $aloneBest),
             );
             $this->assertLessThan(0.0, $crowdedBest, sprintf('Seed %d: with the style channel no name is spared.', $seed));
             $this->assertEqualsWithDelta($aloneMarket, $crowdedMarket, 0.01, sprintf('Seed %d: the channel redistributes, it does not amplify.', $seed));

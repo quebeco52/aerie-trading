@@ -11,10 +11,10 @@ use App\DTO\MacroStateDTO;
 use App\DTO\MaturityRollDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Market\Bond\CreditRatingAgency;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -57,11 +57,11 @@ class SolventFirmSurvivalTest extends TestCase
         $this->assertGreaterThanOrEqual(
             $ranks['BB'],
             $ranks[$stock->getCreditRating()],
-            'a firm with a Safe Altman score and 6x coverage must not be rated near default on volatility alone'
+            'a firm with a Safe Altman score and 6x coverage must not be rated near default on volatility alone',
         );
         $this->assertTrue(
             $engine->rollMaturities($stock, $health, 0.0)->refinanced,
-            'a solvent, investment-grade-ish issuer must keep primary market access'
+            'a solvent, investment-grade-ish issuer must keep primary market access',
         );
     }
 
@@ -92,7 +92,7 @@ class SolventFirmSurvivalTest extends TestCase
         $this->assertLessThanOrEqual(
             2,
             $calm - $shocked,
-            'tripling spot volatility on an unchanged balance sheet must not move the rating more than two notches'
+            'tripling spot volatility on an unchanged balance sheet must not move the rating more than two notches',
         );
     }
 
@@ -161,7 +161,7 @@ class SolventFirmSurvivalTest extends TestCase
             300_000_000.0,
             $roll->principalRepaid,
             1.0,
-            'principal may only be paid out of cash above the operating floor'
+            'principal may only be paid out of cash above the operating floor',
         );
         $this->assertEqualsWithDelta(200_000_000.0, $roll->unfundedShortfall, 1.0);
     }
@@ -201,14 +201,14 @@ class SolventFirmSurvivalTest extends TestCase
         $debtEngineMock->method('issueDebt')->willReturnCallback(
             static function (Stock $target, float $amount, float $rate): void {
                 $target->setWholesaleDebt((string) (((float) $target->getWholesaleDebt()) + $amount));
-            }
+            },
         );
 
         $engine = new TreasuryEngine(
             $this->createStub(CorporateMetrics::class),
             $debtEngineMock,
             $this->createStub(CapExEngine::class),
-            new MathUtility()
+            new MathUtility(),
         );
 
         $ctx = $this->burningContext($stock);
@@ -219,23 +219,23 @@ class SolventFirmSurvivalTest extends TestCase
         $this->assertGreaterThanOrEqual(
             0.0,
             (float) $stock->getCorporateTreasury(),
-            'corporate cash must never be reported as a negative balance'
+            'corporate cash must never be reported as a negative balance',
         );
         $this->assertEqualsWithDelta(
             20_000_000_000.0,
             (float) $stock->getWholesaleDebt(),
             1.0,
-            'a revolver draw is not term debt: the bond ladder must be untouched by it'
+            'a revolver draw is not term debt: the bond ladder must be untouched by it',
         );
         $this->assertGreaterThan(
             0.0,
             (float) $stock->getRevolverDrawn(),
-            'the overdraft must appear on the liability side, not vanish'
+            'the overdraft must appear on the liability side, not vanish',
         );
         $this->assertLessThanOrEqual(
             (float) $stock->getRevolverCommitment(),
             (float) $stock->getRevolverDrawn(),
-            'a draw cannot exceed the committed facility'
+            'a draw cannot exceed the committed facility',
         );
     }
 
@@ -253,14 +253,14 @@ class SolventFirmSurvivalTest extends TestCase
         $debtEngineMock->method('issueDebt')->willReturnCallback(
             static function (Stock $target, float $amount, float $rate): void {
                 $target->setWholesaleDebt((string) (((float) $target->getWholesaleDebt()) + $amount));
-            }
+            },
         );
 
         $engine = new TreasuryEngine(
             $this->createStub(CorporateMetrics::class),
             $debtEngineMock,
             $this->createStub(CapExEngine::class),
-            new MathUtility()
+            new MathUtility(),
         );
 
         // Price zero, so no equity raise can rescue the quarter and reset the flag.
@@ -277,13 +277,13 @@ class SolventFirmSurvivalTest extends TestCase
             50_000_000_000.0,
             (float) $stock->getWholesaleDebt() + (float) $stock->getRevolverDrawn(),
             1.0,
-            'the whole overdraft is funded, within the commitment and beyond it'
+            'the whole overdraft is funded, within the commitment and beyond it',
         );
         $this->assertEqualsWithDelta(
             (float) $stock->getRevolverCommitment(),
             (float) $stock->getRevolverDrawn(),
             1.0,
-            'the committed line is drawn to its limit before uncommitted money is raised'
+            'the committed line is drawn to its limit before uncommitted money is raised',
         );
         $this->assertTrue($ctx->failedEmergencyBorrow, 'a draw past the commitment is a liquidity failure');
     }
@@ -334,7 +334,7 @@ class SolventFirmSurvivalTest extends TestCase
             currentPrice: $currentPrice,
             sharesOutstanding: 1_000_000_000,
             actualTotalNetIncome: -2_000_000_000.0,
-            stockCompensation: 0.0
+            stockCompensation: 0.0,
         );
 
         $ctx->strategy = new StandardCorporateBusinessModel();
@@ -363,7 +363,7 @@ class SolventFirmSurvivalTest extends TestCase
             ebit: -1_000_000_000.0,
             revenue: 40_000_000_000.0,
             depreciation: 500_000_000.0,
-            ebitda: -500_000_000.0
+            ebitda: -500_000_000.0,
         );
 
         return new DebtHealthDTO(
@@ -383,7 +383,7 @@ class SolventFirmSurvivalTest extends TestCase
             isLiquidityCrisis: true,
             isLiquidityWarning: true,
             isUnderLeveraged: false,
-            hasMarketAccess: false
+            hasMarketAccess: false,
         );
     }
 

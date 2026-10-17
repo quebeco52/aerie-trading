@@ -163,7 +163,7 @@ final class CorporateDefaultService
         $termClaims = max(0.0, $plan->claims - $plan->revolverClaim);
         $unsecured = max(
             $listed[Bond::SENIORITY_SENIOR_UNSECURED],
-            $termClaims - $listed[Bond::SENIORITY_SENIOR_SECURED] - $listed[Bond::SENIORITY_SUBORDINATED]
+            $termClaims - $listed[Bond::SENIORITY_SENIOR_SECURED] - $listed[Bond::SENIORITY_SUBORDINATED],
         );
 
         [, $secured, $senior, $subordinated] = CreditRisk::absolutePriorityRecoveries($plan->creditorValue(), [

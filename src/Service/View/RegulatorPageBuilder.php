@@ -65,7 +65,7 @@ final class RegulatorPageBuilder
              FROM corporate_report r
              JOIN stocks s ON s.id = r.stock_id
              WHERE r.id IN (SELECT MAX(id) FROM corporate_report WHERE cet1_ratio IS NOT NULL GROUP BY stock_id)
-             ORDER BY r.cet1_ratio ASC'
+             ORDER BY r.cet1_ratio ASC',
         );
 
         $banks = [];

@@ -2,7 +2,6 @@
 
 namespace App\Command;
 
-use App\Service\Market\Ticker\NestedTransaction;
 use App\DTO\MacroStateDTO;
 use App\Entity\Bond;
 use App\Entity\Etf;
@@ -12,7 +11,6 @@ use App\EventListener\FlushProfiler;
 use App\Service\Corporate\FailureSweep;
 use App\Service\District\DistrictRoster;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\News\SystemicEventReporter;
 use App\Service\Macro\MacroConfigFingerprint;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
@@ -27,21 +25,23 @@ use App\Service\Market\Option\OptionDeskService;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Market\Ticker\BondDeskPhase;
 use App\Service\Market\Ticker\ChartBufferWriter;
+use App\Service\Market\Ticker\EtfTickColumns;
 use App\Service\Market\Ticker\HistoryPruner;
 use App\Service\Market\Ticker\IndexFundPhase;
+use App\Service\Market\Ticker\NestedTransaction;
 use App\Service\Market\Ticker\RestingOrderWatch;
 use App\Service\Market\Ticker\SimulationClockService;
 use App\Service\Market\Ticker\StockBarBook;
-use App\Service\Market\Ticker\EtfTickColumns;
 use App\Service\Market\Ticker\StockTickColumns;
 use App\Service\Market\Ticker\TickCadence;
 use App\Service\Market\Ticker\TickProfiler;
 use App\Service\Market\Trading\ForcedLiquidationService;
+use App\Service\News\SystemicEventReporter;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
 use App\Service\Politics\ElectionRecorder;
-use App\Service\Politics\PoliticsHistoryRecorder;
 use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\PoliticsHistoryRecorder;
 use App\Service\Season\SeasonService;
 use App\Service\User\Portfolio;
 use Doctrine\DBAL\Connection;
@@ -115,7 +115,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private PriceAlertService $priceAlerts,
         /** The league: each account's week, and the season's turn. */
         private SeasonService $seasons,
-
         private int $tickIntervalUs,
         private int $ticksPerYear,
     ) {
@@ -177,14 +176,14 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             'audit-writes',
             null,
             InputOption::VALUE_NONE,
-            'Report and repair any Stock or Bond change that was not handed to persist(). Costs the identity-map walk that explicit change tracking exists to avoid, so it is for a canary run rather than for steady state.'
+            'Report and repair any Stock or Bond change that was not handed to persist(). Costs the identity-map walk that explicit change tracking exists to avoid, so it is for a canary run rather than for steady state.',
         );
 
         $this->addOption(
             'rebase-clock',
             null,
             InputOption::VALUE_NONE,
-            'Align the tick counter to the simulation clock once at start-up. Shifts the phase of every tick-keyed cadence — earnings seasons, auctions, reconstitutions — and ages out industry-ledger records stamped against the old numbering, so it is a deliberate repair rather than a default.'
+            'Align the tick counter to the simulation clock once at start-up. Shifts the phase of every tick-keyed cadence — earnings seasons, auctions, reconstitutions — and ages out industry-ledger records stamped against the old numbering, so it is a deliberate repair rather than a default.',
         );
     }
 
@@ -201,7 +200,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             (int) ($this->redis->get('simulation_tick_count') ?: 0),
             $this->macroEngine->getLiveState()->totalTime,
             $furthestSerial === null ? 0.0 : OptionChainService::earliestTimeFor($furthestSerial),
-            (bool) $input->getOption('rebase-clock')
+            (bool) $input->getOption('rebase-clock'),
         );
 
         $tickCount = $clock->getTickCount();
@@ -218,7 +217,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             'Resuming at tick %d (simulation year %.4f, day %s).',
             $tickCount,
             $simTime,
-            number_format($simTime * 365.0, 1)
+            number_format($simTime * 365.0, 1),
         ));
 
         // The counter and the clock advance at the same rate, so they can only differ by an offset, and an offset
@@ -233,7 +232,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $tickCount,
                 $impliedTime,
                 $simTime,
-                $impliedTime - $simTime
+                $impliedTime - $simTime,
             ));
         }
 
@@ -269,7 +268,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $barsPerYear,
             $this->ticksPerYear,
             100.0 * $barsPerYear / max(1, $this->ticksPerYear),
-            $this->tickIntervalUs / 1000.0
+            $this->tickIntervalUs / 1000.0,
         ));
 
         $conn = $this->entityManager->getConnection();
@@ -355,7 +354,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             if (TickCadence::crossedSimulatedBoundary($simTime, $dt, HistoryPruner::PRUNE_INTERVAL_YEARS)) {
                 $this->messageBus->dispatch(new \App\Message\PruneHistoryMessage(
                     HistoryPruner::DEFAULT_YEARS_KEPT,
-                    HistoryPruner::THINNED_ROWS_PER_YEAR
+                    HistoryPruner::THINNED_ROWS_PER_YEAR,
                 ));
             }
 
@@ -496,7 +495,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         'council_rate' => $macroState->policyRate,
                         'macro' => WireFrame::liveMacro($macroState->toArray()),
                         'bond_curve' => $bondResult['curve'],
-                    ] : []
+                    ] : [],
                 );
                 if ($isFrameTick) {
                     $this->redis->publish('market_updates', json_encode($wireFrame->flush($tickCount, time())));
@@ -523,7 +522,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     // spread, accrued before the snapshot so its net asset value includes the week's interest.
                     $this->portfolio->accrueCashInterest(
                         Portfolio::cashSweepRate($macroState->policyRateEma),
-                        $snapshotInterval * $dt
+                        $snapshotInterval * $dt,
                     );
 
                     $this->portfolio->recordBulkSnapshots();
@@ -563,7 +562,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $this->seasons->recordWeek(
                         $macroState->totalTime,
                         $snapshotInterval * $dt,
-                        Portfolio::cashSweepRate($macroState->policyRateEma)
+                        Portfolio::cashSweepRate($macroState->policyRateEma),
                     );
                     $profiler->lap('season');
                 }
@@ -663,7 +662,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $stocks,
             $macroState,
             $dt * $optionSweepInterval * OptionDeskService::SWEEP_SLICES,
-            OptionDeskService::sweepSlice($tickCount, $optionSweepInterval)
+            OptionDeskService::sweepSlice($tickCount, $optionSweepInterval),
         );
         $profiler->lap('options');
 
@@ -684,7 +683,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $sweepResult['exercised'],
                 $sweepResult['listed'],
                 $held,
-                $tickCount
+                $tickCount,
             ));
         }
     }

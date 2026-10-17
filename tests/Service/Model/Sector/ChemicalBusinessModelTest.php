@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -57,7 +56,7 @@ class ChemicalBusinessModelTest extends TestCase
             outputGapEma: 0.0,
             industrialMetalsIndexEma: 100.0,
             agriculturalCommodityIndexEma: 100.0,
-            energyPriceIndexEma: 100.0
+            energyPriceIndexEma: 100.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -75,7 +74,7 @@ class ChemicalBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertArrayHasKey('base_petrochemicals', $result->streamRevenue);
@@ -99,21 +98,21 @@ class ChemicalBusinessModelTest extends TestCase
             outputGapEma: 0.0,
             industrialMetalsIndexEma: 100.0,
             agriculturalCommodityIndexEma: 100.0,
-            inflationEma: 0.02
+            inflationEma: 0.02,
         );
 
         $boomMacro = new MacroStateDTO(
             outputGapEma: 0.05,
             industrialMetalsIndexEma: 130.0, // +30% metals shift
             agriculturalCommodityIndexEma: 100.0,
-            inflationEma: 0.02
+            inflationEma: 0.02,
         );
 
         $recessionMacro = new MacroStateDTO(
             outputGapEma: -0.05,
             industrialMetalsIndexEma: 70.0, // -30% metals shift
             agriculturalCommodityIndexEma: 100.0,
-            inflationEma: 0.02
+            inflationEma: 0.02,
         );
 
         // Each scenario gets its own firm. Chemical declares a demand transmission lag, so a firm carries
@@ -153,7 +152,7 @@ class ChemicalBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Base revenue = 20M * 1.20 = 24,000,000
@@ -197,7 +196,7 @@ class ChemicalBusinessModelTest extends TestCase
     {
         $model = new ChemicalBusinessModel();
         $calm = $this->feedstockCostRatio($model, oil: 0.0, gas: 0.0);
-        $delta = fn (float $oil, float $gas, float $agri = 100.0): float => $this->feedstockCostRatio($model, oil: $oil, gas: $gas, agriIndex: $agri) - $calm;
+        $delta = fn(float $oil, float $gas, float $agri = 100.0): float => $this->feedstockCostRatio($model, oil: $oil, gas: $gas, agriIndex: $agri) - $calm;
 
         $this->assertLessThan(0.0, $delta(-0.30, 0.0), 'An oil fall lowers the cost ratio.');
         $this->assertLessThan(0.0, $delta(0.0, -0.30), 'A gas fall lowers the cost ratio.');
@@ -242,7 +241,7 @@ class ChemicalBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertEquals(ShockEvent::CHEMICAL_CRACK_SPREAD_SQUEEZE, $result->eventType);
@@ -273,13 +272,12 @@ class ChemicalBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertEquals(ShockEvent::CHEMICAL_AGRI_BOOM, $result->eventType);
         $this->assertTrue($result->isPublicEvent);
     }
-
 
     /**
      * Output is sold into a world market, so a strong domestic currency must reach expected demand through the
@@ -287,7 +285,7 @@ class ChemicalBusinessModelTest extends TestCase
      */
     public function testAStrongCurrencyLowersExpectedDemandThroughTheDeclaredFxExposure(): void
     {
-        $shift = fn (float $fxIndex): float => $this->model->getMacroPhysics((new Stock())->setTicker('FULM_FX'), new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: $fxIndex))['macro_demand_shift'];
+        $shift = fn(float $fxIndex): float => $this->model->getMacroPhysics((new Stock())->setTicker('FULM_FX'), new MacroStateDTO(outputGapEma: 0.0, exchangeRateIndexEma: $fxIndex))['macro_demand_shift'];
 
         // Ten log points over the trend (DTO default 100).
         $strong = $shift(100.0 * exp(0.10));
@@ -296,7 +294,6 @@ class ChemicalBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(-0.10 * ChemicalBusinessModel::FX_REVENUE_EXPOSURE, $strong - $flat, 1e-9);
         $this->assertLessThan(0.0, $strong - $flat, 'A stronger domestic currency prices exports out of foreign markets.');
     }
-
 
     /** On a mixed slate a gas spike squeezes the ethane half with no price relief, so it hurts more than an equal oil spike, which the naphtha-set price partly recovers. */
     public function testAGasSpikeSqueezesAMixedSlateMoreThanAnEqualOilSpike(): void

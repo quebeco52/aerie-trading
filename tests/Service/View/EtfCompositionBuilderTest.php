@@ -7,16 +7,16 @@ namespace App\Tests\Service\View;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
+use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Index\EtfTracker;
+use App\Service\Market\Index\IndexCommittee;
 use App\Service\Market\Index\InMemoryIndexMembershipStore;
 use App\Service\Market\Index\MarketIndex;
-use App\Service\Market\Index\IndexCommittee;
-use App\Service\Market\Chart\PriceChangeFeed;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 use App\Service\View\EtfCompositionBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use App\Service\Market\Pricing\LiquidityEngine;
-use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -55,7 +55,7 @@ class EtfCompositionBuilderTest extends TestCase
             $etfTracker,
             $feed,
             $redis,
-            self::TICKS_PER_YEAR
+            self::TICKS_PER_YEAR,
         );
     }
 
@@ -365,8 +365,8 @@ class EtfCompositionBuilderTest extends TestCase
 
         $this->assertCount($count - $bands['inner'], $facts['atRisk']);
         $this->assertCount($bands['outer'] - $count, $facts['contenders']);
-        $this->assertSame([], array_filter($facts['atRisk'], static fn (array $row): bool => $row['exits']));
-        $this->assertSame([], array_filter($facts['contenders'], static fn (array $row): bool => $row['qualifies']));
+        $this->assertSame([], array_filter($facts['atRisk'], static fn(array $row): bool => $row['exits']));
+        $this->assertSame([], array_filter($facts['contenders'], static fn(array $row): bool => $row['qualifies']));
     }
 
     public function testTheCompositeHasNoBoundaryToWatch(): void
@@ -402,7 +402,7 @@ class EtfCompositionBuilderTest extends TestCase
             0,
             ['SMALL', 'BIG'],
             weights: ['SMALL' => 0.75, 'BIG' => 0.25],
-            factors: ['SMALL' => (0.75 * 1000.0) / 200.0, 'BIG' => (0.25 * 1000.0) / 800.0]
+            factors: ['SMALL' => (0.75 * 1000.0) / 200.0, 'BIG' => (0.25 * 1000.0) / 800.0],
         );
 
         $result = $this->builder($board)->build(MarketIndex::LowVolatility);
@@ -433,7 +433,7 @@ class EtfCompositionBuilderTest extends TestCase
             0,
             ['ONE', 'TWO'],
             weights: ['ONE' => 0.8, 'TWO' => 0.2],
-            factors: ['ONE' => 1.6, 'TWO' => 0.4]
+            factors: ['ONE' => 1.6, 'TWO' => 0.4],
         );
 
         $result = $this->builder($board)->build(MarketIndex::LowVolatility);

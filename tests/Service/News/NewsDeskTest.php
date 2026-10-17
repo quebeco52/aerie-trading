@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\News;
 
+use App\Service\Math\FinancialConstants;
 use App\Service\News\EventCategory;
 use App\Service\News\EventPresenter;
 use App\Service\News\NewsDesk;
-use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 

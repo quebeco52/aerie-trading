@@ -61,7 +61,7 @@ final class ReorganizationEngineTest extends TestCase
             $solvent->convertedClaims,
             (1.0 - $solvent->oldEquityShare) * $solvent->reorganizedEquityValue,
             1e-9,
-            'solvent: the creditors receive new equity worth exactly the claims they gave up'
+            'solvent: the creditors receive new equity worth exactly the claims they gave up',
         );
 
         $insolvent = $engine->planReorganization($this->firm(), $this->macro(), $this->going(ebit: 70.0, ebitda: 10_000.0, assetValue: 500.0, cash: 0.0, claims: 900.0));

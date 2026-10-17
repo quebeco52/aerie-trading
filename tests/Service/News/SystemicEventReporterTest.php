@@ -10,10 +10,10 @@ use App\DTO\PoliticsStateDTO;
 use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
 use App\Service\Event\ShockEvent;
-use App\Service\News\SystemicEventReporter;
 use App\Service\Market\Chart\PriceChangeFeed;
+use App\Service\News\NarrativeEngine;
+use App\Service\News\SystemicEventReporter;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -348,8 +348,13 @@ class SystemicEventReporterTest extends TestCase
     public function testTheExchequerHeadsHeadlineNamesTheHeadAndTheMaturity(): void
     {
         $short = new PoliticsStateDTO(
-            totalTime: 3.0, authoritySalt: 5.0, eventType: ShockEvent::EXCHEQUER_HEAD_APPOINTED, lastExchequerHeadAppointedAt: 3.0,
-            exchequerHeadName: 'Rosalind Tate', exchequerHeadBirth: -51.0, exchequerHeadTermStart: 3.0,
+            totalTime: 3.0,
+            authoritySalt: 5.0,
+            eventType: ShockEvent::EXCHEQUER_HEAD_APPOINTED,
+            lastExchequerHeadAppointedAt: 3.0,
+            exchequerHeadName: 'Rosalind Tate',
+            exchequerHeadBirth: -51.0,
+            exchequerHeadTermStart: 3.0,
             exchequerHeadStance: \App\Service\Politics\Exchequer::stance(4.0),
             exchequerHeadPassedOver: [['name' => 'Hal Brennan', 'birth' => -47.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 1.0, 'competition' => 0.0, 'markets' => 0.0]],
         );
@@ -435,10 +440,10 @@ class SystemicEventReporterTest extends TestCase
             'memberStances' => [1.0, 1.0, 1.0, 0.0, 0.0, -1.0], 'committeeMajority' => 1.0,
             'lastMeetingAt' => 3.5, 'lastMeetingRate' => 0.0425, 'lastMeetingChange' => 0.0025, 'lastMeetingVotes' => array_fill(0, 7, 0.0),
         ];
-        $politics = static fn (array $fields): PoliticsStateDTO => new PoliticsStateDTO(...$fields);
+        $politics = static fn(array $fields): PoliticsStateDTO => new PoliticsStateDTO(...$fields);
 
         $budgetDay = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 3.5), $politics($meeting + ['eventType' => ShockEvent::BUDGET_ENACTED]), $this->benchmarkAt('100'));
-        $this->assertSame([ShockEvent::BUDGET_ENACTED, ShockEvent::MONETARY_DECISION], array_map(static fn (DistrictNews $news): string => $news->getTopic(), $this->persisted));
+        $this->assertSame([ShockEvent::BUDGET_ENACTED, ShockEvent::MONETARY_DECISION], array_map(static fn(DistrictNews $news): string => $news->getTopic(), $this->persisted));
         $this->assertStringContainsString('raises the rate by 25 basis points to 4.25%', $budgetDay[1]['description']);
 
         $this->persisted = [];

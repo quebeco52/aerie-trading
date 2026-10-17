@@ -53,7 +53,7 @@ final class FairTradingBoard
             $term,
             [CouncilAppointments::AXIS_COMPETITION => CouncilAppointments::median($state->councilCompetitionStances)],
             CouncilAppointments::reservedNames($state),
-            $math
+            $math,
         );
         if ($term < 0.0) {
             $chosen['name'] = AerieCouncil::OPENING_FAIR_TRADING_HEAD;

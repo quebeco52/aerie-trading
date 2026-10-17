@@ -105,7 +105,7 @@ final class Valuation
         float $roic,
         float $growthRate = self::DEFAULT_PERPETUAL_GROWTH_RATE,
         ?float $sectorMultiple = null,
-        float $sectorHurdleShift = 0.0
+        float $sectorHurdleShift = 0.0,
     ): float {
         // 1. Enforce absolute structural floor on Cost of Equity to prevent divergence under extreme distress
         $effectiveCostOfEquity = max(self::MIN_COST_OF_EQUITY, $costOfEquity);
@@ -160,7 +160,7 @@ final class Valuation
         float $outputGap,
         float $beta,
         float $inflation,
-        float $discountRate
+        float $discountRate,
     ): float {
         // The secular excess over trend keeps fading (SECULAR_EXCESS_HALF_LIFE_YEARS), so it is priced at its
         // perpetual equivalent rather than as permanent or as nothing.
@@ -230,7 +230,7 @@ final class Valuation
         float $expectedGrowth,
         ?float $sectorMultiple,
         float $accrualsRatio,
-        float $sectorHurdleShift = 0.0
+        float $sectorHurdleShift = 0.0,
     ): float {
         $fairValuePE = self::calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $sectorMultiple, $sectorHurdleShift);
         $accrualsPenalty = max(0.0, $accrualsRatio * self::ACCRUALS_ANOMALY_PE_PENALTY_SCALE);
@@ -250,7 +250,7 @@ final class Valuation
     public static function calculateDividendDiscountModel(
         float $annualDividend,
         float $discountRate,
-        float $growthRate = 0.01
+        float $growthRate = 0.01,
     ): float {
         if ($annualDividend <= 0.0) {
             return 0.0;
@@ -392,7 +392,7 @@ final class Valuation
 
     /**
      * Updates analyst consensus using a Bayesian Inference Model.
-     * 
+     *
      * @param float $priorEstimate  The previous analyst consensus estimate.
      * @param float $priorVariance  The uncertainty (variance) of the prior estimate.
      * @param float $newSignal      The new fundamental signal (e.g., actual structural revenue).
@@ -425,13 +425,13 @@ final class Valuation
         float $inflation,
         ?float $sectorMultiple,
         float $accrualsRatio,
-        float $payoutRatio
+        float $payoutRatio,
     ): float {
         $expectedGrowth = Valuation::calculateFundableGrowth(
             Valuation::calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $hurdleRate),
             $trueReturn,
             $payoutRatio,
-            $inflation
+            $inflation,
         );
 
         return Valuation::calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio, self::sectorHurdleShift($hurdleRate, $beta, $inflation));

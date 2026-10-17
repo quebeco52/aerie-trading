@@ -4,20 +4,19 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Math\FixedIncome;
 use App\DTO\DebtExpansionAppetiteDTO;
-
-use App\Service\Model\ModelParam;
 use App\DTO\DebtHealthDTO;
+
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Quantitative Hedge Funds & Tactical Asset Managers.
@@ -174,9 +173,18 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     /** Leverage ratio threshold triggering Margin Call event lore under wide credit spreads. */
     public const LORE_MARGIN_CALL_LEVERAGE_THRESHOLD = 1.80;
 
-        public function getWholesaleLeverageLimit(): float { return 3.0; }
-    public function getReversionSpeed(): float { return 0.2; }
-    public function getMoatSpread(): float { return 0.008; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 3.0;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.2;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.008;
+    }
 
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile
     {
@@ -185,7 +193,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             errorStdDev: self::BASE_COVERAGE_ERROR,
             minVisibility: 0.10,
             eventBaseVisibility: 0.60,
-            eventMinVisibility: 0.30
+            eventMinVisibility: 0.30,
         );
     }
 
@@ -300,7 +308,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         // Neutralize analyst macro shift so streams apply idiosyncratic macro terms on the base.
         $structuralRevenue = $expectedRevenue / max(0.25, 1.0 + $this->resolveAnalystVisibleMacroShift($stock, $macroState));
@@ -481,7 +489,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         DebtHealthDTO $health,
         float $newBorrowingRate,
         float $ebit,
-        float $depreciation
+        float $depreciation,
     ): float {
         $baseCapacity = parent::calculateDebtExpansionCapacity($equity, $totalDebt, $wholesaleDebt, $health, $newBorrowingRate, $ebit, $depreciation);
 
@@ -504,7 +512,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         float $totalDebt = 0.0,
         float $customerDeposits = 0.0,
         float $targetOperatingCash = 0.0,
-        float $currentTreasury = 0.0
+        float $currentTreasury = 0.0,
     ): DebtExpansionAppetiteDTO {
         return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }

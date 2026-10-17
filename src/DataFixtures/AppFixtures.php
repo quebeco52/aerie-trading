@@ -3,11 +3,11 @@
 namespace App\DataFixtures;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\InitialMarket;
+use App\Data\Company\Sectors;
 use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
-use App\Data\Company\InitialMarket;
-use App\Data\Company\Sectors;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Persistence\ObjectManager;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -15,7 +15,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 class AppFixtures extends Fixture
 {
     public function __construct(
-        private UserPasswordHasherInterface $passwordHasher
+        private UserPasswordHasherInterface $passwordHasher,
     ) {}
 
     public function load(ObjectManager $manager): void
@@ -94,7 +94,7 @@ class AppFixtures extends Fixture
             $stock->setBaselineRoic((string) ($stockData['baseline_roic'] ?? 0.10));
             $stock->setCurrentRoic((string) ($stockData['baseline_roic'] ?? 0.10));
             $stock->setRoicTtm((string) ($stockData['baseline_roic'] ?? 0.10));
-            
+
             $stock->setBaselineRoe((string) ($stockData['baseline_roe'] ?? 0.10));
             $stock->setCurrentRoe((string) ($stockData['baseline_roe'] ?? 0.10));
             $stock->setRoeTtm((string) ($stockData['baseline_roe'] ?? 0.10));
@@ -103,10 +103,10 @@ class AppFixtures extends Fixture
             $stock->setTargetPayoutRatio((string) ($stockData['target_payout_ratio'] ?? 0.30));
             $stock->setDividendSpeed((string) ($stockData['dividendSpeed'] ?? 0.20));
             $stock->setDividendAristocrat((bool) ($stockData['dividend_aristocrat'] ?? false));
-            
+
             // Fixed Cost Ratio (Fallback to 0.35 if missing)
             $stock->setFixedCostRatio((float) ($stockData['fixed_cost_ratio'] ?? 0.35));
-            
+
             // Balance Sheet Data
             $stock->setCorporateTreasury((string) ($stockData['corporate_treasury'] ?? 1000000000.00));
             $stock->setOperatingMargin((string) ($stockData['operating_margin'] ?? 0.15));

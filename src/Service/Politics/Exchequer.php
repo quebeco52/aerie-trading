@@ -58,7 +58,7 @@ final class Exchequer
             $term,
             [CouncilAppointments::AXIS_DEBT => CouncilAppointments::median($state->councilDebtStances)],
             CouncilAppointments::reservedNames($state),
-            $math
+            $math,
         );
         if ($term < 0.0) {
             $chosen['name'] = AerieCouncil::OPENING_EXCHEQUER_HEAD;

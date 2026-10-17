@@ -6,13 +6,13 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ResortsCasinosBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
-use App\Service\Math\FinancialConstants;
-use App\Service\Corporate\EarningsEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -33,7 +33,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
         float $realWageGap = 0.0,
         float $commercialPropertyIndexEma = 100.0,
         float $retailDefaultRateEma = MacroEngine::RETAIL_DEFAULT_BASELINE,
-        float $consumerSentimentMood = 0.0
+        float $consumerSentimentMood = 0.0,
     ): MacroStateDTO {
         return new MacroStateDTO(
             outputGap: $outputGap,

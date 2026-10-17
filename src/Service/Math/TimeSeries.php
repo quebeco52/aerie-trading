@@ -240,7 +240,7 @@ final class TimeSeries
         float $currentLaggedValue,
         float $targetValue,
         float $dt,
-        float $lagTimeConstant
+        float $lagTimeConstant,
     ): float {
         if ($lagTimeConstant <= 0.0 || $dt <= 0.0) {
             return $targetValue;
@@ -279,7 +279,7 @@ final class TimeSeries
         float $targetValue,
         float $dt,
         float $lagTimeConstant,
-        float $maxSpeed
+        float $maxSpeed,
     ): float {
         $distance = abs($targetValue - $currentLaggedValue);
         $knee = $lagTimeConstant > 0.0 ? $maxSpeed * $lagTimeConstant : 0.0;
@@ -303,7 +303,7 @@ final class TimeSeries
         float $dt = 0.25,
         float $erosionAlpha = self::REVERSION_COMPETITIVE_EROSION_ALPHA,
         float $distressPersistence = self::REVERSION_DISTRESS_PERSISTENCE,
-        float $distressGamma = self::REVERSION_DISTRESS_GAMMA
+        float $distressGamma = self::REVERSION_DISTRESS_GAMMA,
     ): float {
         $equilibrium = $wacc + $moatSpread;
 
@@ -320,7 +320,7 @@ final class TimeSeries
         }
 
         // EXACT DISCRETIZATION: Use the exponential solution (1 - e^(-kappa * dt))
-        // This acts as a dampener. Even if effectiveKappa approaches infinity, 
+        // This acts as a dampener. Even if effectiveKappa approaches infinity,
         // the weight naturally caps at 1.0, mathematically preventing target overshooting.
         $reversionWeight = 1.0 - exp(-$effectiveKappa * $dt);
 
@@ -368,7 +368,7 @@ final class TimeSeries
     public static function calculateSeasonallyAdjustedAnnualRate(
         float $periodValue,
         float $seasonalFactor,
-        int $periodsPerYear = 4
+        int $periodsPerYear = 4,
     ): float {
         return ($periodValue / max(0.01, $seasonalFactor)) * $periodsPerYear;
     }
@@ -394,7 +394,7 @@ final class TimeSeries
         float $alpha,
         float $kappa,
         float $minFloor = FinancialConstants::DEFAULT_MIN_STREAM_WEIGHT_FLOOR,
-        float $maxCeiling = FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING
+        float $maxCeiling = FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING,
     ): float {
         $drift = $alpha * ($realizedShare - $currentWeight);
         $reversion = $kappa * ($targetWeight - $currentWeight);

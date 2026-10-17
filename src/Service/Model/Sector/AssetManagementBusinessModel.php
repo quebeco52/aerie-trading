@@ -4,25 +4,24 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Math\FixedIncome;
 use App\DTO\DebtExpansionAppetiteDTO;
-
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
-use App\Service\Model\ModelParameters;
 use App\DTO\SectorCoverageProfile;
+
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
 
 /**
  * Earnings strategy for Asset Managers.
- * 
+ *
  * Financial Physics:
  * - Asset light, high margin business model.
  * - Revenue scales off highly sticky, recurring Assets Under Management (AUM) fees.
@@ -85,10 +84,9 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             errorStdDev: self::BASE_COVERAGE_ERROR,
             minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
             eventBaseVisibility: 0.80,
-            eventMinVisibility: 0.40
+            eventMinVisibility: 0.40,
         );
     }
-
 
     // --- Structural Yield Rails ---
     /** Minimum structural operating EBIT floor as a fraction of operating equity. */
@@ -215,7 +213,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 
         $effectiveEquity = max(1.0, $equity);
 
-        // We use ACTUAL deployed leverage (capped at limits) to prevent the "Phantom Debt" exploit, 
+        // We use ACTUAL deployed leverage (capped at limits) to prevent the "Phantom Debt" exploit,
         // where low-leverage brokers pocket theoretical interest expense as massive ROE.
         $actualLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
         $allowedLeverage = min($actualLeverage, max(0.0, $equityLimit));
@@ -243,14 +241,14 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         // The Fee Revenue Floor:
-        // Asset-light financials don't have massive balance sheets, but they must maintain 
+        // Asset-light financials don't have massive balance sheets, but they must maintain
         // structural fee revenue (AUM / Advisory) to survive.
         $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
 
         $targetEbit = max($minOperatingEbit, $targetEbit);
 
-        // We derive revenue from target EBIT to hit ROE expectations, 
-        // but we MUST cap the turnover. If margins compress due to market saturation, 
+        // We derive revenue from target EBIT to hit ROE expectations,
+        // but we MUST cap the turnover. If margins compress due to market saturation,
         // uncapped reverse-engineering will cause top-line revenue hyperinflation!
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
         $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_TURNOVER_CAP); // Hard cap turnover at 2.0x annually
@@ -259,7 +257,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 
         return [
             'invested_capital' => $earningAssets,
-            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate)
+            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate),
         ];
     }
 
@@ -376,7 +374,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $clientFlowShift + $marketLevelShift - $baseRedemptionAttrition));
         $perfRevenue = max(0.0, $expectedRevenue * $perfWeight
             * (1.0 + ($alphaZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $alphaFeeBonus));
-        
+
         $streamRevenues = [
             'base_fee' => $baseRevenue,
             'alpha'    => $perfRevenue,
@@ -435,7 +433,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $baseYield = $this->calculateCashYield($macroState);
 
         // Expected seed capital return: VIX market panic drag.
-        // We use the deterministic expected return ($seedZ = 0.0) during continuous tick valuation to prevent 
+        // We use the deterministic expected return ($seedZ = 0.0) during continuous tick valuation to prevent
         // high-frequency distress penalty whipsaws in analyzeDebtHealth().
         $vixEma = $macroState->marketVolatilityEma;
         $vixDrag = max(0.0, ($vixEma - self::SEED_VIX_THRESHOLD) * self::SEED_VIX_SENSITIVITY);
@@ -502,7 +500,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     {
         return 0.0;
     }
-
 
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in

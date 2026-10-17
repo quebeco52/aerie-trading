@@ -120,7 +120,7 @@ class MarketConsensusEngine
         ?float $expectedVariableMargin = null,
         float $seasonalRatio = 1.0,
         float $priorExpectedRevenue = 0.0,
-        ?float $expectedRevenueBeforeShocks = null
+        ?float $expectedRevenueBeforeShocks = null,
     ): ConsensusDTO {
         $analystError = $mathUtility->generateStandardNormal() * $coverage->errorStdDev;
 
@@ -153,8 +153,8 @@ class MarketConsensusEngine
                 -self::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
                 min(
                     self::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
-                    ($bookToBill - 1.0) * self::BOOK_TO_BILL_CONSENSUS_SENSITIVITY
-                )
+                    ($bookToBill - 1.0) * self::BOOK_TO_BILL_CONSENSUS_SENSITIVITY,
+                ),
             )
             : 0.0;
 
@@ -165,9 +165,9 @@ class MarketConsensusEngine
             * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
         // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals (fresh estimate)
-        $priorVariance = self::BAYESIAN_BASE_PRIOR_VARIANCE 
+        $priorVariance = self::BAYESIAN_BASE_PRIOR_VARIANCE
             + ($marketVolatility * self::BAYESIAN_VIX_SCALING_FACTOR);
-            
+
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
 
         // Roll prior analyst revenue estimate forward with growth in structural capacity: the pre-shock base on both
@@ -176,7 +176,7 @@ class MarketConsensusEngine
         if ($anchor > 0.0 && $priorExpectedRevenue > 0.0) {
             $rollForward = max(
                 1.0 / self::ANALYST_ANCHOR_MAX_ROLL_FORWARD,
-                min(self::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $baseExpectedRevenue / $priorExpectedRevenue)
+                min(self::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $baseExpectedRevenue / $priorExpectedRevenue),
             );
             $priorEstimate = $anchor * $rollForward;
         } elseif ($anchor > 0.0) {
@@ -184,12 +184,12 @@ class MarketConsensusEngine
         } else {
             $priorEstimate = $baseExpectedRevenue;
         }
-        
+
         $analystExpectedRevenue = Valuation::calculateBayesianAnalystUpdate(
             $priorEstimate,
             $priorVariance,
             $freshEstimate,
-            $signalVariance
+            $signalVariance,
         );
 
         // Store pre-walkdown posterior as anchor so walkdown shading does not compound across quarters.

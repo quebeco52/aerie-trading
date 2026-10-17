@@ -8,9 +8,9 @@ use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\View\IndustryPositionBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -162,7 +162,7 @@ class IndustryPositionBuilderTest extends TestCase
         $firm = $this->stock('STL', 'Steel', 2_000.0);
         $this->assertNull($this->builder(null)->build($firm, new MacroStateDTO())['industry']['saturation']['trailingReturn']);
 
-        $this->filings = array_map(static fn (string $roic): CorporateReport => (new CorporateReport())->setRoic($roic), ['0.1600', '0.1200', '0.0800', '0.1000']);
+        $this->filings = array_map(static fn(string $roic): CorporateReport => (new CorporateReport())->setRoic($roic), ['0.1600', '0.1200', '0.0800', '0.1000']);
         $this->assertEqualsWithDelta(0.115, $this->builder(null)->build($firm, new MacroStateDTO())['industry']['saturation']['trailingReturn'], 1e-12);
     }
 

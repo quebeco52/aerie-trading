@@ -51,7 +51,7 @@ class PeerTableBuilder
 
         // Direct competitors first, the rest of the sector after, each by size: the return column only
         // compares like with like inside one industry.
-        usort($peers, static fn (array $a, array $b): int => [$b['sameIndustry'], $b['marketCap']] <=> [$a['sameIndustry'], $a['marketCap']]);
+        usort($peers, static fn(array $a, array $b): int => [$b['sameIndustry'], $b['marketCap']] <=> [$a['sameIndustry'], $a['marketCap']]);
 
         return $peers;
     }

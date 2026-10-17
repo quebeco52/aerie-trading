@@ -33,7 +33,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             yield10yEma: 0.045,
-            policyRateEma: 0.025
+            policyRateEma: 0.025,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -43,7 +43,7 @@ class ReinsuranceBusinessModelTest extends TestCase
             fixedCosts: 1_000_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('treaty_reinsurance', $result->streamRevenue);
@@ -56,7 +56,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $result->actualRevenue,
             $result->streamRevenue['treaty_reinsurance'] + $result->streamRevenue['catastrophe_bonds'],
-            1.0
+            1.0,
         );
     }
 
@@ -84,7 +84,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             yield10yEma: 0.04,
-            policyRateEma: 0.02
+            policyRateEma: 0.02,
         );
 
         $expectedRevenue = 10_000_000_000.0;
@@ -97,7 +97,7 @@ class ReinsuranceBusinessModelTest extends TestCase
             fixedCosts: 1_000_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $baselineTreatyRevenue = $expectedRevenue * ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT;
@@ -142,7 +142,7 @@ class ReinsuranceBusinessModelTest extends TestCase
             fixedCosts: 1_000_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertEquals(ShockEvent::REINSURANCE_ATTACHMENT_BREACH, $result->eventType);
@@ -184,7 +184,7 @@ class ReinsuranceBusinessModelTest extends TestCase
             fixedCosts: 1_000_000_000.0,
             baselineVol: 0.10,
             macroState: new MacroStateDTO(outputGapEma: 0.0, yield10yEma: 0.04, policyRateEma: 0.02),
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertNotSame(ShockEvent::REINSURANCE_ATTACHMENT_BREACH, $result->eventType);
@@ -206,7 +206,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             yield10yEma: 0.04,
-            policyRateEma: 0.02
+            policyRateEma: 0.02,
         );
 
         $expectedRevenue = 10_000_000_000.0;
@@ -219,7 +219,7 @@ class ReinsuranceBusinessModelTest extends TestCase
             fixedCosts: 1_000_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Variable margin expands beyond the standard 1.50 corporate clamp, bounded by 1.65 PML ceiling

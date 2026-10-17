@@ -11,11 +11,11 @@ use App\Entity\User;
 use App\Entity\UserOption;
 use App\Entity\UserStock;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Market\Trading\MarginEngine;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\OptionPricing;
 use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Market\Trading\MarginEngine;
 
 /**
  * Fills orders in listed contracts.
@@ -78,7 +78,7 @@ final class OptionTradeService
         $quote = $this->pricingEngine->quoteContract(
             $contract,
             $macroState->sovereignCurve(),
-            $macroState->totalTime
+            $macroState->totalTime,
         );
 
         if ($quote->timeToExpiry < OptionPricing::MIN_OPTION_TIME_TO_EXPIRY) {
@@ -98,7 +98,7 @@ final class OptionTradeService
         $premium = self::isBuySide($action) ? $quote->ask : $quote->bid;
         $consideration = Decimal::format(
             $premium * (float) FinancialConstants::OPTION_CONTRACT_MULTIPLIER * $contracts,
-            4
+            4,
         );
 
         $delta = self::isBuySide($action) ? $contracts : -$contracts;
@@ -188,7 +188,7 @@ final class OptionTradeService
             (float) $contract->getStock()->getPrice(),
             (float) $contract->getStrike(),
             $quote->mark,
-            $contract->isCall()
+            $contract->isCall(),
         ) * (float) FinancialConstants::OPTION_CONTRACT_MULTIPLIER * $naked;
 
         // canOpen() measures a POSITION VALUE, which Reg T backs with half of itself in equity. The Rule
@@ -261,7 +261,7 @@ final class OptionTradeService
                 'user_id' => $user->getId(),
                 'stock_id' => $contract->getStock()->getId(),
                 'call' => OptionContract::TYPE_CALL,
-            ]
+            ],
         );
 
         return max(0, $written);
@@ -297,7 +297,7 @@ final class OptionTradeService
         ?UserOption $position,
         int $held,
         int $delta,
-        float $premium
+        float $premium,
     ): void {
         $updated = $held + $delta;
 

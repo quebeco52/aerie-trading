@@ -92,7 +92,7 @@ final class PortfolioEscrowTest extends TestCase
         $this->assertStringContainsString(
             'Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL',
             $this->read('src/Service/Market/Trading/MarginEngine.php'),
-            'MarginEngine must value the open book on the same definition as net asset value.'
+            'MarginEngine must value the open book on the same definition as net asset value.',
         );
     }
 
@@ -119,7 +119,7 @@ final class PortfolioEscrowTest extends TestCase
             $this->assertMatchesRegularExpression(
                 $pattern,
                 $this->read($source),
-                "{$source} totals a user's net worth and must value bond holdings."
+                "{$source} totals a user's net worth and must value bond holdings.",
             );
         }
     }
@@ -145,7 +145,7 @@ final class PortfolioEscrowTest extends TestCase
             $this->assertMatchesRegularExpression(
                 "/escrow|NET_WORTH_SQL/i",
                 $this->read($source),
-                "{$source} totals a user's net worth and must include open-order escrow."
+                "{$source} totals a user's net worth and must include open-order escrow.",
             );
         }
     }
@@ -170,12 +170,12 @@ final class PortfolioEscrowTest extends TestCase
         $this->assertStringContainsString(
             'self::OPEN_ORDER_ESCROW_SQL',
             $this->read('src/Service/User/Portfolio.php'),
-            'Both Portfolio snapshots must build on the shared fragment.'
+            'Both Portfolio snapshots must build on the shared fragment.',
         );
         $this->assertStringContainsString(
             'Portfolio::NET_WORTH_SQL',
             $this->read('src/Controller/LeaderboardController.php'),
-            'The leaderboard ranks on the same definition of net worth the history chart records.'
+            'The leaderboard ranks on the same definition of net worth the history chart records.',
         );
     }
 
@@ -200,7 +200,7 @@ final class PortfolioEscrowTest extends TestCase
             $this->assertMatchesRegularExpression(
                 "/OPEN_ORDER_ESCROW_SQL|NET_WORTH_SQL|trade_orders/",
                 $body,
-                "{$method}() must value the open order book."
+                "{$method}() must value the open order book.",
             );
         }
     }
@@ -234,7 +234,7 @@ final class PortfolioEscrowTest extends TestCase
         $this->assertStringContainsString(
             'Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL',
             $this->read('src/Controller/DashboardController.php'),
-            'The dashboard values the open book on the same definition as net worth.'
+            'The dashboard values the open book on the same definition as net worth.',
         );
     }
 
@@ -276,7 +276,7 @@ final class PortfolioEscrowTest extends TestCase
                 $this->assertMatchesRegularExpression(
                     '/ELSE 0 END$/',
                     $flat,
-                    "{$relativePath}: SHORT and COVER reserve nothing, so the fall-through must be zero — {$flat}"
+                    "{$relativePath}: SHORT and COVER reserve nothing, so the fall-through must be zero — {$flat}",
                 );
             }
         }

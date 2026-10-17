@@ -64,7 +64,7 @@ class MarketStatisticalInvariantTest extends TestCase
             MacroEngine::SYSTEMIC_JUMP_ETA_UP,
             MacroEngine::SYSTEMIC_JUMP_ETA_DOWN,
             MacroEngine::SYSTEMIC_JUMP_VARIANCE_MEAN,
-            $this->dt
+            $this->dt,
         )['price_multiplier'];
     }
 
@@ -170,7 +170,7 @@ class MarketStatisticalInvariantTest extends TestCase
                     marketZ: $marketShock,
                     w1: $this->math->generateStandardNormal(),
                     sectorZ: $sectorShocks[$ticker[0]],
-                    sectorVarianceShare: MacroEngine::SECTOR_FACTOR_VARIANCE_SHARE
+                    sectorVarianceShare: MacroEngine::SECTOR_FACTOR_VARIANCE_SHARE,
                 );
 
                 $next = $diffused * $jump;
@@ -192,14 +192,14 @@ class MarketStatisticalInvariantTest extends TestCase
         $this->assertGreaterThan(
             10.0,
             $inflation,
-            'At market-factor persistence the uncorrected variance inflation must be large, or this guard is pointless.'
+            'At market-factor persistence the uncorrected variance inflation must be large, or this guard is pointless.',
         );
 
         $this->assertEqualsWithDelta(
             1.0,
             ($this->regimeScale ** 2) * $inflation,
             1e-9,
-            'The persistence scale must exactly cancel the variance inflation it corrects for.'
+            'The persistence scale must exactly cancel the variance inflation it corrects for.',
         );
     }
 
@@ -213,12 +213,12 @@ class MarketStatisticalInvariantTest extends TestCase
         $this->assertGreaterThan(
             self::MARKET_VOL * 0.60,
             $realised,
-            sprintf('Realised index volatility collapsed to %.4f against a %.4f calibration.', $realised, self::MARKET_VOL)
+            sprintf('Realised index volatility collapsed to %.4f against a %.4f calibration.', $realised, self::MARKET_VOL),
         );
         $this->assertLessThan(
             self::MARKET_VOL * 1.60,
             $realised,
-            sprintf('Realised index volatility exploded to %.4f against a %.4f calibration.', $realised, self::MARKET_VOL)
+            sprintf('Realised index volatility exploded to %.4f against a %.4f calibration.', $realised, self::MARKET_VOL),
         );
     }
 
@@ -242,7 +242,7 @@ class MarketStatisticalInvariantTest extends TestCase
         $this->assertGreaterThan(
             0.0,
             $crossSector,
-            'Every name shares the market factor, so cross-sector correlation must still be positive.'
+            'Every name shares the market factor, so cross-sector correlation must still be positive.',
         );
         $this->assertGreaterThan(
             $crossSector + 0.05,
@@ -250,8 +250,8 @@ class MarketStatisticalInvariantTest extends TestCase
             sprintf(
                 'Sector factor is not separating names: same-sector %.3f vs cross-sector %.3f.',
                 $sameSector,
-                $crossSector
-            )
+                $crossSector,
+            ),
         );
     }
 
@@ -270,7 +270,7 @@ class MarketStatisticalInvariantTest extends TestCase
         $this->assertLessThan(
             6.0,
             $diffusionKurtosis,
-            'Diffusion-only index returns should stay near-Gaussian once aggregated.'
+            'Diffusion-only index returns should stay near-Gaussian once aggregated.',
         );
         $this->assertGreaterThan(
             $diffusionKurtosis * 1.5,
@@ -278,15 +278,15 @@ class MarketStatisticalInvariantTest extends TestCase
             sprintf(
                 'Systemic jump must materially fatten index tails: %.2f with jumps vs %.2f without.',
                 $jumpKurtosis,
-                $diffusionKurtosis
-            )
+                $diffusionKurtosis,
+            ),
         );
 
         sort($withJump);
         $this->assertLessThan(
             -0.04,
             $withJump[0],
-            'A quarter century of trading must contain at least one sharp district-wide down move.'
+            'A quarter century of trading must contain at least one sharp district-wide down move.',
         );
     }
 
@@ -298,7 +298,7 @@ class MarketStatisticalInvariantTest extends TestCase
             foreach ($returns as $index => $return) {
                 $this->assertTrue(
                     is_finite($return),
-                    sprintf('Non-finite return for %s at tick %d.', $ticker, $index)
+                    sprintf('Non-finite return for %s at tick %d.', $ticker, $index),
                 );
             }
         }

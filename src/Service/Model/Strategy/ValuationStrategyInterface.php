@@ -6,7 +6,6 @@ namespace App\Service\Model\Strategy;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 
 interface ValuationStrategyInterface
 {
@@ -35,7 +34,7 @@ interface ValuationStrategyInterface
      *
      * @return array{costOfEquity: float, equityReturn: float}
      */
-    public function getEquityValuationRates(\App\Entity\Stock $stock, float $returnOnCapital, \App\DTO\DebtHealthDTO $health, float $corporateTaxRate): array;
+    public function getEquityValuationRates(Stock $stock, float $returnOnCapital, \App\DTO\DebtHealthDTO $health, float $corporateTaxRate): array;
     public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin, float $discountRate): float;
 
     /**

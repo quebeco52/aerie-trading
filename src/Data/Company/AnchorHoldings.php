@@ -54,7 +54,7 @@ final class AnchorHoldings
     {
         return array_map(
             static fn(AnchorStake $stake): float => $stake->fraction(),
-            self::STAKES[$ticker] ?? []
+            self::STAKES[$ticker] ?? [],
         );
     }
 

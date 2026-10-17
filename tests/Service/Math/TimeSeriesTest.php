@@ -24,7 +24,7 @@ class TimeSeriesTest extends TestCase
             0.15,
             0.08,
             0.05,
-            0.85
+            0.85,
         );
         $this->assertEqualsWithDelta(0.245, $updated, 0.001);
 
@@ -40,7 +40,7 @@ class TimeSeriesTest extends TestCase
             0.15,
             0.08,
             0.05,
-            0.85
+            0.85,
         );
         $this->assertEqualsWithDelta(0.354, $reverting, 0.001);
 
@@ -65,7 +65,7 @@ class TimeSeriesTest extends TestCase
             wacc: $wacc,
             baseKappa: $baseKappa,
             moatSpread: $moatSpread,
-            dt: $dtQuarterly
+            dt: $dtQuarterly,
         );
 
         $equilibrium = $wacc + $moatSpread; // 0.10
@@ -100,12 +100,12 @@ class TimeSeriesTest extends TestCase
         $this->assertEqualsWithDelta(
             TimeSeries::calculateDistributedLag(0.02, 0.03, 0.25, 0.25),
             TimeSeries::calculateSpeedLimitedDistributedLag(0.02, 0.03, 0.25, 0.25, 0.06),
-            1e-15
+            1e-15,
         );
         $this->assertEqualsWithDelta(
             TimeSeries::calculateDistributedLag(0.09, 0.02, 0.25, 0.25),
             TimeSeries::calculateSpeedLimitedDistributedLag(0.09, 0.02, 0.25, 0.25, INF),
-            1e-15
+            1e-15,
         );
     }
 
@@ -219,7 +219,7 @@ class TimeSeriesTest extends TestCase
             self::assertEqualsWithDelta(
                 0.09,
                 TimeSeries::ewmaAnnualizedVariance(0.09, 0.30 * sqrt($dt), $dt, 0.25),
-                1e-12
+                1e-12,
             );
         }
     }

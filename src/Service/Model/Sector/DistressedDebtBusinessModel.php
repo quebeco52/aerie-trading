@@ -4,19 +4,18 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Math\CreditRisk;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\CreditRisk;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Distressed Debt, Special Situations, and Turnaround Funds.
- * 
+ *
  * Financial Physics:
  * - Counter-Cyclical Special Situations: Thrives during systemic recessions and credit crises.
  * - Tri-Stream Architecture:
@@ -38,7 +37,10 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const BASE_COVERAGE_ERROR = 0.05;
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.80;
 
-        public function getMoatSpread(): float { return 0.005; }
+    public function getMoatSpread(): float
+    {
+        return 0.005;
+    }
 
     // --- Special Situations & Macro Triggers ---
     /** Baseline macro credit spread fallback when macroeconomic state data is absent. */
@@ -148,7 +150,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             return CreditRisk::calculateDiminishingDistressMultiplier(
                 $rawDistressSurge,
                 self::MAX_DISTRESS_REVENUE_EXPANSION,
-                self::DISTRESS_HALF_SATURATION_POINT
+                self::DISTRESS_HALF_SATURATION_POINT,
             );
         }
 
@@ -203,9 +205,9 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
-        $observableShockZ = ($advisoryZ * $advisoryWeight * self::ADVISORY_VARIANCE_SCALAR * $baselineVol) +
-            ($recoveryZ * $recoveryWeight * self::RECOVERY_VARIANCE_SCALAR * $baselineVol) +
-            ($distressMultiplier * $recoveryWeight);
+        $observableShockZ = ($advisoryZ * $advisoryWeight * self::ADVISORY_VARIANCE_SCALAR * $baselineVol)
+            + ($recoveryZ * $recoveryWeight * self::RECOVERY_VARIANCE_SCALAR * $baselineVol)
+            + ($distressMultiplier * $recoveryWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

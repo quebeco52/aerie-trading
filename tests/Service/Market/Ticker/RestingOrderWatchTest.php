@@ -22,12 +22,12 @@ final class RestingOrderWatchTest extends TestCase
     private function watch(array $limitBounds, array $alertBounds = []): RestingOrderWatch
     {
         $redis = $this->createStub(\Redis::class);
-        $redis->method('mGet')->willReturnCallback(static fn (array $keys): array => array_map(
-            static fn (string $key): string|false => $limitBounds[substr($key, strlen('limit_bounds:'))] ?? false,
-            $keys
+        $redis->method('mGet')->willReturnCallback(static fn(array $keys): array => array_map(
+            static fn(string $key): string|false => $limitBounds[substr($key, strlen('limit_bounds:'))] ?? false,
+            $keys,
         ));
         $redis->method('hGetAll')->willReturnCallback(
-            static fn (string $key): array => $key === PriceAlertService::REDIS_KEY ? $alertBounds : []
+            static fn(string $key): array => $key === PriceAlertService::REDIS_KEY ? $alertBounds : [],
         );
 
         return new RestingOrderWatch($redis, new LimitOrderDispatchGate());
@@ -80,7 +80,7 @@ final class RestingOrderWatchTest extends TestCase
     {
         $watch = $this->watch(
             ['AAA' => '{"buy": 0.0, "sell": 999.0}', 'BBB' => '{"buy": 0.0, "sell": 999.0}'],
-            ['AAA' => '{"above": 50.0}', 'BBB' => '{"below": 20.0}']
+            ['AAA' => '{"above": 50.0}', 'BBB' => '{"below": 20.0}'],
         );
 
         $pending = $watch->collect([['ticker' => 'AAA', 'price' => 51.0], ['ticker' => 'BBB', 'price' => 25.0]], [], 1);

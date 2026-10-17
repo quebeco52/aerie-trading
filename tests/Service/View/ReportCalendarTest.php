@@ -106,7 +106,7 @@ class ReportCalendarTest extends TestCase
                     $this->assertSame(
                         (int) substr($label, -1) - 1,
                         EarningsEngine::coveredCalendarQuarter($tick, $ticksPerYear),
-                        sprintf('%s filing on tick %d at %d ticks a year covers %s', $ticker, $tick, $ticksPerYear, $label)
+                        sprintf('%s filing on tick %d at %d ticks a year covers %s', $ticker, $tick, $ticksPerYear, $label),
                     );
                 }
             }

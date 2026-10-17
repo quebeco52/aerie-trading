@@ -165,7 +165,7 @@ class DistrictRevenueFeed
 
         // Largest contributor first — the mix is a rank, not the order streams happened to be
         // computed in.
-        usort($streams, static fn (array $a, array $b): int => $b['share'] <=> $a['share']);
+        usort($streams, static fn(array $a, array $b): int => $b['share'] <=> $a['share']);
 
         $hhi = FirmEconomics::calculateHerfindahlIndex($shares);
 

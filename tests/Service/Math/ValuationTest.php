@@ -103,7 +103,7 @@ class ValuationTest extends TestCase
                 $this->assertGreaterThan(
                     $previousWeight,
                     $impliedWeight,
-                    'A wider spread is a more reliable estimate and must keep more of the firm-level multiple.'
+                    'A wider spread is a more reliable estimate and must keep more of the firm-level multiple.',
                 );
             }
             $previousWeight = $impliedWeight;
@@ -116,7 +116,7 @@ class ValuationTest extends TestCase
         foreach ([[0.10, 0.15, 0.03], [0.12, 0.25, 0.05], [0.06, 0.08, 0.01]] as [$coe, $roic, $growth]) {
             $this->assertSame(
                 Valuation::calculateIntrinsicFairValuePE($coe, $roic, $growth),
-                Valuation::calculateIntrinsicFairValuePE($coe, $roic, $growth, null)
+                Valuation::calculateIntrinsicFairValuePE($coe, $roic, $growth, null),
             );
         }
     }
@@ -132,7 +132,7 @@ class ValuationTest extends TestCase
         $this->assertEqualsWithDelta(0.0, Valuation::sectorHurdleShift($foundingHurdle, $beta, MacroEngine::TARGET_INFLATION), 1e-12);
         $this->assertSame(
             Valuation::calculateIntrinsicFairValuePE($foundingHurdle, 0.20, 0.036, 16.0),
-            Valuation::calculateIntrinsicFairValuePE($foundingHurdle, 0.20, 0.036, 16.0, 0.0)
+            Valuation::calculateIntrinsicFairValuePE($foundingHurdle, 0.20, 0.036, 16.0, 0.0),
         );
 
         // A hundred basis points on the real hurdle: the prior's yield rises by the same, so 16x becomes 1 / (1/16 + 1%).
@@ -145,7 +145,7 @@ class ValuationTest extends TestCase
         $this->assertEqualsWithDelta(
             ($firmWeight * $own) + ((1.0 - $firmWeight) / ((1.0 / 16.0) + 0.01)),
             Valuation::calculateIntrinsicFairValuePE($hurdle, 0.20, 0.036, 16.0, $shift),
-            1e-9
+            1e-9,
         );
 
         // Expected inflation moves the yield and nominal growth alike, so on its own it moves no multiple.
@@ -281,7 +281,7 @@ class ValuationTest extends TestCase
             priorEstimate: 100.0,
             priorVariance: 1.0,
             newSignal: 120.0,
-            signalVariance: 1.0
+            signalVariance: 1.0,
         );
         $this->assertEqualsWithDelta(110.0, $updated, 0.0001);
 
@@ -290,7 +290,7 @@ class ValuationTest extends TestCase
             priorEstimate: 100.0,
             priorVariance: 0.01,
             newSignal: 150.0,
-            signalVariance: 1.00
+            signalVariance: 1.00,
         );
         $this->assertLessThan(101.0, $updatedConfidentPrior);
 
@@ -299,7 +299,7 @@ class ValuationTest extends TestCase
             priorEstimate: 100.0,
             priorVariance: 1.00,
             newSignal: 150.0,
-            signalVariance: 0.01
+            signalVariance: 0.01,
         );
         $this->assertGreaterThan(149.0, $updatedConfidentSignal);
     }

@@ -6,8 +6,8 @@ namespace App\Tests\Service\Market\Option;
 
 use App\DTO\OptionQuoteDTO;
 use App\Entity\OptionContract;
-use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Option\OptionDemandEngine;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
@@ -39,9 +39,18 @@ class OptionDemandEngineTest extends TestCase
     private function quote(float $delta, float $timeToExpiry = 0.25): OptionQuoteDTO
     {
         return new OptionQuoteDTO(
-            mark: 5.0, bid: 4.9, ask: 5.1, impliedVolatility: 0.30,
-            delta: $delta, gamma: 0.03, vega: 20.0, theta: -8.0, rho: 15.0,
-            timeToExpiry: $timeToExpiry, riskFreeRate: 0.04, dividendYield: 0.0,
+            mark: 5.0,
+            bid: 4.9,
+            ask: 5.1,
+            impliedVolatility: 0.30,
+            delta: $delta,
+            gamma: 0.03,
+            vega: 20.0,
+            theta: -8.0,
+            rho: 15.0,
+            timeToExpiry: $timeToExpiry,
+            riskFreeRate: 0.04,
+            dividendYield: 0.0,
         );
     }
 
@@ -73,7 +82,7 @@ class OptionDemandEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $this->engine->demandWeight($this->quote(0.30)),
             $this->engine->demandWeight($this->quote(-0.30)),
-            1e-12
+            1e-12,
         );
     }
 
@@ -115,7 +124,7 @@ class OptionDemandEngineTest extends TestCase
         // Only fear moves the tilt; a quiet tape leaves it at its base rather than pushing past it.
         $this->assertSame(
             OptionDemandEngine::OPTION_PUBLIC_CALL_SHARE,
-            $this->engine->callShare(0.05, 0.13)
+            $this->engine->callShare(0.05, 0.13),
         );
     }
 
@@ -134,7 +143,7 @@ class OptionDemandEngineTest extends TestCase
             $this->engine->evolve($stock, $contracts, $quotes, 0.13, 0.13, 0.01);
         }
 
-        $total = array_sum(array_map(static fn (OptionContract $c): int => $c->customerOpenInterest(), $contracts));
+        $total = array_sum(array_map(static fn(OptionContract $c): int => $c->customerOpenInterest(), $contracts));
 
         $this->assertGreaterThan(0, $total);
         $this->assertEqualsWithDelta($this->engine->contractBudget($stock), (float) $total, 2.0);
@@ -170,7 +179,7 @@ class OptionDemandEngineTest extends TestCase
         $this->assertGreaterThan(
             $contracts[0]->customerOpenInterest(),
             $contracts[1]->customerOpenInterest(),
-            'a frightened public should hold more puts than calls'
+            'a frightened public should hold more puts than calls',
         );
     }
 
@@ -210,7 +219,7 @@ class OptionDemandEngineTest extends TestCase
             $this->settledGamma($dense),
             $this->settledGamma($thin),
             $this->settledGamma($dense) * 0.05,
-            'the same book spread over a coarser sampling of the same range is the same exposure'
+            'the same book spread over a coarser sampling of the same range is the same exposure',
         );
     }
 
@@ -233,9 +242,18 @@ class OptionDemandEngineTest extends TestCase
 
             $contracts[] = $this->contract($ticker, true);
             $quotes[$ticker] = new OptionQuoteDTO(
-                mark: 5.0, bid: 4.9, ask: 5.1, impliedVolatility: 0.30,
-                delta: $delta, gamma: 0.04 * (1.0 - abs(2.0 * $delta - 1.0)), vega: 20.0, theta: -8.0, rho: 15.0,
-                timeToExpiry: 0.25, riskFreeRate: 0.04, dividendYield: 0.0,
+                mark: 5.0,
+                bid: 4.9,
+                ask: 5.1,
+                impliedVolatility: 0.30,
+                delta: $delta,
+                gamma: 0.04 * (1.0 - abs(2.0 * $delta - 1.0)),
+                vega: 20.0,
+                theta: -8.0,
+                rho: 15.0,
+                timeToExpiry: 0.25,
+                riskFreeRate: 0.04,
+                dividendYield: 0.0,
             );
         }
 

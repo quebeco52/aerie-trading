@@ -11,7 +11,6 @@ use App\Entity\Stock;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
@@ -40,13 +39,13 @@ class MarketConsensusEngineTest extends TestCase
             observableShockZ: 0.10, // 10% positive observable shock
             eventType: null,
             eventContext: [],
-            isPublicEvent: false
+            isPublicEvent: false,
         );
 
         $coverage = new SectorCoverageProfile(
             baseVisibility: 0.50,
             errorStdDev: 0.05,
-            minVisibility: 0.20
+            minVisibility: 0.20,
         );
 
         $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
@@ -71,13 +70,13 @@ class MarketConsensusEngineTest extends TestCase
             clampedMargin: 0.30,
             ebit: 400.0,
             observableShockZ: 0.20,
-            eventType: null
+            eventType: null,
         );
 
         $coverage = new SectorCoverageProfile(
             baseVisibility: 0.50,
             errorStdDev: 0.05,
-            minVisibility: 0.25
+            minVisibility: 0.25,
         );
 
         $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
@@ -98,13 +97,13 @@ class MarketConsensusEngineTest extends TestCase
             clampedMargin: 0.30,
             ebit: 400.0,
             observableShockZ: 0.10,
-            eventType: null
+            eventType: null,
         );
 
         $coverage = new SectorCoverageProfile(
             baseVisibility: 0.80,
             errorStdDev: 0.05,
-            minVisibility: 0.20
+            minVisibility: 0.20,
         );
 
         $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
@@ -126,7 +125,7 @@ class MarketConsensusEngineTest extends TestCase
             observableShockZ: 1.0,
             eventType: 'CLINICAL_TRIAL_SUCCESS',
             eventContext: [],
-            isPublicEvent: true
+            isPublicEvent: true,
         );
 
         // Biotech / ConsumerStaples style profile: routine visibility is low (0.10), but event visibility is high (0.90)
@@ -135,7 +134,7 @@ class MarketConsensusEngineTest extends TestCase
             errorStdDev: 0.05,
             minVisibility: 0.0,
             eventBaseVisibility: 0.90,
-            eventMinVisibility: 0.50
+            eventMinVisibility: 0.50,
         );
 
         $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
@@ -157,7 +156,7 @@ class MarketConsensusEngineTest extends TestCase
             observableShockZ: 0.1,
             eventType: null,
             eventContext: [],
-            isPublicEvent: false
+            isPublicEvent: false,
         );
 
         $coverage = new SectorCoverageProfile(
@@ -165,7 +164,7 @@ class MarketConsensusEngineTest extends TestCase
             errorStdDev: 0.05,
             minVisibility: 0.0,
             eventBaseVisibility: 0.90,
-            eventMinVisibility: 0.50
+            eventMinVisibility: 0.50,
         );
 
         $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
@@ -187,7 +186,7 @@ class MarketConsensusEngineTest extends TestCase
             observableShockZ: 0.0,
             eventType: null,
             eventContext: [],
-            isPublicEvent: false
+            isPublicEvent: false,
         );
     }
 
@@ -272,7 +271,7 @@ class MarketConsensusEngineTest extends TestCase
             publishedRevenueShift: 0.50,
         );
 
-        $estimate = fn (float $visibility): float => $this->engine
+        $estimate = fn(float $visibility): float => $this->engine
             ->generateConsensus($actuals, new SectorCoverageProfile(baseVisibility: $visibility, errorStdDev: 0.05), 1000.0, $this->mathUtilityMock, new Stock())
             ->analystUnbiasedRevenue;
 

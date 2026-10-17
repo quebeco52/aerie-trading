@@ -2,7 +2,6 @@
 
 namespace App\Controller;
 
-use App\Entity\TradeOrder;
 use App\Service\Market\Trading\TradeExecutionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -28,7 +27,7 @@ class TradeController extends AbstractController
         $preview = $tradeExecutionService->previewCosts(
             (string) $request->query->get('ticker', ''),
             (string) $request->query->get('action', 'BUY'),
-            (int) $request->query->get('quantity', 0)
+            (int) $request->query->get('quantity', 0),
         );
 
         return $preview === null
@@ -46,7 +45,7 @@ class TradeController extends AbstractController
         if (!$user instanceof \App\Entity\User) {
             return $this->redirectToRoute('app_login');
         }
-        
+
         $ticker = $request->request->get('ticker');
         $action = $request->request->get('action');
         $orderType = $request->request->get('orderType', 'MARKET');
@@ -120,7 +119,7 @@ class TradeController extends AbstractController
             $hasDebit = (float) $user->getMarginDebit() > 0.0;
             $hasShorts = (int) $entityManager->getConnection()->fetchOne(
                 'SELECT COUNT(*) FROM user_stocks WHERE user_id = :user_id AND quantity < 0',
-                ['user_id' => $user->getId()]
+                ['user_id' => $user->getId()],
             ) > 0;
 
             // A written contract requires a margin account exactly as a short sale does — OptionTradeService
@@ -129,7 +128,7 @@ class TradeController extends AbstractController
             // liability under the cash-account rule, which does not measure the requirement at all.
             $hasWrittenOptions = (int) $entityManager->getConnection()->fetchOne(
                 'SELECT COUNT(*) FROM user_options WHERE user_id = :user_id AND quantity < 0',
-                ['user_id' => $user->getId()]
+                ['user_id' => $user->getId()],
             ) > 0;
 
             if ($hasDebit || $hasShorts || $hasWrittenOptions) {
@@ -158,8 +157,8 @@ class TradeController extends AbstractController
         }
 
         $csrfToken = $request->request->get('_token');
-        
-        if (!$this->isCsrfTokenValid('cancel_trade_'.$id, $csrfToken)) {
+
+        if (!$this->isCsrfTokenValid('cancel_trade_' . $id, $csrfToken)) {
             $this->addFlash('error', 'Invalid security token.');
             return $this->redirect($request->headers->get('referer') ?? '/');
         }

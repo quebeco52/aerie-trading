@@ -164,7 +164,7 @@ class PlayerNotifier
         $rows = $this->entityManager->getConnection()->fetchAllAssociative(
             'SELECT user_id, ticker FROM watchlist_items WHERE ticker IN (:tickers)',
             ['tickers' => array_values(array_unique(array_column($watched, 'ticker')))],
-            ['tickers' => ArrayParameterType::STRING]
+            ['tickers' => ArrayParameterType::STRING],
         );
 
         $watchers = [];
@@ -209,13 +209,13 @@ class PlayerNotifier
                     $message['ticker'],
                     $message['link'],
                     $simTime,
-                    $now
+                    $now,
                 );
             }
 
             $conn->executeStatement(
                 'INSERT INTO notifications (user_id, kind, title, body, ticker, link, sim_time, created_at) VALUES ' . implode(', ', $values),
-                $params
+                $params,
             );
         }
     }

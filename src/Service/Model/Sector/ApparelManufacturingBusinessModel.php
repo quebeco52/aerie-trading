@@ -6,19 +6,18 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
 
-use App\Service\Math\ResponseCurves;
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Math\MacroTransmission;
-use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Math\ResponseCurves;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Apparel Manufacturing, Garment Producers, and Industrial Textile Mills.
@@ -177,7 +176,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             errorStdDev: self::BASE_COVERAGE_ERROR,
             minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
             eventBaseVisibility: 0.70,
-            eventMinVisibility: 0.40
+            eventMinVisibility: 0.40,
         );
     }
 
@@ -193,7 +192,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     {
         return FirmEconomics::revenueWeightedRatio(
             $this->resolveTargetStreamWeights($stock),
-            [self::DTC_NWC_INTENSITY, self::WHOLESALE_NWC_INTENSITY, self::CONTRACT_NWC_INTENSITY]
+            [self::DTC_NWC_INTENSITY, self::WHOLESALE_NWC_INTENSITY, self::CONTRACT_NWC_INTENSITY],
         );
     }
 
@@ -202,7 +201,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     {
         return FirmEconomics::revenueWeightedRatio(
             $this->resolveTargetStreamWeights($stock),
-            [self::DTC_LEASE_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY]
+            [self::DTC_LEASE_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY],
         );
     }
 
@@ -346,9 +345,9 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin + $inputCostDrag);
 
-        $observableShockZ = (($dtcZ * $dtcWeight * self::DTC_RETAIL_VARIANCE) +
-            ($wholesaleZ * $wholesaleWeight * self::WHOLESALE_CHANNEL_VARIANCE) +
-            ($contractZ * $contractWeight * self::CONTRACT_TEXTILE_VARIANCE)) * $baselineVol;
+        $observableShockZ = (($dtcZ * $dtcWeight * self::DTC_RETAIL_VARIANCE)
+            + ($wholesaleZ * $wholesaleWeight * self::WHOLESALE_CHANNEL_VARIANCE)
+            + ($contractZ * $contractWeight * self::CONTRACT_TEXTILE_VARIANCE)) * $baselineVol;
         $observableShockZ -= ($bullwhipPenalty * $wholesaleWeight);
 
         return new SectorPhysicsResult(

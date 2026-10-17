@@ -34,7 +34,7 @@ class MarketEventPublisherTest extends TestCase
         $this->publisher = new MarketEventPublisher(
             $this->emMock,
             $this->loggerStub,
-            $this->redisMock
+            $this->redisMock,
         );
     }
 
@@ -122,7 +122,7 @@ class MarketEventPublisherTest extends TestCase
 
         $this->emMock->expects($this->once())
             ->method('persist')
-            ->with($this->callback(fn (mixed $entity): bool => $entity instanceof EtfEvent && $entity->getChangePercent() === null));
+            ->with($this->callback(fn(mixed $entity): bool => $entity instanceof EtfEvent && $entity->getChangePercent() === null));
 
         ob_start();
         $result = $this->publisher->publish($etf, 'SHOCK', 'Systemic liquidity freeze.', null);
@@ -165,7 +165,7 @@ class MarketEventPublisherTest extends TestCase
     {
         $this->emMock->expects($this->once())
             ->method('persist')
-            ->with($this->callback(fn (mixed $entity): bool => $entity instanceof DistrictNews
+            ->with($this->callback(fn(mixed $entity): bool => $entity instanceof DistrictNews
                 && $entity->getDesk() === DistrictNews::DESK_GOVERNMENT
                 && $entity->getTopic() === 'election_held'
                 && $entity->getChangePercent() === '-1.25'));
@@ -208,7 +208,7 @@ class MarketEventPublisherTest extends TestCase
 
         $this->assertNull($unstamped['sim_time']);
         $this->assertSame([13.25, 13.25], [$stock['sim_time'], $district['sim_time']]);
-        $this->assertSame([null, 13.25, 13.25], array_map(fn (object $e): ?float => $e->getSimTime(), $persisted));
+        $this->assertSame([null, 13.25, 13.25], array_map(fn(object $e): ?float => $e->getSimTime(), $persisted));
         $this->assertSame('1 Apr, Year 14', $district['presented']['dateline']);
     }
 
@@ -226,6 +226,6 @@ class MarketEventPublisherTest extends TestCase
         $district = $this->publisher->publishDistrict(DistrictNews::DESK_ECONOMY, 'recession_declared', 'A recession has been declared.', null);
 
         $this->assertSame([true, false, true], [$large['headline'], $small['headline'], $district['headline']]);
-        $this->assertSame([true, false, true], array_map(fn (object $e): ?bool => $e->getHeadline(), $persisted));
+        $this->assertSame([true, false, true], array_map(fn(object $e): ?bool => $e->getHeadline(), $persisted));
     }
 }

@@ -2,10 +2,13 @@
 
 namespace App\Command;
 
-use App\Entity\User;
 use App\Data\Company\InitialMarket;
-use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
+use App\Entity\User;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
+use App\Service\Market\Ticker\StockTickColumns;
+use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -13,9 +16,6 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use App\Service\Math\FinancialConstants;
-use App\Service\Market\Pricing\OpeningBoardBuilder;
-use App\Service\Market\Ticker\StockTickColumns;
 
 #[AsCommand(
     name: 'app:market-reset',
@@ -28,7 +28,7 @@ class MarketResetCommand extends Command
         private \Redis $redis,
         private UserPasswordHasherInterface $passwordHasher,
         private \App\Service\Market\Bond\TreasuryAuctionService $treasuryAuction,
-        private OpeningBoardBuilder $openingBoard
+        private OpeningBoardBuilder $openingBoard,
     ) {
         parent::__construct();
     }
@@ -78,7 +78,7 @@ class MarketResetCommand extends Command
         $placeholders = implode(',', array_fill(0, count($initialTickers), '?'));
         $conn->executeStatement(
             "DELETE FROM stocks WHERE ticker NOT IN ($placeholders)",
-            $initialTickers
+            $initialTickers,
         );
 
         // Ensure the test user exists
@@ -156,7 +156,7 @@ class MarketResetCommand extends Command
                 'description' => \App\Data\Company\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
                 'expense_ratio' => $etfData['expense_ratio'] ?? 0.0,
                 'seed_shares' => FinancialConstants::ETF_SEED_SHARES_OUTSTANDING,
-                'ticker' => $etfData['ticker']
+                'ticker' => $etfData['ticker'],
             ];
 
             // Created when missing rather than only updated: a fund added to the seed after a market was
@@ -168,7 +168,7 @@ class MarketResetCommand extends Command
                 $conn->executeStatement(
                     'INSERT INTO etfs (ticker, name, price, description, expense_ratio, basket_per_share, accrued_income, cumulative_fees_paid, cumulative_trading_costs, shares_outstanding, nav_premium, arbitrage_band, recent_distributions, last_distribution_at, updated_at)
                      VALUES (:ticker, :name, :price, :description, :expense_ratio, 1, 0, 0, 0, :seed_shares, 0, 0, NULL, NULL, NOW())',
-                    $params
+                    $params,
                 );
                 continue;
             }
@@ -194,7 +194,7 @@ class MarketResetCommand extends Command
                         recent_distributions = NULL,
                         last_distribution_at = NULL
                   WHERE ticker = :ticker',
-                $params
+                $params,
             );
         }
 

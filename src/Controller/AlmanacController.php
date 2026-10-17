@@ -39,7 +39,7 @@ class AlmanacController extends AbstractController
             // Institutions with a page of their own the entry is about.
             'pages' => array_values(array_filter(array_map(
                 static fn(string $subject): ?array => isset($hrefs[Institutions::PUBLISHERS[$subject] ?? '']) ? ['name' => Institutions::PUBLISHERS[$subject], 'href' => $hrefs[Institutions::PUBLISHERS[$subject]]] : null,
-                $entry->about
+                $entry->about,
             ))),
         ]);
     }

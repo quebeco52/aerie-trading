@@ -102,7 +102,7 @@ class AgentPopulationTest extends TestCase
             0.01,
             1.0 / 14400.0,
             0.0,
-            0.0
+            0.0,
         );
 
         $this->assertGreaterThan(0.0, $fitness['fundamentalist']);
@@ -121,7 +121,7 @@ class AgentPopulationTest extends TestCase
             0.01,
             1.0 / 14400.0,
             0.0,
-            0.09
+            0.09,
         );
 
         $this->assertEqualsWithDelta($fitness['majority'], $fitness['minority'], 1e-15);
@@ -135,7 +135,7 @@ class AgentPopulationTest extends TestCase
             -0.01,
             1.0 / 14400.0,
             0.0,
-            0.0
+            0.0,
         );
 
         $this->assertLessThan(0.0, $fitness['momentum']);
@@ -149,7 +149,7 @@ class AgentPopulationTest extends TestCase
             -0.01,
             1.0 / 14400.0,
             0.0,
-            0.0
+            0.0,
         );
 
         $this->assertGreaterThan(0.0, $fitness['fundamentalist']);
@@ -170,7 +170,7 @@ class AgentPopulationTest extends TestCase
             0.002,
             1.0 / 14400.0,
             0.0,
-            0.0
+            0.0,
         );
 
         // Fully committed, earning 0.2% in a tick: an annualized rate on the order of tens, not 1e-5.
@@ -260,7 +260,7 @@ class AgentPopulationTest extends TestCase
             0.0,
             $dt,
             0.0,
-            $variance
+            $variance,
         );
 
         $this->assertLessThan(0.0, $fitness['large']);
@@ -278,7 +278,7 @@ class AgentPopulationTest extends TestCase
             0.0,
             $dt,
             0.0,
-            0.09
+            0.09,
         );
 
         $this->assertEqualsWithDelta($fitness['half'] * 4.0, $fitness['full'], 1e-12);
@@ -301,7 +301,7 @@ class AgentPopulationTest extends TestCase
 
         $crowded = $this->population->crowdedFitness(
             ['fundamentalist' => 0.4, 'momentum' => -0.2],
-            ['fundamentalist' => -0.1, 'momentum' => 0.6]
+            ['fundamentalist' => -0.1, 'momentum' => 0.6],
         );
 
         $this->assertEqualsWithDelta(((1.0 - $weight) * 0.4) + ($weight * -0.1), $crowded['fundamentalist'], 1e-12);

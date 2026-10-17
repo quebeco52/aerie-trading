@@ -8,11 +8,10 @@ use App\Data\Company\AnchorHoldings;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
-use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\MarketEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Tests\Support\StockBuilder;
@@ -37,7 +36,7 @@ class CompanySnapshotNavTest extends TestCase
             new MarketEngine($math),
             new DebtEngine($math, CorporateMetrics::getInstance()),
             new AnchorStakeLedger(),
-            $stocks
+            $stocks,
         );
     }
 
@@ -92,7 +91,7 @@ class CompanySnapshotNavTest extends TestCase
         $this->assertLessThan(
             $filed['netAssetValue']['perShare'],
             $crashed['netAssetValue']['perShare'],
-            'A 40% fall in the holdings must show up in the quoted net asset value.'
+            'A 40% fall in the holdings must show up in the quoted net asset value.',
         );
     }
 

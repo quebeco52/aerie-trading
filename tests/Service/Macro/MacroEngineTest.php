@@ -2,9 +2,6 @@
 
 namespace App\Tests\Service\Macro;
 
-use PHPUnit\Framework\TestCase;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -14,8 +11,9 @@ use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
-use App\Data\SectorPE;
-use App\Data\Macro\EconomicCycle;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class MacroEngineTest extends TestCase
@@ -718,7 +716,6 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(100.0, $result->residentialPropertyIndex, 'Tight labor market should expand residential housing index above neutral baseline.');
     }
 
-
     public function testEvansRuleLiftsOffWhenInflationBreachesThreshold(): void
     {
         // Unemployment > 5.0% but Inflation > 2.5% -> Evans Rule allows lift-off to protect price stability
@@ -771,8 +768,6 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(0.00, $result->targetRate, 'Target rate must calculate normally when unemployment is <= 5.0%.');
     }
 
-
-
     public function testCapitalOverhangDragsOutputGap(): void
     {
         // State with positive capital overhang (excess capacity / boom overbuild)
@@ -804,7 +799,7 @@ class MacroEngineTest extends TestCase
             ->with('macroeconomic_state')
             ->willReturnOnConsecutiveCalls(
                 json_encode($positiveOverhangState),
-                json_encode($negativeOverhangState)
+                json_encode($negativeOverhangState),
             );
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
@@ -814,7 +809,7 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(
             $resultNegative->outputGap,
             $resultPositive->outputGap,
-            'Positive capital overhang must exert drag on the output gap compared to negative overhang which provides an autonomous recovery impulse.'
+            'Positive capital overhang must exert drag on the output gap compared to negative overhang which provides an autonomous recovery impulse.',
         );
     }
 
@@ -851,7 +846,7 @@ class MacroEngineTest extends TestCase
             MacroEngine::SENTIMENT_TREND_LEVEL,
             $result->consumerSentimentIndex,
             1.0,
-            'Consumer sentiment must sit at its trend level in a neutral economy.'
+            'Consumer sentiment must sit at its trend level in a neutral economy.',
         );
     }
 
@@ -887,7 +882,7 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(
             85.0,
             $result->consumerSentimentIndex,
-            'Unemployment three points over NAIRU and inflation well over target should heavily depress consumer sentiment.'
+            'Unemployment three points over NAIRU and inflation well over target should heavily depress consumer sentiment.',
         );
     }
 
@@ -961,7 +956,7 @@ class MacroEngineTest extends TestCase
 
         $this->redisMock->method('get')->willReturnOnConsecutiveCalls(
             json_encode($state->toArray()),
-            json_encode($recessionState->toArray())
+            json_encode($recessionState->toArray()),
         );
 
         // Run 1 tick of boom ($dt = 0.25 years / 1 quarter)
@@ -1097,7 +1092,7 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $stateNeutral->macroCreditSpread + ((0.03 - 0.0025) * MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY),
             $stateStressed->macroCreditSpread,
-            0.0001
+            0.0001,
         );
     }
 
@@ -1169,7 +1164,6 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan($lagQ1, $lagQ2, 'Sticky cost lag should accumulate and rise across successive quarters of elevated energy.');
     }
 
-
     public function testRateSmoothingClosesTheSameShareCuttingAsHiking(): void
     {
         // US 1987-2008: 15% of the distance closed a quarter cutting, 13% hiking, not distinguishable (se 4-6%).
@@ -1187,9 +1181,6 @@ class MacroEngineTest extends TestCase
 
         $this->assertEqualsWithDelta($hike, $cut, 1e-12, 'Below the hike ceiling a 100bp distance must close by the same amount either way.');
     }
-
-
-
 
     public function testDynamicNaturalRateDriftsWithTfpGrowth(): void
     {
@@ -1281,7 +1272,7 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta($peak, $step['new_balance_sheet_intensity'], 1e-9, 'The reinvestment hold keeps the portfolio flat.');
         $this->assertEquals(0.0, $step['new_qt_intensity'], 'Holding is not runoff.');
 
-        $state->balanceSheetHoldTimer = \App\Service\Macro\Subsystem\MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS;
+        $state->balanceSheetHoldTimer = MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS;
         $step = $this->monetarySubsystem->calculateBalanceSheetOperations($state, 0.25);
         $this->assertLessThan($peak, $step['new_balance_sheet_intensity'], 'Once the hold expires the portfolio runs off.');
         $this->assertGreaterThan(0.0, $step['new_qt_intensity'], 'Passive runoff still reports QT intensity.');
@@ -1291,7 +1282,7 @@ class MacroEngineTest extends TestCase
     {
         $base = new \App\Service\Macro\MacroState();
         $base->balanceSheetIntensity = 0.008;
-        $base->balanceSheetHoldTimer = \App\Service\Macro\Subsystem\MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS;
+        $base->balanceSheetHoldTimer = MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS;
         $base->policyRate = 0.035;
         $base->tipsBreakeven = 0.02;
 
@@ -1388,7 +1379,7 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             $yieldDataAnchored['term_premium_10y'],
             $yieldDataUnanchored['term_premium_10y'],
-            '10Y term premium must expand when inflation breakeven exceeds target and macro volatility is elevated.'
+            '10Y term premium must expand when inflation breakeven exceeds target and macro volatility is elevated.',
         );
     }
 
@@ -1417,7 +1408,7 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(
             $yieldDataNeutral['term_premium_10y'],
             $yieldDataRecession['term_premium_10y'],
-            'Recessions must compress duration term premium via flight-to-safety demand (Campbell et al. 2017).'
+            'Recessions must compress duration term premium via flight-to-safety demand (Campbell et al. 2017).',
         );
     }
 
@@ -1471,7 +1462,7 @@ class MacroEngineTest extends TestCase
     /** r* follows the trend growth of potential, which the labour force sets beside productivity, and not the cycle. */
     public function testNaturalRateFollowsTrendGrowthAndNotTheCycle(): void
     {
-        $aggregate = new \App\Service\Macro\Subsystem\MacroAggregateSubsystem(new MathUtility());
+        $aggregate = new MacroAggregateSubsystem(new MathUtility());
 
         $boom = new \App\Service\Macro\MacroState();
         $boom->outputGap = 0.03;
@@ -1559,7 +1550,7 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(
             0.0,
             $spreadPeak,
-            sprintf('2s10s yield curve spread must invert at the peak of a monetary policy tightening campaign (got %0.2f bps).', $spreadPeak * 10000)
+            sprintf('2s10s yield curve spread must invert at the peak of a monetary policy tightening campaign (got %0.2f bps).', $spreadPeak * 10000),
         );
 
         // 2. Recession / easing cycle: policyRate = 1.0%, targetRate = 0.5%, outputGap = -2.5%
@@ -1580,7 +1571,7 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             0.0100,
             $spreadEasing,
-            sprintf('2s10s yield curve spread must bull-steepen significantly during monetary easing (got %0.2f bps).', $spreadEasing * 10000)
+            sprintf('2s10s yield curve spread must bull-steepen significantly during monetary easing (got %0.2f bps).', $spreadEasing * 10000),
         );
     }
 
@@ -1605,7 +1596,7 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(
             $gapBaseline,
             $gapCrisis,
-            'BGG financial accelerator: a blown-out credit premium must contract the output gap.'
+            'BGG financial accelerator: a blown-out credit premium must contract the output gap.',
         );
     }
 
@@ -1652,7 +1643,7 @@ class MacroEngineTest extends TestCase
 
     public function testNairuHysteresisScarsAfterDeepRecession(): void
     {
-        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
+        $laborSubsystem = new LaborMarketSubsystem();
 
         $state = new \App\Service\Macro\MacroState();
         $state->nairu = 0.04;
@@ -1664,13 +1655,13 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             0.04,
             $state->nairu,
-            'Sustained high unemployment must cause structural scarring, drifting NAIRU upward.'
+            'Sustained high unemployment must cause structural scarring, drifting NAIRU upward.',
         );
     }
 
     public function testNairuRecoveryDuringTightLaborMarket(): void
     {
-        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
+        $laborSubsystem = new LaborMarketSubsystem();
 
         $state = new \App\Service\Macro\MacroState();
         $state->nairu = 0.06; // Scarred from prior downturn
@@ -1682,13 +1673,13 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(
             0.06,
             $state->nairu,
-            'Prolonged expansion with unemployment below NAIRU must heal structural scarring, drifting NAIRU downward.'
+            'Prolonged expansion with unemployment below NAIRU must heal structural scarring, drifting NAIRU downward.',
         );
     }
 
     public function testDownwardWageRigidity(): void
     {
-        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
+        $laborSubsystem = new LaborMarketSubsystem();
         $dt = 0.25;
         $tfpGrowth = MacroEngine::TFP_DRIFT;
 
@@ -1712,13 +1703,13 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             $downwardDelta,
             $upwardDelta,
-            'Bewley downward wage rigidity: wages must resist falling faster than they rise.'
+            'Bewley downward wage rigidity: wages must resist falling faster than they rise.',
         );
     }
 
     public function testForwardLookingTaylorHikesOnUnanchoredExpectations(): void
     {
-        $monetarySubsystem = new \App\Service\Macro\Subsystem\MonetaryPolicySubsystem($this->mathUtilityMock);
+        $monetarySubsystem = new MonetaryPolicySubsystem($this->mathUtilityMock);
 
         $stateAnchored = new \App\Service\Macro\MacroState();
         $stateAnchored->inflationEma = 0.020;
@@ -1734,13 +1725,13 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             $targetAnchored,
             $targetUnanchored,
-            'Forward-looking Taylor rule must hike aggressively when TIPS breakeven expectations unanchor.'
+            'Forward-looking Taylor rule must hike aggressively when TIPS breakeven expectations unanchor.',
         );
     }
 
     public function testSovereignDebtAccumulatesDuringFiscalDeficit(): void
     {
-        $creditFiscalSubsystem = new \App\Service\Macro\Subsystem\CreditFiscalSubsystem($this->mathUtilityMock);
+        $creditFiscalSubsystem = new CreditFiscalSubsystem($this->mathUtilityMock);
 
         $state = new \App\Service\Macro\MacroState();
         $state->sovereignDebtToGdp = 0.60;
@@ -1755,13 +1746,13 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             0.60,
             $state->sovereignDebtToGdp,
-            'Persistent primary fiscal deficit must accumulate sovereign debt-to-GDP stock.'
+            'Persistent primary fiscal deficit must accumulate sovereign debt-to-GDP stock.',
         );
     }
 
     public function testSovereignDebtSteepensYieldCurve(): void
     {
-        $monetarySubsystem = new \App\Service\Macro\Subsystem\MonetaryPolicySubsystem($this->mathUtilityMock);
+        $monetarySubsystem = new MonetaryPolicySubsystem($this->mathUtilityMock);
         $dt = 0.25;
 
         $stateLowDebt = new \App\Service\Macro\MacroState();
@@ -1780,18 +1771,18 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             $curveLow['yield_30y'],
             $curveHigh['yield_30y'],
-            'The sovereign premium on high debt must lift long-end yields.'
+            'The sovereign premium on high debt must lift long-end yields.',
         );
         $this->assertGreaterThan(
             $curveLow['term_premium_10y'],
             $curveHigh['term_premium_10y'],
-            'Excess sovereign debt supply must expand the 10Y term premium.'
+            'Excess sovereign debt supply must expand the 10Y term premium.',
         );
     }
 
     public function testFinancialConditionsIndexTightensDuringCrisis(): void
     {
-        $assetSubsystem = new \App\Service\Macro\Subsystem\AssetMarketSubsystem($this->mathUtilityMock);
+        $assetSubsystem = new AssetMarketSubsystem($this->mathUtilityMock);
 
         $stateCrisis = new \App\Service\Macro\MacroState();
         $stateCrisis->macroCreditSpreadEma = 0.05; // 500 bps
@@ -1805,13 +1796,13 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             0.20,
             $stateCrisis->financialConditionsIndex,
-            'Crisis conditions (wide spreads, inverted curve, high vol) must produce positive (restrictive) FCI.'
+            'Crisis conditions (wide spreads, inverted curve, high vol) must produce positive (restrictive) FCI.',
         );
     }
 
     public function testFinancialConditionsIndexLooseDuringGoldilocks(): void
     {
-        $assetSubsystem = new \App\Service\Macro\Subsystem\AssetMarketSubsystem($this->mathUtilityMock);
+        $assetSubsystem = new AssetMarketSubsystem($this->mathUtilityMock);
 
         $stateGoldilocks = new \App\Service\Macro\MacroState();
         $stateGoldilocks->macroCreditSpreadEma = 0.012; // Narrow spreads
@@ -1825,13 +1816,13 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(
             -0.10,
             $stateGoldilocks->financialConditionsIndex,
-            'Goldilocks conditions (tight spreads, steep curve, low vol) must produce negative (accommodative) FCI.'
+            'Goldilocks conditions (tight spreads, steep curve, low vol) must produce negative (accommodative) FCI.',
         );
     }
 
     public function testNormalEconomyProducesUpwardSlopingYieldCurveAndTighteningProducesInversion(): void
     {
-        $monetarySubsystem = new \App\Service\Macro\Subsystem\MonetaryPolicySubsystem($this->mathUtilityMock);
+        $monetarySubsystem = new MonetaryPolicySubsystem($this->mathUtilityMock);
         $dt = 0.25;
 
         // 1. Normal, balanced macroeconomic state:
@@ -1879,7 +1870,7 @@ class MacroEngineTest extends TestCase
 
     public function testQuantitativeEasingActivatesWhenTheRuleAsksForARateBelowTheFloor(): void
     {
-        $monetarySubsystem = new \App\Service\Macro\Subsystem\MonetaryPolicySubsystem($this->mathUtilityMock);
+        $monetarySubsystem = new MonetaryPolicySubsystem($this->mathUtilityMock);
         $dt = 0.25;
 
         // At the floor in a -2% slump, the rule asking for -1.5%
@@ -1899,7 +1890,7 @@ class MacroEngineTest extends TestCase
 
     public function testInterbankLiquiditySpreadCoupledToTheBondPremium(): void
     {
-        $creditSubsystem = new \App\Service\Macro\Subsystem\CreditFiscalSubsystem($this->mathUtilityMock);
+        $creditSubsystem = new CreditFiscalSubsystem($this->mathUtilityMock);
 
         $stateCalm = new \App\Service\Macro\MacroState();
         $stateCalm->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
@@ -1919,7 +1910,7 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             $stateCalm->interbankLiquiditySpread,
             $stateStressed->interbankLiquiditySpread,
-            'Wholesale interbank liquidity spread must widen when lenders reprice credit risk.'
+            'Wholesale interbank liquidity spread must widen when lenders reprice credit risk.',
         );
     }
 
@@ -1930,9 +1921,9 @@ class MacroEngineTest extends TestCase
      */
     public function testConsumerSentimentIsTheMichiganFit(): void
     {
-        $assetSubsystem = new \App\Service\Macro\Subsystem\AssetMarketSubsystem($this->mathUtilityMock);
+        $assetSubsystem = new AssetMarketSubsystem($this->mathUtilityMock);
         $dt = 0.25;
-        $months = static fn (float $from, float $to): array => array_map(static fn (int $i): float => $from + (($to - $from) * $i / 12), range(0, 12));
+        $months = static fn(float $from, float $to): array => array_map(static fn(int $i): float => $from + (($to - $from) * $i / 12), range(0, 12));
 
         $neutral = new \App\Service\Macro\MacroState();
         $neutral->nairu = 0.045;
@@ -1956,8 +1947,8 @@ class MacroEngineTest extends TestCase
     /** The terms are two-sided: a tight labour market, low inflation and falling joblessness lift the index above trend. */
     public function testConsumerSentimentRisesAboveTrendInABoom(): void
     {
-        $assetSubsystem = new \App\Service\Macro\Subsystem\AssetMarketSubsystem($this->mathUtilityMock);
-        $months = static fn (float $from, float $to): array => array_map(static fn (int $i): float => $from + (($to - $from) * $i / 12), range(0, 12));
+        $assetSubsystem = new AssetMarketSubsystem($this->mathUtilityMock);
+        $months = static fn(float $from, float $to): array => array_map(static fn(int $i): float => $from + (($to - $from) * $i / 12), range(0, 12));
 
         $boom = new \App\Service\Macro\MacroState();
         $boom->nairu = 0.045;
@@ -2002,7 +1993,7 @@ class MacroEngineTest extends TestCase
 
         $this->redisMock->method('get')->willReturnOnConsecutiveCalls(
             json_encode($stateHighRstar),
-            json_encode($stateBaseRstar)
+            json_encode($stateBaseRstar),
         );
 
         $dtoHigh = $this->engine->updateMacroState(0.25);
@@ -2012,14 +2003,14 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(
             $dtoBase->targetRate,
             $dtoHigh->targetRate,
-            'Taylor rule target rate must incorporate dynamic natural rate (r*) rather than discarding it.'
+            'Taylor rule target rate must incorporate dynamic natural rate (r*) rather than discarding it.',
         );
         // Specifically, the ~150 bps r* spread should reflect in targetRate
         $this->assertEqualsWithDelta(
             $dtoBase->targetRate + (0.030 - MacroEngine::BASE_NATURAL_RATE),
             $dtoHigh->targetRate,
             0.005,
-            'Taylor rule intercept must shift 1:1 with dynamic r*.'
+            'Taylor rule intercept must shift 1:1 with dynamic r*.',
         );
     }
 
@@ -2030,7 +2021,7 @@ class MacroEngineTest extends TestCase
             '{invalid json payload!!}',
             'null',
             '"not an array"',
-            ''
+            '',
         );
 
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);

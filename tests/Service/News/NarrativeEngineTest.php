@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\News;
 
-use App\Service\News\NarrativeEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -33,7 +33,7 @@ class NarrativeEngineTest extends TestCase
             $this->assertNotSame(
                 'Experienced an unexpected market event.',
                 $lore,
-                "ShockEvent::{$name} ({$eventType}) must have a defined lore branch in NarrativeEngine."
+                "ShockEvent::{$name} ({$eventType}) must have a defined lore branch in NarrativeEngine.",
             );
         }
     }

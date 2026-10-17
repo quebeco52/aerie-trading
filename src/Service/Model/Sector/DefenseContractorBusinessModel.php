@@ -5,23 +5,22 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
-use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Heavy Defense Contractors & Aerospace Weapons Manufacturers.
- * 
+ *
  * Financial Physics:
  * - Tri-Stream Defense Engine:
  *      1. Cost-Plus Allied Procurement: the mainland's and its allies' orders, protected by FAR 16.3 inflation escalators.
@@ -146,10 +145,22 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Working capital intensity of the fixed-price book while FAR 32.503-6 withholds its progress payments. */
     public const WITHHOLDING_NWC_INTENSITY = 0.18;
 
-        public function getWholesaleLeverageLimit(): float { return 2.0; }
-    public function getReversionSpeed(): float { return 0.12; }
-    public function getMoatSpread(): float { return 0.02; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.2; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.0;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.12;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.02;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.2;
+    }
 
     public function getCapexCyclicality(): float
     {
@@ -243,7 +254,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::CostPlusWeight->value             => self::COST_PLUS_WEIGHT,
@@ -325,12 +336,24 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Contract awards fund a multi-year backlog; revenue is recognized on percentage of completion, so
         // appropriations and export bans hit ORDERS in full and revenue gradually.
         // Foreign military sales are bought out of the same allied budgets, so they take the same award term.
-        $costPlusBook = $streams->recognizeBacklog('cost_plus_procurement', $expectedRevenue * $costPlusWeight,
-            max(0.0, (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + $alliedOrders) * $costPlusMultiplier), self::COST_PLUS_BACKLOG_BURN_RATE);
-        $fixedPriceBook = $streams->recognizeBacklog('fixed_price_development', $expectedRevenue * $fixedPriceWeight,
-            max(0.0, (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) + $alliedOrders) * $fixedPriceMultiplier), self::FIXED_PRICE_BACKLOG_BURN_RATE);
-        $fmsBook = $streams->recognizeBacklog('foreign_military_sales', $expectedRevenue * $fmsWeight,
-            max(0.0, (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) + $alliedOrders + $this->resolveFxDemandShift($macroState)) * $fmsMultiplier), self::FMS_BACKLOG_BURN_RATE);
+        $costPlusBook = $streams->recognizeBacklog(
+            'cost_plus_procurement',
+            $expectedRevenue * $costPlusWeight,
+            max(0.0, (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + $alliedOrders) * $costPlusMultiplier),
+            self::COST_PLUS_BACKLOG_BURN_RATE,
+        );
+        $fixedPriceBook = $streams->recognizeBacklog(
+            'fixed_price_development',
+            $expectedRevenue * $fixedPriceWeight,
+            max(0.0, (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) + $alliedOrders) * $fixedPriceMultiplier),
+            self::FIXED_PRICE_BACKLOG_BURN_RATE,
+        );
+        $fmsBook = $streams->recognizeBacklog(
+            'foreign_military_sales',
+            $expectedRevenue * $fmsWeight,
+            max(0.0, (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) + $alliedOrders + $this->resolveFxDemandShift($macroState)) * $fmsMultiplier),
+            self::FMS_BACKLOG_BURN_RATE,
+        );
 
         $costPlusRevenue = $costPlusBook['revenue'];
         $fixedPriceRevenue = $fixedPriceBook['revenue'];
@@ -377,7 +400,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-                    kpis: ['book_to_bill' => $backlogRevenue > 0.0 ? $backlogOrders / $backlogRevenue : 1.0, 'backlog_quarters' => $backlogQuarters],
+            kpis: ['book_to_bill' => $backlogRevenue > 0.0 ? $backlogOrders / $backlogRevenue : 1.0, 'backlog_quarters' => $backlogQuarters],
             specialCharge: $specialCharge,
         );
     }

@@ -24,7 +24,7 @@ final class InMemoryIndexMembershipStore implements IndexMembershipStoreInterfac
         array $added = [],
         array $deleted = [],
         array $weights = [],
-        array $factors = []
+        array $factors = [],
     ): void {
         $this->state[$index->value] = [
             'tick' => $tick,

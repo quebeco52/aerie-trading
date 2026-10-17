@@ -246,14 +246,14 @@ class OptionChainBuilder
         if ((float) $stock->getPrice() < FinancialConstants::OPTION_LISTING_MIN_PRICE) {
             return sprintf(
                 'Listed contracts require a share price of at least $%s. A ladder struck on a lower price has no usable strikes.',
-                number_format(FinancialConstants::OPTION_LISTING_MIN_PRICE, 2)
+                number_format(FinancialConstants::OPTION_LISTING_MIN_PRICE, 2),
             );
         }
 
         if (!$this->chainService->isListable($stock)) {
             return sprintf(
                 'The exchange lists contracts against a trading record. This name turns over less than %s shares a day.',
-                number_format(FinancialConstants::OPTION_LISTING_MIN_ADV)
+                number_format(FinancialConstants::OPTION_LISTING_MIN_ADV),
             );
         }
 

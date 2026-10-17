@@ -7,8 +7,8 @@ namespace App\Tests\Service\Market\Option;
 use App\DTO\SovereignCurveDTO;
 use App\Entity\OptionContract;
 use App\Service\Market\Bond\BondPricingEngine;
-use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Option\OptionPricingEngine;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\OptionPricing;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
@@ -99,7 +99,7 @@ class OptionPricingEngineTest extends TestCase
 
     public function testAStockIsQuotedOnTheBetaItsTapeTradesOn(): void
     {
-        $stock = \App\Tests\Support\StockBuilder::create('BETA')->withPrice(100.0)->build();
+        $stock = StockBuilder::create('BETA')->withPrice(100.0)->build();
         $stock->setBeta('1.0')->setVolatility('0.30')->setCurrentVolatility('0.30')->setJumpIntensity('1.0')->setJumpVol('0.10');
 
         $asset = $this->engine->surfaceFor($stock, 0.25);
@@ -141,7 +141,7 @@ class OptionPricingEngineTest extends TestCase
                 - ($lambda * OptionPricing::calculateKouJumpMoment(2, $own['p_up'], $own['eta_up'], $own['eta_down']))
                 - ($market['lambda'] * OptionPricing::calculateKouJumpMoment(2, $market['p_up'], $market['eta_up'], $market['eta_down']))),
             [$own, $market],
-            0.25
+            0.25,
         );
 
         $this->assertEqualsWithDelta($expected['skewness'], $surface['skewness'], 1e-12);
@@ -168,7 +168,7 @@ class OptionPricingEngineTest extends TestCase
                 - (3.0 * OptionPricing::calculateKouJumpMoment(2, $own['p_up'], $own['eta_up'], $own['eta_down']))
                 - ($market['lambda'] * OptionPricing::calculateKouJumpMoment(2, $market['p_up'], $market['eta_up'], $market['eta_down']))),
             [$own, $market],
-            0.5
+            0.5,
         );
 
         $this->assertEqualsWithDelta(($jumpy['atm_volatility'] ** 2) * 0.5, $shape['variance'], 1e-12);
@@ -240,7 +240,7 @@ class OptionPricingEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $quote->mark * OptionPricingEngine::OPTION_MIN_HALF_SPREAD_FRACTION,
             ($quote->ask - $quote->bid) / 2.0,
-            1e-9
+            1e-9,
         );
     }
 
@@ -252,7 +252,7 @@ class OptionPricingEngineTest extends TestCase
         $this->assertGreaterThanOrEqual(0.0, $quote->bid);
         $this->assertLessThanOrEqual(
             $quote->mark * OptionPricingEngine::OPTION_MAX_HALF_SPREAD_FRACTION,
-            ($quote->ask - $quote->bid) / 2.0
+            ($quote->ask - $quote->bid) / 2.0,
         );
     }
 

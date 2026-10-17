@@ -206,7 +206,7 @@ final class AgentFlowEngine
                 $view->logReturn,
                 $view->dt,
                 $view->riskFreeRate,
-                $variance
+                $variance,
             );
 
             // The return the agents just watched is now part of the volatility they can see.
@@ -337,7 +337,7 @@ final class AgentFlowEngine
             return $positions;
         }
 
-        return array_map(static fn (float $position): float => $position * $splitRatio, $positions);
+        return array_map(static fn(float $position): float => $position * $splitRatio, $positions);
     }
 
     /**

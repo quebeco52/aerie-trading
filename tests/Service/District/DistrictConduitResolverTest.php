@@ -49,7 +49,7 @@ class DistrictConduitResolverTest extends TestCase
         $this->assertSame(
             [],
             $resolver->conduitsForBusinessModel('test'),
-            'A model reading only near-universal fields should not be wired to any institution'
+            'A model reading only near-universal fields should not be wired to any institution',
         );
     }
 
@@ -67,7 +67,7 @@ class DistrictConduitResolverTest extends TestCase
 
         $this->assertSame(
             ['rate-council', 'land-registry'],
-            $resolver->conduitsForBusinessModel('test')
+            $resolver->conduitsForBusinessModel('test'),
         );
     }
 }

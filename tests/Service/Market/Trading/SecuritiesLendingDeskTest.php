@@ -50,7 +50,7 @@ class SecuritiesLendingDeskTest extends TestCase
     {
         $this->assertGreaterThan(
             $this->desk->lendableSupply($this->stock(float: 0.20)),
-            $this->desk->lendableSupply($this->stock(float: 0.95))
+            $this->desk->lendableSupply($this->stock(float: 0.95)),
         );
     }
 
@@ -68,7 +68,7 @@ class SecuritiesLendingDeskTest extends TestCase
         $this->assertEqualsWithDelta(
             SecuritiesLendingDesk::GENERAL_COLLATERAL_BORROW_FEE,
             $this->desk->borrowFee($this->stock()),
-            1e-9
+            1e-9,
         );
     }
 

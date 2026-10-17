@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ShippingBusinessModel;
 use App\Service\Model\StreamContext;
-use App\Service\Event\ShockEvent;
-use App\DTO\MacroStateDTO;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -28,7 +28,7 @@ class ShippingBusinessModelTest extends TestCase
         $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         // Positive output gap -> continuous positive spot rate multiplier
-        $macroStatePositive = \App\DTO\MacroStateDTO::fromArray(['output_gap_ema' => 0.010, 'inflation_ema' => 0.02]);
+        $macroStatePositive = MacroStateDTO::fromArray(['output_gap_ema' => 0.010, 'inflation_ema' => 0.02]);
         $resultPositive = $model->computeActualFinancials(
             $stock,
             1000.0,
@@ -36,11 +36,11 @@ class ShippingBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroStatePositive,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // Negative output gap -> continuous negative spot rate multiplier
-        $macroStateNegative = \App\DTO\MacroStateDTO::fromArray(['output_gap_ema' => -0.010, 'inflation_ema' => 0.02]);
+        $macroStateNegative = MacroStateDTO::fromArray(['output_gap_ema' => -0.010, 'inflation_ema' => 0.02]);
         $resultNegative = $model->computeActualFinancials(
             $stock,
             1000.0,
@@ -48,7 +48,7 @@ class ShippingBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroStateNegative,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertGreaterThan($resultNegative->actualRevenue, $resultPositive->actualRevenue);
@@ -64,8 +64,8 @@ class ShippingBusinessModelTest extends TestCase
         $mathUtilityMock = $this->createStub(MathUtility::class);
         $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $baseMacro = new \App\DTO\MacroStateDTO(freightRateIndexEma: 100.0);
-        $surgeMacro = new \App\DTO\MacroStateDTO(freightRateIndexEma: 140.0);
+        $baseMacro = new MacroStateDTO(freightRateIndexEma: 100.0);
+        $surgeMacro = new MacroStateDTO(freightRateIndexEma: 140.0);
 
         $baseResult = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $baseMacro, $mathUtilityMock);
         $surgeResult = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $surgeMacro, $mathUtilityMock);
@@ -80,8 +80,8 @@ class ShippingBusinessModelTest extends TestCase
         $stock->setTicker('SHIP');
         $stock->setBeta('1.0');
 
-        $baseMacro = new \App\DTO\MacroStateDTO(exchangeRateIndexEma: 100.0);
-        $strongDollarMacro = new \App\DTO\MacroStateDTO(exchangeRateIndexEma: 120.0);
+        $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
+        $strongDollarMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0);
 
         $basePhysics = $model->getMacroPhysics($stock, $baseMacro);
         $strongDollarPhysics = $model->getMacroPhysics($stock, $strongDollarMacro);
@@ -120,7 +120,7 @@ class ShippingBusinessModelTest extends TestCase
             // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
+            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
             $math->method('checkProbability')->willReturn($exits);
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
@@ -150,7 +150,6 @@ class ShippingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($baseline->actualRevenue, $after->actualRevenue, $baseline->actualRevenue * 1e-9, 'back to baseline once the regime exits');
     }
 
-
     /**
      * Spot revenue is rate times cargo, each entering once. The gap used to reach the spot book three times (a root
      * shift at cyclicality x MACRO_DEMAND_SCALAR, a direct 3.5x spot-rate term, and the freight index that already
@@ -163,7 +162,7 @@ class ShippingBusinessModelTest extends TestCase
         $stock->setTicker('XSHP');
         $stock->setBeta('1.0');
         $quiet = $this->createStub(MathUtility::class);
-        $run = fn (MacroStateDTO $state) => $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $state, $quiet);
+        $run = fn(MacroStateDTO $state) => $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $state, $quiet);
         $cargoElasticity = ShippingBusinessModel::OPERATING_CYCLICALITY * ShippingBusinessModel::MACRO_DEMAND_SCALAR;
 
         $gap = -0.01;
@@ -179,7 +178,7 @@ class ShippingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             ShippingBusinessModel::SPOT_CHARTER_WEIGHT * $gap * $cargoElasticity,
             $model->resolveSectorActivityShift($stock, $slump),
-            1e-9
+            1e-9,
         );
 
         // A freight-rate move reprices the same cargo one for one, books as price, and leaves the charter book alone.
@@ -213,7 +212,7 @@ class ShippingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $model->getMacroPhysics($stock, $home)['macro_demand_shift'],
             $model->getMacroPhysics($stock, $abroad)['macro_demand_shift'],
-            1e-12
+            1e-12,
         );
     }
 }

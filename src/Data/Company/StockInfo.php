@@ -286,7 +286,7 @@ class StockInfo
 
     /**
      * Retrieves the description for a given stock or ETF.
-     * 
+     *
      * @param array<string, mixed> $stock
      */
     public static function getDescription(array $stock): string

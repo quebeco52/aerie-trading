@@ -3,17 +3,18 @@
 namespace App\Twig;
 
 use App\Entity\User;
+use Firebase\JWT\JWT;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
-use Firebase\JWT\JWT;
 
 class WebSocketTicketExtension extends AbstractExtension
 {
     public function __construct(
         private Security $security,
-        #[Autowire('%kernel.secret%')] private string $appSecret
+        #[Autowire('%kernel.secret%')]
+        private string $appSecret,
     ) {}
 
     public function getFunctions(): array
@@ -30,7 +31,7 @@ class WebSocketTicketExtension extends AbstractExtension
 
         $payload = [
             'uid' => $userId,
-            'exp' => time() + (3600 * 4) // 4 hours
+            'exp' => time() + (3600 * 4), // 4 hours
         ];
 
         return JWT::encode($payload, $this->appSecret, 'HS256');

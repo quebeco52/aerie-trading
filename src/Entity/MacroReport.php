@@ -156,14 +156,11 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $unemploymentRateEma = null;
 
-
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $realGdpQuarterlyGrowth = null;
 
     #[ORM\Column(nullable: true)]
     private ?bool $recessionDeclared = null;
-
-
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $energyPriceIndex = null;
@@ -652,7 +649,6 @@ class MacroReport
 
     // What the state paid to stand behind the banks in the last crisis, and the rescue stakes it still holds, of GDP.
 
-
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $foreignOutputGap = null;
 
@@ -840,7 +836,6 @@ class MacroReport
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $sovereignFundDrawToGdp = null;
-
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $sovereignFundStampDutyToGdp = null;

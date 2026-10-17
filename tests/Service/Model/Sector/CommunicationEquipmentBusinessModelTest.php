@@ -6,12 +6,12 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommunicationEquipmentBusinessModel;
+use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -42,8 +42,8 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $stock->setEarningsMomentumZ($momentum);
 
         $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-        $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $scriptedZ : 0.0);
-        $math->method('checkProbability')->willReturnCallback(fn (float $p): bool => in_array($p, $hazardFires, true));
+        $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $scriptedZ : 0.0);
+        $math->method('checkProbability')->willReturnCallback(fn(float $p): bool => in_array($p, $hazardFires, true));
 
         return $this->model->computeActualFinancials(
             $stock,
@@ -52,7 +52,7 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
             20_000_000.0,
             $baselineVol,
             $macro ?? new MacroStateDTO(),
-            $math
+            $math,
         );
     }
 
@@ -125,7 +125,7 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             10_000_000.0 * (1.0 + ($upbeatMacro->sentimentDeviation() * CommunicationEquipmentBusinessModel::DEVICE_SHIPMENT_SENTIMENT_SENSITIVITY)),
             $upbeat->streamRevenue['sep_licensing'],
-            1.0
+            1.0,
         );
     }
 
@@ -250,7 +250,7 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
             0.20 * CommunicationEquipmentBusinessModel::REVENUE_VARIANCE_SCALAR * CommunicationEquipmentBusinessModel::ENTERPRISE_WEIGHT * CommunicationEquipmentBusinessModel::NETWORK_BACKLOG_BURN_RATE,
             $orders->observableShockZ,
             1e-9,
-            'An order shock is seen at the share of it the backlog delivers this quarter.'
+            'An order shock is seen at the share of it the backlog delivers this quarter.',
         );
     }
 

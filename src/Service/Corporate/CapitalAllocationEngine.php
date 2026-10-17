@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
-use App\Entity\Stock;
-use App\Service\Math\CreditRisk;
-use App\Service\Math\Valuation;
-use App\Service\Math\TimeSeries;
-use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Macro\MacroEngine;
-use App\Service\Math\MathUtility;
 use App\DTO\CapitalAllocationContext;
 use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
+use App\Service\Math\CreditRisk;
+use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
 
 /**
  * Service responsible for returning cash to shareholders.
@@ -49,7 +47,7 @@ class CapitalAllocationEngine
         private CorporateMetrics $corporateMetrics,
         private DebtEngine $debtEngine,
         private MathUtility $mathUtility,
-        private TreasuryEngine $treasuryEngine
+        private TreasuryEngine $treasuryEngine,
     ) {}
 
     /**
@@ -65,7 +63,7 @@ class CapitalAllocationEngine
         float $actualTotalNetIncome = 0.0,
         float $stockCompensation = 0.0,
         ?float $openingCapitalRatio = null,
-        ?float $expansionBudget = null
+        ?float $expansionBudget = null,
     ): array {
         $ctx = new CapitalAllocationContext(
             $stock,
@@ -76,7 +74,7 @@ class CapitalAllocationEngine
             $sharesOutstanding,
             $actualTotalNetIncome,
             $stockCompensation,
-            $expansionBudget
+            $expansionBudget,
         );
         $ctx->openingCapitalRatio = $openingCapitalRatio;
 
@@ -97,40 +95,40 @@ class CapitalAllocationEngine
             'loan_originations' => $ctx->loanOriginations,
             'asset_sale_proceeds' => $ctx->assetSaleProceeds,
             'asset_sale_loss' => $ctx->assetSaleLoss,
-            'events' => $ctx->events
+            'events' => $ctx->events,
         ];
     }
 
     private function initializeContext(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
-        
+
         $ctx->quarterlyEps = $ctx->actualAnnualEps / 4.0;
         $ctx->trailingQuarterlyEps = (float) $stock->getEarningsPerShare() / 4.0;
         $ctx->quarterlyNetIncome = $ctx->actualTotalNetIncome != 0.0 ? $ctx->actualTotalNetIncome : ($ctx->quarterlyEps * $ctx->sharesOutstanding);
-        
+
         $ctx->currentTreasury = (float) $stock->getCorporateTreasury();
         $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
         $ctx->customerDeposits = (float) $stock->getCustomerDeposits();
-        
+
         $ctx->operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $ctx->investedCapital = $stock->getInvestedCapital();
-        
+
         $ctx->industry = $stock->getIndustry() ?: 'General';
         $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);
         $ctx->isFinancial = \App\Data\Company\Sectors::isFinancial($ctx->businessModel);
         $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
-        
+
         // Coverage, cost of capital and the hurdle that gate distributions and borrowing are read off what the
         // firm actually earned over the last twelve months, as its lenders measure it. The structural margin
         // only moves through reinvestment decay, so on it a firm in a margin collapse kept paying a dividend on
         // coverage it no longer had; one annualized quarter instead flipped the verdict with the seasons.
         $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
-        
+
         $ebit = $ctx->health->rawMetrics->ebit ?? 0.0;
         $nopat = $ebit > 0 ? $ebit * (1.0 - $ctx->macroState->corporateTaxRate) : $ebit;
         $ctx->quarterlyNopat = $nopat / 4.0;
-        
+
         $totalFcfGenerated = $ctx->quarterlyFcfPerShare * $ctx->sharesOutstanding;
         $ctx->newTreasury = $ctx->currentTreasury + $totalFcfGenerated;
     }
@@ -138,7 +136,7 @@ class CapitalAllocationEngine
     private function executeDividends(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
-        
+
         // Bertrand & Schoar (2003): payout policy carries a persistent manager fixed effect. An empire
         // builder retains what a steward would distribute, from the same balance sheet.
         $targetPayout = $stock->getPolicyPayoutRatio();
@@ -184,7 +182,7 @@ class CapitalAllocationEngine
         $targetDividend = $holdsDividend ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
 
         $isRegulatoryDividendHalt = false;
-        
+
         $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury, $ctx->macroState);
         if ($regulatoryCap !== null) {
             if ($regulatoryCap <= 0.0) {
@@ -311,13 +309,13 @@ class CapitalAllocationEngine
     private function executeCorporateStrategy(CapitalAllocationContext $ctx): void
     {
         $this->treasuryEngine->executeCorporateStrategy($ctx);
-        
+
         // The cash target the manager runs to: the buffer it chooses, biased, above the liability backing and the
         // solvency floor, which stay where the model puts them. Every hoarding test downstream measures against
         // this, so the fortress is not detected as defective for holding the reserves that define it.
         $ctx->targetOperatingCash = $ctx->stock->getManagementProfile()->managedTargetCash($ctx->strategy, $ctx->operatingBase, (float) $ctx->stock->getCustomerDeposits(), (float) $ctx->stock->getWholesaleDebt());
         $ctx->excessCash = max(0.0, $ctx->newTreasury - $ctx->targetOperatingCash);
-        
+
         if ($ctx->actualAnnualEps > 0) {
             $ctx->currentPE = $ctx->currentPrice / $ctx->actualAnnualEps;
         } else {
@@ -345,7 +343,7 @@ class CapitalAllocationEngine
 
         return max(
             $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn),
-            $ctx->strategy->getUndeployableCapitalShare($ctx->stock, $ctx->macroState, $this->mathUtility)
+            $ctx->strategy->getUndeployableCapitalShare($ctx->stock, $ctx->macroState, $this->mathUtility),
         );
     }
 
@@ -420,7 +418,7 @@ class CapitalAllocationEngine
             $ctx->macroState->tipsBreakeven,
             \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio()
+            $stock->getPolicyPayoutRatio(),
         );
 
         $ctx->newShares = $ctx->sharesOutstanding;
@@ -489,7 +487,7 @@ class CapitalAllocationEngine
 
             $valuationDiscount = max(
                 $repurchaseAccretion,
-                max(0.0, ($fairValuePE - $ctx->currentPE) / max(1.0, $fairValuePE))
+                max(0.0, ($fairValuePE - $ctx->currentPE) / max(1.0, $fairValuePE)),
             );
             $aggression = $isMegaHoarder ? 1.0 : min(1.0, 0.50 + $valuationDiscount);
 
@@ -498,7 +496,7 @@ class CapitalAllocationEngine
             // appetite do not scale them.
             $actualSpend = max($actualSpend, min(max($capitalSurplusReturn, $recapitalization), $absoluteMaxSpend));
             $sharesRepurchased = (int) floor($actualSpend / max($ctx->currentPrice, 0.01));
-            
+
             // Cap buybacks at 95% of currently outstanding shares per quarter.
             $maxSharesToBuy = (int) floor($ctx->sharesOutstanding * 0.95);
             $sharesRepurchased = min($sharesRepurchased, $maxSharesToBuy);
@@ -518,11 +516,11 @@ class CapitalAllocationEngine
 
                 $ctx->events[] = [
                     'description' => "Bought back " . number_format($sharesRepurchased) . " shares.",
-                    'shock' => 0.0
+                    'shock' => 0.0,
                 ];
             }
         }
-        
+
         $ctx->newTreasury -= $ctx->totalCashSpent;
     }
 
@@ -607,7 +605,7 @@ class CapitalAllocationEngine
             $this->resolvePreBuybackEquity($ctx),
             CreditRisk::netBookDebt((float) $ctx->stock->getTotalDebt(), $leaseLiability, $ctx->newTreasury, $ctx->targetOperatingCash),
             $ctx->health->leverageTarget,
-            $ctx->health->debtToEquity
+            $ctx->health->debtToEquity,
         );
     }
 

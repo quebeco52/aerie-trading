@@ -31,7 +31,7 @@ class RetailInsuranceBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             yield10yEma: 0.045,
-            policyRateEma: 0.025
+            policyRateEma: 0.025,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -41,7 +41,7 @@ class RetailInsuranceBusinessModelTest extends TestCase
             fixedCosts: 1_000_000_000.0,
             baselineVol: 0.08,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('property_casualty_premiums', $result->streamRevenue);
@@ -54,7 +54,7 @@ class RetailInsuranceBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $result->actualRevenue,
             $result->streamRevenue['property_casualty_premiums'] + $result->streamRevenue['life_insurance_premiums'],
-            1.0
+            1.0,
         );
     }
 
@@ -105,7 +105,7 @@ class RetailInsuranceBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             yield10yEma: 0.045,
-            policyRateEma: 0.025
+            policyRateEma: 0.025,
         );
 
         $expectedRevenue = 10_000_000_000.0;
@@ -116,7 +116,7 @@ class RetailInsuranceBusinessModelTest extends TestCase
             fixedCosts: 1_000_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // Observable shock should match the revenue percentage deviation

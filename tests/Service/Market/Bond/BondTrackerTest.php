@@ -6,10 +6,10 @@ namespace App\Tests\Service\Market\Bond;
 
 use App\Entity\Bond;
 use App\Entity\Stock;
-use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Market\Bond\BondLedgerService;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\BondTracker;
+use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Math\FinancialConstants;
 use App\Tests\Support\MacroStateBuilder;
 use Doctrine\DBAL\Connection;
@@ -33,7 +33,7 @@ class BondTrackerTest extends TestCase
         return new BondTracker(
             $this->createStub(EntityManagerInterface::class),
             new BondPricingEngine(),
-            $ledger
+            $ledger,
         );
     }
 
@@ -211,7 +211,7 @@ class BondTrackerTest extends TestCase
             $this->assertEqualsWithDelta(
                 $engine->zeroYield($macro->sovereignCurve(), $tenor),
                 $point['yield'],
-                1e-12
+                1e-12,
             );
         }
     }
@@ -261,7 +261,7 @@ class BondTrackerTest extends TestCase
                 $sent[] = [$sql, $params];
 
                 return 1;
-            }
+            },
         );
 
         $em = $this->createStub(EntityManagerInterface::class);

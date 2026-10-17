@@ -5,23 +5,22 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
+use App\DTO\MacroStateDTO;
+use App\DTO\SectorPhysicsResult;
+
+use App\Entity\Stock;
+
+use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
-
 use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
-use App\DTO\SectorPhysicsResult;
-use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
-use App\Service\Event\ShockEvent;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Internet Retail & Digital Marketplace Megacorporations.
- * 
+ *
  * Financial Physics:
  * - Tri-Stream Architecture:
  *      1. 1st-Party Retail: Buys and sells physical inventory. Low margin, highly exposed to supply chain inflation and recessions.
@@ -64,13 +63,34 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.40; // 1P sales are visible, but 3P/Ads are a black box
     public const BASE_COVERAGE_ERROR = 0.08;
 
-        public function getMinIcr(): float { return 2.5; }
-    public function getWholesaleLeverageLimit(): float { return 1.5; }
-    public function getDividendCrisisIcr(): float { return 2.0; }
-    public function getBuybackMinIcr(): float { return 2.5; }
-    public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.02; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.5; }
+    public function getMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 1.5;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 2.0;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.02;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.5;
+    }
 
     public function getSeasonalityFactors(): array
     {
@@ -120,7 +140,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     {
         return FirmEconomics::blendWorkingCapitalShares(
             $this->resolveTargetStreamWeights($stock),
-            [self::FIRST_PARTY_WORKING_CAPITAL, self::THIRD_PARTY_WORKING_CAPITAL, self::DIGITAL_ADS_WORKING_CAPITAL]
+            [self::FIRST_PARTY_WORKING_CAPITAL, self::THIRD_PARTY_WORKING_CAPITAL, self::DIGITAL_ADS_WORKING_CAPITAL],
         );
     }
 
@@ -129,7 +149,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     {
         return FirmEconomics::revenueWeightedRatio(
             $this->resolveTargetStreamWeights($stock),
-            [self::FIRST_PARTY_LEASE_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY, self::DIGITAL_ADS_LEASE_INTENSITY]
+            [self::FIRST_PARTY_LEASE_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY, self::DIGITAL_ADS_LEASE_INTENSITY],
         );
     }
 
@@ -309,7 +329,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $plannedTpAdsCosts = $expectedRevenue * (($tpWeight * self::THIRD_PARTY_COST_RATIO) + ($adsWeight * self::DIGITAL_ADS_COST_RATIO));
         $fpBaselineCosts = max(0.0, $targetTotalCosts - $plannedTpAdsCosts);
         $fpVariableMargin = $expectedRevenue * $fpWeight > 0 ? $fpBaselineCosts / ($expectedRevenue * $fpWeight) : $realizedVariableMargin;
-        
+
         $fxShift = $macroState->exchangeRateGap();
         $fpCostSavings = $fpRevenue * $fxShift * self::IMPORT_SOURCING_FX_SCALAR;
 
@@ -328,9 +348,9 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Visibility: 1P retail is visible via credit card data, 3P and Ads are opaque.
-        $observableShockZ = ($fpZ * $fpWeight * self::FIRST_PARTY_VARIANCE * 0.80) +
-            ($tpZ * $tpWeight * self::THIRD_PARTY_VARIANCE * 0.20) +
-            ($adsZ * $adsWeight * self::DIGITAL_ADS_VARIANCE * 0.10);
+        $observableShockZ = ($fpZ * $fpWeight * self::FIRST_PARTY_VARIANCE * 0.80)
+            + ($tpZ * $tpWeight * self::THIRD_PARTY_VARIANCE * 0.20)
+            + ($adsZ * $adsWeight * self::DIGITAL_ADS_VARIANCE * 0.10);
         $observableShockZ *= $baselineVol;
 
         return new SectorPhysicsResult(

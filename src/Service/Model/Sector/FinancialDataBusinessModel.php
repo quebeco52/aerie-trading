@@ -5,20 +5,19 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Financial Data & Stock Exchanges (Rating Agencies, Market Data).
- * 
+ *
  * Financial Physics:
  * - Asset-light, ultra-high margin monopolies.
  * - Revenue is incredibly sticky due to mandatory recurring subscriptions and licensing fees.
@@ -50,9 +49,18 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     public const BASE_COVERAGE_ERROR = 0.10;
-        public function getReversionSpeed(): float { return 0.1; }
-    public function getMoatSpread(): float { return 0.025; }
-    public function getCapExCompletionRate(Stock $stock): float { return 1.0; }
+    public function getReversionSpeed(): float
+    {
+        return 0.1;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.025;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 1.0;
+    }
     // --- Secular Demand ---
     /** Data processing, internet publishing and other information services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
     public const SECULAR_SHARE_1997 = 0.0037;
@@ -92,7 +100,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 
         return FirmEconomics::blendWorkingCapitalShares(
             [$params[ModelParam::SubscriptionRevenueWeight], $params[ModelParam::TransactionRevenueWeight]],
-            [self::SUBSCRIPTION_WORKING_CAPITAL, self::TRANSACTION_WORKING_CAPITAL]
+            [self::SUBSCRIPTION_WORKING_CAPITAL, self::TRANSACTION_WORKING_CAPITAL],
         );
     }
 
@@ -162,7 +170,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 
         $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
         $transactionRevenue  = max(0.0, $expectedRevenue * $transactionWeight * (1.0 + ($transactionZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 5.0))) + $transactionMacroBonus));
-        
+
         $streamRevenues = [
             'subscription' => $subscriptionRevenue,
             'transaction'  => $transactionRevenue,

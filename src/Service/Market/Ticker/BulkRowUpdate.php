@@ -73,7 +73,7 @@ final class BulkRowUpdate
 
             // Only the first SELECT names the derived columns; the rest are positional.
             $cells = $first
-                ? array_merge(['? AS id'], array_map(static fn (string $column): string => '? AS ' . $column, $columns))
+                ? array_merge(['? AS id'], array_map(static fn(string $column): string => '? AS ' . $column, $columns))
                 : array_fill(0, $width + 1, '?');
             $first = false;
 
@@ -85,8 +85,8 @@ final class BulkRowUpdate
         }
 
         $assignments = array_map(
-            static fn (string $column): string => sprintf('t.%1$s = v.%1$s', $column),
-            $columns
+            static fn(string $column): string => sprintf('t.%1$s = v.%1$s', $column),
+            $columns,
         );
 
         return [
@@ -94,7 +94,7 @@ final class BulkRowUpdate
                 'UPDATE %s t JOIN (%s) v ON v.id = t.id SET %s',
                 $table,
                 implode(' UNION ALL ', $selects),
-                implode(', ', $assignments)
+                implode(', ', $assignments),
             ),
             'params' => $params,
         ];

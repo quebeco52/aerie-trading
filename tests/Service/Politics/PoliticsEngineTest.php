@@ -266,7 +266,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $seed[Diet::EXCHANGE] * (1.0 - ($weight * 0.04 / $governing) + ((1.0 - $weight) * 0.04 / $opposition)),
             $shares[Diet::EXCHANGE],
-            1e-12
+            1e-12,
         );
         $this->assertLessThan($seed[Diet::EXCHANGE], $shares[Diet::EXCHANGE], 'It loses with the government,');
         $this->assertGreaterThan($seed[Diet::EXCHANGE] * $shares[Diet::VANGUARD] / $seed[Diet::VANGUARD], $shares[Diet::EXCHANGE], 'but less than a cabinet party does.');
@@ -355,7 +355,7 @@ class PoliticsEngineTest extends TestCase
             self::ELECTION_AT + ($onTheDay->formationLog[array_key_last($onTheDay->formationLog)]['day'] / FinancialConstants::DAYS_PER_YEAR),
             $onTheDay->coalitionTakesOfficeAt,
             1e-12,
-            'The cabinet takes office the day the last attempt succeeds.'
+            'The cabinet takes office the day the last attempt succeeds.',
         );
     }
 
@@ -825,7 +825,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame($pole, Politics::platform([Diet::AXIS_STATE => 1.0, Diet::AXIS_OPENNESS => -1.0]));
         $this->assertSame(
             Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::EXCHANGE][Diet::AXIS_OPENNESS]]),
-            Politics::platform([Diet::AXIS_STATE => -1.0, Diet::AXIS_OPENNESS => 1.0])
+            Politics::platform([Diet::AXIS_STATE => -1.0, Diet::AXIS_OPENNESS => 1.0]),
         );
     }
 
@@ -855,9 +855,6 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame($state->importTariffRate, $policy->importTariffRate);
         $this->assertSame($state->laborForceGrowthRate, $policy->laborForceGrowthRate);
     }
-
-
-
 
     /** The closed end of the openness axis taxes foreign home buyers at Singapore's 60%; the open end and the middle tax none. */
     public function testTheClosedEndTaxesForeignHomeBuyers(): void
@@ -930,9 +927,6 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.007, $civic - $vanguard, 3e-5, 'The ends part by 0.7% of GDP.');
         $this->assertEqualsWithDelta(MacroEngine::PUBLIC_PURCHASES_TO_GDP, Politics::platform([Diet::AXIS_STATE => 0.0])['publicSpending'], 1e-15);
     }
-
-
-
 
     /**
      * A supporter accepts a lever no further from its own policy than the one in force (Romer & Rosenthal 1978): it
@@ -1076,7 +1070,10 @@ class PoliticsEngineTest extends TestCase
     private function quietMath(): MathUtility
     {
         return new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
         };
     }
 
@@ -1126,7 +1123,6 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(0.0, $founding['carbonPrice']);
         $this->assertSame(0.0, $founding['extractionStringency']);
     }
-
 
     /** A party's programme, the standing levers and the state fields all list the levers in one order, so a budget that changes nothing compares equal. */
     public function testEveryLeverListIsInPlatformOrder(): void

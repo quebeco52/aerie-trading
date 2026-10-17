@@ -40,7 +40,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 30_000_000.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('mass_market_sales', $result->streamRevenue);
@@ -79,7 +79,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 25_000_000.0,
             baselineVol: 0.0,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         // FALC tuned: 55% Mass Market Fleet, 25% Apex Luxury, 8% Software Telematics, 12% Captive Finance
@@ -127,7 +127,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         // Apex luxury hypercars exert Veblen pricing power when inflation runs over the 2% breakevens (0.04 * 0.80 = +3.2%)
         $this->assertGreaterThan(
             $baselineResult->streamRevenue['apex_luxury'],
-            $inflationResult->streamRevenue['apex_luxury']
+            $inflationResult->streamRevenue['apex_luxury'],
         );
         $this->assertEqualsWithDelta(25_800_000.0, $inflationResult->streamRevenue['apex_luxury'], 1.0);
     }
@@ -153,7 +153,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 25_000_000.0,
             baselineVol: 0.15,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertSame(\App\Service\Event\ShockEvent::LABOR_STRIKE, $result->eventType);
@@ -195,7 +195,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 25_000_000.0,
             baselineVol: 0.0,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertSame(\App\Service\Event\ShockEvent::PRODUCT_RECALL, $result->eventType);
@@ -244,7 +244,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setBeta('1.0');
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $run = fn (MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $macro, $mathMock);
+        $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $macro, $mathMock);
 
         $calm = $run(new MacroStateDTO(freightRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0, inflationEma: 0.02));
         $freightSpike = $run(new MacroStateDTO(freightRateIndexEma: 160.0, industrialMetalsIndexEma: 100.0, inflationEma: 0.02));
@@ -292,7 +292,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             $mildDrop,
             $shift($mildStrongPmi) - $neutralShift,
             1e-12,
-            'the industrial PMI is the machinery makers\' signal, not the car buyer\'s'
+            'the industrial PMI is the machinery makers\' signal, not the car buyer\'s',
         );
 
         $severe = new MacroStateDTO(outputGapEma: -0.06, consumerSentimentIndexEma: 55.0, policyRateEma: 0.01);
@@ -312,7 +312,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $quiet = $this->createStub(MathUtility::class);
         $expectedRevenue = 100_000_000.0;
 
-        $stateAt = fn (float $gap): MacroStateDTO => new MacroStateDTO(
+        $stateAt = fn(float $gap): MacroStateDTO => new MacroStateDTO(
             outputGapEma: $gap,
             consumerSentimentIndexEma: MacroEngine::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * $gap),
             exchangeRateIndexEma: 100.0,
@@ -335,7 +335,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('XAUT');
         $stock->setBeta('1.0');
-        $shift = fn (float $policy, float $breakeven): float => $this->model->getMacroPhysics($stock, new MacroStateDTO(
+        $shift = fn(float $policy, float $breakeven): float => $this->model->getMacroPhysics($stock, new MacroStateDTO(
             policyRateEma: $policy,
             tipsBreakevenEma: $breakeven,
             naturalRateEma: MacroEngine::BASE_NATURAL_RATE,
@@ -352,7 +352,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             -0.01 * AutoManufacturerBusinessModel::OPERATING_CYCLICALITY * AutoManufacturerBusinessModel::RATE_SENSITIVITY_SCALAR,
             $shift(MacroEngine::BASE_NATURAL_RATE + 0.03, 0.02),
-            1e-12
+            1e-12,
         );
     }
 
@@ -372,7 +372,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             yield10yEma: 0.045,
             yield2yEma: 0.050, // Inverted curve
             equityRiskPremium: 0.055,
-            macroCreditSpread: 0.035
+            macroCreditSpread: 0.035,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -382,7 +382,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 263_900_000_000.0, // 500B * (1 - 0.09 margin) * 0.58 fixed cost ratio
             baselineVol: 0.35,
             macroState: $macro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertGreaterThan(0.0, $result->actualRevenue);
@@ -405,7 +405,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
         $macroNormal = new MacroStateDTO(
             outputGapEma: 0.0,
-            supplyChainPressureIndexEma: 0.0
+            supplyChainPressureIndexEma: 0.0,
         );
 
         $resultNormal = $this->model->computeActualFinancials(
@@ -415,12 +415,12 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 2_000_000_000.0,
             baselineVol: 0.0,
             macroState: $macroNormal,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $macroBottleneck = new MacroStateDTO(
             outputGapEma: 0.0,
-            supplyChainPressureIndexEma: 2.50 // Severe supply chain bottleneck
+            supplyChainPressureIndexEma: 2.50, // Severe supply chain bottleneck
         );
 
         $resultBottleneck = $this->model->computeActualFinancials(
@@ -430,7 +430,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 2_000_000_000.0,
             baselineVol: 0.0,
             macroState: $macroBottleneck,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertGreaterThan($resultNormal->clampedMargin, $resultBottleneck->clampedMargin, 'Global supply chain bottleneck must increase variable manufacturing costs.');
@@ -447,7 +447,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
         $macroNormal = new MacroStateDTO(
             outputGapEma: 0.0,
-            capacityUtilizationRateEma: 0.785
+            capacityUtilizationRateEma: 0.785,
         );
 
         $resultNormal = $this->model->computeActualFinancials(
@@ -457,12 +457,12 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 2_000_000_000.0,
             baselineVol: 0.0,
             macroState: $macroNormal,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $macroBoom = new MacroStateDTO(
             outputGapEma: 0.0,
-            capacityUtilizationRateEma: 0.835 // High factory utilization
+            capacityUtilizationRateEma: 0.835, // High factory utilization
         );
 
         $resultBoom = $this->model->computeActualFinancials(
@@ -472,7 +472,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 2_000_000_000.0,
             baselineVol: 0.0,
             macroState: $macroBoom,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertGreaterThan($resultNormal->streamRevenue['mass_market_sales'], $resultBoom->streamRevenue['mass_market_sales'], 'High industrial capacity utilization must increase vehicle assembly revenue.');
@@ -520,7 +520,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $falcCalm->streamRevenue['captive_finance'] * $creditCost,
             $falcStress->actualVariableCosts - $falcCalm->actualVariableCosts,
-            1.0
+            1.0,
         );
     }
 }

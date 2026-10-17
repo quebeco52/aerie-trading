@@ -62,7 +62,7 @@ class AnchorHoldingsTest extends TestCase
                 $this->assertArrayNotHasKey(
                     $held,
                     AnchorHoldings::STAKES,
-                    "{$holder} holds {$held}, which is itself a sphere — that needs look-through valuation."
+                    "{$holder} holds {$held}, which is itself a sphere — that needs look-through valuation.",
                 );
             }
         }
@@ -76,13 +76,13 @@ class AnchorHoldingsTest extends TestCase
         foreach (array_keys(AnchorHoldings::STAKES) as $holder) {
             $industry = $rows[$holder]['industry'] ?? 'General';
             $strategy = Sectors::getBusinessModelStrategy(
-                Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none'
+                Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none',
             );
 
             $this->assertInstanceOf(
                 InvestmentCompanyBusinessModel::class,
                 $strategy,
-                "{$holder} declares anchor stakes but is run by " . $strategy::class . ', which never reads them.'
+                "{$holder} declares anchor stakes but is run by " . $strategy::class . ', which never reads them.',
             );
         }
     }
@@ -114,13 +114,13 @@ class AnchorHoldingsTest extends TestCase
                     'The anchor blocks in %s take %.0f%% of a company whose declared float is %.0f%%.',
                     $ticker,
                     100.0 * $closelyHeld,
-                    100.0 * $declared
-                )
+                    100.0 * $declared,
+                ),
             );
             $this->assertGreaterThanOrEqual(
                 AnchorHoldings::MIN_TRADABLE_FLOAT,
                 $tradable,
-                "{$ticker} has almost no float left once its anchor blocks are removed."
+                "{$ticker} has almost no float left once its anchor blocks are removed.",
             );
             $this->assertEqualsWithDelta($declared - $closelyHeld, $tradable, 1e-9, $ticker);
         }
@@ -157,7 +157,7 @@ class AnchorHoldingsTest extends TestCase
             $investedCapital = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateLiveInvestedCapital(
                 (float) ($rows[$holder]['total_equity'] ?? 0.0),
                 (float) ($rows[$holder]['wholesale_debt'] ?? 0.0) + (float) ($rows[$holder]['customer_deposits'] ?? 0.0),
-                (float) ($rows[$holder]['corporate_treasury'] ?? 0.0)
+                (float) ($rows[$holder]['corporate_treasury'] ?? 0.0),
             );
 
             $this->assertGreaterThan(0.0, $portfolio, "{$holder} declares stakes worth nothing.");
@@ -168,8 +168,8 @@ class AnchorHoldingsTest extends TestCase
                     '%s declares a portfolio worth %s against %s of capital employed; trim its stakes or raise its balance sheet.',
                     $holder,
                     number_format($portfolio / 1e9, 0) . 'B',
-                    number_format($investedCapital / 1e9, 0) . 'B'
-                )
+                    number_format($investedCapital / 1e9, 0) . 'B',
+                ),
             );
         }
     }

@@ -29,14 +29,10 @@ final class InMemoryAgentStateStore implements AgentStateStoreInterface
     }
 
     /** Nothing to bulk-load: the array is already local. */
-    public function beginBatch(): void
-    {
-    }
+    public function beginBatch(): void {}
 
     /** Nothing to bulk-send: writes landed as they were made. */
-    public function commitBatch(): void
-    {
-    }
+    public function commitBatch(): void {}
 
     public function readStyle(): array
     {

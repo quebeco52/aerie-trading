@@ -4,28 +4,27 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\DTO\InterestExpenseDTO;
 use App\DTO\DebtExpansionAppetiteDTO;
+use App\DTO\InterestExpenseDTO;
 
-use App\Service\Math\CreditRisk;
-use App\Service\Math\MacroTransmission;
-use App\Service\Math\TimeSeries;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
+
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Event\ShockEvent;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Commercial Banks.
- * 
+ *
  * Financial Physics:
  * - Profits are driven by Net Interest Margin (NIM) and the spread between wholesale/deposit rates and lending rates.
  * - Evaluated strictly on Return on Equity (ROE) rather than ROIC.
@@ -81,18 +80,50 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Rate at which planned capital expenditure is completed. */
     public const THRESHOLD_CAPEX_COMPLETION_RATE = 1.0;
 
-        public function getMinIcr(): float { return self::THRESHOLD_MIN_ICR; }
-    public function getBankruptEquityThreshold(): float { return self::THRESHOLD_BANKRUPT_EQUITY; }
-    public function getDistressEquityThreshold(): float { return self::THRESHOLD_DISTRESS_EQUITY; }
-    public function getWarningEquityThreshold(): float { return self::THRESHOLD_WARNING_EQUITY; }
-    public function getWholesaleLeverageLimit(): float { return self::THRESHOLD_WHOLESALE_LEVERAGE_LIMIT; }
-    public function getDividendCrisisIcr(): float { return self::THRESHOLD_DIVIDEND_CRISIS_ICR; }
-    public function getBuybackMinIcr(): float { return self::THRESHOLD_BUYBACK_MIN_ICR; }
-    public function getReversionSpeed(): float { return self::THRESHOLD_REVERSION_SPEED; }
-    public function getMoatSpread(): float { return self::THRESHOLD_MOAT_SPREAD; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return self::THRESHOLD_NWC_INTENSITY; }
-    public function getCapExCompletionRate(Stock $stock): float { return self::THRESHOLD_CAPEX_COMPLETION_RATE; }
-
+    public function getMinIcr(): float
+    {
+        return self::THRESHOLD_MIN_ICR;
+    }
+    public function getBankruptEquityThreshold(): float
+    {
+        return self::THRESHOLD_BANKRUPT_EQUITY;
+    }
+    public function getDistressEquityThreshold(): float
+    {
+        return self::THRESHOLD_DISTRESS_EQUITY;
+    }
+    public function getWarningEquityThreshold(): float
+    {
+        return self::THRESHOLD_WARNING_EQUITY;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return self::THRESHOLD_WHOLESALE_LEVERAGE_LIMIT;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return self::THRESHOLD_DIVIDEND_CRISIS_ICR;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return self::THRESHOLD_BUYBACK_MIN_ICR;
+    }
+    public function getReversionSpeed(): float
+    {
+        return self::THRESHOLD_REVERSION_SPEED;
+    }
+    public function getMoatSpread(): float
+    {
+        return self::THRESHOLD_MOAT_SPREAD;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return self::THRESHOLD_NWC_INTENSITY;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return self::THRESHOLD_CAPEX_COMPLETION_RATE;
+    }
 
     // --- Non-Interest Revenue Mix ---
     /** Fee income's weight in the non-interest revenue (custodial, wealth, payments); the lore may add captive stake dividends beside it. */
@@ -400,11 +431,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // The cash beside the book earns its own interest below the line, so the book need not.
         $targetEbit = max(
             $totalDebt * self::MIN_CORE_LENDING_YIELD,
-            ($earningAssets * $optimalEbit / max(1.0, $optimalEarningAssets)) - $this->resolveTreasuryIncome($stock, $macroState)
+            ($earningAssets * $optimalEbit / max(1.0, $optimalEarningAssets)) - $this->resolveTreasuryIncome($stock, $macroState),
         );
         $targetRevenue = min(
             max(0.0, $targetEbit) + ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock)),
-            $earningAssets * self::MAX_GROSS_ASSET_YIELD
+            $earningAssets * self::MAX_GROSS_ASSET_YIELD,
         );
 
         return $targetRevenue / max(1.0, $earningAssets);
@@ -498,7 +529,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $earningAssets = max(1.0, $this->resolveEarningAssets($stock));
         $earningCash = max(0.0, (float) $stock->getCorporateTreasury() - ($this->getOperatingBase($stock) * self::INTEREST_INCOME_CASH_BUFFER));
         $targetIncomeBeta = (($assetIncomeBeta * $this->resolveBetaAssets($stock)) - $earningCash) / $earningAssets;
-        $repriced = static fn (float $years): float => 1.0 - exp(-static::BETA_HORIZON_YEARS / $years);
+        $repriced = static fn(float $years): float => 1.0 - exp(-static::BETA_HORIZON_YEARS / $years);
 
         $loanShare = $this->getLoanShareOfEarningAssets();
         $residentialShare = $this->resolveLoanBookMix($stock)['residential'];
@@ -526,7 +557,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $spread = $pricing['loan_spread'];
         $rates = $this->resolveRepricingRates($stock, $macroState);
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $book = static fn (string $key, float $steadyState): float => isset($momentum[$key]) ? (float) $momentum[$key] : $steadyState;
+        $book = static fn(string $key, float $steadyState): float => isset($momentum[$key]) ? (float) $momentum[$key] : $steadyState;
 
         $loanShare = $this->getLoanShareOfEarningAssets();
         $residentialShare = $this->resolveLoanBookMix($stock)['residential'];
@@ -808,7 +839,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $appetite = max(
             self::MIN_CREDIT_RISK_APPETITE,
-            min(self::MAX_CREDIT_RISK_APPETITE, (float) $params[ModelParam::CreditRiskAppetite])
+            min(self::MAX_CREDIT_RISK_APPETITE, (float) $params[ModelParam::CreditRiskAppetite]),
         );
 
         return $appetite / self::NEUTRAL_CREDIT_RISK_APPETITE;
@@ -831,12 +862,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $householdZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->retailDefaultRateEma,
             $macroState->retailDefaultRateTrend,
-            CreditRisk::RETAIL_ASRF_RHO
+            CreditRisk::RETAIL_ASRF_RHO,
         );
         $corporateZ = CreditRisk::calculateVasicekSystematicFactor(
             $macroState->corporateDefaultRateEma,
             $macroState->corporateDefaultRateTrend,
-            CreditRisk::CORPORATE_DEFAULT_RHO
+            CreditRisk::CORPORATE_DEFAULT_RHO,
         );
 
         $quarter = 1.0 / FinancialConstants::QUARTERS_PER_YEAR;
@@ -884,7 +915,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return self::completeLoanBookMix(
             (float) $params[ModelParam::ResidentialMortgageShare],
             (float) $params[ModelParam::ConsumerLoanShare],
-            (float) $params[ModelParam::CommercialRealEstateShare]
+            (float) $params[ModelParam::CommercialRealEstateShare],
         );
     }
 
@@ -959,7 +990,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return 1.0 - self::SECURITIES_SHARE_OF_EARNING_ASSETS;
     }
 
-
     public function getCreditLossHorizonYears(): float
     {
         return self::CECL_LIFETIME_HORIZON_YEARS;
@@ -1004,13 +1034,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return $excessCash * $this->calculateCashYield($macroState);
     }
 
-
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         return max(
             $operatingBase * self::TARGET_CASH_OPERATING_MULT,
             $currentLiability * self::TARGET_CASH_LIABILITY_MULT,
-            $wholesaleDebt * self::TARGET_CASH_WHOLESALE_MULT
+            $wholesaleDebt * self::TARGET_CASH_WHOLESALE_MULT,
         );
     }
 
@@ -1019,7 +1048,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return max(
             $operatingBase * self::MIN_CASH_OPERATING_MULT,
             $currentLiability * self::MIN_CASH_LIABILITY_MULT,
-            $wholesaleDebt * self::MIN_CASH_WHOLESALE_MULT
+            $wholesaleDebt * self::MIN_CASH_WHOLESALE_MULT,
         );
     }
 
@@ -1076,7 +1105,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return max(0.0, min($spendCap, $retainedEarningsThisQuarter));
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $customerDeposits = (float) $stock->getCustomerDeposits();
@@ -1092,7 +1121,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
     }
-
 
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
@@ -1120,7 +1148,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
     {
         $currentLiabilities = $state['customerDeposits'];
-        if ($currentLiabilities <= 0) return;
+        if ($currentLiabilities <= 0) {
+            return;
+        }
 
         $policyRate = $macroState->policyRateEma;
 
@@ -1147,8 +1177,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
             // News is the departure from trend: a base growing with the economy is not a capture.
             $departureFromTrend = ($liabilityChange / $currentLiabilities) - $trendGrowthQuarterly;
-            if ($departureFromTrend < self::LIABILITY_FLIGHT_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)]];
-            elseif ($departureFromTrend > self::LIABILITY_CAPTURE_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)]];
+            if ($departureFromTrend < self::LIABILITY_FLIGHT_THRESHOLD) {
+                $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)]];
+            } elseif ($departureFromTrend > self::LIABILITY_CAPTURE_THRESHOLD) {
+                $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)]];
+            }
         }
     }
 
@@ -1279,7 +1312,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      * Basel III's maximum distributable amount bars them below the combined buffer. Above it the regulator restricts
      * nothing (null), which is not a cap at 100% of earnings.
      */
-    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?\App\DTO\MacroStateDTO $macroState = null): ?float
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {
         $cet1Ratio = $this->calculateCet1Ratio($stock, $currentTreasury);
         $ccyb = $macroState !== null ? $macroState->countercyclicalBufferRate : 0.0;
@@ -1296,7 +1329,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      * The CET1 requirement this lender holds, the countercyclical buffer aside: the District's in force for a regulated
      * bank, Basel III's minimum and conservation buffer for one outside it.
      */
-    public function capitalRequirement(?\App\DTO\MacroStateDTO $macroState): float
+    public function capitalRequirement(?MacroStateDTO $macroState): float
     {
         if (!static::PRUDENTIALLY_REGULATED) {
             return self::BASEL_CCB_CET1_RATIO;
@@ -1311,7 +1344,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      * a year on and 0.95pp three years on (Bridges et al. 2014, BoE WP 486, Table C), the target's partial adjustment
      * doing the rest.
      */
-    public function getTargetCapitalRatio(Stock $stock, ?\App\DTO\MacroStateDTO $macroState = null): ?float
+    public function getTargetCapitalRatio(Stock $stock, ?MacroStateDTO $macroState = null): ?float
     {
         $target = parent::getTargetCapitalRatio($stock, $macroState);
         $assets = $stock->getTotalAssets();

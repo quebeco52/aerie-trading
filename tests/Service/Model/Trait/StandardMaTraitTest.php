@@ -27,7 +27,7 @@ final class StandardMaTraitTest extends TestCase
         $this->assertSame(
             5_000_000_000.0,
             $this->model->applyMaSpendCap(5_000_000_000.0, 100_000_000.0),
-            'A deal far beyond equity is bounded by the engine\'s borrowing capacity, not by this model.'
+            'A deal far beyond equity is bounded by the engine\'s borrowing capacity, not by this model.',
         );
     }
 
@@ -76,17 +76,17 @@ final class StandardMaTraitTest extends TestCase
         $this->assertSame(
             200_000_000.0,
             $this->model->calculateDivestedEquity($seller, 0.25, 800_000_000.0, 400_000_000.0, 50_000_000.0, 800_000_000.0, 0.0),
-            'With no debt transferred the whole pro-rata capital slice leaves as equity.'
+            'With no debt transferred the whole pro-rata capital slice leaves as equity.',
         );
         $this->assertSame(
             50_000_000.0,
             $this->model->calculateDivestedEquity($seller, 0.25, 800_000_000.0, 400_000_000.0, 50_000_000.0, 800_000_000.0, 150_000_000.0),
-            'Debt that travels with the division reduces the equity released.'
+            'Debt that travels with the division reduces the equity released.',
         );
         $this->assertSame(
             0.0,
             $this->model->calculateDivestedEquity($seller, 0.0, 800_000_000.0, 400_000_000.0, 50_000_000.0, 800_000_000.0, 0.0),
-            'Divesting nothing releases nothing.'
+            'Divesting nothing releases nothing.',
         );
 
         // Shedding liabilities is a balance-sheet operation the standard model leaves to the engine.

@@ -61,7 +61,7 @@ class LaborMarketSubsystem
 
     public function __construct(
         /** Records what moved unemployment, the NAIRU and wages. Null in a test or a headless harness, off everywhere the ticker is not. */
-        private readonly ?MacroDiagnosticsProbe $diagnostics = null
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
     /**

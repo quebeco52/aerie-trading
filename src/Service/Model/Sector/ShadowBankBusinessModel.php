@@ -4,21 +4,20 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Shadow Banks (Mortgage Finance, Non-bank lenders).
- * 
+ *
  * Financial Physics:
  * - Operates like a bank but without customer deposits.
  * - Funds its entire loan book via Wholesale Debt (Repo Markets, Commercial Paper).
@@ -42,8 +41,14 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.10;
-    public function getWholesaleLeverageLimit(): float { return 8.0; }
-    public function getMoatSpread(): float { return 0.005; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 8.0;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.005;
+    }
 
     // --- Portfolio & Asset Yield Architecture ---
     /**
@@ -222,7 +227,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
         $targetEbit = max(
             $earningAssets * self::MIN_OPERATING_EBIT_YIELD,
-            $targetEbt + $interestExpense - $interestIncome + $this->resolveThroughTheCycleCreditProvision($stock, $earningAssets)
+            $targetEbt + $interestExpense - $interestIncome + $this->resolveThroughTheCycleCreditProvision($stock, $earningAssets),
         );
 
         return min($targetEbit / $stableMargin, $earningAssets * self::MAX_GROSS_ASSET_YIELD) / max(1.0, $earningAssets);
@@ -281,7 +286,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
         $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag + $propertyOriginationBoost + $housingStartsShift));
         $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $sloosDirectLendingBoost + $m2Shift + $ccybArbitrageBoost));
-        
+
         $streamRevenues = [
             'origination_fees' => $mortgageRevenue,
             'direct_lending'   => $lendingRevenue,

@@ -35,17 +35,17 @@ final class StandardTreasuryTraitTest extends TestCase
         $this->assertSame(
             $operatingBase * FinancialConstants::TARGET_OPERATING_CASH_RATIO,
             $this->model->calculateTargetOperatingCash($operatingBase, 0.0, 0.0),
-            'The cash target is a flat ratio of the operating base.'
+            'The cash target is a flat ratio of the operating base.',
         );
         $this->assertSame(
             $operatingBase * FinancialConstants::MIN_OPERATING_CASH_RATIO,
             $this->model->calculateMinOperatingCash($operatingBase, 0.0, 0.0),
-            'The cash floor is a flat ratio of the operating base.'
+            'The cash floor is a flat ratio of the operating base.',
         );
         $this->assertLessThan(
             $this->model->calculateTargetOperatingCash($operatingBase, 0.0, 0.0),
             $this->model->calculateMinOperatingCash($operatingBase, 0.0, 0.0),
-            'The floor must sit below the target or the firm is permanently raising cash.'
+            'The floor must sit below the target or the firm is permanently raising cash.',
         );
     }
 
@@ -63,7 +63,7 @@ final class StandardTreasuryTraitTest extends TestCase
         $this->assertSame(
             $this->model->calculateMinOperatingCash($base, 0.0, 0.0),
             $this->model->calculateMinOperatingCash($base, 900_000_000.0, 2_000_000_000.0),
-            'The same holds for the floor.'
+            'The same holds for the floor.',
         );
     }
 
@@ -91,7 +91,7 @@ final class StandardTreasuryTraitTest extends TestCase
         $this->assertLessThan(
             FinancialConstants::MEGA_HOARDER_THRESHOLD_RATIO,
             FinancialConstants::HOARDER_THRESHOLD_RATIO,
-            'The hoarder threshold must sit below the mega threshold.'
+            'The hoarder threshold must sit below the mega threshold.',
         );
     }
 
@@ -140,7 +140,7 @@ final class StandardTreasuryTraitTest extends TestCase
             100_000_000.0 * $yield,
             $this->model->calculateInterestIncome($rich, $macro, $math),
             0.01,
-            'Only the surplus over target earns the cash yield.'
+            'Only the surplus over target earns the cash yield.',
         );
 
         $poor = (new Stock())->setTicker('CASH');

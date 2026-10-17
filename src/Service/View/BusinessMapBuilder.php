@@ -97,8 +97,8 @@ final class BusinessMapBuilder
 
         $model = Sectors::strategyFor($stock->getIndustry());
         $details = array_map(
-            static fn (array $detail): array => ['drivers' => MacroFieldCatalog::relabelDrivers($detail['drivers'] ?? [])] + $detail,
-            $report->getStreamDetails() ?? []
+            static fn(array $detail): array => ['drivers' => MacroFieldCatalog::relabelDrivers($detail['drivers'] ?? [])] + $detail,
+            $report->getStreamDetails() ?? [],
         );
         $kpis = $report->getReportedKpis() ?? [];
         $state = $stock->getEarningsMomentumZ() ?? [];
@@ -137,8 +137,8 @@ final class BusinessMapBuilder
             foreach ($map[$column] as $i => $card) {
                 if (isset($card['id'])) {
                     $map[$column][$i]['feeds'] = array_values(array_unique(array_map(
-                        static fn (array $edge): string => mb_strtolower($labels[$edge[1]] ?? ''),
-                        array_filter($map['edges'], static fn (array $edge): bool => $edge[0] === $card['id'])
+                        static fn(array $edge): string => mb_strtolower($labels[$edge[1]] ?? ''),
+                        array_filter($map['edges'], static fn(array $edge): bool => $edge[0] === $card['id']),
                     )));
                 }
             }
@@ -177,7 +177,7 @@ final class BusinessMapBuilder
                 $drivers[$id]['effects'][(string) $key] = (float) $driver['impact'];
             }
         }
-        uasort($drivers, static fn (array $a, array $b): int => max(array_map('abs', $b['effects'])) <=> max(array_map('abs', $a['effects'])));
+        uasort($drivers, static fn(array $a, array $b): int => max(array_map('abs', $b['effects'])) <=> max(array_map('abs', $a['effects'])));
 
         if ($drivers !== []) {
             $map['outside'][] = ['group' => 'Demand'];
@@ -264,7 +264,7 @@ final class BusinessMapBuilder
                     'Orders ran %s%% %s shipments. The backlog holds %s quarters of sales.',
                     number_format(abs($bookToBill - 1.0) * 100.0, 0),
                     $bookToBill >= 1.0 ? 'ahead of' : 'behind',
-                    number_format((float) ($kpis['backlog_quarters'] ?? $state[StreamContext::BACKLOG_STATE_PREFIX . $key]), 1)
+                    number_format((float) ($kpis['backlog_quarters'] ?? $state[StreamContext::BACKLOG_STATE_PREFIX . $key]), 1),
                 ),
                 'chips' => $chips,
             ];
@@ -353,7 +353,7 @@ final class BusinessMapBuilder
                     'Input costs run %s%% %s normal; prices have caught up %s%%.',
                     number_format(abs($level) * 100.0, 1),
                     $level >= 0.0 ? 'above' : 'below',
-                    number_format(abs($recovery) * 100.0, 1)
+                    number_format(abs($recovery) * 100.0, 1),
                 ),
                 'chips' => [['text' => 'on margin', 'figure' => -$drag * 100.0, 'format' => 'signed_points', 'tone' => $drag > 0.0 ? 'down' : 'up']],
             ];
@@ -434,9 +434,9 @@ final class BusinessMapBuilder
             'bonds' => $state[CommercialBankBusinessModel::STATE_BOOK_YIELD_SECURITIES] ?? null,
         ], 'is_numeric');
         $note = $yields === [] ? null : implode(', ', array_map(
-            static fn (string $label, $yield): string => sprintf('%s %s%%', $label, number_format((float) $yield * 100.0, 2)),
+            static fn(string $label, $yield): string => sprintf('%s %s%%', $label, number_format((float) $yield * 100.0, 2)),
             array_keys($yields),
-            $yields
+            $yields,
         )) . ' on the book.';
         if (is_numeric($state[CommercialBankBusinessModel::STATE_FLOATING_LOAN_SHARE] ?? null)) {
             $note .= sprintf(' %s%% of loans float with the policy rate.', number_format((float) $state[CommercialBankBusinessModel::STATE_FLOATING_LOAN_SHARE] * 100.0, 0));
@@ -598,7 +598,7 @@ final class BusinessMapBuilder
                 number_format(abs($inPlace) * 100.0, 1),
                 $inPlace >= 0.0 ? 'above' : 'below',
                 number_format(abs($spread) * 100.0, 1),
-                $spread >= 0.0 ? 'above' : 'below'
+                $spread >= 0.0 ? 'above' : 'below',
             ),
         ], [self::chip(sprintf('Re-leasing %s', $spread >= 0.0 ? 'up' : 'down'), $spread >= 0.0 ? 'up' : 'down')]);
     }
@@ -728,7 +728,7 @@ final class BusinessMapBuilder
             $ordered = [];
             $group = [];
             $flush = static function () use (&$ordered, &$group, $centre): void {
-                usort($group, static fn (array $a, array $b): int => $centre[$a['id']] <=> $centre[$b['id']]);
+                usort($group, static fn(array $a, array $b): int => $centre[$a['id']] <=> $centre[$b['id']]);
                 array_push($ordered, ...$group);
                 $group = [];
             };
@@ -753,7 +753,7 @@ final class BusinessMapBuilder
      */
     private static function positions(array $cards): array
     {
-        $ids = array_values(array_filter(array_map(static fn (array $card): ?string => $card['id'] ?? null, $cards)));
+        $ids = array_values(array_filter(array_map(static fn(array $card): ?string => $card['id'] ?? null, $cards)));
         $positions = [];
         foreach ($ids as $i => $id) {
             $positions[$id] = ($i + 0.5) / count($ids);

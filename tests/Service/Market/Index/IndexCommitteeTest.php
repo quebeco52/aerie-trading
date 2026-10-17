@@ -4,18 +4,17 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Index;
 
-use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Service\Market\Index\EtfTracker;
 use App\Service\Market\Index\IndexCommittee;
 use App\Service\Market\Index\InMemoryIndexMembershipStore;
 use App\Service\Market\Index\MarketIndex;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Ticker\IndexFundPhase;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
 use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Market\Pricing\LiquidityEngine;
-use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -38,7 +37,7 @@ class IndexCommitteeTest extends TestCase
         $this->redisStore = [];
 
         // A Redis stand-in holding just the divisor, which is the only key the tracker touches here.
-        $redis = new class($this->redisStore) extends \Redis {
+        $redis = new class ($this->redisStore) extends \Redis {
             /** @param array<string, string> $backing */
             public function __construct(private array &$backing) {}
 
@@ -59,7 +58,7 @@ class IndexCommitteeTest extends TestCase
             $this->createStub(EntityManagerInterface::class),
             $this->createStub(\App\Service\Event\MarketEventPublisher::class),
             $redis,
-            new \App\Service\Market\Index\IndexFundAccountant($this->createStub(EntityManagerInterface::class))
+            new \App\Service\Market\Index\IndexFundAccountant($this->createStub(EntityManagerInterface::class)),
         );
     }
 
@@ -175,7 +174,7 @@ class IndexCommitteeTest extends TestCase
 
         $this->assertGreaterThan(
             IndexCommittee::floatAdjustedCap($closelyHeld),
-            IndexCommittee::floatAdjustedCap($widelyHeld)
+            IndexCommittee::floatAdjustedCap($widelyHeld),
         );
     }
 
@@ -291,7 +290,7 @@ class IndexCommitteeTest extends TestCase
         $this->assertEqualsWithDelta(
             MarketIndex::INDEX_CONSTITUENT_COUNT * 100.0,
             $committee->memberCapitalisation(MarketIndex::Headline, $caps),
-            1e-9
+            1e-9,
         );
     }
 
@@ -365,7 +364,7 @@ class IndexCommitteeTest extends TestCase
         $this->assertNotEqualsWithDelta(
             (float) $this->etfTracker->currentDivisor('LBI'),
             (float) $this->etfTracker->currentDivisor('LBC'),
-            1.0
+            1.0,
         );
     }
 
@@ -435,7 +434,7 @@ class IndexCommitteeTest extends TestCase
     {
         $this->assertSame(
             'Lakebird ' . MarketIndex::INDEX_CONSTITUENT_COUNT,
-            MarketIndex::benchmark()->indexName()
+            MarketIndex::benchmark()->indexName(),
         );
 
         $committee = $this->committee();
@@ -445,7 +444,7 @@ class IndexCommitteeTest extends TestCase
         $this->assertStringContainsString(
             (string) count($result['tickers']),
             MarketIndex::benchmark()->indexName(),
-            'the name must state the membership the committee actually seats'
+            'the name must state the membership the committee actually seats',
         );
     }
 
@@ -529,7 +528,7 @@ class IndexCommitteeTest extends TestCase
         $this->assertEqualsWithDelta(
             $total,
             $this->committee()->memberCapitalisation(MarketIndex::LowVolatility, $caps),
-            $total * 1e-9
+            $total * 1e-9,
         );
     }
 
@@ -580,7 +579,7 @@ class IndexCommitteeTest extends TestCase
         $this->assertEqualsWithDelta(
             2.0 / 3.0,
             ($moved['A'] * $struck['factors']['A']) / $total,
-            1e-9
+            1e-9,
         );
     }
 
@@ -606,7 +605,7 @@ class IndexCommitteeTest extends TestCase
      */
     public function testASectorIndexDropsAReclassifiedNameWithoutMovingTheLevel(): void
     {
-        $staple = fn (string $ticker, float $cap, string $sector) => StockBuilder::create($ticker)
+        $staple = fn(string $ticker, float $cap, string $sector) => StockBuilder::create($ticker)
             ->withPrice($cap)->withSharesOutstanding(1)->withPublicFloatPercentage(1.0)->withSector($sector)->build();
 
         $stocks = [
@@ -652,7 +651,7 @@ class IndexCommitteeTest extends TestCase
         $this->assertEqualsWithDelta(
             MarketIndex::INDEX_MAX_CONSTITUENT_WEIGHT,
             $result['weights']['GIANT'],
-            1e-6
+            1e-6,
         );
         $this->assertEqualsWithDelta(1.0, array_sum($result['weights']), 1e-9);
 
@@ -867,7 +866,7 @@ class IndexCommitteeTest extends TestCase
         $this->assertGreaterThan(
             $multiples['TWIN'],
             $multiples['SODA'],
-            'the staple is held by the sector fund and its twin is not'
+            'the staple is held by the sector fund and its twin is not',
         );
 
         // The twin is still held: the whole-board fund owns everything that is listed.
@@ -880,7 +879,7 @@ class IndexCommitteeTest extends TestCase
         $this->assertEqualsWithDelta(
             (MarketIndex::Staples->passiveShare() * $staples['SODA']) / $market['SODA'],
             $multiples['SODA'] - $multiples['TWIN'],
-            1e-9
+            1e-9,
         );
     }
 

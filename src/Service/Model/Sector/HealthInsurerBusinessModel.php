@@ -134,7 +134,7 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -152,7 +152,7 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
             currentLaggedValue: $streams->getPersistedState(self::STATE_LOSS_RATIO_GAP, 0.0),
             targetValue: ($costTrend - $pricedTrend) * self::POLICY_TERM_YEARS,
             dt: $dt,
-            lagTimeConstant: self::POLICY_TERM_YEARS
+            lagTimeConstant: self::POLICY_TERM_YEARS,
         );
         $streams->registerState(self::STATE_LOSS_RATIO_GAP, $gap);
         $streams->registerState(self::STATE_PRICED_TREND, TimeSeries::calculateDistributedLag($pricedTrend, $costTrend, $dt, self::RATING_LAG_YEARS));
@@ -164,7 +164,7 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
             currentLaggedValue: $streams->getPersistedState(self::STATE_AVERAGE_LOSS_RATIO, $lossRatio),
             targetValue: $lossRatio,
             dt: $dt,
-            lagTimeConstant: self::MLR_AVERAGING_YEARS
+            lagTimeConstant: self::MLR_AVERAGING_YEARS,
         );
         $streams->registerState(self::STATE_AVERAGE_LOSS_RATIO, $averageLossRatio);
         $rebateRate = max(0.0, self::reportedLossRatioFloor() - $averageLossRatio);

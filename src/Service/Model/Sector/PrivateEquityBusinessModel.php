@@ -4,18 +4,17 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Math\FixedIncome;
 use App\DTO\DebtExpansionAppetiteDTO;
-
-use App\Service\Math\Distributions;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
+
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\Distributions;
+use App\Service\Math\FixedIncome;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Private Equity & Alternative Asset Managers.
@@ -41,7 +40,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Deal team compensation dominates private equity overhead. */
     public const FIXED_COST_LABOR_SHARE = 0.70;
 
-        public function getWholesaleLeverageLimit(): float { return 2.5; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.5;
+    }
 
     // --- Leverage & Aggression Physics ---
     /** Minimum leverage aggression multiplier when the firm is unlevered. */
@@ -223,7 +225,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
         return [
             'invested_capital' => $earningAssets,
-            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate)
+            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate),
         ];
     }
 
@@ -440,13 +442,13 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         );
     }
 
-    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
     {
         return new \App\DTO\SectorCoverageProfile(
             baseVisibility: 0.20,
             errorStdDev: 0.05,
             eventBaseVisibility: 0.85,
-            eventMinVisibility: 0.60
+            eventMinVisibility: 0.60,
         );
     }
 

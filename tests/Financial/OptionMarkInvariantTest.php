@@ -95,7 +95,7 @@ class OptionMarkInvariantTest extends TestCase
             $offenders,
             "These read option_contracts without joining user_options, so they may be reading a stale mark "
             . "for a contract nobody holds. Either join through the holding, or price on read as "
-            . 'OptionChainBuilder does.'
+            . 'OptionChainBuilder does.',
         );
     }
 
@@ -114,7 +114,7 @@ class OptionMarkInvariantTest extends TestCase
                 '$contract->' . $accessor,
                 $source,
                 "The chain panel reads {$accessor} off the contract. Those columns are only maintained for "
-                . 'contracts somebody holds, so an unheld row would render a stale mark.'
+                . 'contracts somebody holds, so an unheld row would render a stale mark.',
             );
         }
     }

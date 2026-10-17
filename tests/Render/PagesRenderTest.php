@@ -38,7 +38,7 @@ final class PagesRenderTest extends KernelTestCase
             ];
         }
         $stocks[3]['changePercent'] = 0.0;
-        usort($stocks, static fn ($a, $b) => $b['marketCap'] <=> $a['marketCap']);
+        usort($stocks, static fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
         $macro = ['output_gap' => 0.0132, 'inflation' => 0.0241, 'policy_rate' => 0.0425, 'yield_10y' => 0.0461];
 
         $almanac = new \App\Service\Lore\Almanac(dirname(__DIR__, 2));

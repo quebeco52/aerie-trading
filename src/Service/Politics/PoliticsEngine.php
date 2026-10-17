@@ -11,10 +11,10 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\Valuation;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -575,7 +575,7 @@ class PoliticsEngine
             $state->dietSeats,
             $state->partyPositions,
             $standing,
-            $recession
+            $recession,
         )['levers'];
 
         if ($levers !== $standing) {
@@ -641,7 +641,7 @@ class PoliticsEngine
                         $positions[$party][$axis],
                         AerieDiet::HOME_POSITIONS[$party][$axis],
                         $axis,
-                        $this->mathUtility->generateStandardNormal()
+                        $this->mathUtility->generateStandardNormal(),
                     );
                 }
             }

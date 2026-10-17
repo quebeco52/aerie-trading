@@ -131,7 +131,7 @@ final class LiquidityEngine
 
         return max(
             self::MIN_ANNUAL_TURNOVER,
-            min(self::MAX_ANNUAL_TURNOVER, $ratio)
+            min(self::MAX_ANNUAL_TURNOVER, $ratio),
         );
     }
 
@@ -195,7 +195,7 @@ final class LiquidityEngine
 
         return max(
             self::MIN_ADV_ACTIVITY_MULTIPLIER,
-            min(self::MAX_ADV_ACTIVITY_MULTIPLIER, $multiplier)
+            min(self::MAX_ADV_ACTIVITY_MULTIPLIER, $multiplier),
         );
     }
 
@@ -223,7 +223,7 @@ final class LiquidityEngine
 
         return max(
             FinancialConstants::MIN_HALF_SPREAD,
-            min(self::MAX_HALF_SPREAD, $spread / 2.0)
+            min(self::MAX_HALF_SPREAD, $spread / 2.0),
         );
     }
 

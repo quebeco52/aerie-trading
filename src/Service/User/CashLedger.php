@@ -66,7 +66,7 @@ final class CashLedger
         $user->setCashBalance(\bcadd(
             (string) $user->getCashBalance(),
             \bcsub($amount, $repaid, self::CASH_SCALE),
-            self::CASH_SCALE
+            self::CASH_SCALE,
         ));
     }
 

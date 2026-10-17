@@ -99,14 +99,14 @@ class MacroSnapshotRecorder
         $names = array_merge(
             [self::TIMESTAMP_COLUMN],
             array_values($columns),
-            [self::GAP_CHANNELS_COLUMN, self::DIAGNOSTICS_COLUMN, self::FINGERPRINT_COLUMN, self::TICKS_PER_YEAR_COLUMN]
+            [self::GAP_CHANNELS_COLUMN, self::DIAGNOSTICS_COLUMN, self::FINGERPRINT_COLUMN, self::TICKS_PER_YEAR_COLUMN],
         );
         $placeholders = array_fill(0, count($names), '?');
 
         return sprintf(
             'INSERT INTO macro_report (%s) VALUES (%s)',
             implode(', ', $names),
-            implode(', ', $placeholders)
+            implode(', ', $placeholders),
         );
     }
 }

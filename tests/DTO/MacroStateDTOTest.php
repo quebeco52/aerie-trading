@@ -226,6 +226,6 @@ class MacroStateDTOTest extends TestCase
         $slump = new MacroStateDTO(outputGapEma: -0.04, consumerSentimentIndexEma: 70.0, consumerSentimentMood: -6.0);
 
         $this->assertEqualsWithDelta(-0.06, $slump->sentimentResidual(), 1e-12);
-        $this->assertEqualsWithDelta((70.0 - \App\Service\Macro\MacroEngine::SENTIMENT_TREND_LEVEL) / 100.0, $slump->sentimentDeviation(), 1e-12);
+        $this->assertEqualsWithDelta((70.0 - MacroEngine::SENTIMENT_TREND_LEVEL) / 100.0, $slump->sentimentDeviation(), 1e-12);
     }
 }

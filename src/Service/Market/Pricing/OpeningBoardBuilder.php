@@ -13,10 +13,10 @@ use App\Data\Company\StockInfo;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\ManagementSuccessionEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
@@ -127,7 +127,7 @@ class OpeningBoardBuilder
         // whatever AnchorHoldings locks away. Derived so a stake and a float cannot drift apart.
         $stock->setPublicFloatPercentage((string) AnchorHoldings::tradableFloat(
             $stockData['ticker'],
-            (float) ($stockData['public_float'] ?? 0.90)
+            (float) ($stockData['public_float'] ?? 0.90),
         ));
         $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
         $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
@@ -205,7 +205,7 @@ class OpeningBoardBuilder
                 $stock,
                 $strategy->getWorkingCapitalDays($stock),
                 $revenue,
-                $revenue * (1.0 - $margin)
+                $revenue * (1.0 - $margin),
             );
             $metrics->seedReceivablesAllowance($stock, $openingMacro->corporateDefaultRateEma);
 
@@ -218,7 +218,7 @@ class OpeningBoardBuilder
                     (float) $stock->getNetWorkingCapital(),
                     (float) $stock->getGoodwill(),
                     $stock->getTotalCipAmount(),
-                    $assetAgeRatio
+                    $assetAgeRatio,
                 );
             } else {
                 $sphere = ['stock' => $stock, 'invested' => $investedCapital, 'assetAgeRatio' => $assetAgeRatio];
@@ -230,7 +230,7 @@ class OpeningBoardBuilder
                 $stock,
                 $strategy->getThroughTheCycleCreditLossRate($stock)
                     * $strategy->getCreditLossHorizonYears()
-                    * $strategy->getForwardCreditLossMultiplier($stock, $openingMacro)
+                    * $strategy->getForwardCreditLossMultiplier($stock, $openingMacro),
             );
         }
 
@@ -296,7 +296,7 @@ class OpeningBoardBuilder
                     $stock->getTicker(),
                     100.0 * (1.0 - $fit),
                     100.0 * $fit,
-                    100.0 * AnchorHoldings::MIN_CONSOLIDATED_SHARE
+                    100.0 * AnchorHoldings::MIN_CONSOLIDATED_SHARE,
                 ));
             }
 
@@ -306,7 +306,7 @@ class OpeningBoardBuilder
                 (float) $stock->getNetWorkingCapital(),
                 (float) $stock->getGoodwill(),
                 $stock->getTotalCipAmount(),
-                $sphere['assetAgeRatio']
+                $sphere['assetAgeRatio'],
             );
         }
     }

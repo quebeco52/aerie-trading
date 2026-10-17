@@ -65,8 +65,8 @@ class SovereignFundDynamicsTest extends TestCase
         // The spending arithmetic itself is pinned exactly in SovereignFundSubsystemTest; this guards a fund that
         // bleeds away or explodes.
         $logChanges = array_map(
-            static fn (array $run): float => log($run['sizes'][count($run['sizes']) - 1] / $run['sizes'][0]),
-            $withFund
+            static fn(array $run): float => log($run['sizes'][count($run['sizes']) - 1] / $run['sizes'][0]),
+            $withFund,
         );
         $meanLogChange = array_sum($logChanges) / count($logChanges);
         $this->assertGreaterThan(-1.16, $meanLogChange, 'The fund must not bleed away; it keeps half its compound return.');
@@ -77,13 +77,13 @@ class SovereignFundDynamicsTest extends TestCase
         // is bounded below by the size check above, not here: a fund run down by a slump it paid for owns less. A fund
         // grown large against the board meets the ownership ceiling first, and the ceiling overrides the weight by
         // design, so the weight is judged only in the years the ceiling leaves it free.
-        $ownership = array_merge(...array_values(array_map(static fn (array $run): array => $run['ownership'], $withFund)));
-        $weights = array_merge(...array_values(array_map(static fn (array $run): array => $run['weights'], $withFund)));
-        $weightOwnership = array_merge(...array_values(array_map(static fn (array $run): array => $run['weightOwnership'], $withFund)));
+        $ownership = array_merge(...array_values(array_map(static fn(array $run): array => $run['ownership'], $withFund)));
+        $weights = array_merge(...array_values(array_map(static fn(array $run): array => $run['weights'], $withFund)));
+        $weightOwnership = array_merge(...array_values(array_map(static fn(array $run): array => $run['weightOwnership'], $withFund)));
         $freeWeights = array_values(array_filter(
             $weights,
-            static fn (int $year): bool => $weightOwnership[$year] < SovereignFundSubsystem::MAX_OWNERSHIP_SHARE * 0.95,
-            ARRAY_FILTER_USE_KEY
+            static fn(int $year): bool => $weightOwnership[$year] < SovereignFundSubsystem::MAX_OWNERSHIP_SHARE * 0.95,
+            ARRAY_FILTER_USE_KEY,
         ));
         $this->assertGreaterThan(count($weights) / 2, count($freeWeights), 'The ceiling binds in the tail, not as a rule.');
         $this->assertGreaterThan(0.6, min($freeWeights), 'Rebalancing keeps the fund on the board at its policy weight.');
@@ -91,19 +91,19 @@ class SovereignFundDynamicsTest extends TestCase
         // A fund that bought a fall to the 10% ceiling can drift past it only by the board falling further.
         $this->assertLessThan(0.15, max($ownership), 'And the ownership ceiling keeps its footprint bounded.');
 
-        $rebalances = array_sum(array_map(static fn (array $run): int => $run['rebalances'], $withFund));
+        $rebalances = array_sum(array_map(static fn(array $run): int => $run['rebalances'], $withFund));
         $perDecade = $rebalances / (count(self::SEEDS) * self::YEARS / 10.0);
         $this->assertGreaterThan(0.05, $perDecade, 'A fixed-weight rule has to trade sometimes.');
         $this->assertLessThan(6.0, $perDecade, 'A band a 30% relative move trips is not a daily trade.');
 
-        $netWith = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateNetLiabilities'], $withFund)));
-        $netWithout = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateNetLiabilities'], $withoutFund)));
+        $netWith = $this->median(array_merge(...array_map(static fn(array $run): array => $run['lateNetLiabilities'], $withFund)));
+        $netWithout = $this->median(array_merge(...array_map(static fn(array $run): array => $run['lateNetLiabilities'], $withoutFund)));
         $this->assertLessThan(
             $netWithout - (0.5 * MacroEngine::OPENING_FUND_TO_GDP),
             $netWith,
-            'Funding the structural deficit lowers the net liabilities the fiscal rule settles on by at least half the fund it opened with.'
+            'Funding the structural deficit lowers the net liabilities the fiscal rule settles on by at least half the fund it opened with.',
         );
-        $debtWith = $this->median(array_merge(...array_map(static fn (array $run): array => $run['lateDebt'], $withFund)));
+        $debtWith = $this->median(array_merge(...array_map(static fn(array $run): array => $run['lateDebt'], $withFund)));
         $this->assertGreaterThan(MacroEngine::SOVEREIGN_DEBT_FLOOR + 0.20, $debtWith, 'Gross debt stays well off the floor.');
     }
 

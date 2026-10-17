@@ -7,8 +7,8 @@ namespace App\Service\Market\Chart;
 use App\Command\MarketTickerCommand;
 use App\Entity\Stock;
 use App\Entity\StockHistory;
-use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Market\Ticker\TickCadence;
+use Doctrine\ORM\EntityManagerInterface;
 
 /**
  * Reads each stock's price change over the buffered lookback window.
@@ -52,8 +52,7 @@ class PriceChangeFeed
         private readonly \Redis $redis,
         private readonly EntityManagerInterface $entityManager,
         private readonly int $ticksPerYear,
-    ) {
-    }
+    ) {}
 
     /**
      * Persisted history rows one lookback window spans at the configured tick rate. History is

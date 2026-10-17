@@ -99,7 +99,7 @@ class OptionPricingTest extends TestCase
         float $rate,
         float $yield,
         float $tenor,
-        bool $isCall
+        bool $isCall,
     ): void {
         $step = $spot * 1e-5;
 
@@ -119,7 +119,7 @@ class OptionPricingTest extends TestCase
         float $rate,
         float $yield,
         float $tenor,
-        bool $isCall
+        bool $isCall,
     ): void {
         $step = $spot * 1e-3;
 
@@ -140,7 +140,7 @@ class OptionPricingTest extends TestCase
         float $rate,
         float $yield,
         float $tenor,
-        bool $isCall
+        bool $isCall,
     ): void {
         $step = 1e-5;
 
@@ -160,7 +160,7 @@ class OptionPricingTest extends TestCase
         float $rate,
         float $yield,
         float $tenor,
-        bool $isCall
+        bool $isCall,
     ): void {
         $step = 1e-5;
 
@@ -182,7 +182,7 @@ class OptionPricingTest extends TestCase
         float $rate,
         float $yield,
         float $tenor,
-        bool $isCall
+        bool $isCall,
     ): void {
         $step = 1e-6;
 
@@ -231,7 +231,7 @@ class OptionPricingTest extends TestCase
     {
         $this->assertSame(
             OptionPricing::MIN_OPTION_VOLATILITY,
-            OptionPricing::calculateImpliedVolatility(0.0, 100.0, 100.0, 0.04, 0.0, 1.0, true)
+            OptionPricing::calculateImpliedVolatility(0.0, 100.0, 100.0, 0.04, 0.0, 1.0, true),
         );
     }
 
@@ -239,7 +239,7 @@ class OptionPricingTest extends TestCase
     {
         $this->assertSame(
             OptionPricing::MAX_OPTION_VOLATILITY,
-            OptionPricing::calculateImpliedVolatility(99.0, 100.0, 100.0, 0.04, 0.0, 1.0, true)
+            OptionPricing::calculateImpliedVolatility(99.0, 100.0, 100.0, 0.04, 0.0, 1.0, true),
         );
     }
 
@@ -396,7 +396,7 @@ class OptionPricingTest extends TestCase
                 $atmVol,
                 $deviates['d1'],
                 $shape['skewness'],
-                $shape['excess_kurtosis']
+                $shape['excess_kurtosis'],
             );
 
             $strip[] = [

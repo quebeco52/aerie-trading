@@ -2,11 +2,10 @@
 
 namespace App\Service\Corporate;
 
-use App\Service\Notification\PriceAlertService;
 use App\Entity\Stock;
-use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Macro\MacroEngine;
 use App\Service\Event\MarketEventPublisher;
+use App\Service\Notification\PriceAlertService;
+use Doctrine\ORM\EntityManagerInterface;
 
 /**
  * Service responsible for executing corporate actions.
@@ -40,9 +39,8 @@ class CorporateActionEngine
     public function __construct(
         private CorporateLedgerService $corporateLedgerService,
         private MarketEventPublisher $marketEvent,
-        private \Redis $redis
+        private \Redis $redis,
     ) {}
-
 
     /**
      * Evaluates and processes potential stock splits based on the current price.
@@ -67,7 +65,7 @@ class CorporateActionEngine
             return [
                 'price' => 0.0,
                 'shares' => max(1.0, $sharesOutstanding),
-                'event' => null
+                'event' => null,
             ];
         }
 
@@ -99,10 +97,9 @@ class CorporateActionEngine
         return [
             'price' => $newPrice,
             'shares' => max(1.0, $sharesOutstanding),
-            'event' => $splitEvent
+            'event' => $splitEvent,
         ];
     }
-
 
     /**
      * Executes a recursive forward split (e.g., 4-for-1) to bring the price back below $400.
@@ -156,7 +153,6 @@ class CorporateActionEngine
 
         return ['price' => $newPrice, 'shares' => $sharesOutstanding, 'event' => $splitEvent];
     }
-
 
     /**
      * Executes a recursive reverse split (e.g., 1-for-10) to bring the price back above $2.
@@ -215,7 +211,6 @@ class CorporateActionEngine
         return ['price' => $newPrice, 'shares' => (float) $sharesOutstanding, 'event' => $splitEvent];
     }
 
-
     /**
      * Brings the cached trigger levels into post-split units. The resting-order bounds are dropped, which makes the
      * next tick check the book once and rewrite them from the restated orders; alert bounds are only rebuilt when
@@ -239,7 +234,9 @@ class CorporateActionEngine
         $cacheKey = "chart_buffer:{$ticker}";
         $redisData = $this->redis->lRange($cacheKey, 0, -1);
 
-        if (empty($redisData)) return;
+        if (empty($redisData)) {
+            return;
+        }
 
         $this->redis->del($cacheKey);
 

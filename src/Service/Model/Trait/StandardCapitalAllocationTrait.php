@@ -23,7 +23,7 @@ trait StandardCapitalAllocationTrait
     }
 
     /** Capital a firm cannot deploy is the saturation severity the allocation engine already measures; nothing further to add. */
-    public function getUndeployableCapitalShare(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): float
+    public function getUndeployableCapitalShare(Stock $stock, MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): float
     {
         return 0.0;
     }

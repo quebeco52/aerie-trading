@@ -10,15 +10,14 @@ use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
-use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -44,7 +43,7 @@ final class StockTrackerFactorWiringTest extends TestCase
             ebit: 1000.0,
             revenue: 5000.0,
             depreciation: 100.0,
-            ebitda: 1100.0
+            ebitda: 1100.0,
         );
 
         return new DebtHealthDTO(
@@ -63,7 +62,7 @@ final class StockTrackerFactorWiringTest extends TestCase
             rawMetrics: $metrics,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
     }
 
@@ -78,7 +77,7 @@ final class StockTrackerFactorWiringTest extends TestCase
         ?float $postSplitPrice = null,
         ?\App\Service\Market\Agent\AgentStrategyInterface $agentStrategy = null,
         ?\Closure $earningsReport = null,
-        ?MergerAndAcquisitionEngine $maEngine = null
+        ?MergerAndAcquisitionEngine $maEngine = null,
     ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
@@ -92,16 +91,16 @@ final class StockTrackerFactorWiringTest extends TestCase
                     'analyst_targets' => [],
                     'perceived_fair_value' => 100.0,
                 ];
-            }
+            },
         );
 
         $corporateActions = $this->createStub(CorporateActionEngine::class);
         $corporateActions->method('processSplits')->willReturnCallback(
-            static fn (Stock $stock, float $price, float $shares): array => [
+            static fn(Stock $stock, float $price, float $shares): array => [
                 'price' => $postSplitPrice ?? $price,
                 'shares' => $shares,
                 'event' => null,
-            ]
+            ],
         );
 
         $debtEngine = $this->createStub(DebtEngine::class);
@@ -135,14 +134,14 @@ final class StockTrackerFactorWiringTest extends TestCase
                 new \App\Service\Market\Agent\AgentPopulation(),
                 new \App\Service\Market\Agent\InMemoryAgentStateStore(),
                 new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-                $agentStrategy === null ? [] : [$agentStrategy]
+                $agentStrategy === null ? [] : [$agentStrategy],
             ),
             // Stubbed maths, so checkProbability() is false and no succession fires in tests that
             // are about something else.
             new \App\Service\Corporate\ManagementSuccessionEngine(
-                $this->createStub(\App\Service\Event\MarketEventPublisher::class),
-                $this->createStub(\App\Service\Math\MathUtility::class)
-            )
+                $this->createStub(MarketEventPublisher::class),
+                $this->createStub(MathUtility::class),
+            ),
         );
     }
 
@@ -157,7 +156,7 @@ final class StockTrackerFactorWiringTest extends TestCase
             $seen = $view;
         };
 
-        return new class($record) implements \App\Service\Market\Agent\AgentStrategyInterface {
+        return new class ($record) implements \App\Service\Market\Agent\AgentStrategyInterface {
             public function __construct(private \Closure $record) {}
 
             public function identifier(): string
@@ -204,7 +203,7 @@ final class StockTrackerFactorWiringTest extends TestCase
 
         $macro = new MacroStateDTO(
             marketJumpMultiplier: 0.95,
-            sectorZ: ['Financials' => 1.75, 'Information Technology' => -2.50]
+            sectorZ: ['Financials' => 1.75, 'Information Technology' => -2.50],
         );
 
         $tracker->updateStocks([$this->stock('Financials')], 1.0 / 252.0, false, $macro);
@@ -296,7 +295,7 @@ final class StockTrackerFactorWiringTest extends TestCase
         $this->assertEqualsWithDelta(
             ($firstTrend * exp(-1.0)) + log(1.10),
             (float) $stock->getPriceMomentumTrend(),
-            1e-9
+            1e-9,
         );
     }
 
@@ -329,7 +328,7 @@ final class StockTrackerFactorWiringTest extends TestCase
                 $stock->setPrice('108.00');
 
                 return [['type' => 'EARNINGS', 'ticker' => 'TEST', 'description' => 'Q', 'change_percent' => 0.0, 'dividend_per_share' => 2.0]];
-            }
+            },
         );
 
         $stock = $this->stock();

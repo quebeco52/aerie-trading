@@ -4,24 +4,23 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
+use App\Data\Company\InitialMarket;
+use App\Data\Company\ManagementStyle;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
-use App\Data\Company\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\TreasuryEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Valuation;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
-use App\Data\Company\InitialMarket;
-use App\Service\Math\Valuation;
 
 #[AllowMockObjectsWithoutExpectations]
 class CapitalAllocationEngineTest extends TestCase
@@ -42,10 +41,10 @@ class CapitalAllocationEngineTest extends TestCase
         $this->corporateMetricsMock->method('calculateMarketSaturationPenalty')->willReturn(0.0);
 
         $this->corporateMetricsMock->method('calculateSaturationSeverity')->willReturnCallback(
-            fn(float $p, float $r) => $p <= 0.0 ? 0.0 : min(1.0, $p / max(0.01, $r + $p))
+            fn(float $p, float $r) => $p <= 0.0 ? 0.0 : min(1.0, $p / max(0.01, $r + $p)),
         );
         $this->corporateMetricsMock->method('calculateLifeCyclePayoutRatio')->willReturnCallback(
-            fn(float $b, float $s) => min(0.85, max($b, $b + ((0.85 - $b) * $s)))
+            fn(float $b, float $s) => min(0.85, max($b, $b + ((0.85 - $b) * $s))),
         );
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(5000000.0);
 
@@ -61,7 +60,7 @@ class CapitalAllocationEngineTest extends TestCase
             ebit: 2000000.0,
             revenue: 10000000.0,
             depreciation: 500000.0,
-            ebitda: 2500000.0
+            ebitda: 2500000.0,
         );
 
         $debtHealthMock = new DebtHealthDTO(
@@ -80,7 +79,7 @@ class CapitalAllocationEngineTest extends TestCase
             rawMetrics: $debtMetricsMock,
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
 
         $this->debtHealth = $debtHealthMock;
@@ -89,7 +88,7 @@ class CapitalAllocationEngineTest extends TestCase
 
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
         // The board's buyback appetite is a uniform draw; the stub draws the middle of whatever range it is asked for.
-        $this->mathUtilityMock->method('generateUniformBetween')->willReturnCallback(static fn (float $min, float $max): float => 0.5 * ($min + $max));
+        $this->mathUtilityMock->method('generateUniformBetween')->willReturnCallback(static fn(float $min, float $max): float => 0.5 * ($min + $max));
 
         $this->treasuryEngineMock = $this->createStub(TreasuryEngine::class);
 
@@ -98,7 +97,7 @@ class CapitalAllocationEngineTest extends TestCase
             $this->corporateMetricsMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,
-            $this->treasuryEngineMock
+            $this->treasuryEngineMock,
         );
     }
 
@@ -130,7 +129,7 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertLessThan(
             $operatorBuyback,
             $fortressBuyback,
-            'Identical balance sheets: the only thing holding the cash in is the style.'
+            'Identical balance sheets: the only thing holding the cash in is the style.',
         );
 
         // Total distribution, not just the leg the bias used to reach. This is the assertion that would have
@@ -141,7 +140,7 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertLessThan(
             $operatorTotal,
             $fortressTotal,
-            'A manager that retains must return less in total than the neutral baseline, through every channel combined.'
+            'A manager that retains must return less in total than the neutral baseline, through every channel combined.',
         );
     }
 
@@ -243,10 +242,23 @@ class CapitalAllocationEngineTest extends TestCase
 
         $refused = $this->createMock(DebtEngine::class);
         $refused->method('analyzeTrailingDebtHealth')->willReturn(new DebtHealthDTO(
-            grossCost: 0.05, effectiveCost: 0.05, cashYield: 0.04, isNegativeCarry: false, isSevereNegativeCarry: false,
-            interestCoverage: 5.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 1.5, wacc: 0.06,
-            costOfEquity: 0.08, leveredBeta: 1.0, rawMetrics: $this->debtHealth->rawMetrics, isLiquidityCrisis: false,
-            isLiquidityWarning: false, isUnderLeveraged: false, hasMarketAccess: false
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.04,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 5.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: false,
+            debtTolerance: 1.5,
+            wacc: 0.06,
+            costOfEquity: 0.08,
+            leveredBeta: 1.0,
+            rawMetrics: $this->debtHealth->rawMetrics,
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false,
+            hasMarketAccess: false,
         ));
         $refused->expects($this->never())->method('issueDebt');
         $unfunded = (new CapitalAllocationEngine($this->corporateLedgerServiceMock, $this->corporateMetricsMock, $refused, $this->mathUtilityMock, $this->treasuryEngineMock))
@@ -314,7 +326,7 @@ class CapitalAllocationEngineTest extends TestCase
             ->with(
                 $this->isInstanceOf(Stock::class),
                 $this->greaterThan(0.0),
-                $this->isInstanceOf(\DateTimeInterface::class)
+                $this->isInstanceOf(\DateTimeInterface::class),
             );
 
         $engine = new CapitalAllocationEngine(
@@ -322,7 +334,7 @@ class CapitalAllocationEngineTest extends TestCase
             $this->corporateMetricsMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,
-            $this->treasuryEngineMock
+            $this->treasuryEngineMock,
         );
 
         $stock = new Stock();
@@ -359,7 +371,7 @@ class CapitalAllocationEngineTest extends TestCase
             $this->corporateMetricsMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,
-            $this->treasuryEngineMock
+            $this->treasuryEngineMock,
         );
 
         $stock = new Stock();
@@ -402,7 +414,7 @@ class CapitalAllocationEngineTest extends TestCase
             $this->corporateMetricsMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,
-            $this->treasuryEngineMock
+            $this->treasuryEngineMock,
         );
 
         $stock = new Stock();
@@ -775,7 +787,7 @@ class CapitalAllocationEngineTest extends TestCase
             $this->corporateMetricsMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,
-            $this->treasuryEngineMock
+            $this->treasuryEngineMock,
         );
 
         $bank = new Stock();
@@ -875,7 +887,7 @@ class CapitalAllocationEngineTest extends TestCase
             $this->corporateMetricsMock,
             $debtEngine,
             $this->mathUtilityMock,
-            $this->treasuryEngineMock
+            $this->treasuryEngineMock,
         );
     }
 
@@ -924,14 +936,14 @@ class CapitalAllocationEngineTest extends TestCase
                 ebit: 2000000.0,
                 revenue: 10000000.0,
                 depreciation: 500000.0,
-                ebitda: 2500000.0
+                ebitda: 2500000.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
             isUnderLeveraged: false,
             hasLeverageHeadroom: $hasLeverageHeadroom,
             netDebtToEbitda: $hasLeverageHeadroom ? 0.5 : 4.5,
-            ebitdaCovenantLimit: 2.0
+            ebitdaCovenantLimit: 2.0,
         );
     }
 
@@ -1222,7 +1234,7 @@ class CapitalAllocationEngineTest extends TestCase
                 ebit: 50_000_000.0,
                 revenue: 100_000_000.0,
                 depreciation: 0.0,
-                ebitda: 50_000_000.0
+                ebitda: 50_000_000.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
@@ -1231,7 +1243,7 @@ class CapitalAllocationEngineTest extends TestCase
             netDebtToEbitda: $hasLeverageHeadroom ? 0.4 : 4.5,
             ebitdaCovenantLimit: 3.5,
             debtToEquity: $netDebt / 100_000_000.0,
-            leverageTarget: 0.75
+            leverageTarget: 0.75,
         );
 
         $borrowed = [];
@@ -1294,7 +1306,7 @@ class CapitalAllocationEngineTest extends TestCase
             $this->corporateMetricsMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,
-            $this->treasuryEngineMock
+            $this->treasuryEngineMock,
         );
 
         $stock = new Stock();

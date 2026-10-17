@@ -5,23 +5,22 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
+use App\DTO\MacroStateDTO;
 
-use App\Service\Model\ModelParam;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Specialty Industrial Machinery.
- * 
+ *
  * Financial Physics:
  * - High Moat: Specialty products mean higher margins and pricing power.
  * - Backlog-Buffered Cyclicality: Equipment sales are driven by the macro output gap, cushioned by multi-quarter order backlogs.
@@ -104,9 +103,18 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     /** Top-line equipment revenue multiplier for a mega infrastructure deal win. */
     public const MEGA_INFRASTRUCTURE_DEAL_MULT    = 1.20;
 
-        public function getReversionSpeed(): float { return 0.1; }
-    public function getMoatSpread(): float { return 0.025; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.18; }
+    public function getReversionSpeed(): float
+    {
+        return 0.1;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.025;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.18;
+    }
 
     public function getCapexCyclicality(): float
     {
@@ -130,7 +138,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        // Nullify global demand shift so macro cyclicality is isolated 
+        // Nullify global demand shift so macro cyclicality is isolated
         // exclusively to equipment sales, keeping aftermarket services defensive.
         $physics['macro_demand_shift'] = 0.0;
 
@@ -264,7 +272,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-                    kpis: ['book_to_bill' => $equipmentBook['book_to_bill'], 'backlog_quarters' => $equipmentBook['backlog_quarters']],
+            kpis: ['book_to_bill' => $equipmentBook['book_to_bill'], 'backlog_quarters' => $equipmentBook['backlog_quarters']],
         );
     }
 
@@ -275,7 +283,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             errorStdDev: 0.05,
             minVisibility: 0.0,
             eventBaseVisibility: 0.60,
-            eventMinVisibility: 0.30
+            eventMinVisibility: 0.30,
         );
     }
 

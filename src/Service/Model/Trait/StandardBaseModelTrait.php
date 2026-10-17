@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
-use App\Service\Model\ModelParam;
 use App\Data\Company\StockModelTuning;
 use App\DTO\MacroStateDTO;
-use App\Service\Model\ModelParameters;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
+use App\Service\Model\StreamContext;
 
 trait StandardBaseModelTrait
 {
@@ -124,7 +124,7 @@ trait StandardBaseModelTrait
         float $trailingBlendWeight,
         float $saturationBase,
         ?MacroStateDTO $macroState,
-        float $currentWeight = FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT
+        float $currentWeight = FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT,
     ): float {
         $blended = $trailing === 0.0 ? $realised : ($realised * $currentWeight) + ($trailing * (1.0 - $currentWeight));
 

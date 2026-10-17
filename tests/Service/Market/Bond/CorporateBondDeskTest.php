@@ -91,7 +91,7 @@ class CorporateBondDeskTest extends TestCase
         $ledger->expects($this->exactly(2))->method('processCall')->willReturnCallback(
             function (Bond $bond, float $price) use (&$paid): void {
                 $paid[$bond->getTicker()] = $price;
-            }
+            },
         );
 
         $called = $this->desk($ledger)->retireExcess($stock, $issues, $this->curve(), 1.0);
@@ -119,7 +119,7 @@ class CorporateBondDeskTest extends TestCase
         $this->assertEqualsWithDelta(
             4.0e9 * FinancialConstants::CORPORATE_PUBLIC_DEBT_SHARE,
             $this->desk()->targetPublicFace($stock),
-            1e-6
+            1e-6,
         );
     }
 
@@ -175,7 +175,7 @@ class CorporateBondDeskTest extends TestCase
         $this->assertEqualsWithDelta(
             FinancialConstants::BOND_FACE_VALUE,
             (float) $bond->getCleanPrice(),
-            FinancialConstants::BOND_FACE_VALUE * 0.01
+            FinancialConstants::BOND_FACE_VALUE * 0.01,
         );
     }
 
@@ -252,7 +252,7 @@ class CorporateBondDeskTest extends TestCase
         $this->assertGreaterThanOrEqual(
             FinancialConstants::CORPORATE_MIN_ISSUE_FACE,
             $trancheSlice,
-            'the smallest admitted firm cannot bring an issue large enough to be worth bringing'
+            'the smallest admitted firm cannot bring an issue large enough to be worth bringing',
         );
     }
 

@@ -2,8 +2,6 @@
 
 namespace App\Tests\Panther;
 
-use Symfony\Component\Panther\PantherTestCase;
-
 class StockPagePantherTest extends BasePantherTestCase
 {
     public function testEtfPageLoadsAndRendersInteractiveElements(): void

@@ -39,17 +39,26 @@ final class StandardDebtPhysicsTraitTest extends TestCase
             ebit: $ebit,
             revenue: $ebit * 5.0,
             depreciation: 0.0,
-            ebitda: $ebit
+            ebitda: $ebit,
         );
 
         return new DebtHealthDTO(
-            grossCost: 0.05, effectiveCost: 0.04, cashYield: 0.03,
-            isNegativeCarry: false, isSevereNegativeCarry: false,
+            grossCost: 0.05,
+            effectiveCost: 0.04,
+            cashYield: 0.03,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
             interestCoverage: $interestExpense > 0 ? $ebit / $interestExpense : 999.0,
-            wantsToPaydownDebt: false, canIssueDebt: true,
-            debtTolerance: $debtTolerance, wacc: $wacc, costOfEquity: 0.10,
-            leveredBeta: 1.0, rawMetrics: $metrics,
-            isLiquidityCrisis: false, isLiquidityWarning: false, isUnderLeveraged: false
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: $debtTolerance,
+            wacc: $wacc,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: $metrics,
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false,
         );
     }
 
@@ -81,15 +90,15 @@ final class StandardDebtPhysicsTraitTest extends TestCase
         $this->assertSame($target, $this->model->getLeverageTarget($tolerance), 'An undeclared model targets the default share of its tolerance.');
         $this->assertTrue(
             $this->model->isUnderLeveraged(0.5 * $target, $tolerance, $icrFloor, $minIcr),
-            'Below target, with coverage at the floor, the firm is under-levered.'
+            'Below target, with coverage at the floor, the firm is under-levered.',
         );
         $this->assertFalse(
             $this->model->isUnderLeveraged(0.5 * $target, $tolerance, $icrFloor - 0.01, $minIcr),
-            'Thin coverage blocks a recapitalization however far below target the firm sits.'
+            'Thin coverage blocks a recapitalization however far below target the firm sits.',
         );
         $this->assertFalse(
             $this->model->isUnderLeveraged($target, $tolerance, $icrFloor + 1.0, $minIcr),
-            'At its target the firm carries the leverage it means to.'
+            'At its target the firm carries the leverage it means to.',
         );
     }
 
@@ -131,13 +140,25 @@ final class StandardDebtPhysicsTraitTest extends TestCase
 
         // Balance sheet binds: coverage is abundant but equity already carries its tolerated debt.
         $balanceBound = $this->model->calculateDebtExpansionCapacity(
-            $equity, 900_000_000.0, 900_000_000.0, $this->health(1.0, 0.08, 1_000_000.0, 5_000_000_000.0), $rate, 5_000_000_000.0, 0.0
+            $equity,
+            900_000_000.0,
+            900_000_000.0,
+            $this->health(1.0, 0.08, 1_000_000.0, 5_000_000_000.0),
+            $rate,
+            5_000_000_000.0,
+            0.0,
         );
         $this->assertEqualsWithDelta(100_000_000.0, $balanceBound, 1.0, 'The equity tolerance must cap the raise.');
 
         // Coverage binds: the balance sheet is empty but EBIT cannot service much more interest.
         $coverageBound = $this->model->calculateDebtExpansionCapacity(
-            $equity, 0.0, 0.0, $this->health(1.0, 0.08, 0.0, 10_000_000.0), $rate, 10_000_000.0, 0.0
+            $equity,
+            0.0,
+            0.0,
+            $this->health(1.0, 0.08, 0.0, 10_000_000.0),
+            $rate,
+            10_000_000.0,
+            0.0,
         );
         $expectedInterestRoom = 10_000_000.0 / ($this->model->getBuybackMinIcr() + 0.5);
         $this->assertEqualsWithDelta($expectedInterestRoom / $rate, $coverageBound, 1.0, 'Coverage must cap the raise when the balance sheet does not.');
@@ -147,7 +168,7 @@ final class StandardDebtPhysicsTraitTest extends TestCase
         $this->assertSame(
             0.0,
             $this->model->calculateDebtExpansionCapacity($equity, 2_000_000_000.0, 2_000_000_000.0, $this->health(1.0, 0.08, 1_000_000.0, 5_000_000_000.0), $rate, 5_000_000_000.0, 0.0),
-            'An over-levered firm has zero capacity, not negative capacity.'
+            'An over-levered firm has zero capacity, not negative capacity.',
         );
     }
 
@@ -187,12 +208,12 @@ final class StandardDebtPhysicsTraitTest extends TestCase
         $this->assertLessThan(
             $this->model->getMinIcr(),
             $this->model->getDividendCrisisIcr(),
-            'A firm must cut the dividend before it breaches its own minimum coverage, not after.'
+            'A firm must cut the dividend before it breaches its own minimum coverage, not after.',
         );
         $this->assertGreaterThanOrEqual(
             $this->model->getDividendCrisisIcr(),
             $this->model->getBuybackMinIcr(),
-            'Buybacks must stop no later than dividends do.'
+            'Buybacks must stop no later than dividends do.',
         );
 
         // A non-financial fails on book equity alone, with no regulatory capital layer above zero.

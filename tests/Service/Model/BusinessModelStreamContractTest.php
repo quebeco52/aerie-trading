@@ -77,11 +77,11 @@ class BusinessModelStreamContractTest extends TestCase
         $z2 = $q2->streamZ;
 
         // A launch adds a cohort to a pipeline model's state, so launch-cohort keys may grow between quarters.
-        $keys = static fn (array $z): array => array_values(array_filter(array_keys($z), static fn (string $k): bool => !str_starts_with($k, 'state:cohort:')));
+        $keys = static fn(array $z): array => array_values(array_filter(array_keys($z), static fn(string $k): bool => !str_starts_with($k, 'state:cohort:')));
         $this->assertSame(
             $keys($z1),
             $keys($z2),
-            "Stream keys in {$modelClass} must be identical between quarter 1 and quarter 2 (no key mismatches)"
+            "Stream keys in {$modelClass} must be identical between quarter 1 and quarter 2 (no key mismatches)",
         );
 
         foreach ($z2 as $key => $val) {
@@ -116,7 +116,7 @@ class BusinessModelStreamContractTest extends TestCase
                     // map but is not a Z-score, so it is bounded by its own model rails, not by N(0,1).
                     $this->assertTrue(
                         is_finite($val),
-                        "Structural state {$key} in {$modelClass} diverged on quarter {$quarter}: {$val}"
+                        "Structural state {$key} in {$modelClass} diverged on quarter {$quarter}: {$val}",
                     );
                     continue;
                 }
@@ -124,7 +124,7 @@ class BusinessModelStreamContractTest extends TestCase
                 $this->assertLessThan(
                     8.0,
                     abs($val),
-                    "Stream Z for {$key} in {$modelClass} exploded beyond stationary bounds on quarter {$quarter}: {$val}"
+                    "Stream Z for {$key} in {$modelClass} exploded beyond stationary bounds on quarter {$quarter}: {$val}",
                 );
             }
         }

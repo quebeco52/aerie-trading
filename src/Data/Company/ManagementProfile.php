@@ -36,7 +36,7 @@ final readonly class ManagementProfile
 
     public function __construct(
         public ManagementStyle $style,
-        public float $intensity = self::INTENSITY_MEDIAN
+        public float $intensity = self::INTENSITY_MEDIAN,
     ) {}
 
     /**
@@ -126,7 +126,7 @@ final readonly class ManagementProfile
     {
         return $this->appliedTargetCash(
             $strategy->calculateTargetOperatingCash($operatingBase, $customerDeposits, $wholesaleDebt),
-            $strategy->calculateLiabilityBackingCash($customerDeposits, $wholesaleDebt)
+            $strategy->calculateLiabilityBackingCash($customerDeposits, $wholesaleDebt),
         );
     }
 

@@ -255,7 +255,7 @@ class DistrictRevenueFeedTest extends TestCase
         $this->repository->method('findForStocksNewestFirst')->willReturn($reports);
 
         $streams = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'];
-        $newStream = array_values(array_filter($streams, static fn (array $s): bool => $s['key'] === 'custody_float'))[0];
+        $newStream = array_values(array_filter($streams, static fn(array $s): bool => $s['key'] === 'custody_float'))[0];
 
         // A stream that did not exist last quarter has no growth rate — null, not a flat 0.0.
         $this->assertNull($newStream['qoqDelta']);
@@ -289,7 +289,7 @@ class DistrictRevenueFeedTest extends TestCase
         $this->repository->method('findForStocksNewestFirst')->willReturn($reports);
 
         $streams = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'];
-        $fee = array_values(array_filter($streams, static fn (array $s): bool => $s['key'] === 'fee_income'))[0];
+        $fee = array_values(array_filter($streams, static fn(array $s): bool => $s['key'] === 'fee_income'))[0];
 
         $this->assertSame(500.0, $fee['shareShiftBps']);
     }

@@ -67,7 +67,7 @@ class AnchorPortfolioBuilderTest extends TestCase
         $this->assertEqualsWithDelta(
             array_sum(array_column($portfolio['holdings'], 'value')),
             $portfolio['totalValue'],
-            1.0
+            1.0,
         );
     }
 
@@ -90,7 +90,7 @@ class AnchorPortfolioBuilderTest extends TestCase
         $board[0]->setIsBankrupt(true);
 
         $portfolio = $this->builder($board)->build($this->sphere());
-        $dead = array_values(array_filter($portfolio['holdings'], static fn (array $h): bool => $h['isBankrupt']));
+        $dead = array_values(array_filter($portfolio['holdings'], static fn(array $h): bool => $h['isBankrupt']));
 
         $this->assertCount(1, $dead);
         $this->assertSame(0.0, $dead[0]['value']);

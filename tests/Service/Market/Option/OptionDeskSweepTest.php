@@ -9,15 +9,15 @@ use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Repository\OptionContractRepository;
 use App\Service\Market\Bond\BondPricingEngine;
-use App\Service\Market\Option\DealerGammaEngine;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
+use App\Service\Market\Option\DealerGammaEngine;
 use App\Service\Market\Option\InMemoryDealerGammaStore;
-use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Option\OptionChainService;
 use App\Service\Market\Option\OptionDemandEngine;
 use App\Service\Market\Option\OptionDeskService;
 use App\Service\Market\Option\OptionPricingEngine;
 use App\Service\Market\Option\OptionSettlementEngine;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\User\CashLedger;
@@ -46,14 +46,14 @@ class OptionDeskSweepTest extends TestCase
         // The settlement's expiry scan and the sweep's chain read share one connection. Only the chain read
         // is being described here, so the expiry scan is answered empty.
         $connection->method('fetchAllAssociative')->willReturnCallback(
-            static fn (string $sql): array => str_contains($sql, 'expires_at_time <=') ? [] : $rows
+            static fn(string $sql): array => str_contains($sql, 'expires_at_time <=') ? [] : $rows,
         );
         $connection->method('executeStatement')->willReturnCallback(
             function (string $sql, array $params = []): int {
                 $this->sent[] = [$sql, $params];
 
                 return 1;
-            }
+            },
         );
 
         $em = $this->createStub(EntityManagerInterface::class);
@@ -70,7 +70,7 @@ class OptionDeskSweepTest extends TestCase
             new OptionSettlementEngine($em, new CashLedger()),
             new OptionDemandEngine($liquidity),
             new DealerGammaEngine($this->gammaStore = new InMemoryDealerGammaStore(), $liquidity),
-            new InMemoryOrderFlowStore()
+            new InMemoryOrderFlowStore(),
         );
     }
 
@@ -132,8 +132,8 @@ class OptionDeskSweepTest extends TestCase
 
         $this->assertSame(1, $result['marked']);
 
-        $marks = array_values(array_filter($this->sent, static fn (array $s): bool => str_contains($s[0], '? AS price')));
-        $books = array_values(array_filter($this->sent, static fn (array $s): bool => str_contains($s[0], 'structural_open_interest')));
+        $marks = array_values(array_filter($this->sent, static fn(array $s): bool => str_contains($s[0], '? AS price')));
+        $books = array_values(array_filter($this->sent, static fn(array $s): bool => str_contains($s[0], 'structural_open_interest')));
 
         // Exactly the held contract is marked, and it goes out in the bulk shape: its id, then the seven
         // mark values. A book of a thousand held contracts would cost the same one statement.

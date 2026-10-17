@@ -82,7 +82,7 @@ class ConglomerateBusinessModelTest extends TestCase
             fixedCosts: 15_000_000.0,
             baselineVol: 0.08,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('industrial_manufacturing', $result->streamRevenue);
@@ -120,7 +120,7 @@ class ConglomerateBusinessModelTest extends TestCase
             10_000_000.0,
             0.05,
             $this->neutralMacro(),
-            $this->deterministicMath()
+            $this->deterministicMath(),
         );
 
         $this->assertArrayNotHasKey('merchant_trading', $result->streamRevenue);
@@ -135,7 +135,7 @@ class ConglomerateBusinessModelTest extends TestCase
             10_000_000.0,
             0.05,
             $this->neutralMacro(),
-            $this->deterministicMath()
+            $this->deterministicMath(),
         );
 
         $this->assertArrayNotHasKey('financial_investments', $harr->streamRevenue);
@@ -160,7 +160,7 @@ class ConglomerateBusinessModelTest extends TestCase
 
         $this->assertGreaterThan(
             $calm->streamRevenue['financial_investments'],
-            $blowout->streamRevenue['financial_investments']
+            $blowout->streamRevenue['financial_investments'],
         );
     }
 
@@ -182,7 +182,7 @@ class ConglomerateBusinessModelTest extends TestCase
 
         $this->assertLessThan(
             $calm->streamRevenue['financial_investments'],
-            $widening->streamRevenue['financial_investments']
+            $widening->streamRevenue['financial_investments'],
         );
     }
 
@@ -211,7 +211,7 @@ class ConglomerateBusinessModelTest extends TestCase
 
         $this->assertLessThan(
             $clean->streamRevenue['financial_investments'],
-            $losses->streamRevenue['financial_investments']
+            $losses->streamRevenue['financial_investments'],
         );
     }
 
@@ -294,7 +294,6 @@ class ConglomerateBusinessModelTest extends TestCase
             }
         }
     }
-
 
     public function testTheCycleReachesTheCostBaseThroughTheOperatingStreams(): void
     {

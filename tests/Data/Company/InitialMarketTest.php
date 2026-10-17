@@ -122,14 +122,14 @@ class InitialMarketTest extends TestCase
         $this->assertArrayHasKey(
             $stock['sector'],
             Sectors::MACRO_SECTORS,
-            "Stock {$ticker} specifies unknown sector: '{$stock['sector']}'"
+            "Stock {$ticker} specifies unknown sector: '{$stock['sector']}'",
         );
 
         $this->assertArrayHasKey('industry', $stock, "Missing industry for {$ticker}");
         $this->assertArrayHasKey(
             $stock['industry'],
             Sectors::INDUSTRY_METRICS,
-            "Stock {$ticker} specifies unknown industry: '{$stock['industry']}'"
+            "Stock {$ticker} specifies unknown industry: '{$stock['industry']}'",
         );
 
         // Core Financial Bounds
@@ -180,8 +180,7 @@ class InitialMarketTest extends TestCase
         $this->assertLessThanOrEqual(
             $equityLimit + 1e-6,
             $debtToEquity,
-            "Stock {$ticker} in industry {$industry} exceeds equity limit of {$equityLimit} (actual D/E: {$debtToEquity})"
+            "Stock {$ticker} in industry {$industry} exceeds equity limit of {$equityLimit} (actual D/E: {$debtToEquity})",
         );
     }
 }
-

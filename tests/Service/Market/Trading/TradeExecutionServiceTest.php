@@ -12,27 +12,27 @@ use App\Entity\User;
 use App\Entity\UserBond;
 use App\Entity\UserEtf;
 use App\Entity\UserStock;
-use App\Service\Market\Trading\AssetResolver;
-use App\Service\Market\Flow\InMemoryOrderFlowStore;
-use App\Service\Market\Pricing\LiquidityEngine;
-use App\Service\Market\Trading\MarginEngine;
-use App\Service\Macro\MacroStateProvider;
-use App\Service\Market\Bond\BondPricingEngine;
-use App\Service\Market\Option\OptionPricingEngine;
-use App\Service\Market\Option\OptionTradeService;
-use App\Service\Market\Option\OptionMarginCalculator;
-use App\Service\Market\Trading\SecuritiesLendingDesk;
-use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
-use App\Service\Market\Trading\TradeExecutionService;
-use App\Service\User\Portfolio;
-use App\Tests\Support\MacroStateBuilder;
-use Doctrine\DBAL\Connection;
-use Doctrine\ORM\EntityManagerInterface;
 use App\Repository\BondRepository;
 use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
 use App\Repository\TradeOrderRepository;
+use App\Service\Macro\MacroStateProvider;
+use App\Service\Market\Bond\BondPricingEngine;
+use App\Service\Market\Flow\InMemoryOrderFlowStore;
+use App\Service\Market\Option\OptionMarginCalculator;
+use App\Service\Market\Option\OptionPricingEngine;
+use App\Service\Market\Option\OptionTradeService;
+use App\Service\Market\Pricing\LiquidityEngine;
+use App\Service\Market\Trading\AssetResolver;
+use App\Service\Market\Trading\MarginEngine;
+use App\Service\Market\Trading\SecuritiesLendingDesk;
+use App\Service\Market\Trading\TradeExecutionService;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
+use App\Service\User\Portfolio;
+use App\Tests\Support\MacroStateBuilder;
+use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -109,9 +109,9 @@ class TradeExecutionServiceTest extends TestCase
                 new OptionPricingEngine(new BondPricingEngine()),
                 new MacroStateProvider($this->redisStub),
                 new MarginEngine($this->emMock, new OptionMarginCalculator($this->emMock)),
-                new \App\Service\User\CashLedger()
+                new \App\Service\User\CashLedger(),
             ),
-            new \App\Service\User\CashLedger()
+            new \App\Service\User\CashLedger(),
         );
     }
 
@@ -160,7 +160,7 @@ class TradeExecutionServiceTest extends TestCase
 
         $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 10);
         $spent = 1000.0 - (float) $user->getCashBalance();
-        $consideration = $spent / (1.0 + \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE);
+        $consideration = $spent / (1.0 + FinancialConstants::STAMP_DUTY_RATE);
 
         $this->assertGreaterThan(0.0, $preview['spread']);
         $this->assertEqualsWithDelta($consideration / 500.0 - 1.0, $preview['spread'] + $preview['impact'], 1e-5);
@@ -224,7 +224,7 @@ class TradeExecutionServiceTest extends TestCase
 
         $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 100);
 
-        $orders = array_values(array_filter($persisted, static fn (object $e): bool => $e instanceof TradeOrder));
+        $orders = array_values(array_filter($persisted, static fn(object $e): bool => $e instanceof TradeOrder));
         $this->assertCount(1, $orders);
 
         $order = $orders[0];
@@ -521,9 +521,9 @@ class TradeExecutionServiceTest extends TestCase
 
         $this->assertGreaterThan(500.0, $spent);
         $this->assertEqualsWithDelta(
-            500.0 * (1.0 + \App\Service\Math\FinancialConstants::ETF_HALF_SPREAD),
+            500.0 * (1.0 + FinancialConstants::ETF_HALF_SPREAD),
             $spent,
-            0.0001
+            0.0001,
         );
     }
 
@@ -1138,7 +1138,7 @@ class TradeExecutionServiceTest extends TestCase
         $user->setCashBalance('100000.00');
         $this->service->executeOrder($user, 'G10-001', 'BUY', 'MARKET', 10);
 
-        $marks = array_values(array_filter($statements, static fn (array $statement): bool => str_contains($statement[0], 'bonds')));
+        $marks = array_values(array_filter($statements, static fn(array $statement): bool => str_contains($statement[0], 'bonds')));
         $this->assertCount(1, $marks);
         $this->assertContains(42, $marks[0][1]);
         $this->assertContains((string) $live, $marks[0][1]);
@@ -1346,7 +1346,7 @@ class TradeExecutionServiceTest extends TestCase
                 $queries[] = preg_replace('/\s+/', ' ', $sql);
 
                 return $result;
-            }
+            },
         );
 
         $em = $this->createStub(EntityManagerInterface::class);
@@ -1359,7 +1359,7 @@ class TradeExecutionServiceTest extends TestCase
                 $written[$key] = $value;
 
                 return true;
-            }
+            },
         );
 
         $service = clone $this->service;
@@ -1388,7 +1388,7 @@ class TradeExecutionServiceTest extends TestCase
         self::assertEquals(
             ['buy' => 0.0, 'sell' => 999999999.0],
             json_decode((string) ($written['limit_bounds:APEX'] ?? ''), true),
-            'An empty book is written, not skipped: the ticker treats a missing key as "check anyway".'
+            'An empty book is written, not skipped: the ticker treats a missing key as "check anyway".',
         );
     }
 }

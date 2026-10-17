@@ -137,7 +137,7 @@ class StochasticProcessesTest extends TestCase
             theta: $theta,
             sigma: 0.20,
             dt: 1.0,
-            dW: 0.0
+            dW: 0.0,
         );
 
         $this->assertGreaterThan($currentPrice, $nextPrice, 'Price below theta must revert upwards.');
@@ -163,7 +163,7 @@ class StochasticProcessesTest extends TestCase
             $this->assertEqualsWithDelta(
                 exp($mean + ($variance / 2.0)),
                 StochasticProcesses::calculateSchwartzForwardPrice($spot, $kappa, $theta, $sigma, $horizon),
-                1e-9
+                1e-9,
             );
         }
 
@@ -178,7 +178,7 @@ class StochasticProcessesTest extends TestCase
         $this->assertEqualsWithDelta(
             exp(log($theta) - ($sigma * $sigma) / (4.0 * $kappa)),
             StochasticProcesses::calculateSchwartzForwardPrice($spot, $kappa, $theta, $sigma, 100.0),
-            1e-6
+            1e-6,
         );
     }
 
@@ -195,7 +195,7 @@ class StochasticProcessesTest extends TestCase
             0.10 * (pow(50.0 / 25.0, 1.8) - 1.0),
             StochasticProcesses::calculateConvenienceYield(75.0),
             0.0000001,
-            'Backwardation yield must follow the storage curve exactly.'
+            'Backwardation yield must follow the storage curve exactly.',
         );
 
         $previous = -1.0;
@@ -210,7 +210,7 @@ class StochasticProcessesTest extends TestCase
         $this->assertSame(
             StochasticProcesses::calculateConvenienceYield(51.0),
             StochasticProcesses::calculateConvenienceYield(10.0),
-            'Below the buffer floor the curve saturates at its clamped value.'
+            'Below the buffer floor the curve saturates at its clamped value.',
         );
     }
 
@@ -242,7 +242,7 @@ class StochasticProcessesTest extends TestCase
         $this->assertEqualsWithDelta(
             1.05,
             StochasticProcesses::averageMeanRevertingVolatility(1.05, 0.35, 1.1507, 0.0001),
-            0.005
+            0.005,
         );
     }
 
@@ -256,7 +256,7 @@ class StochasticProcessesTest extends TestCase
         $this->assertEqualsWithDelta(
             0.35,
             StochasticProcesses::averageMeanRevertingVolatility(1.05, 0.35, 1.1507, 400.0),
-            0.01
+            0.01,
         );
     }
 
@@ -277,7 +277,7 @@ class StochasticProcessesTest extends TestCase
         $this->assertEqualsWithDelta(
             $expected,
             StochasticProcesses::averageMeanRevertingVolatility($spot, $longRun, $kappa, $horizon),
-            1.0e-9
+            1.0e-9,
         );
         $this->assertEqualsWithDelta(0.5406, $expected, 0.001, 'the closed form itself must not drift');
     }
@@ -302,7 +302,7 @@ class StochasticProcessesTest extends TestCase
         $this->assertEqualsWithDelta(
             0.28,
             StochasticProcesses::averageMeanRevertingVolatility(0.28, 0.28, 1.1507, 5.0),
-            1.0e-9
+            1.0e-9,
         );
     }
 
@@ -348,7 +348,7 @@ class StochasticProcessesTest extends TestCase
         self::assertEqualsWithDelta(
             $muV * (1.0 - exp(-StochasticProcesses::MAX_VARIANCE_JUMP_MEAN_MULTIPLE)),
             StochasticProcesses::meanVarianceJump(0.0, $muV),
-            1e-15
+            1e-15,
         );
     }
 }

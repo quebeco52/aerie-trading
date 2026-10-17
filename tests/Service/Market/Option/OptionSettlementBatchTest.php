@@ -35,7 +35,7 @@ class OptionSettlementBatchTest extends TestCase
                 $this->sent[] = [$sql, $params];
 
                 return 1;
-            }
+            },
         );
 
         // Nobody holds any of it, which is the ordinary case: a listed chain is mostly contracts no account

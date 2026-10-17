@@ -42,7 +42,7 @@ final class StandardCapitalAllocationTraitTest extends TestCase
         $this->assertSame(
             $normal,
             $this->model->calculateMaxBuybackSpend($excess, 900_000_000.0, false),
-            'A strong quarter does not itself enlarge the buyback; only the cash pile does.'
+            'A strong quarter does not itself enlarge the buyback; only the cash pile does.',
         );
 
         $this->assertSame(0.0, $this->model->calculateMaxBuybackSpend(0.0, 100_000_000.0, true), 'No excess cash means no buyback, however profitable the quarter.');
@@ -72,7 +72,7 @@ final class StandardCapitalAllocationTraitTest extends TestCase
         $this->assertGreaterThan(
             $this->model->getMaxOrganicGrowthSpeed(false, false),
             $this->model->getMaxOrganicGrowthSpeed(true, true),
-            'A cash-rich firm must be able to reinvest faster than a lean one.'
+            'A cash-rich firm must be able to reinvest faster than a lean one.',
         );
     }
 

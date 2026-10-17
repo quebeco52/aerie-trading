@@ -64,8 +64,8 @@ class BusinessCycleRealismTest extends TestCase
         }
         $skew /= $count;
 
-        $belowThree = count(array_filter($gaps, static fn (float $g): bool => $g < -0.03)) / $count;
-        $aboveTwo = count(array_filter($gaps, static fn (float $g): bool => $g > 0.02)) / $count;
+        $belowThree = count(array_filter($gaps, static fn(float $g): bool => $g < -0.03)) / $count;
+        $aboveTwo = count(array_filter($gaps, static fn(float $g): bool => $g > 0.02)) / $count;
 
         // A fifth of quarters deep in slack is the most an economy whose households borrow at floating rates and whose
         // banks have a crisis every twenty years or so can spend there and still have recessions as episodes.
@@ -128,7 +128,7 @@ class BusinessCycleRealismTest extends TestCase
         $this->assertGreaterThan(
             $boomSpeed,
             $bustSpeed,
-            'Contractions must reach their trough faster than expansions reach their peak; a symmetric oscillator fails this.'
+            'Contractions must reach their trough faster than expansions reach their peak; a symmetric oscillator fails this.',
         );
         $this->assertGreaterThan(0.020, $bustSpeed, 'A contraction has to be an event, not a drift.');
     }
@@ -146,11 +146,11 @@ class BusinessCycleRealismTest extends TestCase
         foreach (self::SEEDS as $seed) {
             $gaps = $this->simulateGapPath([$seed]);
 
-            $atClamp = count(array_filter($gaps, static fn (float $gap): bool => $gap < MacroAggregateSubsystem::OUTPUT_GAP_FLOOR + 0.01));
+            $atClamp = count(array_filter($gaps, static fn(float $gap): bool => $gap < MacroAggregateSubsystem::OUTPUT_GAP_FLOOR + 0.01));
             $this->assertLessThanOrEqual(
                 4,
                 $atClamp,
-                sprintf('Seed %d must not sit on the -12%% capacity clamp.', $seed)
+                sprintf('Seed %d must not sit on the -12%% capacity clamp.', $seed),
             );
 
             $longestDeepRun = 0;
@@ -163,7 +163,7 @@ class BusinessCycleRealismTest extends TestCase
             $this->assertLessThanOrEqual(
                 40,
                 $longestDeepRun,
-                sprintf('Seed %d must recover from a deep contraction rather than settle into one.', $seed)
+                sprintf('Seed %d must recover from a deep contraction rather than settle into one.', $seed),
             );
         }
     }

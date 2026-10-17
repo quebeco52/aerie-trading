@@ -6,8 +6,8 @@ namespace App\Tests\Service\View;
 
 use App\Entity\Etf;
 use App\Entity\Stock;
-use App\Entity\User;
 use App\Entity\TradeOrder;
+use App\Entity\User;
 use App\Entity\UserStock;
 use App\Repository\HoldingRepository;
 use App\Repository\TradeOrderRepository;
@@ -36,7 +36,7 @@ class ViewerPositionBuilderTest extends TestCase
         $this->costBasis = new CostBasisCalculator();
 
         $connection = $this->createMock(\Doctrine\DBAL\Connection::class);
-        $connection->method('fetchAllAssociative')->willReturnCallback(fn (): array => $this->dividendRows);
+        $connection->method('fetchAllAssociative')->willReturnCallback(fn(): array => $this->dividendRows);
         $entityManager = $this->createMock(\Doctrine\ORM\EntityManagerInterface::class);
         $entityManager->method('getConnection')->willReturn($connection);
         $this->dividendIncome = new DividendIncomeCalculator($entityManager);

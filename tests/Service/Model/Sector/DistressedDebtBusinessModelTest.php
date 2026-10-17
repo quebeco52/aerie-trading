@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DistressedDebtBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -35,7 +35,7 @@ class DistressedDebtBusinessModelTest extends TestCase
         $crisisMacro = new MacroStateDTO(
             outputGapEma: -0.03,
             macroCreditSpread: 0.05,
-            inflationEma: 0.02
+            inflationEma: 0.02,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -45,7 +45,7 @@ class DistressedDebtBusinessModelTest extends TestCase
             fixedCosts: 10_000_000.0,
             baselineVol: 0.0,
             macroState: $crisisMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('restructuring_advisory', $result->streamRevenue);
@@ -66,7 +66,7 @@ class DistressedDebtBusinessModelTest extends TestCase
         $bullMacro = new MacroStateDTO(
             outputGapEma: 0.03,
             macroCreditSpread: 0.01,
-            inflationEma: 0.02
+            inflationEma: 0.02,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -76,7 +76,7 @@ class DistressedDebtBusinessModelTest extends TestCase
             fixedCosts: 10_000_000.0,
             baselineVol: 0.0,
             macroState: $bullMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         // Revenue should contract slightly due to dry powder holding drag
@@ -92,7 +92,7 @@ class DistressedDebtBusinessModelTest extends TestCase
 
         $crisisMacro = new MacroStateDTO(
             outputGapEma: -0.02,
-            macroCreditSpread: 0.04
+            macroCreditSpread: 0.04,
         );
 
         $mathStub = $this->getMockBuilder(MathUtility::class)
@@ -109,7 +109,7 @@ class DistressedDebtBusinessModelTest extends TestCase
             fixedCosts: 5_000_000.0,
             baselineVol: 0.20,
             macroState: $crisisMacro,
-            mathUtility: $mathStub
+            mathUtility: $mathStub,
         );
 
         $this->assertSame(ShockEvent::DISTRESSED_DEBT_RESTRUCTURING, $result->eventType);
@@ -148,7 +148,7 @@ class DistressedDebtBusinessModelTest extends TestCase
             macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
             macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
             highYieldCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, // Baseline HY
-            corporateDefaultRateEma: 0.020   // Baseline 2.0%
+            corporateDefaultRateEma: 0.020,   // Baseline 2.0%
         );
 
         $hySpikeMacro = new MacroStateDTO(
@@ -156,7 +156,7 @@ class DistressedDebtBusinessModelTest extends TestCase
             macroCreditSpread: 0.02,
             macroCreditSpreadEma: 0.02,
             highYieldCreditSpreadEma: 0.088, // Blowout to 880 bps (+400 bps)
-            corporateDefaultRateEma: 0.060   // Surging to 6.0% (+200% shift)
+            corporateDefaultRateEma: 0.060,   // Surging to 6.0% (+200% shift)
         );
 
         $mathMock = $this->getMockBuilder(MathUtility::class)
@@ -170,7 +170,7 @@ class DistressedDebtBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $calmResult->streamRevenue['turnaround_recovery'],
             $spikeResult->streamRevenue['turnaround_recovery'],
-            'Surging high-yield credit spreads and corporate default rates must explode distressed debt recovery revenue.'
+            'Surging high-yield credit spreads and corporate default rates must explode distressed debt recovery revenue.',
         );
     }
 
@@ -186,7 +186,7 @@ class DistressedDebtBusinessModelTest extends TestCase
             macroCreditSpread: 0.08,
             macroCreditSpreadEma: 0.08,
             highYieldCreditSpreadEma: 0.150,
-            corporateDefaultRateEma: 0.250
+            corporateDefaultRateEma: 0.250,
         );
 
         $mathMock = $this->getMockBuilder(MathUtility::class)
@@ -206,7 +206,6 @@ class DistressedDebtBusinessModelTest extends TestCase
         $this->assertLessThanOrEqual($absoluteMaxAllowed, $result->streamRevenue['turnaround_recovery']);
         $this->assertGreaterThan($expectedRevenue, $result->actualRevenue);
     }
-
 
     public function testTheWorkoutDesksStaffUpIntoTheSlump(): void
     {

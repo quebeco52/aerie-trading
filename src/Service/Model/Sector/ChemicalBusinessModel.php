@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
-use App\Service\Math\FinancialConstants;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for the Chemical Industry (Petrochemicals, Specialty Chemicals, Agrochemicals).
@@ -163,10 +162,22 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     /** Seasonal fertilizer inventory stockpiling working capital intensity for agrochemicals. */
     public const AGROCHEM_NWC_INTENSITY = 0.28;
 
-        public function getWholesaleLeverageLimit(): float { return 1.5; }
-    public function getReversionSpeed(): float { return 0.12; }
-    public function getMoatSpread(): float { return 0.01; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.3; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 1.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.12;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.01;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.3;
+    }
 
     // --- Secular Demand ---
     /** Chemical products value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -200,9 +211,9 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
         $totalWeight = max(0.01, $basePetroWeight + $specialtyWeight + $agriWeight);
 
-        return (($basePetroWeight * self::BASE_PETRO_NWC_INTENSITY) +
-                ($specialtyWeight * self::SPECIALTY_CHEM_NWC_INTENSITY) +
-                ($agriWeight * self::AGROCHEM_NWC_INTENSITY)) / $totalWeight;
+        return (($basePetroWeight * self::BASE_PETRO_NWC_INTENSITY)
+                + ($specialtyWeight * self::SPECIALTY_CHEM_NWC_INTENSITY)
+                + ($agriWeight * self::AGROCHEM_NWC_INTENSITY)) / $totalWeight;
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
@@ -324,9 +335,9 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::CHEMICAL_AGRI_BOOM;
         }
 
-        $observableShockZ = ($basePetroZ * $basePetroWeight * self::BASE_PETRO_VARIANCE) +
-            ($specialtyZ * $specialtyWeight * self::SPECIALTY_CHEM_VARIANCE) +
-            ($agriZ * $agriWeight * self::AGROCHEM_VARIANCE);
+        $observableShockZ = ($basePetroZ * $basePetroWeight * self::BASE_PETRO_VARIANCE)
+            + ($specialtyZ * $specialtyWeight * self::SPECIALTY_CHEM_VARIANCE)
+            + ($agriZ * $agriWeight * self::AGROCHEM_VARIANCE);
         $observableShockZ *= $baselineVol;
 
         return new SectorPhysicsResult(

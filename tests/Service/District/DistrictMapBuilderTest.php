@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\District;
 
-use App\Data\District\DistrictMap;
 use App\Data\Company\Sectors;
+use App\Data\District\DistrictMap;
 use App\DTO\DistrictCanvasDTO;
 use App\DTO\DistrictHeightEnvelope;
 use App\DTO\DistrictPlotDTO;
@@ -250,7 +250,7 @@ class DistrictMapBuilderTest extends TestCase
     {
         $envelope = $this->referenceEnvelope();
         $labels = array_map(
-            static fn (array $line) => $line['label'],
+            static fn(array $line) => $line['label'],
             $this->builder->buildGridlines($envelope, $this->canvasFor()),
         );
 
@@ -278,7 +278,7 @@ class DistrictMapBuilderTest extends TestCase
             $this->assertGreaterThanOrEqual(
                 DistrictMap::GRIDLINE_MIN_SPACING,
                 $ys[$i] - $ys[$i - 1],
-                'Consecutive gridline labels would overlap in the gutter'
+                'Consecutive gridline labels would overlap in the gutter',
             );
             $this->assertGreaterThan((float) DistrictMap::GRIDLINE_LABEL_SIZE, $ys[$i] - $ys[$i - 1]);
         }
@@ -290,7 +290,7 @@ class DistrictMapBuilderTest extends TestCase
         $gridlines = $this->builder->buildGridlines($envelope, $canvas);
 
         $this->assertSame(DistrictMap::ROW_COUNT, $canvas->rowCount());
-        $this->assertNotEmpty(array_filter($gridlines, static fn (array $l) => $l['row'] === $canvas->rowCount() - 1));
+        $this->assertNotEmpty(array_filter($gridlines, static fn(array $l) => $l['row'] === $canvas->rowCount() - 1));
 
         foreach ($gridlines as $line) {
             $expected = $canvas->groundLineForRow($line['row']) - $this->builder->calculateFacadeHeight(self::capFromLabel($line['label']), $envelope);
@@ -307,7 +307,7 @@ class DistrictMapBuilderTest extends TestCase
 
         $counts = [];
         for ($row = 0; $row < $canvas->rowCount(); $row++) {
-            $counts[$row] = count(array_filter($gridlines, static fn (array $l) => $l['row'] === $row));
+            $counts[$row] = count(array_filter($gridlines, static fn(array $l) => $l['row'] === $row));
         }
 
         // The fixture's caps descend down the street, so no row may carry more rules than the one above.
@@ -382,7 +382,7 @@ class DistrictMapBuilderTest extends TestCase
     {
         ['canvas' => $canvas, 'plots' => $plots] = $this->compose($this->fullStreet());
 
-        $largest = array_reduce($plots, static fn (?DistrictPlotDTO $carry, DistrictPlotDTO $p) => $carry === null || $p->height > $carry->height ? $p : $carry);
+        $largest = array_reduce($plots, static fn(?DistrictPlotDTO $carry, DistrictPlotDTO $p) => $carry === null || $p->height > $carry->height ? $p : $carry);
         $this->assertNotNull($largest);
 
         $skyTop = $largest->row === 0 ? $canvas->laneBandBottom : $canvas->rowGroundLines[$largest->row - 1] + DistrictMap::KERB_DEPTH;
@@ -511,7 +511,7 @@ class DistrictMapBuilderTest extends TestCase
     {
         // Over many windows the hash scatter converges on the share it was drawn from.
         $lit = $this->builder->lightWindows($this->builder->windowKeys('LAKE', 200, 50), 0.6);
-        $count = array_sum(array_map(static fn (array $row) => array_sum(array_map('intval', $row)), $lit));
+        $count = array_sum(array_map(static fn(array $row) => array_sum(array_map('intval', $row)), $lit));
 
         $this->assertEqualsWithDelta(0.6, $count / 10000, 0.03);
     }
@@ -620,7 +620,7 @@ class DistrictMapBuilderTest extends TestCase
         // Each run spans exactly its plots, never crosses a row, and covers every plot once.
         $covered = 0;
         foreach ($runs as $run) {
-            $members = array_filter($plots, static fn (DistrictPlotDTO $p) => $p->row === $run['row'] && $p->x >= $run['x'] && $p->x + $p->width <= $run['x'] + $run['width']);
+            $members = array_filter($plots, static fn(DistrictPlotDTO $p) => $p->row === $run['row'] && $p->x >= $run['x'] && $p->x + $p->width <= $run['x'] + $run['width']);
             $this->assertNotEmpty($members);
             foreach ($members as $member) {
                 $this->assertSame($run['district'], $member->district);
@@ -667,7 +667,7 @@ class DistrictMapBuilderTest extends TestCase
                 $this->assertStringEndsWith(
                     DistrictMap::DISTRICT_CONTINUATION_SUFFIX,
                     $run['label'],
-                    "{$run['district']} is named twice on the street"
+                    "{$run['district']} is named twice on the street",
                 );
                 continue;
             }
@@ -719,13 +719,13 @@ class DistrictMapBuilderTest extends TestCase
         ['envelope' => $envelope, 'canvas' => $canvas] = $this->compose($this->fullStreet());
         $gridlines = $this->builder->buildGridlines($envelope, $canvas);
 
-        $upper = array_values(array_filter($gridlines, static fn (array $l) => $l['row'] === 0 && $l['label'] === '$1T'));
-        $lower = array_values(array_filter($gridlines, static fn (array $l) => $l['row'] === 1 && $l['label'] === '$1T'));
+        $upper = array_values(array_filter($gridlines, static fn(array $l) => $l['row'] === 0 && $l['label'] === '$1T'));
+        $lower = array_values(array_filter($gridlines, static fn(array $l) => $l['row'] === 1 && $l['label'] === '$1T'));
 
         $this->assertNotSame(
             $upper[0]['y'],
             $lower[0]['y'],
-            'A market cap maps to a facade height, so its rule must sit at each row\'s own y'
+            'A market cap maps to a facade height, so its rule must sit at each row\'s own y',
         );
     }
 
@@ -735,8 +735,8 @@ class DistrictMapBuilderTest extends TestCase
         ['frontage' => $frontage, 'plots' => $plots] = $this->compose($stocks);
 
         $this->assertSame(
-            array_map(static fn (array $slot) => $slot['ticker'], $frontage['slots']),
-            array_map(static fn (DistrictPlotDTO $plot) => $plot->ticker, $plots)
+            array_map(static fn(array $slot) => $slot['ticker'], $frontage['slots']),
+            array_map(static fn(DistrictPlotDTO $plot) => $plot->ticker, $plots),
         );
     }
 
@@ -829,7 +829,7 @@ class DistrictMapBuilderTest extends TestCase
             }
         }
 
-        $this->assertSame(array_keys($expectedIds), array_map(static fn ($i) => $i->id, $institutions));
+        $this->assertSame(array_keys($expectedIds), array_map(static fn($i) => $i->id, $institutions));
         $this->assertNotEmpty($institutions);
     }
 

@@ -8,10 +8,10 @@ use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Politics\SecuritiesCommission;
-use App\Service\Model\Sector\StandardCorporateBusinessModel;
-use PHPUnit\Framework\TestCase;
 use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Service\Politics\SecuritiesCommission;
+use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionProperty;
@@ -122,12 +122,12 @@ final class EarningsManagementTest extends TestCase
         $this->assertLessThanOrEqual(
             $consensus + (EarningsEngine::EARNINGS_MANAGEMENT_BEAT_CUSHION_PER_SHARE * self::SHARES),
             $ctx->reportedActualNetIncome,
-            'It lands within a cent of the line, not comfortably past it.'
+            'It lands within a cent of the line, not comfortably past it.',
         );
         $this->assertSame(
             $ctx->managedAccrual,
             $ctx->stock->getManagedAccrualBank(),
-            'Everything borrowed has to be owed back.'
+            'Everything borrowed has to be owed back.',
         );
     }
 
@@ -174,7 +174,7 @@ final class EarningsManagementTest extends TestCase
             $this->assertGreaterThan(
                 $consensus,
                 $ctx->reportedActualNetIncome,
-                sprintf('A quarter %.1f cents short that management closes must print at or above the line, not a smaller miss.', (1.0 - $shortfallFraction) * 100)
+                sprintf('A quarter %.1f cents short that management closes must print at or above the line, not a smaller miss.', (1.0 - $shortfallFraction) * 100),
             );
         }
     }
@@ -255,7 +255,7 @@ final class EarningsManagementTest extends TestCase
         $this->assertLessThanOrEqual(
             $cap + 0.01,
             $ctx->stock->getManagedAccrualBank(),
-            'The balance owed must never exceed what the balance sheet can hide.'
+            'The balance owed must never exceed what the balance sheet can hide.',
         );
     }
 
@@ -271,7 +271,7 @@ final class EarningsManagementTest extends TestCase
         $this->assertLessThan(
             $bank->getEarningsManagementPropensity($stock),
             $utility->getEarningsManagementPropensity($stock),
-            'A rate-regulated utility has less room and less reason to manage the print than a bank setting its own loan loss provision.'
+            'A rate-regulated utility has less room and less reason to manage the print than a bank setting its own loan loss provision.',
         );
     }
 }

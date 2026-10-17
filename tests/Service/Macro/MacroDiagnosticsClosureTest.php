@@ -105,7 +105,7 @@ class MacroDiagnosticsClosureTest extends TestCase
                 $gap['change'],
                 $gap['drift'] + $gap['diffusion'] + $gap['clamp'] + $gap['external'] + $gap['unexplained'],
                 1e-12,
-                "Quarter {$index}"
+                "Quarter {$index}",
             );
             $this->assertSame(0.0, $gap['external'], "Quarter {$index}: the drift equation is the gap's only writer.");
         }

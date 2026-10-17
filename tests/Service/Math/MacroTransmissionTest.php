@@ -30,7 +30,7 @@ class MacroTransmissionTest extends TestCase
             hyCreditSpread: 0.048,
             marketVolatility: 0.15,
             dt: 0.25,
-            dW: 0.0
+            dW: 0.0,
         );
         $this->assertGreaterThan(80.0, $revertingIndex, 'Index below baseline must mean-revert upwards.');
 
@@ -41,7 +41,7 @@ class MacroTransmissionTest extends TestCase
             hyCreditSpread: 0.025,
             marketVolatility: 0.10,
             dt: 0.25,
-            dW: 0.0
+            dW: 0.0,
         );
         $this->assertGreaterThan(100.0, $goldenEra, 'High equity multiples, tight spreads, and low VIX must stimulate M&A deal activity.');
 
@@ -52,7 +52,7 @@ class MacroTransmissionTest extends TestCase
             hyCreditSpread: 0.090,
             marketVolatility: 0.40,
             dt: 0.25,
-            dW: 0.0
+            dW: 0.0,
         );
         $this->assertLessThan(100.0, $panicIndex, 'Market panic and credit freeze must collapse deal activity index.');
         $this->assertGreaterThanOrEqual(20.0, $panicIndex);
@@ -85,7 +85,7 @@ class MacroTransmissionTest extends TestCase
             drivers: [
                 ['deviation' => 0.0, 'sensitivity' => 120.0],
                 ['deviation' => 0.0, 'sensitivity' => 80.0],
-            ]
+            ],
         );
         $this->assertEqualsWithDelta(50.0, $neutral, 0.001);
 
@@ -95,7 +95,7 @@ class MacroTransmissionTest extends TestCase
             drivers: [
                 ['deviation' => 0.03, 'sensitivity' => 150.0], // +4.5
                 ['deviation' => 0.02, 'sensitivity' => 50.0],  // +1.0
-            ]
+            ],
         );
         $this->assertEqualsWithDelta(55.5, $expansion, 0.001);
         $this->assertGreaterThan(50.0, $expansion);
@@ -106,7 +106,7 @@ class MacroTransmissionTest extends TestCase
             drivers: [
                 ['deviation' => -0.04, 'sensitivity' => 150.0], // -6.0
                 ['deviation' => -0.02, 'sensitivity' => 50.0],  // -1.0
-            ]
+            ],
         );
         $this->assertEqualsWithDelta(43.0, $contraction, 0.001);
         $this->assertLessThan(50.0, $contraction);
@@ -116,7 +116,7 @@ class MacroTransmissionTest extends TestCase
             baseline: 50.0,
             drivers: [['deviation' => 1.0, 'sensitivity' => 100.0]],
             min: 30.0,
-            max: 70.0
+            max: 70.0,
         );
         $this->assertEqualsWithDelta(70.0, $clampedHigh, 0.001);
 
@@ -124,7 +124,7 @@ class MacroTransmissionTest extends TestCase
             baseline: 50.0,
             drivers: [['deviation' => -1.0, 'sensitivity' => 100.0]],
             min: 30.0,
-            max: 70.0
+            max: 70.0,
         );
         $this->assertEqualsWithDelta(30.0, $clampedLow, 0.001);
     }
@@ -150,7 +150,7 @@ class MacroTransmissionTest extends TestCase
             unitLaborCost: 0.02,
             otherCostInflation: 0.02,
             outputGap: 0.0,
-            weights: $weights
+            weights: $weights,
         );
         $this->assertEqualsWithDelta(0.02, $neutralPpi, 1e-12);
 
@@ -163,7 +163,7 @@ class MacroTransmissionTest extends TestCase
             unitLaborCost: 0.05,   // Elevated ULC
             otherCostInflation: 0.03,
             outputGap: 0.02,
-            weights: $weights
+            weights: $weights,
         );
         $this->assertGreaterThan($neutralPpi, $shockPpi);
         $this->assertGreaterThan(0.10, $shockPpi);
@@ -179,7 +179,7 @@ class MacroTransmissionTest extends TestCase
             outputGap: 1.0,
             weights: $weights,
             min: -0.06,
-            max: 0.25
+            max: 0.25,
         );
         $this->assertEqualsWithDelta(0.25, $clampedMax, 0.0001);
     }
@@ -207,7 +207,7 @@ class MacroTransmissionTest extends TestCase
             sloosTightening: 0.0,
             dt: 0.25,
             dW: 0.0,
-            params: $params
+            params: $params,
         );
         $this->assertGreaterThan(100.0, $boomStarts, 'High Tobin Q and cheap mortgage financing must stimulate housing starts.');
 
@@ -221,7 +221,7 @@ class MacroTransmissionTest extends TestCase
             sloosTightening: 0.35,
             dt: 0.25,
             dW: 0.0,
-            params: $params
+            params: $params,
         );
         $this->assertLessThan(100.0, $slumpStarts, 'High mortgage rates and tight bank lending must depress housing starts.');
         $this->assertGreaterThanOrEqual(40.0, $slumpStarts);
@@ -238,7 +238,7 @@ class MacroTransmissionTest extends TestCase
             dt: 0.25,
             dW: 0.0,
             params: $params,
-            creditGap: 0.05
+            creditGap: 0.05,
         );
         $neutralStarts = MacroTransmission::calculateTobinsQHousingStarts(
             currentStarts: 100.0,
@@ -250,7 +250,7 @@ class MacroTransmissionTest extends TestCase
             dt: 0.25,
             dW: 0.0,
             params: $params,
-            creditGap: 0.0
+            creditGap: 0.0,
         );
         $this->assertGreaterThan($neutralStarts, $creditBoomStarts, 'Positive credit-to-GDP gap must stimulate housing starts.');
     }
@@ -350,7 +350,7 @@ class MacroTransmissionTest extends TestCase
             0.020 * (0.04 / (0.08 - 0.04)),
             MacroTransmission::calculateConvexPhillipsCurve(0.04),
             0.0000001,
-            'The expansion branch must follow the asymptotic form.'
+            'The expansion branch must follow the asymptotic form.',
         );
 
         // Contraction branch: (kappa / yMax) * rigidity * y — linear, so halving the gap halves the pressure.
@@ -358,13 +358,13 @@ class MacroTransmissionTest extends TestCase
             (0.020 / 0.08) * 0.35 * -0.04,
             MacroTransmission::calculateConvexPhillipsCurve(-0.04),
             0.0000001,
-            'The contraction branch must follow the rigid linear form.'
+            'The contraction branch must follow the rigid linear form.',
         );
         $this->assertEqualsWithDelta(
             2.0 * MacroTransmission::calculateConvexPhillipsCurve(-0.02),
             MacroTransmission::calculateConvexPhillipsCurve(-0.04),
             0.0000001,
-            'Downward rigidity is linear: no curvature below the closed gap.'
+            'Downward rigidity is linear: no curvature below the closed gap.',
         );
 
         // The ceiling denominator floors at 0.005, so the gap may exceed capacity without dividing by zero.
@@ -375,12 +375,12 @@ class MacroTransmissionTest extends TestCase
         $this->assertLessThan(
             MacroTransmission::calculateConvexPhillipsCurve(-0.04, 0.08, 0.020, 0.35),
             MacroTransmission::calculateConvexPhillipsCurve(-0.04, 0.08, 0.020, 0.70),
-            'A weaker rigidity factor must let prices fall further.'
+            'A weaker rigidity factor must let prices fall further.',
         );
         $this->assertSame(
             MacroTransmission::calculateConvexPhillipsCurve(0.04, 0.08, 0.020, 0.35),
             MacroTransmission::calculateConvexPhillipsCurve(0.04, 0.08, 0.020, 0.70),
-            'Downward rigidity must not touch the expansion branch.'
+            'Downward rigidity must not touch the expansion branch.',
         );
     }
 
@@ -419,7 +419,7 @@ class MacroTransmissionTest extends TestCase
     /** Lending standards move starts both ways: loose standards let as many more through as tight ones hold back. */
     public function testLendingStandardsMoveHousingStartsBothWays(): void
     {
-        $starts = static fn (float $sloos): float => MacroTransmission::calculateTobinsQHousingStarts(
+        $starts = static fn(float $sloos): float => MacroTransmission::calculateTobinsQHousingStarts(
             currentStarts: 100.0,
             residentialPriceRatio: 1.0,
             replacementCostRatio: 1.0,
@@ -428,7 +428,7 @@ class MacroTransmissionTest extends TestCase
             sloosTightening: $sloos,
             dt: 0.25,
             dW: 0.0,
-            params: ['baseline' => 100.0, 'qSens' => 45.0, 'costSens' => 550.0, 'sloosSens' => 30.0, 'kappa' => 1.20, 'sigma' => 0.03, 'min' => 40.0, 'max' => 180.0]
+            params: ['baseline' => 100.0, 'qSens' => 45.0, 'costSens' => 550.0, 'sloosSens' => 30.0, 'kappa' => 1.20, 'sigma' => 0.03, 'min' => 40.0, 'max' => 180.0],
         );
 
         $held = 100.0 - $starts(0.20);

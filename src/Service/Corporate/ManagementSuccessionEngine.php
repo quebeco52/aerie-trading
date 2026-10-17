@@ -65,7 +65,7 @@ class ManagementSuccessionEngine
 
     public function __construct(
         private MarketEventPublisher $marketEvent,
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
     ) {}
 
     /**
@@ -131,7 +131,7 @@ class ManagementSuccessionEngine
     {
         return min(
             self::MAX_ANNUAL_HAZARD,
-            self::BASE_DEPARTURE_HAZARD + $this->resolveForcedHazard($tenure, $evaSpread)
+            self::BASE_DEPARTURE_HAZARD + $this->resolveForcedHazard($tenure, $evaSpread),
         );
     }
 
@@ -146,7 +146,7 @@ class ManagementSuccessionEngine
         }
 
         return Distributions::calculateNormalCDF(
-            self::FORCED_TURNOVER_INTERCEPT - (self::FORCED_TURNOVER_EVA_LOADING * $evaSpread)
+            self::FORCED_TURNOVER_INTERCEPT - (self::FORCED_TURNOVER_EVA_LOADING * $evaSpread),
         );
     }
 
@@ -191,7 +191,7 @@ class ManagementSuccessionEngine
 
             return $this->drawFrom(array_values(array_filter(
                 ManagementStyle::cases(),
-                static fn (ManagementStyle $case): bool => $case !== $incumbent
+                static fn(ManagementStyle $case): bool => $case !== $incumbent,
             )));
         }
 
@@ -252,7 +252,7 @@ class ManagementSuccessionEngine
             $stock->getName() ?: (string) $stock->getTicker(),
             $departure,
             number_format($tenure, 1),
-            $mandate
+            $mandate,
         );
 
         $event = $this->marketEvent->publish($stock, 'MANAGEMENT CHANGE', $description, 0.0);

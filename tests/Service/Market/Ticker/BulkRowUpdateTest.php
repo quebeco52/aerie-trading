@@ -24,7 +24,7 @@ class BulkRowUpdateTest extends TestCase
         $this->assertSame(
             'UPDATE bonds t JOIN (SELECT ? AS id, ? AS price, ? AS clean_price UNION ALL SELECT ?, ?, ?) v ON v.id = t.id '
             . 'SET t.price = v.price, t.clean_price = v.clean_price',
-            $statement['sql']
+            $statement['sql'],
         );
         $this->assertSame([7, '101.5', '100.2', 9, '99.1', '98.7'], $statement['params']);
     }

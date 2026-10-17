@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SpecialtyIndustrialMachineryBusinessModel;
+use App\Service\Model\StreamContext;
 use PHPUnit\Framework\TestCase;
 
 class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
@@ -30,14 +30,14 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
             outputGapEma: 0.0,
             exchangeRateIndexEma: 100.0,
             industrialMetalsIndexEma: 100.0,
-            energyPriceIndexEma: 100.0
+            energyPriceIndexEma: 100.0,
         );
 
         $shockMacro = new MacroStateDTO(
             outputGapEma: 0.0,
             exchangeRateIndexEma: 120.0, // Strong currency export headwind
             industrialMetalsIndexEma: 140.0, // Precision alloy cost drag
-            energyPriceIndexEma: 100.0
+            energyPriceIndexEma: 100.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -50,7 +50,7 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $baseMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $shockResult = $this->model->computeActualFinancials(
@@ -60,7 +60,7 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $shockMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertArrayHasKey('equipment_sales', $baseResult->streamRevenue);
@@ -69,13 +69,13 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
         // Equipment sales drop under strong dollar export headwind
         $this->assertLessThan(
             $baseResult->streamRevenue['equipment_sales'],
-            $shockResult->streamRevenue['equipment_sales']
+            $shockResult->streamRevenue['equipment_sales'],
         );
 
         // Variable cost margin expands (clampedMargin increases) under metals cost drag
         $this->assertGreaterThan(
             $baseResult->clampedMargin,
-            $shockResult->clampedMargin
+            $shockResult->clampedMargin,
         );
     }
 
@@ -97,7 +97,7 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $overhangResult->streamRevenue['equipment_sales'],
             $scarcityResult->streamRevenue['equipment_sales'],
-            'Excess capital capacity overhang must dampen specialty equipment orders relative to capital scarcity.'
+            'Excess capital capacity overhang must dampen specialty equipment orders relative to capital scarcity.',
         );
     }
 
@@ -119,7 +119,7 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $lowCuResult->streamRevenue['equipment_sales'],
             $highCuResult->streamRevenue['equipment_sales'],
-            'Tight industrial capacity utilization triggers factory capex expansion, increasing specialty machinery sales.'
+            'Tight industrial capacity utilization triggers factory capex expansion, increasing specialty machinery sales.',
         );
     }
 
@@ -141,7 +141,7 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $normalResult->clampedMargin,
             $delayedResult->clampedMargin,
-            'Global supply chain bottlenecks (GSCPI) delay precision parts and increase variable margin drag.'
+            'Global supply chain bottlenecks (GSCPI) delay precision parts and increase variable margin drag.',
         );
     }
 

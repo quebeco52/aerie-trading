@@ -8,8 +8,8 @@ use App\Data\Company\AnchorHoldings;
 use App\Data\Company\CompanyResearch;
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
-use App\Service\Model\ModelParam;
 use App\Data\Company\StockModelTuning;
+use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -51,8 +51,8 @@ class CompanyResearchTest extends TestCase
     private static function text(array $article): string
     {
         return implode("\n\n", [$article['headline'], $article['standfirst'], ...array_map(
-            static fn (array $section): string => $section['heading'] . "\n\n" . $section['body'],
-            $article['sections']
+            static fn(array $section): string => $section['heading'] . "\n\n" . $section['body'],
+            $article['sections'],
         )]);
     }
 
@@ -94,7 +94,7 @@ class CompanyResearchTest extends TestCase
     /** @return iterable<string, array{0: string, 1: string, 2: float, 3: float, 4?: float}> */
     public static function figureProvider(): iterable
     {
-        $tuning = static fn (string $ticker, ModelParam $param): float => StockModelTuning::get($ticker, $param, NAN);
+        $tuning = static fn(string $ticker, ModelParam $param): float => StockModelTuning::get($ticker, $param, NAN);
 
         yield 'LAKE payout' => ['LAKE', 'pays out about 40% of earnings', self::seed('LAKE')['target_payout_ratio'], 0.40];
         yield 'LAKE fees' => ['LAKE', 'add a further fifth of revenue', $tuning('LAKE', ModelParam::FeeRevenueWeight), 0.20];

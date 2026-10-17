@@ -251,18 +251,18 @@ enum MarketIndex: string
         return match ($this) {
             self::Headline => sprintf(
                 'The %d largest listed companies by float-adjusted capitalisation, weighted by float with no ceiling on any constituent. Admission additionally requires profitability: trailing twelve-month earnings and the most recent quarter must both be positive, a test that governs joining rather than staying. Membership is reviewed quarterly and banded, so a name is admitted only once it has clearly risen into the index and dropped only once it has clearly fallen out of it.',
-                self::INDEX_CONSTITUENT_COUNT
+                self::INDEX_CONSTITUENT_COUNT,
             ),
             self::Composite => 'Every listed company, weighted by float-adjusted capitalisation. The market as a whole rather than a selection from it: nothing is admitted or dropped except by listing or delisting.',
             self::LowVolatility => sprintf(
                 'The %d listed companies with the lowest trailing volatility, each weighted by the reciprocal of that volatility so the quietest names carry the most. Selected and weighted on risk alone, with no view on what anything is worth.',
-                self::INDEX_LOW_VOLATILITY_COUNT
+                self::INDEX_LOW_VOLATILITY_COUNT,
             ),
             self::Staples => sprintf(
                 'Every listed consumer staples company, weighted by float-adjusted capitalisation and capped so that no constituent exceeds %s%% and the constituents above %s%% do not exceed %s%% in combination.',
                 number_format(self::INDEX_MAX_CONSTITUENT_WEIGHT * 100, 1),
                 number_format(FinancialConstants::INDEX_CONCENTRATION_THRESHOLD * 100, 1),
-                number_format(FinancialConstants::INDEX_CONCENTRATION_BUDGET * 100, 0)
+                number_format(FinancialConstants::INDEX_CONCENTRATION_BUDGET * 100, 0),
             ),
         };
     }

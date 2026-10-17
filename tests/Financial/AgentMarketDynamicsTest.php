@@ -20,9 +20,9 @@ use App\Service\Market\Agent\VolatilityTargetStrategy;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
-use App\Service\Market\Pricing\StockTracker;
 
 /**
  * The agent population driven against the real price process.
@@ -93,7 +93,7 @@ class AgentMarketDynamicsTest extends TestCase
             new InMemoryAgentStateStore(),
             $orderFlow,
             [new FundamentalistStrategy(), new MomentumStrategy(), new IndexFundStrategy(), new VolatilityTargetStrategy(), new RelativeValueStrategy()],
-            [new MarketMakerStrategy()]
+            [new MarketMakerStrategy()],
         );
 
         $stock = $this->stock();
@@ -135,7 +135,7 @@ class AgentMarketDynamicsTest extends TestCase
                 revenuePerShare: 50.0,
                 businessModel: 'none',
                 liveCostOfEquity: 0.10,
-                orderFlowVariance: $impactVariance
+                orderFlowVariance: $impactVariance,
             ));
 
             $nextPrice = $result['price'];
@@ -167,7 +167,7 @@ class AgentMarketDynamicsTest extends TestCase
                     financialConditions: 0.0,
                     dt: $dt,
                     riskFreeRate: $macro->policyRate,
-                    annualizedVolatility: $volatility
+                    annualizedVolatility: $volatility,
                 ));
                 $agentEngine->endTick();
 
@@ -215,8 +215,8 @@ class AgentMarketDynamicsTest extends TestCase
                     'Seed %d: agents moved realized volatility from %.2f%% to %.2f%%.',
                     $seed,
                     $without * 100,
-                    $with * 100
-                )
+                    $with * 100,
+                ),
             );
         }
     }
@@ -246,8 +246,8 @@ class AgentMarketDynamicsTest extends TestCase
                     'Seed %d: the fundamentalist share only moved between %.2f and %.2f. The switching is inert.',
                     $seed,
                     $run['minShare'],
-                    $run['maxShare']
-                )
+                    $run['maxShare'],
+                ),
             );
         }
 

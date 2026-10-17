@@ -238,7 +238,7 @@ class SecuritiesBookServiceTest extends TestCase
         self::assertLessThan(
             0.05 * self::BOOK,
             abs($mark->totalMark),
-            'A book discounted at a yield of nothing would print a gain of a third of the book or more.'
+            'A book discounted at a yield of nothing would print a gain of a third of the book or more.',
         );
     }
 
@@ -266,7 +266,7 @@ class SecuritiesBookServiceTest extends TestCase
         self::assertEqualsWithDelta(
             $mark->totalMark * FinancialConstants::DEFAULT_HTM_BOOK_SHARE,
             $mark->htmMark,
-            1e-6
+            1e-6,
         );
     }
 
@@ -284,7 +284,7 @@ class SecuritiesBookServiceTest extends TestCase
             $second->afsMark - $first->afsMark,
             $second->afsEquityDelta,
             1e-6,
-            'The second quarter books only what moved since the first.'
+            'The second quarter books only what moved since the first.',
         );
     }
 
@@ -334,7 +334,7 @@ class SecuritiesBookServiceTest extends TestCase
             $mark->totalMark * (1.0 - FinancialConstants::DEFAULT_HTM_BOOK_SHARE),
             $mark->afsMark,
             1e-6,
-            'AFS mark reflects the non-HTM tranche share of the markdown.'
+            'AFS mark reflects the non-HTM tranche share of the markdown.',
         );
     }
 }

@@ -247,7 +247,7 @@ final class MonetaryAuthority
             array_merge([$state->governorStance], array_values($state->memberStances)),
             $state->committeeMajority,
             $macro->ruleInflationGap,
-            $macro->ruleOutputGap
+            $macro->ruleOutputGap,
         );
         $state->lastMeetingRate = $macro->policyRate;
         $state->lastMeetingAt = $state->totalTime;

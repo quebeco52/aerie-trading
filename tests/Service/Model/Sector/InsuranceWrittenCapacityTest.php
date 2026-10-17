@@ -60,7 +60,7 @@ final class InsuranceWrittenCapacityTest extends TestCase
         $stock = $this->underwriterAtCapacity(8.0);
         $this->assertGreaterThanOrEqual(
             $retail->resolveLifePremiumShare($stock) + ((1.0 - $retail->resolveLifePremiumShare($stock)) * $floor) - 1e-9,
-            $retail->resolveTargetWrittenShare($stock, $this->neutralMacro(), new MathUtility(), (float) $stock->getTotalEquity())
+            $retail->resolveTargetWrittenShare($stock, $this->neutralMacro(), new MathUtility(), (float) $stock->getTotalEquity()),
         );
     }
 

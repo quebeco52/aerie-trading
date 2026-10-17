@@ -5,20 +5,19 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Semiconductor Foundries and Photolithography Equipment Manufacturers.
- * 
+ *
  * Financial Physics:
  * - Extreme Capital Intensity ("Shovel Makers"): Requires astronomical CapEx to build and upgrade cleanrooms and lithography tools.
  * - Non-Linear Fab Utilization Leverage: With massive fixed overhead and depreciation, profitability scales non-linearly with capacity utilization.
@@ -58,9 +57,18 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     /** Years for a move in the output gap to reach the order book. Short lead times, but a quarter of booked backlog still separates a demand turn from a shipment. */
     public const DEMAND_LAG_YEARS = 0.25;
 
-        public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.02; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.02;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.125;
+    }
     // --- Secular Demand ---
     /** Business and household investment in information processing equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private fixed investment and Table 2.4.5). */
     public const SECULAR_SHARE_1997 = 0.0300;
@@ -187,12 +195,12 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $cuShift = MacroTransmission::calculateCapacityUtilizationShift(
             $macroState->capacityUtilizationRateEma,
             MacroEngine::CU_BASELINE,
-            self::CAPACITY_UTILIZATION_SENSITIVITY
+            self::CAPACITY_UTILIZATION_SENSITIVITY,
         );
         $pmiShift = MacroTransmission::calculatePmiDemandShift(
             $macroState->manufacturingPmiEma,
             MacroEngine::PMI_BASELINE,
-            self::PMI_CHIP_DEMAND_SENSITIVITY
+            self::PMI_CHIP_DEMAND_SENSITIVITY,
         );
         $utilizationMultiplier = $cuShift + $pmiShift;
         $eventType = null;
@@ -258,11 +266,11 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-                    kpis: ['book_to_bill' => $foundryBook['book_to_bill'], 'backlog_quarters' => $foundryBook['backlog_quarters']],
+            kpis: ['book_to_bill' => $foundryBook['book_to_bill'], 'backlog_quarters' => $foundryBook['backlog_quarters']],
         );
     }
 
-    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Wafer shipment lead times and supply chain checks give ~60% visibility (40% floor).
         // Fab fires, power outages, and export bans are highly public events.
@@ -271,7 +279,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             errorStdDev: 0.05,
             minVisibility: 0.40,
             eventBaseVisibility: 0.95,
-            eventMinVisibility: 0.80
+            eventMinVisibility: 0.80,
         );
     }
 

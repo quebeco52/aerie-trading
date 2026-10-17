@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
-use App\Entity\Stock;
+use App\DTO\AcquisitionContext;
+use App\DTO\DivestitureContext;
 use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
+use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
-use App\DTO\AcquisitionContext;
-use App\DTO\DivestitureContext;
 use App\Service\Math\Valuation;
 use App\Service\Model\BusinessModelInterface;
-use App\Service\Corporate\Industry\IndustryShareLedger;
 
 /**
  * Service responsible for executing Mergers and Acquisitions.
@@ -40,7 +40,7 @@ class MergerAndAcquisitionEngine
     public const MA_CASH_FALLBACK_PROB = 0.05;
     /** Threshold for cash fallback, at the District's $12T scale. */
     public const MA_CASH_FALLBACK_THRESHOLD = 7_500_000_000.0;
-    
+
     /** Minimum buying power for empire builders, at the District's $12T scale. */
     public const MA_EMPIRE_BUILDER_MIN_POWER = 1_000_000_000.0;
     /** Minimum buying power for LBO, at the District's $12T scale. */
@@ -53,7 +53,7 @@ class MergerAndAcquisitionEngine
     public const MA_LOW_RATE_CEILING = 0.07;
     /** Moderate rate ceiling. */
     public const MA_MOD_RATE_CEILING = 0.08;
-    
+
     /** Stock dilution fraction during M&A. */
     public const MA_STOCK_DILUTION_FRACTION = 0.10;
     /** Stock underpricing discount. */
@@ -62,7 +62,7 @@ class MergerAndAcquisitionEngine
     public const MA_FINANCIAL_EQUITY_CAP = 0.15;
     /** Most of a target's net identifiable assets that can be trade cycle rather than plant. */
     public const MA_MAX_WORKING_CAPITAL_SHARE = 0.90;
-    
+
     /** Maturity used in Merton's distance to default calculation. */
     public const MA_MERTON_MATURITY = 5.0;
 
@@ -182,7 +182,7 @@ class MergerAndAcquisitionEngine
         foreach (\App\Data\Company\ManagementStyle::cases() as $style) {
             $maxBias = max(
                 $maxBias,
-                \App\Data\Company\ManagementProfile::forStyle($style, \App\Data\Company\ManagementProfile::MAX_INTENSITY)->acquisitionBias()
+                \App\Data\Company\ManagementProfile::forStyle($style, \App\Data\Company\ManagementProfile::MAX_INTENSITY)->acquisitionBias(),
             );
         }
 
@@ -192,7 +192,7 @@ class MergerAndAcquisitionEngine
             self::MA_MEGA_HOARDER_PROB * $maxBias,
             self::MA_HOARDER_PROB * $maxBias,
             self::MA_LOW_LEVERAGE_PROB * $maxBias,
-            self::MA_MOD_LEVERAGE_PROB * $maxBias
+            self::MA_MOD_LEVERAGE_PROB * $maxBias,
         );
 
         return self::$acquisitionHazardCeiling = $primary + (self::MA_CASH_FALLBACK_PROB * $maxBias);
@@ -249,7 +249,7 @@ class MergerAndAcquisitionEngine
         private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
         /** Industry capacity balance; null (unit tests) leaves a deal's plant to be read as a build. */
-        private ?IndustryShareLedger $industryShareLedger = null
+        private ?IndustryShareLedger $industryShareLedger = null,
     ) {}
 
     // =========================================================================
@@ -270,7 +270,7 @@ class MergerAndAcquisitionEngine
         $ctx = new AcquisitionContext($acquirer, $macroState, $dt, $tickCount, $ticksPerYear);
 
         $this->initializeAcquisitionContext($ctx);
-        
+
         if ($this->shouldAbortAcquisition($ctx)) {
             return null;
         }
@@ -288,12 +288,12 @@ class MergerAndAcquisitionEngine
     private function initializeAcquisitionContext(AcquisitionContext $ctx): void
     {
         $stock = $ctx->acquirer;
-        
+
         $ctx->treasury = (float) $stock->getCorporateTreasury();
         $ctx->price = (float) $stock->getPrice();
         $ctx->shares = (float) $stock->getSharesOutstanding();
         $ctx->debtRatio = (float) $stock->getDebtToEquityRatio();
-        
+
         $ctx->operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $ctx->equity = (float) $stock->getTotalEquity();
         $ctx->preDealInvestedCapital = $stock->getInvestedCapital();
@@ -304,7 +304,7 @@ class MergerAndAcquisitionEngine
         // Underwritten on the margin the firm last reported, as the treasury's own lender test is: the
         // structural margin kept a firm that was losing money looking fit to borrow for the next deal.
         $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
-        
+
         $ctx->industry = $stock->getIndustry() ?: 'General';
         $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);
         $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
@@ -321,7 +321,7 @@ class MergerAndAcquisitionEngine
     private function determineAcquisitionStrategy(AcquisitionContext $ctx): void
     {
         $stock = $ctx->acquirer;
-        
+
         // The archetype answers "which kind of manager is this?" and the profile answers "how firmly?" —
         // the branch below is an identity test, everything after it reads dials.
         $style = $stock->getManagementStyle();
@@ -340,7 +340,7 @@ class MergerAndAcquisitionEngine
             $ctx->health,
             $ctx->costOfNewBorrowing,
             $ctx->health->rawMetrics->ebit ?? 0.0,
-            $ctx->health->rawMetrics->depreciation ?? 0.0
+            $ctx->health->rawMetrics->depreciation ?? 0.0,
         ));
         $ctx->totalBuyingPower = $ctx->treasury + $ctx->borrowingCapacity;
 
@@ -349,16 +349,16 @@ class MergerAndAcquisitionEngine
         $ctx->excessCash = $hoardStatus['excess_cash'];
         $ctx->isHoarder = $hoardStatus['is_hoarder'];
         $ctx->isMegaHoarder = $hoardStatus['is_mega_hoarder'];
-        
+
         $ctx->normalizedDebtUtilization = $ctx->debtRatio / max(0.1, $equityLimit);
-        
+
         $ctx->eps = (float) $stock->getEarningsPerShare();
         $ctx->currentPE = $ctx->eps > 0 ? ($ctx->price / $ctx->eps) : 9999.0;
-        
+
         $ctx->trueReturn = $ctx->strategy->getTrueReturn($stock);
         $ctx->hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $ctx->economicSpread = $ctx->trueReturn - $ctx->hurdleRate;
-        
+
         // Struck as the market strikes it: cost of equity on the return on equity (MarketEngine).
         $valuationReturn = $ctx->strategy->getValuationReturn($ctx->trueReturn, $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null, $ctx->health->costOfEquity);
         $equityRates = $ctx->strategy->getEquityValuationRates($stock, $valuationReturn, $ctx->health, $ctx->macroState->corporateTaxRate);
@@ -371,36 +371,36 @@ class MergerAndAcquisitionEngine
             $ctx->macroState->tipsBreakeven,
             \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio()
+            $stock->getPolicyPayoutRatio(),
         );
         $ctx->bookValuePerShare = max(0.01, $ctx->equity / max(1.0, $ctx->shares));
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;
         $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
-        
+
         $ctx->aggression = 1.0;
         $ctx->isEmpireBuilder = $style === \App\Data\Company\ManagementStyle::EmpireBuilder;
         $ctx->hubrisPremium = $manager->hubrisPremium();
-        
+
         // Discretionary acquisition strategy: empire builders, overvalued stock mergers, and cash hoarders.
         $config = match (true) {
             // Empire builders fund acquisitions via available debt capacity, falling through to cash if covenants bind.
             $ctx->isEmpireBuilder && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
-                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => 0.55, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true
+                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => 0.55, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true,
             ],
             $ctx->isOvervalued => [
-                'prob' => self::MA_OVERVALUED_PROB, 'spend' => 0.50, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true
+                'prob' => self::MA_OVERVALUED_PROB, 'spend' => 0.50, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true,
             ],
             $ctx->isMegaHoarder => [
-                'prob' => self::MA_MEGA_HOARDER_PROB, 'spend' => 0.60, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false
+                'prob' => self::MA_MEGA_HOARDER_PROB, 'spend' => 0.60, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false,
             ],
             $ctx->isHoarder => [
-                'prob' => self::MA_HOARDER_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false
+                'prob' => self::MA_HOARDER_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false,
             ],
             $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->normalizedDebtUtilization < self::MA_LOW_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_LOW_RATE_CEILING => [
-                'prob' => self::MA_LOW_LEVERAGE_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false
+                'prob' => self::MA_LOW_LEVERAGE_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false,
             ],
             $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->normalizedDebtUtilization < self::MA_MOD_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_MOD_RATE_CEILING => [
-                'prob' => self::MA_MOD_LEVERAGE_PROB, 'spend' => 0.30, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false
+                'prob' => self::MA_MOD_LEVERAGE_PROB, 'spend' => 0.30, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false,
             ],
             default => null,
         };
@@ -428,7 +428,7 @@ class MergerAndAcquisitionEngine
             $ctx->dealExecuted = true;
         } elseif ($fallbackHazard > 0.0 && $draw < $primaryHazard + ((1.0 - $primaryHazard) * $fallbackHazard)) {
             $config = [
-                'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => 0.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false
+                'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => 0.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false,
             ];
             $ctx->dealExecuted = true;
         }
@@ -439,7 +439,7 @@ class MergerAndAcquisitionEngine
         }
 
         $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        
+
         $customerDeposits = (float) $stock->getCustomerDeposits();
         if ($customerDeposits > 0.0) {
             $floatReserve = $customerDeposits;
@@ -454,7 +454,7 @@ class MergerAndAcquisitionEngine
         $ctx->bindingLimit = self::LIMIT_BUYING_POWER;
 
         $this->capPurchasePrice($ctx, $ctx->strategy->applyMaSpendCap($ctx->purchasePrice, $stock->getTangibleEquity()), self::LIMIT_SPEND_CAP);
-        
+
         if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
             $ctx->dealExecuted = false;
             return;
@@ -508,7 +508,7 @@ class MergerAndAcquisitionEngine
             $ctx->macroState,
             IndustryShareLedger::secularExcessGrowth($ctx->strategy, $ctx->acquirer),
             $ctx->tickCount,
-            $ctx->ticksPerYear
+            $ctx->ticksPerYear,
         );
         if ($market === null) {
             return ['price' => INF, 'review_binds' => false];
@@ -594,7 +594,7 @@ class MergerAndAcquisitionEngine
     {
         $stock = $ctx->acquirer;
         $config = $ctx->config;
-        
+
         if ($config['use_stock']) {
             $offeringPrice = $ctx->price * (1.0 - self::MA_STOCK_UNDERPRICING);
             $ctx->sharesIssued = $ctx->purchasePrice / max(0.01, $offeringPrice);
@@ -607,7 +607,7 @@ class MergerAndAcquisitionEngine
         } else {
             $ctx->debtIssued = $ctx->purchasePrice - $ctx->usableTreasury;
             $stock->setCorporateTreasury((string) ($ctx->treasury - $ctx->usableTreasury));
-            
+
             $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
             $currentNetDebt = max(0.0, $ctx->currentDebt - $ctx->treasury);
             $newNetDebt = $currentNetDebt + $ctx->debtIssued;
@@ -622,7 +622,7 @@ class MergerAndAcquisitionEngine
                 max(0.01, $newNetDebt),
                 $newAssetVolatility,
                 $ctx->policyRate,
-                self::MA_MERTON_MATURITY
+                self::MA_MERTON_MATURITY,
             );
 
             // The deal's notes price at the rating the pro-forma balance sheet carries: the combined EBITDA is the
@@ -631,7 +631,7 @@ class MergerAndAcquisitionEngine
             $proFormaRating = $this->debtEngine->resolveProFormaRating($stock, $distanceToDefault, $newNetDebt, $proFormaEbitda);
 
             $ctx->costOfNewDebt = $ctx->yield5y + $this->debtEngine->resolveCreditSpread($stock, $ctx->macroState, $proFormaRating);
-            
+
             $this->debtEngine->issueDebt($stock, $ctx->debtIssued, $ctx->costOfNewDebt);
         }
     }
@@ -658,7 +658,7 @@ class MergerAndAcquisitionEngine
         $oldRevenueCapital = CorporateMetrics::revenueGeneratingCapital(
             $ctx->preDealInvestedCapital,
             $stock->getTotalCipAmount(),
-            (float) $stock->getGoodwill()
+            (float) $stock->getGoodwill(),
         );
         $acquirerTurnover = $ctx->strategy->isFinancial() ? null : $stock->getAssetTurnover();
         $oldStructuralRevenue = $acquirerTurnover !== null
@@ -673,7 +673,7 @@ class MergerAndAcquisitionEngine
         $roicOnPricePaid = $effectiveTargetRoic * ($economicValue / max(1.0, $ctx->purchasePrice));
 
         $totalNewCapital = max(1.0, $oldCapitalBase + $ctx->purchasePrice);
-        
+
         $ctx->strategy->blendAcquisitionDNA($stock, $oldCapitalBase, $ctx->purchasePrice, $roicOnPricePaid, $totalNewCapital);
 
         // Goodwill allocation: excess of purchase price over fair value of net identifiable assets.
@@ -709,9 +709,9 @@ class MergerAndAcquisitionEngine
         if ($ctx->debtIssued > 0) {
             $newInterestExpense = $ctx->debtIssued * $ctx->costOfNewDebt * (1.0 - $ctx->macroState->corporateTaxRate);
         }
-        
+
         $trueAcquiredNetIncome = $acquiredNopat - $newInterestExpense;
-        
+
         $currentEps = (float) $stock->getEarningsPerShare();
         $stock->setEarningsPerShare((string) ($currentEps + ($trueAcquiredNetIncome / max(1.0, $ctx->shares))));
     }
@@ -729,11 +729,11 @@ class MergerAndAcquisitionEngine
 
         $quarters = EarningsEngine::TTM_QUARTERS;
         $stock->setQuarterlyOperatingHistory(array_map(
-            static fn (array $quarter): array => [
+            static fn(array $quarter): array => [
                 'revenue' => ((float) $quarter['revenue'] * $retainedShare) + ($acquiredAnnualRevenue / $quarters),
                 'ebit' => ((float) $quarter['ebit'] * $retainedShare) + ($acquiredAnnualOperatingIncome / $quarters),
             ],
-            array_values($history)
+            array_values($history),
         ));
     }
 
@@ -813,7 +813,7 @@ class MergerAndAcquisitionEngine
      */
     private function describeDealTerms(AcquisitionContext $ctx): string
     {
-        $billions = static fn (float $amount): string => '$' . number_format($amount / 1_000_000_000, 1) . 'B';
+        $billions = static fn(float $amount): string => '$' . number_format($amount / 1_000_000_000, 1) . 'B';
         $paidInStock = ($ctx->config['use_stock'] ?? false) ? $ctx->purchasePrice : 0.0;
         $paidInCash = max(0.0, $ctx->purchasePrice - $ctx->debtIssued - $paidInStock);
 
@@ -845,7 +845,7 @@ class MergerAndAcquisitionEngine
         return [
             'event' => $event,
             'shock' => $ctx->eventShock / 100.0,
-            'spent' => $ctx->purchasePrice
+            'spent' => $ctx->purchasePrice,
         ];
     }
 
@@ -931,7 +931,7 @@ class MergerAndAcquisitionEngine
     private function initializeDivestitureContext(DivestitureContext $ctx): void
     {
         $stock = $ctx->seller;
-        
+
         $ctx->eps = (float) $stock->getEarningsPerShare();
         $ctx->price = (float) $stock->getPrice();
         $ctx->shares = max(1.0, (float) $stock->getSharesOutstanding());
@@ -943,7 +943,7 @@ class MergerAndAcquisitionEngine
         $ctx->industry = $stock->getIndustry() ?: 'General';
         $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);
         $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
-        
+
         $ctx->currentReturn = $ctx->strategy->getTrueReturn($stock);
         if ($ctx->currentReturn === 0.0) {
             $ctx->currentReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->netIncome, $stock->getInvestedCapital());
@@ -967,16 +967,16 @@ class MergerAndAcquisitionEngine
         $ctx->currentEquity = (float) $stock->getTotalEquity();
         $ctx->investedCapital = $stock->getInvestedCapital();
         $ctx->evaluationCapital = $ctx->strategy->getEvaluationCapital($ctx->currentEquity, $ctx->investedCapital);
-        
+
         $ctx->structuralNetIncome = $ctx->evaluationCapital * $ctx->currentReturn;
         $ctx->normalizedNetIncome = ($ctx->netIncome * 0.50) + ($ctx->structuralNetIncome * 0.50);
-        
+
         $ctx->normalizedEps = $ctx->normalizedNetIncome / $ctx->shares;
         $ctx->currentPE = $ctx->normalizedEps > 0 ? $ctx->price / $ctx->normalizedEps : 0.0;
-        
+
         $ctx->targetCash = $stock->getManagementProfile()->managedTargetCash($ctx->strategy, $ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
         $ctx->hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $stock->getManagementProfile()->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
-        
+
         $ctx->nominalGdpIndex = $ctx->macroState->nominalGdpIndex;
         $ctx->samRatio = (float) $stock->getSamRatio();
         $ctx->scaleRatio = $this->corporateMetrics->calculateAddressableShare($stock, $ctx->evaluationCapital, $ctx->macroState);
@@ -1024,7 +1024,7 @@ class MergerAndAcquisitionEngine
             $ctx->dealExecuted = false;
             return;
         }
-        
+
         $ctx->dealExecuted = true;
     }
 
@@ -1033,7 +1033,7 @@ class MergerAndAcquisitionEngine
         $ctx->lostNetIncome = $ctx->normalizedNetIncome * $ctx->divestedFraction;
         $ctx->currentDebt = (float) $ctx->seller->getWholesaleDebt();
         $ctx->lostDebt = $ctx->currentDebt * $ctx->divestedFraction;
-        
+
         // The book value leaving with the division is what its ledgers actually carry, less the debt the buyer
         // assumes. Only a balance sheet with no modelled asset side (a bank's loan book) falls back to the
         // strategy's capital-proxy estimate; anything else would state a gain against assets never retired.
@@ -1065,7 +1065,7 @@ class MergerAndAcquisitionEngine
     private function applyDivestitureAccounting(DivestitureContext $ctx): void
     {
         $stock = $ctx->seller;
-        
+
         $currentEps = (float) $stock->getEarningsPerShare();
         $stock->setEarningsPerShare((string) ($currentEps * (1.0 - $ctx->divestedFraction)));
 
@@ -1074,7 +1074,7 @@ class MergerAndAcquisitionEngine
         $stock->setPrincipalArrears((string) ((float) $stock->getPrincipalArrears() * (1.0 - $ctx->divestedFraction)));
 
         $ctx->strategy->shedDivestedLiabilities($stock, $ctx->divestedFraction, $ctx->treasury);
-        
+
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $ctx->divestedFraction)));
         // ...and a seller as if the business it sold had never been its own.

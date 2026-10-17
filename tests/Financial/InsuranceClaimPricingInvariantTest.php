@@ -65,7 +65,7 @@ final class InsuranceClaimPricingInvariantTest extends TestCase
             self::STRUCTURAL_COST_RATIO,
             $mean,
             4.0 * $standardError,
-            sprintf('%s: mean cost ratio %.4f (se %.5f) must sit on the structural %.2f.', $model::class, $mean, $standardError, self::STRUCTURAL_COST_RATIO)
+            sprintf('%s: mean cost ratio %.4f (se %.5f) must sit on the structural %.2f.', $model::class, $mean, $standardError, self::STRUCTURAL_COST_RATIO),
         );
     }
 }

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Trading;
 
-use App\Service\Market\Trading\MarginEngine;
 use App\Service\Market\Option\OptionMarginCalculator;
+use App\Service\Market\Trading\MarginEngine;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -151,7 +151,7 @@ class MarginEngineTest extends TestCase
             longMarketValue: 100000.0,
             shortMarketValue: 0.0,
             marginDebit: 80000.0,
-            openBuyCommitment: 60000.0
+            openBuyCommitment: 60000.0,
         );
 
         $this->assertSame($before->equity, $after->equity, 'Escrowed cash is still the account\'s cash.');
@@ -172,7 +172,7 @@ class MarginEngineTest extends TestCase
             longMarketValue: 100000.0,
             shortMarketValue: 0.0,
             marginDebit: 80000.0,
-            openBuyCommitment: 60000.0
+            openBuyCommitment: 60000.0,
         );
 
         $this->assertSame(0.0, $status->buyingPower);
@@ -232,7 +232,7 @@ class MarginEngineTest extends TestCase
         // that, not less: selling less would leave the account called again on the next tick.
         $this->assertGreaterThan(
             $status->callAmount() / FinancialConstants::MAINTENANCE_MARGIN_LONG,
-            $notional
+            $notional,
         );
 
         // Selling that much genuinely clears the call: equity is unchanged, the requirement falls.
@@ -240,7 +240,7 @@ class MarginEngineTest extends TestCase
             cash: 0.0,
             longMarketValue: 20000.0 - $notional,
             shortMarketValue: 0.0,
-            marginDebit: 16000.0 - $notional
+            marginDebit: 16000.0 - $notional,
         );
 
         $this->assertFalse($after->isCalled());

@@ -9,10 +9,10 @@ use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
-use App\Service\Market\Pricing\StockTracker;
 
 /**
  * The invariant that governs every phase of the market layer: a new source of price movement must draw
@@ -124,7 +124,7 @@ class OrderFlowVarianceBudgetTest extends TestCase
                 revenuePerShare: 50.0,
                 businessModel: 'none',
                 liveCostOfEquity: 0.10,
-                orderFlowVariance: $budget ? $impactVarianceEma : 0.0
+                orderFlowVariance: $budget ? $impactVarianceEma : 0.0,
             ));
 
             $nextPrice = $result['price'];
@@ -188,8 +188,8 @@ class OrderFlowVarianceBudgetTest extends TestCase
                     'Players trading %.0f%% of daily volume moved realized volatility from %.2f%% to %.2f%%.',
                     $shareOfDailyVolume * 100,
                     $baseline * 100,
-                    $withFlow * 100
-                )
+                    $withFlow * 100,
+                ),
             );
         }
     }
@@ -213,13 +213,13 @@ class OrderFlowVarianceBudgetTest extends TestCase
             $this->assertGreaterThan(
                 $baseline,
                 $unbudgeted,
-                'Unbudgeted order flow must visibly add variance, or this test proves nothing.'
+                'Unbudgeted order flow must visibly add variance, or this test proves nothing.',
             );
 
             $this->assertLessThan(
                 $unbudgeted,
                 $budgeted,
-                'The budget must reclaim variance the flow supplied.'
+                'The budget must reclaim variance the flow supplied.',
             );
         }
     }
@@ -245,7 +245,7 @@ class OrderFlowVarianceBudgetTest extends TestCase
         $this->assertGreaterThan(
             $baseline + 0.02,
             $churned,
-            'Beyond the cap, volatility should rise rather than be silently suppressed.'
+            'Beyond the cap, volatility should rise rather than be silently suppressed.',
         );
     }
 }

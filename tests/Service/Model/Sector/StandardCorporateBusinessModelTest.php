@@ -35,7 +35,7 @@ class StandardCorporateBusinessModelTest extends TestCase
 
         $macroState = new MacroStateDTO(
             policyRate: 0.04,
-            equityRiskPremium: 0.05
+            equityRiskPremium: 0.05,
         );
 
         $metrics = $this->model->getTargetMetrics($stock, $macroState, $this->mathUtility);
@@ -89,7 +89,7 @@ class StandardCorporateBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(
             outputGapEma: 0.02,
             inflationEma: 0.05,
-            exchangeRateIndexEma: 110.0
+            exchangeRateIndexEma: 110.0,
         );
 
         $physics = $this->model->getMacroPhysics($stock, $macro);
@@ -121,7 +121,7 @@ class StandardCorporateBusinessModelTest extends TestCase
             $defensiveMultiplier,
             $cyclicalMultiplier,
             1e-9,
-            'Beta must not change how much inflation a firm recovers in price.'
+            'Beta must not change how much inflation a firm recovers in price.',
         );
 
         // Pricing power does drive it: a price taker recovers less than a price setter.
@@ -131,7 +131,7 @@ class StandardCorporateBusinessModelTest extends TestCase
 
         $this->assertGreaterThan(
             $defensiveMultiplier,
-            $this->model->getMacroPhysics($priceSetter, $macro)['pricing_power_multiplier']
+            $this->model->getMacroPhysics($priceSetter, $macro)['pricing_power_multiplier'],
         );
 
         // Elasticity is centred so the median firm recovers expected inflation exactly.
@@ -183,7 +183,7 @@ class StandardCorporateBusinessModelTest extends TestCase
             fixedCosts: 10_000_000.0,
             baselineVol: 0.0,
             macroState: $highInflationMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertGreaterThan(0.0, $result->actualRevenue);

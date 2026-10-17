@@ -67,7 +67,7 @@ class PriceBarAggregator
     {
         $barYears = max(
             max(1, $minRowsPerBar) / max(1e-9, $rowsPerYear),
-            max(0.0, $spanYears) / max(1, $targetBars)
+            max(0.0, $spanYears) / max(1, $targetBars),
         );
 
         $bars = [];

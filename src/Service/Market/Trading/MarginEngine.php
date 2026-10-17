@@ -7,11 +7,11 @@ namespace App\Service\Market\Trading;
 use App\DTO\MarginStatusDTO;
 use App\Entity\User;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Market\Option\OptionMarginCalculator;
 use App\Service\Math\FinancialConstants;
 use App\Service\Politics\SecuritiesCommission;
 use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Market\Option\OptionMarginCalculator;
 
 /**
  * Regulation T margin accounting: what an account is worth, what it must keep, and when it gets called, at the
@@ -68,17 +68,17 @@ final class MarginEngine
              FROM user_stocks us
              JOIN stocks s ON us.stock_id = s.id
              WHERE us.user_id = :user_id",
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         ) ?: ['long_value' => 0.0, 'short_value' => 0.0];
 
         $etfValue = (float) $this->entityManager->getConnection()->fetchOne(
             'SELECT COALESCE(SUM(ue.quantity * e.price), 0) FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id WHERE ue.user_id = :user_id',
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         );
 
         $bondValue = (float) $this->entityManager->getConnection()->fetchOne(
             'SELECT COALESCE(SUM(ub.quantity * b.price), 0) FROM user_bonds ub JOIN bonds b ON ub.bond_id = b.id WHERE ub.user_id = :user_id',
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         );
 
         // The open book, on the same definition net asset value uses. Working an order moves the assets out
@@ -87,7 +87,7 @@ final class MarginEngine
         // has already left user_stocks, and neither has changed what the account owns.
         $escrow = $this->entityManager->getConnection()->fetchAssociative(
             'SELECT d.escrow_cash, d.escrow_long FROM (' . Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL . ') d WHERE d.user_id = :user_id',
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         ) ?: [];
 
         $escrowCash = (float) ($escrow['escrow_cash'] ?? 0.0);
@@ -106,7 +106,7 @@ final class MarginEngine
             openBuyCommitment: $escrowCash,
             optionLongValue: $options['long_value'],
             optionShortValue: $options['short_value'],
-            optionRequirement: $options['requirement']
+            optionRequirement: $options['requirement'],
         );
     }
 
@@ -130,7 +130,7 @@ final class MarginEngine
         float $openBuyCommitment = 0.0,
         float $optionLongValue = 0.0,
         float $optionShortValue = 0.0,
-        float $optionRequirement = 0.0
+        float $optionRequirement = 0.0,
     ): MarginStatusDTO {
         // A long contract is an asset and a written one is a liability, both at what it would cost to close
         // them. Leaving the written side out would have shown an account that had sold unbounded risk as

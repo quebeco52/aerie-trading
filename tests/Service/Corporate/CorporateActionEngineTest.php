@@ -2,10 +2,10 @@
 
 namespace App\Tests\Service\Corporate;
 
-use PHPUnit\Framework\TestCase;
+use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Entity\Stock;
+use PHPUnit\Framework\TestCase;
 
 class CorporateActionEngineTest extends TestCase
 {
@@ -43,7 +43,7 @@ class CorporateActionEngineTest extends TestCase
 
         // Act: Run it through the engine
         $result = $this->engine->processSplits($stock, $startingPrice, $startingShares, 5.0);
-        $stock->setSharesOutstanding((string)$result['shares']); // Bridge logic test
+        $stock->setSharesOutstanding((string) $result['shares']); // Bridge logic test
 
         // Assert: The math must hold up!
         // 1000 -> 500 -> 250 (It should take exactly 2 splits to stabilize)
@@ -72,7 +72,7 @@ class CorporateActionEngineTest extends TestCase
 
         // Act: Run it through the engine
         $result = $this->engine->processSplits($stock, $startingPrice, $startingShares, 5.0);
-        $stock->setSharesOutstanding((string)$result['shares']); // Bridge logic test
+        $stock->setSharesOutstanding((string) $result['shares']); // Bridge logic test
 
         // Assert: The math must hold up!
         // 0.10 -> 1.00 -> 10.00 (It should take 2 reverse splits of 1-for-10)

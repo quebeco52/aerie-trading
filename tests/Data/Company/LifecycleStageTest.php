@@ -61,7 +61,7 @@ final class LifecycleStageTest extends TestCase
             $signs = explode(' / ', $stage->cashFlowSignature());
             $this->assertCount(3, $signs, $stage->value);
 
-            $choices = array_map(static fn (string $sign): array => $sign === '±' ? [true, false] : [$sign === '+'], $signs);
+            $choices = array_map(static fn(string $sign): array => $sign === '±' ? [true, false] : [$sign === '+'], $signs);
             foreach ($choices[0] as $cfo) {
                 foreach ($choices[1] as $cfi) {
                     foreach ($choices[2] as $cff) {

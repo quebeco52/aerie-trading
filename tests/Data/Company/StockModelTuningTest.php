@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Data\Company;
 
 use App\Data\Company\InitialMarket;
-use App\Service\Model\ModelParam;
 use App\Data\Company\Sectors;
 use App\Data\Company\StockModelTuning;
+use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
 use PHPUnit\Framework\TestCase;
 
@@ -53,7 +53,7 @@ class StockModelTuningTest extends TestCase
                 $enumCase = ModelParam::tryFrom((string) $key);
                 $this->assertNotNull(
                     $enumCase,
-                    sprintf("Ticker '%s' has an unknown parameter key: '%s'", $ticker, $key)
+                    sprintf("Ticker '%s' has an unknown parameter key: '%s'", $ticker, $key),
                 );
             }
         }
@@ -92,7 +92,7 @@ class StockModelTuningTest extends TestCase
             $this->assertArrayHasKey(
                 $ticker,
                 $modelByTicker,
-                sprintf("Ticker '%s' has tuning overrides but is not a listed company.", $ticker)
+                sprintf("Ticker '%s' has tuning overrides but is not a listed company.", $ticker),
             );
 
             $strategy = Sectors::getBusinessModelStrategy($modelByTicker[$ticker]);
@@ -113,8 +113,8 @@ class StockModelTuningTest extends TestCase
                         . 'Either wire the parameter into the model or drop the override.',
                         $ticker,
                         $case->name,
-                        (new \ReflectionClass($strategy))->getShortName()
-                    )
+                        (new \ReflectionClass($strategy))->getShortName(),
+                    ),
                 );
             }
         }
@@ -237,7 +237,7 @@ class StockModelTuningTest extends TestCase
                         1.0,
                         $sum,
                         1e-5,
-                        sprintf("Ticker '%s' stream group '%s' does not sum to 1.0 (actual: %f)", $ticker, $groupName, $sum)
+                        sprintf("Ticker '%s' stream group '%s' does not sum to 1.0 (actual: %f)", $ticker, $groupName, $sum),
                     );
                 }
             }
@@ -426,34 +426,33 @@ class StockModelTuningTest extends TestCase
     {
         $registry = new \App\Service\Model\BusinessModelRegistry();
 
-        foreach (\App\Data\Company\InitialMarket::STOCKS as $stockData) {
+        foreach (InitialMarket::STOCKS as $stockData) {
             $ticker = $stockData['ticker'];
             $industry = $stockData['industry'];
 
             $this->assertArrayHasKey(
                 $industry,
-                \App\Data\Company\Sectors::INDUSTRY_METRICS,
-                sprintf("Ticker '%s' industry '%s' not found in Sectors::INDUSTRY_METRICS", $ticker, $industry)
+                Sectors::INDUSTRY_METRICS,
+                sprintf("Ticker '%s' industry '%s' not found in Sectors::INDUSTRY_METRICS", $ticker, $industry),
             );
 
-            $modelKey = \App\Data\Company\Sectors::INDUSTRY_METRICS[$industry]['business_model'];
+            $modelKey = Sectors::INDUSTRY_METRICS[$industry]['business_model'];
             $this->assertTrue(
                 $registry->has($modelKey),
-                sprintf("Ticker '%s' (industry: %s) references unregistered business model key '%s'", $ticker, $industry, $modelKey)
+                sprintf("Ticker '%s' (industry: %s) references unregistered business model key '%s'", $ticker, $industry, $modelKey),
             );
         }
     }
 
     public function testAllBusinessModelsHaveLoreDescription(): void
     {
-        foreach (\App\Data\Company\Sectors::INDUSTRY_METRICS as $industry => $metrics) {
+        foreach (Sectors::INDUSTRY_METRICS as $industry => $metrics) {
             $modelKey = $metrics['business_model'];
             $this->assertArrayHasKey(
                 $modelKey,
-                \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS,
-                sprintf("Business model key '%s' (for industry '%s') is missing from Sectors::BUSINESS_MODEL_DESCRIPTIONS", $modelKey, $industry)
+                Sectors::BUSINESS_MODEL_DESCRIPTIONS,
+                sprintf("Business model key '%s' (for industry '%s') is missing from Sectors::BUSINESS_MODEL_DESCRIPTIONS", $modelKey, $industry),
             );
         }
     }
 }
-

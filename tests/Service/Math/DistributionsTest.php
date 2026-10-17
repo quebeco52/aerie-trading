@@ -82,14 +82,14 @@ class DistributionsTest extends TestCase
             1.0 / Distributions::MEAN_ABSOLUTE_DEVIATION_TO_SIGMA,
             Distributions::calculateMeanAbsoluteScale([1.0, -1.0, 1.0, -1.0]),
             0.0000001,
-            'The estimator must invert the normal mean-absolute-deviation constant.'
+            'The estimator must invert the normal mean-absolute-deviation constant.',
         );
 
         // Sign is discarded: only the magnitude of the surprise carries scale.
         $this->assertSame(
             Distributions::calculateMeanAbsoluteScale([0.4, -0.2, 0.6]),
             Distributions::calculateMeanAbsoluteScale([-0.4, 0.2, -0.6]),
-            'The scale of a surprise must not depend on its direction.'
+            'The scale of a surprise must not depend on its direction.',
         );
 
         // The point of the estimator: one blow-up quarter must not dominate the other nine.
@@ -97,7 +97,7 @@ class DistributionsTest extends TestCase
         $withOutlier = $quiet;
         $withOutlier[] = 2.0;
 
-        $sumOfSquares = sqrt(array_sum(array_map(static fn (float $x): float => $x ** 2, $withOutlier)) / count($withOutlier));
+        $sumOfSquares = sqrt(array_sum(array_map(static fn(float $x): float => $x ** 2, $withOutlier)) / count($withOutlier));
         $robust = Distributions::calculateMeanAbsoluteScale($withOutlier);
 
         $this->assertLessThan($sumOfSquares, $robust, 'A fat tail must move the mean absolute estimate less than a root-mean-square.');
@@ -124,7 +124,7 @@ class DistributionsTest extends TestCase
         $this->assertLessThan(
             Distributions::gompertzMakehamWait(0.5, $age, $level, $slope, $background),
             Distributions::gompertzMakehamWait(0.5, $age + 20.0, $level, $slope, $background),
-            'The older wait less.'
+            'The older wait less.',
         );
     }
 

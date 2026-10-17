@@ -8,10 +8,10 @@ use App\Data\Company\ManagementProfile;
 use App\Data\Company\ManagementStyle;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\StockBuilder;
@@ -46,7 +46,7 @@ class MergerAndAcquisitionGateTest extends TestCase
             $this->createStub(MarketEventPublisher::class),
             $debt,
             $math,
-            new CorporateMetrics()
+            new CorporateMetrics(),
         );
     }
 
@@ -99,7 +99,7 @@ class MergerAndAcquisitionGateTest extends TestCase
                     [
                         round(MergerAndAcquisitionEngine::acquisitionHazardCeiling() * $dt, 12),
                         round(MergerAndAcquisitionEngine::divestitureHazardCeiling() * $dt, 12),
-                    ]
+                    ],
                 );
 
                 return false;
@@ -198,12 +198,12 @@ class MergerAndAcquisitionGateTest extends TestCase
                 ebit: 1000.0,
                 revenue: 5000.0,
                 depreciation: 100.0,
-                ebitda: 1100.0
+                ebitda: 1100.0,
             ),
             isLiquidityCrisis: false,
             isLiquidityWarning: false,
             isUnderLeveraged: false,
-            hasLeverageHeadroom: true
+            hasLeverageHeadroom: true,
         );
     }
 }

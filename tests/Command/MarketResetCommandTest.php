@@ -58,13 +58,13 @@ final class MarketResetCommandTest extends TestCase
                 $sent[] = [$sql, $params];
 
                 return 1;
-            }
+            },
         );
         $connection->method('fetchOne')->willReturn(false);
 
         $stocks = $this->createMock(EntityRepository::class);
         $stocks->method('findOneBy')->willReturnCallback(
-            static fn (array $criteria): ?Stock => $existing[$criteria['ticker'] ?? ''] ?? null
+            static fn(array $criteria): ?Stock => $existing[$criteria['ticker'] ?? ''] ?? null,
         );
         $users = $this->createMock(EntityRepository::class);
         $users->method('findOneBy')->willReturn(null);
@@ -72,7 +72,7 @@ final class MarketResetCommandTest extends TestCase
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->method('getConnection')->willReturn($connection);
         $entityManager->method('getRepository')->willReturnCallback(
-            static fn (string $class): EntityRepository => $class === Stock::class ? $stocks : $users
+            static fn(string $class): EntityRepository => $class === Stock::class ? $stocks : $users,
         );
 
         $hasher = $this->createMock(UserPasswordHasherInterface::class);
@@ -90,7 +90,7 @@ final class MarketResetCommandTest extends TestCase
             },
             $hasher,
             $auctions,
-            new OpeningBoardBuilder($math, new DebtEngine($math, CorporateMetrics::getInstance()), new MarketEngine($math), new AnchorStakeLedger())
+            new OpeningBoardBuilder($math, new DebtEngine($math, CorporateMetrics::getInstance()), new MarketEngine($math), new AnchorStakeLedger()),
         );
 
         $this->assertSame(Command::SUCCESS, (new CommandTester($command))->execute([]));

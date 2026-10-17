@@ -60,7 +60,7 @@ final class SovereignReserveFund
             $term,
             [CouncilAppointments::AXIS_FUND => CouncilAppointments::median($state->councilFundStances)],
             CouncilAppointments::reservedNames($state),
-            $math
+            $math,
         );
         if ($term < 0.0) {
             $chosen['name'] = AerieCouncil::OPENING_FUND_HEAD;

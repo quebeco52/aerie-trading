@@ -28,12 +28,12 @@ class ComputerHardwareBusinessModelTest extends TestCase
 
         $baseMacro = new MacroStateDTO(
             exchangeRateIndexEma: 100.0,
-            industrialMetalsIndexEma: 100.0
+            industrialMetalsIndexEma: 100.0,
         );
 
         $strongDollarMacro = new MacroStateDTO(
             exchangeRateIndexEma: 120.0, // Strong domestic currency creates export headwind
-            industrialMetalsIndexEma: 100.0
+            industrialMetalsIndexEma: 100.0,
         );
 
         $mathMock = $this->createStub(MathUtility::class);
@@ -46,7 +46,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $baseMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $strongDollarResult = $this->model->computeActualFinancials(
@@ -56,7 +56,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.10,
             macroState: $strongDollarMacro,
-            mathUtility: $mathMock
+            mathUtility: $mathMock,
         );
 
         $this->assertArrayHasKey('enterprise_hardware', $baseResult->streamRevenue);
@@ -134,7 +134,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
             $stock->setEarningsMomentumZ(['event' => -9.9]);
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
             $draw = ComputerHardwareBusinessModel::SEMICONDUCTOR_SHORTAGE_Z_SCORE + 1.0;
-            $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $draw : 0.0);
+            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $draw : 0.0);
             $math->method('checkProbability')->willReturn(false);
 
             return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.70, 20_000_000.0, 0.0, $macro, $math);

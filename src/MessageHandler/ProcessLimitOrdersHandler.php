@@ -10,14 +10,14 @@ use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 class ProcessLimitOrdersHandler
 {
     public function __construct(
-        private TradeExecutionService $tradeExecutionService
+        private TradeExecutionService $tradeExecutionService,
     ) {}
 
     public function __invoke(ProcessLimitOrdersMessage $message): void
     {
         $this->tradeExecutionService->processLimitOrders(
             $message->getTicker(),
-            $message->getCurrentPrice()
+            $message->getCurrentPrice(),
         );
     }
 }

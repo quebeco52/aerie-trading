@@ -69,7 +69,7 @@ final class ElectionForecast
                 $state->pollAverageVariance,
                 end($state->polls)['shares'],
                 $time - $since,
-                $state->normalVoteShares
+                $state->normalVoteShares,
             );
             $state->pollAveragedAt = $time;
         }
@@ -219,7 +219,7 @@ final class ElectionForecast
             $state->dietSeats,
             $state->partyPositions,
             $standing,
-            $recession
+            $recession,
         )['levers'];
     }
 

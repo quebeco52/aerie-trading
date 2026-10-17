@@ -4,27 +4,26 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Math\FixedIncome;
-use App\Service\Model\StreamContext;
-use App\DTO\InterestExpenseDTO;
 use App\DTO\DebtExpansionAppetiteDTO;
-
-use App\Service\Math\Distributions;
-use App\Service\Math\TimeSeries;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
+use App\DTO\InterestExpenseDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
-use App\Service\Event\ShockEvent;
 use App\Service\Corporate\CorporateMetrics;
+
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Event\ShockEvent;
+use App\Service\Math\Distributions;
+use App\Service\Math\FixedIncome;
+use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Insurance companies.
- * 
+ *
  * Financial Physics:
  * - Revenue (Premiums) is highly sticky and predictable.
  * - Variance comes from Catastrophes (Claims/Underwriting losses).
@@ -49,7 +48,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Propensity to steer reported earnings toward consensus with accruals. Loss reserves are an actuarial estimate management sets itself: strengthening or releasing them moves the headline without touching cash. */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.60;
 
-        public function getMoatSpread(): float { return 0.01; }
+    public function getMoatSpread(): float
+    {
+        return 0.01;
+    }
 
     // --- The Kenney Rule & Capacity Limits ---
     /** Standard Premium-to-Surplus capacity ratio required to maintain strong credit ratings. */
@@ -255,7 +257,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // Premium = min(demand x written share, Kenney capacity).
         $targetRevenue = min(
             $this->resolvePremiumDemand($stock, $macroState) * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility),
-            $this->resolveKenneyCapacity($stock)
+            $this->resolveKenneyCapacity($stock),
         );
         // Hard market floor prevents abrupt revenue collapse following catastrophe-driven surplus drawdown.
         $priorRevenue = (float) $stock->getTotalRevenue();
@@ -278,18 +280,18 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         }
 
         // Saturation measures the firm's size in its market, so it reads the whole book, goodwill included.
-        $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $stock->getAmortizedCostEquity()), $macroState);
+        $saturationPenalty = CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $stock->getAmortizedCostEquity()), $macroState);
         $waccBase = $macroState->marketCostOfEquity();
         // Cap baseline return at capacity ROIC to prevent margin compression from inflating implied turnover.
         $baselineRoic = min($capacityRoic, max($waccBase, $baselineRoic - $saturationPenalty));
 
         return [
             'invested_capital' => $operatingEquity,
-            'baseline_roic'    => $baselineRoic
+            'baseline_roic'    => $baselineRoic,
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
@@ -454,7 +456,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return self::writtenShareAtExcessReturn(
             $underwritingReturn + $bookFloatReturn + $heldFloatReturn - $hurdle,
             self::UNDERWRITING_RESULT_DISPERSION * self::KENNEY_CAPACITY_RATIO * $afterTax,
-            $this->resolveLifePremiumShare($stock)
+            $this->resolveLifePremiumShare($stock),
         );
     }
 
@@ -502,7 +504,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             $streams->getPersistedState(self::STATE_UNRECOVERED_CLAIMS_COST, 0.0),
             $excess * self::PREMIUM_CATCH_UP_YEARS,
             \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
-            self::PREMIUM_CATCH_UP_YEARS
+            self::PREMIUM_CATCH_UP_YEARS,
         );
         $streams->registerState(self::STATE_UNRECOVERED_CLAIMS_COST, $gap);
 
@@ -594,7 +596,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // Kenney capacity when demand meets capacity.
         $targetPremiumToSurplus = $streams->getPersistedState(
             self::STATE_TARGET_PREMIUM_TO_SURPLUS,
-            self::KENNEY_CAPACITY_RATIO * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility)
+            self::KENNEY_CAPACITY_RATIO * $this->resolveWrittenCapacity($stock, $macroState, $mathUtility),
         );
         if ($targetPremiumToSurplus > 0.0) {
             $streams->registerState(self::STATE_TARGET_PREMIUM_TO_SURPLUS, $targetPremiumToSurplus);
@@ -606,7 +608,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             currentLaggedValue: $streams->getPersistedState(self::STATE_OBSERVED_CAPACITY, $currentRatio),
             targetValue: $currentRatio,
             dt: \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
-            lagTimeConstant: self::CAPACITY_OBSERVATION_LAG_YEARS
+            lagTimeConstant: self::CAPACITY_OBSERVATION_LAG_YEARS,
         ));
 
         // The quarter's renewals are written at the share the rate on offer now justifies.
@@ -614,7 +616,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_WRITTEN_SHARE, self::adjustWrittenShare(
             $streams->getPersistedState(self::STATE_WRITTEN_SHARE, $targetShare),
             $targetShare,
-            \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP
+            \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
         ));
     }
 
@@ -916,7 +918,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $isMegaHoarder ? $excessCash * self::MEGA_BUYBACK_CASH_SHARE : min($excessCash * self::STANDARD_BUYBACK_SHARE, $retainedEarningsThisQuarter * self::MAX_RETAINED_BUYBACK_MULT);
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $corporateDebt = (float) $stock->getWholesaleDebt();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
@@ -1154,7 +1156,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             currentLaggedValue: $reserves,
             targetValue: ($incurred / $dt) * $runoffYears,
             dt: $dt,
-            lagTimeConstant: $runoffYears
+            lagTimeConstant: $runoffYears,
         ));
 
         return ['reserves' => $settled, 'paid' => $reserves + $incurred - $settled];
@@ -1300,9 +1302,18 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return false;
     }
 
-    public function getBankruptEquityThreshold(): float { return self::BANKRUPT_EQUITY_THRESHOLD; }
-    public function getDistressEquityThreshold(): float { return self::DISTRESS_EQUITY_THRESHOLD; }
-    public function getWarningEquityThreshold(): float { return self::WARNING_EQUITY_THRESHOLD; }
+    public function getBankruptEquityThreshold(): float
+    {
+        return self::BANKRUPT_EQUITY_THRESHOLD;
+    }
+    public function getDistressEquityThreshold(): float
+    {
+        return self::DISTRESS_EQUITY_THRESHOLD;
+    }
+    public function getWarningEquityThreshold(): float
+    {
+        return self::WARNING_EQUITY_THRESHOLD;
+    }
 
     /**
      * NAIC Model Act #440, section 5: without the commissioner's prior approval an insurer may pay out in any twelve

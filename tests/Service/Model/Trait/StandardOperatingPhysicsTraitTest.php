@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Trait;
 
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
-use App\Service\Model\ModelParameters;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
-use App\Tests\Support\Model\BareStandardModel;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Tests\Support\Model\BareStandardModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
 use PHPUnit\Framework\TestCase;
 
@@ -64,7 +64,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             $withPrice->actualRevenue - 200_000.0 - $withPrice->actualVariableCosts,
             $withPrice->ebit,
             0.0001,
-            'The EBIT identity must survive the split.'
+            'The EBIT identity must survive the split.',
         );
     }
 
@@ -119,7 +119,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $this->assertGreaterThan(
             $this->model->getCoverageProfile($systemic)->baseVisibility,
             $this->model->getCoverageProfile($titan)->baseVisibility,
-            'A titan must be better covered than a merely systemic firm.'
+            'A titan must be better covered than a merely systemic firm.',
         );
         $this->assertGreaterThan($base->minVisibility, $this->model->getCoverageProfile($titan)->minVisibility, 'The floor rises with importance too.');
 
@@ -132,7 +132,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $this->assertLessThanOrEqual(
             $configured->getCoverageProfile($titan)->baseVisibility,
             $configured->getCoverageProfile($titan)->minVisibility,
-            'The floor can never exceed the base visibility.'
+            'The floor can never exceed the base visibility.',
         );
     }
 
@@ -175,7 +175,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             -$this->model->resolveFxDemandShift($strong),
             $this->model->resolveFxDemandShift($weak),
             0.0000001,
-            'Equal and opposite moves must produce equal and opposite shifts.'
+            'Equal and opposite moves must produce equal and opposite shifts.',
         );
 
         // Exposure is the multiplier: a heavily exposed exporter feels the same move far more.
@@ -194,7 +194,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     public function testInputCostDeviationWeightsOnlyDeclaredExposures(): void
     {
         $calm = new MacroStateDTO(
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
         );
         $this->assertEqualsWithDelta(0.0, $this->model->resolveInputCostDeviation($calm), 0.0000001, 'At baseline every channel sits at zero.');
 
@@ -202,18 +202,18 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $configured = new ConfiguredStandardModel();
         $agriSpike = new MacroStateDTO(
             agriculturalCommodityIndexEma: 200.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
         );
         $this->assertEqualsWithDelta(0.0, $configured->resolveInputCostDeviation($agriSpike), 0.0000001, 'A market the firm does not buy in cannot move its costs.');
         $this->assertGreaterThan(0.0, $this->model->resolveInputCostDeviation(new MacroStateDTO(
             industrialMetalsIndexEma: 150.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
         )), 'The default basket does buy metals.');
 
         // A metals spike reaches it in proportion to the declared share.
         $metalsSpike = new MacroStateDTO(
             industrialMetalsIndexEma: 150.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
         );
         $this->assertEqualsWithDelta(0.20 * 0.50, $configured->resolveInputCostDeviation($metalsSpike), 0.0000001, 'The deviation is the share times the relative move.');
     }
@@ -256,7 +256,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             agriculturalCommodityIndexEma: 100.0,
             freightRateIndexEma: 100.0,
             producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
-            realWageGap: 0.0
+            realWageGap: 0.0,
         );
 
         foreach ($this->model->resolveInputPriceDeviations($baseline) as $channel => $deviation) {
@@ -282,7 +282,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     public function testThePpiChannelIsTheWholesalePriceLevelAgainstItsTrend(): void
     {
         $excess = 0.03;
-        $horizon = \App\Service\Macro\MacroEngine::COMMODITY_TREND_HORIZON_YEARS;
+        $horizon = MacroEngine::COMMODITY_TREND_HORIZON_YEARS;
         $dt = 0.01;
         $level = 0.0;
         $trend = 0.0;
@@ -331,7 +331,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $stock = (new Stock())->setTicker('DRAG');
         $spike = new MacroStateDTO(
             industrialMetalsIndexEma: 200.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
         );
 
         $taker = $this->model->exposeInputCostDrag($stock, $spike, $this->model->exposeStreamContext([], $this->math), 0.0, 0.60);
@@ -344,14 +344,14 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         // A collapse in input prices is a windfall of the same shape, not an asymmetric no-op.
         $collapse = new MacroStateDTO(
             industrialMetalsIndexEma: 50.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
         );
         $this->assertLessThan(0.0, $this->model->exposeInputCostDrag($stock, $collapse, $this->model->exposeStreamContext([], $this->math), 0.0, 0.60), 'Falling input prices must widen margin.');
 
         // However violent the move, one quarter's drag is bounded.
         $crisis = new MacroStateDTO(
             industrialMetalsIndexEma: 100_000.0,
-            producerPriceInflationEma: MacroEngine::TARGET_INFLATION
+            producerPriceInflationEma: MacroEngine::TARGET_INFLATION,
         );
         $this->assertLessThanOrEqual(0.50, $this->model->exposeInputCostDrag($stock, $crisis, $this->model->exposeStreamContext([], $this->math), 0.0, 0.60), 'The drag is clamped so one quarter cannot destroy the cost base.');
     }
@@ -392,7 +392,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             $expectedCycle,
             $days['dso'] + $days['dio'] - $days['dpo'],
             0.0000001,
-            'DSO + DIO - DPO must return the declared cycle.'
+            'DSO + DIO - DPO must return the declared cycle.',
         );
         foreach (['dso', 'dio', 'dpo'] as $leg) {
             $this->assertGreaterThan(0.0, $days[$leg], "A positive cycle ties up cash in {$leg}.");
@@ -421,7 +421,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
             -0.08 * FinancialConstants::DAYS_PER_YEAR,
             $days['dso'] + $days['dio'] - $days['dpo'],
             0.0000001,
-            'The identity holds through the sign change.'
+            'The identity holds through the sign change.',
         );
     }
 

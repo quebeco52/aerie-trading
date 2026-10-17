@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\Service\Macro\MacroEngine;
-use App\Service\Model\Sector\SemiconductorBusinessModel;
-use App\Service\Math\FinancialConstants;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Math\MathUtility;
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\SemiconductorBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
-use App\DTO\MacroStateDTO;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -42,7 +42,7 @@ class SemiconductorBusinessModelTest extends TestCase
         $realizedVariableMargin = 0.30; // 30% baseline variable cost
         $fixedCosts = 200.0;
         $baselineVol = 0.20;
-        $macroState = \App\DTO\MacroStateDTO::fromArray(['output_gap_ema' => 0.0]);
+        $macroState = MacroStateDTO::fromArray(['output_gap_ema' => 0.0]);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -51,7 +51,7 @@ class SemiconductorBusinessModelTest extends TestCase
             $fixedCosts,
             $baselineVol,
             $macroState,
-            $this->mathUtilityMock
+            $this->mathUtilityMock,
         );
 
         // With yieldModifier = 0.08 * 0.85 = 0.068, actualVariableCosts = 1000.0 * (0.30 + 0.068) = 368.0
@@ -72,7 +72,7 @@ class SemiconductorBusinessModelTest extends TestCase
         $realizedVariableMargin = 0.30;
         $fixedCosts = 200.0;
         $baselineVol = 0.20;
-        $macroState = \App\DTO\MacroStateDTO::fromArray(['output_gap_ema' => 0.0]);
+        $macroState = MacroStateDTO::fromArray(['output_gap_ema' => 0.0]);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -81,7 +81,7 @@ class SemiconductorBusinessModelTest extends TestCase
             $fixedCosts,
             $baselineVol,
             $macroState,
-            $this->mathUtilityMock
+            $this->mathUtilityMock,
         );
 
         // With yieldModifier = 0.00, actualVariableCosts = 1000.0 * 0.30 = 300.0
@@ -96,7 +96,7 @@ class SemiconductorBusinessModelTest extends TestCase
         $stock->setTicker('TSMC');
         $stock->setCapexRatio('0.80');
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $run = fn (array $macro) => $this->model->computeActualFinancials($stock, 1000.0, 0.30, 200.0, 0.20, \App\DTO\MacroStateDTO::fromArray(['output_gap_ema' => 0.0] + $macro), $this->mathUtilityMock);
+        $run = fn(array $macro) => $this->model->computeActualFinancials($stock, 1000.0, 0.30, 200.0, 0.20, MacroStateDTO::fromArray(['output_gap_ema' => 0.0] + $macro), $this->mathUtilityMock);
 
         $baseline = $run([]);
         // Fab power is 2.3% of output, but industrial tariffs pass a wholesale move through at only 0.106 (EIA), which puts
@@ -122,7 +122,7 @@ class SemiconductorBusinessModelTest extends TestCase
 
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $macroNormal = \App\DTO\MacroStateDTO::fromArray([
+        $macroNormal = MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'capacity_utilization_rate_ema' => 0.785,
         ]);
@@ -134,10 +134,10 @@ class SemiconductorBusinessModelTest extends TestCase
             fixedCosts: 200.0,
             baselineVol: 0.0,
             macroState: $macroNormal,
-            mathUtility: $this->mathUtilityMock
+            mathUtility: $this->mathUtilityMock,
         );
 
-        $macroBoom = \App\DTO\MacroStateDTO::fromArray([
+        $macroBoom = MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'capacity_utilization_rate_ema' => 0.835, // +5% above baseline
         ]);
@@ -149,7 +149,7 @@ class SemiconductorBusinessModelTest extends TestCase
             fixedCosts: 200.0,
             baselineVol: 0.0,
             macroState: $macroBoom,
-            mathUtility: $this->mathUtilityMock
+            mathUtility: $this->mathUtilityMock,
         );
 
         $this->assertGreaterThan($resultNormal->streamRevenue['foundry'], $resultBoom->streamRevenue['foundry'], 'Elevated industrial capacity utilization must expand foundry throughput.');

@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
-use App\DTO\MacroStateDTO;
+use App\DTO\CapitalAllocationContext;
 use App\Entity\Stock;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
-use App\DTO\CapitalAllocationContext;
 use App\Service\Math\Valuation;
 
 /**
@@ -70,7 +69,7 @@ class TreasuryEngine
         private CapExEngine $capExEngine,
         private MathUtility $mathUtility,
         /** Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve. */
-        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine())
+        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine()),
     ) {}
 
     /**
@@ -142,7 +141,7 @@ class TreasuryEngine
         // A lender short of its operating cash sells from the book before it borrows at penalty rates.
         $this->liquidateEarningAssetsForCash(
             $ctx,
-            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt),
         );
 
         // COMMITTED REVOLVER (the facility a bank contracted to fund whatever the bond market is doing). The
@@ -221,7 +220,7 @@ class TreasuryEngine
         $raisedOnSecurities = $securitiesSold * $securitiesRecovery;
         $loansSold = min(
             max(0.0, $ceiling - $securitiesSold),
-            max(0.0, $shortfall - $raisedOnSecurities) / (1.0 - $haircut)
+            max(0.0, $shortfall - $raisedOnSecurities) / (1.0 - $haircut),
         );
 
         $carryingValueSold = $securitiesSold + $loansSold;
@@ -238,7 +237,7 @@ class TreasuryEngine
 
         if ($realizedMark !== 0.0) {
             $stock->setUnrealizedSecuritiesMark(
-                Decimal::format($carriedMark - $realizedMark, 4)
+                Decimal::format($carriedMark - $realizedMark, 4),
             );
         }
 
@@ -302,7 +301,7 @@ class TreasuryEngine
                 $ctx->health,
                 $newBorrowingRate,
                 $ebit,
-                $depreciation
+                $depreciation,
             );
 
             // An institution steering to its own capital ratio grows its balance sheet with its equity
@@ -337,7 +336,7 @@ class TreasuryEngine
                     $totalDebt,
                     $ctx->customerDeposits,
                     $targetCashReserves,
-                    $ctx->newTreasury
+                    $ctx->newTreasury,
                 );
 
                 // How much of that capacity the firm is willing to draw is a manager's choice; the capacity
@@ -481,7 +480,7 @@ class TreasuryEngine
                         'clearing_house' => 'clearing collateral and exchange margin reserves',
                         'distressed_debt' => 'distressed credit and turnaround equity acquisitions',
                         'reit' => 'property acquisitions and development',
-                        default => 'organic expansion'
+                        default => 'organic expansion',
                     };
                     $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}."];
                 }
@@ -539,7 +538,7 @@ class TreasuryEngine
                 'asset_manager', 'private_equity', 'hedge_fund' => 'fund seeding and AUM deployment',
                 'clearing_house' => 'clearing collateral and exchange margin reserves',
                 'distressed_debt' => 'distressed credit and turnaround equity acquisitions',
-                default => 'earning assets'
+                default => 'earning assets',
             };
             $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}."];
         }
@@ -562,7 +561,7 @@ class TreasuryEngine
             $ctx->stock,
             $ctx->health,
             $ctx->newTreasury,
-            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt),
         );
         if ($roll->maturingPrincipal <= 0.0) {
             return;
@@ -619,13 +618,17 @@ class TreasuryEngine
     private function processEquityIssuance(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
-        if ($ctx->currentPrice <= 0.0) return;
+        if ($ctx->currentPrice <= 0.0) {
+            return;
+        }
 
         // A buyback this quarter bars the OPPORTUNISTIC raise — a board does not buy its own stock and sell
         // it in the same breath. It must not bar the rescue: a firm that repurchased shares before the
         // maturity landed was left unable to raise the money to fund it, which is backwards.
         $isRescue = $ctx->failedEmergencyBorrow || $ctx->unfundedMaturity > 0.0;
-        if ($ctx->totalCashSpent > 0.0 && !$isRescue) return;
+        if ($ctx->totalCashSpent > 0.0 && !$isRescue) {
+            return;
+        }
 
         $currentPE = $ctx->quarterlyEps > 0 ? ($ctx->currentPrice / ($ctx->quarterlyEps * 4)) : 9999.0;
         if ($ctx->actualAnnualEps > 0) {
@@ -648,7 +651,7 @@ class TreasuryEngine
             $ctx->macroState->tipsBreakeven,
             \App\Data\Company\Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
-            $stock->getPolicyPayoutRatio()
+            $stock->getPolicyPayoutRatio(),
         );
 
         // The shares outstanding now, after any buyback this quarter; the context's count is the opening one.
@@ -717,7 +720,7 @@ class TreasuryEngine
                 $amtB = number_format($targetRaise / 1_000_000_000, 2);
                 $ctx->events[] = [
                     'description' => "Issued new shares to raise \${$amtB}B and {$reason}.",
-                    'shock' => self::SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT
+                    'shock' => self::SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT,
                 ];
 
                 $ctx->failedEmergencyBorrow = false;
@@ -878,7 +881,7 @@ class TreasuryEngine
         $sized = max(
             FinancialConstants::MIN_OPERATING_BASE_CASH,
             $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
-                * self::REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE
+                * self::REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE,
         );
 
         if ($sized > (float) $ctx->stock->getRevolverCommitment()) {
@@ -978,7 +981,7 @@ class TreasuryEngine
         // drawn down and never repaid, and a run of closed quarters exhausted it for good.
         $this->sweepRevolver(
             $ctx,
-            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt),
         );
 
         if (!$ctx->debtActionTaken && $ctx->health->wantsToPaydownDebt && $ctx->wholesaleDebt > 0 && $ctx->newTreasury > $targetOperatingCash) {
@@ -1055,8 +1058,8 @@ class TreasuryEngine
 
             $shouldSweep = $currentDebtRatio > $evalLimit;
 
-            // Financial institutions (Banks, Brokerages, Insurers) have structural, regulatory-driven balance sheets 
-            // where "cash hoarding" is just normal float/deposits/trading buffers, and junk status on marginal debt 
+            // Financial institutions (Banks, Brokerages, Insurers) have structural, regulatory-driven balance sheets
+            // where "cash hoarding" is just normal float/deposits/trading buffers, and junk status on marginal debt
             // shouldn't force them to liquidate their structural core funding.
             if ($ctx->strategy->shouldForceDeleveragingOnJunkOrHoarding()) {
                 if ($isJunkBondStatus || $hoardStatus['is_hoarder']) {
@@ -1099,7 +1102,7 @@ class TreasuryEngine
             'debtActionTaken' => $ctx->debtActionTaken,
             'bank_apy' => $ctx->bankApy,
             'failed_emergency_borrow' => $ctx->failedEmergencyBorrow,
-            'events' => $ctx->events
+            'events' => $ctx->events,
         ];
 
         $ctx->strategy->processPassiveLiabilityGrowth($ctx->stock, $ctx->macroState, $state, $this->mathUtility);

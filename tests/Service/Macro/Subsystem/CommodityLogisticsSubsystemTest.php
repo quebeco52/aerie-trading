@@ -5,7 +5,6 @@ namespace App\Tests\Service\Macro\Subsystem;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
@@ -47,20 +46,20 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(
             MacroEngine::ENERGY_BASELINE,
             CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(MacroEngine::ENERGY_BASELINE),
-            1e-9
+            1e-9,
         );
 
         // 2% short of capacity clears at the combined inelasticity.
         $this->assertEqualsWithDelta(
             MacroEngine::ENERGY_BASELINE * ((100.0 / 98.0) ** CommodityLogisticsSubsystem::ENERGY_CAPACITY_INELASTICITY),
             CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(98.0),
-            1e-9
+            1e-9,
         );
 
         // Capacity built out far beyond demand cannot drag the equilibrium below the floor any market has cleared at.
         $this->assertSame(
             CommodityLogisticsSubsystem::MIN_ENERGY_EQUILIBRIUM,
-            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(400.0)
+            CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice(400.0),
         );
     }
 
@@ -129,7 +128,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         }
 
         $mean = array_sum($annual) / count($annual);
-        $sd = sqrt(array_sum(array_map(static fn (float $x): float => ($x - $mean) ** 2, $annual)) / count($annual));
+        $sd = sqrt(array_sum(array_map(static fn(float $x): float => ($x - $mean) ** 2, $annual)) / count($annual));
         // Gold's annualised volatility has stayed within 10-18% on most days since 1971 (World Gold Council).
         $this->assertGreaterThan(0.10, $sd);
         $this->assertLessThan(0.18, $sd);
@@ -217,7 +216,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
         $n = count($logBase);
         $mean = array_sum($logBase) / $n;
-        $variance = array_sum(array_map(static fn (float $x): float => ($x - $mean) ** 2, $logBase)) / $n;
+        $variance = array_sum(array_map(static fn(float $x): float => ($x - $mean) ** 2, $logBase)) / $n;
         $lagged = 0.0;
         for ($i = 1; $i < $n; $i++) {
             $lagged += ($logBase[$i] - $mean) * ($logBase[$i - 1] - $mean);
@@ -252,7 +251,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $oneSd = CommodityLogisticsSubsystem::supplyChainPressureAt(
             130.0 * exp(CommodityLogisticsSubsystem::SUPPLY_CHAIN_FREIGHT_LOG_SD),
             130.0,
-            MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL + CommodityLogisticsSubsystem::SUPPLY_CHAIN_DELIVERY_SD
+            MacroEngine::SUPPLIER_DELIVERIES_NEUTRAL + CommodityLogisticsSubsystem::SUPPLY_CHAIN_DELIVERY_SD,
         );
         $this->assertEqualsWithDelta(2.0 / CommodityLogisticsSubsystem::SUPPLY_CHAIN_SUM_SD, $oneSd, 1e-12);
     }
@@ -322,8 +321,14 @@ class CommodityLogisticsSubsystemTest extends TestCase
     public function testGasCarriesAWinterPremiumOverItsSummerPrice(): void
     {
         $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $subsystem = new CommodityLogisticsSubsystem($quiet);
 
@@ -342,8 +347,14 @@ class CommodityLogisticsSubsystemTest extends TestCase
     public function testGasFollowsOilThroughTheRatio(): void
     {
         $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $subsystem = new CommodityLogisticsSubsystem($quiet);
 
@@ -387,7 +398,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         }
         $this->assertEqualsWithDelta(1.0, array_sum($factors) / count($factors), 1e-9, 'the season moves power within the year, not its level');
 
-        $month = static fn (int $m): float => CommodityLogisticsSubsystem::resolvePowerSeasonalFactor(($m + 0.5) / 12.0);
+        $month = static fn(int $m): float => CommodityLogisticsSubsystem::resolvePowerSeasonalFactor(($m + 0.5) / 12.0);
         $this->assertGreaterThan($month(3), $month(0), 'January heating load over April');
         $this->assertGreaterThan($month(0), $month(6), 'the air-conditioning peak is the larger one');
         $this->assertLessThan($month(9), $month(3), 'spring, with hydro and mild weather, is the trough');
@@ -417,7 +428,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
         $n = count($quarterly);
         $mean = array_sum($quarterly) / $n;
-        $variance = array_sum(array_map(static fn (float $x): float => ($x - $mean) ** 2, $quarterly)) / $n;
+        $variance = array_sum(array_map(static fn(float $x): float => ($x - $mean) ** 2, $quarterly)) / $n;
         $lagged = 0.0;
         for ($i = 1; $i < $n; $i++) {
             $lagged += ($quarterly[$i] - $mean) * ($quarterly[$i - 1] - $mean);
@@ -428,7 +439,6 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.37, $lagged / ($variance * $n), 0.12);
         $this->assertEqualsWithDelta(MacroEngine::WHOLESALE_POWER_BASELINE, array_sum($levels) / count($levels), 2.0, 'centred on the baseline, not its median');
     }
-
 
     // --- Physical Catastrophes ---
 
@@ -458,8 +468,14 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $math = new class extends MathUtility {
             public int $events = 0;
             public float $severity = 0.0;
-            public function generatePoissonCount(float $mean): int { return $this->events; }
-            public function generateParetoSeverity(float $scale, float $alpha, float $cap): float { return $this->severity; }
+            public function generatePoissonCount(float $mean): int
+            {
+                return $this->events;
+            }
+            public function generateParetoSeverity(float $scale, float $alpha, float $cap): float
+            {
+                return $this->severity;
+            }
         };
         $subsystem = new CommodityLogisticsSubsystem($math);
         $state = new MacroState();
@@ -484,14 +500,19 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(exp(-CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY * 0.5), $state->catastropheLossIndex / (4.0 + (CommodityLogisticsSubsystem::SYSTEMIC_CATASTROPHE_SEVERITY - 0.1) * exp(-CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY * 0.01)), 0.01, 'and settles at the claims decay rate.');
     }
 
-
     // --- Energy Supply Cobweb ---
 
     private function quietCommoditySubsystem(): CommodityLogisticsSubsystem
     {
         $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
 
         return new CommodityLogisticsSubsystem($quiet);
@@ -566,7 +587,6 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($run(4), $run(252), 0.05, 'Two years of capacity build must not depend on how finely the years are ticked.');
     }
 
-
     /** A district this size does not set the copper price: metals clear on world demand, so a foreign boom moves the spot with the district flat. */
     public function testMetalsClearOnGlobalDemandNotTheDistrictsGapAlone(): void
     {
@@ -595,8 +615,14 @@ class CommodityLogisticsSubsystemTest extends TestCase
     {
         $math = new class extends MathUtility {
             private bool $landed = false;
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
             public function calculateJumpDiffusion(float $lambda, float $jumpMean, float $jumpVol, float $dt): array
             {
                 if ($this->landed) {
@@ -632,7 +658,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $shocked = $run($this->oneShockSubsystem());
         $quiet = $run($this->quietCommoditySubsystem());
 
-        return array_map(static fn (float $a, float $b): float => log($a / $b), $shocked, $quiet);
+        return array_map(static fn(float $a, float $b): float => log($a / $b), $shocked, $quiet);
     }
 
     /** Merton (1976): an oil shock is a move in the level, which then reverts like any other; it does not vanish after a tick. */

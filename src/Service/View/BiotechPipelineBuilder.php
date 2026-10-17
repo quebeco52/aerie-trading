@@ -48,7 +48,7 @@ class BiotechPipelineBuilder
             'rndReplacement' => $book['rndReplacement'],
             'ramping' => count(array_filter(
                 $book['cohorts'],
-                static fn (array $cohort): bool => $cohort['exclusivityQuarters'] > 0.0 && $cohort['adoption'] < BiotechBusinessModel::LAUNCH_PEAK_ADOPTION
+                static fn(array $cohort): bool => $cohort['exclusivityQuarters'] > 0.0 && $cohort['adoption'] < BiotechBusinessModel::LAUNCH_PEAK_ADOPTION,
             )),
             'ladder' => self::ladder($book['cohorts'], $book['offPatentShare']),
             'runway' => $this->runway($stock),

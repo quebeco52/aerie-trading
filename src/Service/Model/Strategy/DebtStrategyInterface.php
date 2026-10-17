@@ -4,20 +4,20 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Strategy;
 
-use App\DTO\InterestExpenseDTO;
-use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\DebtCostDTO;
+use App\DTO\DebtExpansionAppetiteDTO;
+use App\DTO\DebtHealthDTO;
 
+use App\DTO\DebtMetricsDTO;
+use App\DTO\InterestExpenseDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\DTO\DebtHealthDTO;
-use App\DTO\DebtMetricsDTO;
 
 interface DebtStrategyInterface
 {
     public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float;
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO;
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?MacroStateDTO $macroState = null): InterestExpenseDTO;
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float;
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO;
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float;

@@ -84,7 +84,7 @@ final class PlayerPanelBuilder
              LEFT JOIN etfs e ON e.ticker = w.ticker AND w.asset_type = 'ETF'
              WHERE w.user_id = :u
              ORDER BY w.ticker",
-            ['u' => $user->getId()]
+            ['u' => $user->getId()],
         );
 
         $items = [];
@@ -135,7 +135,7 @@ final class PlayerPanelBuilder
 
         return [
             'items' => $items,
-            'complete' => count(array_filter($checkable, static fn (array $item): bool => $item['done'])) === count($checkable),
+            'complete' => count(array_filter($checkable, static fn(array $item): bool => $item['done'])) === count($checkable),
         ];
     }
 }

@@ -5,22 +5,21 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
+use App\DTO\MacroStateDTO;
 
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Restaurant Franchisors & Fast Food Giants.
- * 
+ *
  * Financial Physics:
  * - Tri-Stream Franchisor Architecture:
  *      1. Company-Operated Stores: High variable food/labor/energy costs, low margin, traffic volatility.
@@ -78,7 +77,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
         return FirmEconomics::blendWorkingCapitalShares(
             [$params[ModelParam::CompanyStoresWeight], $params[ModelParam::FranchiseRoyaltiesWeight], $params[ModelParam::FranchiseLeaseWeight]],
-            [self::COMPANY_STORES_WORKING_CAPITAL, self::FRANCHISE_ROYALTIES_WORKING_CAPITAL, self::FRANCHISE_LEASES_WORKING_CAPITAL]
+            [self::COMPANY_STORES_WORKING_CAPITAL, self::FRANCHISE_ROYALTIES_WORKING_CAPITAL, self::FRANCHISE_LEASES_WORKING_CAPITAL],
         );
     }
 
@@ -119,7 +118,10 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     // --- Continuous Elasticity ---
     public const FRANCHISE_SCALE_ELASTICITY = 0.015;
 
-        public function getMoatSpread(): float { return 0.015; }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
 
     public function getSeasonalityFactors(): array
     {
@@ -214,7 +216,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $cycleShares = MacroTransmission::allocateDemandShift(
             ['company_operated_stores' => $corporateWeight, 'franchise_royalties' => $franchiseWeight, 'franchise_real_estate_leases' => $leaseWeight],
             ['company_operated_stores' => 1.0, 'franchise_royalties' => 1.0, 'franchise_real_estate_leases' => self::FRANCHISE_LEASE_CYCLE_LOADING],
-            $this->resolveCycleDemandShift($stock, $macroState)
+            $this->resolveCycleDemandShift($stock, $macroState),
         );
 
         $corporateRevenue = max(0.0, $expectedRevenue * $corporateWeight * (1.0 + ($corporateZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $cycleShares['company_operated_stores']) * $viralMultiplier);
@@ -292,14 +294,14 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
     {
         return new \App\DTO\SectorCoverageProfile(
             baseVisibility: 0.30,
             errorStdDev: 0.05,
             minVisibility: 0.10,
             eventBaseVisibility: 0.90,
-            eventMinVisibility: 0.50
+            eventMinVisibility: 0.50,
         );
     }
 

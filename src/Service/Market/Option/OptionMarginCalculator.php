@@ -40,7 +40,7 @@ final class OptionMarginCalculator
              JOIN option_contracts oc ON uo.option_contract_id = oc.id
              JOIN stocks s ON oc.stock_id = s.id
              WHERE uo.user_id = :user_id',
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         );
 
         if ($rows === []) {
@@ -85,7 +85,7 @@ final class OptionMarginCalculator
                 (float) $row['underlying'],
                 (float) $row['strike'],
                 $premium,
-                $isCall
+                $isCall,
             ) * $multiplier * $written;
         }
 
@@ -101,7 +101,7 @@ final class OptionMarginCalculator
     {
         $rows = $this->em->getConnection()->fetchAllAssociative(
             'SELECT stock_id, quantity FROM user_stocks WHERE user_id = :user_id AND quantity > 0',
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         );
 
         $shares = [];

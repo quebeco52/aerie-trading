@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Option;
 
 use App\Entity\OptionContract;
-use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Option\OptionChainService;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
@@ -35,7 +35,7 @@ class OptionChainServiceTest extends TestCase
         // Two moments inside the same month list the same serials, so an expiry is one market-wide event.
         $this->assertSame(
             OptionChainService::listedSerials(4.0),
-            OptionChainService::listedSerials(4.0 + (1.0 / 365.0))
+            OptionChainService::listedSerials(4.0 + (1.0 / 365.0)),
         );
     }
 
@@ -76,7 +76,7 @@ class OptionChainServiceTest extends TestCase
     {
         $this->assertSame(
             (float) OptionChainService::OPTION_STRIKE_INCREMENTS[count(OptionChainService::OPTION_STRIKE_INCREMENTS) - 1],
-            OptionChainService::strikeIncrement(1.0e6)
+            OptionChainService::strikeIncrement(1.0e6),
         );
     }
 
@@ -147,12 +147,12 @@ class OptionChainServiceTest extends TestCase
         $this->assertEqualsWithDelta(
             floor(($spot * (1.0 + OptionChainService::OPTION_STRIKE_LADDER_WIDTH)) / $increment) * $increment,
             max($strikes),
-            1e-9
+            1e-9,
         );
         $this->assertEqualsWithDelta(
             ceil(($spot * (1.0 - OptionChainService::OPTION_STRIKE_LADDER_WIDTH)) / $increment) * $increment,
             min($strikes),
-            1e-9
+            1e-9,
         );
     }
 

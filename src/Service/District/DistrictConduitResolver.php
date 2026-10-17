@@ -20,8 +20,7 @@ class DistrictConduitResolver
 {
     public function __construct(
         private readonly BusinessModelRegistryInterface $registry,
-    ) {
-    }
+    ) {}
 
     /**
      * @return list<string> institution ids this business model draws a conduit from

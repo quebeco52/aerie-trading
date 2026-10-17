@@ -48,7 +48,7 @@ class MarketTickerLockContentionTest extends TestCase
             'dispatch(new \App\Message\ProcessLimitOrdersMessage',
             $this->insideTheTickTransaction(),
             'A limit-order check dispatched inside the tick transaction hands the worker rows the tick still '
-            . 'holds, in the opposite lock order: that is the 1213. Collect them and dispatch after the commit.'
+            . 'holds, in the opposite lock order: that is the 1213. Collect them and dispatch after the commit.',
         );
     }
 
@@ -58,7 +58,7 @@ class MarketTickerLockContentionTest extends TestCase
         self::assertStringContainsString(
             'dispatch(new \App\Message\ProcessLimitOrdersMessage',
             $this->source(),
-            'Resting orders are never looked at if nothing dispatches the check'
+            'Resting orders are never looked at if nothing dispatches the check',
         );
     }
 
@@ -74,7 +74,7 @@ class MarketTickerLockContentionTest extends TestCase
         self::assertLessThan(
             $generic,
             $retryable,
-            'PHP takes the first matching catch, so the retryable one has to come first or it never runs'
+            'PHP takes the first matching catch, so the retryable one has to come first or it never runs',
         );
     }
 
@@ -90,7 +90,7 @@ class MarketTickerLockContentionTest extends TestCase
         self::assertStringNotContainsString(
             'sleep(',
             substr($source, $retryable, $generic - $retryable),
-            'At a 10 ms tick a five-second pause is 500 ticks of frozen market for a fault already over'
+            'At a 10 ms tick a five-second pause is 500 ticks of frozen market for a fault already over',
         );
     }
 }

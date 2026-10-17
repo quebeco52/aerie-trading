@@ -4,28 +4,28 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
-use PHPUnit\Framework\TestCase;
-use PHPUnit\Framework\Attributes\DataProvider;
-use App\Entity\Stock;
+use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Math\FinancialConstants;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\TreasuryEngine;
-use App\Service\Corporate\DebtEngine;
+use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
+use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
-use App\Service\Math\MathUtility;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\News\NarrativeEngine;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Data\Company\Sectors;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
+use App\Service\News\NarrativeEngine;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Exhaustive Closed-Loop Multi-Quarter Simulation Invariant Test.
- * 
+ *
  * Verifies that running consecutive quarterly earnings reports across all 100+ registered
  * sector industries over a 5-to-10 year time horizon under multiple macroeconomic regimes
  * (Neutral, Severe Recession, Stagflationary Overheating) does not induce mathematical
@@ -53,7 +53,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $corporateMetrics,
             $debtEngine,
             $capExEngine,
-            $this->mathUtility
+            $this->mathUtility,
         );
 
         $capitalAllocationEngine = new CapitalAllocationEngine(
@@ -61,7 +61,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $corporateMetrics,
             $debtEngine,
             $this->mathUtility,
-            $treasuryEngine
+            $treasuryEngine,
         );
 
         $this->earningsEngine = new EarningsEngine(
@@ -73,7 +73,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $this->mathUtility,
             $corporateMetrics,
             $narrativeEngineMock,
-            $marketConsensusEngine
+            $marketConsensusEngine,
         );
 
         // These are stochastic multi-year simulations checked against hard collapse thresholds. Left unseeded
@@ -143,7 +143,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             nominalGdpIndex: 1.0,
             marketVolatilityEma: 0.15,
             macroCreditSpreadEma: 0.015,
-            interbankLiquiditySpreadEma: 0.0010
+            interbankLiquiditySpreadEma: 0.0010,
         );
 
         $ticksPerQuarter = (int) (252 / 4);
@@ -178,27 +178,27 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $this->assertGreaterThan(
                 $initialRevenue * 0.15,
                 $currentRevenue,
-                "Quarter {$quarter} for {$industry} suffered a catastrophic collapse from initial \${$initialRevenue} to \${$currentRevenue}"
+                "Quarter {$quarter} for {$industry} suffered a catastrophic collapse from initial \${$initialRevenue} to \${$currentRevenue}",
             );
 
             // Invariant 2: Invested Capital must remain strongly positive
             $this->assertGreaterThan(
                 500_000_000.0,
                 $currentInvestedCapital,
-                "Invested capital collapsed below minimum threshold in Q{$quarter} for {$industry}"
+                "Invested capital collapsed below minimum threshold in Q{$quarter} for {$industry}",
             );
 
             // Invariant 3: Total Equity must remain solvent
             $this->assertGreaterThan(
                 2_000_000_000.0,
                 $currentEquity,
-                "Total equity drained below solvency in Q{$quarter} for {$industry}"
+                "Total equity drained below solvency in Q{$quarter} for {$industry}",
             );
 
             // Invariant 4: Treasury must be finite and bounded
             $this->assertTrue(
                 is_finite($currentTreasury),
-                "Corporate treasury became non-finite in Q{$quarter} for {$industry}"
+                "Corporate treasury became non-finite in Q{$quarter} for {$industry}",
             );
 
             // Invariant 5: Return metrics must remain bounded
@@ -226,7 +226,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
         $this->assertGreaterThan(
             $initialRevenue * 0.20,
             $finalRevenue,
-            "{$industry} experienced secular decay: Revenue dropped from \${$initialRevenue} to \${$finalRevenue} over 20 quarters"
+            "{$industry} experienced secular decay: Revenue dropped from \${$initialRevenue} to \${$finalRevenue} over 20 quarters",
         );
     }
 
@@ -253,7 +253,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             nominalGdpIndex: 1.0,
             marketVolatilityEma: 0.15,
             macroCreditSpreadEma: 0.015,
-            interbankLiquiditySpreadEma: 0.0010
+            interbankLiquiditySpreadEma: 0.0010,
         );
 
         $ticksPerQuarter = (int) (252 / 4);
@@ -292,7 +292,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $this->assertGreaterThan(
                 0.0,
                 $netPpe,
-                "Net PP&E fully depreciated away in Q{$quarter} for {$industry}"
+                "Net PP&E fully depreciated away in Q{$quarter} for {$industry}",
             );
 
             // The balance sheet balances: every asset is claimed by a creditor or a shareholder and nothing
@@ -313,7 +313,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $assets,
             $claims,
             max(1.0, $assets * 1e-6),
-            "Balance sheet failed to balance in Q{$quarter} for {$industry}"
+            "Balance sheet failed to balance in Q{$quarter} for {$industry}",
         );
     }
 
@@ -337,7 +337,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             nominalGdpIndex: 0.90,
             marketVolatilityEma: 0.45, // 45% VIX Panic
             macroCreditSpreadEma: 0.07, // 700bps credit spread blowout
-            interbankLiquiditySpreadEma: 0.0200 // Severe liquidity freeze
+            interbankLiquiditySpreadEma: 0.0200, // Severe liquidity freeze
         );
 
         $ticksPerQuarter = (int) (252 / 4);
@@ -403,7 +403,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             nominalGdpIndex: 0.90,
             marketVolatilityEma: 0.45,
             macroCreditSpreadEma: 0.07,
-            interbankLiquiditySpreadEma: 0.0200
+            interbankLiquiditySpreadEma: 0.0200,
         );
 
         $ticksPerQuarter = (int) (252 / 4);
@@ -418,13 +418,13 @@ class MultiQuarterCorporateSimulationTest extends TestCase
                 $this->assertLessThanOrEqual(
                     FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS,
                     $stock->getQuartersInDefault(),
-                    "{$industry} failed to cure a missed maturity within its grace period by Q{$quarter} of an ordinary recession"
+                    "{$industry} failed to cure a missed maturity within its grace period by Q{$quarter} of an ordinary recession",
                 );
             }
             $this->assertGreaterThan(
                 0.0,
                 (float) $stock->getTotalEquity(),
-                "{$industry} was rendered insolvent by an ordinary recession in Q{$quarter}"
+                "{$industry} was rendered insolvent by an ordinary recession in Q{$quarter}",
             );
         }
     }
@@ -449,7 +449,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             nominalGdpIndex: 1.25,
             marketVolatilityEma: 0.28,
             macroCreditSpreadEma: 0.035,
-            interbankLiquiditySpreadEma: 0.0050
+            interbankLiquiditySpreadEma: 0.0050,
         );
 
         $ticksPerQuarter = (int) (252 / 4);
@@ -520,9 +520,8 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $this->assertLessThanOrEqual(
                 (int) ($initialShares * 1.05),
                 $currentShares,
-                "IBHI must not undergo dilutive equity issuance in Q{$quarter} due to seasonal oscillation"
+                "IBHI must not undergo dilutive equity issuance in Q{$quarter} due to seasonal oscillation",
             );
         }
     }
 }
-

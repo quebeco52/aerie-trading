@@ -66,7 +66,7 @@ final class ManagementProfileTest extends TestCase
         $this->assertEqualsWithDelta(
             1.0 + 0.5 * ($archetype->hurdleBias() - 1.0),
             $half->hurdleBias(),
-            1e-12
+            1e-12,
         );
         $this->assertEqualsWithDelta(0.875, $half->hurdleBias(), 1e-12, 'Half of the way from 1.00 down to 0.75.');
         $this->assertEqualsWithDelta(0.5 * $archetype->hubrisPremium(), $half->hubrisPremium(), 1e-12, 'An additive premium scales directly.');
@@ -118,7 +118,7 @@ final class ManagementProfileTest extends TestCase
             ManagementProfile::INTENSITY_MEDIAN,
             $draws[intdiv(count($draws), 2)],
             0.03,
-            'A log-normal with zero log-mean has its median at one, which is where the archetype must sit.'
+            'A log-normal with zero log-mean has its median at one, which is where the archetype must sit.',
         );
 
         // And it genuinely disperses: two managers of the same kind should not be the same manager.

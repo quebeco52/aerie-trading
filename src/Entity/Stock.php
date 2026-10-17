@@ -7,7 +7,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Represents a publicly traded stock on the Aerie Exchange.
- * * Uses Absolute Values (Total Net Income, Total Equity) to maintain 
+ * * Uses Absolute Values (Total Net Income, Total Equity) to maintain
  * mathematically flawless accounting during splits, buyouts, and buybacks.
  */
 #[ORM\Entity(repositoryClass: \App\Repository\StockRepository::class)]
@@ -71,9 +71,7 @@ class Stock
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $lastSplitAt = null;
 
-
     // THE BALANCE SHEET
-
 
     /**
      * @var string Absolute cash and liquid reserves held by the corporation.
@@ -344,9 +342,7 @@ class Stock
     #[ORM\Column(type: 'boolean', options: ['default' => true])]
     private bool $aociFiltered = true;
 
-
     // CORPORATE POLICY & MARKET PHYSICS
-
 
     /**
      * @var string Baseline, long-term annualized volatility (Sigma).
@@ -371,13 +367,11 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
     private ?string $beta = '1.00';
 
-
     /**
      * @var string|null Jump intensity (Lambda) - expected number of market shocks per year (Merton Jump Diffusion).
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '2.00'])]
     private ?string $jumpIntensity = '2.00';
-
 
     /**
      * @var string|null The standard deviation (volatility) of the jump size.
@@ -754,8 +748,6 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, options: ['default' => '1.000000'])]
     private string $committedCostScale = '1.000000';
 
-
-
     public static function cleanBcStr(int|float|string|null $val, int $scale = 4): string
     {
         if ($val === null || $val === '') {
@@ -973,7 +965,6 @@ class Stock
         return $this;
     }
 
-
     public function getJumpVol(): ?string
     {
         return $this->jumpVol;
@@ -983,7 +974,6 @@ class Stock
         $this->jumpVol = $jumpVol !== null ? self::cleanBcStr($jumpVol, 4) : null;
         return $this;
     }
-
 
     public function getDescription(): ?string
     {
@@ -1556,7 +1546,6 @@ class Stock
         return $this;
     }
 
-
     public function getFloatingDebtRatio(): ?string
     {
         return $this->floatingDebtRatio;
@@ -1935,7 +1924,7 @@ class Stock
 
     /**
      * Calculates Earnings Per Share (EPS) dynamically from Absolute Total Net Income.
-     * 
+     *
      * @return string|null The calculated EPS.
      */
     public function getEarningsPerShare(): ?string
@@ -1946,7 +1935,7 @@ class Stock
 
     /**
      * Sets the Earnings Per Share (EPS) by calculating and updating the Absolute Total Net Income.
-     * 
+     *
      * @param string|null $earningsPerShare The target EPS to reverse-engineer into Net Income.
      */
     public function setEarningsPerShare(?string $earningsPerShare): static
@@ -1968,19 +1957,21 @@ class Stock
 
     /**
      * Calculates Free Cash Flow (FCF) Per Share dynamically from Absolute Total FCF.
-     * 
+     *
      * @return string|null The calculated FCF per share.
      */
     public function getFreeCashFlowPerShare(): ?string
     {
-        if ($this->totalFreeCashFlow === null) return null;
+        if ($this->totalFreeCashFlow === null) {
+            return null;
+        }
         $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
         return \bcdiv(self::cleanBcStr($this->totalFreeCashFlow, 4), $sharesStr, 8);
     }
 
     /**
      * Sets the Free Cash Flow (FCF) Per Share by updating the Absolute Total FCF.
-     * 
+     *
      * @param string|null $freeCashFlowPerShare The target FCF per share.
      */
     public function setFreeCashFlowPerShare(?string $freeCashFlowPerShare): self
@@ -2002,7 +1993,7 @@ class Stock
 
     /**
      * Calculates Book Value Per Share dynamically from Absolute Total Equity.
-     * 
+     *
      * @return string The calculated Book Value Per Share.
      */
     public function getBookValuePerShare(): string
@@ -2013,7 +2004,7 @@ class Stock
 
     /**
      * Sets the Book Value Per Share by updating the Absolute Total Equity.
-     * 
+     *
      * @param string $bookValuePerShare The target Book Value Per Share.
      */
     public function setBookValuePerShare(string $bookValuePerShare): static
@@ -2025,7 +2016,7 @@ class Stock
 
     /**
      * Derives Absolute Total Revenue mathematically using Total Net Income and Operating Margin.
-     * 
+     *
      * @return string The computed Total Revenue.
      */
     public function getTotalRevenue(): string
@@ -2192,7 +2183,7 @@ class Stock
 
     /**
      * Calculates Revenue Per Share based on computed Total Revenue.
-     * 
+     *
      * @return string The calculated Revenue Per Share.
      */
     public function getRevenuePerShare(): string
@@ -2443,4 +2434,3 @@ class Stock
         return $this;
     }
 }
-

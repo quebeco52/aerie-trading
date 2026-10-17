@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
+use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Data\Company\Sectors;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\FinancialConstants;
@@ -47,7 +47,7 @@ class CorporateMetricsTest extends TestCase
             0.18 * pow(3.0, -CorporateMetrics::CAPITAL_MARGINAL_ELASTICITY),
             $severe,
             1e-12,
-            'ROIC_marginal = ROIC_base x (K / K_optimal)^(-alpha) at the default moat factor.'
+            'ROIC_marginal = ROIC_base x (K / K_optimal)^(-alpha) at the default moat factor.',
         );
 
         // A firm whose position defends the extra scale pays a softer elasticity for the same capital.
@@ -55,7 +55,7 @@ class CorporateMetricsTest extends TestCase
         $titan->setSystemicImportance('titan');
         $this->assertGreaterThan(
             $this->metrics->applyScaleDiseconomies($stock, 0.18, $threshold * 3.0),
-            $this->metrics->applyScaleDiseconomies($titan, 0.18, $threshold * 3.0)
+            $this->metrics->applyScaleDiseconomies($titan, 0.18, $threshold * 3.0),
         );
 
         // A return already at or below zero has nothing left to decay.
@@ -85,7 +85,7 @@ class CorporateMetricsTest extends TestCase
             $earningsGate = $this->metrics->applyScaleDiseconomies(
                 $stock,
                 $structuralReturn - $this->metrics->calculateCournotPriceHaircut($stock, $share, $investedCapital, $macroState),
-                $share
+                $share,
             );
 
             // How TreasuryEngine builds the same figure. The penalty is zero because the structural return
@@ -96,7 +96,7 @@ class CorporateMetricsTest extends TestCase
                 $treasuryGate,
                 $earningsGate,
                 1e-12,
-                sprintf('The two gates disagree at a scale ratio of %.2f.', $share)
+                sprintf('The two gates disagree at a scale ratio of %.2f.', $share),
             );
         }
     }
@@ -119,12 +119,12 @@ class CorporateMetricsTest extends TestCase
         $this->assertSame(
             0.0,
             $this->metrics->calculateCournotPriceHaircut($utility, $share, $investedCapital, $macroState),
-            'Nothing substitutable is being sold, so no price is cut by building.'
+            'Nothing substitutable is being sold, so no price is cut by building.',
         );
         $this->assertLessThan(
             0.16,
             $this->metrics->applyScaleDiseconomies($utility, 0.16, $share),
-            'The plant has still outrun the territory it serves, and the next unit of it earns less.'
+            'The plant has still outrun the territory it serves, and the next unit of it earns less.',
         );
     }
 
@@ -180,7 +180,7 @@ class CorporateMetricsTest extends TestCase
         // Writing goodwill off moves capital and goodwill together, so the productive base does not move.
         $this->assertSame(
             CorporateMetrics::revenueGeneratingCapital(100.0, 0.0, 15.0),
-            CorporateMetrics::revenueGeneratingCapital(85.0, 0.0, 0.0)
+            CorporateMetrics::revenueGeneratingCapital(85.0, 0.0, 0.0),
         );
     }
 
@@ -225,7 +225,7 @@ class CorporateMetricsTest extends TestCase
             exp(TimeSeries::fadedExcessIntegral($excess, 0.0, 63.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)),
             CorporateMetrics::secularMarketGrowth($stock, 63.0),
             1e-12,
-            'the same faded drift the ledger grows trend demand by'
+            'the same faded drift the ledger grows trend demand by',
         );
 
         // Capital that kept pace with its market from a 29% opening share is still at 29% of it.
@@ -268,7 +268,7 @@ class CorporateMetricsTest extends TestCase
         $macro = new MacroStateDTO(nominalGdpIndex: 1.0, corporateTaxRate: 0.21);
         $capital = 300_000_000_000.0;
 
-        $substitutability = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::INDUSTRY_METRICS['Steel']['business_model'])->getIndustrySubstitutability();
+        $substitutability = Sectors::getBusinessModelStrategy(Sectors::INDUSTRY_METRICS['Steel']['business_model'])->getIndustrySubstitutability();
         $lerner = 0.30 * $substitutability / FinancialConstants::COURNOT_DEMAND_ELASTICITY;
         $expectedHaircut = 1.5 * (1.0 - 0.21) * $lerner;
 

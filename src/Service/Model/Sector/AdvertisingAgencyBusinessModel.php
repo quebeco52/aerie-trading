@@ -5,20 +5,18 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
-use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Global Advertising Agencies & MarTech Networks.
- * 
+ *
  * Financial Physics:
  * - Asset light, human-capital intensive.
  * - Tri-Stream Agency Architecture:
@@ -69,14 +67,38 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.25;
     public const BASE_COVERAGE_ERROR = 0.06;
 
-        public function getMinIcr(): float { return 3.0; }
-    public function getWholesaleLeverageLimit(): float { return 1.5; }
-    public function getDividendCrisisIcr(): float { return 2.0; }
-    public function getBuybackMinIcr(): float { return 3.0; }
-    public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.05; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.2; }
+    public function getMinIcr(): float
+    {
+        return 3.0;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 1.5;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 2.0;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 3.0;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.05;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.2;
+    }
 
     // --- Secular Demand ---
     /** Miscellaneous professional, scientific and technical services (advertising) value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -90,8 +112,11 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         return MacroEngine::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-    
-    public function getCapexCyclicality(): float { return 0.10; }
+
+    public function getCapexCyclicality(): float
+    {
+        return 0.10;
+    }
 
     // --- Stream Weights ---
     /** Baseline fraction of revenue derived from programmatic media buying commissions. */
@@ -205,9 +230,9 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
-        $observableShockZ = ($mediaZ * $mediaWeight * self::MEDIA_VARIANCE_SCALAR * $baselineVol) +
-            ($brandZ * $brandWeight * self::BRAND_VARIANCE_SCALAR * $baselineVol) +
-            ($macroAdSpendShift * $mediaWeight);
+        $observableShockZ = ($mediaZ * $mediaWeight * self::MEDIA_VARIANCE_SCALAR * $baselineVol)
+            + ($brandZ * $brandWeight * self::BRAND_VARIANCE_SCALAR * $baselineVol)
+            + ($macroAdSpendShift * $mediaWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate;
 
 use App\Entity\Stock;
-use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -61,7 +61,7 @@ final class SegregatedCustodySolvencyTest extends TestCase
             $bare['z_score'],
             $pooled['z_score'],
             0.0001,
-            'member margin is bankruptcy-remote, so it may not move the CCP\'s capital ratio at all'
+            'member margin is bankruptcy-remote, so it may not move the CCP\'s capital ratio at all',
         );
         $this->assertSame('Safe', $pooled['zone']);
         $this->assertFalse($pooled['is_bankrupt']);
@@ -99,7 +99,7 @@ final class SegregatedCustodySolvencyTest extends TestCase
         $this->assertLessThan(
             $unfundedScore['z_score'],
             $fundedScore['z_score'],
-            'deposit funding is leverage for a bank and must dilute its capital ratio'
+            'deposit funding is leverage for a bank and must dilute its capital ratio',
         );
         $this->assertSame('Distress', $fundedScore['zone'], '$50B of equity against $1.3T of deposits is a thin bank');
         $this->assertSame('Safe', $unfundedScore['zone'], 'the same equity carrying no deposit book is not');

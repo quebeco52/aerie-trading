@@ -30,7 +30,7 @@ class MacroReportHistoryRepository
         $rows = $this->connection->fetchAllAssociative(sprintf(
             'SELECT total_time, bank_capital_requirement, merger_review_leniency, %s FROM macro_report WHERE total_time IS NOT NULL ORDER BY id DESC LIMIT %d',
             implode(', ', $columns),
-            $quarters
+            $quarters,
         ));
 
         $laws = [];
@@ -56,7 +56,7 @@ class MacroReportHistoryRepository
     {
         $rows = $this->connection->fetchAllAssociative(sprintf(
             'SELECT total_time, sovereign_fund_target_weight, sovereign_fund_policy_equity_share FROM macro_report WHERE total_time IS NOT NULL ORDER BY id DESC LIMIT %d',
-            $quarters
+            $quarters,
         ));
 
         $policy = [];
@@ -80,12 +80,12 @@ class MacroReportHistoryRepository
     {
         $rows = $this->connection->fetchAllAssociative(sprintf(
             'SELECT total_time, inflation_ema FROM macro_report WHERE total_time IS NOT NULL AND inflation_ema IS NOT NULL ORDER BY id DESC LIMIT %d',
-            $quarters
+            $quarters,
         ));
 
         return array_map(
             static fn(array $row): array => ['t' => (float) $row['total_time'], 'inflation' => (float) $row['inflation_ema']],
-            array_reverse($rows)
+            array_reverse($rows),
         );
     }
 

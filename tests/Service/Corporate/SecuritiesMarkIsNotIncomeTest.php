@@ -41,7 +41,7 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
         $this->engine = (new ReflectionClass(EarningsEngine::class))->newInstanceWithoutConstructor();
         $securities = new \ReflectionProperty(EarningsEngine::class, 'securitiesBook');
         $securities->setValue($this->engine, new \App\Service\Corporate\SecuritiesBookService(
-            new \App\Service\Market\Bond\BondPricingEngine()
+            new \App\Service\Market\Bond\BondPricingEngine(),
         ));
 
         $this->roll = new ReflectionMethod(EarningsEngine::class, 'rollForwardSecuritiesBook');
@@ -116,13 +116,13 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
         self::assertEqualsWithDelta(
             $strategy->getEffectiveTaxRate($hiked->corporateTaxRate) * $stock->getRecognizedSecuritiesMark(),
             $stock->getSecuritiesDeferredTax(),
-            1.0
+            1.0,
         );
         self::assertEqualsWithDelta(
             $equityAfterOpen + $stock->getRecognizedSecuritiesMark() - $stock->getSecuritiesDeferredTax(),
             (float) $stock->getTotalEquity(),
             1.0,
-            'Equity carries the available-for-sale mark net of tax and only that.'
+            'Equity carries the available-for-sale mark net of tax and only that.',
         );
         self::assertLessThan($equityAfterOpen, (float) $stock->getTotalEquity());
 

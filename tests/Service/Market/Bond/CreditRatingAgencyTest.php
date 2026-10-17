@@ -236,7 +236,7 @@ class CreditRatingAgencyTest extends TestCase
         $this->assertNotNull($zoned);
         $this->assertFalse(
             $this->agency->isDowngrade('BBB', $zoned),
-            'a capital ratio the CCP\'s own model calls safe may not cap its rating'
+            'a capital ratio the CCP\'s own model calls safe may not cap its rating',
         );
     }
 
@@ -257,7 +257,7 @@ class CreditRatingAgencyTest extends TestCase
             $this->assertSame(
                 $this->agency->evaluateRating($numeric, 4.0, $zScore),
                 $this->agency->evaluateRating($zoned, 4.0, $zScore, $zone),
-                'the standard path zones on the same two numbers the brackets use'
+                'the standard path zones on the same two numbers the brackets use',
             );
         }
     }
@@ -307,7 +307,7 @@ class CreditRatingAgencyTest extends TestCase
     /** The base case for S&P's two forecast years weighs 50%, against 25/15/10 for the observed years, and keeps its share when fewer years are observed. */
     public function testTheForecastYearsWeighHalfOfTheTimeWeightedBasis(): void
     {
-        $year = static fn (float $netDebt, float $ebitda): array => ['net_debt' => $netDebt, 'ebitda' => $ebitda];
+        $year = static fn(float $netDebt, float $ebitda): array => ['net_debt' => $netDebt, 'ebitda' => $ebitda];
         $quarters = [$year(300.0, 60.0), $year(0.0, 0.0), $year(0.0, 0.0), $year(0.0, 0.0), $year(200.0, 80.0), $year(0.0, 0.0), $year(0.0, 0.0), $year(0.0, 0.0), $year(100.0, 100.0)];
         $baseCase = $year(300.0, 120.0);
 

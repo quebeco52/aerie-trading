@@ -34,9 +34,9 @@ final class RestingOrderWatch
         // The whole book's bounds come over in one MGET rather than a round trip per instrument.
         $tradable = array_values(array_filter(
             array_merge($quotes, $struckBonds),
-            static fn (array $update): bool => empty($update['is_bankrupt'])
+            static fn(array $update): bool => empty($update['is_bankrupt']),
         ));
-        $boundsKeys = array_map(static fn (array $update): string => "limit_bounds:{$update['ticker']}", $tradable);
+        $boundsKeys = array_map(static fn(array $update): string => "limit_bounds:{$update['ticker']}", $tradable);
         $boundsRows = $boundsKeys === [] ? [] : $this->redis->mGet($boundsKeys);
 
         foreach ($tradable as $i => $update) {

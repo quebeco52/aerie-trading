@@ -5,24 +5,23 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
+use App\DTO\MacroStateDTO;
 
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Waste Management & Environmental Services.
- * 
+ *
  * Financial Physics:
  * - Localized Oligopolies: Extremely high barriers to entry (landfill permitting) grant immense pricing power.
- * - Tri-Stream Model: 
+ * - Tri-Stream Model:
  *      1. Residential Collection: Hyper-sticky, contracted revenue.
  *      2. Commercial/Industrial: Highly sensitive to economic output and construction volume.
  *      3. Recycling & RNG: Highly sensitive to global energy and commodity spot prices.
@@ -65,14 +64,38 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.50; // High visibility due to steady municipal contracts
     public const BASE_COVERAGE_ERROR = 0.05;
 
-        public function getMinIcr(): float { return 2.5; }
-    public function getWholesaleLeverageLimit(): float { return 2.0; }
-    public function getDividendCrisisIcr(): float { return 1.75; }
-    public function getBuybackMinIcr(): float { return 2.5; }
-    public function getReversionSpeed(): float { return 0.12; }
-    public function getMoatSpread(): float { return 0.02; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.08; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.25; }
+    public function getMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.0;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 1.75;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.12;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.02;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.08;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.25;
+    }
 
     // --- Secular Demand ---
     /** Waste management and remediation services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -122,7 +145,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        // Nullify global demand shift to avoid double-dipping, as macro volume shocks 
+        // Nullify global demand shift to avoid double-dipping, as macro volume shocks
         // are handled discretely per-stream (Commercial vs. Residential) below.
         $physics['macro_demand_shift'] = 0.0;
 
@@ -233,9 +256,9 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Residential is highly visible, Commercial correlates to GDP, Recycling is visible via commodities
-        $observableShockZ = ($residentialZ * $residentialWeight * self::RESIDENTIAL_VARIANCE_SCALAR * 0.90) +
-            ($commercialZ * $commercialWeight * self::COMMERCIAL_VARIANCE_SCALAR * 0.50) +
-            ($recyclingZ * $recyclingWeight * self::RECYCLING_VARIANCE_SCALAR * 0.80);
+        $observableShockZ = ($residentialZ * $residentialWeight * self::RESIDENTIAL_VARIANCE_SCALAR * 0.90)
+            + ($commercialZ * $commercialWeight * self::COMMERCIAL_VARIANCE_SCALAR * 0.50)
+            + ($recyclingZ * $recyclingWeight * self::RECYCLING_VARIANCE_SCALAR * 0.80);
         $observableShockZ *= $baselineVol;
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.

@@ -7,9 +7,9 @@ namespace App\Tests\EventSubscriber;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
-use App\Repository\CorporateReportRepository;
 use App\Entity\Stock;
 use App\EventSubscriber\EarningsReportSubscriber;
+use App\Repository\CorporateReportRepository;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Event\ShockEvent;
 use App\Service\Model\BusinessModelInterface;
@@ -59,7 +59,7 @@ class EarningsReportSubscriberTest extends TestCase
             governmentSpendingIndexEma: 110.0,
             inflationEma: 0.035,
             marketVolatilityEma: 0.22,
-            macroCreditSpreadEma: 0.03
+            macroCreditSpreadEma: 0.03,
         );
 
         $strategy = $this->createMock(BusinessModelInterface::class);
@@ -68,7 +68,7 @@ class EarningsReportSubscriberTest extends TestCase
             stock: $stock,
             macroState: $macro,
             strategy: $strategy,
-            businessModel: 'security_protection'
+            businessModel: 'security_protection',
         );
 
         $ctx->actualRevenue = 10000000.0;
@@ -98,7 +98,7 @@ class EarningsReportSubscriberTest extends TestCase
             ebit: 2000000.0,
             revenue: 40000000.0,
             depreciation: 200000.0,
-            ebitda: 2200000.0
+            ebitda: 2200000.0,
         );
 
         // No previous report exists in DB
@@ -131,7 +131,7 @@ class EarningsReportSubscriberTest extends TestCase
         // effect below materiality is dropped, and momentum follows on its own scale.
         $this->assertSame(
             ['Allied defence spending', 'CPI inflation', 'Strong operational execution'],
-            array_column($gov['drivers'], 'label')
+            array_column($gov['drivers'], 'label'),
         );
         $this->assertSame(0.034, $gov['drivers'][0]['share']);
         $this->assertSame([1, 2], [$gov['drivers'][0]['direction'], $gov['drivers'][0]['strength']]);
@@ -179,7 +179,7 @@ class EarningsReportSubscriberTest extends TestCase
             stock: $stock,
             macroState: new MacroStateDTO(),
             strategy: $strategy,
-            businessModel: 'auto_manufacturer'
+            businessModel: 'auto_manufacturer',
         );
 
         $ctx->actualRevenue = 10000000.0;
@@ -213,7 +213,7 @@ class EarningsReportSubscriberTest extends TestCase
             ebit: 2000000.0,
             revenue: 40000000.0,
             depreciation: 500000.0,
-            ebitda: 2500000.0
+            ebitda: 2500000.0,
         );
 
         $this->reportRepository->method('findLatestFor')->willReturn(null);
@@ -293,14 +293,14 @@ class EarningsReportSubscriberTest extends TestCase
             $assets,
             $liabilities + (float) $stock->getTotalEquity(),
             0.01,
-            'assets must equal liabilities plus equity'
+            'assets must equal liabilities plus equity',
         );
 
         // And the asset side is genuinely the sum of its parts, not a single stored number.
         $this->assertEqualsWithDelta(
             5000000.0 + 5500000.0 + 4000000.0 + 18000000.0 + 2000000.0 + 1500000.0 + $lease,
             $assets,
-            0.01
+            0.01,
         );
     }
 
@@ -333,7 +333,9 @@ class EarningsReportSubscriberTest extends TestCase
 
         $this->reportRepository->method('findLatestFor')->willReturn(null);
         $persisted = null;
-        $this->entityManager->expects($this->once())->method('persist')->willReturnCallback(function ($r) use (&$persisted) { $persisted = $r; });
+        $this->entityManager->expects($this->once())->method('persist')->willReturnCallback(function ($r) use (&$persisted) {
+            $persisted = $r;
+        });
 
         $this->subscriber->onEarningsReported(new EarningsReportedEvent($ctx));
 
@@ -378,7 +380,9 @@ class EarningsReportSubscriberTest extends TestCase
 
         $this->reportRepository->method('findLatestFor')->willReturn(null);
         $persisted = null;
-        $this->entityManager->expects($this->once())->method('persist')->willReturnCallback(function ($r) use (&$persisted) { $persisted = $r; });
+        $this->entityManager->expects($this->once())->method('persist')->willReturnCallback(function ($r) use (&$persisted) {
+            $persisted = $r;
+        });
 
         $this->subscriber->onEarningsReported(new EarningsReportedEvent($ctx));
 
@@ -450,7 +454,9 @@ class EarningsReportSubscriberTest extends TestCase
         $repository = $this->createStub(CorporateReportRepository::class);
         $entityManager->method('getRepository')->willReturn($repository);
         $persisted = null;
-        $entityManager->method('persist')->willReturnCallback(function ($r) use (&$persisted): void { $persisted = $r; });
+        $entityManager->method('persist')->willReturnCallback(function ($r) use (&$persisted): void {
+            $persisted = $r;
+        });
 
         (new EarningsReportSubscriber($entityManager, new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Corporate\CorporateMetrics())))
             ->onEarningsReported(new EarningsReportedEvent($ctx));
@@ -472,7 +478,7 @@ class EarningsReportSubscriberTest extends TestCase
         $stock->setEarningsMomentumZ([
             'net_interest_income' => -1.77,
             'fee_income'          => 0.50,
-            'proprietary_dividend'=> 1.20,
+            'proprietary_dividend' => 1.20,
         ]);
 
         $macro = new MacroStateDTO(
@@ -480,7 +486,7 @@ class EarningsReportSubscriberTest extends TestCase
             yield10yEma: 0.045,
             yield2yEma: 0.035,
             interbankLiquiditySpreadEma: 0.001,
-            macroCreditSpreadEma: 0.024
+            macroCreditSpreadEma: 0.024,
         );
 
         $strategy = $this->createMock(BusinessModelInterface::class);
@@ -489,14 +495,14 @@ class EarningsReportSubscriberTest extends TestCase
             stock: $stock,
             macroState: $macro,
             strategy: $strategy,
-            businessModel: 'commercial_bank'
+            businessModel: 'commercial_bank',
         );
 
         $ctx->actualRevenue = 300000000.0;
         $ctx->streamRevenue = [
             'net_interest_income' => 200000000.0,
             'fee_income'          => 60000000.0,
-            'proprietary_dividend'=> 40000000.0,
+            'proprietary_dividend' => 40000000.0,
         ];
         $ctx->streamMacroEffects = [
             'net_interest_income' => ['output_gap_ema' => 0.015, 'yield_10y_ema' => 0.041, 'macro_credit_spread_ema' => -0.006],
@@ -517,7 +523,7 @@ class EarningsReportSubscriberTest extends TestCase
             ebit: 105000000.0,
             revenue: 1200000000.0,
             depreciation: 0.0,
-            ebitda: 105000000.0
+            ebitda: 105000000.0,
         );
 
         $this->reportRepository
@@ -538,7 +544,7 @@ class EarningsReportSubscriberTest extends TestCase
         $streamDetails = $persistedReport->getStreamDetails();
         $this->assertArrayHasKey('net_interest_income', $streamDetails);
         $nii = $streamDetails['net_interest_income'];
-        
+
         $this->assertSame(['10Y yield', 'Output gap', 'IG credit spread', 'Operational headwinds'], array_column($nii['drivers'], 'label'));
 
         $yieldDriver = $nii['drivers'][0];
@@ -548,8 +554,8 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertSame([1, 2], [$yieldDriver['direction'], $yieldDriver['strength']]);
 
         // Strongest first among the measured drivers: the panel prints the head of this list.
-        $macro = array_values(array_filter($nii['drivers'], static fn (array $d): bool => $d['type'] === 'macro'));
-        $impacts = array_map(static fn (array $d): float => abs((float) $d['impact']), $macro);
+        $macro = array_values(array_filter($nii['drivers'], static fn(array $d): bool => $d['type'] === 'macro'));
+        $impacts = array_map(static fn(array $d): float => abs((float) $d['impact']), $macro);
         $sorted = $impacts;
         rsort($sorted);
         $this->assertSame($sorted, $impacts);
@@ -569,7 +575,7 @@ class EarningsReportSubscriberTest extends TestCase
 
         $macro = new MacroStateDTO(
             outputGapEma: 0.02,
-            consumerSentimentIndexEma: 108.0
+            consumerSentimentIndexEma: 108.0,
         );
 
         $strategy = $this->createMock(BusinessModelInterface::class);
@@ -578,7 +584,7 @@ class EarningsReportSubscriberTest extends TestCase
             stock: $stock,
             macroState: $macro,
             strategy: $strategy,
-            businessModel: 'internet_retail'
+            businessModel: 'internet_retail',
         );
 
         $ctx->actualRevenue = 12000000.0;
@@ -603,7 +609,7 @@ class EarningsReportSubscriberTest extends TestCase
             ebit: 2200000.0,
             revenue: 48000000.0,
             depreciation: 300000.0,
-            ebitda: 2500000.0
+            ebitda: 2500000.0,
         );
         $ctx->eventType = ShockEvent::VIRAL_GROWTH;
 
@@ -663,7 +669,7 @@ class EarningsReportSubscriberTest extends TestCase
             stock: $stock,
             macroState: new MacroStateDTO(totalTime: 13.4125),
             strategy: $strategy,
-            businessModel: 'auto_manufacturer'
+            businessModel: 'auto_manufacturer',
         );
         $ctx->sharesOutstanding = 9_600_000.0;
         $ctx->actualRevenue = 10_000_000.0;
@@ -681,7 +687,7 @@ class EarningsReportSubscriberTest extends TestCase
             ebit: 0.0,
             revenue: 0.0,
             depreciation: 0.0,
-            ebitda: 0.0
+            ebitda: 0.0,
         );
 
         $engine = (new \ReflectionClass(\App\Service\Corporate\EarningsEngine::class))->newInstanceWithoutConstructor();
@@ -725,7 +731,7 @@ class EarningsReportSubscriberTest extends TestCase
             strategy: new class extends \App\Service\Model\Sector\StandardCorporateBusinessModel {
                 public const EARNINGS_MANAGEMENT_PROPENSITY = 1.00;
             },
-            businessModel: 'auto_manufacturer'
+            businessModel: 'auto_manufacturer',
         );
         $ctx->sharesOutstanding = 100_000_000.0;
         $ctx->corporateTaxRate = 0.21;
@@ -754,7 +760,7 @@ class EarningsReportSubscriberTest extends TestCase
             ebit: 100_000_000.0,
             revenue: 400_000_000.0,
             depreciation: 20_000_000.0,
-            ebitda: 120_000_000.0
+            ebitda: 120_000_000.0,
         );
 
         // Draws pinned at a quarter of the unit interval: the near miss is closed with a quarter-cent cushion.
@@ -792,7 +798,7 @@ class EarningsReportSubscriberTest extends TestCase
             (float) $persisted->getNetIncome(),
             $preTax - $tax - (float) $persisted->getGoodwillImpairment() - (float) ($persisted->getBankLevy() ?? 0.0),
             0.01,
-            'Pretax income less tax and the charges below it is the net income filed.'
+            'Pretax income less tax and the charges below it is the net income filed.',
         );
         $this->assertEqualsWithDelta(4_000_000.0, (float) $persisted->getCashTaxPaid(), 0.01, 'An accrual moves no cash.');
         $this->assertEqualsWithDelta($tax - (float) $persisted->getCashTaxPaid(), (float) $persisted->getDeferredTaxExpense(), 0.01);

@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Command;
 
-use App\Service\Market\Ticker\HistoryPruner;
 use App\Command\MacroGapDumpCommand;
-use App\Command\PruneHistoryCommand;
 use App\Service\Macro\Recorder\OutputGapProbe;
+use App\Service\Market\Ticker\HistoryPruner;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -123,7 +122,7 @@ class MacroGapDumpCommandTest extends TestCase
                 ['fingerprint' => 'aaa', 'from' => 3, 'to' => 5],
                 ['fingerprint' => 'bbb', 'from' => 6, 'to' => 6],
             ],
-            MacroGapDumpCommand::segments([null, null, 'aaa', 'aaa', 'aaa', 'bbb'])
+            MacroGapDumpCommand::segments([null, null, 'aaa', 'aaa', 'aaa', 'bbb']),
         );
         $this->assertCount(1, MacroGapDumpCommand::segments(['aaa', 'aaa']));
     }
@@ -152,7 +151,7 @@ class MacroGapDumpCommandTest extends TestCase
         $this->assertGreaterThanOrEqual(
             20,
             $years,
-            'macro_report retention is shorter than the 20 simulated years a run is dumped for.'
+            'macro_report retention is shorter than the 20 simulated years a run is dumped for.',
         );
     }
 
@@ -167,7 +166,7 @@ class MacroGapDumpCommandTest extends TestCase
         $this->assertSame(
             ['REDIS_KEY'],
             array_keys($constants),
-            'The probe publishes only the OPEN window; closed quarters belong to macro_report.'
+            'The probe publishes only the OPEN window; closed quarters belong to macro_report.',
         );
     }
 }

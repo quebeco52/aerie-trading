@@ -30,14 +30,14 @@ class SentimentMoodTest extends TestCase
                 max(AssetMarketSubsystem::SENTIMENT_FLOOR, min(AssetMarketSubsystem::SENTIMENT_CEILING, MacroEngine::SENTIMENT_TREND_LEVEL + $state->consumerSentimentMood)),
                 $state->consumerSentimentIndex,
                 1e-9,
-                'With neutral fundamentals the index is the trend level plus the mood, inside the survey\'s range.'
+                'With neutral fundamentals the index is the trend level plus the mood, inside the survey\'s range.',
             );
             $moods[] = $state->consumerSentimentMood;
         }
 
         $n = count($moods);
         $mean = array_sum($moods) / $n;
-        $variance = array_sum(array_map(static fn (float $m): float => ($m - $mean) ** 2, $moods)) / $n;
+        $variance = array_sum(array_map(static fn(float $m): float => ($m - $mean) ** 2, $moods)) / $n;
         $lagged = 0.0;
         for ($i = 1; $i < $n; $i++) {
             $lagged += ($moods[$i] - $mean) * ($moods[$i - 1] - $mean);

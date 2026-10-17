@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
-use App\DTO\InterestExpenseDTO;
-use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\DebtCostDTO;
+use App\DTO\DebtExpansionAppetiteDTO;
+use App\DTO\InterestExpenseDTO;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -14,7 +14,7 @@ use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 
 /**
- * Encapsulates the core financial physics overrides for financial institutions 
+ * Encapsulates the core financial physics overrides for financial institutions
  * (Banks, Insurers, Clearing Houses, etc.).
  *
  * This implements the "God Object Refactor", offloading the `isFinancial` branching
@@ -66,8 +66,8 @@ trait FinancialPhysicsTrait
         float $corporateTaxRate,
         float $wacc = 0.08,
         float $costOfEquity = 0.10,
-        ?\App\DTO\MacroStateDTO $macroState = null,
-        float $depreciation = 0.0
+        ?MacroStateDTO $macroState = null,
+        float $depreciation = 0.0,
     ): float {
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * FinancialConstants::QUARTERS_PER_YEAR : 0.0;
@@ -81,7 +81,7 @@ trait FinancialPhysicsTrait
             $costOfEquity,
             static::TTM_ROE_WEIGHT,
             max(1.0, $equity),
-            $macroState
+            $macroState,
         ));
 
         return $reportedReturn;
@@ -123,9 +123,9 @@ trait FinancialPhysicsTrait
         return false;
     }
 
-    public function processPassiveLiabilityGrowth(Stock $stock, \App\DTO\MacroStateDTO $macroState, array &$state, \App\Service\Math\MathUtility $mathUtility): void {}
+    public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, \App\Service\Math\MathUtility $mathUtility): void {}
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
@@ -186,7 +186,7 @@ trait FinancialPhysicsTrait
 
     public function getDebtMaturityRolloverRate(): float
     {
-        return \App\Service\Math\FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER;
+        return FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER;
     }
 
     public function getDeleveragingEvaluationDebt(float $totalDebt, float $wholesaleDebt): float
@@ -199,9 +199,15 @@ trait FinancialPhysicsTrait
         return $this->getWholesaleLeverageLimit() > 0 ? $this->getWholesaleLeverageLimit() : $macroDebtTolerance;
     }
 
-    public function isFinancial(): bool { return true; }
+    public function isFinancial(): bool
+    {
+        return true;
+    }
     /** Financial revenue is a yield on a book, not a unit price times a volume: no own-price volume response. */
-    public function getPriceElasticityOfDemand(): float { return 0.0; }
+    public function getPriceElasticityOfDemand(): float
+    {
+        return 0.0;
+    }
 
     /**
      * The loans, securities and other assets the institution earns its yield on, net of the losses it
@@ -235,34 +241,85 @@ trait FinancialPhysicsTrait
         return max(0.0, $this->getThroughTheCycleCreditLossRate($stock)) * max(0.0, $earningAssets);
     }
 
-    public function getMinIcr(): float { return 1.05; }
-    public function getBankruptEquityThreshold(): float { return 2.0; }
-    public function getDistressEquityThreshold(): float { return 4.0; }
-    public function getWarningEquityThreshold(): float { return 6.0; }
-    public function getWholesaleLeverageLimit(): float { return 1.0; }
-    public function getDividendCrisisIcr(): float { return 1.05; }
-    public function getBuybackMinIcr(): float { return 1.15; }
-    public function getReversionSpeed(): float { return 0.18; }
-    public function getMoatSpread(): float { return 0.00; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.0; }
-    public function getCapExCompletionRate(Stock $stock): float { return 1.0; }
-    public function getPhysicalCapital(Stock $stock): float { return (float) $stock->getTotalEquity(); }
+    public function getMinIcr(): float
+    {
+        return 1.05;
+    }
+    public function getBankruptEquityThreshold(): float
+    {
+        return 2.0;
+    }
+    public function getDistressEquityThreshold(): float
+    {
+        return 4.0;
+    }
+    public function getWarningEquityThreshold(): float
+    {
+        return 6.0;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 1.0;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 1.05;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 1.15;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.18;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.00;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.0;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 1.0;
+    }
+    public function getPhysicalCapital(Stock $stock): float
+    {
+        return (float) $stock->getTotalEquity();
+    }
 
     /**
      * A balance sheet business has no trade cycle: it holds loans and securities, not receivables and stock.
      *
      * @return array{dso: float, dio: float, dpo: float}
      */
-    public function getWorkingCapitalDays(Stock $stock): array { return ['dso' => 0.0, 'dio' => 0.0, 'dpo' => 0.0]; }
+    public function getWorkingCapitalDays(Stock $stock): array
+    {
+        return ['dso' => 0.0, 'dio' => 0.0, 'dpo' => 0.0];
+    }
 
     /**
      * A bank's branches and core systems are immaterial next to its balance sheet, so financial models keep
      * depreciating the equity proxy rather than maintaining a plant ledger they would never use.
      */
-    public function getDepreciableBase(Stock $stock): float { return $this->getPhysicalCapital($stock); }
-    public function allowsPhysicalOrganicCapex(): bool { return false; }
-    public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float { return $actualTotalNetIncome; }
-    public function shouldForceDeleveragingOnJunkOrHoarding(): bool { return false; }
+    public function getDepreciableBase(Stock $stock): float
+    {
+        return $this->getPhysicalCapital($stock);
+    }
+    public function allowsPhysicalOrganicCapex(): bool
+    {
+        return false;
+    }
+    public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float
+    {
+        return $actualTotalNetIncome;
+    }
+    public function shouldForceDeleveragingOnJunkOrHoarding(): bool
+    {
+        return false;
+    }
     public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, float $afterTaxCostOfDebt, ?float $investedCapitalPerShare = null): float
     {
         return $bookValuePerShare * $structuralRoic;

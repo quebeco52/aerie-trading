@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Retail Insurance (Life, Property & Casualty).

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Chart;
 
-use App\Service\Market\Ticker\TickCadence;
 use App\Service\Market\Chart\ChartRange;
+use App\Service\Market\Ticker\TickCadence;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -86,7 +86,7 @@ final class ChartRangeTest extends TestCase
 
             $floor = ChartRange::simTimeFloor('1y', $newest);
             $this->assertNotNull($floor);
-            $selected = array_values(array_filter($simTimes, static fn (float $t): bool => $t >= $floor));
+            $selected = array_values(array_filter($simTimes, static fn(float $t): bool => $t >= $floor));
 
             $this->assertEqualsWithDelta(1.0, $newest - $selected[0], 1.0 / $rowsPerYear, "1y spans the wrong time at {$rowsPerYear} rows a year.");
         }

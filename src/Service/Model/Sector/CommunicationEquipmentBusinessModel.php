@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Math\MacroTransmission;
-use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Communication Equipment (radio access networks, core routing, standard-essential patents).
@@ -146,9 +146,18 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin sensitivity to network deployments pulling in high-margin optimization software and support attach. */
     public const SOFTWARE_ATTACH_ELASTICITY = 0.010;
 
-    public function getReversionSpeed(): float { return 0.20; }
-    public function getMoatSpread(): float { return 0.025; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
+    public function getReversionSpeed(): float
+    {
+        return 0.20;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.025;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.15;
+    }
 
     // --- Secular Demand ---
     /** Business investment in communication equipment plus household telephone equipment as a share of US nominal GDP in 1997 (BEA NIPA Tables 5.5.5 and 2.4.5). */
@@ -398,7 +407,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
             errorStdDev: 0.05,
             minVisibility: 0.10,
             eventBaseVisibility: 0.85,
-            eventMinVisibility: 0.50
+            eventMinVisibility: 0.50,
         );
     }
 

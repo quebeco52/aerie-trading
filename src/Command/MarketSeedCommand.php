@@ -2,11 +2,12 @@
 
 namespace App\Command;
 
+use App\Data\Company\InitialMarket;
+use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
 use App\Entity\User;
-use App\Data\Company\InitialMarket;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -14,7 +15,6 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use App\Service\Market\Pricing\OpeningBoardBuilder;
 
 #[AsCommand(
     name: 'app:market-seed',
@@ -26,7 +26,7 @@ class MarketSeedCommand extends Command
         private EntityManagerInterface $entityManager,
         private UserPasswordHasherInterface $passwordHasher,
         private \App\Service\Market\Bond\TreasuryAuctionService $treasuryAuction,
-        private OpeningBoardBuilder $openingBoard
+        private OpeningBoardBuilder $openingBoard,
     ) {
         parent::__construct();
     }

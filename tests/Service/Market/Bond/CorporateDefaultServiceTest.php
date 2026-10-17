@@ -31,7 +31,7 @@ class CorporateDefaultServiceTest extends TestCase
     {
         return CreditRisk::calculateRecoveryGivenDefault(
             CorporateDefaultService::baseRecoveryFor($seniority),
-            $defaultRate
+            $defaultRate,
         );
     }
 
@@ -53,11 +53,11 @@ class CorporateDefaultServiceTest extends TestCase
         // that did not say — and assuming anything safer would quietly flatter every such claim.
         $this->assertSame(
             CorporateDefaultService::RECOVERY_SENIOR_UNSECURED,
-            CorporateDefaultService::baseRecoveryFor(null)
+            CorporateDefaultService::baseRecoveryFor(null),
         );
         $this->assertSame(
             CorporateDefaultService::RECOVERY_SENIOR_UNSECURED,
-            CorporateDefaultService::baseRecoveryFor('SOMETHING_UNKNOWN')
+            CorporateDefaultService::baseRecoveryFor('SOMETHING_UNKNOWN'),
         );
     }
 
@@ -65,11 +65,11 @@ class CorporateDefaultServiceTest extends TestCase
     {
         $this->assertSame(
             CorporateDefaultService::RECOVERY_SENIOR_SECURED,
-            CorporateDefaultService::baseRecoveryFor(Bond::SENIORITY_SENIOR_SECURED)
+            CorporateDefaultService::baseRecoveryFor(Bond::SENIORITY_SENIOR_SECURED),
         );
         $this->assertSame(
             CorporateDefaultService::RECOVERY_SUBORDINATED,
-            CorporateDefaultService::baseRecoveryFor(Bond::SENIORITY_SUBORDINATED)
+            CorporateDefaultService::baseRecoveryFor(Bond::SENIORITY_SUBORDINATED),
         );
     }
 
@@ -93,7 +93,7 @@ class CorporateDefaultServiceTest extends TestCase
             $this->assertGreaterThan(
                 $this->recovery(Bond::SENIORITY_SUBORDINATED, $rate),
                 $this->recovery(Bond::SENIORITY_SENIOR_SECURED, $rate),
-                "at a default rate of {$rate}"
+                "at a default rate of {$rate}",
             );
         }
     }
@@ -108,7 +108,7 @@ class CorporateDefaultServiceTest extends TestCase
             $this->assertGreaterThanOrEqual(
                 CreditRisk::MIN_RECOVERY_RATE,
                 $this->recovery($seniority, 0.99),
-                $seniority
+                $seniority,
             );
         }
     }

@@ -107,8 +107,7 @@ class SovereignFundSubsystem
 
     public function __construct(
         private readonly MathUtility $mathUtility,
-    ) {
-    }
+    ) {}
 
     /**
      * Advances the fund one tick: incept, mark to market, chain the return index, take in the District's money, pay
@@ -248,7 +247,7 @@ class SovereignFundSubsystem
             beta: self::FOREIGN_EQUITY_MARKET_CORRELATION,
             marketVol: self::FOREIGN_EQUITY_VOLATILITY,
             marketZ: $state->marketZ,
-            w1: $this->mathUtility->generateStandardNormal()
+            w1: $this->mathUtility->generateStandardNormal(),
         );
     }
 
@@ -291,7 +290,7 @@ class SovereignFundSubsystem
             curvature1: 0.0,
             curvature2: 0.0,
             tau: $maturity,
-            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA
+            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA,
         );
 
         return $expectationsYield
@@ -396,7 +395,7 @@ class SovereignFundSubsystem
         return $this->expectedCompoundRealReturn(
             $state,
             $state->sovereignFundDomesticEquity / $fund,
-            $this->foreignEquityHomeValue($state) / $fund
+            $this->foreignEquityHomeValue($state) / $fund,
         );
     }
 

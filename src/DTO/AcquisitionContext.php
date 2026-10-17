@@ -18,7 +18,7 @@ class AcquisitionContext
         public readonly float $dt,
         /** Simulation tick; dates the industry ledger's peer records the merger review reads. */
         public readonly int $tickCount = 0,
-        public readonly int $ticksPerYear = 252
+        public readonly int $ticksPerYear = 252,
     ) {}
 
     // State Variables
@@ -26,7 +26,7 @@ class AcquisitionContext
     public float $price = 0.0;
     public float $shares = 0.0;
     public float $debtRatio = 0.0;
-    
+
     public float $operatingBase = 0.0;
     public float $equity = 0.0;
     /** Invested capital before the deal is funded; funding moves cash, debt or shares and already adds the price. */
@@ -34,12 +34,12 @@ class AcquisitionContext
     public float $currentDebt = 0.0;
     public float $policyRate = 0.0;
     public float $yield5y = 0.0;
-    
+
     public ?DebtHealthDTO $health = null;
     public string $industry = 'General';
     public string $businessModel = 'none';
     public ?BusinessModelInterface $strategy = null;
-    
+
     // Buying Power & Cash
     public float $borrowingCapacity = 0.0;
     public float $totalBuyingPower = 0.0;
@@ -48,7 +48,7 @@ class AcquisitionContext
     public bool $isHoarder = false;
     public bool $isMegaHoarder = false;
     public float $usableTreasury = 0.0;
-    
+
     // Strategy evaluation
     public float $normalizedDebtUtilization = 0.0;
     public float $eps = 0.0;
@@ -65,7 +65,7 @@ class AcquisitionContext
     /** Fraction of the target's standalone value paid on top of it — the acquirer's overpayment (Roll 1986). */
     public float $hubrisPremium = 0.0;
     public float $costOfNewBorrowing = 0.0;
-    
+
     // Deal Config
     public ?array $config = null;
     public bool $dealExecuted = false;
@@ -75,12 +75,12 @@ class AcquisitionContext
     /** The last sizing step that cut the purchase price (MergerAndAcquisitionEngine::LIMIT_*). */
     public string $bindingLimit = '';
     public array $target = [];
-    
+
     // Funding results
     public float $costOfNewDebt = 0.0;
     public float $debtIssued = 0.0;
     public float $sharesIssued = 0.0;
-    
+
     // Synergy & Accounting
     public float $synergyMultiplier = 1.0;
     /** The target's standalone after-tax return on its economic value, before synergy. */
@@ -91,7 +91,7 @@ class AcquisitionContext
     /** Goodwill recognized on this deal (purchase price above the fair value of net identifiable assets). */
     public float $goodwillRecorded = 0.0;
     public float $newEquity = 0.0;
-    
+
     public float $eventShock = 0.0;
     public array $eventData = [];
 }

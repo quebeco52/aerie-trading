@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Controller;
 
 use App\Entity\User;
@@ -41,8 +40,7 @@ class DashboardController extends AbstractController
         \App\Service\Macro\MacroStateProvider $macroStateProvider,
         \App\Service\View\PlayerPanelBuilder $playerPanels,
         Request $request,
-    ): Response
-    {
+    ): Response {
         /** @var User $user */
         $user = $this->getUser();
 
@@ -252,7 +250,7 @@ class DashboardController extends AbstractController
                     '%s %s $%s',
                     $contract->getStock()->getTicker(),
                     $contract->isCall() ? 'Call' : 'Put',
-                    number_format((float) $contract->getStrike(), 2)
+                    number_format((float) $contract->getStrike(), 2),
                 ),
                 'sector' => 'Options',
                 'quantity' => $contracts,
@@ -280,7 +278,7 @@ class DashboardController extends AbstractController
         $conn = $entityManager->getConnection();
         $escrowRow = $conn->fetchAssociative(
             'SELECT d.escrow_cash AS escrowed_cash, d.escrow_long AS escrowed_shares FROM (' . Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL . ') d WHERE d.user_id = :user_id',
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         ) ?: ['escrowed_cash' => 0.0, 'escrowed_shares' => 0.0];
 
         $escrowedCash = (float) $escrowRow['escrowed_cash'];
@@ -362,7 +360,7 @@ class DashboardController extends AbstractController
              LEFT JOIN etfs   e ON e.ticker = o.ticker AND o.asset_type = 'ETF'
              LEFT JOIN bonds  b ON b.ticker = o.ticker AND o.asset_type = 'BOND'
              WHERE o.user_id = :user_id AND o.status = 'OPEN'",
-            ['user_id' => $user->getId()]
+            ['user_id' => $user->getId()],
         ) as $row) {
             if ($row['price'] !== null) {
                 $livePrices[(string) $row['ticker']] = (float) $row['price'];
@@ -393,7 +391,7 @@ class DashboardController extends AbstractController
             'allocation' => $allocation,
             'cashShare' => $totalPortfolioValue > 0 ? $cashBalance / $totalPortfolioValue : null,
             // The rates the ticker accrues at, from the same two functions it calls.
-            'cashRate' => \App\Service\User\Portfolio::cashSweepRate($macro->policyRateEma),
+            'cashRate' => Portfolio::cashSweepRate($macro->policyRateEma),
             'marginRate' => \App\Service\Market\Trading\ForcedLiquidationService::marginLoanRate($macro->policyRate),
             'totalDividendIncome' => $totalDividendIncome,
             'dividendPayments' => $dividendIncome->recentPayments($user),
@@ -448,7 +446,7 @@ class DashboardController extends AbstractController
         $limit = $limits[$range] ?? 400;
 
         $conn = $entityManager->getConnection();
-        $sql = 'SELECT total_value, recorded_at FROM portfolio_history WHERE user_id = :user_id ORDER BY recorded_at DESC LIMIT ' . (int)$limit;
+        $sql = 'SELECT total_value, recorded_at FROM portfolio_history WHERE user_id = :user_id ORDER BY recorded_at DESC LIMIT ' . (int) $limit;
         $rows = $conn->fetchAllAssociative($sql, ['user_id' => $user->getId()]);
 
         // An account with no snapshots yet gets an empty series; the page plots the portfolio value it
@@ -484,7 +482,7 @@ class DashboardController extends AbstractController
             'SELECT h.price, h.recorded_at FROM etf_history h JOIN etfs e ON e.id = h.etf_id
              WHERE e.ticker = :ticker AND h.recorded_at BETWEEN :from AND :to
              ORDER BY h.recorded_at',
-            ['ticker' => \App\Entity\Season::BENCHMARK_TICKER, 'from' => $from, 'to' => $to]
+            ['ticker' => \App\Entity\Season::BENCHMARK_TICKER, 'from' => $from, 'to' => $to],
         );
 
         $step = max(1, (int) ceil(count($rows) / self::INDEX_LINE_POINTS));

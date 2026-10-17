@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
-use App\Service\Model\ModelParameters;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -15,6 +13,8 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
 
 /**
  * Earnings strategy for Multi-Industry Conglomerates & Industrial Holding Trusts.
@@ -157,14 +157,34 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Fraction of contrarian deployment alpha visible to public consensus ahead of the filing. */
     public const CONTRARIAN_OBSERVABLE_DISCOUNT = 0.50;
 
-    public function getMinIcr(): float { return 2.5; }
-    public function getWholesaleLeverageLimit(): float { return 2.0; }
-    public function getDividendCrisisIcr(): float { return 1.75; }
-    public function getBuybackMinIcr(): float { return 2.5; }
-    public function getReversionSpeed(): float { return 0.1; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.15; }
-
+    public function getMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.0;
+    }
+    public function getDividendCrisisIcr(): float
+    {
+        return 1.75;
+    }
+    public function getBuybackMinIcr(): float
+    {
+        return 2.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.1;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.15;
+    }
 
     public function getCapexCyclicality(): float
     {
@@ -219,7 +239,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $pmiShift = MacroTransmission::calculatePmiDemandShift(
             $macroState->manufacturingPmiEma,
             MacroEngine::PMI_BASELINE,
-            self::PMI_INDUSTRIAL_SENSITIVITY
+            self::PMI_INDUSTRIAL_SENSITIVITY,
         );
 
         return ($macroState->outputGapEma * self::INDUSTRIAL_MACRO_SCALAR * $beta) + ($pmiShift * $beta);
@@ -241,7 +261,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $params = $this->resolvePortfolioParameters($stock);
 
@@ -329,12 +349,12 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Blended observable shock
-        $observableShockZ = ($industrialShock * $industrialWeight) +
-            ($defensiveShock * $defensiveWeight) +
-            ($floatShock * $floatWeight * self::FLOAT_OBSERVABLE_DISCOUNT) +
-            ($industrialMacroBoost * $industrialWeight) +
-            ($defensiveMacroBoost * $defensiveWeight) +
-            ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
+        $observableShockZ = ($industrialShock * $industrialWeight)
+            + ($defensiveShock * $defensiveWeight)
+            + ($floatShock * $floatWeight * self::FLOAT_OBSERVABLE_DISCOUNT)
+            + ($industrialMacroBoost * $industrialWeight)
+            + ($defensiveMacroBoost * $defensiveWeight)
+            + ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
@@ -369,7 +389,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         float $outputGap,
         float $spreadLevel,
         float $spreadImpulse,
-        float $divestitureAlpha
+        float $divestitureAlpha,
     ): float {
         // Risk-free carry: cash and short sovereign paper earn the front rate, measured against the neutral
         // rate the economy itself perceives. A float is an asset at 5% and an idle drag at zero.
@@ -387,7 +407,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $deploymentAlpha = CreditRisk::calculateDiminishingDistressMultiplier(
             $rawDeploymentSignal,
             self::MAX_CONTRARIAN_FLOAT_EXPANSION,
-            self::CONTRARIAN_HALF_SATURATION_POINT
+            self::CONTRARIAN_HALF_SATURATION_POINT,
         );
 
         // Credit losses: spreads compensate for defaults, they are not free yield. Net carry = spread - expected loss.

@@ -69,7 +69,7 @@ class TradeOrderRepository extends ServiceEntityRepository
     {
         return $this->findBy(
             ['user' => $user, 'status' => TradeOrder::STATUS_OPEN],
-            ['createdAt' => 'DESC']
+            ['createdAt' => 'DESC'],
         );
     }
 
@@ -82,7 +82,7 @@ class TradeOrderRepository extends ServiceEntityRepository
     {
         return $this->findBy(
             ['user' => $user, 'ticker' => $ticker, 'status' => TradeOrder::STATUS_OPEN],
-            ['createdAt' => 'DESC']
+            ['createdAt' => 'DESC'],
         );
     }
 
@@ -124,7 +124,7 @@ class TradeOrderRepository extends ServiceEntityRepository
                 'status' => [TradeOrder::STATUS_FILLED, TradeOrder::STATUS_CANCELLED],
             ],
             ['createdAt' => 'DESC'],
-            $limit
+            $limit,
         );
     }
 
@@ -142,7 +142,7 @@ class TradeOrderRepository extends ServiceEntityRepository
             ],
             ['createdAt' => 'DESC', 'id' => 'DESC'],
             $limit,
-            $offset
+            $offset,
         );
     }
 

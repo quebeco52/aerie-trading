@@ -2,11 +2,11 @@
 
 namespace App\Service\Macro\Subsystem;
 
-use App\DTO\MacroStateDTO;
 use App\Data\Macro\MacroFieldRegistry;
-use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroTransmission;
@@ -144,7 +144,6 @@ class MonetaryPolicySubsystem
     /** Bonds the full programme holds, over GDP: 19.5%, the Fed's securities held outright at QE3's end ($4.21T, H.4.1 22 Oct 2014) less the ~$0.79T held before the crisis, on 2014's $17.5T GDP. */
     public const QE_HOLDINGS_TO_GDP_AT_FULL_PROGRAM = 0.195;
 
-
     // --- Deposits Channel (Drechsler, Savov & Schnabl 2017) ---
     /** Money-market share per unit of deposit spread beyond the neutral spread (the neutral rate less the base beta's share of it): the 2022-23 cycle moved ~5 points of share on ~100 bps of extra spread. */
     public const MMF_SPREAD_SENSITIVITY = 5.0;
@@ -166,7 +165,7 @@ class MonetaryPolicySubsystem
     public function __construct(
         private readonly MathUtility $mathUtility,
         /** Records what set the target and what held the rate. Null in a test or a headless harness, off everywhere the ticker is not. */
-        private readonly ?MacroDiagnosticsProbe $diagnostics = null
+        private readonly ?MacroDiagnosticsProbe $diagnostics = null,
     ) {}
 
     /**
@@ -321,7 +320,7 @@ class MonetaryPolicySubsystem
             currentLaggedValue: $state->inflationEndpointGap,
             targetValue: $state->inflationEma - $targetInflation,
             dt: $dt,
-            lagTimeConstant: 1.0 / self::INFLATION_ENDPOINT_LEARNING_GAIN
+            lagTimeConstant: 1.0 / self::INFLATION_ENDPOINT_LEARNING_GAIN,
         );
     }
 
@@ -375,7 +374,7 @@ class MonetaryPolicySubsystem
         $habitatShiftAtTenYears = FixedIncome::calculatePreferredHabitatTermPremiumShift(
             balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($state->balanceSheetIntensity, $state->sovereignDebtToGdpEma, $state->sovereignDebtAverageMaturity),
             tau: 10.0,
-            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
         );
         // Sovereign credit risk is left in the yield: a rule easing as the debt premium rises is fiscal dominance.
         $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears - $state->sovereignRiskSpreadEma) - MacroEngine::NS_BASE_TERM_PREMIUM;
@@ -598,7 +597,7 @@ class MonetaryPolicySubsystem
             sigChi: self::TERM_PREMIUM_SHOCK_SIGMA,
             sigXi: self::TERM_PREMIUM_REGIME_SIGMA,
             rho: 0.0,
-            dt: $dt
+            dt: $dt,
         );
 
         $state->termPremiumShock = max(-self::TERM_PREMIUM_SHOCK_CAP, min(self::TERM_PREMIUM_SHOCK_CAP, $factors['chi']));
@@ -615,7 +614,7 @@ class MonetaryPolicySubsystem
             sigChi: self::TERM_PREMIUM_SHOCK_SIGMA,
             sigXi: self::TERM_PREMIUM_REGIME_SIGMA,
             rho: 0.0,
-            dt: $dt
+            dt: $dt,
         );
         $state->foreignTermPremiumShock = max(-self::TERM_PREMIUM_SHOCK_CAP, min(self::TERM_PREMIUM_SHOCK_CAP, $foreign['chi']));
         $state->foreignTermPremiumRegime = max(self::MIN_TERM_PREMIUM_REGIME, min(self::MAX_TERM_PREMIUM_REGIME, $foreign['xi']));
@@ -893,7 +892,7 @@ class MonetaryPolicySubsystem
             termPremiumHorizonYears: MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS,
             balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($state->balanceSheetIntensity, $state->sovereignDebtToGdpEma, $state->sovereignDebtAverageMaturity),
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
-            effectiveLowerBound: MacroEngine::EFFECTIVE_LOWER_BOUND
+            effectiveLowerBound: MacroEngine::EFFECTIVE_LOWER_BOUND,
         );
     }
 
@@ -919,7 +918,7 @@ class MonetaryPolicySubsystem
             currentLaggedValue: $state->moneyMarketFundShare,
             targetValue: $targetShare,
             dt: $dt,
-            lagTimeConstant: self::MMF_MIGRATION_YEARS
+            lagTimeConstant: self::MMF_MIGRATION_YEARS,
         );
     }
 
@@ -942,7 +941,7 @@ class MonetaryPolicySubsystem
             beta0: MacroEngine::RECESSION_PROBIT_BETA_0,
             betaSlope: MacroEngine::RECESSION_PROBIT_BETA_SLOPE,
             betaTp: MacroEngine::RECESSION_PROBIT_BETA_TP,
-            betaFci: MacroEngine::RECESSION_PROBIT_BETA_FCI
+            betaFci: MacroEngine::RECESSION_PROBIT_BETA_FCI,
         );
     }
 

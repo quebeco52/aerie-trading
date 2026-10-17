@@ -3,12 +3,10 @@
 namespace App\Tests\Service\News;
 
 use App\Entity\DistrictNews;
-use App\Entity\Etf;
 use App\Entity\EtfEvent;
-use App\Entity\Stock;
 use App\Entity\StockEvent;
-use App\Service\News\EventPresenter;
 use App\Service\Event\ShockEvent;
+use App\Service\News\EventPresenter;
 use PHPUnit\Framework\TestCase;
 
 class EventPresenterTest extends TestCase
@@ -170,7 +168,7 @@ class EventPresenterTest extends TestCase
     /** A quarter's results read as a sentence, so the headline strip and the district map can print them. */
     public function testEarningsReadAsASentence(): void
     {
-        $headline = fn (string $desc): string => $this->presenter->present(['type' => 'EARNINGS', 'description' => $desc])['headline'];
+        $headline = fn(string $desc): string => $this->presenter->present(['type' => 'EARNINGS', 'description' => $desc])['headline'];
 
         $this->assertSame('Quarterly earnings of $1.42 a share beat forecasts by $0.11.', $headline('Q-Earnings: $1.42 (Beat expectations by $0.11 | +$1.20B EVA).'));
         $this->assertSame('Quarterly loss of $0.45 a share missed forecasts by $0.10.', $headline('Q-Earnings: -$0.45 (Missed expectations by $0.10 | -$15.00M EVA).'));
@@ -180,7 +178,7 @@ class EventPresenterTest extends TestCase
     /** A price shock says what the shares did, including one published before the copy named the move. */
     public function testAPriceShockSaysWhatTheSharesDid(): void
     {
-        $this->assertSame('Hummock Foods shares jump 12.4% in a sudden move.', \App\Service\News\EventPresenter::shockHeadline('Hummock Foods shares', 12.44));
+        $this->assertSame('Hummock Foods shares jump 12.4% in a sudden move.', EventPresenter::shockHeadline('Hummock Foods shares', 12.44));
         $this->assertSame('Shares drop 11.0% in a sudden move.', $this->presenter->present(['type' => 'SHOCK', 'description' => 'Sudden market shock detected.', 'change_percent' => -11.0])['headline']);
         $this->assertSame('Shares moved sharply.', $this->presenter->present(['type' => 'SHOCK', 'description' => 'Sudden market shock detected.'])['headline']);
     }

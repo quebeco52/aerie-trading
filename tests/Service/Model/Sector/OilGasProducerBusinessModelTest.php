@@ -26,9 +26,7 @@ final class OilGasProducerBusinessModelTest extends TestCase
     private function fixedDraws(float $z = 0.0): MathUtility
     {
         return new class ($z) extends MathUtility {
-            public function __construct(private readonly float $z)
-            {
-            }
+            public function __construct(private readonly float $z) {}
 
             public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
             {
@@ -83,7 +81,7 @@ final class OilGasProducerBusinessModelTest extends TestCase
             fixedCosts: $fixedCosts,
             baselineVol: 0.20,
             macroState: $macro,
-            mathUtility: $this->fixedDraws($z)
+            mathUtility: $this->fixedDraws($z),
         );
     }
 
@@ -246,7 +244,7 @@ final class OilGasProducerBusinessModelTest extends TestCase
             $this->assertEqualsWithDelta(
                 ($strict->actualVariableCosts + (50.0 * $factor)) - ($founding->actualVariableCosts + 50.0),
                 $this->model->annualExtractionCostBase($stock) / 4.0 * ($factor - 1.0),
-                1e-6
+                1e-6,
             );
         }
     }

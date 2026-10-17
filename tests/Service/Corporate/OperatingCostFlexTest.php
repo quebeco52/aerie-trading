@@ -11,15 +11,15 @@ use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
@@ -55,7 +55,7 @@ final class OperatingCostFlexTest extends TestCase
             $corporateMetrics,
             $debtEngine,
             $mathUtility,
-            $treasuryEngine
+            $treasuryEngine,
         );
 
         return new EarningsEngine(
@@ -68,7 +68,7 @@ final class OperatingCostFlexTest extends TestCase
             $corporateMetrics,
             $this->createStub(NarrativeEngine::class),
             new MarketConsensusEngine(),
-            null
+            null,
         );
     }
 
@@ -112,7 +112,7 @@ final class OperatingCostFlexTest extends TestCase
             $stock,
             new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04),
             Sectors::getBusinessModelStrategy(self::AUTO_MANUFACTURER),
-            self::AUTO_MANUFACTURER
+            self::AUTO_MANUFACTURER,
         );
         $ctx->capacityUtilization = $utilization * $seasonalFactor;
         $ctx->seasonalFactor = $seasonalFactor;
@@ -158,7 +158,7 @@ final class OperatingCostFlexTest extends TestCase
                     'yield_5y_ema' => 0.04 + \App\Service\Model\Sector\InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
                 ]),
                 Sectors::getBusinessModelStrategy('investment_bank'),
-                'investment_bank'
+                'investment_bank',
             );
             $ctx->capacityUtilization = 1.0;
             $ctx->seasonalFactor = 1.0;
@@ -184,14 +184,14 @@ final class OperatingCostFlexTest extends TestCase
         $this->assertGreaterThan(
             $cut,
             $rebuild,
-            'costs are sticky DOWNWARD: the rebuild elasticity must exceed the contraction one'
+            'costs are sticky DOWNWARD: the rebuild elasticity must exceed the contraction one',
         );
 
         // Pinned to the coefficients rather than only their ordering, so a silent recalibration is visible: each
         // annual ABJ elasticity closes its quarterly compounding share of the gap.
         $contraction = \App\Service\Math\TimeSeries::periodAdjustmentSpeed(
             FinancialConstants::STICKY_COST_BETA_EXPANSION + FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY,
-            EarningsEngine::QUARTERLY_TIME_STEP
+            EarningsEngine::QUARTERLY_TIME_STEP,
         );
         $expansion = \App\Service\Math\TimeSeries::periodAdjustmentSpeed(FinancialConstants::STICKY_COST_BETA_EXPANSION, EarningsEngine::QUARTERLY_TIME_STEP);
         $this->assertEqualsWithDelta(1.0 - exp($contraction * log(0.90)), $cut, 1e-9);
@@ -328,7 +328,7 @@ final class OperatingCostFlexTest extends TestCase
             nominalGdpIndex: 1.0,
             marketVolatilityEma: 0.15,
             macroCreditSpreadEma: 0.015,
-            interbankLiquiditySpreadEma: 0.0010
+            interbankLiquiditySpreadEma: 0.0010,
         ));
 
         $slump = $run(new MacroStateDTO(
@@ -342,20 +342,20 @@ final class OperatingCostFlexTest extends TestCase
             nominalGdpIndex: 0.94,
             marketVolatilityEma: 0.35,
             macroCreditSpreadEma: 0.05,
-            interbankLiquiditySpreadEma: 0.01
+            interbankLiquiditySpreadEma: 0.01,
         ));
 
-        $mean = static fn (array $series): float => array_sum($series) / count($series);
+        $mean = static fn(array $series): float => array_sum($series) / count($series);
 
         $this->assertLessThan(
             $mean($neutral) - 0.02,
             $mean($slump),
-            'a six-point output gap held for four years has to show up as a smaller committed cost base (ABJ closes ~83% of the gap in four years)'
+            'a six-point output gap held for four years has to show up as a smaller committed cost base (ABJ closes ~83% of the gap in four years)',
         );
         $this->assertGreaterThan(
             FinancialConstants::MIN_COMMITTED_COST_SCALE,
             min($slump),
-            'an ordinary recession is not a liquidation: the irreducible base survives it'
+            'an ordinary recession is not a liquidation: the irreducible base survives it',
         );
         $this->assertLessThanOrEqual(1.0, max($neutral), 'the structural base is still the ceiling at trend');
     }

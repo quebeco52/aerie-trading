@@ -31,7 +31,7 @@ class DistrictControllerTest extends WebTestCase
         // companies than that.
         $this->assertLessThanOrEqual(
             DistrictMap::STREET_ROSTER_SIZE,
-            $crawler->filter('[data-district-target="plot"]')->count()
+            $crawler->filter('[data-district-target="plot"]')->count(),
         );
         $this->assertGreaterThan(0, $crawler->filter('[data-district-target="plot"]')->count());
     }
@@ -141,7 +141,7 @@ class DistrictControllerTest extends WebTestCase
 
         $this->assertResponseIsSuccessful();
 
-        $tickers = $crawler->filter('[data-district-target="plot"]')->each(fn ($node) => $node->attr('data-ticker'));
+        $tickers = $crawler->filter('[data-district-target="plot"]')->each(fn($node) => $node->attr('data-ticker'));
 
         $raw = $crawler->filter('[data-controller="district"]')->attr('data-district-revenue-mix-value');
         $this->assertNotNull($raw);
@@ -170,7 +170,7 @@ class DistrictControllerTest extends WebTestCase
         $institutions = json_decode($raw, true);
         $this->assertIsArray($institutions);
 
-        $renderedIds = $crawler->filter('[data-district-target="institution"]')->each(fn ($node) => $node->attr('data-institution'));
+        $renderedIds = $crawler->filter('[data-district-target="institution"]')->each(fn($node) => $node->attr('data-institution'));
         $shippedIds = array_column($institutions, 'id');
 
         sort($renderedIds);
@@ -222,7 +222,7 @@ class DistrictControllerTest extends WebTestCase
         }
 
         $groundLines = array_unique($crawler->filter('[data-district-target="plot"]')
-            ->each(fn ($node) => $node->attr('data-ground-line')));
+            ->each(fn($node) => $node->attr('data-ground-line')));
 
         $this->assertCount(DistrictMap::ROW_COUNT, $groundLines, 'A full roster should occupy every row, each at its own ground line');
     }
@@ -276,7 +276,7 @@ class DistrictControllerTest extends WebTestCase
         $this->assertCount(
             count(DistrictMap::SECTOR_PALETTE),
             $crawler->filter('[data-district-target="sectorChip"]'),
-            'Every sector in the legend is a filter chip'
+            'Every sector in the legend is a filter chip',
         );
     }
 
@@ -291,7 +291,7 @@ class DistrictControllerTest extends WebTestCase
         // One legend swatch per macro sector.
         $this->assertGreaterThanOrEqual(
             count(DistrictMap::SECTOR_PALETTE),
-            $crawler->filter('.rounded-full')->count()
+            $crawler->filter('.rounded-full')->count(),
         );
     }
 
@@ -327,7 +327,7 @@ class DistrictControllerTest extends WebTestCase
         $buttons = $crawler->filter('[data-district-target="conduitModeBtn"]');
         $this->assertCount(4, $buttons, 'Toolbar should contain 4 conduit filter mode buttons');
 
-        $modes = $buttons->each(fn ($node) => $node->attr('data-mode'));
+        $modes = $buttons->each(fn($node) => $node->attr('data-mode'));
         $this->assertSame(['all', 'stressed', 'focused', 'muted'], $modes);
     }
 
@@ -380,7 +380,7 @@ class DistrictControllerTest extends WebTestCase
         $this->assertSelectorExists('[data-district-target="reconstitutionNotice"]');
         $this->assertMatchesRegularExpression(
             '/^(in \d+d|now)$/',
-            trim($crawler->filter('[data-district-target="summaryReconstitution"]')->text())
+            trim($crawler->filter('[data-district-target="summaryReconstitution"]')->text()),
         );
 
         $schedule = json_decode($crawler->filter('[data-controller="district"]')->attr('data-district-reconstitution-value'), true);

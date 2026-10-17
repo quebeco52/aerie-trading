@@ -54,7 +54,7 @@ class FinancialInvariantTest extends TestCase
             $this->assertGreaterThanOrEqual(
                 $previousPressure,
                 $pressure,
-                "Phillips curve monotonicity violated at gap={$gap}: {$pressure} < {$previousPressure}"
+                "Phillips curve monotonicity violated at gap={$gap}: {$pressure} < {$previousPressure}",
             );
 
             $previousPressure = $pressure;
@@ -125,7 +125,7 @@ class FinancialInvariantTest extends TestCase
             $this->assertGreaterThan(
                 $igSpread,
                 $hySpread,
-                "HY spread must exceed IG spread in {$name}: HY={$hySpread}, IG={$igSpread}"
+                "HY spread must exceed IG spread in {$name}: HY={$hySpread}, IG={$igSpread}",
             );
 
             // Invariant 3: High Yield / IG spread ratio must be at least 2.0x
@@ -133,7 +133,7 @@ class FinancialInvariantTest extends TestCase
             $this->assertGreaterThanOrEqual(
                 2.0,
                 $ratio,
-                "HY must keep at least 2.0x the IG spread in {$name}"
+                "HY must keep at least 2.0x the IG spread in {$name}",
             );
         }
     }
@@ -154,19 +154,19 @@ class FinancialInvariantTest extends TestCase
         $this->assertGreaterThan(
             $expansionState->macroCreditSpread,
             $recessionState->macroCreditSpread,
-            'Recession IG spread must exceed Expansion IG spread'
+            'Recession IG spread must exceed Expansion IG spread',
         );
         $this->assertGreaterThan(
             $expansionState->highYieldCreditSpread,
             $recessionState->highYieldCreditSpread,
-            'Recession HY spread must exceed Expansion HY spread'
+            'Recession HY spread must exceed Expansion HY spread',
         );
 
         // Crisis spreads must blow out beyond recession spreads
         $this->assertGreaterThan(
             $recessionState->highYieldCreditSpread,
             $crisisState->highYieldCreditSpread,
-            'Crisis HY spread must exceed Recession HY spread'
+            'Crisis HY spread must exceed Recession HY spread',
         );
     }
 
@@ -206,7 +206,7 @@ class FinancialInvariantTest extends TestCase
         $this->assertSame(
             $monetarySubsystem->calculateTargetRate($fresh, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25),
             $monetarySubsystem->calculateTargetRate($withHistory, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25),
-            'Two years of undershoot buy no extra accommodation once inflation is back.'
+            'Two years of undershoot buy no extra accommodation once inflation is back.',
         );
     }
 
@@ -245,7 +245,7 @@ class FinancialInvariantTest extends TestCase
         $this->assertLessThan(
             $gapClean,
             $gapOverhang,
-            "Inventory overhang must drag output gap lower during liquidation ({$gapOverhang} < {$gapClean})"
+            "Inventory overhang must drag output gap lower during liquidation ({$gapOverhang} < {$gapClean})",
         );
     }
 
@@ -307,7 +307,7 @@ class FinancialInvariantTest extends TestCase
                 $this->assertGreaterThan(
                     $previousYield,
                     $convenienceYield,
-                    "Convenience yield must strictly increase as inventory depletes ({$convenienceYield} > {$previousYield} at level={$level})"
+                    "Convenience yield must strictly increase as inventory depletes ({$convenienceYield} > {$previousYield} at level={$level})",
                 );
             }
 
@@ -371,7 +371,7 @@ class FinancialInvariantTest extends TestCase
         $this->assertGreaterThan(
             $hikingCurve['yield_10y'],
             $hikingCurve['yield_2y'],
-            'Late-cycle restrictive policy tightening must invert the 2s10s yield curve (2Y > 10Y)'
+            'Late-cycle restrictive policy tightening must invert the 2s10s yield curve (2Y > 10Y)',
         );
     }
 
@@ -462,21 +462,21 @@ class FinancialInvariantTest extends TestCase
         $this->assertGreaterThan(
             $slackState->jobVacanciesRate,
             $tightState->jobVacanciesRate,
-            'Job vacancies must be strictly higher when unemployment is low along the Beveridge curve'
+            'Job vacancies must be strictly higher when unemployment is low along the Beveridge curve',
         );
 
         // Invariant 2: Labor market tightness theta = V / U must be significantly higher in tight market
         $this->assertGreaterThan(
             2.0 * $slackState->laborTightness,
             $tightState->laborTightness,
-            'Labor tightness must expand significantly during low unemployment'
+            'Labor tightness must expand significantly during low unemployment',
         );
 
         // Invariant 3: Wage Phillips curve transmission
         $this->assertGreaterThan(
             $slackState->wageGrowth,
             $tightState->wageGrowth,
-            'Tight labor markets must exert higher nominal wage growth pressure'
+            'Tight labor markets must exert higher nominal wage growth pressure',
         );
     }
 
@@ -503,7 +503,7 @@ class FinancialInvariantTest extends TestCase
         $this->assertLessThan(
             $calmCurve['term_premium_10y'],
             $crisisCurve['term_premium_10y'],
-            'Financial market volatility spike must compress sovereign term premium via safe-haven flight-to-safety'
+            'Financial market volatility spike must compress sovereign term premium via safe-haven flight-to-safety',
         );
     }
 
@@ -526,7 +526,7 @@ class FinancialInvariantTest extends TestCase
             $curve['yield_10y'],
             $curve['risk_neutral_10y'] + $curve['term_premium_10y'],
             0.0001,
-            'ACM decomposition must preserve y_10y = RN_10y + TP_10y identity'
+            'ACM decomposition must preserve y_10y = RN_10y + TP_10y identity',
         );
 
         // Invariant 2: All nominal tenors must strictly respect the Effective Lower Bound floor
@@ -539,10 +539,16 @@ class FinancialInvariantTest extends TestCase
     public function testSupplyShocksAreSymmetricProvidingTailwindsWhenBelowBaseline(): void
     {
         $deterministicMath = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
 
             // The disaster gate is the only randomness left; a jump in one leg would swamp the difference.
-            public function checkProbability(float $probability): bool { return false; }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $aggregate = new MacroAggregateSubsystem($deterministicMath);
 
@@ -568,14 +574,14 @@ class FinancialInvariantTest extends TestCase
         $this->assertGreaterThan(
             $gapNeutral,
             $gapDividend,
-            'Below-baseline energy prices must act as an aggregate supply tailwind'
+            'Below-baseline energy prices must act as an aggregate supply tailwind',
         );
 
         // Invariant: Expensive energy must act as a supply drag ($gapDrag < $gapNeutral)
         $this->assertLessThan(
             $gapNeutral,
             $gapDrag,
-            'Above-baseline energy prices must act as an aggregate supply drag'
+            'Above-baseline energy prices must act as an aggregate supply drag',
         );
     }
 
@@ -587,10 +593,16 @@ class FinancialInvariantTest extends TestCase
     public function testMonetaryEasingStillStimulatesInARecessionButLessThanTighteningRestrains(): void
     {
         $deterministicMath = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
 
             // The disaster gate is the only randomness left; a jump in one leg would swamp the difference.
-            public function checkProbability(float $probability): bool { return false; }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
 
         $gaps = [];
@@ -631,7 +643,7 @@ class FinancialInvariantTest extends TestCase
         $this->assertLessThan(
             0.0,
             $stateNormal->financialConditionsIndex,
-            'Normal expansion conditions must exhibit negative (accommodative) FCI'
+            'Normal expansion conditions must exhibit negative (accommodative) FCI',
         );
 
         // Recession / Crisis regime: wide spreads, flat/inverted slope, high vol
@@ -648,7 +660,7 @@ class FinancialInvariantTest extends TestCase
         $this->assertGreaterThan(
             0.50,
             $stateCrisis->financialConditionsIndex,
-            'Financial crisis must produce strongly positive (restrictive) FCI'
+            'Financial crisis must produce strongly positive (restrictive) FCI',
         );
     }
 
@@ -700,14 +712,14 @@ class FinancialInvariantTest extends TestCase
         $this->assertGreaterThan(
             $curveLow['level'],
             $curveHigh['level'],
-            'Elevated TIPS breakeven must lift long-term yield level beta0'
+            'Elevated TIPS breakeven must lift long-term yield level beta0',
         );
 
         // 10Y sovereign yield must reflect higher inflation regime
         $this->assertGreaterThan(
             $curveLow['yield_10y'],
             $curveHigh['yield_10y'],
-            '10Y sovereign yield must adjust upward when forward inflation expectations rise'
+            '10Y sovereign yield must adjust upward when forward inflation expectations rise',
         );
     }
 
@@ -732,7 +744,7 @@ class FinancialInvariantTest extends TestCase
         $this->assertGreaterThanOrEqual(
             0.0035,
             $spreadNeutral,
-            sprintf('Neutral 2s10s spread must be at least +35 bps (got %0.2f bps)', $spreadNeutral * 10000)
+            sprintf('Neutral 2s10s spread must be at least +35 bps (got %0.2f bps)', $spreadNeutral * 10000),
         );
 
         // 2. Monetary easing / recession state (policy rate = 1.0%, target rate = 0.5%, output gap = -2.5%)
@@ -751,7 +763,7 @@ class FinancialInvariantTest extends TestCase
         $this->assertGreaterThanOrEqual(
             0.0100,
             $spreadEasing,
-            sprintf('2s10s yield curve spread must bull-steepen to at least +100 bps during monetary easing (got %0.2f bps)', $spreadEasing * 10000)
+            sprintf('2s10s yield curve spread must bull-steepen to at least +100 bps during monetary easing (got %0.2f bps)', $spreadEasing * 10000),
         );
 
         // 3. Peak tightening state (policy rate = 5.25%, target rate = 5.25%, inflation = 3.5%, output gap = +2.5%)
@@ -772,7 +784,7 @@ class FinancialInvariantTest extends TestCase
         $this->assertLessThan(
             0.0,
             $spreadPeak,
-            sprintf('2s10s yield curve spread must invert at peak monetary tightening (got %0.2f bps)', $spreadPeak * 10000)
+            sprintf('2s10s yield curve spread must invert at peak monetary tightening (got %0.2f bps)', $spreadPeak * 10000),
         );
     }
 
@@ -833,4 +845,3 @@ class FinancialInvariantTest extends TestCase
         $this->assertGreaterThan(-0.080, min($paths['tighter']), 'Held policy alone must not dig a depression.');
     }
 }
-

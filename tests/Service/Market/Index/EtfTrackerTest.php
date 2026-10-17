@@ -61,7 +61,7 @@ class EtfTrackerTest extends TestCase
             $this->emMock,
             $this->marketEventMock,
             $this->redisMock,
-            $this->accountant
+            $this->accountant,
         );
     }
 
@@ -113,7 +113,7 @@ class EtfTrackerTest extends TestCase
                 $written[] = [$sql, $params];
 
                 return 1;
-            }
+            },
         );
 
         $totalMarketCap = 1_100_000_000.0; // $1.1B -> $110 price
@@ -149,7 +149,7 @@ class EtfTrackerTest extends TestCase
                 $written++;
 
                 return 1;
-            }
+            },
         );
 
         $this->tracker->updateIndex(1_100_000_000.0, true, 'LBI', $etf);
@@ -310,7 +310,7 @@ class EtfTrackerTest extends TestCase
                 $this->statements[] = $sql;
 
                 return 1;
-            }
+            },
         );
 
         $this->tracker->updateIndex($divisor === '1000000' ? 800_000_000.0 : 100_000_000.0, false, 'LBI', $etf);
@@ -321,7 +321,7 @@ class EtfTrackerTest extends TestCase
     {
         return array_values(array_filter(
             $this->statements,
-            static fn (string $sql): bool => str_contains($sql, 'trade_orders')
+            static fn(string $sql): bool => str_contains($sql, 'trade_orders'),
         ));
     }
 
@@ -359,7 +359,7 @@ class EtfTrackerTest extends TestCase
 
         $history = array_values(array_filter(
             $this->statements,
-            static fn (string $sql): bool => str_contains($sql, 'UPDATE etf_history')
+            static fn(string $sql): bool => str_contains($sql, 'UPDATE etf_history'),
         ));
         $this->assertCount(1, $history);
 
@@ -370,7 +370,7 @@ class EtfTrackerTest extends TestCase
             $this->assertMatchesRegularExpression(
                 sprintf('/\b%1$s\s*=\s*%1$s\s*%2$s\s*:factor\b/', $column, preg_quote($operator, '/')),
                 $history[0],
-                sprintf('etf_history.%s has to be restated by the split factor, as the price is.', $column)
+                sprintf('etf_history.%s has to be restated by the split factor, as the price is.', $column),
             );
         }
     }
@@ -428,8 +428,8 @@ class EtfTrackerTest extends TestCase
         $orderBook = $this->orderBookStatements();
         $this->assertNotEmpty($orderBook);
         $this->assertTrue(
-            (bool) array_filter($orderBook, static fn (string $sql): bool => str_contains($sql, "status = 'CANCELLED'")),
-            'An order emptied by the reverse split has to be cancelled, not left resting at zero shares.'
+            (bool) array_filter($orderBook, static fn(string $sql): bool => str_contains($sql, "status = 'CANCELLED'")),
+            'An order emptied by the reverse split has to be cancelled, not left resting at zero shares.',
         );
     }
 }

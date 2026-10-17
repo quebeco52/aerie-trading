@@ -6,7 +6,6 @@ namespace App\Tests\Data\Macro;
 
 use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
-use App\Entity\MacroReport;
 use App\Service\Macro\MacroState;
 use PHPUnit\Framework\TestCase;
 
@@ -189,14 +188,14 @@ class MacroFieldRegistryTest extends TestCase
         $this->assertSame(
             [],
             array_values($missing),
-            'MacroStateDTO declares fields MacroState has no property for: ' . implode(', ', $missing)
+            'MacroStateDTO declares fields MacroState has no property for: ' . implode(', ', $missing),
         );
 
         $orphaned = array_diff($stateProperties, $fields);
         $this->assertSame(
             [],
             array_values($orphaned),
-            'MacroState carries fields the DTO never snapshots: ' . implode(', ', $orphaned)
+            'MacroState carries fields the DTO never snapshots: ' . implode(', ', $orphaned),
         );
     }
 
@@ -236,7 +235,7 @@ class MacroFieldRegistryTest extends TestCase
         $this->assertSame(
             [],
             $lost,
-            'Fields did not survive MacroState::toArray() -> MacroStateDTO::fromArray(): ' . implode(', ', $lost)
+            'Fields did not survive MacroState::toArray() -> MacroStateDTO::fromArray(): ' . implode(', ', $lost),
         );
     }
 
@@ -288,7 +287,7 @@ class MacroFieldRegistryTest extends TestCase
         $this->assertSame(
             [],
             $orphans,
-            'MacroReport columns with no MacroStateDTO field to fill them: ' . implode(', ', $orphans)
+            'MacroReport columns with no MacroStateDTO field to fill them: ' . implode(', ', $orphans),
         );
     }
 
@@ -303,14 +302,14 @@ class MacroFieldRegistryTest extends TestCase
         $this->assertCount(
             count($columns),
             array_unique(array_values($columns)),
-            'Two macro fields map to the same macro_report column.'
+            'Two macro fields map to the same macro_report column.',
         );
 
         $entityColumns = MacroFieldRegistry::entityColumns();
         $this->assertCount(
             count($entityColumns) - count(self::RECORDER_OWNED_COLUMNS),
             $columns,
-            'The persisted field list and the mapped entity columns disagree on how many columns the macro vector fills.'
+            'The persisted field list and the mapped entity columns disagree on how many columns the macro vector fills.',
         );
     }
 
@@ -335,7 +334,7 @@ class MacroFieldRegistryTest extends TestCase
             $unrecorded,
             'Macro fields reach no macro_report column and are not declared transient. Add a column to '
             . 'App\Entity\MacroReport, or name the field in TRANSIENT_FIELDS with the reason: '
-            . implode(', ', $unrecorded)
+            . implode(', ', $unrecorded),
         );
     }
 
@@ -353,7 +352,7 @@ class MacroFieldRegistryTest extends TestCase
             $this->assertArrayNotHasKey(
                 $field,
                 $persisted,
-                "TRANSIENT_FIELDS says '{$field}' is not recorded, but macro_report has a column for it."
+                "TRANSIENT_FIELDS says '{$field}' is not recorded, but macro_report has a column for it.",
             );
             $this->assertNotSame('', trim($reason), "TRANSIENT_FIELDS gives no reason for '{$field}'.");
         }
@@ -373,7 +372,7 @@ class MacroFieldRegistryTest extends TestCase
             $this->assertMatchesRegularExpression(
                 '/^[a-z][a-z0-9]*(_[a-z0-9]+)*$/',
                 $key,
-                "Wire key for {$field} is not snake_case: {$key}"
+                "Wire key for {$field} is not snake_case: {$key}",
             );
         }
     }

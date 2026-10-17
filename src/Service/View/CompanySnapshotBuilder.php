@@ -13,9 +13,9 @@ use App\Repository\StockRepository;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Builds the headline valuation block on a company's page: size, multiple, yield, and where the
@@ -26,7 +26,6 @@ use App\Service\Math\FinancialConstants;
  */
 class CompanySnapshotBuilder
 {
-
     public function __construct(
         private readonly MarketEngine $marketEngine,
         private readonly DebtEngine $debtEngine,

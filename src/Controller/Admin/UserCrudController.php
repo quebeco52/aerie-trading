@@ -8,8 +8,8 @@ use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
 use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\EmailField;
-use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\NumberField;
+use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 use Symfony\Component\Form\Extension\Core\Type\PasswordType;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
@@ -34,19 +34,19 @@ class UserCrudController extends AbstractCrudController
     {
         return [
             EmailField::new('email'),
-            
+
             TextField::new('plainPassword', 'New Password')
                 ->onlyOnForms()
                 ->setFormType(PasswordType::class)
                 ->setRequired($pageName === Crud::PAGE_NEW),
-                
+
             ChoiceField::new('roles')
                 ->setChoices([
                     'Standard User' => 'ROLE_USER',
-                    'Administrator' => 'ROLE_ADMIN'
+                    'Administrator' => 'ROLE_ADMIN',
                 ])
                 ->allowMultipleChoices(),
-                
+
             NumberField::new('cashBalance', 'Cash Balance')
                 ->setNumDecimals(2)
                 ->hideOnIndex(),
@@ -74,8 +74,8 @@ class UserCrudController extends AbstractCrudController
         if ($user->getPlainPassword()) {
             $hashedPassword = $this->passwordHasher->hashPassword($user, $user->getPlainPassword());
             $user->setPassword($hashedPassword);
-            
-            $user->setPlainPassword(null); 
+
+            $user->setPlainPassword(null);
         }
     }
 }

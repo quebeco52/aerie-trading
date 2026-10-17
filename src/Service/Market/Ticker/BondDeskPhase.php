@@ -47,8 +47,8 @@ final class BondDeskPhase
         // A matured issue stops trading, so it leaves the working set now rather than at the next reload: it
         // would otherwise be re-marked and re-redeemed every tick until then.
         if ($result['matured'] !== []) {
-            $maturedIds = array_map(static fn (Bond $b): ?int => $b->getId(), $result['matured']);
-            $bonds = array_filter($bonds, static fn (Bond $b): bool => !in_array($b->getId(), $maturedIds, true));
+            $maturedIds = array_map(static fn(Bond $b): ?int => $b->getId(), $result['matured']);
+            $bonds = array_filter($bonds, static fn(Bond $b): bool => !in_array($b->getId(), $maturedIds, true));
         }
         $bonds = array_values($bonds);
 

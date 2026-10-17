@@ -8,7 +8,6 @@ use App\Data\Politics\AerieCouncil;
 use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\CouncilAppointments as Appointments;
-use App\Service\Politics\FinancialRegulator;
 use App\Service\Politics\MonetaryAuthority;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
@@ -113,7 +112,7 @@ class CouncilAppointmentsTest extends TestCase
             $distance = static fn(array $candidate): float => sqrt(array_sum(array_map(
                 static fn(string $axis, float $stance): float => ($candidate[$axis === Appointments::AXIS_MONEY ? 'stance' : $axis] - $stance) ** 2,
                 array_keys($target),
-                $target
+                $target,
             )));
             $shortlist = [];
             for ($slot = 0; $slot < Appointments::SHORTLIST; ++$slot) {
@@ -360,7 +359,7 @@ class CouncilAppointmentsTest extends TestCase
         $distance = static fn(array $candidate, array $target): float => sqrt(
             (($candidate['stance'] - $target[Appointments::AXIS_MONEY]) ** 2)
             + (($candidate['regulation'] - $target[Appointments::AXIS_REGULATION]) ** 2)
-            + (($candidate['fund'] - $target[Appointments::AXIS_FUND]) ** 2)
+            + (($candidate['fund'] - $target[Appointments::AXIS_FUND]) ** 2),
         );
         for ($i = 0; $i < 200; ++$i) {
             $target = [Appointments::AXIS_MONEY => $i % 2 === 0 ? 1.0 : -1.0, Appointments::AXIS_REGULATION => 0.2, Appointments::AXIS_FUND => -0.3];
@@ -373,7 +372,10 @@ class CouncilAppointmentsTest extends TestCase
             }
             $slots = array_map(static fn(array $kept): int => (int) array_search($kept, $field, true), $shortlist);
             $this->assertSame($slots, array_values(array_unique($slots)));
-            $this->assertSame($slots, (static function (array $sorted): array { sort($sorted); return $sorted; })($slots), 'kept in the order they applied');
+            $this->assertSame($slots, (static function (array $sorted): array {
+                sort($sorted);
+                return $sorted;
+            })($slots), 'kept in the order they applied');
             $worstKept = max(array_map(static fn(array $kept): float => $distance($kept, $target), $shortlist));
             foreach ($field as $slot => $applicant) {
                 if (!in_array($slot, $slots, true)) {

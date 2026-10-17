@@ -35,7 +35,7 @@ final class RedisIndexMembershipStore implements IndexMembershipStoreInterface
             return null;
         }
 
-        $list = static fn (mixed $value): array => is_array($value) ? array_values(array_map('strval', $value)) : [];
+        $list = static fn(mixed $value): array => is_array($value) ? array_values(array_map('strval', $value)) : [];
 
         // A weight map written by an older build is simply absent; every reader reads a missing factor as
         // one, which is the cap-weighted index this store used to assume every index was.
@@ -71,7 +71,7 @@ final class RedisIndexMembershipStore implements IndexMembershipStoreInterface
         array $added = [],
         array $deleted = [],
         array $weights = [],
-        array $factors = []
+        array $factors = [],
     ): void {
         try {
             $this->redis->set($index->membershipKey(), json_encode([

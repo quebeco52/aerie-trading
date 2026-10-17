@@ -7,9 +7,9 @@ namespace App\Service\Market\Bond;
 use App\DTO\MacroStateDTO;
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
+use App\Service\Market\Ticker\BulkRowUpdate;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Market\Ticker\BulkRowUpdate;
 
 /**
  * Per-tick maintenance of the bond desk: mark every outstanding issue against the live curve, pay coupons
@@ -91,7 +91,7 @@ class BondTracker
         MacroStateDTO $macroState,
         bool $recordHistory = false,
         array $issuerSpreads = [],
-        bool $mark = true
+        bool $mark = true,
     ): array {
         $curve = $macroState->sovereignCurve();
         $currentTime = $macroState->totalTime;
@@ -375,7 +375,7 @@ class BondTracker
         $conn->executeStatement(
             'INSERT INTO bond_history (bond_id, clean_price, yield_to_maturity, recorded_at, sim_time) VALUES '
             . implode(', ', $values),
-            $params
+            $params,
         );
     }
 }

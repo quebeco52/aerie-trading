@@ -294,7 +294,6 @@ class MacroState
     public float $coreGoodsInflation;
     public float $coreGoodsInflationEma;
 
-
     public float $highYieldCreditSpread;
     public float $highYieldCreditSpreadEma;
 
@@ -732,7 +731,7 @@ class MacroState
             $carriedFinance = $state->financeOutputGap;
             $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(
                 MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
-                MacroAggregateSubsystem::dealActivityGap($state->dealActivityIndexEma, $state->dealActivityIndexTrend)
+                MacroAggregateSubsystem::dealActivityGap($state->dealActivityIndexEma, $state->dealActivityIndexTrend),
             );
             if (isset($carried['financeOutputGap'], $carried['domesticDemandGapEma'])) {
                 $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $state->financeOutputGap - $carriedFinance);

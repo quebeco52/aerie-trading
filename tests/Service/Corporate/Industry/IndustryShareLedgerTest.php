@@ -6,8 +6,8 @@ namespace App\Tests\Service\Corporate\Industry;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
@@ -346,7 +346,7 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertEqualsWithDelta(
             10_000.0 * 1.2 * 1.1 * exp(TimeSeries::fadedExcessIntegral(0.02, 0.0, 5.0, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)),
             $later['market_revenue'],
-            1e-6
+            1e-6,
         );
 
         // A peer whose record has aged out is off the roster: its share is back in the fringe.

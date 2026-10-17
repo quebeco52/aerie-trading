@@ -6,10 +6,10 @@ namespace App\Service\Market\Option;
 
 use App\Entity\OptionContract;
 use App\Entity\Stock;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
-use App\Service\Market\Pricing\LiquidityEngine;
 
 /**
  * Decides what is listed: which names carry a class, which expiries are open, and which strikes exist.
@@ -109,8 +109,8 @@ final class OptionChainService
         $current = self::expirySerial($currentTime);
 
         return array_map(
-            static fn (int $months): int => $current + $months,
-            self::OPTION_EXPIRY_MONTHS
+            static fn(int $months): int => $current + $months,
+            self::OPTION_EXPIRY_MONTHS,
         );
     }
 
@@ -220,7 +220,7 @@ final class OptionChainService
             $underlying,
             $serial,
             $optionType === OptionContract::TYPE_CALL ? 'C' : 'P',
-            $strikeText
+            $strikeText,
         );
     }
 
@@ -348,9 +348,9 @@ final class OptionChainService
             $this->em->getConnection()->fetchFirstColumn(
                 'SELECT ticker FROM option_contracts WHERE stock_id IN (:stocks) AND expiry_serial IN (:serials)',
                 ['stocks' => $stockIds, 'serials' => array_values($serials)],
-                ['stocks' => ArrayParameterType::INTEGER, 'serials' => ArrayParameterType::INTEGER]
+                ['stocks' => ArrayParameterType::INTEGER, 'serials' => ArrayParameterType::INTEGER],
             ),
-            true
+            true,
         );
     }
 
@@ -369,7 +369,7 @@ final class OptionChainService
             $connection->executeStatement(
                 'INSERT INTO option_contracts (' . $columns . ') VALUES '
                 . implode(', ', array_fill(0, count($chunk), $placeholders)),
-                array_merge(...$chunk)
+                array_merge(...$chunk),
             );
         }
     }

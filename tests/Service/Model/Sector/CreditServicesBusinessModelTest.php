@@ -7,9 +7,9 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\CreditServicesBusinessModel;
 use PHPUnit\Framework\TestCase;
-use App\Service\Model\Sector\CommercialBankBusinessModel;
 
 class CreditServicesBusinessModelTest extends TestCase
 {
@@ -45,7 +45,11 @@ class CreditServicesBusinessModelTest extends TestCase
         $stock->setFloatingDebtRatio('0.60');
 
         $macro = new MacroStateDTO(
-            policyRate: 0.04, policyRateEma: 0.04, yield5yEma: 0.045, corporateTaxRate: 0.21, equityRiskPremium: 0.045
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield5yEma: 0.045,
+            corporateTaxRate: 0.21,
+            equityRiskPremium: 0.045,
         );
 
         $lossFree = new class extends CreditServicesBusinessModel {
@@ -59,12 +63,12 @@ class CreditServicesBusinessModelTest extends TestCase
         $without = $lossFree->getTargetMetrics($stock, $macro, $this->mathUtility);
 
         $this->assertSame($without['invested_capital'], $withLosses['invested_capital']);
-        $grossYield = static fn (array $metrics): float => $metrics['baseline_roic'] / (0.45 * (1.0 - $macro->corporateTaxRate));
+        $grossYield = static fn(array $metrics): float => $metrics['baseline_roic'] / (0.45 * (1.0 - $macro->corporateTaxRate));
         $this->assertEqualsWithDelta(
             $this->model->getThroughTheCycleCreditLossRate($stock),
             $grossYield($withLosses) - $grossYield($without),
             1e-9,
-            'revenue per unit of book must rise by exactly the through-the-cycle loss rate the ledger charges'
+            'revenue per unit of book must rise by exactly the through-the-cycle loss rate the ledger charges',
         );
     }
 
@@ -78,7 +82,7 @@ class CreditServicesBusinessModelTest extends TestCase
             inflationEma: 0.02,
             consumerSentimentIndexEma: 100.0,
             retailDefaultRateEma: 0.025,
-            unemploymentRateEma: 0.045
+            unemploymentRateEma: 0.045,
         );
 
         $result = $this->model->computeActualFinancials(
@@ -88,7 +92,7 @@ class CreditServicesBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.05,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('lending', $result->streamRevenue);
@@ -164,7 +168,7 @@ class CreditServicesBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $this->model->getForwardCreditLossMultiplier($stock, $lowRecessionMacro),
             $this->model->getForwardCreditLossMultiplier($stock, $highRecessionMacro),
-            'Elevated forward recession risk must raise the lifetime loss estimate on revolving loan portfolios.'
+            'Elevated forward recession risk must raise the lifetime loss estimate on revolving loan portfolios.',
         );
     }
 
@@ -203,7 +207,7 @@ class CreditServicesBusinessModelTest extends TestCase
         $this->assertGreaterThan(
             $tightResult->streamRevenue['lending'],
             $looseResult->streamRevenue['lending'],
-            'Commercial bank credit tightening gates revolving credit originations and contracts lending asset growth.'
+            'Commercial bank credit tightening gates revolving credit originations and contracts lending asset growth.',
         );
     }
 
@@ -223,7 +227,7 @@ class CreditServicesBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($this->model->resolveInterestYield($stock, $calm), $this->model->resolveInterestYield($stock, $freeze), 1e-12);
 
-        $businessLender = new class extends \App\Service\Model\Sector\CommercialBankBusinessModel {
+        $businessLender = new class extends CommercialBankBusinessModel {
             protected function resolveLoanBookMix(Stock $stock): array
             {
                 return ['residential' => 0.0, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 1.0];

@@ -37,7 +37,7 @@ final class HistorySamplingRateTest extends TestCase
             $this->assertSame(
                 TickCadence::TARGET_HISTORY_POINTS_PER_YEAR,
                 TickCadence::historyPointsPerYear($ticksPerYear),
-                "Sampling overshoots the target at {$ticksPerYear} ticks/year."
+                "Sampling overshoots the target at {$ticksPerYear} ticks/year.",
             );
         }
     }
@@ -71,7 +71,7 @@ final class HistorySamplingRateTest extends TestCase
             $this->assertSame(
                 TickCadence::historyPointsPerYear($ticksPerYear),
                 $bars,
-                "Sampling rate disagrees with the ticker's own write cadence at {$ticksPerYear} ticks/year."
+                "Sampling rate disagrees with the ticker's own write cadence at {$ticksPerYear} ticks/year.",
             );
         }
     }
@@ -97,7 +97,7 @@ final class HistorySamplingRateTest extends TestCase
             $this->assertLessThan(
                 $ticksPerYear,
                 $bars,
-                "Every tick closes a bar at {$ticksPerYear} ticks/year; the bar cadence has collapsed."
+                "Every tick closes a bar at {$ticksPerYear} ticks/year; the bar cadence has collapsed.",
             );
         }
     }
@@ -116,13 +116,13 @@ final class HistorySamplingRateTest extends TestCase
         $this->assertStringContainsString(
             'ChartRange::simTimeFloor',
             $source,
-            'Stored ranges must be selected by simulated time, not by a row count.'
+            'Stored ranges must be selected by simulated time, not by a row count.',
         );
         // A bare integer against a range name is a row count; a fraction is a span of years.
         $this->assertDoesNotMatchRegularExpression(
             "/'(?:1w|1m|3m|6m|1y|3y|5y|10y)'\s*=>\s*\d+\s*[,\]]/",
             $source,
-            'A hardcoded row count for a named range pins the chart to one tick rate.'
+            'A hardcoded row count for a named range pins the chart to one tick rate.',
         );
     }
 }

@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\EventSubscriber;
 
+use App\Data\Company\Sectors;
+use App\Data\Macro\MacroFieldCatalog;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Math\Decimal;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use App\Data\Macro\MacroFieldCatalog;
-use App\Data\Company\Sectors;
-use App\Service\Corporate\DebtEngine;
 
 class EarningsReportSubscriber implements EventSubscriberInterface
 {
@@ -36,7 +36,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
-        private readonly DebtEngine $debtEngine
+        private readonly DebtEngine $debtEngine,
     ) {}
 
     public static function getSubscribedEvents(): array
@@ -50,7 +50,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
     {
         $ctx = $event->getContext();
         $stock = $ctx->stock;
-        
+
         $report = new \App\Entity\CorporateReport();
         $report->setStock($stock);
         $report->setRecordedAt(new \DateTime());
@@ -99,7 +99,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $leaseLiability = \App\Service\Corporate\CorporateMetrics::getInstance()->resolveLeaseLiability(
             $stock,
             (float) $stock->getTotalRevenue(),
-            $ctx->strategy->getLeaseIntensity($stock)
+            $ctx->strategy->getLeaseIntensity($stock),
         );
         $report->setCip($stock->getCipBalance());
         $report->setGoodwill($stock->getGoodwill());
@@ -127,13 +127,13 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setUnrealizedSecuritiesMark(
             $ctx->strategy->resolveSecuritiesBook($stock) > 0.0 || $ctx->unrealizedSecuritiesMark !== 0.0
                 ? Decimal::format($ctx->unrealizedSecuritiesMark, 4)
-                : null
+                : null,
         );
         $report->setCustomerDeposits($ctx->strategy->isFinancial() ? $stock->getCustomerDeposits() : null);
         $report->setCet1Ratio(
             $ctx->strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
                 ? Decimal::format($ctx->strategy->calculateCet1Ratio($stock), 4)
-                : null
+                : null,
         );
         $netInterestMargin = null;
         if ($hasEarningAssets && isset($ctx->streamRevenue['net_interest_income']) && $stock->getNetEarningAssets() > 0.0) {
@@ -162,12 +162,12 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setEva(Decimal::format($ctx->quarterlyEconomicProfit, 4));
         $report->setDividendPaid(Decimal::format((float) ($ctx->allocation['total_paid'] ?? 0.0), 4));
         $report->setStockBuybacks(Decimal::format((float) ($ctx->allocation['total_cash_spent'] ?? 0.0), 4));
-        
+
         if ($ctx->health) {
             $report->setCashYield(Decimal::format($ctx->health->cashYield, 4));
             $report->setCostOfEquity(Decimal::format((float) ($ctx->health->costOfEquity ?? 0.10), 4));
         }
-        
+
         $report->setDepositApy(isset($ctx->allocation['bank_apy']) ? Decimal::format((float) $ctx->allocation['bank_apy'], 4) : null);
 
         $finalEquity = (float) $stock->getTotalEquity();
@@ -292,7 +292,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
             ];
         }
 
-        usort($presented, static fn (array $a, array $b): int => abs((float) $b['impact']) <=> abs((float) $a['impact']));
+        usort($presented, static fn(array $a, array $b): int => abs((float) $b['impact']) <=> abs((float) $a['impact']));
 
         return $presented;
     }

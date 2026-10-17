@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Pricing;
 
-use App\DTO\MacroStateDTO;
 use App\Data\Company\Sectors;
+use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Market\Pricing\PolicyCapitalization as Policy;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\PoliticsEngine;
 use PHPUnit\Framework\TestCase;
 
@@ -178,7 +178,7 @@ class PolicyCapitalizationTest extends TestCase
             Policy::publicSpendingGap($this->spending($shareAt($longRun) - $cut, $settled, $longRun), self::CAP_RATE),
             Policy::publicSpendingGap($this->spending($shareAt($longRun), $settled, $longRun, debt: 1.10, pace: 0.01), self::CAP_RATE),
             1e-12,
-            'At the law less the cut, nothing more is closing.'
+            'At the law less the cut, nothing more is closing.',
         );
 
         // The next government is priced at its own debt plank: the same appropriation under a plank that brings debt down
@@ -213,7 +213,7 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta(
             $this->path($rise, $carried - Policy::LONG_RUN_UTILITY_TARIFF_SHORTFALL, 2.5, Policy::UTILITY_TARIFF_TERM_PERSISTENCE, UtilityBusinessModel::RATE_CASE_DECISION_RATE),
             Policy::utilityTariffShortfallGap($macro, self::CAP_RATE),
-            1e-12
+            1e-12,
         );
         $this->assertEqualsWithDelta(-0.79 * Policy::utilityTariffShortfallGap($macro, self::CAP_RATE) * 100.0, Policy::earningsGap($macro, ['utilityRateGrant' => 100.0], 0.21, self::CAP_RATE), 1e-12);
         $this->assertEqualsWithDelta(UtilityBusinessModel::FOUNDING_TARIFF_SHORTFALL, $carried, 1e-4, 'The trailing earnings open on the founding grant\'s shortfall.');
@@ -242,7 +242,7 @@ class PolicyCapitalizationTest extends TestCase
             Policy::corporateTaxShiftGap($sitting($old, 10.0), self::CAP_RATE),
             Policy::corporateTaxShiftGap($sitting($new, 10.0), self::CAP_RATE),
             1e-15,
-            'On the day it passes, passing it changes nothing.'
+            'On the day it passes, passing it changes nothing.',
         );
     }
 
@@ -310,7 +310,7 @@ class PolicyCapitalizationTest extends TestCase
         $this->assertEqualsWithDelta(
             Policy::corporateTaxShiftGap($this->macro(['corporateTax' => $inForce], expected: ['corporateTax' => $inForce], from: 12.5, time: 10.0), self::CAP_RATE),
             Policy::corporateTaxShiftGap($revised, self::CAP_RATE, previous: true),
-            1e-15
+            1e-15,
         );
     }
 

@@ -85,7 +85,7 @@ class MacroSnapshotRecorderTest extends TestCase
         $this->assertCount(
             count($columns),
             $placeholders,
-            'The statement names a different number of columns than it binds placeholders.'
+            'The statement names a different number of columns than it binds placeholders.',
         );
         $this->assertSame(['?'], array_values(array_unique($placeholders)), 'Every value must be bound, never inlined.');
 
@@ -162,7 +162,7 @@ class MacroSnapshotRecorderTest extends TestCase
             $this->assertSame(
                 $sentinels[$field],
                 $byColumn[$column],
-                "Field {$field} did not land in column {$column}."
+                "Field {$field} did not land in column {$column}.",
             );
         }
     }

@@ -8,10 +8,10 @@ use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Politics\PoliticsEngine;
 
 /**
@@ -90,7 +90,7 @@ final class PolicyCapitalization
     {
         $speed = MacroEngine::FISCAL_ADJUSTMENT_SPEED;
 
-        return self::expectedOverLife($macro, $capRate, $previous, 'corporateTax', $macro->corporateTaxPolicyShift, static fn (float $law, array $levers): float => $law, self::LONG_RUN_CORPORATE_TAX_SHIFT, self::CORPORATE_TAX_TERM_PERSISTENCE, $speed)
+        return self::expectedOverLife($macro, $capRate, $previous, 'corporateTax', $macro->corporateTaxPolicyShift, static fn(float $law, array $levers): float => $law, self::LONG_RUN_CORPORATE_TAX_SHIFT, self::CORPORATE_TAX_TERM_PERSISTENCE, $speed)
             - $macro->corporateTaxShiftEmbodied
             // The rate still closing on the law in force.
             + (($macro->corporateTaxShiftRealized - $macro->corporateTaxPolicyShift) * (1.0 - Valuation::perpetuityShareAfter($capRate, 0.0, $speed)));
@@ -104,7 +104,7 @@ final class PolicyCapitalization
      */
     public static function expectedDividendTaxRate(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'dividendTax', $macro->dividendTaxRate, static fn (float $law, array $levers): float => $law, self::LONG_RUN_DIVIDEND_TAX_RATE, self::DIVIDEND_TAX_TERM_PERSISTENCE);
+        return self::expectedOverLife($macro, $capRate, $previous, 'dividendTax', $macro->dividendTaxRate, static fn(float $law, array $levers): float => $law, self::LONG_RUN_DIVIDEND_TAX_RATE, self::DIVIDEND_TAX_TERM_PERSISTENCE);
     }
 
     /**
@@ -115,7 +115,7 @@ final class PolicyCapitalization
      */
     public static function bankLevyGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'bankLevyRate', $macro->bankLevyRate, static fn (float $law, array $levers): float => $law, self::LONG_RUN_BANK_LEVY_RATE, self::BANK_LEVY_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'bankLevyRate', $macro->bankLevyRate, static fn(float $law, array $levers): float => $law, self::LONG_RUN_BANK_LEVY_RATE, self::BANK_LEVY_TERM_PERSISTENCE)
             - $macro->bankLevyEmbodied;
     }
 
@@ -127,7 +127,7 @@ final class PolicyCapitalization
      */
     public static function extractionCostGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'extractionStringency', $macro->extractionStringency, static fn (float $law, array $levers): float => self::measure('extractionStringency', $law), self::LONG_RUN_EXTRACTION_COST_FACTOR, self::EXTRACTION_COST_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'extractionStringency', $macro->extractionStringency, static fn(float $law, array $levers): float => self::measure('extractionStringency', $law), self::LONG_RUN_EXTRACTION_COST_FACTOR, self::EXTRACTION_COST_TERM_PERSISTENCE)
             - $macro->extractionCostFactorEmbodied;
     }
 
@@ -139,7 +139,7 @@ final class PolicyCapitalization
      */
     public static function stampDutyVolumeGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'stampDutyRate', $macro->stampDutyRate, static fn (float $law, array $levers): float => self::measure('stampDutyRate', $law), self::LONG_RUN_STAMP_DUTY_VOLUME_FACTOR, self::STAMP_DUTY_VOLUME_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'stampDutyRate', $macro->stampDutyRate, static fn(float $law, array $levers): float => self::measure('stampDutyRate', $law), self::LONG_RUN_STAMP_DUTY_VOLUME_FACTOR, self::STAMP_DUTY_VOLUME_TERM_PERSISTENCE)
             - $macro->stampDutyVolumeFactorEmbodied;
     }
 
@@ -151,7 +151,7 @@ final class PolicyCapitalization
      */
     public static function carbonPowerUpliftGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'carbonPrice', $macro->carbonPrice, static fn (float $law, array $levers): float => self::measure('carbonPrice', $law), self::LONG_RUN_CARBON_POWER_UPLIFT, self::CARBON_POWER_TERM_PERSISTENCE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'carbonPrice', $macro->carbonPrice, static fn(float $law, array $levers): float => self::measure('carbonPrice', $law), self::LONG_RUN_CARBON_POWER_UPLIFT, self::CARBON_POWER_TERM_PERSISTENCE)
             - $macro->carbonPowerUpliftEmbodied;
     }
 
@@ -168,10 +168,10 @@ final class PolicyCapitalization
     public static function publicSpendingGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
         $speed = MacroEngine::GOVT_SPENDING_MEAN_REVERSION;
-        $purchasesSet = static fn (float $law, array $levers): float => self::measure('publicSpending', CreditFiscalSubsystem::purchasesTarget(
+        $purchasesSet = static fn(float $law, array $levers): float => self::measure('publicSpending', CreditFiscalSubsystem::purchasesTarget(
             $law,
             CreditFiscalSubsystem::requiredPrimaryBalanceAt($macro, (float) ($levers['debtTarget'] ?? $macro->debtTarget), (float) ($levers['debtPace'] ?? $macro->debtPace)),
-            (float) ($levers['consolidationTaxShare'] ?? $macro->consolidationTaxShare)
+            (float) ($levers['consolidationTaxShare'] ?? $macro->consolidationTaxShare),
         ));
         $inForce = $purchasesSet($macro->publicSpendingShare, []);
         $purchases = ($macro->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
@@ -189,7 +189,7 @@ final class PolicyCapitalization
      */
     public static function utilityTariffShortfallGap(MacroStateDTO $macro, float $capRate, bool $previous = false): float
     {
-        return self::expectedOverLife($macro, $capRate, $previous, 'utilityRateGrant', $macro->utilityRateCaseGrantShare, static fn (float $law, array $levers): float => self::measure('utilityRateGrant', $law), self::LONG_RUN_UTILITY_TARIFF_SHORTFALL, self::UTILITY_TARIFF_TERM_PERSISTENCE, UtilityBusinessModel::RATE_CASE_DECISION_RATE)
+        return self::expectedOverLife($macro, $capRate, $previous, 'utilityRateGrant', $macro->utilityRateCaseGrantShare, static fn(float $law, array $levers): float => self::measure('utilityRateGrant', $law), self::LONG_RUN_UTILITY_TARIFF_SHORTFALL, self::UTILITY_TARIFF_TERM_PERSISTENCE, UtilityBusinessModel::RATE_CASE_DECISION_RATE)
             - $macro->utilityTariffShortfallEmbodied;
     }
 

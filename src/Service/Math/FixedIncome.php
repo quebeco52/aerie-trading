@@ -113,7 +113,7 @@ final class FixedIncome
         float $tau,
         float $lambda1 = 0.5,
         float $lambda2 = 0.15,
-        ?float $slopeLambda = null
+        ?float $slopeLambda = null,
     ): float {
         if ($tau <= 0.0) {
             return $level + $slope;
@@ -178,7 +178,7 @@ final class FixedIncome
     public static function calculatePreferredHabitatTermPremiumShift(
         float $balanceSheetIntensity,
         float $tau,
-        float $habitatSensitivity = 1.0
+        float $habitatSensitivity = 1.0,
     ): float {
         $durationWeight = self::calculateTermPremiumDurationScale($tau);
         return -$balanceSheetIntensity * $durationWeight * $habitatSensitivity;
@@ -223,7 +223,7 @@ final class FixedIncome
         float $termPremiumHorizonYears,
         float $balanceSheetIntensity,
         float $habitatSensitivity,
-        float $effectiveLowerBound
+        float $effectiveLowerBound,
     ): float {
         return max($effectiveLowerBound, self::calculateSovereignZeroYieldUnbounded(
             tau: $tau,
@@ -238,7 +238,7 @@ final class FixedIncome
             longEndPremium: $longEndPremium,
             termPremiumHorizonYears: $termPremiumHorizonYears,
             balanceSheetIntensity: $balanceSheetIntensity,
-            habitatSensitivity: $habitatSensitivity
+            habitatSensitivity: $habitatSensitivity,
         ));
     }
 
@@ -264,12 +264,12 @@ final class FixedIncome
         float $longEndPremium,
         float $termPremiumHorizonYears,
         float $balanceSheetIntensity,
-        float $habitatSensitivity
+        float $habitatSensitivity,
     ): float {
         $preferredHabitatShift = self::calculatePreferredHabitatTermPremiumShift(
             balanceSheetIntensity: $balanceSheetIntensity,
             tau: $tau,
-            habitatSensitivity: $habitatSensitivity
+            habitatSensitivity: $habitatSensitivity,
         );
 
         $durationScale = self::calculateTermPremiumDurationScale($tau, $termPremiumHorizonYears);
@@ -283,7 +283,7 @@ final class FixedIncome
             tau: $tau,
             lambda1: $lambda1,
             lambda2: $lambda2,
-            slopeLambda: $slopeLambda
+            slopeLambda: $slopeLambda,
         );
 
         return $yield + $termPremium + $preferredHabitatShift;

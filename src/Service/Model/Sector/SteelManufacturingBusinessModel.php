@@ -5,23 +5,21 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
-use App\Service\Event\ShockEvent;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Steel & Raw Metal Manufacturing.
- * 
+ *
  * Financial Physics:
  * - Brutally cyclical and capital-intensive (blast furnaces must run continuously).
- * - Revenue is a mix of stable, long-term OEM supply contracts (Automotive, Heavy Machinery) 
+ * - Revenue is a mix of stable, long-term OEM supply contracts (Automotive, Heavy Machinery)
  *   and highly volatile Hot-Rolled Coil (HRC) spot market trading.
  * - Metal Spread & Energy Drag: Steel production is exposed to raw metallurgical coal, iron ore,
  *   and electricity costs. When energy prices spike, metal spreads compress.
@@ -88,11 +86,26 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
 
-    public function getWholesaleLeverageLimit(): float { return 2.5; }
-    public function getReversionSpeed(): float { return 0.1; }
-    public function getMoatSpread(): float { return 0.01; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.2; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.35; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.1;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.01;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.2;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.35;
+    }
 
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Nucor tons shipped to outside customers
@@ -170,7 +183,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             + $this->resolveFxDemandShift($macroState, self::FX_REVENUE_EXPOSURE);
     }
 
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::ContractOemWeight->value => self::CONTRACTED_OEM_WEIGHT,

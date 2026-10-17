@@ -4,19 +4,19 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
+use App\Data\Company\ManagementProfile;
+use App\Data\Company\ManagementStyle;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
-use App\Data\Company\ManagementProfile;
-use App\Data\Company\ManagementStyle;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Bond\CreditRatingAgency;
-use App\Service\Corporate\CorporateMetrics;
+use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
-use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -43,7 +43,7 @@ class DebtEngineTest extends TestCase
             $this->mathUtilityMock,
             $this->corporateMetricsMock,
             $this->creditRatingAgency,
-            $this->marketEventPublisherMock
+            $this->marketEventPublisherMock,
         );
     }
 
@@ -61,7 +61,7 @@ class DebtEngineTest extends TestCase
         $macroState = new MacroStateDTO(
             policyRateEma: 0.04,
             corporateTaxRate: 0.21,
-            yield5yEma: 0.04
+            yield5yEma: 0.04,
         );
 
         // Distance to default about 1.2 sits in the B bracket; one notch at a time takes BBB to BB.
@@ -74,7 +74,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo($stock),
                 $this->equalTo('CREDIT_DOWNGRADE'),
                 $this->stringContains('downgraded from BBB to BB'),
-                $this->equalTo(-3.0)
+                $this->equalTo(-3.0),
             );
 
         $this->engine->calculateInterestExpense($stock, $macroState, true);
@@ -96,13 +96,13 @@ class DebtEngineTest extends TestCase
         $macroState = new MacroStateDTO(
             policyRateEma: 0.04,
             corporateTaxRate: 0.21,
-            yield5yEma: 0.04
+            yield5yEma: 0.04,
         );
 
         // Distance to default clears the AAA line with room to spare; one notch at a time takes BBB to A.
         $this->assertGreaterThan(
             CreditRatingAgency::THRESHOLD_AAA + CreditRatingAgency::HYSTERESIS_BUFFER,
-            $this->engine->resolveDistanceToDefault($stock, $macroState)
+            $this->engine->resolveDistanceToDefault($stock, $macroState),
         );
         $this->marketEventPublisherMock->expects($this->once())
             ->method('publish')
@@ -110,7 +110,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo($stock),
                 $this->equalTo('CREDIT_UPGRADE'),
                 $this->stringContains('upgraded from BBB to A'),
-                $this->equalTo(2.0)
+                $this->equalTo(2.0),
             );
 
         $this->engine->calculateInterestExpense($stock, $macroState, true);
@@ -299,7 +299,7 @@ class DebtEngineTest extends TestCase
         $macroState = new MacroStateDTO(
             policyRateEma: 0.04,
             corporateTaxRate: 0.21,
-            yield5yEma: 0.04
+            yield5yEma: 0.04,
         );
 
         $this->marketEventPublisherMock->expects($this->once())
@@ -308,7 +308,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo($stock),
                 $this->equalTo('CREDIT_UPGRADE'),
                 $this->stringContains('upgraded from BBB to A'),
-                $this->equalTo(2.0)
+                $this->equalTo(2.0),
             );
 
         $this->engine->calculateInterestExpense($stock, $macroState, true);
@@ -334,7 +334,7 @@ class DebtEngineTest extends TestCase
         $macroState = new MacroStateDTO(
             policyRateEma: 0.04,
             corporateTaxRate: 0.21,
-            yield5yEma: 0.04
+            yield5yEma: 0.04,
         );
 
         $this->marketEventPublisherMock->expects($this->once())
@@ -343,7 +343,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo($stock),
                 $this->equalTo('CREDIT_DOWNGRADE'),
                 $this->stringContains('downgraded from AAA to CCC'),
-                $this->equalTo(-3.0)
+                $this->equalTo(-3.0),
             );
 
         $this->engine->calculateInterestExpense($stock, $macroState, true);
@@ -445,7 +445,7 @@ class DebtEngineTest extends TestCase
             policyRateEma: 0.04,
             corporateTaxRate: 0.20,
             yield5yEma: 0.04,
-            equityRiskPremium: 0.05
+            equityRiskPremium: 0.05,
         );
 
         $health = $engine->analyzeDebtHealth($stock, $macro);
@@ -483,7 +483,7 @@ class DebtEngineTest extends TestCase
         $macro = new MacroStateDTO(
             policyRateEma: 0.01, // Low cash yield (1%)
             corporateTaxRate: 0.20,
-            yield5yEma: 0.02
+            yield5yEma: 0.02,
         );
 
         $health = $engine->analyzeDebtHealth($stock, $macro);
@@ -724,7 +724,7 @@ class DebtEngineTest extends TestCase
             10_000_000_000.0 - $roll->maturingPrincipal,
             (float) $stock->getWholesaleDebt(),
             1.0,
-            'repaid principal must leave the balance sheet'
+            'repaid principal must leave the balance sheet',
         );
     }
 
@@ -747,7 +747,7 @@ class DebtEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             $roll->maturingPrincipal - $roll->principalRepaid,
             $roll->unfundedShortfall,
-            1.0
+            1.0,
         );
     }
 
@@ -875,18 +875,18 @@ class DebtEngineTest extends TestCase
         $this->assertSame(
             $dry->getWholesaleDebt(),
             $drawn->getWholesaleDebt(),
-            'pricing the facility must not disturb the term ladder'
+            'pricing the facility must not disturb the term ladder',
         );
         $this->assertGreaterThan(
             $baseline->interestExpense,
             $withLine->interestExpense,
-            'a drawn facility is borrowed money and has to be paid for'
+            'a drawn facility is borrowed money and has to be paid for',
         );
         $this->assertEqualsWithDelta(
             1_000_000_000.0,
             (float) $drawn->getTotalDebt() - (float) $dry->getTotalDebt(),
             1.0,
-            'and it is leverage: coverage, the Altman test and the Merton distance all have to see it'
+            'and it is leverage: coverage, the Altman test and the Merton distance all have to see it',
         );
     }
 
@@ -920,7 +920,7 @@ class DebtEngineTest extends TestCase
             $this->assertGreaterThan(
                 $baseline->interestExpense,
                 $withLine->interestExpense,
-                "{$model} does not charge its drawn revolver any interest"
+                "{$model} does not charge its drawn revolver any interest",
             );
         }
 
@@ -978,7 +978,7 @@ class DebtEngineTest extends TestCase
             ebit: 3_000_000_000.0,
             revenue: 20_000_000_000.0,
             depreciation: 500_000_000.0,
-            ebitda: 3_500_000_000.0
+            ebitda: 3_500_000_000.0,
         );
 
         return new DebtHealthDTO(
@@ -997,7 +997,7 @@ class DebtEngineTest extends TestCase
             rawMetrics: $metrics,
             isLiquidityCrisis: $interestCoverage < 0.0,
             isLiquidityWarning: $interestCoverage < 2.0,
-            isUnderLeveraged: false
+            isUnderLeveraged: false,
         );
     }
 
@@ -1089,12 +1089,12 @@ class DebtEngineTest extends TestCase
     {
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
         $stock = $this->leveredFirm('LEVER', '1.00', '0.0163');
-        $macro = static fn (float $ig, float $gap): MacroStateDTO => new MacroStateDTO(
+        $macro = static fn(float $ig, float $gap): MacroStateDTO => new MacroStateDTO(
             outputGapEma: $gap,
             yield5yEma: 0.03,
             macroCreditSpreadEma: $ig,
             macroCreditSpreadTrend: 0.013,
-            highYieldCreditSpreadEma: $ig * 3.3
+            highYieldCreditSpreadEma: $ig * 3.3,
         );
 
         foreach (['BBB', 'BB'] as $rating) {
@@ -1130,7 +1130,7 @@ class DebtEngineTest extends TestCase
 
         $this->assertGreaterThan(
             \App\Data\Company\Sectors::getBusinessModelStrategy('none')->getLeaseIntensity($build('General')),
-            \App\Data\Company\Sectors::getBusinessModelStrategy('restaurant')->getLeaseIntensity($build('Restaurants'))
+            \App\Data\Company\Sectors::getBusinessModelStrategy('restaurant')->getLeaseIntensity($build('Restaurants')),
         );
         $this->assertLessThan($plain['z_score'], $restaurant['z_score']);
     }
@@ -1170,7 +1170,7 @@ class DebtEngineTest extends TestCase
             yield5yEma: 0.045,
             macroCreditSpreadEma: 0.02,
             corporateTaxRate: 0.21,
-            equityRiskPremium: 0.045
+            equityRiskPremium: 0.045,
         );
     }
 
@@ -1184,7 +1184,7 @@ class DebtEngineTest extends TestCase
     public function testCostOfEquityIsStruckOnTheLongYieldNotThePolicyRate(): void
     {
         $engine = $this->costOfCapitalEngine();
-        $macro = static fn (float $policyRate, float $longYield, float $longYieldAverage = 0.048): MacroStateDTO => new MacroStateDTO(
+        $macro = static fn(float $policyRate, float $longYield, float $longYieldAverage = 0.048): MacroStateDTO => new MacroStateDTO(
             inflationEma: 0.02,
             policyRateEma: $policyRate,
             yield5yEma: 0.045,
@@ -1192,9 +1192,9 @@ class DebtEngineTest extends TestCase
             yield10yEma: $longYieldAverage,
             macroCreditSpreadEma: 0.02,
             corporateTaxRate: 0.21,
-            equityRiskPremium: 0.045
+            equityRiskPremium: 0.045,
         );
-        $costOfEquity = fn (float $policyRate, float $longYield, float $longYieldAverage = 0.048): float => $engine->analyzeDebtHealth($this->leveredFirm('MID', '0.80', '0.006'), $macro($policyRate, $longYield, $longYieldAverage))->costOfEquity;
+        $costOfEquity = fn(float $policyRate, float $longYield, float $longYieldAverage = 0.048): float => $engine->analyzeDebtHealth($this->leveredFirm('MID', '0.80', '0.006'), $macro($policyRate, $longYield, $longYieldAverage))->costOfEquity;
 
         $base = $costOfEquity(0.04, 0.048);
 
@@ -1225,9 +1225,9 @@ class DebtEngineTest extends TestCase
     {
         $engine = $this->costOfCapitalEngine();
         $macro = $this->neutralMacro();
-        $beta = fn (string $price, ?float $fairEquity): float => $engine->analyzeDebtHealth(
+        $beta = fn(string $price, ?float $fairEquity): float => $engine->analyzeDebtHealth(
             $this->leveredFirm('LEV', '1.00', '0.02')->setPrice($price)->setFairEquityValue($fairEquity),
-            $macro
+            $macro,
         )->leveredBeta;
 
         $standing = $beta('10.00', 1.0e9);
@@ -1255,7 +1255,7 @@ class DebtEngineTest extends TestCase
             $this->assertGreaterThanOrEqual(
                 $marketRate,
                 $health->costOfEquity,
-                sprintf('%s prices its equity below its own debt.', $ticker)
+                sprintf('%s prices its equity below its own debt.', $ticker),
             );
             $this->assertGreaterThan(0.0, $health->costOfEquity);
         }
@@ -1277,7 +1277,7 @@ class DebtEngineTest extends TestCase
         $this->assertGreaterThan(
             $fortress->costOfEquity,
             $distressed->costOfEquity,
-            'Two hedges with the same beta must still separate by their own credit risk.'
+            'Two hedges with the same beta must still separate by their own credit risk.',
         );
     }
 
@@ -1296,7 +1296,7 @@ class DebtEngineTest extends TestCase
         $this->assertGreaterThan(
             $veryDefensive->costOfEquity,
             $defensive->costOfEquity,
-            'A 0.45 beta must cost more equity capital than a 0.10 beta.'
+            'A 0.45 beta must cost more equity capital than a 0.10 beta.',
         );
     }
 
@@ -1351,7 +1351,7 @@ class DebtEngineTest extends TestCase
             CreditRisk::solveMertonAssetVolatility(1_000_000_000.0, 0.20, 500_000_000.0, $macro->policyRateEma, 5.0),
             $recorded,
             1e-12,
-            'the first evaluation records the solution at the capital structure it finds'
+            'the first evaluation records the solution at the capital structure it finds',
         );
 
         $this->assertEqualsWithDelta($recorded, $engine->resolveAssetVolatility($stock, 1_000_000_000.0, 8_000_000_000.0, 0.04), 1e-12);
@@ -1364,7 +1364,7 @@ class DebtEngineTest extends TestCase
         $this->assertNull($engine->calibrateAssetVolatility($bank, 0.04));
         $this->assertLessThan(
             $engine->resolveAssetVolatility($bank, 1_000_000_000.0, 1_000_000_000.0, 0.04),
-            $engine->resolveAssetVolatility($bank, 1_000_000_000.0, 4_000_000_000.0, 0.04)
+            $engine->resolveAssetVolatility($bank, 1_000_000_000.0, 4_000_000_000.0, 0.04),
         );
     }
 
@@ -1486,7 +1486,7 @@ class DebtEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             ['revenue' => 800_000_000.0, 'margin' => 0.25],
             $engine->resolveTrailingOperatingBasis($stock),
-            1e-9
+            1e-9,
         );
     }
 
@@ -1507,7 +1507,7 @@ class DebtEngineTest extends TestCase
 
         $this->assertEquals(
             $engine->analyzeDebtHealth($stock, $macro, null, 0.02),
-            $engine->analyzeTrailingDebtHealth($stock, $macro)
+            $engine->analyzeTrailingDebtHealth($stock, $macro),
         );
     }
 
@@ -1530,7 +1530,7 @@ class DebtEngineTest extends TestCase
         $this->assertEqualsWithDelta(
             CreditRisk::solveMertonAssetValue(1_000_000_000.0, $assetVolatility, 500_000_000.0, $macro->policyRateEma, 5.0),
             $going->assetValue,
-            1.0
+            1.0,
         );
         $this->assertEqualsWithDelta(120_000_000.0, $going->trailingEbit, 1e-3);
         $this->assertEqualsWithDelta($engine->analyzeTrailingDebtHealth($stock, $macro)->rawMetrics->ebitda, $going->trailingEbitda, 1e-3);
@@ -1600,7 +1600,7 @@ class DebtEngineTest extends TestCase
             policyRateEma: 0.03,
             corporateTaxRate: 0.20,
             yield5yEma: 0.03,
-            equityRiskPremium: 0.05
+            equityRiskPremium: 0.05,
         );
     }
 
@@ -1828,12 +1828,12 @@ class DebtEngineTest extends TestCase
         $engine = $this->costOfCapitalEngine();
         $stock = $this->leveredFirm('CYCL', '1.20', '0.0163');
         $stock->setCreditRating('BBB');
-        $metrics = fn (float $ema, float $trend): \App\DTO\DebtMetricsDTO => $engine->calculateInterestExpense(
+        $metrics = fn(float $ema, float $trend): DebtMetricsDTO => $engine->calculateInterestExpense(
             $stock,
-            new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.04, yield5yEma: 0.045, macroCreditSpreadEma: $ema, macroCreditSpreadTrend: $trend, corporateTaxRate: 0.21)
+            new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.04, yield5yEma: 0.045, macroCreditSpreadEma: $ema, macroCreditSpreadTrend: $trend, corporateTaxRate: 0.21),
         );
 
-        $multiple = static fn (float $seeded): float => CreditRisk::calculateIssuerSpreadMultiple($seeded, \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD, \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD * \App\Service\Macro\MacroEngine::HY_BASE_SPREAD_MULTIPLIER);
+        $multiple = static fn(float $seeded): float => CreditRisk::calculateIssuerSpreadMultiple($seeded, \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD, \App\Service\Macro\MacroEngine::BASE_CREDIT_SPREAD * \App\Service\Macro\MacroEngine::HY_BASE_SPREAD_MULTIPLIER);
         $bbb = CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'] * $multiple(0.0163);
         $this->assertEqualsWithDelta($bbb * 0.019, $metrics(0.019, 0.015)->dynamicSpread, 1e-12, 'A firm seeded at the BBB spread trades at the BBB multiple of the index.');
         $this->assertEqualsWithDelta($bbb * 0.012, $metrics(0.012, 0.015)->dynamicSpread, 1e-12, 'A tight market lowers the cost of new debt.');
@@ -1938,7 +1938,7 @@ class DebtEngineTest extends TestCase
 
             return $stock;
         };
-        $macro = static fn (float $ig, float $hy): MacroStateDTO => new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.045, macroCreditSpreadEma: $ig, highYieldCreditSpreadEma: $hy);
+        $macro = static fn(float $ig, float $hy): MacroStateDTO => new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.045, macroCreditSpreadEma: $ig, highYieldCreditSpreadEma: $hy);
 
         $calmCcc = $engine->analyzeDebtHealth($issuer('CCC'), $macro(0.013, 0.043));
         $this->assertGreaterThan(0.10, $calmCcc->rawMetrics->dynamicSpread, 'a CCC trades at its class spread');

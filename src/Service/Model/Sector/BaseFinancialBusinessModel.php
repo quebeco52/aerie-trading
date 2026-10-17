@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MacroTransmission;
 use App\Service\Model\BusinessModelInterface;
+use App\Service\Model\ModelParam;
 use App\Service\Model\Trait\FinancialPhysicsTrait;
 use App\Service\Model\Trait\StandardBaseModelTrait;
 use App\Service\Model\Trait\StandardCapitalAllocationTrait;

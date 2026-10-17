@@ -33,8 +33,8 @@ final class TickProfilerTest extends TestCase
         $profiler->lap('second');
 
         [$second, $first] = array_map('floatval', array_map(
-            static fn (string $part): string => explode(' ', $part)[1],
-            explode(', ', $profiler->breakdown())
+            static fn(string $part): string => explode(' ', $part)[1],
+            explode(', ', $profiler->breakdown()),
         ));
         self::assertGreaterThanOrEqual(2.0, $second);
         self::assertLessThan($second, $first);

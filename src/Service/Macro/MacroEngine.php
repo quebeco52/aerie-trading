@@ -4,6 +4,7 @@ namespace App\Service\Macro;
 
 use App\DTO\GovernmentPolicyDTO;
 use App\DTO\MacroStateDTO;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -13,7 +14,6 @@ use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
-use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\SecuritiesCommission;
 use Psr\Log\LoggerInterface;
@@ -262,7 +262,6 @@ class MacroEngine
     /** Share of the reserve fund's expected long-term real return the budget may spend without the fund's consent: half, Singapore's constitutional limit on the Net Investment Returns Contribution. The share the District opened with. */
     public const RESERVE_DRAW_CEILING = 0.50;
 
-
     // --- Policy Levers: Tariffs (Fajgelbaum et al. 2020; Furceri et al. 2018) ---
     /** Average tariff partners put on the District's exports per point of its average tariff on imports: 0.60 in 2018, when US tariffs rose 14.0 points on 12.7% of imports and retaliation 13.1 points on 8.2% of exports (Fajgelbaum, Goldberg, Kennedy & Khandelwal 2020). */
     public const TARIFF_RETALIATION_RATIO = (0.131 * 0.082) / (0.140 * 0.127);
@@ -407,7 +406,6 @@ class MacroEngine
     /** Productivity offset subtracted from the annual reimbursement update (ACA s.3401 multifactor-productivity adjustment, ~0.6pp a year). Read by the fiscal subsystem and by the state's opening value. */
     public const REIMBURSEMENT_PRODUCTIVITY_OFFSET = 0.006;
 
-
     // --- District-Wide Systemic Event Triggers ---
     /** Minimum simulated years between district-wide events, so distinct crises arriving together report a quarter apart rather than on one tick. */
     public const SYSTEMIC_EVENT_COOLDOWN_YEARS = 0.25;
@@ -504,7 +502,7 @@ class MacroEngine
                     . 'Restore the key, or start over with app:market-reset; opening a fresh economy here would run '
                     . 'Year-1 prices under the current board.',
                     self::REDIS_MACRO_STATE,
-                    $totalTime
+                    $totalTime,
                 ));
             }
             $state = new MacroState();
@@ -517,7 +515,7 @@ class MacroEngine
         $this->logger?->warning(sprintf(
             'Macroeconomic clock realigned from %.6f to %.6f simulation years to match the database.',
             $state->totalTime,
-            $totalTime
+            $totalTime,
         ));
 
         $state->totalTime = $totalTime;
@@ -572,7 +570,7 @@ class MacroEngine
         ?float $strategicStakeCash = null,
         ?GovernmentPolicyDTO $policy = null,
         ?float $boardBankLevy = null,
-    ): \App\DTO\MacroStateDTO {
+    ): MacroStateDTO {
         $state = $this->loadState();
 
         if ($policy !== null) {
@@ -723,7 +721,7 @@ class MacroEngine
         $this->diagnostics?->recordAverages($state, $dt);
 
         $this->saveState($state);
-        return \App\DTO\MacroStateDTO::fromMacroState($state);
+        return MacroStateDTO::fromMacroState($state);
     }
 
     /**
@@ -784,7 +782,7 @@ class MacroEngine
                 unset($state->systemicAlarmLatches[$alarm]);
             }
         }
-        $armed = static fn (string $alarm): bool => $episodes[$alarm] && !isset($state->systemicAlarmLatches[$alarm]);
+        $armed = static fn(string $alarm): bool => $episodes[$alarm] && !isset($state->systemicAlarmLatches[$alarm]);
 
         // Inside the cooldown only an edge-triggered event lands: the level conditions it suppresses must not outrank it.
         $edgeOnly = false;
@@ -855,7 +853,6 @@ class MacroEngine
         }
     }
 
-
     /** Whether the statistics office has a recession declared and not yet over (MacroAggregateSubsystem::recordQuarterlyRealGdp()). */
     public static function recessionDeclared(MacroState|MacroStateDTO $state): bool
     {
@@ -919,14 +916,14 @@ class MacroEngine
      * inflation, labor market dynamics, credit spreads, commodities, real estate,
      * and national accounts into the macro_report table.
      *
-     * @param \App\DTO\MacroStateDTO                         $macroState State snapshot to record.
+     * @param MacroStateDTO                         $macroState State snapshot to record.
      * @param \Doctrine\DBAL\Connection                       $conn       Database connection.
-     * @param \App\Service\Macro\Recorder\QuarterRecord|null $quarter    The probes' closed windows and the run's identity.
+     * @param Recorder\QuarterRecord|null $quarter    The probes' closed windows and the run's identity.
      */
     public function recordMacroSnapshot(
-        \App\DTO\MacroStateDTO $macroState,
+        MacroStateDTO $macroState,
         \Doctrine\DBAL\Connection $conn,
-        ?\App\Service\Macro\Recorder\QuarterRecord $quarter = null
+        ?Recorder\QuarterRecord $quarter = null,
     ): void {
         $this->snapshotRecorder->recordSnapshot($macroState, $conn, $quarter);
     }

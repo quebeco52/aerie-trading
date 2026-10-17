@@ -69,7 +69,7 @@ final class StochasticProcesses
         float $etaUp,
         float $etaDown,
         float $capUp,
-        float $capDown
+        float $capDown,
     ): float {
         return ($pUp * self::truncatedExponentialSecondMoment($etaUp, $capUp))
             + ((1.0 - $pUp) * self::truncatedExponentialSecondMoment($etaDown, $capDown));
@@ -103,7 +103,7 @@ final class StochasticProcesses
         float $etaUp,
         float $etaDown,
         float $capUp,
-        float $capDown
+        float $capDown,
     ): float {
         $upRate = $etaUp - 1.0;
         if (abs($upRate) < self::COMPENSATOR_UNIT_RATE_TOLERANCE) {
@@ -130,7 +130,7 @@ final class StochasticProcesses
         float $etaUp,
         float $etaDown,
         float $capUp,
-        float $capDown
+        float $capDown,
     ): float {
         return ($pUp * self::truncatedExponentialMean($etaUp, $capUp))
             - ((1.0 - $pUp) * self::truncatedExponentialMean($etaDown, $capDown));
@@ -204,7 +204,7 @@ final class StochasticProcesses
         float $etaUp,
         float $etaDown,
         float $cap,
-        float $dt
+        float $dt,
     ): float {
         if ($lambda <= 0.0 || $etaUp <= 0.0 || $etaDown <= 0.0 || $cap <= 0.0 || $dt <= 0.0) {
             return 0.0;
@@ -242,7 +242,7 @@ final class StochasticProcesses
         float $spotVolatility,
         float $longRunVolatility,
         float $reversionSpeed,
-        float $horizonYears
+        float $horizonYears,
     ): float {
         $spotVariance = $spotVolatility ** 2.0;
         $longRunVariance = $longRunVolatility ** 2.0;
@@ -335,7 +335,7 @@ final class StochasticProcesses
     public static function logOuJumpLevelShift(float $lambda, float $kappa, float $jumpMean, float $jumpVol): float
     {
         // (E[e^(wJ)] - 1) / w is smooth on [0, 1] and tends to the mean jump at w = 0; composite Simpson integrates it.
-        $integrand = static fn (float $w): float => $w > 0.0
+        $integrand = static fn(float $w): float => $w > 0.0
             ? (exp(($jumpMean * $w) + (0.5 * $jumpVol * $jumpVol * $w * $w)) - 1.0) / $w
             : $jumpMean;
         $intervals = self::LEVY_OU_COMPENSATOR_SIMPSON_INTERVALS;
@@ -431,7 +431,7 @@ final class StochasticProcesses
         float $inventoryLevel,
         float $minBufferStock = 50.0,
         float $yieldScale = 0.10,
-        float $exponent = 1.8
+        float $exponent = 1.8,
     ): float {
         $bufferSlack = max(1.0, $inventoryLevel - $minBufferStock);
         $neutralSlack = max(1.0, 100.0 - $minBufferStock);
@@ -506,7 +506,7 @@ final class StochasticProcesses
         float $marketZ,
         float $w1,
         float $sectorZ = 0.0,
-        float $sectorVarianceShare = 0.0
+        float $sectorVarianceShare = 0.0,
     ): float {
         // Three-way orthogonal variance decomposition: systematic market factor, sector factor, and idiosyncratic residual.
         $boundedShare = max(0.0, min(1.0, $sectorVarianceShare));

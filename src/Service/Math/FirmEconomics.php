@@ -281,7 +281,7 @@ final class FirmEconomics
         float $capitalStockOverhang,
         float $baselineCu = MacroEngine::CU_BASELINE,
         float $gapSensitivity = MacroEngine::CU_GAP_SENSITIVITY,
-        float $overhangSensitivity = MacroEngine::CU_OVERHANG_SENSITIVITY
+        float $overhangSensitivity = MacroEngine::CU_OVERHANG_SENSITIVITY,
     ): float {
         $rawCu = $baselineCu + ($gapSensitivity * $outputGap) - ($overhangSensitivity * $capitalStockOverhang);
         return max(0.60, min(0.92, $rawCu));
@@ -391,7 +391,7 @@ final class FirmEconomics
         float $dW,
         float $baselineCrack = 22.0,
         float $kappa = 1.41,
-        float $sigma = 0.75
+        float $sigma = 0.75,
     ): float {
         $demandFactor = 1.0 + (1.20 * $outputGap);
         $inventoryTightness = max(0.0, (100.0 - $energyInventoryIndex) / 100.0) * 15.0;
@@ -417,7 +417,7 @@ final class FirmEconomics
         float $creditSpread,
         float $creditSpreadTrend,
         float $capacityUtilization,
-        float $interbankLiquiditySpread
+        float $interbankLiquiditySpread,
     ): array {
         return [
             // Customers stretch payment when credit is dearer than it usually is.
@@ -460,7 +460,7 @@ final class FirmEconomics
     {
         $blend = [];
         foreach (['receivables', 'inventory', 'payables'] as $balance) {
-            $blend[$balance] = self::revenueWeightedRatio($weights, array_map(static fn (array $shares): float => $shares[$balance], $streamShares));
+            $blend[$balance] = self::revenueWeightedRatio($weights, array_map(static fn(array $shares): float => $shares[$balance], $streamShares));
         }
 
         return $blend;

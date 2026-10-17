@@ -46,7 +46,7 @@ final class CoastGuard
             $term,
             CouncilAppointments::councilMedians($state),
             CouncilAppointments::reservedNames($state),
-            $math
+            $math,
         );
         if ($term < 0.0) {
             $chosen['name'] = AerieCouncil::OPENING_COAST_GUARD_COMMANDANT;

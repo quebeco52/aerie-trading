@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\TechBusinessModel;
 use App\Service\Model\StreamContext;
-use App\Service\Event\ShockEvent;
-use App\DTO\MacroStateDTO;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -28,7 +28,7 @@ class TechBusinessModelTest extends TestCase
         $mathUtilityMock = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ'])->getMock();
         $mathUtilityMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
 
-        $macroState = \App\DTO\MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
+        $macroState = MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
         $result = $model->computeActualFinancials(
             $stock,
             1000.0,
@@ -36,7 +36,7 @@ class TechBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // SaaS ARR expansion lowers variable cost percentage below 30%
@@ -57,7 +57,7 @@ class TechBusinessModelTest extends TestCase
             // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
+            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
             $math->method('checkProbability')->willReturn($exits);
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };

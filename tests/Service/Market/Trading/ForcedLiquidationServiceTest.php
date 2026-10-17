@@ -31,13 +31,13 @@ final class ForcedLiquidationServiceTest extends TestCase
 
         $connection = $this->createStub(Connection::class);
         $connection->method('fetchAssociative')->willReturnCallback(
-            static fn (string $sql): array|false => str_contains($sql, 'long_value') ? ['long_value' => 0.0, 'short_value' => 20000.0] : false
+            static fn(string $sql): array|false => str_contains($sql, 'long_value') ? ['long_value' => 0.0, 'short_value' => 20000.0] : false,
         );
         $connection->method('fetchOne')->willReturn('0');
         $connection->method('fetchAllAssociative')->willReturnCallback(
-            static fn (string $sql): array => str_contains($sql, 'UNION ALL')
+            static fn(string $sql): array => str_contains($sql, 'UNION ALL')
                 ? [['ticker' => 'APEX', 'quantity' => -200, 'unit_value' => 100.0, 'side' => 'short']]
-                : []
+                : [],
         );
         $em = $this->createStub(EntityManagerInterface::class);
         $em->method('getConnection')->willReturn($connection);
@@ -100,7 +100,7 @@ final class ForcedLiquidationServiceTest extends TestCase
         });
 
         $repository = $this->createStub(EntityRepository::class);
-        $repository->method('find')->willReturnCallback(static fn (int|string $id): ?Stock => (int) $id === 7 ? $stock : null);
+        $repository->method('find')->willReturnCallback(static fn(int|string $id): ?Stock => (int) $id === 7 ? $stock : null);
 
         $em = $this->createStub(EntityManagerInterface::class);
         $em->method('getConnection')->willReturn($connection);
@@ -111,11 +111,11 @@ final class ForcedLiquidationServiceTest extends TestCase
             new MarginEngine($em, new OptionMarginCalculator($em)),
             new SecuritiesLendingDesk(),
             $this->createStub(TradeExecutionService::class),
-            new NullLogger()
+            new NullLogger(),
         );
         $service->restateShortInterest();
 
         $this->assertSame('250.00', $stock->getShortInterestShares());
-        $this->assertCount(1, array_filter($statements, static fn (string $sql): bool => str_contains($sql, 'SET s.short_interest_shares')));
+        $this->assertCount(1, array_filter($statements, static fn(string $sql): bool => str_contains($sql, 'SET s.short_interest_shares')));
     }
 }

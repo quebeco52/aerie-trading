@@ -7,11 +7,11 @@ namespace App\Tests\Command;
 use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use Doctrine\ORM\Mapping\Column;
 use PHPUnit\Framework\TestCase;
@@ -214,7 +214,7 @@ final class MarketResetCompletenessTest extends TestCase
         $this->assertSame(
             1,
             preg_match('/UPDATE etfs\s+SET(.*?)WHERE ticker = :ticker/s', $source, $statement),
-            'Could not find the fund reset UPDATE — if the reset was restructured, update this test with it.'
+            'Could not find the fund reset UPDATE — if the reset was restructured, update this test with it.',
         );
 
         preg_match_all('/^\s*([a-z_]+)\s*=/m', $statement[1], $assignments);
@@ -235,12 +235,12 @@ final class MarketResetCompletenessTest extends TestCase
         $missing = array_diff(
             array_keys($this->fundColumns()),
             $this->fundResetAssignedColumns(),
-            array_keys(self::FUND_INTENTIONALLY_PRESERVED)
+            array_keys(self::FUND_INTENTIONALLY_PRESERVED),
         );
 
         $this->assertSame([], array_values($missing), sprintf(
             "app:market-reset does not clear these Etf columns, so the old market's fund books survive into the new one: %s",
-            implode(', ', $missing)
+            implode(', ', $missing),
         ));
     }
 

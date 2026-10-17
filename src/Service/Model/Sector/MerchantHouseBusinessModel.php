@@ -6,11 +6,11 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
+use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
-use App\Entity\Stock;
 use App\Service\Math\StochasticProcesses;
 
 /**
@@ -47,7 +47,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
 
     /** Baseline fraction of revenue from secured inventory financing, trade credit and treasury buffers. */
     public const CONTRARIAN_FLOAT_WEIGHT = 0.15;
-
 
     /** A price taker on the cargo, a monopolist on the berth. */
     public const PRICING_POWER_INDEX = 0.55;
@@ -124,7 +123,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         return MacroTransmission::calculatePmiDemandShift(
             $macroState->manufacturingPmiEma,
             MacroEngine::PMI_BASELINE,
-            self::MERCHANT_PMI_SENSITIVITY
+            self::MERCHANT_PMI_SENSITIVITY,
         ) + MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, self::MERCHANT_FOREIGN_SENSITIVITY);
     }
 
@@ -135,7 +134,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         // The portfolio IS the archetype here, so the mix is class constants rather than tuning dials —
         // a firm that runs a different one is a different sub-model, the way reinsurance is. Pricing power
@@ -177,7 +176,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             $outputGap,
             $macroState->macroCreditSpreadEma,
             $macroState->macroCreditSpread - $macroState->macroCreditSpreadEma,
-            max(0.0, $dealActivityShift) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR
+            max(0.0, $dealActivityShift) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR,
         );
 
         // --- Tail Risk: a counterparty failure on a cargo book, not a deal ---
@@ -212,15 +211,15 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         $merchantCostShift = $this->resolveMerchantCostShift($macroState, $mathUtility, $realizedVariableMargin, $priceLift);
 
         $clampedMargin = $this->clampMargin(
-            $realizedVariableMargin + $ppiCostDrag + ($merchantCostShift * $merchantShare)
+            $realizedVariableMargin + $ppiCostDrag + ($merchantCostShift * $merchantShare),
         );
 
-        $observableShockZ = ($merchantShock * $merchantWeight * self::MERCHANT_OBSERVABLE_DISCOUNT) +
-            ($tollboothShock * $tollboothWeight) +
-            ($floatShock * $floatWeight * self::FLOAT_OBSERVABLE_DISCOUNT) +
-            ($merchantSurge * $merchantWeight * self::MERCHANT_OBSERVABLE_DISCOUNT) +
-            ($tollboothMacroBoost * $tollboothWeight) +
-            ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
+        $observableShockZ = ($merchantShock * $merchantWeight * self::MERCHANT_OBSERVABLE_DISCOUNT)
+            + ($tollboothShock * $tollboothWeight)
+            + ($floatShock * $floatWeight * self::FLOAT_OBSERVABLE_DISCOUNT)
+            + ($merchantSurge * $merchantWeight * self::MERCHANT_OBSERVABLE_DISCOUNT)
+            + ($tollboothMacroBoost * $tollboothWeight)
+            + ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
@@ -267,7 +266,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         MacroStateDTO $macroState,
         MathUtility $mathUtility,
         float $realizedVariableMargin,
-        float $merchantPriceLift
+        float $merchantPriceLift,
     ): float {
         $priceLift = max(-0.90, $merchantPriceLift);
         $costRatio = max(0.0, min(1.0, $realizedVariableMargin));

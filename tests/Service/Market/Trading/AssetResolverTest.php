@@ -11,11 +11,11 @@ use App\Entity\User;
 use App\Entity\UserBond;
 use App\Entity\UserEtf;
 use App\Entity\UserStock;
-use App\Service\Market\Trading\AssetResolver;
-use Doctrine\ORM\EntityManagerInterface;
 use App\Repository\BondRepository;
 use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
+use App\Service\Market\Trading\AssetResolver;
+use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -49,7 +49,7 @@ class AssetResolverTest extends TestCase
     {
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('getRepository')->willReturnCallback(
-            fn (string $class): object => $this->repositories[$class] ?? $this->emptyRepository($class)
+            fn(string $class): object => $this->repositories[$class] ?? $this->emptyRepository($class),
         );
 
         return new AssetResolver($em);
@@ -136,7 +136,7 @@ class AssetResolverTest extends TestCase
 
         $this->assertSame(
             'Trading is halted for DEAD. The company is bankrupt.',
-            $this->resolver()->resolve('DEAD')?->haltReason()
+            $this->resolver()->resolve('DEAD')?->haltReason(),
         );
     }
 
@@ -150,7 +150,7 @@ class AssetResolverTest extends TestCase
 
         $this->assertSame(
             'Trading is halted for G02-001. The issue has matured.',
-            $this->resolver()->resolve('G02-001')?->haltReason()
+            $this->resolver()->resolve('G02-001')?->haltReason(),
         );
     }
 

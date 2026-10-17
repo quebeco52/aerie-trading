@@ -306,7 +306,7 @@ class InitialMarket
             'total_equity' => 415_970_640_000.00,
             'customer_deposits' => 1_380_000_000_000.00,
             'wholesale_debt' => 226_320_000_000.00,
-            'retained_earnings' => 82_800_000_000.00
+            'retained_earnings' => 82_800_000_000.00,
         ],
         [
             'ticker' => 'DOVE',
@@ -347,7 +347,7 @@ class InitialMarket
             'total_equity'      => 85_000_000_000.00,
             'customer_deposits' => 275_000_000_000.00,
             'wholesale_debt'    => 11_000_000_000.00,
-            'retained_earnings' => 33_750_000_000.00
+            'retained_earnings' => 33_750_000_000.00,
         ],
         [
             'ticker' => 'SHRK',
@@ -377,7 +377,7 @@ class InitialMarket
             'total_equity' => 15_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 4_500_000_000.00,
-            'retained_earnings' => 14_000_000_000.00
+            'retained_earnings' => 14_000_000_000.00,
         ],
         [
             'ticker' => 'BIRD',
@@ -406,7 +406,7 @@ class InitialMarket
             'total_equity'      => 50_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 60_000_000_000.00,
-            'retained_earnings' => 18_750_000_000.00
+            'retained_earnings' => 18_750_000_000.00,
         ],
         [
             'ticker' => 'WATCH',
@@ -435,7 +435,7 @@ class InitialMarket
             'total_equity' => 12_250_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 9_625_000_000.00,
-            'retained_earnings' => 2_100_000_000.00
+            'retained_earnings' => 2_100_000_000.00,
         ],
         [
             'ticker' => 'WING',
@@ -464,7 +464,7 @@ class InitialMarket
             'total_equity'      => 35_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 10_000_000_000.00,
-            'retained_earnings' => 10_000_000_000.00
+            'retained_earnings' => 10_000_000_000.00,
         ],
         [
             'ticker' => 'PENG',
@@ -493,7 +493,7 @@ class InitialMarket
             'total_equity'      => 22_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 9_000_000_000.00,
-            'retained_earnings' => 5_000_000_000.00
+            'retained_earnings' => 5_000_000_000.00,
         ],
         [
             'ticker' => 'SHOR',
@@ -522,7 +522,7 @@ class InitialMarket
             'total_equity'      => 32_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 40_000_000_000.00,
-            'retained_earnings' => 20_000_000_000.00
+            'retained_earnings' => 20_000_000_000.00,
         ],
         [
             'ticker' => 'RIVE',
@@ -551,7 +551,7 @@ class InitialMarket
             'total_equity'      => 24_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 14_000_000_000.00,
-            'retained_earnings' => 2_500_000_000.00
+            'retained_earnings' => 2_500_000_000.00,
         ],
         [
             'ticker' => 'GRIP',
@@ -582,7 +582,7 @@ class InitialMarket
             'total_equity'      => 35_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 27_500_000_000.00,
-            'retained_earnings' => 9_000_000_000.00
+            'retained_earnings' => 9_000_000_000.00,
         ],
         [
             'ticker' => 'LOON',
@@ -611,7 +611,7 @@ class InitialMarket
             'total_equity' => 65_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 75_000_000_000.00,
-            'retained_earnings' => 32_500_000_000.00
+            'retained_earnings' => 32_500_000_000.00,
         ],
         [
             'ticker' => 'PHIL',
@@ -641,7 +641,7 @@ class InitialMarket
             'total_equity'      => 22_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 18_000_000_000.00,
-            'retained_earnings' => 9_000_000_000.00
+            'retained_earnings' => 9_000_000_000.00,
         ],
         [
             'ticker' => 'TRIV',
@@ -671,7 +671,7 @@ class InitialMarket
             'total_equity'      => 32_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 27_500_000_000.00,
-            'retained_earnings' => 18_000_000_000.00
+            'retained_earnings' => 18_000_000_000.00,
         ],
         [
             'ticker' => 'IBHI',
@@ -700,7 +700,7 @@ class InitialMarket
             'total_equity' => 90_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 50_000_000_000.00,
-            'retained_earnings' => 22_500_000_000.00
+            'retained_earnings' => 22_500_000_000.00,
         ],
         [
             'ticker' => 'TICK',
@@ -736,7 +736,7 @@ class InitialMarket
             'total_equity' => 15_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 3_000_000_000.00,
-            'retained_earnings' => 15_000_000_000.00
+            'retained_earnings' => 15_000_000_000.00,
         ],
         [
             'ticker' => 'SINK',
@@ -765,7 +765,7 @@ class InitialMarket
             'total_equity' => 75_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 37_500_000_000.00,
-            'retained_earnings' => 22_500_000_000.00
+            'retained_earnings' => 22_500_000_000.00,
         ],
         [
             'ticker' => 'CASC',
@@ -797,7 +797,7 @@ class InitialMarket
             'total_equity'      => 320_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 100_000_000_000.00,
-            'retained_earnings' => 40_000_000_000.00
+            'retained_earnings' => 40_000_000_000.00,
         ],
         [
             'ticker' => 'GULL',
@@ -827,7 +827,7 @@ class InitialMarket
             'total_equity'      => 32_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 37_500_000_000.00,
-            'retained_earnings' => 25_000_000_000.00
+            'retained_earnings' => 25_000_000_000.00,
         ],
         [
             'ticker' => 'WADE',
@@ -857,7 +857,7 @@ class InitialMarket
             'total_equity'      => 24_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 24_000_000_000.00,
-            'retained_earnings' => 18_000_000_000.00
+            'retained_earnings' => 18_000_000_000.00,
         ],
         [
             'ticker' => 'CORM',
@@ -887,7 +887,7 @@ class InitialMarket
             'total_equity'      => 20_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 20_000_000_000.00,
-            'retained_earnings' => 8_000_000_000.00
+            'retained_earnings' => 8_000_000_000.00,
         ],
         [
             'ticker' => 'CRAN',
@@ -916,7 +916,7 @@ class InitialMarket
             'total_equity'      => 30_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 30_000_000_000.00,
-            'retained_earnings' => 15_000_000_000.00
+            'retained_earnings' => 15_000_000_000.00,
         ],
         [
             'ticker' => 'TALN',
@@ -945,7 +945,7 @@ class InitialMarket
             'total_equity' => 60_000_000_000.00,
             'customer_deposits' => 425_000_000_000.00,
             'wholesale_debt' => 24_000_000_000.00,
-            'retained_earnings' => 33_750_000_000.00
+            'retained_earnings' => 33_750_000_000.00,
         ],
         [
             'ticker' => 'CANV',
@@ -974,7 +974,7 @@ class InitialMarket
             'total_equity' => 40_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 32_500_000_000.00,
-            'retained_earnings' => 30_000_000_000.00
+            'retained_earnings' => 30_000_000_000.00,
         ],
         [
             'ticker' => 'SGRB',
@@ -1005,7 +1005,7 @@ class InitialMarket
             'total_equity'      => 22_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 17_500_000_000.00,
-            'retained_earnings' => 8_000_000_000.00
+            'retained_earnings' => 8_000_000_000.00,
         ],
         [
             'ticker' => 'STRK',
@@ -1034,7 +1034,7 @@ class InitialMarket
             'total_equity'      => 35_000_000_000.00,
             'customer_deposits' => 225_000_000_000.00,
             'wholesale_debt'    => 11_000_000_000.00,
-            'retained_earnings' => 15_000_000_000.00
+            'retained_earnings' => 15_000_000_000.00,
         ],
         [
             'ticker' => 'BREW',
@@ -1063,7 +1063,7 @@ class InitialMarket
             'total_equity'      => 15_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 12_000_000_000.00,
-            'retained_earnings' => 5_000_000_000.00
+            'retained_earnings' => 5_000_000_000.00,
         ],
         [
             'ticker' => 'CLAW',
@@ -1093,7 +1093,7 @@ class InitialMarket
             'total_equity'      => 2_250_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 450_000_000.00,
-            'retained_earnings' => 1_500_000_000.00
+            'retained_earnings' => 1_500_000_000.00,
         ],
         [
             'ticker' => 'ROOK',
@@ -1122,7 +1122,7 @@ class InitialMarket
             'total_equity'      => 17_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 20_000_000_000.00,
-            'retained_earnings' => 2_250_000_000.00
+            'retained_earnings' => 2_250_000_000.00,
         ],
         [
             'ticker' => 'PLZA',
@@ -1152,7 +1152,7 @@ class InitialMarket
             'total_equity' => 45_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 52_500_000_000.00,
-            'retained_earnings' => 28_750_000_000.00
+            'retained_earnings' => 28_750_000_000.00,
         ],
         [
             'ticker' => 'LYRE',
@@ -1181,7 +1181,7 @@ class InitialMarket
             'total_equity'      => 11_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 3_500_000_000.00,
-            'retained_earnings' => 5_000_000_000.00
+            'retained_earnings' => 5_000_000_000.00,
         ],
         [
             'ticker' => 'STAR',
@@ -1210,7 +1210,7 @@ class InitialMarket
             'total_equity'      => 14_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 4_500_000_000.00,
-            'retained_earnings' => 10_000_000_000.00
+            'retained_earnings' => 10_000_000_000.00,
         ],
         [
             'ticker' => 'WEAV',
@@ -1240,7 +1240,7 @@ class InitialMarket
             'total_equity' => 26_100_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 14_500_000_000.00,
-            'retained_earnings' => 11_600_000_000.00
+            'retained_earnings' => 11_600_000_000.00,
         ],
         [
             'ticker' => 'JDAW',
@@ -1270,7 +1270,7 @@ class InitialMarket
             'total_equity' => 21_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 7_000_000_000.00,
-            'retained_earnings' => 11_000_000_000.00
+            'retained_earnings' => 11_000_000_000.00,
         ],
         [
             'ticker' => 'CROP',
@@ -1299,7 +1299,7 @@ class InitialMarket
             'total_equity'      => 32_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 25_000_000_000.00,
-            'retained_earnings' => 16_000_000_000.00
+            'retained_earnings' => 16_000_000_000.00,
         ],
         [
             'ticker' => 'BRKW',
@@ -1353,7 +1353,7 @@ class InitialMarket
             'total_equity' => 1_128_600_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 75_600_000_000.00,
-            'retained_earnings' => 648_000_000_000.00
+            'retained_earnings' => 648_000_000_000.00,
         ],
         [
             'ticker' => 'ELDE',
@@ -1383,7 +1383,7 @@ class InitialMarket
             'total_equity'      => 25_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 32_500_000_000.00,
-            'retained_earnings' => 300_000_000.00
+            'retained_earnings' => 300_000_000.00,
         ],
         [
             'ticker' => 'SWFT',
@@ -1421,7 +1421,7 @@ class InitialMarket
             'total_equity'      => 20_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 16_000_000_000.00,
-            'retained_earnings' => 7_500_000_000.00
+            'retained_earnings' => 7_500_000_000.00,
         ],
         [
             'ticker' => 'VULT',
@@ -1451,7 +1451,7 @@ class InitialMarket
             'total_equity' => 40_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 17_500_000_000.00,
-            'retained_earnings' => 35_000_000_000.00
+            'retained_earnings' => 35_000_000_000.00,
         ],
         [
             'ticker' => 'FALC',
@@ -1483,7 +1483,7 @@ class InitialMarket
             'total_equity' => 95_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 115_000_000_000.00,
-            'retained_earnings' => 22_500_000_000.00
+            'retained_earnings' => 22_500_000_000.00,
         ],
         [
             'ticker' => 'OSPR',
@@ -1512,7 +1512,7 @@ class InitialMarket
             'total_equity' => 30_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 24_000_000_000.00,
-            'retained_earnings' => 24_000_000_000.00
+            'retained_earnings' => 24_000_000_000.00,
         ],
         [
             'ticker' => 'CROW',
@@ -1545,7 +1545,7 @@ class InitialMarket
             'total_equity' => 30_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 9_000_000_000.00,
-            'retained_earnings' => 22_500_000_000.00
+            'retained_earnings' => 22_500_000_000.00,
         ],
         [
             'ticker' => 'CNDR',
@@ -1579,7 +1579,7 @@ class InitialMarket
             'total_equity' => 40_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 17_500_000_000.00, // Book D/E 0.44: the US metals & mining average, about BHP's.
-            'retained_earnings' => 20_000_000_000.00
+            'retained_earnings' => 20_000_000_000.00,
         ],
         [
             'ticker' => 'SILC',
@@ -1609,7 +1609,7 @@ class InitialMarket
             'total_equity' => 105_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 50_000_000_000.00,
-            'retained_earnings' => 70_000_000_000.00
+            'retained_earnings' => 70_000_000_000.00,
         ],
         [
             'ticker' => 'KSTL',
@@ -1638,7 +1638,7 @@ class InitialMarket
             'total_equity' => 35_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 27_500_000_000.00,
-            'retained_earnings' => 22_500_000_000.00
+            'retained_earnings' => 22_500_000_000.00,
         ],
         [
             'ticker' => 'POOL',
@@ -1667,7 +1667,7 @@ class InitialMarket
             'total_equity' => 55_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 225_000_000_000.00,
-            'retained_earnings' => 32_500_000_000.00
+            'retained_earnings' => 32_500_000_000.00,
         ],
         [
             'ticker' => 'ACC',

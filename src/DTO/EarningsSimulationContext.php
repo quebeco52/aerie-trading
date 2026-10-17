@@ -17,7 +17,7 @@ class EarningsSimulationContext
         public readonly MacroStateDTO $macroState,
         public readonly BusinessModelInterface $strategy,
         public readonly string $businessModel,
-        public readonly float $dt = 0.25
+        public readonly float $dt = 0.25,
     ) {}
 
     public float $investedCapital = 0.0;
@@ -43,7 +43,7 @@ class EarningsSimulationContext
     public int $fiscalQuarter = 0;
     public int $tickCount = 0;
     public int $ticksPerYear = 252;
-    
+
     // Capacity & Revenue
     public float $capacityUtilization = 0.0;
     /** Capacity utilization without the firm's own demand shock and jump this quarter: the output analysts forecast. */
@@ -109,15 +109,15 @@ class EarningsSimulationContext
     public float $taxDepreciation = 0.0;
     /** Income on the tax return: pretax income less the plant's timing differences, before the loss carryforward. */
     public float $taxableIncome = 0.0;
-    
+
     // Variables
     public float $realizedVariableMargin = 0.0;
-    
+
     // Analyst
     public float $analystExpectedRevenue = 0.0;
     public float $analystExpectedVariableCosts = 0.0;
     public float $expectedEbit = 0.0;
-    
+
     // Actuals
     public float $actualRevenue = 0.0;
     public float $actualVariableCosts = 0.0;
@@ -199,7 +199,7 @@ class EarningsSimulationContext
     public float $quarterlyDepreciation = 0.0;
     public float $trueOperatingMargin = 0.0;
     public float $operatingCosts = 0.0;
-    public ?\App\DTO\DebtMetricsDTO $debtMetrics = null;
+    public ?DebtMetricsDTO $debtMetrics = null;
 
     // Net Income
     public float $preTaxIncome = 0.0;
@@ -229,13 +229,13 @@ class EarningsSimulationContext
     public array $allocation = [];
     public float $totalReportedCapex = 0.0;
     public float $trueQuarterlyFcf = 0.0;
-    
+
     // Market Event
     public float $totalShockPct = 0.0;
     public string $corporateActionDescriptions = "";
-    
+
     // Health & Value
-    public ?\App\DTO\DebtHealthDTO $health = null;
+    public ?DebtHealthDTO $health = null;
     public float $wacc = 0.0;
     public float $quarterlyEconomicProfit = 0.0;
 }

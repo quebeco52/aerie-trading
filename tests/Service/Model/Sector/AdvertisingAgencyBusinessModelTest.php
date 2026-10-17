@@ -37,7 +37,7 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
             fixedCosts: 25_000_000.0,
             baselineVol: 0.12,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertArrayHasKey('media_buying_commissions', $result->streamRevenue);
@@ -48,7 +48,7 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $result->actualRevenue,
             $result->streamRevenue['media_buying_commissions'] + $result->streamRevenue['creative_brand_retainers'] + $result->streamRevenue['martech_consulting'],
-            1.0
+            1.0,
         );
     }
 
@@ -60,12 +60,12 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
 
         $recessionMacro = new MacroStateDTO(
             outputGapEma: -0.03,
-            consumerSentimentIndexEma: 70.0
+            consumerSentimentIndexEma: 70.0,
         );
 
         $boomMacro = new MacroStateDTO(
             outputGapEma: 0.03,
-            consumerSentimentIndexEma: 130.0
+            consumerSentimentIndexEma: 130.0,
         );
 
         $recessionResult = $this->model->computeActualFinancials(
@@ -75,7 +75,7 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
             fixedCosts: 25_000_000.0,
             baselineVol: 0.0,
             macroState: $recessionMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $boomResult = $this->model->computeActualFinancials(
@@ -85,16 +85,15 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
             fixedCosts: 25_000_000.0,
             baselineVol: 0.0,
             macroState: $boomMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $this->mathUtility,
         );
 
         $this->assertGreaterThan(
             $recessionResult->streamRevenue['media_buying_commissions'],
             $boomResult->streamRevenue['media_buying_commissions'],
-            'Consumer sentiment and output gap booms must expand media buying commissions.'
+            'Consumer sentiment and output gap booms must expand media buying commissions.',
         );
     }
-
 
     /**
      * This model applies the cycle per stream in calculateSectorPhysics, so the parent's generic demand shift

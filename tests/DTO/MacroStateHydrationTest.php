@@ -112,7 +112,7 @@ class MacroStateHydrationTest extends TestCase
             $dto->highYieldCreditSpread,
             $dto->highYieldCreditSpreadEma,
             1e-12,
-            'A smoothed spread with no history opens level with the spread it smooths.'
+            'A smoothed spread with no history opens level with the spread it smooths.',
         );
     }
 
@@ -283,8 +283,8 @@ class MacroStateHydrationTest extends TestCase
 
         // Openings are declared to the basis point.
         foreach (['yield_2y' => 'yield2y', 'yield_5y' => 'yield5y', 'yield_10y' => 'yield10y', 'yield_30y' => 'yield30y',
-                  'level' => 'nsLevel', 'beta1' => 'nsBeta1', 'curvature' => 'nsCurvature', 'curvature2' => 'nsCurvature2',
-                  'base_term_premium' => 'nsBaseTermPremium', 'term_premium_10y' => 'termPremium10y', 'risk_neutral_10y' => 'riskNeutral10y'] as $key => $field) {
+            'level' => 'nsLevel', 'beta1' => 'nsBeta1', 'curvature' => 'nsCurvature', 'curvature2' => 'nsCurvature2',
+            'base_term_premium' => 'nsBaseTermPremium', 'term_premium_10y' => 'termPremium10y', 'risk_neutral_10y' => 'riskNeutral10y'] as $key => $field) {
             $this->assertEqualsWithDelta($curve[$key], $state->$field, 0.00006, $field);
         }
     }
@@ -308,7 +308,7 @@ class MacroStateHydrationTest extends TestCase
         $viaSnapshot = MacroStateDTO::fromArray($payload);
 
         foreach (['policyRate', 'inflation', 'inflationEma', 'macroCreditSpread', 'highYieldCreditSpread',
-                  'nsBeta1', 'qeActive', 'qeIntensity', 'qtIntensity', 'balanceSheetIntensity'] as $field) {
+            'nsBeta1', 'qeActive', 'qeIntensity', 'qtIntensity', 'balanceSheetIntensity'] as $field) {
             $this->assertSame($viaState->$field, $viaSnapshot->$field, "Readers disagree on {$field}.");
         }
     }
@@ -328,8 +328,8 @@ class MacroStateHydrationTest extends TestCase
     public static function curveReaderProvider(): array
     {
         return [
-            'snapshot opening' => [static fn (): object => MacroStateDTO::fromArray([])],
-            'engine opening'   => [static fn (): object => new MacroState()],
+            'snapshot opening' => [static fn(): object => MacroStateDTO::fromArray([])],
+            'engine opening'   => [static fn(): object => new MacroState()],
         ];
     }
 
@@ -353,13 +353,13 @@ class MacroStateHydrationTest extends TestCase
             $curve->policyRate - $curve->nsLevel,
             $curve->nsBeta1,
             1e-12,
-            'beta1 is the policy rate under the long-run level, not a free parameter.'
+            'beta1 is the policy rate under the long-run level, not a free parameter.',
         );
         $this->assertEqualsWithDelta(
             $curve->yield10y - $curve->policyRate,
             $curve->nsSlope,
             1e-12,
-            'The reported slope is the 10y-over-policy term spread.'
+            'The reported slope is the 10y-over-policy term spread.',
         );
         $this->assertGreaterThan(0.0, $curve->nsLevel, 'A long end at zero is a degenerate curve.');
         $this->assertLessThan(0.0, $curve->nsBeta1, 'An upward curve carries a negative beta1.');

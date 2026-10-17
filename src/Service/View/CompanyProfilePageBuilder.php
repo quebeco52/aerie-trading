@@ -6,8 +6,8 @@ namespace App\Service\View;
 
 use App\Data\Company\AnchorHoldings;
 use App\Data\Company\CompanyResearch;
-use App\Data\District\Institutions;
 use App\Data\Company\StrategicHoldings;
+use App\Data\District\Institutions;
 use App\Entity\Stock;
 use App\Repository\StockEventRepository;
 use App\Repository\StockRepository;
@@ -93,7 +93,7 @@ class CompanyProfilePageBuilder
             $holders[] = ['name' => Institutions::SOVEREIGN_RESERVE_FUND, 'ticker' => null, 'share' => $strategic];
         }
 
-        usort($holders, static fn (array $a, array $b): int => $b['share'] <=> $a['share']);
+        usort($holders, static fn(array $a, array $b): int => $b['share'] <=> $a['share']);
 
         return $holders;
     }

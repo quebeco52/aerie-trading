@@ -5,19 +5,18 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
-use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Heavy Manufacturing and Heavy Industry (e.g. Autos, Heavy Machinery, Specialty Chemicals, Steel).
- * 
+ *
  * Financial Physics:
  * - High Operating Leverage: Massive fixed costs mean margins compress violently during recessions but explode during booms.
  * - Pro-Cyclical: Highly sensitive to the macro output gap (GDP).
@@ -64,10 +63,22 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.30;
     public const BASE_COVERAGE_ERROR = 0.08;
-        public function getReversionSpeed(): float { return 0.12; }
-    public function getMoatSpread(): float { return 0.01; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
+    public function getReversionSpeed(): float
+    {
+        return 0.12;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.01;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.15;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.125;
+    }
     // --- CapEx & Asset Physics ---
     public function getCapexCyclicality(): float
     {
@@ -168,7 +179,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $cycleShares = MacroTransmission::allocateDemandShift(
             ['oem_equipment' => $oemWeight, 'aftermarket_mro' => $mroWeight],
             ['oem_equipment' => 1.0, 'aftermarket_mro' => self::MRO_CYCLE_LOADING],
-            $this->resolveCycleDemandShift($stock, $macroState)
+            $this->resolveCycleDemandShift($stock, $macroState),
         );
 
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
@@ -212,8 +223,8 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin + $inputCostDrag + $gscpiCostDrag);
 
-        $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * self::OEM_BACKLOG_BURN_RATE) +
-            ($mroZ * $mroWeight * self::MRO_VARIANCE_SCALAR);
+        $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * self::OEM_BACKLOG_BURN_RATE)
+            + ($mroZ * $mroWeight * self::MRO_VARIANCE_SCALAR);
         $observableShockZ *= $baselineVol;
 
         return new SectorPhysicsResult(
@@ -223,7 +234,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
             eventType: null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-                    kpis: ['book_to_bill' => $oemBook['book_to_bill'], 'backlog_quarters' => $oemBook['backlog_quarters']],
+            kpis: ['book_to_bill' => $oemBook['book_to_bill'], 'backlog_quarters' => $oemBook['backlog_quarters']],
         );
     }
 

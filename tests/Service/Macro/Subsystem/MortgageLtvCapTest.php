@@ -19,8 +19,14 @@ class MortgageLtvCapTest extends TestCase
     protected function setUp(): void
     {
         $math = new class extends MathUtility {
-            public function generateStandardNormal(): float { return 0.0; }
-            public function checkProbability(float $probability): bool { return false; }
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
         };
         $this->subsystem = new CreditFiscalSubsystem($math);
     }

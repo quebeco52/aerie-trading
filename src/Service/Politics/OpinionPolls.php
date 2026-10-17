@@ -120,7 +120,7 @@ final class OpinionPolls
             $inflation - $state->supportInflationCounted,
             $math->generateStandardNormal(),
             count(AerieDiet::governingParties($state->governingCoalition)) === 1,
-            self::termClock($state->totalTime - $state->termStartedAt) - self::termClock($state->supportUpdatedAt - $state->termStartedAt)
+            self::termClock($state->totalTime - $state->termStartedAt) - self::termClock($state->supportUpdatedAt - $state->termStartedAt),
         );
         $base = self::lastingSupport($state);
         $moved = PoliticsEngine::applyIncumbentSwing($base, $state->governingCoalition, $swing, $state->supportParties);

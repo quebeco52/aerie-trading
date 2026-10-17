@@ -65,7 +65,7 @@ final class ReportedKpiConsensusTest extends TestCase
         $this->assertGreaterThan(
             $this->consensusRevenue(1.00),
             $this->consensusRevenue(1.20),
-            'A book-to-bill of 1.2 is revenue already won; consensus must reflect it.'
+            'A book-to-bill of 1.2 is revenue already won; consensus must reflect it.',
         );
     }
 
@@ -75,7 +75,7 @@ final class ReportedKpiConsensusTest extends TestCase
         $this->assertLessThan(
             $this->consensusRevenue(1.00),
             $this->consensusRevenue(0.80),
-            'Shipping more than is being ordered is a forward revenue decline analysts can see coming.'
+            'Shipping more than is being ordered is a forward revenue decline analysts can see coming.',
         );
     }
 
@@ -94,7 +94,7 @@ final class ReportedKpiConsensusTest extends TestCase
         $this->assertLessThanOrEqual(
             $neutral * (1.0 + MarketConsensusEngine::MAX_BOOK_TO_BILL_CONSENSUS_TILT) + 1.0,
             $extreme,
-            'The forward tilt must stay inside its cap however large the disclosed order book.'
+            'The forward tilt must stay inside its cap however large the disclosed order book.',
         );
     }
 

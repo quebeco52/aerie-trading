@@ -78,7 +78,6 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $state->wageGrowth);
     }
 
-
     public function testUnemploymentNeverBreachesFrictionalFloorInExtremeBoom(): void
     {
         $state = new MacroState();
@@ -100,8 +99,8 @@ class LaborMarketSubsystemTest extends TestCase
     private function convergedWageGrowth(float $expectedInflation): float
     {
         $state = new MacroState();
-        $state->unemploymentRate = \App\Service\Macro\MacroEngine::NATURAL_UNEMPLOYMENT;
-        $state->nairu = \App\Service\Macro\MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $state->nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
         $state->tipsBreakeven = $expectedInflation;
         $state->tipsBreakevenEma = $expectedInflation;
         $state->domesticInflation = $expectedInflation;
@@ -111,7 +110,7 @@ class LaborMarketSubsystemTest extends TestCase
         // Partial adjustment at WAGE_ADJUSTMENT_SPEED closes half the growth gap each quarter; the level the start-up
         // leaves behind error-corrects on a ~7 year half-life, so a century settles both.
         for ($i = 0; $i < 400; $i++) {
-            $this->subsystem->calculateLaborMarketAndWages($state, \App\Service\Macro\MacroEngine::TFP_DRIFT, 0.25);
+            $this->subsystem->calculateLaborMarketAndWages($state, MacroEngine::TFP_DRIFT, 0.25);
         }
 
         return $state->wageGrowth;
@@ -151,7 +150,7 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(
             MacroEngine::NATURAL_UNEMPLOYMENT + 0.0020,
             $scarred,
-            'Two years of sustained slack must leave structural scarring behind.'
+            'Two years of sustained slack must leave structural scarring behind.',
         );
 
         // Ten years with the market tight. Re-absorption is linear in the scarring, so the excess decays
@@ -170,12 +169,12 @@ class LaborMarketSubsystemTest extends TestCase
             $expected,
             $state->nairu,
             1e-6,
-            'A tight labour market must re-absorb scarring at its own speed, not at the product of two deviations.'
+            'A tight labour market must re-absorb scarring at its own speed, not at the product of two deviations.',
         );
         $this->assertLessThan(
             MacroEngine::NATURAL_UNEMPLOYMENT + (($scarred - MacroEngine::NATURAL_UNEMPLOYMENT) * 0.40),
             $state->nairu,
-            'Most of the scarring must be gone after a decade of tight labour markets: the ratchet has to close.'
+            'Most of the scarring must be gone after a decade of tight labour markets: the ratchet has to close.',
         );
     }
 
@@ -223,7 +222,7 @@ class LaborMarketSubsystemTest extends TestCase
             0.03,
             $unanchored - $anchored,
             1e-6,
-            'Three points more expected inflation must become three points more nominal wage growth.'
+            'Three points more expected inflation must become three points more nominal wage growth.',
         );
     }
 
@@ -240,13 +239,13 @@ class LaborMarketSubsystemTest extends TestCase
                 $this->convergedWageGrowth(0.02) - 0.02,
                 $real,
                 1e-6,
-                sprintf('Real wage growth moved when only expected inflation changed (%.0f%%).', $expectedInflation * 100)
+                sprintf('Real wage growth moved when only expected inflation changed (%.0f%%).', $expectedInflation * 100),
             );
             $this->assertEqualsWithDelta(
-                \App\Service\Macro\MacroEngine::TFP_DRIFT,
+                MacroEngine::TFP_DRIFT,
                 $real,
                 1e-9,
-                'At its natural rate the tightness term vanishes, so real pay is exactly productivity.'
+                'At its natural rate the tightness term vanishes, so real pay is exactly productivity.',
             );
         }
     }
@@ -262,13 +261,12 @@ class LaborMarketSubsystemTest extends TestCase
     public function testNominalWageGrowthIsCappedOnceExpectedInflationPassesTheCeiling(): void
     {
         $ceiling = LaborMarketSubsystem::MAX_NOMINAL_WAGE_GROWTH;
-        $headroom = $ceiling - \App\Service\Macro\MacroEngine::TFP_DRIFT;
+        $headroom = $ceiling - MacroEngine::TFP_DRIFT;
 
         $this->assertEqualsWithDelta($ceiling, $this->convergedWageGrowth($headroom), 1e-6, 'The ceiling is reached exactly at its headroom.');
         $this->assertEqualsWithDelta($ceiling, $this->convergedWageGrowth(0.12), 1e-6, 'Beyond it, nominal wage growth stops rising.');
         $this->assertLessThan(0.0, $this->convergedWageGrowth(0.12) - 0.12, 'Past the ceiling, real pay falls.');
     }
-
 
     // --- Wage Error Correction ---
 
@@ -344,7 +342,6 @@ class LaborMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($halfLives[0], $halfLives[1], 0.02, 'The half-life moved with the tick.');
     }
 
-
     /**
      * The wage level is measured against POTENTIAL productivity: when potential absorbs a technology gain the
      * real wage falls below its path by that gain (unit labour cost drops), and the error correction then pays
@@ -362,7 +359,6 @@ class LaborMarketSubsystemTest extends TestCase
         }
         $this->assertGreaterThan(-0.001, $state->realWageGap, 'Thirty years on, wages have caught up with the productivity they are paid out of.');
     }
-
 
     /** The change over the year reads the month end twelve before the last off the Sahm record. */
     public function testUnemploymentChangeIsReadOverTheYear(): void

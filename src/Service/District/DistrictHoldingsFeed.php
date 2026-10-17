@@ -41,7 +41,7 @@ class DistrictHoldingsFeed
 
         // The calculator needs the running order: a weighted average is path dependent, and a sell
         // consumes the basis the buys before it laid down.
-        $filledOrders = $this->entityManager->getRepository(\App\Entity\TradeOrder::class)
+        $filledOrders = $this->entityManager->getRepository(TradeOrder::class)
             ->findFilledForUser($user);
 
         return $this->describe($userStocks, $this->costBasis->calculate($filledOrders));

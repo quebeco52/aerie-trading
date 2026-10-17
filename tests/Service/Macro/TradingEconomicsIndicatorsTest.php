@@ -139,13 +139,13 @@ class TradingEconomicsIndicatorsTest extends TestCase
             $shockState->producerPriceInflation,
             $settledState->producerPriceInflation,
             'A settled price level is not a price surge: with the trend caught up, the commodity legs must '
-            . 'contribute no inflation, however far the level sits from its nominal baseline.'
+            . 'contribute no inflation, however far the level sits from its nominal baseline.',
         );
         $this->assertLessThan(
             0.050,
             $settledState->producerPriceInflation,
             'Standing commodity levels must not book permanent producer inflation; only the wage, supply '
-            . 'chain and demand legs may still be firing here.'
+            . 'chain and demand legs may still be firing here.',
         );
     }
 
@@ -164,7 +164,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $this->assertLessThan(
             MacroEngine::TRADE_BALANCE_BASELINE,
             $stateOvervalued->tradeBalanceToGdp,
-            'Currency appreciation and strong domestic absorption must deteriorate the trade balance.'
+            'Currency appreciation and strong domestic absorption must deteriorate the trade balance.',
         );
 
         // 2. Depreciated currency & deep domestic contraction (import compression + export competitiveness)
@@ -178,7 +178,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $this->assertGreaterThan(
             MacroEngine::TRADE_BALANCE_BASELINE,
             $stateDepreciated->tradeBalanceToGdp,
-            'Currency depreciation and domestic import compression must improve the net export balance.'
+            'Currency depreciation and domestic import compression must improve the net export balance.',
         );
     }
 
@@ -204,7 +204,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $this->assertGreaterThan(
             100.0,
             $boomState->housingStartsIndex,
-            'High Tobin Q and affordable mortgage credit must stimulate housing starts above baseline.'
+            'High Tobin Q and affordable mortgage credit must stimulate housing starts above baseline.',
         );
 
         // 2. Housing freeze: depressed prices, high replacement cost, 8% mortgage rates, tight credit
@@ -225,7 +225,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $this->assertLessThan(
             100.0,
             $slumpState->housingStartsIndex,
-            'High mortgage costs, elevated replacement costs, and bank credit rationing must depress housing starts.'
+            'High mortgage costs, elevated replacement costs, and bank credit rationing must depress housing starts.',
         );
     }
 
@@ -247,7 +247,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $this->assertGreaterThan(
             $neutralGrowth,
             $qeState->moneySupplyGrowth,
-            'Central bank QE and commercial bank credit expansion must accelerate M2 money supply growth.'
+            'Central bank QE and commercial bank credit expansion must accelerate M2 money supply growth.',
         );
 
         // 2. Central bank quantitative tightening (QT) & credit crunch
@@ -262,7 +262,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $this->assertLessThan(
             $neutralGrowth,
             $qtState->moneySupplyGrowth,
-            'Aggressive QT and commercial credit rationing must sharply slow M2 money supply growth.'
+            'Aggressive QT and commercial credit rationing must sharply slow M2 money supply growth.',
         );
     }
 

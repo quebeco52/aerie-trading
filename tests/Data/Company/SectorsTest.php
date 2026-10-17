@@ -77,7 +77,6 @@ class SectorsTest extends TestCase
         }
     }
 
-
     /**
      * Catalog industries with no model of their own are aliased to the nearest real model rather than falling
      * through to the generic corporate physics, so a future ticker in one of them inherits sector behaviour.
@@ -157,7 +156,7 @@ class SectorsTest extends TestCase
     /** The financial flag is each model's own; pinned so a model cannot change sides without the change being seen. */
     public function testTheFinancialInstitutionsAreTheLendersUnderwritersAndMarketInfrastructure(): void
     {
-        $financial = array_keys(array_filter(Sectors::BUSINESS_MODELS, static fn (string $class, string $id): bool => Sectors::isFinancial($id), ARRAY_FILTER_USE_BOTH));
+        $financial = array_keys(array_filter(Sectors::BUSINESS_MODELS, static fn(string $class, string $id): bool => Sectors::isFinancial($id), ARRAY_FILTER_USE_BOTH));
         sort($financial);
 
         $this->assertSame([

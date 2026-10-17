@@ -40,7 +40,7 @@ final class OptionSettlementFreshReadTest extends TestCase
         $connection = $this->createStub(Connection::class);
         $connection->method('isTransactionActive')->willReturn(true);
         $connection->method('executeStatement')->willReturn(1);
-        $connection->method('fetchAllAssociative')->willReturn(array_map(static fn (int $id): array => [
+        $connection->method('fetchAllAssociative')->willReturn(array_map(static fn(int $id): array => [
             'id' => $id, 'ticker' => 'TST-' . $id, 'option_type' => OptionContract::TYPE_CALL,
             'strike' => '50.00000000', 'underlying' => 'TST', 'settlement' => '60.00000000',
         ], [1, 2]));

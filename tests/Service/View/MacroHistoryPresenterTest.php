@@ -43,7 +43,7 @@ class MacroHistoryPresenterTest extends TestCase
     {
         $this->assertSame(
             [...array_keys(OutputGapChannels::families()), 'other'],
-            array_keys(MacroHistoryPresenter::GAP_GROUP_LABELS)
+            array_keys(MacroHistoryPresenter::GAP_GROUP_LABELS),
         );
     }
 

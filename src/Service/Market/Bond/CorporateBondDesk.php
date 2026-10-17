@@ -109,7 +109,7 @@ final class CorporateBondDesk
              FROM bonds
              WHERE issuer_id IS NOT NULL AND status = :active
              GROUP BY issuer_id',
-            ['active' => Bond::STATUS_ACTIVE]
+            ['active' => Bond::STATUS_ACTIVE],
         );
 
         $byIssuer = [];
@@ -176,7 +176,7 @@ final class CorporateBondDesk
         }
 
         $ceiling = $this->listedFaceCeiling($stock);
-        $listedFace = array_sum(array_map(static fn (Bond $bond): float => max(0.0, (float) $bond->getOutstandingFace()), $issues));
+        $listedFace = array_sum(array_map(static fn(Bond $bond): float => max(0.0, (float) $bond->getOutstandingFace()), $issues));
         $spread = (float) $stock->getDynamicCreditSpread();
         $now = new \DateTime();
         $called = [];
@@ -304,7 +304,7 @@ final class CorporateBondDesk
     {
         $existing = (int) $this->em->getConnection()->fetchOne(
             'SELECT COUNT(*) FROM bonds WHERE issuer_id = :issuer',
-            ['issuer' => $stock->getId()]
+            ['issuer' => $stock->getId()],
         );
 
         return sprintf('%s-%02dY%02d', $stock->getTicker(), (int) $tenor, $existing + 1);
@@ -318,7 +318,7 @@ final class CorporateBondDesk
             $stock->getTicker(),
             $couponRate * 100.0,
             (int) $tenor,
-            $maturityTime
+            $maturityTime,
         );
     }
 }

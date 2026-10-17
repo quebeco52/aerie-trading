@@ -5,19 +5,19 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-use App\Service\Model\StreamContext;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\Distributions;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
-use App\Service\Math\FinancialConstants;
+use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Integrated Resorts & Casinos.
@@ -137,10 +137,22 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     /** Calendar-quarter seasonality of a coastal resort: Atlantic City land-based casino win 2015 (NJ DGE) by quarter over its mean. */
     public const SEASONALITY_FACTORS = [0.90, 0.99, 1.18, 0.93];
 
-    public function getReversionSpeed(): float { return self::MARGIN_REVERSION_SPEED; }
-    public function getMoatSpread(): float { return self::MOAT_SPREAD; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return self::WORKING_CAPITAL_INTENSITY; }
-    public function getCapExCompletionRate(Stock $stock): float { return self::CAPEX_COMPLETION_RATE; }
+    public function getReversionSpeed(): float
+    {
+        return self::MARGIN_REVERSION_SPEED;
+    }
+    public function getMoatSpread(): float
+    {
+        return self::MOAT_SPREAD;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return self::WORKING_CAPITAL_INTENSITY;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return self::CAPEX_COMPLETION_RATE;
+    }
 
     public function getSeasonalityFactors(): array
     {
@@ -184,7 +196,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         float $fixedCosts,
         float $baselineVol,
         MacroStateDTO $macroState,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
     ): SectorPhysicsResult {
         $pricingPower = $this->resolvePricingPower($stock);
         $targetWeights = $this->resolveTargetWeights($stock);
@@ -224,12 +236,12 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             $visitorShift,
             self::CRE_LEASE_WALT_YEARS,
             self::CRE_MAX_RELEASING_SPREAD,
-            $quarter
+            $quarter,
         );
 
         $shifts = $this->resolveStreamShifts($visitorShift, $streams->getRegimeElapsed(self::CRACKDOWN_REGIME) > 0, $rolledInPlaceRent, $tenantDefaultLoss);
         // Each stream's level over the one expected revenue was built at.
-        $relative = static fn (float $shift): float => ((1.0 + $shift) / max(0.01, 1.0 + $rootShift)) - 1.0;
+        $relative = static fn(float $shift): float => ((1.0 + $shift) / max(0.01, 1.0 + $rootShift)) - 1.0;
 
         // --- Gaming: volume on the visitor cycle, hold luck on the high-limit tables ---
         $gamingVolumeRevenue = max(0.0, $expectedRevenue * $gamingWeight
@@ -343,7 +355,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             $visitorShift,
             (float) ($momentum[StreamContext::REGIME_STATE_PREFIX . self::CRACKDOWN_REGIME] ?? 0.0) > 0.0,
             (float) ($momentum[self::STATE_IN_PLACE_RENT] ?? $visitorShift),
-            $this->resolveTenantDefaultLoss($macroState)
+            $this->resolveTenantDefaultLoss($macroState),
         );
 
         $weights = $this->resolveTargetWeights($stock);

@@ -45,7 +45,7 @@ final class SecurityBureau
             $term,
             CouncilAppointments::councilMedians($state),
             CouncilAppointments::reservedNames($state),
-            $math
+            $math,
         );
         if ($term < 0.0) {
             $chosen['name'] = AerieCouncil::OPENING_SECURITY_DIRECTOR;

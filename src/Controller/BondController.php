@@ -8,9 +8,9 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Bond;
 use App\Entity\User;
 use App\Repository\BondRepository;
-use App\Service\Macro\MacroStateProvider;
 use App\Repository\HoldingRepository;
 use App\Repository\TradeOrderRepository;
+use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Math\FinancialConstants;
@@ -40,7 +40,7 @@ class BondController extends AbstractController
         HoldingRepository $holdingRepository,
         MacroStateProvider $macroStateProvider,
         BondPricingEngine $pricingEngine,
-        PriceChangeFeed $priceChangeFeed
+        PriceChangeFeed $priceChangeFeed,
     ): Response {
         $macro = $macroStateProvider->liveState();
 
@@ -118,7 +118,8 @@ class BondController extends AbstractController
         PriceChangeFeed $priceChangeFeed,
         CostBasisCalculator $costBasis,
         CouponIncomeCalculator $couponIncome,
-        #[Autowire('%app.ticks_per_year%')] int $ticksPerYear,
+        #[Autowire('%app.ticks_per_year%')]
+        int $ticksPerYear,
     ): Response {
         $bond = $bondRepository->findOneByTicker($ticker);
         if (!$bond instanceof Bond) {

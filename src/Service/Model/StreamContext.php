@@ -53,7 +53,7 @@ class StreamContext
         /** This quarter's realized N(0,1) demand factor of the firm's macro sector; null when the macro state carries none. */
         private readonly ?float $sectorInnovation = null,
         /** Loading rho_s of every revenue stream on the sector demand factor (rho_s^2 = variance shared with sector peers). */
-        private readonly float $sectorFactorLoading = 0.0
+        private readonly float $sectorFactorLoading = 0.0,
     ) {}
 
     /**
@@ -291,7 +291,7 @@ class StreamContext
         float $adaptationRate = self::DEFAULT_MIX_ADAPTATION_RATE,
         float $reversionSpeed = self::DEFAULT_MIX_REVERSION_SPEED,
         float $minFloor = FinancialConstants::DEFAULT_MIN_STREAM_WEIGHT_FLOOR,
-        float $maxCeiling = FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING
+        float $maxCeiling = FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING,
     ): array {
         $normalizedTargets = ResponseCurves::normalizeWeightsSimplex($targetWeights);
         if (empty($normalizedTargets)) {
@@ -334,7 +334,7 @@ class StreamContext
                     $adaptationRate,
                     $reversionSpeed,
                     $minFloor,
-                    $maxCeiling
+                    $maxCeiling,
                 );
                 $rawWeights[$key] = $raw;
             }

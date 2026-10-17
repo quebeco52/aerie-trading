@@ -5,21 +5,20 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
+use App\DTO\MacroStateDTO;
 
-use App\Service\Model\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\DTO\MacroStateDTO;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Computer Hardware (Supercomputers, PCs, Peripherals).
- * 
+ *
  * Financial Physics:
  * - Enterprise Model: High-margin B2B hardware sales. Less sensitive to macro output gap.
  * - Consumer Model: Highly cyclical, deeply sensitive to consumer discretionary spending.
@@ -67,7 +66,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 
     // --- Pricing Power & Macro Physics ---
     /** Hard floor on pricing power given consumer dependency. */
-    public const MIN_BETA_PRICING_POWER_FLOOR = 0.80; 
+    public const MIN_BETA_PRICING_POWER_FLOOR = 0.80;
 
     // --- Revenue & Shock Physics ---
     /** Inventory obsolescence increases variance. */
@@ -107,8 +106,14 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     /** Consumer PCs are a landed import competing on retail shelf price, so the consumer book reprices with the currency harder than the enterprise book. */
     public const CONSUMER_FX_REVENUE_EXPOSURE = 0.15;
 
-        public function getReversionSpeed(): float { return 0.25; }
-    public function getMoatSpread(): float { return 0.02; }
+    public function getReversionSpeed(): float
+    {
+        return 0.25;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.02;
+    }
 
     // --- Secular Demand ---
     /** Spending on personal computers and peripherals plus business investment in computers and peripheral equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption expenditures and Table 5.3.5). */
@@ -127,7 +132,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        // Set to 0.0 to prevent double-dipping, as macro volume shocks 
+        // Set to 0.0 to prevent double-dipping, as macro volume shocks
         // are handled discretely per-stream in calculateSectorPhysics.
         $physics['macro_demand_shift'] = 0.0;
 
@@ -276,7 +281,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Consumer tech supply chains are heavily scrutinized and scraped.
         return new \App\DTO\SectorCoverageProfile(
@@ -284,7 +289,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
             errorStdDev: 0.05,
             minVisibility: 0.10,
             eventBaseVisibility: 0.90,
-            eventMinVisibility: 0.50
+            eventMinVisibility: 0.50,
         );
     }
 

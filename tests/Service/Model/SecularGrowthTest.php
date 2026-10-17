@@ -29,7 +29,7 @@ final class SecularGrowthTest extends TestCase
         self::assertEqualsWithDelta(
             MacroEngine::TREND_REAL_GROWTH + (($opening - MacroEngine::TREND_REAL_GROWTH) / 2.0),
             $model->getFadedSecularGrowthRate($stock, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS),
-            1e-12
+            1e-12,
         );
         self::assertEqualsWithDelta(MacroEngine::TREND_REAL_GROWTH, $model->getFadedSecularGrowthRate($stock, 500.0), 1e-9);
     }

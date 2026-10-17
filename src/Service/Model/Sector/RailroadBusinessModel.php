@@ -5,21 +5,19 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\Service\Math\MacroTransmission;
-use App\Service\Model\BusinessModelInterface;
-
-use App\Service\Model\ModelParam;
 use App\DTO\MacroStateDTO;
+
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
-use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroTransmission;
+use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
 
 /**
  * Earnings strategy for Class 1 Freight Railroads & Rail Infrastructure.
- * 
+ *
  * Financial Physics:
  * - High Barrier to Entry / Geographic Duopolies: Captive track networks grant immense pricing power.
  * - Tri-Stream Freight Architecture:
@@ -100,11 +98,26 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     /** Export volume per unit of the foreign bloc's output gap: the customers abroad. The import side rides on the domestic cycle. */
     public const FOREIGN_DEMAND_SENSITIVITY = 0.80;
 
-    public function getWholesaleLeverageLimit(): float { return 2.5; }
-    public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.02; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.3; }
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 2.5;
+    }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+    public function getMoatSpread(): float
+    {
+        return 0.02;
+    }
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.15;
+    }
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.3;
+    }
 
     // --- Secular Demand ---
     /** Rail transportation value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
@@ -118,10 +131,13 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         return MacroEngine::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-    
-    public function getCapexCyclicality(): float { return 0.70; } // Heavy rail maintenance CapEx
 
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    public function getCapexCyclicality(): float
+    {
+        return 0.70;
+    } // Heavy rail maintenance CapEx
+
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::IntermodalFreightWeight->value  => self::INTERMODAL_WEIGHT,
@@ -196,9 +212,9 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
-        $observableShockZ = ($intermodalZ * $intermodalWeight * self::INTERMODAL_VARIANCE_SCALAR) +
-            ($bulkZ * $bulkWeight * self::BULK_VARIANCE_SCALAR) +
-            ($intermodalMacroShift * $intermodalWeight);
+        $observableShockZ = ($intermodalZ * $intermodalWeight * self::INTERMODAL_VARIANCE_SCALAR)
+            + ($bulkZ * $bulkWeight * self::BULK_VARIANCE_SCALAR)
+            + ($intermodalMacroShift * $intermodalWeight);
         $observableShockZ *= $baselineVol;
 
         return new SectorPhysicsResult(

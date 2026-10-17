@@ -29,7 +29,7 @@ final class FailureSweepFreshReadTest extends TestCase
 
         $em = $this->createMock(EntityManagerInterface::class);
         $em->method('getConnection')->willReturn($connection);
-        $em->method('find')->willReturnCallback(static fn (string $class, int|string $id): ?User => $users[(int) $id] ?? null);
+        $em->method('find')->willReturnCallback(static fn(string $class, int|string $id): ?User => $users[(int) $id] ?? null);
         $refreshed = [];
         $em->expects($this->exactly(2))->method('refresh')->willReturnCallback(static function (object $user) use (&$refreshed): void {
             $refreshed[] = $user;

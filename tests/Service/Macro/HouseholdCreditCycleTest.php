@@ -43,7 +43,7 @@ class HouseholdCreditCycleTest extends TestCase
                 $changes[] = $leverage[$q] - $leverage[$q - 12];
                 $gaps[] = $gap[$q];
             }
-            $yearEnd = array_values(array_filter($leverage, static fn (int $q): bool => $q % 4 === 3, ARRAY_FILTER_USE_KEY));
+            $yearEnd = array_values(array_filter($leverage, static fn(int $q): bool => $q % 4 === 3, ARRAY_FILTER_USE_KEY));
             for ($y = 2; $y < count($yearEnd); $y++) {
                 $annual[] = $yearEnd[$y] - $yearEnd[$y - 1];
                 $annualLagged[] = $yearEnd[$y - 1] - $yearEnd[$y - 2];

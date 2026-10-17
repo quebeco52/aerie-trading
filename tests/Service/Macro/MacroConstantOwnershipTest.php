@@ -104,7 +104,7 @@ class MacroConstantOwnershipTest extends TestCase
         $this->assertSame(
             [],
             $misplaced,
-            "These belong to the subsystem that reads them, not to MacroEngine:\n  " . implode("\n  ", $misplaced)
+            "These belong to the subsystem that reads them, not to MacroEngine:\n  " . implode("\n  ", $misplaced),
         );
     }
 
@@ -139,7 +139,7 @@ class MacroConstantOwnershipTest extends TestCase
         $this->assertSame(
             [],
             $leaked,
-            "Shared parameters belong on MacroEngine:\n  " . implode("\n  ", $leaked)
+            "Shared parameters belong on MacroEngine:\n  " . implode("\n  ", $leaked),
         );
     }
 

@@ -2,8 +2,8 @@
 
 namespace App\Service\Market\Pricing;
 
-use App\Service\Macro\MacroEngine;
 use App\DTO\MacroStateDTO;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\OptionPricing;
@@ -94,7 +94,7 @@ class MarketEngine
     public const MAX_IMPACT_VARIANCE_DRAG_SHARE = 0.25;
 
     public function __construct(
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
     ) {}
 
     /**
@@ -207,7 +207,7 @@ class MarketEngine
         float $longTermVolatility,
         float $beta,
         float $lambda,
-        float $jumpVol
+        float $jumpVol,
     ): array {
         $jumpScale = max(self::MIN_JUMP_SCALE, $jumpVol);
 
@@ -219,7 +219,7 @@ class MarketEngine
                 2,
                 self::SVJJ_P_UP,
                 1.0,
-                1.0 / self::JUMP_DOWNSIDE_SCALE_RATIO
+                1.0 / self::JUMP_DOWNSIDE_SCALE_RATIO,
             );
             $budget = self::longTermIdiosyncraticVariance($longTermVolatility, $beta)
                 * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE;
@@ -323,7 +323,8 @@ class MarketEngine
      *
      * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value, the reversion speed that was applied and the policy news multiplier the price took.
      */
-    public function calculateNextPrice(\App\DTO\MarketPricingContext $ctx): array {
+    public function calculateNextPrice(\App\DTO\MarketPricingContext $ctx): array
+    {
         $currentPrice = $ctx->currentPrice;
         $currentVolatility = $ctx->currentVolatility;
         $longTermVolatility = $ctx->longTermVolatility;
@@ -384,7 +385,7 @@ class MarketEngine
             $dynamicEtaUp,
             $dynamicEtaDown,
             $capUp,
-            $capDown
+            $capDown,
         );
 
         // The market-wide jump as this name takes it, through its beta (systemicJumpMoments()).
@@ -414,16 +415,16 @@ class MarketEngine
                     $dynamicEtaUp,
                     $dynamicEtaDown,
                     $capUp,
-                    $capDown
+                    $capDown,
                 ),
-                $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE
+                $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE,
             )
             : 0.0;
 
         // Order-flow variance budget: deduct measured impact variance from diffusion variance.
         $impactVariance = min(
             max(0.0, $orderFlowVariance),
-            $longTermIdiosyncraticVar * self::MAX_IMPACT_VARIANCE_DRAG_SHARE
+            $longTermIdiosyncraticVar * self::MAX_IMPACT_VARIANCE_DRAG_SHARE,
         );
 
         // Announcement variance budget: a report or a warning is a scheduled jump (Dubinsky, Johannes, Kaeck &
@@ -431,7 +432,7 @@ class MarketEngine
         // within the same minority bound as its unscheduled jumps.
         $announcementVariance = min(
             max(0.0, $ctx->announcementVariance),
-            $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE
+            $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE,
         );
 
         // What the idiosyncratic diffusion is left with once the name's own other sources of variance have been paid
@@ -442,7 +443,7 @@ class MarketEngine
         $adjustedTheta = max(
             0.0001,
             (($longTermIdiosyncraticVar * $commonIdiosyncraticScale) - $idiosyncraticJumpVariance - $impactVariance - $announcementVariance)
-                * (1.0 - self::varianceJumpLoad($lambda, $dynamicKappa, $dt))
+                * (1.0 - self::varianceJumpLoad($lambda, $dynamicKappa, $dt)),
         );
 
         // The state arrives as the name's TOTAL variance, which is what every other part of the system
@@ -454,7 +455,7 @@ class MarketEngine
         $priorSystematicVar = ($beta * $priorMarketVol) * ($beta * $priorMarketVol);
         $currentIdiosyncraticVar = max(
             0.0,
-            $currentVar - $priorSystematicVar - $systemicJumpVariance - $idiosyncraticJumpVariance
+            $currentVar - $priorSystematicVar - $systemicJumpVariance - $idiosyncraticJumpVariance,
         );
 
         // The SVJJ Jump Process (Kou Distribution). The variance jump scales with the name's own
@@ -466,7 +467,7 @@ class MarketEngine
             etaUp: $dynamicEtaUp,
             etaDown: $dynamicEtaDown,
             muV: max(0.0, $currentIdiosyncraticVar) * self::VARIANCE_JUMP_MEAN_SHARE,
-            dt: $dt
+            dt: $dt,
         );
 
         // Variance Process via Quadratic-Exponential (QE) Scheme, run on the idiosyncratic variance.
@@ -475,7 +476,7 @@ class MarketEngine
             theta: $adjustedTheta,
             kappa: $dynamicKappa,
             sigma: $volOfVol,
-            dt: $dt
+            dt: $dt,
         );
 
         // Add the contemporaneous volatility jump from the SVJJ model
@@ -538,13 +539,13 @@ class MarketEngine
             marketZ: $marketZ,
             w1: $idiosyncraticShock,
             sectorZ: $sectorZ,
-            sectorVarianceShare: MacroEngine::SECTOR_FACTOR_VARIANCE_SHARE
+            sectorVarianceShare: MacroEngine::SECTOR_FACTOR_VARIANCE_SHARE,
         );
 
         // Geometrically blend the GBM price with the fundamental Fair Value
         $diffusedPrice = exp(
-            $reversionWeight * log(max(0.01, $gbmPrice)) +
-                (1.0 - $reversionWeight) * log(max(0.01, $perceivedFairValue))
+            $reversionWeight * log(max(0.01, $gbmPrice))
+                + (1.0 - $reversionWeight) * log(max(0.01, $perceivedFairValue)),
         );
 
         // Calculate Analyst Targets for UI and Sentiment Display
@@ -567,7 +568,7 @@ class MarketEngine
         if ($marketJumpMultiplier > 0.0 && $marketJumpMultiplier !== 1.0) {
             $systemicJumpLogReturn = max(
                 FinancialConstants::MIN_JUMP_LOG_RETURN,
-                min(FinancialConstants::MAX_JUMP_LOG_RETURN, log($marketJumpMultiplier) * $beta)
+                min(FinancialConstants::MAX_JUMP_LOG_RETURN, log($marketJumpMultiplier) * $beta),
             );
             $systemicJumpMultiplier = exp($systemicJumpLogReturn);
         }
@@ -635,7 +636,7 @@ class MarketEngine
             $ctx->dividendAdjustmentSpeed,
             $ctx->policyBasesPerShare,
             $ctx->longRunReturn,
-            $ctx->excessCashPerShare
+            $ctx->excessCashPerShare,
         );
     }
 
@@ -696,7 +697,7 @@ class MarketEngine
         float $dividendAdjustmentSpeed = 1.0,
         array $policyBasesPerShare = [],
         ?float $longRunReturn = null,
-        float $excessCashPerShare = 0.0
+        float $excessCashPerShare = 0.0,
     ): array {
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
@@ -722,7 +723,7 @@ class MarketEngine
             $revenuePerShare,
             $bookValuePerShare,
             $baselineMargin,
-            $hurdleRate
+            $hurdleRate,
         );
 
         // Without a balance sheet there is no leverage to apply, and the operating return stands in.
@@ -743,15 +744,28 @@ class MarketEngine
             $afterTaxCostOfDebt,
             // Real capital employed when the caller supplied a balance sheet; the model's structural
             // approximation from revenue and book value otherwise.
-            $investedCapitalPerShare > 0.0 ? $investedCapitalPerShare : null
+            $investedCapitalPerShare > 0.0 ? $investedCapitalPerShare : null,
         );
 
         // The value legs struck on one set of earnings, so a law that moves the earnings moves every leg they reach,
         // floors and all.
         $strikeLegs = function (float $equityReturn, float $structuralEps) use (
-            $strategy, $macro, $macroState, $hurdleRate, $outputGap, $beta, $secularGrowth, $baselineIndustryPE, $accrualsRatio,
-            $revenuePerShare, $netDebtPerShare, $bookValuePerShare, $tangibleBookValuePerShare, $dividendPerShare,
-            $targetPayoutRatio, $dividendAdjustmentSpeed
+            $strategy,
+            $macro,
+            $macroState,
+            $hurdleRate,
+            $outputGap,
+            $beta,
+            $secularGrowth,
+            $baselineIndustryPE,
+            $accrualsRatio,
+            $revenuePerShare,
+            $netDebtPerShare,
+            $bookValuePerShare,
+            $tangibleBookValuePerShare,
+            $dividendPerShare,
+            $targetPayoutRatio,
+            $dividendAdjustmentSpeed
         ): array {
             // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
             // The growth transmission and the Sloan accruals discount live in MathUtility because the corporate
@@ -764,11 +778,11 @@ class MarketEngine
                     $outputGap,
                     $beta,
                     $macro->tipsBreakeven,
-                    $hurdleRate
+                    $hurdleRate,
                 ),
                 $equityReturn,
                 $targetPayoutRatio,
-                $macro->tipsBreakeven
+                $macro->tipsBreakeven,
             );
 
             $fairValuePE = Valuation::calculateQualityAdjustedFairValuePE(
@@ -777,7 +791,7 @@ class MarketEngine
                 $expectedGrowth,
                 $baselineIndustryPE,
                 $accrualsRatio,
-                Valuation::sectorHurdleShift($hurdleRate, $beta, $macro->tipsBreakeven)
+                Valuation::sectorHurdleShift($hurdleRate, $beta, $macro->tipsBreakeven),
             );
 
             // The structural run-rate is the normalized EPS: the trailing print already reaches it once, through the
@@ -795,7 +809,7 @@ class MarketEngine
 
             $psMultiple = max(
                 self::MIN_PS_FALLBACK_MULT,
-                min(self::MAX_PS_FALLBACK_MULT, max(self::MIN_PS_ANCHOR_PE, $fairValuePE) * $impliedMargin)
+                min(self::MAX_PS_FALLBACK_MULT, max(self::MIN_PS_ANCHOR_PE, $fairValuePE) * $impliedMargin),
             );
             $revenueFloorValue = $revenuePerShare * $psMultiple;
             $revenueFloorEquityValue = max(0.01, $revenueFloorValue - $netDebtPerShare);
@@ -819,7 +833,7 @@ class MarketEngine
                 $dividendSupportValue = max(
                     0.0,
                     Valuation::calculateDividendDiscountModel($targetDividend, $requiredYield, $sustainableGrowth)
-                        + Valuation::calculateDividendAdjustmentValue(($dividendPerShare * 4.0) - $targetDividend, $requiredYield, $dividendAdjustmentSpeed)
+                        + Valuation::calculateDividendAdjustmentValue(($dividendPerShare * 4.0) - $targetDividend, $requiredYield, $dividendAdjustmentSpeed),
                 );
             }
 
@@ -892,7 +906,7 @@ class MarketEngine
         $perceivedFairValue = max(0.01, $legs['fair_value'] + $excessCashPerShare);
 
         // Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
-        // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained 
+        // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained
         // arbitrageurs pull back, slowing down market efficiency and price correction speed.
         $liquidityDampener = 1.0 / (1.0 + ($systemicStressIndex * self::FUNDING_LIQUIDITY_STRESS_FACTOR));
         $dynamicReversion = $reversionSpeed * $liquidityDampener;
@@ -905,7 +919,7 @@ class MarketEngine
                 'growth_analyst' => max(0.01, $legs['earnings_value'] + $excessCashPerShare),
                 'income_analyst' => max(0.01, $legs['dividend_value'] + $excessCashPerShare),
                 'value_analyst'  => max(0.01, ($legs['book_value'] * self::VALUE_ANALYST_BOOK_MULT) + $excessCashPerShare),
-            ]
+            ],
         ];
     }
 }

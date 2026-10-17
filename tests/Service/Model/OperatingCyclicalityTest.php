@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use App\Service\Model\ModelParam;
 use App\Data\Company\StockModelTuning;
 use App\DTO\MacroStateDTO;
-use App\Service\Model\ModelParameters;
 use App\Entity\Stock;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
 use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use App\Service\Model\Sector\HeavyManufacturingBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -38,7 +38,7 @@ class OperatingCyclicalityTest extends TestCase
         $this->assertEqualsWithDelta(
             $model->getMacroPhysics($lowBeta, $macro)['macro_demand_shift'],
             $model->getMacroPhysics($highBeta, $macro)['macro_demand_shift'],
-            1e-12
+            1e-12,
         );
     }
 

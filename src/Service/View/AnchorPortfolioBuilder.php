@@ -82,7 +82,7 @@ class AnchorPortfolioBuilder
             $holdings[$i]['shareOfPortfolio'] = $total > 0.0 ? $holding['value'] / $total : 0.0;
         }
 
-        usort($holdings, static fn (array $a, array $b): int => $b['value'] <=> $a['value']);
+        usort($holdings, static fn(array $a, array $b): int => $b['value'] <=> $a['value']);
 
         return [
             'holdings' => $holdings,

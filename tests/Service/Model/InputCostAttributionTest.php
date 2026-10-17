@@ -118,9 +118,9 @@ final class InputCostAttributionTest extends TestCase
     {
         $streams = new StreamContext($state, new MathUtility());
         $resolve = \Closure::bind(
-            fn (Stock $stock, MacroStateDTO $macro, StreamContext $streams): float => $this->resolveInputCostDrag($stock, $macro, $streams, 0.6, 0.4),
+            fn(Stock $stock, MacroStateDTO $macro, StreamContext $streams): float => $this->resolveInputCostDrag($stock, $macro, $streams, 0.6, 0.4),
             $this->model,
-            $this->model::class
+            $this->model::class,
         );
         $drag = $resolve(new Stock(), $macro, $streams);
 

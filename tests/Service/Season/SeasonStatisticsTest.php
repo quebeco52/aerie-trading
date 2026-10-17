@@ -62,7 +62,7 @@ final class SeasonStatisticsTest extends TestCase
     {
         $m = self::mean($xs);
 
-        return array_sum(array_map(static fn (float $x): float => ($x - $m) ** 2, $xs)) / (count($xs) - 1);
+        return array_sum(array_map(static fn(float $x): float => ($x - $m) ** 2, $xs)) / (count($xs) - 1);
     }
 
     public function testSharpeFromSumsEqualsTheDirectFormula(): void

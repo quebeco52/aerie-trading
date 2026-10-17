@@ -10,8 +10,8 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use App\Service\Model\StreamContext;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -22,7 +22,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         float $macroCreditSpread = 0.015,
         float $energyPriceShock = 0.0,
         float $nominalGdpIndex = 1.0,
-        float $energyPriceIndexEma = 100.0
+        float $energyPriceIndexEma = 100.0,
     ): MacroStateDTO {
         return new MacroStateDTO(
             outputGap: 0.0,
@@ -92,7 +92,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             MacroEngine::ALLIED_PROCUREMENT_ELASTICITY * log(0.8),
             $model->getCapexCycleSignal(new Stock(), new MacroStateDTO(alliedDefenseSpendingIndexEma: 80.0)),
-            1e-12
+            1e-12,
         );
     }
 
@@ -125,7 +125,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             50.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // Wright's Law scale efficiency on FMS volume reduces variable cost margin below baseline 65%
@@ -153,7 +153,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             3000.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // With zero Z-scores and target inflation, actual revenue should equal expected revenue exactly ($10,000)
@@ -180,7 +180,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             3000.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         // Excess inflation (0.04 - 0.02) = 0.02 * 1.50 = 0.03 costPlusBonus on cost-plus ORDERS.
@@ -216,7 +216,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             3000.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertEqualsWithDelta(10_000.0, $result->actualRevenue, 1e-6);
@@ -243,7 +243,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             3000.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertSame(ShockEvent::PROJECT_DELAY, $result->eventType);
@@ -279,7 +279,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             3000.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertSame(ShockEvent::GEOPOLITICAL_CONFLICT, $result->eventType);
@@ -309,7 +309,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             3000.0,
             0.15,
             $macroState,
-            $mathUtilityMock
+            $mathUtilityMock,
         );
 
         $this->assertSame(ShockEvent::GEOPOLITICAL_EXPORT_BAN, $result->eventType);
@@ -374,7 +374,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             DefenseContractorBusinessModel::BASE_NWC_INTENSITY
                 + (DefenseContractorBusinessModel::WITHHOLDING_NWC_INTENSITY - DefenseContractorBusinessModel::BASE_NWC_INTENSITY) * 0.15,
             $model->getWorkingCapitalIntensity($exporter),
-            1e-12
+            1e-12,
         );
     }
 
@@ -435,7 +435,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             3000.0,
             0.15,
             $macroState,
-            $mathUtility
+            $mathUtility,
         );
 
         // FMS active weight should have drifted up from 0.20 due to 50% realized share
@@ -464,7 +464,7 @@ class DefenseContractorBusinessModelTest extends TestCase
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $run = fn (MacroStateDTO $macro) => $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock)->streamRevenue;
+        $run = fn(MacroStateDTO $macro) => $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock)->streamRevenue;
 
         $base = $run(new MacroStateDTO(alliedDefenseSpendingIndexEma: 100.0, exchangeRateIndexEma: 100.0));
         $buildUp = $run(new MacroStateDTO(alliedDefenseSpendingIndexEma: 120.0, exchangeRateIndexEma: 100.0));
@@ -478,7 +478,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             $costPlusLift / DefenseContractorBusinessModel::COST_PLUS_BACKLOG_BURN_RATE,
             $fmsLift / DefenseContractorBusinessModel::FMS_BACKLOG_BURN_RATE,
-            1e-9
+            1e-9,
         );
 
         // A strong currency prices exports out against foreign primes; domestic-currency programmes do not see it.
@@ -550,7 +550,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn (float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
+            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
             $math->method('checkProbability')->willReturn($exits);
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
