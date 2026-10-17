@@ -77,7 +77,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo(-3.0),
             );
 
-        $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
 
         $this->assertSame('BB', $stock->getCreditRating());
     }
@@ -113,7 +113,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo(2.0),
             );
 
-        $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
 
         $this->assertSame('A', $stock->getCreditRating());
     }
@@ -143,7 +143,7 @@ class DebtEngineTest extends TestCase
             $stock->setPrice('200.00');
             $this->assertGreaterThan(CreditRatingAgency::THRESHOLD_AAA, $this->engine->resolveDistanceToDefault($stock, $macroState));
 
-            $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true);
+            $metrics = $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
             $this->assertSame('Safe', $this->engine->calculateAltmanZScore($stock, $metrics->ebit, 100_000_000.0)['zone']);
 
             return [$stock->getCreditRating(), $metrics->ebitda];
@@ -192,13 +192,13 @@ class DebtEngineTest extends TestCase
         $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
         $stock = $this->leveredOperatingFirm('BB');
 
-        $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $metrics = $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
         $rated = ($stock->getQuarterlyOperatingHistory() ?? [])[3][DebtEngine::RATED_LEVERAGE_KEY] ?? [];
         $this->assertCount(1, $rated);
         $this->assertSame($metrics->ebitda, $rated[0]['ebitda']);
         $this->assertGreaterThan(0.0, $rated[0]['net_debt']);
 
-        $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
         $this->assertCount(1, ($stock->getQuarterlyOperatingHistory() ?? [])[3][DebtEngine::RATED_LEVERAGE_KEY] ?? [], 'the same quarter reviewed again');
 
         for ($quarter = 1; $quarter <= 11; $quarter++) {
@@ -207,7 +207,7 @@ class DebtEngineTest extends TestCase
             $history[] = ['revenue' => 25_000_000.0, 'ebit' => 2_500_000.0];
             $stock->setQuarterlyOperatingHistory(array_values(array_slice($history, -4)));
             $stock->setWholesaleDebt((string) (80_000_000 + $quarter * 1_000_000));
-            $this->engine->calculateInterestExpense($stock, $macroState, true);
+            $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
 
             $rated = ($stock->getQuarterlyOperatingHistory() ?? [])[3][DebtEngine::RATED_LEVERAGE_KEY] ?? [];
             $this->assertCount(min($quarter + 1, CreditRatingAgency::timeWeightedLeverageQuarters()), $rated, "quarter {$quarter}");
@@ -224,7 +224,7 @@ class DebtEngineTest extends TestCase
         $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
 
         $today = $this->leveredOperatingFirm('BBB');
-        $metrics = $this->engine->calculateInterestExpense($today, $macroState, true);
+        $metrics = $this->engine->reviewRatingAndPriceDebt($today, $macroState);
         $this->assertGreaterThanOrEqual(3.0, 80_000_000.0 / $metrics->ebitda);
         $this->assertLessThan(4.0, 80_000_000.0 / $metrics->ebitda);
         $this->assertSame('BB', $today->getCreditRating(), 'on this quarter alone the anchor is BB');
@@ -234,7 +234,7 @@ class DebtEngineTest extends TestCase
         self::assertArrayHasKey(2, $history, 'the fixture files a third trailing quarter');
         $history[2][DebtEngine::RATED_LEVERAGE_KEY] = array_fill(0, 8, ['net_debt' => 80_000_000.0, 'ebitda' => 80_000_000.0]);
         $through->setQuarterlyOperatingHistory($history);
-        $this->engine->calculateInterestExpense($through, $macroState, true);
+        $this->engine->reviewRatingAndPriceDebt($through, $macroState);
         $this->assertSame('BBB', $through->getCreditRating(), 'the two earlier years at 1x keep the weighted ratio modest');
     }
 
@@ -247,7 +247,7 @@ class DebtEngineTest extends TestCase
         $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.21, yield5yEma: 0.04);
         $stock = $this->leveredOperatingFirm('BB');
 
-        $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true, 100_000_000.0, 0.02);
+        $metrics = $this->engine->reviewRatingAndPriceDebt($stock, $macroState, 100_000_000.0, 0.02);
         $baseCaseEbitda = $metrics->ebitda + 100_000_000.0 * (0.10 - 0.02);
         $weighted = (CreditRatingAgency::CORE_RATIO_FORECAST_WEIGHT * $baseCaseEbitda + 0.25 * $metrics->ebitda) / (CreditRatingAgency::CORE_RATIO_FORECAST_WEIGHT + 0.25);
         $pointInTime = CreditRatingAgency::financialRiskAnchor(80_000_000.0, $metrics->ebitda, false);
@@ -280,7 +280,7 @@ class DebtEngineTest extends TestCase
         $stock->setSharesOutstanding('1000000');
         $stock->setPrice('200.00');
 
-        $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $metrics = $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
         $leverage = 110_000_000.0 / $metrics->ebitda;
         $this->assertGreaterThanOrEqual(4.0, $leverage);
         $this->assertLessThan(4.5, $leverage);
@@ -318,7 +318,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo(2.0),
             );
 
-        $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
 
         $this->assertSame('A', $stock->getCreditRating());
     }
@@ -353,7 +353,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo(-3.0),
             );
 
-        $this->engine->calculateInterestExpense($stock, $macroState, true);
+        $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
 
         $this->assertSame('CCC', $stock->getCreditRating());
     }
@@ -373,7 +373,7 @@ class DebtEngineTest extends TestCase
             $stock->setIndustry($industry);
             $stock->setHistoricalFixedRate('0.02');
 
-            $this->assertEqualsWithDelta(0.02, $engine->calculateInterestExpense($stock, $macroState, true)->historicalFixedRate, 1e-12, 'The quarter is charged at the coupon the book carries.');
+            $this->assertEqualsWithDelta(0.02, $engine->reviewRatingAndPriceDebt($stock, $macroState)->historicalFixedRate, 1e-12, 'The quarter is charged at the coupon the book carries.');
             $this->assertTrue($engine->rollMaturities($stock, $health, 50_000_000_000.0)->refinanced);
 
             $rollover = \App\Data\Company\Sectors::getBusinessModelStrategy($model)->getDebtMaturityRolloverRate();
@@ -417,13 +417,13 @@ class DebtEngineTest extends TestCase
 
         $shut = $this->buildMaturityIssuer('B', 0.02);
         $shut->setHistoricalFixedRate('0.06');
-        $shut->setHistoricalFixedRate((string) $engine->calculateInterestExpense($shut, $crisis, true)->historicalFixedRate);
+        $shut->setHistoricalFixedRate((string) $engine->reviewRatingAndPriceDebt($shut, $crisis)->historicalFixedRate);
         $this->assertFalse($engine->rollMaturities($shut, $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.18), 50_000_000_000.0)->refinanced, 'control: the market is shut');
         $this->assertSame(0.06, (float) $shut->getHistoricalFixedRate());
 
         $uncovered = $this->buildMaturityIssuer('CCC', 0.02);
         $uncovered->setHistoricalFixedRate('0.06');
-        $uncovered->setHistoricalFixedRate((string) $engine->calculateInterestExpense($uncovered, $crisis, true)->historicalFixedRate);
+        $uncovered->setHistoricalFixedRate((string) $engine->reviewRatingAndPriceDebt($uncovered, $crisis)->historicalFixedRate);
         $this->assertFalse($engine->rollMaturities($uncovered, $this->buildHealthForMaturity(interestCoverage: 0.4, dynamicSpread: 0.02), 100_000_000.0)->refinanced, 'control: no lender rolls it');
         $this->assertSame(0.06, (float) $uncovered->getHistoricalFixedRate());
     }
@@ -1327,7 +1327,7 @@ class DebtEngineTest extends TestCase
         foreach ([100_000_000, 200_000_000, 400_000_000, 700_000_000, 1_200_000_000] as $debt) {
             $stock->setWholesaleDebt((string) $debt);
             for ($review = 0; $review < 4; $review++) {
-                $engine->calculateInterestExpense($stock, $macro, true);
+                $engine->reviewRatingAndPriceDebt($stock, $macro);
             }
             $ratings[] = $stock->getCreditRating();
             $spreads[] = $engine->calculateInterestExpense($stock, $macro)->dynamicSpread;
@@ -1821,7 +1821,7 @@ class DebtEngineTest extends TestCase
         });
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $agency, null);
 
-        $engine->calculateInterestExpense($stock, $macroState, true);
+        $engine->reviewRatingAndPriceDebt($stock, $macroState);
 
         $this->assertNotNull($graded);
         $this->assertSame($graded, $engine->resolveDistanceToDefault($stock, $macroState));
@@ -1877,10 +1877,10 @@ class DebtEngineTest extends TestCase
         $bank->setOperatingMargin('0.30');
         $this->assertGreaterThan(CreditRatingAgency::THRESHOLD_AAA + CreditRatingAgency::HYSTERESIS_BUFFER, $engine->resolveDistanceToDefault($bank, $macroState), 'the equity reads the bank as AAA');
 
-        $engine->calculateInterestExpense($bank, $macroState, true);
+        $engine->reviewRatingAndPriceDebt($bank, $macroState);
         $this->assertSame('AA', $bank->getCreditRating(), 'one notch a review toward the ceiling');
-        $engine->calculateInterestExpense($bank, $macroState, true);
-        $engine->calculateInterestExpense($bank, $macroState, true);
+        $engine->reviewRatingAndPriceDebt($bank, $macroState);
+        $engine->reviewRatingAndPriceDebt($bank, $macroState);
         $this->assertSame(CreditRatingAgency::CAPITAL_RATED_RATING_CEILING, $bank->getCreditRating(), 'and no further');
     }
 

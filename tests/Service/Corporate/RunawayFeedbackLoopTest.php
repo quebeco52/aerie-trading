@@ -162,6 +162,7 @@ class RunawayFeedbackLoopTest extends TestCase
             ebitda: 11_000_000_000.0,
         );
         $debtEngine->method('calculateInterestExpense')->willReturn($debtMetrics);
+        $debtEngine->method('reviewRatingAndPriceDebt')->willReturn($debtMetrics);
         $health = new DebtHealthDTO(
             grossCost: 0.05,
             effectiveCost: 0.04,
@@ -267,6 +268,7 @@ class RunawayFeedbackLoopTest extends TestCase
             ebitda: 10_000_000_000.0,
         );
         $debtEngine->method('calculateInterestExpense')->willReturn($debtMetrics);
+        $debtEngine->method('reviewRatingAndPriceDebt')->willReturn($debtMetrics);
         $health = new DebtHealthDTO(
             grossCost: 0.05,
             effectiveCost: 0.04,

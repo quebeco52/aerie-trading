@@ -117,32 +117,49 @@ class DebtEngine
     ) {}
 
     /**
+     * The quarter's report: the agency reviews the rating on the quarter's figures, an upgrade or downgrade is
+     * published as news, and the debt is then priced on the rating it has just assigned. calculateInterestExpense()
+     * prices it without the review.
+     *
+     * @param float|null $overrideRevenue Annual revenue to rate and price on, in place of the reported total.
+     * @param float|null $overrideMargin  Operating margin to rate and price on, in place of the reported one.
+     */
+    public function reviewRatingAndPriceDebt(Stock $stock, MacroStateDTO $macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
+    {
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry() ?: 'General');
+        $operating = $this->resolveOperatingFigures($stock, $macroState, $strategy, $overrideRevenue, $overrideMargin);
+        $this->reviewCreditRating($stock, $macroState, $strategy, $operating);
+
+        return $this->priceDebt($stock, $macroState, $strategy, $operating);
+    }
+
+    /**
      * Calculates the gross and blended interest expenses for a company's debt structure.
      *
-     * The debt is priced at the firm's market spread (resolveCreditSpread()), on the rating the agency assigns
-     * here on the quarter's report. The fixed book is charged at the coupon it carries; rollMaturities() reprices it.
+     * The debt is priced at the firm's market spread (resolveCreditSpread()) on the rating it holds. The fixed book is
+     * charged at the coupon it carries; rollMaturities() reprices it.
      *
-     * @param Stock $stock           The stock entity being analyzed.
-     * @param MacroStateDTO $macroState      The current macroeconomic state.
-     * @param bool  $advanceMaturity Whether this is the quarter's report, on which the agency reviews the rating.
-     * @return \App\DTO\DebtMetricsDTO
+     * @param float|null $overrideRevenue Annual revenue to price on, in place of the reported total.
+     * @param float|null $overrideMargin  Operating margin to price on, in place of the reported one.
      */
-    public function calculateInterestExpense(Stock $stock, MacroStateDTO $macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
+    public function calculateInterestExpense(Stock $stock, MacroStateDTO $macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
     {
-        $debt = (float) $stock->getTotalDebt();
-        $treasury = (float) $stock->getCorporateTreasury();
-        $policyRate = $macroState->policyRateEma;
-        $yield5y = $macroState->yield5yEma;
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry() ?: 'General');
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Company\Sectors::businessModelFor($industry);
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
+        return $this->priceDebt($stock, $macroState, $strategy, $this->resolveOperatingFigures($stock, $macroState, $strategy, $overrideRevenue, $overrideMargin));
+    }
 
+    /**
+     * The annual operating figures the debt is rated and priced on: revenue (the target metrics' when the firm reports
+     * none), EBIT at the margin, and depreciation on the base the earnings engine charges it against.
+     *
+     * @return array{revenue: float, ebit: float, depreciation: float, ebitda: float}
+     */
+    private function resolveOperatingFigures(Stock $stock, MacroStateDTO $macroState, \App\Service\Model\BusinessModelInterface $strategy, ?float $overrideRevenue, ?float $overrideMargin): array
+    {
         $revenue = $overrideRevenue ?? (float) $stock->getTotalRevenue();
 
         if ($revenue <= 0.0) {
-            $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
-
             $targetMetrics = $strategy->getTargetMetrics($stock, $macroState, $this->mathUtility);
             $investedCapital = $targetMetrics['invested_capital'];
             $baselineRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
@@ -154,32 +171,66 @@ class DebtEngine
         $margin = $overrideMargin ?? (float) $stock->getOperatingMargin();
         $ebit = $revenue * $margin;
 
-        // Calculate Depreciation to find true Cash Flow (EBITDA)
-        $depreciationRate = $this->resolveDepreciationRate($stock);
-
         // Depreciation runs on the same base the earnings engine charges it against (net PP&E for physical
         // businesses, the capital proxy for financial ones), so coverage and EBITDA here agree with the
         // income statement instead of depreciating goodwill and working capital.
-        $depreciation = max(0.0, $strategy->getDepreciableBase($stock)) * $depreciationRate;
-        $ebitda = $ebit + $depreciation;
+        $depreciation = max(0.0, $strategy->getDepreciableBase($stock)) * $this->resolveDepreciationRate($stock);
+
+        return ['revenue' => $revenue, 'ebit' => $ebit, 'depreciation' => $depreciation, 'ebitda' => $ebit + $depreciation];
+    }
+
+    /**
+     * The agency's review on the quarter's report: it re-rates the firm on its distance to default, its Altman Z and
+     * the leverage anchor, and an upgrade or downgrade is published as news.
+     *
+     * @param array{revenue: float, ebit: float, depreciation: float, ebitda: float} $operating
+     */
+    private function reviewCreditRating(Stock $stock, MacroStateDTO $macroState, \App\Service\Model\BusinessModelInterface $strategy, array $operating): void
+    {
+        if ($this->creditRatingAgency === null) {
+            return;
+        }
+
+        $debt = (float) $stock->getTotalDebt();
+        $netDebt = $debt > 0.0 ? max(0.0, $strategy->getNetDebtCapital($debt, (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury())) : 0.0;
+        // A firm that owes nothing stands at the top of the distance-to-default scale.
+        $distanceToDefault = $debt > 0.0 ? $this->resolveDistanceToDefault($stock, $macroState) : 10.0;
+
+        $oldRating = $stock->getCreditRating();
+        $zScoreData = $this->resolveRatingZScore($stock, $strategy, $operating['ebit'], $operating['revenue']);
+        $anchor = self::leverageAnchor(
+            $stock,
+            $strategy,
+            $netDebt,
+            $operating['ebitda'],
+            $this->recordRatedLeverage($stock, $netDebt, $operating['ebitda']),
+            self::baseCaseLeverage($stock, $netDebt, $operating['revenue'], $operating['depreciation']),
+        );
+        $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone'], $anchor);
+        if ($newRating === null || $this->marketEventPublisher === null) {
+            return;
+        }
+
+        $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
+        $desc = $isDowngrade
+            ? sprintf('[CREDIT DOWNGRADE] %s: Credit rating downgraded from %s to %s due to deteriorating %s.', $stock->getTicker(), $oldRating, $newRating, $debt > 0.0 ? 'credit profile' : 'fundamental solvency')
+            : sprintf('[CREDIT UPGRADE] %s: Credit rating upgraded from %s to %s following balance sheet strengthening.', $stock->getTicker(), $oldRating, $newRating);
+        $this->marketEventPublisher->publish($stock, $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE', $desc, $isDowngrade ? -3.0 : 2.0);
+    }
+
+    /**
+     * The debt priced on the rating the firm carries, at the quarter's operating figures.
+     *
+     * @param array{revenue: float, ebit: float, depreciation: float, ebitda: float} $operating
+     */
+    private function priceDebt(Stock $stock, MacroStateDTO $macroState, \App\Service\Model\BusinessModelInterface $strategy, array $operating): \App\DTO\DebtMetricsDTO
+    {
+        $debt = (float) $stock->getTotalDebt();
+        $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
+        ['revenue' => $revenue, 'ebit' => $ebit, 'depreciation' => $depreciation, 'ebitda' => $ebitda] = $operating;
 
         if ($debt <= 0.0) {
-            if ($this->creditRatingAgency !== null && $advanceMaturity) {
-                $oldRating = $stock->getCreditRating();
-                $zScoreData = $this->resolveRatingZScore($stock, $strategy, $ebit, $revenue);
-                $anchor = self::leverageAnchor($stock, $strategy, 0.0, $ebitda, $this->recordRatedLeverage($stock, 0.0, $ebitda), self::baseCaseLeverage($stock, 0.0, $revenue, $depreciation));
-                $newRating = $this->creditRatingAgency->evaluateRating($stock, 10.0, $zScoreData['z_score'], $zScoreData['zone'], $anchor);
-                if ($newRating !== null && $this->marketEventPublisher !== null) {
-                    $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
-                    $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
-                    $desc = $isDowngrade
-                        ? sprintf('[CREDIT DOWNGRADE] %s: Credit rating downgraded from %s to %s due to deteriorating fundamental solvency.', $stock->getTicker(), $oldRating, $newRating)
-                        : sprintf('[CREDIT UPGRADE] %s: Credit rating upgraded from %s to %s following balance sheet strengthening.', $stock->getTicker(), $oldRating, $newRating);
-                    $changePct = $isDowngrade ? -3.0 : 2.0;
-                    $this->marketEventPublisher->publish($stock, $eventType, $desc, $changePct);
-                }
-            }
-
             $creditSpread = $this->resolveCreditSpread($stock, $macroState);
 
             return new \App\DTO\DebtMetricsDTO(
@@ -198,30 +249,15 @@ class DebtEngine
             );
         }
 
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, $wholesaleDebt, $treasury));
         $totalEquity = (float) $stock->getTotalEquity();
-        $equityLimit = \App\Data\Company\Sectors::metricsFor($industry)['equity_limit'];
+        $equityLimit = \App\Data\Company\Sectors::metricsFor($stock->getIndustry() ?: 'General')['equity_limit'];
 
-        $distanceToDefault = $this->resolveDistanceToDefault($stock, $macroState);
-
-        if ($this->creditRatingAgency !== null && $advanceMaturity) {
-            $oldRating = $stock->getCreditRating();
-            $zScoreData = $this->resolveRatingZScore($stock, $strategy, $ebit, $revenue);
-            $anchor = self::leverageAnchor($stock, $strategy, $netDebt, $ebitda, $this->recordRatedLeverage($stock, $netDebt, $ebitda), self::baseCaseLeverage($stock, $netDebt, $revenue, $depreciation));
-            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone'], $anchor);
-            if ($newRating !== null && $this->marketEventPublisher !== null) {
-                $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
-                $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
-                $desc = $isDowngrade
-                    ? sprintf('[CREDIT DOWNGRADE] %s: Credit rating downgraded from %s to %s due to deteriorating credit profile.', $stock->getTicker(), $oldRating, $newRating)
-                    : sprintf('[CREDIT UPGRADE] %s: Credit rating upgraded from %s to %s following balance sheet strengthening.', $stock->getTicker(), $oldRating, $newRating);
-                $changePct = $isDowngrade ? -3.0 : 2.0;
-                $this->marketEventPublisher->publish($stock, $eventType, $desc, $changePct);
-            }
+        // An indebted firm's first evaluation records its asset volatility at the capital structure it has then
+        // (calibrateAssetVolatility()), as the opening seed does; the distance to default reads it from there on.
+        if ($stock->getAssetVolatility() === null) {
+            $this->calibrateAssetVolatility($stock, $policyRate);
         }
 
-        // Priced after the agency has had its say, on the rating it has just assigned.
         $dynamicSpread = $this->resolveCreditSpread($stock, $macroState);
 
         // Fixed-rate corporate debt is priced off the 5-Year Yield curve, not the overnight Policy Rate
@@ -234,7 +270,6 @@ class DebtEngine
         $floatingInterestRate = $policyRate + $dynamicSpread;
 
         // Customer Deposits & Leverage Physics
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
         // The strategies are handed the FUNDED book only — term debt and deposits — because the revolver is
         // priced here instead. They do not agree on where they read the balance from: the corporate and the
         // base financial physics charge whatever $debt they are given, while the bank, credit, clearing and
@@ -580,7 +615,7 @@ class DebtEngine
         $metrics = \App\Data\Company\Sectors::metricsFor($industry);
         $strategy = \App\Data\Company\Sectors::strategyFor($industry);
 
-        $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false, $overrideRevenue, $overrideMargin);
+        $debtMetrics = $this->calculateInterestExpense($stock, $macroState, $overrideRevenue, $overrideMargin);
 
         $ebit = $debtMetrics->ebit;
         $interestExpense = $debtMetrics->interestExpense;

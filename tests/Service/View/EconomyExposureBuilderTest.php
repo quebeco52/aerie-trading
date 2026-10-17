@@ -121,7 +121,7 @@ final class EconomyExposureBuilderTest extends TestCase
             }
         }
 
-        self::assertStringContainsString('->calculateInterestExpenseAndWholesaleRate(', self::methodSource(DebtEngine::class, 'calculateInterestExpense'));
+        self::assertStringContainsString('->calculateInterestExpenseAndWholesaleRate(', self::methodSource(DebtEngine::class, 'priceDebt'));
         self::assertStringContainsString('->resolveLoanBookMix(', self::methodSource(CommercialBankBusinessModel::class, 'resolveConditionalCreditLossRate'));
         self::assertStringContainsString('->resolveProductionProfile(', self::methodSource(OilGasProducerBusinessModel::class, 'calculateSectorPhysics'));
         self::assertStringContainsString('->resolveProductMix(', self::methodSource(MiningBusinessModel::class, 'calculateSectorPhysics'));

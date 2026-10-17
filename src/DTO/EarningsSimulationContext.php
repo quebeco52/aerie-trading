@@ -289,6 +289,10 @@ class EarningsSimulationContext
     public float $priceGapPct = 0.0;
 
     // FCF & Capital
+    /** Quarterly free cash flow to the firm per share, before capital allocation (calculateFreeCashFlow()). */
+    public float $freeCashFlowPerShare = 0.0;
+    /** Quarterly operating capex (maintenance, growth, scheduled), before the expansion the allocation funds. */
+    public float $operatingCapex = 0.0;
     public array $allocation = [];
     public float $totalReportedCapex = 0.0;
     public float $trueQuarterlyFcf = 0.0;

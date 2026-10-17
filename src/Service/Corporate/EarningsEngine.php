@@ -422,6 +422,8 @@ class EarningsEngine
         $this->manageReportedEarnings($ctx);
         $this->calculateEPSAndSurprise($ctx);
         $this->calculateFreeCashFlow($ctx);
+        $this->allocateCapital($ctx);
+        $this->reportFreeCashFlow($ctx);
         $this->executeAnnouncementReturn($ctx);
 
         return $this->publishEventAndReport($ctx);
@@ -1426,13 +1428,13 @@ class EarningsEngine
         $saExpectedRevenue = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
         $saExpectedEbit = ($saExpectedRevenue * (1.0 - $ctx->baselineVariableMargin)) - ($ctx->fixedCosts / $ctx->seasonalFixedCostFactor) - $ctx->quarterlyDepreciation - $ctx->expectedCreditLossProvision;
         $saExpectedMargin = $saExpectedEbit / max(1.0, $saExpectedRevenue);
-        $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $saExpectedRevenue * 4.0, $saExpectedMargin);
+        $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, $saExpectedRevenue * 4.0, $saExpectedMargin);
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;
 
         $ctx->trueOperatingMargin = $ctx->ebit / max(1.0, $ctx->actualRevenue);
         // The rating review reads the same twelve months a lender does; only its Altman cap uses the operating figures.
         $trailing = $this->debtEngine->resolveTrailingOperatingBasis($stock);
-        $ctx->debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, true, $trailing['revenue'] ?? $annualSaarRevenue, $trailing['margin'] ?? $ctx->structuralOperatingMargin);
+        $ctx->debtMetrics = $this->debtEngine->reviewRatingAndPriceDebt($stock, $ctx->macroState, $trailing['revenue'] ?? $annualSaarRevenue, $trailing['margin'] ?? $ctx->structuralOperatingMargin);
 
         $annualInterestExpense = $ctx->debtMetrics->interestExpense;
         $ctx->quarterlyInterestExpense = $annualInterestExpense / 4.0;
@@ -1751,6 +1753,11 @@ class EarningsEngine
         $stock->setTotalNetIncome((string) $trailingNetIncome);
     }
 
+    /**
+     * The quarter's operating capital spending and the free cash flow to the firm it leaves: maintenance at the
+     * replacement cost of the plant worn out, growth capex through the NPV gate, the capex the sector physics
+     * schedules, and the working capital the quarter builds. The plant ledger rolls forward on what is bought outright.
+     */
     private function calculateFreeCashFlow(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
@@ -1834,8 +1841,8 @@ class EarningsEngine
             ];
         }
 
-        $annualFcfPerShare = $fcfData['fcf_per_share'] / max(0.001, $ctx->dt);
-        $actualAnnualCapEx = $fcfData['capex'] / max(0.001, $ctx->dt);
+        $ctx->freeCashFlowPerShare = $fcfData['fcf_per_share'];
+        $ctx->operatingCapex = $fcfData['capex'];
 
         // Replacement CapEx is the bar the firm has to clear to stand still, so the reinvestment ratio is
         // measured against the depreciation charge restated at today's prices, not the historical-cost charge.
@@ -1844,7 +1851,16 @@ class EarningsEngine
         $ctx->strategy->recordReinvestmentRatio($stock, $reinvestmentRatio, $ctx->dt);
 
         $this->rollForwardFixedAssetLedger($ctx, $fcfData['direct_capex']);
+    }
 
+    /**
+     * The board's capital allocation on the quarter's earnings and free cash flow (CapitalAllocationEngine): dividends,
+     * buybacks, issuance, expansion and debt, booked to the cash-flow statement at the cash that moved; then the
+     * quarter's equity compensation vests in new shares.
+     */
+    private function allocateCapital(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
         $currentPrice = (float) $stock->getPrice();
         $debtBeforeAllocation = (float) $stock->getWholesaleDebt();
         $revolverBeforeAllocation = (float) $stock->getRevolverDrawn();
@@ -1852,7 +1868,7 @@ class EarningsEngine
         $ctx->allocation = $this->capitalAllocationEngine->allocateCapital(
             $stock,
             $ctx->actualAnnualEpsRaw,
-            $fcfData['fcf_per_share'],
+            $ctx->freeCashFlowPerShare,
             $currentPrice,
             $ctx->sharesOutstanding,
             $ctx->macroState,
@@ -1902,6 +1918,19 @@ class EarningsEngine
             // What vests gets sold: the supply reaches the tape through the flow channel over the quarter.
             $stock->addCorporateFlowBacklog(-$vestedShares);
         }
+    }
+
+    /**
+     * The free cash flow the filing reports, net of the expansion the allocation funded, and the Sloan accruals ratio
+     * of reported earnings against operating cash.
+     */
+    private function reportFreeCashFlow(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $organicCapex = $ctx->allocation['organic_capex'] ?? 0.0;
+        $annualFcfPerShare = $ctx->freeCashFlowPerShare / max(0.001, $ctx->dt);
+        $actualAnnualCapEx = $ctx->operatingCapex / max(0.001, $ctx->dt);
+
         $reportedOrganicCapex = $ctx->strategy->allowsPhysicalOrganicCapex() ? $organicCapex : 0.0;
         $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
         $organicCapexPerShare = $ctx->sharesOutstanding > 0 ? ($annualizedOrganicCapex / $ctx->sharesOutstanding) : 0.0;

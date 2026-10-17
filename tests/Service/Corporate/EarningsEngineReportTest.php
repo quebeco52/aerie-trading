@@ -62,6 +62,7 @@ class EarningsEngineReportTest extends TestCase
             ebitda: 1100.0,
         );
         $this->debtEngineMock->method('calculateInterestExpense')->willReturn($debtMetrics);
+        $this->debtEngineMock->method('reviewRatingAndPriceDebt')->willReturn($debtMetrics);
         $debtHealth = new \App\DTO\DebtHealthDTO(
             grossCost: 0.05,
             effectiveCost: 0.04,
@@ -762,13 +763,11 @@ class EarningsEngineReportTest extends TestCase
                 return $this->trailingHealth[] = parent::analyzeTrailingDebtHealth($stock, $macroState);
             }
 
-            public function calculateInterestExpense(Stock $stock, \App\DTO\MacroStateDTO $macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
+            public function reviewRatingAndPriceDebt(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
             {
-                if ($advanceMaturity) {
-                    $this->ratingRevenue[] = $overrideRevenue;
-                }
+                $this->ratingRevenue[] = $overrideRevenue;
 
-                return parent::calculateInterestExpense($stock, $macroState, $advanceMaturity, $overrideRevenue, $overrideMargin);
+                return parent::reviewRatingAndPriceDebt($stock, $macroState, $overrideRevenue, $overrideMargin);
             }
         };
         $engine = new EarningsEngine(
