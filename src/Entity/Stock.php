@@ -712,6 +712,14 @@ class Stock
     private int $quartersInDefault = 0;
 
     /**
+     * @var string Principal that fell due and was not paid. It is part of wholesale debt, not on top of it, and stays
+     *             due ahead of the next quarter's maturities until it is funded, refinanced or restructured: a missed
+     *             maturity left the clock the moment the next quarter's smaller slice was paid.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
+    private string $principalArrears = '0.0000';
+
+    /**
      * @var string Committed size of the revolving credit facility the firm's banks have contracted to fund.
      *             A revolver is a term commitment negotiated in good times: it ratchets UP as the business
      *             grows and does not shrink because a bad quarter shrank revenue, which is what makes it a
@@ -2361,6 +2369,17 @@ class Stock
     public function setQuartersInDefault(int $quartersInDefault): static
     {
         $this->quartersInDefault = max(0, $quartersInDefault);
+        return $this;
+    }
+
+    public function getPrincipalArrears(): string
+    {
+        return $this->principalArrears;
+    }
+
+    public function setPrincipalArrears(string $principalArrears): static
+    {
+        $this->principalArrears = self::cleanBcStr($principalArrears, 4);
         return $this;
     }
 

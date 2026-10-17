@@ -96,3 +96,11 @@ Out: onesided-base.out, onesided-live.out; per model: `model_an.py 1-4 base live
 - Board: nothing outside the range earlier code drew on seeds 1-4. FX min 79.9 → 87.6 looks systematic (+6..+9 on
   every seed) but base's seeds sit at the low end of history (80.8-89.2 across pol/cv/live runs). Failures
   0.25/seed both; payment defaults 0.75 → 1.5 (history 0.6-2.0); rescue raises 12.2 → 3.
+
+## Batch A: payout cap, divestiture cash, coupon roll, arrears, bond convexity (10-17, on main)
+Unpaired seeds 1-8, base = git archive HEAD (21bc0997), live = checkout. Out: batchA-{base,live}-8s.out.
+- Distress: Ch11 0.63 -> 1.0/seed (5 vs 8 events, ~0.8 SE); payment defaults 1.0 -> 1.38; failures 0.125 -> 0.25
+  (1 vs 2). Seeds 1-4 alone read 0.75 -> 1.75; an arm with the arrears carry disabled (wt-noarrears, seeds 1-4) gave
+  the same 1.75 and identical paths in seeds 2-4, so the carry rarely binds and the 1-4 rise was path noise.
+- EW index vol 21t 15.7 -> 16.8% (live higher in 7/8, unpaired t~1.9), inside the 14-19% earlier code drew.
+  Inflation sd, unemployment, gap mean, P/E end, beat share: overlapping (gap -0.57 vs -0.52, infl sd 0.97 vs 1.08).

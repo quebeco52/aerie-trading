@@ -397,6 +397,22 @@ final class FixedIncome
     }
 
     /**
+     * Price change of a book laddered evenly out to twice its duration when its yield moves by dy, as a fraction: equal
+     * present values on maturities spread evenly over [0, 2D] each reprice by exp(-dy t), which averages to
+     * (1 - exp(-2D dy)) / (2D dy) - 1 (continuously compounded). Exact for the ladder at any move; to second order it is
+     * -D dy + 0.5 C dy^2 with the ladder's convexity C = 4D^2/3, a third more than a bullet of the same duration.
+     */
+    public static function calculateLadderPriceChange(float $duration, float $yieldChange): float
+    {
+        $span = 2.0 * max(0.0, $duration) * $yieldChange;
+        if ($span === 0.0) {
+            return 0.0;
+        }
+
+        return (-expm1(-$span) / $span) - 1.0;
+    }
+
+    /**
      * Yield to maturity: the single continuously compounded rate that reproduces a bond's dirty price.
      *
      * Newton-Raphson on the price function, whose derivative with respect to yield is the negative

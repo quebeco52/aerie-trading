@@ -129,6 +129,34 @@ class FixedIncomeTest extends TestCase
         $this->assertEqualsWithDelta($numeric, FixedIncome::calculateConvexity($flows, $yield), 1e-3);
     }
 
+    /**
+     * An even ladder of zeros out to twice its duration has that duration, and its price change at any move is the
+     * PV-weighted repricing of every rung; to second order that is -D dy + 0.5 (4D^2/3) dy^2.
+     */
+    public function testLadderPriceChangeRepricesAnEvenLadderOfZeros(): void
+    {
+        $duration = 6.0;
+        $yield = 0.04;
+        $rungs = 2400;
+        $flows = [];
+        for ($k = 1; $k <= $rungs; $k++) {
+            $time = 2.0 * $duration * ($k - 0.5) / $rungs;
+            // Equal present value on every rung: the ladder is even in what it holds, not in what it is paid.
+            $flows[] = ['time' => $time, 'amount' => exp($yield * $time)];
+        }
+        $priceAt = static fn (float $y): float => FixedIncome::calculateBondPresentValue($flows, static fn (float $tau): float => $y);
+
+        $this->assertEqualsWithDelta($duration, FixedIncome::calculateMacaulayDuration($flows, $yield), 1e-9);
+        $this->assertEqualsWithDelta(48.0, FixedIncome::calculateConvexity($flows, $yield), 1e-3, 'The ladder convexity, 4D^2/3.');
+        foreach ([-0.035, -0.01, 0.0001, 0.02, 0.08] as $move) {
+            $this->assertEqualsWithDelta(($priceAt($yield + $move) / $priceAt($yield)) - 1.0, FixedIncome::calculateLadderPriceChange($duration, $move), 1e-6, "Exact at a {$move} move.");
+        }
+        $small = 0.0005;
+        // Off the second-order expansion by the third-order term, D^3 dy^3 / 3.
+        $this->assertEqualsWithDelta((-$duration * $small) + (0.5 * 48.0 * $small * $small), FixedIncome::calculateLadderPriceChange($duration, $small), ($duration * $small) ** 3);
+        $this->assertSame(0.0, FixedIncome::calculateLadderPriceChange($duration, 0.0));
+    }
+
     // --- Yield To Maturity ---
 
     public function testYieldToMaturityRecoversTheRateThatPricedTheBond(): void

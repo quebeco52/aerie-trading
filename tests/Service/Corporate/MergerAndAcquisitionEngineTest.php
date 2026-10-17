@@ -604,6 +604,40 @@ class MergerAndAcquisitionEngineTest extends TestCase
      * A divestiture retires a pro rata slice of every ledger and books the difference between the proceeds
      * and that book value as the gain or loss. A fire sale below book is a real loss charged in full.
      */
+    /**
+     * The cash a seller keeps is not sold. Two sellers alike but for $5B more cash, which the market prices at face, sell
+     * the same quarter of the same business: the buyer pays the same for it, and the announcement prices the same
+     * gain or loss, whatever sits in the treasury that stays behind.
+     */
+    public function testDivestitureDoesNotPayForTheCashTheSellerKeeps(): void
+    {
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0);
+        $this->primeDistressedDivestiture(operatingBase: 100_000_000_000.0, fraction: 0.20);
+
+        $sale = function (string $ticker, float $extraCash) use ($macroState): array {
+            $stock = $this->buildLedgeredAcquirer($ticker, treasury: 1_000_000_000.0 + $extraCash, debt: 4_000_000_000.0, shares: 10_000_000.0);
+            $stock->setPrice((string) (100.0 + ($extraCash / 10_000_000.0)));
+            $stock->setOperatingMargin('-0.05');
+            $stock->setEarningsPerShare('-0.10');
+            $stock->setTotalNetIncome('-1000000000');
+            $stock->setRoicTtm('0.00');
+            $treasuryBefore = (float) $stock->getCorporateTreasury();
+            $cap = (float) $stock->getPrice() * 10_000_000.0;
+
+            $result = $this->engine->evaluateCorporateDivestiture($stock, $macroState, 1.0);
+            $this->assertIsArray($result);
+
+            return [(float) $stock->getCorporateTreasury() - $treasuryBefore, $result['shock'] * $cap];
+        };
+
+        [$leanProceeds, $leanGain] = $sale('LEAN', 0.0);
+        [$richProceeds, $richGain] = $sale('RICH', 5_000_000_000.0);
+
+        $this->assertGreaterThan(0.0, $leanProceeds);
+        $this->assertEqualsWithDelta($leanProceeds, $richProceeds, 1.0, 'The buyer pays for the business, not for the cash the seller keeps.');
+        $this->assertEqualsWithDelta($leanGain, $richGain, 1.0, 'The holders gain or lose the same dollars on the same sale.');
+    }
+
     public function testDivestitureRetiresEveryLedgerProRataAndKeepsTheBalanceSheetBalanced(): void
     {
         $stock = $this->buildLedgeredAcquirer('DIVL', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);

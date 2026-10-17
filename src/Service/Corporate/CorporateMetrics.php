@@ -82,6 +82,24 @@ class CorporateMetrics
         return max($revenue, $equity, $floor);
     }
 
+    /**
+     * Treasury the business does not need: cash over the model's own target on its operating base, without a manager's
+     * taste for more. None for a financial, whose cash is its balance sheet. Valued at face wherever the firm is valued.
+     */
+    public static function excessOperatingCash(Stock $stock): float
+    {
+        $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
+        if ($strategy->isFinancial()) {
+            return 0.0;
+        }
+
+        return max(0.0, (float) $stock->getCorporateTreasury() - $strategy->calculateTargetOperatingCash(
+            self::getInstance()->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity()),
+            (float) $stock->getCustomerDeposits(),
+            (float) $stock->getWholesaleDebt()
+        ));
+    }
+
     public function calculateLiveInvestedCapital(float $equity, float $debt, float $treasury): float
     {
         return max(1.0, max($equity * 0.50, ($equity + $debt - $treasury)));

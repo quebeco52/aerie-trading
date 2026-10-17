@@ -103,12 +103,7 @@ class MarketPricingContext
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
         $baselineVolatility = (float) $stock->getVolatility();
         $treasury = (float) $stock->getCorporateTreasury();
-        // The cash the business needs is the model's own target on its operating base, without a manager's taste for more.
-        $excessCash = $strategy->isFinancial() ? 0.0 : max(0.0, $treasury - $strategy->calculateTargetOperatingCash(
-            \App\Service\Corporate\CorporateMetrics::getInstance()->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity()),
-            (float) $stock->getCustomerDeposits(),
-            (float) $stock->getWholesaleDebt()
-        ));
+        $excessCash = \App\Service\Corporate\CorporateMetrics::excessOperatingCash($stock);
 
         return new self(
             currentPrice: (float) $stock->getPrice(),

@@ -85,11 +85,11 @@ class DebtEngine
      * Calculates the gross and blended interest expenses for a company's debt structure.
      *
      * The debt is priced at the firm's market spread (resolveCreditSpread()), on the rating the agency assigns
-     * here when the maturity wall advances.
+     * here on the quarter's report. The fixed book is charged at the coupon it carries; rollMaturities() reprices it.
      *
      * @param Stock $stock           The stock entity being analyzed.
      * @param MacroStateDTO $macroState      The current macroeconomic state.
-     * @param bool  $advanceMaturity Whether to advance the maturity wall and lock in new blended rates.
+     * @param bool  $advanceMaturity Whether this is the quarter's report, on which the agency reviews the rating.
      * @return \App\DTO\DebtMetricsDTO
      */
     public function calculateInterestExpense(Stock $stock, \App\DTO\MacroStateDTO $macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
@@ -192,24 +192,9 @@ class DebtEngine
         // Fixed-rate corporate debt is priced off the 5-Year Yield curve, not the overnight Policy Rate
         $currentMarketFixedRate = $yield5y + $dynamicSpread;
 
-        $historicalRate = (float) $stock->getHistoricalFixedRate();
-
-        if ($advanceMaturity) {
-            // Maturity wall: the business model sets how fast the fixed-rate book rolls to market. Refinancing ahead
-            // of maturity when rates fall pays only for a speculative-grade issuer, whose bonds turn callable at a
-            // fixed premium after their non-call period; investment-grade bonds carry make-whole calls, which price
-            // the call at the Treasury curve plus a small spread, so retiring them early saves nothing (Powers &
-            // Tsyplakov 2008). Letting every issuer refinance down gave coupons a free option on falling rates.
-            $turnover = $strategy->getDebtMaturityRolloverRate();
-            $isSpeculativeGrade = (\App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS[(string) $stock->getCreditRating()] ?? \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS['BBB'])
-                < \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS['BBB'];
-            if ($isSpeculativeGrade && $currentMarketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
-                $turnover = self::ACCELERATED_DEBT_TURNOVER;
-            }
-            $blendedFixedRate = ($historicalRate * (1.0 - $turnover)) + ($currentMarketFixedRate * $turnover);
-        } else {
-            $blendedFixedRate = $historicalRate;
-        }
+        // The quarter is charged at the coupon the book carries; it reprices only where the roll refinances
+        // (rollMaturities()), not on principal repaid in cash or left unpaid.
+        $blendedFixedRate = (float) $stock->getHistoricalFixedRate();
 
         $floatingInterestRate = $policyRate + $dynamicSpread;
 
@@ -902,14 +887,18 @@ class DebtEngine
 
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
 
-        $maturing = $wholesaleDebt * max(0.0, $strategy->getDebtMaturityRolloverRate());
+        // Principal missed in an earlier quarter is still due, ahead of the slice maturing now.
+        $arrears = min($wholesaleDebt, max(0.0, (float) $stock->getPrincipalArrears()));
+        $maturing = (($wholesaleDebt - $arrears) * max(0.0, $strategy->getDebtMaturityRolloverRate())) + $arrears;
         if ($maturing <= 0.0) {
             return new \App\DTO\MaturityRollDTO(0.0, true, 0.0, 0.0);
         }
 
         if ($this->hasPrimaryMarketAccess($stock, $health->rawMetrics, $health->interestCoverage)) {
-            // Refinanced in the primary market: the principal survives and only its coupon reprices, which
-            // calculateInterestExpense() has already done through the blended fixed rate.
+            // Refinanced in the primary market: the principal survives and the refinanced share reprices to today's rate.
+            $stock->setHistoricalFixedRate((string) self::refinancedCoupon($stock, $strategy, $health->rawMetrics->currentMarketRate, $maturing / $wholesaleDebt));
+            $stock->setPrincipalArrears('0');
+
             return new \App\DTO\MaturityRollDTO($maturing, true, 0.0, 0.0);
         }
 
@@ -917,8 +906,30 @@ class DebtEngine
         $shortfall = $maturing - $repaid;
 
         $stock->setWholesaleDebt((string) max(0.0, $wholesaleDebt - $repaid));
+        // Due until paid: the treasury settles the final figure once rescue funding has had its turn.
+        $stock->setPrincipalArrears((string) $shortfall);
 
         return new \App\DTO\MaturityRollDTO($maturing, false, $repaid, $shortfall);
+    }
+
+    /**
+     * The fixed coupon after a refinanced roll: the share of the book refinanced reprices to today's rate (the business
+     * model's quarterly roll, plus any arrears rolled with it). Refinancing ahead of maturity when rates fall pays only for a speculative-grade issuer, whose bonds
+     * turn callable at a fixed premium after their non-call period; investment-grade bonds carry make-whole calls, which
+     * price the call at the Treasury curve plus a small spread, so retiring them early saves nothing (Powers &
+     * Tsyplakov 2008). Letting every issuer refinance down gave coupons a free option on falling rates.
+     */
+    private static function refinancedCoupon(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $marketFixedRate, float $refinancedShare): float
+    {
+        $historicalRate = (float) $stock->getHistoricalFixedRate();
+        $turnover = max(0.0, min(1.0, $refinancedShare));
+        $isSpeculativeGrade = (\App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS[(string) $stock->getCreditRating()] ?? \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS['BBB'])
+            < \App\Service\Market\Bond\CreditRatingAgency::RATING_RANKS['BBB'];
+        if ($isSpeculativeGrade && $marketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
+            $turnover = max($turnover, self::ACCELERATED_DEBT_TURNOVER);
+        }
+
+        return ($historicalRate * (1.0 - $turnover)) + ($marketFixedRate * $turnover);
     }
 
     /** A lender, an insurer, or any institution steering to a capital ratio, is underwritten and rated on its capital, not its cash flow. */

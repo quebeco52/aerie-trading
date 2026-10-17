@@ -717,6 +717,7 @@ class TreasuryEngineTest extends TestCase
             $this->assertSame(0.0, (float) ($event['shock'] ?? 0.0), 'A distress event moved the price: ' . ($event['description'] ?? ''));
         }
         $this->assertEqualsWithDelta(140_000_000.0, $ctx->unfundedMaturity, 1.0, 'only the part the revolver could not cover is unfunded');
+        $this->assertEqualsWithDelta(140_000_000.0, (float) $stock->getPrincipalArrears(), 1.0, 'and it stays due next quarter');
         $this->assertEqualsWithDelta(160_000_000.0, $ctx->principalRepaid, 1.0, 'cash plus the full commitment went to the bondholders');
         $this->assertGreaterThan(0.0, (float) $stock->getTotalEquity(), 'the firm is still notionally solvent');
     }
@@ -757,6 +758,7 @@ class TreasuryEngineTest extends TestCase
 
         $this->assertFalse($stock->isPaymentDefault(), 'a funded quarter cures the default');
         $this->assertSame(0, $stock->getQuartersInDefault(), 'and resets the grace clock');
+        $this->assertSame(0.0, (float) $stock->getPrincipalArrears(), 'and nothing is left overdue');
     }
 
     /**

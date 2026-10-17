@@ -353,46 +353,27 @@ class DebtEngineTest extends TestCase
 
     public function testMaturityWallRollsAtBusinessModelRolloverRate(): void
     {
-        // Historical coupon 2%, market now 6%: how far the blended rate moves in one quarter is the
-        // business model's rollover rate. A regulated utility (12-year bonds) must reprice far slower
-        // than a standard corporate (5-year bonds), which is the only legitimate bond-proxy channel.
-        $macroState = new MacroStateDTO(
-            policyRateEma: 0.05,
-            corporateTaxRate: 0.21,
-            yield5yEma: 0.06
-        );
+        // Historical coupon 2%, market now 7%: how far a refinanced roll moves the coupon is the business model's
+        // rollover rate. A regulated utility (12-year bonds) must reprice far slower than a standard corporate
+        // (5-year bonds), which is the only legitimate bond-proxy channel. The quarter itself is charged at the 2%.
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        $macroState = new MacroStateDTO(policyRateEma: 0.05, corporateTaxRate: 0.21, yield5yEma: 0.06);
+        $health = $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.02);
 
-        $buildStock = function (string $industry): Stock {
-            $stock = new Stock();
-            $stock->setTicker('ROLL');
+        $coupons = [];
+        foreach (['Utilities - Regulated Electric' => 'utility', 'General' => 'none'] as $industry => $model) {
+            $stock = $this->buildMaturityIssuer('BBB', 0.0);
             $stock->setIndustry($industry);
-            $stock->setTotalEquity('1000000000');
-            $stock->setWholesaleDebt('500000000');
-            $stock->setTotalRevenue('800000000');
-            $stock->setOperatingMargin('0.20');
             $stock->setHistoricalFixedRate('0.02');
-            $stock->setFloatingDebtRatio('0.0');
-            $stock->setCreditSpread('0.0');
-            $stock->setVolatility('0.15');
-            $stock->setSharesOutstanding('10000000');
-            $stock->setPrice('100.00');
-            return $stock;
-        };
 
-        $utility = $buildStock('Utilities - Regulated Electric');
-        $corporate = $buildStock('General');
+            $this->assertEqualsWithDelta(0.02, $engine->calculateInterestExpense($stock, $macroState, true)->historicalFixedRate, 1e-12, 'The quarter is charged at the coupon the book carries.');
+            $this->assertTrue($engine->rollMaturities($stock, $health, 50_000_000_000.0)->refinanced);
 
-        $utilityMetrics = $this->engine->calculateInterestExpense($utility, $macroState, true);
-        $corporateMetrics = $this->engine->calculateInterestExpense($corporate, $macroState, true);
-
-        $utilityRollover = \App\Data\Company\Sectors::getBusinessModelStrategy('utility')->getDebtMaturityRolloverRate();
-        $corporateRollover = \App\Data\Company\Sectors::getBusinessModelStrategy('none')->getDebtMaturityRolloverRate();
-
-        // Each firm reprices toward its own market rate: the two can sit in different rating brackets.
-        $this->assertLessThan($corporateRollover, $utilityRollover);
-        $this->assertEqualsWithDelta((0.02 * (1.0 - $utilityRollover)) + ($utilityMetrics->currentMarketRate * $utilityRollover), $utilityMetrics->historicalFixedRate, 1e-9);
-        $this->assertEqualsWithDelta((0.02 * (1.0 - $corporateRollover)) + ($corporateMetrics->currentMarketRate * $corporateRollover), $corporateMetrics->historicalFixedRate, 1e-9);
-        $this->assertLessThan($corporateMetrics->historicalFixedRate, $utilityMetrics->historicalFixedRate);
+            $rollover = \App\Data\Company\Sectors::getBusinessModelStrategy($model)->getDebtMaturityRolloverRate();
+            $this->assertEqualsWithDelta((0.02 * (1.0 - $rollover)) + (0.07 * $rollover), (float) $stock->getHistoricalFixedRate(), 1e-9);
+            $coupons[$model] = (float) $stock->getHistoricalFixedRate();
+        }
+        $this->assertLessThan($coupons['none'], $coupons['utility']);
     }
 
     /**
@@ -402,39 +383,42 @@ class DebtEngineTest extends TestCase
      */
     public function testOnlySpeculativeGradeIssuersRefinanceEarlyWhenRatesFall(): void
     {
-        $macroState = new MacroStateDTO(policyRateEma: 0.01, corporateTaxRate: 0.21, yield5yEma: 0.01);
-        $build = function (string $equity, string $debt, string $margin, string $coupon): Stock {
-            $stock = new Stock();
-            $stock->setTicker('RFIN');
-            $stock->setIndustry('General');
-            $stock->setTotalEquity($equity);
-            $stock->setWholesaleDebt($debt);
-            $stock->setTotalRevenue('800000000');
-            $stock->setOperatingMargin($margin);
-            $stock->setHistoricalFixedRate($coupon);
-            $stock->setFloatingDebtRatio('0.0');
-            $stock->setCreditSpread('0.0');
-            $stock->setVolatility('0.15');
-            $stock->setSharesOutstanding('10000000');
-            $stock->setPrice('100.00');
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        // The market prices both at 6% against a book coupon of 8%.
+        $health = $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.01);
+        $rollover = \App\Data\Company\Sectors::strategyFor('Auto Manufacturers')->getDebtMaturityRolloverRate();
 
-            return $stock;
-        };
-        $rollover = \App\Data\Company\Sectors::getBusinessModelStrategy('none')->getDebtMaturityRolloverRate();
+        foreach ([['A', $rollover], ['BB', 0.15]] as [$rating, $turnover]) {
+            $stock = $this->buildMaturityIssuer($rating, 0.0);
+            $stock->setHistoricalFixedRate('0.08');
 
-        $fixtures = [
-            [$build('2000000000', '200000000', '0.30', '0.08'), false, 0.08],
-            [$build('100000000', '2400000000', '0.06', '0.20'), true, 0.20],
-        ];
-        foreach ($fixtures as [$stock, $speculative, $coupon]) {
-            $metrics = $this->engine->calculateInterestExpense($stock, $macroState, true);
-            $isSpeculative = CreditRatingAgency::RATING_RANKS[$stock->getCreditRating()] < CreditRatingAgency::RATING_RANKS['BBB'];
-            $this->assertSame($speculative, $isSpeculative, 'control: the fixture lands on the intended side of investment grade');
-            $this->assertLessThan($coupon - 0.015, $metrics->currentMarketRate, 'control: the market sits well below the book coupon');
-
-            $turnover = $speculative ? 0.15 : $rollover;
-            $this->assertEqualsWithDelta(($coupon * (1.0 - $turnover)) + ($metrics->currentMarketRate * $turnover), $metrics->historicalFixedRate, 1e-9);
+            $this->assertTrue($engine->rollMaturities($stock, $health, 50_000_000_000.0)->refinanced, "control: a {$rating} issuer rolls");
+            $this->assertEqualsWithDelta((0.08 * (1.0 - $turnover)) + (0.06 * $turnover), (float) $stock->getHistoricalFixedRate(), 1e-9, "{$rating} refinances at its own pace");
         }
+    }
+
+    /**
+     * Only what is refinanced reprices. A maturity the market refuses is repaid in cash or left unpaid, and the notes
+     * still outstanding keep the coupon they were issued at; repricing them to the crisis yield charged a shut-out firm
+     * a refinancing it never got, and the lower coverage kept it shut out.
+     */
+    public function testARefusedRollLeavesTheCouponUnchanged(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        // The quarter as the engines run it: the report charges interest, then the treasury meets the maturity.
+        $crisis = new MacroStateDTO(policyRateEma: 0.05, corporateTaxRate: 0.21, yield5yEma: 0.10);
+
+        $shut = $this->buildMaturityIssuer('B', 0.02);
+        $shut->setHistoricalFixedRate('0.06');
+        $shut->setHistoricalFixedRate((string) $engine->calculateInterestExpense($shut, $crisis, true)->historicalFixedRate);
+        $this->assertFalse($engine->rollMaturities($shut, $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.18), 50_000_000_000.0)->refinanced, 'control: the market is shut');
+        $this->assertSame(0.06, (float) $shut->getHistoricalFixedRate());
+
+        $uncovered = $this->buildMaturityIssuer('CCC', 0.02);
+        $uncovered->setHistoricalFixedRate('0.06');
+        $uncovered->setHistoricalFixedRate((string) $engine->calculateInterestExpense($uncovered, $crisis, true)->historicalFixedRate);
+        $this->assertFalse($engine->rollMaturities($uncovered, $this->buildHealthForMaturity(interestCoverage: 0.4, dynamicSpread: 0.02), 100_000_000.0)->refinanced, 'control: no lender rolls it');
+        $this->assertSame(0.06, (float) $uncovered->getHistoricalFixedRate());
     }
 
     public function testAnalyzeDebtHealthHealthySolventCompany(): void
@@ -819,6 +803,42 @@ class DebtEngineTest extends TestCase
     /**
      * A debt-free firm has no maturity ladder at all.
      */
+    /**
+     * A missed maturity stays due until paid. Shut out two quarters running, a firm that pays the second quarter's own
+     * slice still owes the first quarter's: it has not cured, and the grace clock keeps running. A reopened market rolls
+     * the arrears with the slice, and only that refinanced share reprices.
+     */
+    public function testAMissedMaturityStaysDueUntilPaid(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+        $stock = $this->buildMaturityIssuer('CCC', 0.02);
+        $stock->setWholesaleDebt('2000000000.00');
+        $stock->setHistoricalFixedRate('0.06');
+        $rollover = \App\Data\Company\Sectors::strategyFor('Auto Manufacturers')->getDebtMaturityRolloverRate();
+        $shut = $this->buildHealthForMaturity(interestCoverage: 0.4, dynamicSpread: 0.02);
+
+        $first = $engine->rollMaturities($stock, $shut, 10_000_000.0);
+        $this->assertEqualsWithDelta((2_000_000_000.0 * $rollover) - 10_000_000.0, $first->unfundedShortfall, 1.0);
+        $this->assertEqualsWithDelta($first->unfundedShortfall, (float) $stock->getPrincipalArrears(), 1.0, 'the missed principal is carried');
+
+        // Next quarter the firm can pay exactly its new slice, and no more.
+        $debt = (float) $stock->getWholesaleDebt();
+        $slice = ($debt - $first->unfundedShortfall) * $rollover;
+        $second = $engine->rollMaturities($stock, $shut, $slice);
+        $this->assertEqualsWithDelta($slice + $first->unfundedShortfall, $second->maturingPrincipal, 1.0, 'the arrears fall due ahead of the slice');
+        $this->assertEqualsWithDelta($first->unfundedShortfall, $second->unfundedShortfall, 1.0, 'paying the new slice leaves the old one unpaid');
+
+        $open = $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.02);
+        $stock->setCreditRating('BB');
+        $debt = (float) $stock->getWholesaleDebt();
+        $third = $engine->rollMaturities($stock, $open, 0.0);
+        $this->assertTrue($third->refinanced);
+        $this->assertSame(0.0, (float) $stock->getPrincipalArrears(), 'a refinanced roll clears the arrears');
+        $share = $third->maturingPrincipal / $debt;
+        $this->assertGreaterThan($rollover, $share);
+        $this->assertEqualsWithDelta((0.06 * (1.0 - $share)) + (0.07 * $share), (float) $stock->getHistoricalFixedRate(), 1e-9, 'the refinanced share, arrears included, reprices');
+    }
+
     public function testDebtFreeFirmHasNothingToRoll(): void
     {
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);

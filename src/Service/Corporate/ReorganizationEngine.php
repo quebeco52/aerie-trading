@@ -103,6 +103,7 @@ class ReorganizationEngine
         // Confirmation cures every default the plan deals with.
         $stock->setPaymentDefault(false);
         $stock->setQuartersInDefault(0);
+        $stock->setPrincipalArrears('0');
 
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
         if ($plan->oldEquityShare >= 1.0) {

@@ -1045,7 +1045,13 @@ class MergerAndAcquisitionEngine
         // takes (Shleifer & Vishny 1992; Pulvino 1998). The floor reads the market, not the book: a firm trading
         // below book has assets the market values below cost, and a floor on book sold them for more than they were
         // worth. The buyer takes its share of the debt, so this is the slice's equity value, as the earnings price is.
-        $fireSaleValue = $ctx->divestedFraction * max(0.0, $ctx->price * $ctx->shares) * (1.0 - self::DIV_FIRE_SALE_DISCOUNT);
+        // The cash over the business's needs and the listed stakes stay with the seller, so their value is not sold:
+        // the market's value less the cash at face, on the share of the rest that is operations.
+        $excessCash = CorporateMetrics::excessOperatingCash($ctx->seller);
+        $operatingNetAssets = max(1.0, (float) $ctx->seller->getTotalEquity() - $excessCash);
+        $operatingShare = max(0.0, min(1.0, 1.0 - ((float) ($ctx->seller->getListedStakesCarrying() ?? 0.0) / $operatingNetAssets)));
+        $ctx->soldValue = $ctx->divestedFraction * max(0.0, ($ctx->price * $ctx->shares) - $excessCash) * $operatingShare;
+        $fireSaleValue = $ctx->soldValue * (1.0 - self::DIV_FIRE_SALE_DISCOUNT);
 
         $ctx->salePrice = $ctx->normalizedNetIncome > 0
             ? max($ctx->lostNetIncome * $ctx->saleMultiple, $fireSaleValue)
@@ -1064,6 +1070,8 @@ class MergerAndAcquisitionEngine
         $stock->setEarningsPerShare((string) ($currentEps * (1.0 - $ctx->divestedFraction)));
 
         $stock->setWholesaleDebt((string) max(0.0, $ctx->currentDebt - $ctx->lostDebt));
+        // The buyer assumes its share of the debt, and with it that share of any principal already overdue.
+        $stock->setPrincipalArrears((string) ((float) $stock->getPrincipalArrears() * (1.0 - $ctx->divestedFraction)));
 
         $ctx->strategy->shedDivestedLiabilities($stock, $ctx->divestedFraction, $ctx->treasury);
         
@@ -1181,11 +1189,11 @@ class MergerAndAcquisitionEngine
 
         // The seller's announcement return is what the sale is worth to its shareholders over their stake. The
         // market already values the division pro rata inside the firm, and the buyer takes its share of the
-        // debt with it, so the seller gives up that fraction of its market value and receives the price, less the tax:
+        // debt with it, so the seller gives up the slice's market value and receives the price, less the tax:
         // selling above its own valuation creates value (Hite, Owers & Rogers 1987), a fire sale below it
         // destroys some. Limited liability is the only bound.
         $marketCap = max(1.0, $ctx->price * $ctx->shares);
-        $ctx->eventShock = max(-100.0, (($ctx->salePrice - $ctx->taxOnSale - ($ctx->divestedFraction * $marketCap)) / $marketCap) * 100.0);
+        $ctx->eventShock = max(-100.0, (($ctx->salePrice - $ctx->taxOnSale - $ctx->soldValue) / $marketCap) * 100.0);
 
         $event = $this->marketEvent->publish($ctx->seller, 'DIVESTITURE', $desc, $ctx->eventShock, $ctx->salePrice / $marketCap);
 

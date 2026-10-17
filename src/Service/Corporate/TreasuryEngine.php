@@ -916,6 +916,9 @@ class TreasuryEngine
             $this->fundMaturityFromCash($ctx, $ctx->unfundedMaturity);
         }
 
+        // What is still unfunded stays due next quarter, ahead of its maturities; a funded quarter clears it.
+        $stock->setPrincipalArrears((string) max(0.0, $ctx->unfundedMaturity));
+
         if ($ctx->unfundedMaturity <= 0.0) {
             $this->curePaymentDefault($ctx);
 

@@ -731,6 +731,40 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertSame(0.50, $result['dividend_paid'], 'A 60% ceiling does not bind a dividend at half the quarter\'s earnings; the hold keeps it above the 30% target.');
     }
 
+    /**
+     * The tier caps the dividend paid, not only the board's target: a broker paying 80% of the quarter's earnings when
+     * it falls into the second tier (30%) pays 30% that quarter, rather than smoothing down from 80% for years and
+     * borrowing to do it.
+     */
+    public function testABufferTierCapsTheDividendPaidNotOnlyItsTarget(): void
+    {
+        $broker = new Stock();
+        $broker->setTicker('TIER_BRKR');
+        $broker->setIndustry('Brokerages');
+        $broker->setSharesOutstanding('1000000');
+        $broker->setPrice('100.00');
+        $broker->setTotalEquity('100000000');
+        $broker->setWholesaleDebt('950000000');
+        $broker->setCustomerDeposits('0.00');
+        $broker->setCorporateTreasury('50000000');
+        $broker->setTargetPayoutRatio('0.40');
+        $broker->setDividendSpeed('0.09');
+        $broker->setLastDividend('0.80');
+        $broker->setRetainedEarnings('50000000.00');
+        $broker->setTotalRevenue('10000000.00');
+        $broker->setOperatingMargin('0.20');
+        $broker->setRoeTtm('0.12');
+        $broker->setTotalNetIncome('4000000.00');
+
+        $model = new \App\Service\Model\Sector\BrokerageBusinessModel();
+        $this->assertSame(FinancialConstants::REGULATORY_BUFFER_TIER_2_PAYOUT_CAP, $model->getRegulatoryDividendCap($broker, 50_000_000.0), 'Control: the broker sits in the second buffer tier.');
+
+        $result = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
+            ->allocateCapital($broker, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+
+        $this->assertEqualsWithDelta(0.30, $result['dividend_paid'], 1e-9, 'At most 30% of the quarter\'s earnings leaves, whatever was paid last quarter.');
+    }
+
     public function testCommercialBankCapitalConservationBufferHaltsDividends(): void
     {
         $engine = new CapitalAllocationEngine(

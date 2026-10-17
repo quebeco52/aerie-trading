@@ -9,6 +9,7 @@ use App\DTO\SecuritiesMarkDTO;
 use App\Service\Corporate\SecuritiesBookService;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FixedIncome;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -133,6 +134,12 @@ class SecuritiesBookServiceTest extends TestCase
         self::assertLessThan(0.0, $loss);
         self::assertGreaterThan(0.0, $gain);
         self::assertGreaterThan(abs($loss), $gain, 'A convex book gains more on a rally than it loses on the same selloff.');
+
+        // The asymmetry is the ladder's own, at the move left after the quarter's roll-down: about 4D^2/3 dy^2, 2.4% here.
+        $dyAfterRoll = $dyUp * (1.0 - (1.0 / (4.0 * 7.0)));
+        $asymmetry = FixedIncome::calculateLadderPriceChange(7.0, $dyAfterRoll) + FixedIncome::calculateLadderPriceChange(7.0, -$dyAfterRoll);
+        self::assertEqualsWithDelta($asymmetry, ($gain + $loss) / self::BOOK, 1e-9);
+        self::assertGreaterThan(0.02, $asymmetry);
     }
 
     /**
@@ -229,22 +236,22 @@ class SecuritiesBookServiceTest extends TestCase
         );
 
         self::assertLessThan(
-            SecuritiesBookService::MAX_SECURITIES_MARK_RATIO * self::BOOK,
+            0.05 * self::BOOK,
             abs($mark->totalMark),
-            'A book discounted at a yield of nothing would pin straight to the clamp.'
+            'A book discounted at a yield of nothing would print a gain of a third of the book or more.'
         );
     }
 
-    /** The clamp exists because past it the duration expansion is extrapolation rather than a price. */
-    public function testTheMarkIsClampedAtTheRatioPastWhichDurationIsExtrapolation(): void
+    /** Repriced exactly, a long book can lose most of its value to a huge selloff, never more, and a bigger one always costs more. */
+    public function testAHugeSelloffTakesMostOfALongBookButNeverMoreThanAllOfIt(): void
     {
-        $mark = $this->roll($this->macro(0.30, 0.32), 30.0, carryingYield: 0.001);
+        $huge = $this->roll($this->macro(0.30, 0.32), 30.0, carryingYield: 0.001)->totalMark;
+        $large = $this->roll($this->macro(0.08, 0.10), 30.0, carryingYield: 0.001)->totalMark;
 
-        self::assertEqualsWithDelta(
-            -SecuritiesBookService::MAX_SECURITIES_MARK_RATIO * self::BOOK,
-            $mark->totalMark,
-            1.0
-        );
+        self::assertLessThan(-0.80 * self::BOOK, $huge);
+        self::assertGreaterThan(-self::BOOK, $huge);
+        self::assertLessThan($large, $huge, 'A bigger selloff costs more.');
+        self::assertLessThan(0.0, $large);
     }
 
     /**

@@ -73,6 +73,8 @@ class DivestitureContext
     public float $lostDebt = 0.0;
     public float $lostEquity = 0.0;
     
+    /** Market value of what is handed over: the slice of the firm's value without the cash and listed stakes it keeps. */
+    public float $soldValue = 0.0;
     public float $salePrice = 0.0;
     public float $newTreasury = 0.0;
     public float $gainOnSale = 0.0;

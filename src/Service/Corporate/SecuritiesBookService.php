@@ -8,6 +8,7 @@ use App\DTO\SecuritiesMarkDTO;
 use App\DTO\SovereignCurveDTO;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FixedIncome;
 
 /**
  * Rolls a financial's investment securities book forward one quarter and marks it against the curve.
@@ -27,12 +28,8 @@ use App\Service\Math\FinancialConstants;
 final class SecuritiesBookService
 {
     // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
-    /** Convexity of a plain fixed-coupon book at the durations financials run; the second-order term that makes a rally worth more than the selloff cost. */
-    public const SECURITIES_BOOK_CONVEXITY = 0.45;
     /** Floor on the carrying yield, so a book struck at the zero bound still discounts rather than dividing by nothing. */
     public const MIN_SECURITIES_CARRYING_YIELD = 0.001;
-    /** Cap on the mark as a share of the book. Past this the duration approximation is extrapolation, not a price. */
-    public const MAX_SECURITIES_MARK_RATIO = 0.35;
 
     public function __construct(
         private readonly BondPricingEngine $bondPricingEngine,
@@ -41,9 +38,10 @@ final class SecuritiesBookService
     /**
      * Mark a book against the curve after reinvesting the quarter's maturities.
      *
-     * Price sensitivity is the standard second-order expansion, dP/P = -D_mod * dy + 0.5 * C * dy^2. The
-     * convexity term is not decoration: without it a rally and a selloff of the same size are worth the
-     * same in opposite directions, and the asymmetry that makes a bond a bond disappears.
+     * The book is a ladder of maturing paper, repriced exactly at the move (FixedIncome::calculateLadderPriceChange).
+     * Its convexity is not decoration: without it a rally and a selloff of the same size are worth the same in
+     * opposite directions, and the asymmetry that makes a bond a bond disappears. A second-order expansion at the
+     * ladder's real convexity turns back up past a move of 0.75/D, so a long book showed a gain on a large selloff.
      *
      * Note on the book's size: it is re-read from the balance sheet each quarter rather than carried, so
      * net new money is treated as part of the same roll-down that maturities are, instead of being tracked
@@ -79,7 +77,8 @@ final class SecuritiesBookService
 
         // Floating-rate paper reprices to the curve and owns none of its moves. What is left is the part
         // that is still paying a coupon struck at a yield the market has since left behind.
-        $effectiveDuration = max(0.0, $duration) * max(0.0, min(1.0, 1.0 - $floatingShare));
+        $fixedShare = max(0.0, min(1.0, 1.0 - $floatingShare));
+        $effectiveDuration = max(0.0, $duration) * $fixedShare;
         // A level of zero is not a zero-rate world, it is a curve nobody fitted — a bare DTO in a harness or
         // a test. Evaluating it would put the whole market's paper at a yield of nothing.
         $marketYield = max(
@@ -113,15 +112,10 @@ final class SecuritiesBookService
         $rolled = ($opening * (1.0 - $rolldown)) + ($marketYield * $rolldown);
         $newCarryingYield = max(self::MIN_SECURITIES_CARRYING_YIELD, $rolled);
 
+        // The fixed sleeve is a rolling ladder of maturing paper, repriced exactly at the move; the floating sleeve
+        // owns none of it.
         $deltaYield = $marketYield - $newCarryingYield;
-        $markRatio = (-$effectiveDuration * $deltaYield)
-            + (0.5 * self::SECURITIES_BOOK_CONVEXITY * $deltaYield * $deltaYield);
-
-        // Past this the duration expansion stops being a price and starts being extrapolation.
-        $markRatio = max(
-            -self::MAX_SECURITIES_MARK_RATIO,
-            min(self::MAX_SECURITIES_MARK_RATIO, $markRatio)
-        );
+        $markRatio = $fixedShare * FixedIncome::calculateLadderPriceChange($duration, $deltaYield);
 
         $totalMark = $book * $markRatio;
         $afsMark = $totalMark * (1.0 - $htm);

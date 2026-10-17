@@ -224,6 +224,11 @@ class CapitalAllocationEngine
         }
 
         $ctx->newDividend = max(0.0, $lastDividend + ($speed * ($targetDividend - $lastDividend)));
+        // The tier caps what is paid, not only what the board aims at: smoothed from a dividend above it, the payment
+        // would pass the cap for years, and the firm would borrow to pay it out of the capital the tier is rebuilding.
+        if ($regulatoryCap !== null && $regulatoryCap > 0.0) {
+            $ctx->newDividend = min($ctx->newDividend, max(0.0, $sustainableBase) * $regulatoryCap);
+        }
 
         // A pass-through keeps its tax status only by distributing its taxable income, so while the quarter is
         // profitable no payout preference, smoothing or crisis omission above can take the dividend below it.
