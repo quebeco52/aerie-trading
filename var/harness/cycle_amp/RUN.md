@@ -146,3 +146,17 @@ unemployment, floor share), and which gap channels carry the gap's quarterly mov
 - `wr_analyse.py` = dc_analyse for arms A B C (pairs B-A, C-A) + gap ex supply, wage growth/target/difference, sds,
   downward share, gap acf8, supercore sd; `SHORT=1` stops after the main table. `wr_recovery.py`: episodes with gap
   < -2% (trough to gap >= 0, 8-quarter rise, policy - (r*+2%), inflation and wages over trough..trough+8).
+
+## Services repricing shock (2026-10-18, svc_run.sh)
+- Harness `ServicesHarnessTest.php` = `TimingHarnessTest.php` plus row columns `supercore`, `core_goods`, `wg`
+  (wageGrowth), `be`, `be_q` (tipsBreakeven, quoted), `nairu`, `svc_shock` (servicesPriceShock).
+- Trees from `svc_setup.sh <SNAP>` (env REV, default HEAD): `svctree` = git archive REV + working-tree src (arm C,
+  SERVICES_PRICE_SHOCK_SD 0.005); `ovrA/B/D` = working-tree MacroAggregateSubsystem with 0.0 / 0.004 / 0.006 (the
+  draw is taken in every arm, so seeds pair). Setup deletes `cache-svctree`.
+- Run: `SNAP=<dir> YEARS=33 bin/harness-batch var/harness/cycle_amp/svc_run.sh 1-4 A B C D &&
+  SEEDS=1-4 python3 var/harness/cycle_amp/svc_analyse.py A B C D > var/harness/cycle_amp/svc_s4.out`
+  Stage 2: `... svc_run.sh 5-16 A C D && SEEDS=1-16 PAIRS=C:D python3 ... svc_analyse.py A C D > ...svc_s16.out` (~19 min).
+  Outputs `runs/S<arm>-<seed>.*`. TPY 360, POLITICS 1.
+- `svc_analyse.py` (env SEEDS, BURN 2): services/core goods/headline 4q-average moments (sd, ac4, ac1, corr with the
+  gap 4 quarters earlier), shock sd, policy (sd, floor share, largest 4q cut/hike), gap, u - NAIRU, wages, breakeven
+  sd, clamp share; paired vs the first arm; env PAIRS=X:Y adds Y-X for services sd and ac4.

@@ -302,6 +302,7 @@ class MacroEngine
         $this->assetSubsystem->calculateResidentialPropertyIndex($state, $expectedInflation, $dt);
         $this->assetSubsystem->calculateHousingStarts($state, $expectedInflation, $dt);
 
+        $this->aggregateSubsystem->calculateServicesRepricing($state, $dt);
         $state->inflation = $this->aggregateSubsystem->calculateInflation($state, MacroConstants::TARGET_INFLATION, $productivityGrowthRate, $dt);
         $this->aggregateSubsystem->calculateProducerPriceInflation($state, $productivityGrowthRate, $dt);
         $state->marketVolatility = $this->assetSubsystem->calculateMarketVolatility($state, $dt, $systemicShock['varianceJump'], $systemicShock['returnInnovation']);

@@ -172,6 +172,34 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertGreaterThan($stateSupply->supercoreInflation, $stateSupply->coreGoodsInflation, 'Supply chain bottleneck must drive core goods higher than supercore services');
     }
 
+    /**
+     * Services repricing on their own schedules sits outside the sticky services rate: it passes into measured services
+     * inflation whole, fades at its own reversion rather than the sticky rate's, and reaches headline at the services
+     * weight.
+     */
+    public function testServicesRepricingSitsOutsideTheStickyRate(): void
+    {
+        $dt = 0.25;
+        $shock = 0.004;
+        $calm = new MacroState();
+        $calm->inflation = MacroConstants::TARGET_INFLATION;
+        $calm->inflationEma = MacroConstants::TARGET_INFLATION;
+        $calm->wageGrowth = MacroConstants::TFP_DRIFT + MacroConstants::TARGET_INFLATION;
+        $repriced = clone $calm;
+        $repriced->servicesPriceShock = $shock;
+        $repriced->supercoreInflation += $shock;
+
+        $this->subsystem->calculateServicesRepricing($calm, $dt);
+        $this->subsystem->calculateServicesRepricing($repriced, $dt);
+        $calmHeadline = $this->subsystem->calculateInflation($calm, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
+        $repricedHeadline = $this->subsystem->calculateInflation($repriced, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, $dt);
+
+        $faded = $shock * exp(-MacroAggregateSubsystem::SERVICES_PRICE_SHOCK_REVERSION * $dt);
+        $this->assertEqualsWithDelta($faded, $repriced->servicesPriceShock, 1e-12, 'The repricing fades at its own reversion.');
+        $this->assertEqualsWithDelta($faded, $repriced->supercoreInflation - $calm->supercoreInflation, 1e-12, 'Services inflation carries the repricing whole, over an unchanged sticky rate.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE * $faded, $repricedHeadline - $calmHeadline, 1e-12, 'Headline carries it at the services weight.');
+    }
+
     public function testCalculateCapacityUtilization(): void
     {
         $stateNormal = new MacroState();

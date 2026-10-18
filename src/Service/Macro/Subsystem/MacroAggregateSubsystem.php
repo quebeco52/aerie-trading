@@ -546,6 +546,15 @@ class MacroAggregateSubsystem
     /** Demand sensitivity factor scaling aggregate output gap pressure into core goods prices. */
     public const CORE_GOODS_DEMAND_SENSITIVITY = 0.80;
 
+    // --- Services Repricing on Their Own Schedules (Ball & Mankiw 1995 relative-price shocks) ---
+    /** Mean reversion (a year) of services repricing on its own: an insurance, rent or fee reset runs about a year. */
+    public const SERVICES_PRICE_SHOCK_REVERSION = 1.0;
+    /**
+     * Stationary sd of the inflation services add by repricing outside the wage and demand pressure their sticky rate
+     * follows: 0.5pp, so the yearly services rate swings about 0.5pp, the low end of rich economies.
+     */
+    public const SERVICES_PRICE_SHOCK_SD = 0.005;
+
     // --- Supply-Chain Costs in Core Goods (Carriere-Swallow, Deb, Furceri, Jimenez & Ostry 2023) ---
     /**
      * Headline price level a year after container freight rates double: ~0.7pp, peaking at twelve months (IMF blog,
@@ -1383,12 +1392,28 @@ class MacroAggregateSubsystem
     }
 
     /**
+     * Insurance, rents, medical and regulated fees reprice on their own schedules (Ball & Mankiw 1995 relative-price
+     * shocks): an OU rate the measured services rate carries over its sticky part, which follows wages and demand in
+     * calculateInflation().
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateServicesRepricing(MacroState $state, float $dt): void
+    {
+        $prior = $state->servicesPriceShock;
+        $state->servicesPriceShock = StochasticProcesses::calculateOrnsteinUhlenbeckStep($prior, self::SERVICES_PRICE_SHOCK_REVERSION, self::SERVICES_PRICE_SHOCK_SD, $dt, $this->mathUtility->generateStandardNormal());
+        $state->supercoreInflation += $state->servicesPriceShock - $prior;
+    }
+
+    /**
      * Hybrid New Keynesian Phillips Curve with Benigno & Eggertsson (2023) Convexity
      * and Shapiro (2022) Sectoral Disaggregation (Supercore Services vs Core Goods vs Commodity).
      *
      * Models non-linear capacity-constrained inflation where output gaps approaching capacity accelerate inflation
      * non-linearly, while downward nominal wage/price rigidity flattens the curve during recessions. Decomposes
-     * inflation into wage-push supercore services, freight/materials core goods, and energy/food pass-through.
+     * inflation into wage-push supercore services (with services repricing on their own schedules), freight/materials
+     * core goods, and energy/food pass-through.
      *
      * @param MacroState $state                  Current macroeconomic state.
      * @param float      $targetInflation        Central bank inflation target.
@@ -1436,8 +1461,10 @@ class MacroAggregateSubsystem
 
         // Calvo (1983) sticky price dynamics via continuous AR(1) state adjustment.
         $reversionWeight = 1.0 - exp(-self::INFLATION_MEAN_REVERSION * $dt);
-        $state->supercoreInflation += $reversionWeight * ($targetSupercore - $state->supercoreInflation);
-        $state->supercoreInflation = max(-0.01, min(0.20, $state->supercoreInflation));
+        // The services repricing (calculateServicesRepricing()) rides on the measured rate outside its sticky part.
+        $stickySupercore = $state->supercoreInflation - $state->servicesPriceShock;
+        $stickySupercore += $reversionWeight * ($targetSupercore - $stickySupercore);
+        $state->supercoreInflation = max(-0.01, min(0.20, $stickySupercore + $state->servicesPriceShock));
 
         $state->coreGoodsInflation += $reversionWeight * ($targetCoreGoods - $state->coreGoodsInflation);
         $state->coreGoodsInflation = max(-0.02, min(0.20, $state->coreGoodsInflation));
@@ -1515,12 +1542,13 @@ class MacroAggregateSubsystem
                 'expectationsSlip' => $anchorSlip * $weightSum,
                 'demandPull' => $convexDemandPressure * (self::INFLATION_WEIGHT_SUPERCORE + (self::CORE_GOODS_DEMAND_SENSITIVITY * self::INFLATION_WEIGHT_GOODS)),
                 'wagePush' => $wageCostPush * self::INFLATION_WEIGHT_SUPERCORE,
+                'servicesRepricing' => $state->servicesPriceShock * self::INFLATION_WEIGHT_SUPERCORE,
                 'goodsSupply' => $goodsSupplyFriction * self::INFLATION_WEIGHT_GOODS,
                 'energyPassThrough' => $energyCostPush,
                 'foodPassThrough' => $agriCostPush,
                 'carbonPassThrough' => $carbonCostPush,
                 'importPrices' => $importPriceInflation * (self::INFLATION_WEIGHT_GOODS + self::INFLATION_WEIGHT_COMMODITY),
-                'stickyPriceLag' => (self::INFLATION_WEIGHT_SUPERCORE * ($state->supercoreInflation - $targetSupercore))
+                'stickyPriceLag' => (self::INFLATION_WEIGHT_SUPERCORE * ($state->supercoreInflation - $state->servicesPriceShock - $targetSupercore))
                     + (self::INFLATION_WEIGHT_GOODS * ($state->coreGoodsInflation - $targetCoreGoods)),
                 'clamp' => $boundedInflation - $blendedInflation,
             ], $boundedInflation, $dt);

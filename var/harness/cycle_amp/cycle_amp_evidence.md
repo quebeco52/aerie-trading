@@ -401,3 +401,18 @@ wage level error correction (WAGE_ERROR_CORRECTION_SPEED on realWageGap) lowers 
 target, not wage growth, absorbs the rigidity. Supercore and headline move by -0.03pp (2-se bound ~0.07pp), the gap
 ex supply part by -0.07 (0.16). The B gap lift (+0.19) is the exogenous TFP supply part (+0.21), not demand.
 Caveats: paths diverge across arms (Diet tariffs, TFP); slump rows pool 42-51 episodes; no blow-ups.
+
+## 2026-10-18 Services repricing shock (A SD 0.0 / B 0.004 / C 0.005 working tree / D 0.006)
+Question: does the OU services relative-price shock put supercore 4q-avg sd in 0.52-0.68 with ac4 <= 0.58, and do
+policy and the cycle stay sensible? Harness ServicesHarnessTest.php, svc_setup.sh/svc_run.sh/svc_analyse.py (RUN.md),
+tree = git archive HEAD f2393640 + working-tree src; seeds 1-4, 33 y, burn 2 y, TPY 360, POLITICS 1. Wall 8 min.
+Table: svc_s4.out. Reading: services sd A 0.26 / B 0.42 / C 0.57 / D 0.54, ac4 0.78 / 0.60 / 0.66 / 0.48 (C misses
+the ac4 bar; D meets both but its seed range is 0.36-0.71). Arms are not monotone in SD (C sd > D) because paths drift
+apart over 33 y even with the draw shared: gap sd C-A +0.45 (t 2.0) and other C/D guard deltas read as path noise at
+n = 4. Headline sd unchanged (+0.03, t 0.4 in C). No clamp binding, no runaway (supercore 0.5-4.4%). Realised shock sd
+~93% of the stationary SD (finite-sample, tau 1 y).
+Stage 2 (seeds 1-16, arms A C D; seeds 5-16 added on the same snapshot; table svc_s16.out, PAIRS=C:D): services sd
+A 0.25 / C 0.53 (0.37-0.68) / D 0.60 (0.36-0.98), ac4 0.78 / 0.59 / 0.55. Paired C-A sd +0.28 (0.03), ac4 -0.19
+(0.03); D-C sd +0.08 (0.05, t 1.6), ac4 -0.04 (0.04, t -0.9): C and D not separable. The 4-seed guard moves were
+noise: gap sd C-A +0.19 (0.11, t 1.8), gap mean D-A -0.08 (0.22). Floor share, largest 4q cut/hike, u - NAIRU flat.
+Headline sd +0.09-0.10 (t 1.7-1.9) in both. No clamp hit; one D seed's supercore touches -0.9%. Wall 19 min / 36 runs.

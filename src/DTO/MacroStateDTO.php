@@ -366,6 +366,7 @@ readonly class MacroStateDTO
          */
         public float $supercoreInflation = MacroConstants::TARGET_INFLATION,
         public float $supercoreInflationEma = MacroConstants::TARGET_INFLATION,
+        public float $servicesPriceShock = 0.0,
         public float $coreGoodsInflation = MacroConstants::TARGET_INFLATION,
         public float $coreGoodsInflationEma = MacroConstants::TARGET_INFLATION,
         public float $highYieldCreditSpread = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,

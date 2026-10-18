@@ -321,6 +321,8 @@ class MacroState
 
     public float $supercoreInflation;
     public float $supercoreInflationEma;
+    // Inflation from services repricing on their own schedules (an OU rate): supercoreInflation less its sticky part.
+    public float $servicesPriceShock;
     public float $coreGoodsInflation;
     public float $coreGoodsInflationEma;
 
