@@ -22,7 +22,7 @@ use PHPUnit\Framework\TestCase;
  */
 class HouseholdCreditCycleTest extends TestCase
 {
-    private const SEEDS = [1, 2, 3];
+    private const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     private const YEARS = 50;
     private const BURN_IN_YEARS = 10;
     private const TICKS_PER_YEAR = 90;
@@ -46,10 +46,10 @@ class HouseholdCreditCycleTest extends TestCase
             }
         }
 
-        // Three seeds read these correlations to about 0.15 either way, so they guard the signs; the strength of the
-        // borrowing leg is MacroAggregateSubsystemTest's.
+        // A crisis or two decides a seed's reading (single seeds run from about zero to 0.7), so twelve pooled guard
+        // the signs; the strength of the borrowing leg is MacroAggregateSubsystemTest's.
         $this->assertGreaterThan(0.10, $this->correlation($changes, $gaps), 'Three years of rising leverage are a boom.');
-        $this->assertGreaterThan(0.25, $this->correlation($annual, $annualLagged), 'A year of new borrowing is followed by more.');
+        $this->assertGreaterThan(0.10, $this->correlation($annual, $annualLagged), 'A year of new borrowing is followed by more.');
     }
 
     /**

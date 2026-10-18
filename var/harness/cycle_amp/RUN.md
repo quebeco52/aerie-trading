@@ -88,3 +88,61 @@ unemployment, floor share), and which gap channels carry the gap's quarterly mov
   (~20 min per 40 runs). Outputs `runs/J<arm>-<seed>.*`. `PFX= ... inv2_analyse.py JA IC` pairs across prefixes.
 - `inv2_analyse.py` = inv_analyse plus recession-quarter means (rec flag), OLS slopes of the contribution on same and
   last quarter's final-sales growth, corr(overhang, gap - inv) and the pooled recession share.
+
+## Spending timing, a level part of GDP (2026-10-18, tim_run.sh)
+- Harness `TimingHarnessTest.php`: `InventoryHarnessTest.php` plus row columns `tim` (spendingTimingGap) and `tim_stock`
+  (spendingPulledForward), 0 on trees without them.
+- Trees from `tim_setup.sh <SNAP>` (env REV, default 9344b2de): `t0tree` = git archive REV (arm A); `t1tree` = REV +
+  working-tree src (C, SPENDING_TIMING_SHOCK_SD 0.004); `ovrB`/`ovrD` = working-tree MacroAggregateSubsystem with
+  0.002 / 0.006. Setup deletes `cache-t0tree`/`cache-t1tree`.
+- Run: `SNAP=<dir> YEARS=33 bin/harness-batch var/harness/cycle_amp/tim_run.sh 1-8 A B C D &&
+  SEEDS=1-8 python3 var/harness/cycle_amp/tim_analyse.py A B C D > var/harness/cycle_amp/tim_s8.out`
+  Outputs `runs/T<arm>-<seed>.*`. TPY 360, POLITICS 1.
+- `tim_analyse.py` = inv2_analyse plus underlying final sales (gap - inv - tim) growth, the demand gap's change AR1,
+  timing level/contribution moments, recession-quarter timing contribution; paired vs the first arm only.
+
+## Why the gap averages below zero (2026-10-18, gb_run.sh)
+- Harness `GapBiasHarnessTest.php` = `InventoryHarnessTest.php` + the `OutputGapProbe` window per quarter (`gc`,
+  `gc_diff`, `gc_clamp`) + levers and inflation parts (`nairu`, `infl_ema`, `supercore`, `core_goods`, `net_tax`, `lfg`,
+  `mig`, `draw_share`, `fund_draw`, `debt_target`, `primary`, ...) + drag inputs (`ebp`, `ebp_tr`, `cap_req`,
+  `cap_built`, `epu_ema`, `cat_ema`, `stance`, `hdsg`, `ccd`; added mid-stage 2, so only some of seeds 9-16 carry them).
+- Tree: `$SNAP/gbtree` = `git archive 9344b2de` + vendor symlink. `$SNAP/ovrC/Service/Macro/Subsystem/
+  MacroAggregateSubsystem.php` = the tree's file with the convexDemandPressure call replaced by the linear
+  (PHILLIPS_CONVEX_KAPPA / PHILLIPS_MAX_CAPACITY) * (outputGap - productivitySupplyGap).
+- Arms: A POLITICS=1; B POLITICS=0; C ovrC POLITICS=1; D ovrC POLITICS=0. Outputs `runs/G<arm>-<seed>.*`.
+- Run: `SNAP=<dir> YEARS=33 bin/harness-batch var/harness/cycle_amp/gb_run.sh 1-8 A B C D &&
+  SEEDS=1-8 python3 var/harness/cycle_amp/gb_analyse.py > var/harness/cycle_amp/gb_s8.out` (~16 min per 32 runs).
+- `gb_analyse.py` (env SEEDS, BURN 2, TARGET 0.02): moments, levers, then the mean-gap attribution (domestic channel
+  k: 4*mean(gc_k)/1.44, level parts at their mean level; closure rows W*y measured vs predicted). Paired B-A, C-A, D-A, D-C.
+- `gb_inputs.py` (env SEEDS 9-16): input mean/sd of each one-sided drag and its rectification part.
+
+## Drag compensators (2026-10-18, dc_run.sh)
+- Harness `DragCompHarnessTest.php` = `GapBiasHarnessTest.php` + row columns `tim`, `tim_stock`, `dti`.
+- Trees from `dc_setup.sh <SNAP>` (env REV, default HEAD): `dctree` = git archive REV + working-tree src (arm B:
+  compensators on, timing SD 0.004); `ovrA` = the working-tree MacroAggregateSubsystem with
+  CREDIT_PREMIUM_NOISE_ADVERSE_MEAN, CATASTROPHE_ADVERSE_BURDEN_MEAN, EPU_NOISE_ADVERSE_LOG_MEAN at 0.0 (arm A =
+  timing arm C). Setup prints checks and deletes `cache-dctree`.
+- Run: `SNAP=<dir> YEARS=33 bin/harness-batch var/harness/cycle_amp/dc_run.sh 1-8 A B &&
+  SEEDS=1-8 python3 var/harness/cycle_amp/dc_analyse.py > var/harness/cycle_amp/dc_s8.out &&
+  PFX=D SEEDS=1-8 python3 var/harness/cycle_amp/tim_analyse.py A B > var/harness/cycle_amp/dc_shape_s8.out`
+  Outputs `runs/D<arm>-<seed>.*`. TPY 360, POLITICS 1; ~16 min per 16 runs on 8 slots.
+- `dc_analyse.py` = gb_analyse (levels, levers, mean-gap attribution with `tim` as a level part) plus share of quarters
+  with gap < -3% and annual DTI-change AR1; paired B-A. Shape guards (growth skew/AR1, peak-to-trough, HP AR1,
+  recessions, crises, drawdown, ELB) from `tim_analyse.py` with `PFX=D`.
+
+## Wage downward rigidity (2026-10-18, wr_run.sh)
+- Harness `WageRigidityHarnessTest.php` = `DragCompHarnessTest.php` + row columns `wg` (wageGrowth), `rwg`
+  (realWageGap) and, time-weighted over the quarter, `wg_avg`, `wtgt_avg` (the wage-growth target), `wdn_share`
+  (share of ticks adjusting downward), `wrf` (the factor). The averages come from static accumulators that exist only
+  in the OVR copies of LaborMarketSubsystem, so every arm runs with an OVR.
+- Trees from `wr_setup.sh <SNAP>` (env REV, default HEAD): `wrtree` = git archive REV + working-tree src; `ovrA/B/C`
+  = working-tree LaborMarketSubsystem + accumulators, WAGE_DOWNWARD_RIGIDITY_FACTOR A 0.30, B 0.60, C 1.00. Setup
+  prints checks and deletes `cache-wrtree`.
+- Run: `SNAP=<dir> YEARS=33 bin/harness-batch var/harness/cycle_amp/wr_run.sh 1-16 A B C &&
+  SEEDS=1-16 python3 var/harness/cycle_amp/wr_analyse.py > var/harness/cycle_amp/wr_s16.out &&
+  PFX=W SEEDS=1-16 python3 var/harness/cycle_amp/tim_analyse.py A B C > var/harness/cycle_amp/wr_shape_s16.out &&
+  SEEDS=1-16 python3 var/harness/cycle_amp/wr_recovery.py > var/harness/cycle_amp/wr_recovery_s16.out`
+  Outputs `runs/W<arm>-<seed>.*`. TPY 360, POLITICS 1; ~12 min per 24 runs on 8 slots.
+- `wr_analyse.py` = dc_analyse for arms A B C (pairs B-A, C-A) + gap ex supply, wage growth/target/difference, sds,
+  downward share, gap acf8, supercore sd; `SHORT=1` stops after the main table. `wr_recovery.py`: episodes with gap
+  < -2% (trough to gap >= 0, 8-quarter rise, policy - (r*+2%), inflation and wages over trough..trough+8).

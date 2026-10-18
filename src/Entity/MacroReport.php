@@ -309,6 +309,9 @@ class MacroReport
     private ?string $inventoryInvestmentGap = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $spendingTimingGap = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $monetaryStanceStage1 = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]

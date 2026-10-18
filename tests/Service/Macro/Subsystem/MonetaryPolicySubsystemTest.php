@@ -112,6 +112,26 @@ class MonetaryPolicySubsystemTest extends TestCase
     }
 
     /**
+     * Purchases moved into the quarter from others are seen through too: they are paid back before a rate move lands.
+     */
+    public function testTheRuleSeesThroughSpendingTiming(): void
+    {
+        $atPotential = new MacroState();
+        $atPotential->outputGap = 0.0;
+        $atPotential->outputGapEma = 0.0;
+        $pulledForward = new MacroState();
+        $pulledForward->outputGap = 0.005;
+        $pulledForward->outputGapEma = 0.005;
+        $pulledForward->spendingTimingGap = 0.005;
+
+        $this->assertEqualsWithDelta(
+            $this->subsystem->calculateTargetRate($atPotential, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE),
+            $this->subsystem->calculateTargetRate($pulledForward, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE),
+            1e-12,
+        );
+    }
+
+    /**
      * A rate committee's supermajority leans the rule its camp's way: a dovish one answers each point of inflation over
      * target 0.35 less, a hawkish one each point of output gap 0.17 less. At target with no gap no camp leans, so a
      * neutral economy gets the published rule whoever sits; with no committee handed over the rule is untouched.

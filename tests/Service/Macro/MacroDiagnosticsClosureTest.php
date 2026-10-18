@@ -134,6 +134,7 @@ class MacroDiagnosticsClosureTest extends TestCase
             $this->assertArrayHasKey('outputGap', $terms, "Quarter {$index}");
             $this->assertArrayHasKey('productivitySeenThrough', $terms, "Quarter {$index}");
             $this->assertArrayHasKey('inventoriesSeenThrough', $terms, "Quarter {$index}");
+            $this->assertArrayHasKey('spendingTimingSeenThrough', $terms, "Quarter {$index}");
             $this->assertArrayHasKey('productivitySupplyGap', $quarter['diagnostics']['averages'], "Quarter {$index}");
         }
     }

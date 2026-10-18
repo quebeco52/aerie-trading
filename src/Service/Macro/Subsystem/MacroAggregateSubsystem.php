@@ -293,6 +293,12 @@ class MacroAggregateSubsystem
      */
     public const KALDOR_CREDIT_PREMIUM_DRAG = 3.5;
     /**
+     * Adverse premium the premium's own noise averages over its decade trend, the economy still and no crisis struck:
+     * 0.145pp. The one-sided drag hands it back, as a jump's compensator does, so credit noise bends the cycle without
+     * lowering its average; crises and the cycle's own spikes stay costs.
+     */
+    public const CREDIT_PREMIUM_NOISE_ADVERSE_MEAN = 0.00145;
+    /**
      * Excess premium per unit of capital the banks must hold but have not built, here and in lending standards: 0.22,
      * so a 1pp rise phased in over four years costs the 0.17% of output the MAG (2010) median gives.
      */
@@ -351,11 +357,22 @@ class MacroAggregateSubsystem
      */
     public const KALDOR_CATASTROPHE_DRAG = 0.004;
     /**
+     * Burden above an average year the catastrophe process averages (0.24 of a year, a heavy tail of rare large
+     * seasons): potential carries the average toll, so the drag hands it back and only a worse season than that costs.
+     */
+    public const CATASTROPHE_ADVERSE_BURDEN_MEAN = 0.24;
+    /**
      * Demand drag per log unit of policy uncertainty ABOVE baseline: a doubling costs ~0.4pp a year, so the 2006-2011
      * rise integrates to the ~1% output loss Baker, Bloom & Davis attribute to it. One-sided: spikes cost output (Bloom
      * 2009), calm does not stimulate.
      */
     public const KALDOR_EPU_DRAG = 0.006;
+    /**
+     * Log uncertainty over baseline the index's own noise averages on its adverse side, with no slack and no election
+     * near (0.082): handed back so the noise bends the cycle without lowering its average; uncertainty that slack and
+     * elections raise stays a cost.
+     */
+    public const EPU_NOISE_ADVERSE_LOG_MEAN = 0.082;
 
     // --- Aggregate Demand Disturbance (Smets-Wouters 2007) ---
     /**
@@ -439,6 +456,20 @@ class MacroAggregateSubsystem
      * so inventory investment moves about 0.3% of GDP, under the US's 0.4% as a services centre holds less stock.
      */
     public const INVENTORY_COST_SHOCK_SD = 0.003;
+
+    // --- Spending Timing (durables, equipment and procurement moved between quarters) ---
+    /** Mean reversion (a year) of purchases brought forward or put off: a timing window lasts about a quarter. */
+    public const SPENDING_TIMING_SHOCK_REVERSION = 4.0;
+    /**
+     * Stationary sd of purchases brought forward (+) or put off (-), a share of GDP a year: 0.4%, a promotion, a tax
+     * change, a hard winter or a large order moving spending between quarters.
+     */
+    public const SPENDING_TIMING_SHOCK_SD = 0.004;
+    /**
+     * Speed (a year) at which purchases brought forward are missing from later quarters, and put-off ones made: half
+     * in about four months (Mian & Sufi 2012: the clunkers' pull-forward reversed within the year).
+     */
+    public const SPENDING_TIMING_PAYBACK_SPEED = 2.0;
 
     // --- Effective Corporate Borrowing Cost Weights ---
     /**
@@ -760,6 +791,7 @@ class MacroAggregateSubsystem
         $demandZ = $this->mathUtility->generateStandardNormal();
         $outZ = $this->mathUtility->generateStandardNormal();
         $inventoryZ = $this->mathUtility->generateStandardNormal();
+        $timingZ = $this->mathUtility->generateStandardNormal();
 
         // Curdia & Woodford (2010) ex-ante real borrowing cost, the 5-year leg deflated by the market's breakeven.
         $expectedInflation5y = $state->tipsBreakeven;
@@ -784,8 +816,9 @@ class MacroAggregateSubsystem
         // Gilchrist & Zakrajsek (2012): the excess bond premium is the price of credit supply, and spending pays it on
         // its adverse side only (Barnichon, Matthes & Ziegenbein 2022: easy credit does not lift output). Read against
         // its decade trend, with capital the banks have yet to build counted as premium (Macroeconomic Assessment Group
-        // 2010).
-        $creditPremiumDrag = self::KALDOR_CREDIT_PREMIUM_DRAG * max(0.0, self::excessCreditPremium($state));
+        // 2010). Like the uncertainty and catastrophe drags it hands back the average its input's own noise puts on it,
+        // as a jump's compensator does: the noise bends the cycle's shape without lowering its average.
+        $creditPremiumDrag = self::KALDOR_CREDIT_PREMIUM_DRAG * (max(0.0, self::excessCreditPremium($state)) - self::CREDIT_PREMIUM_NOISE_ADVERSE_MEAN);
 
         $momentum = self::KALDOR_MOMENTUM * $y;
         // Kaldor (1940) non-linear asymmetric capacity ceiling constraint.
@@ -831,15 +864,15 @@ class MacroAggregateSubsystem
         $householdNewBorrowing = self::KALDOR_HOUSEHOLD_NEW_BORROWING * $state->householdNewBorrowing;
         $householdDeleveragingDrag = self::KALDOR_HOUSEHOLD_DEBT_SERVICE * $state->householdDebtServiceGap;
 
-        // Hallegatte et al. (2007) physical capital destruction supply drag.
-        $catastropheSupplyDrag = self::KALDOR_CATASTROPHE_DRAG * max(0.0, $state->catastropheLossIndexEma - 1.0);
+        // Hallegatte et al. (2007) physical capital destruction supply drag, past the average season's toll.
+        $catastropheSupplyDrag = self::KALDOR_CATASTROPHE_DRAG * (max(0.0, $state->catastropheLossIndexEma - 1.0) - self::CATASTROPHE_ADVERSE_BURDEN_MEAN);
 
         // Jordà, Schularick & Taylor (2013) post-crisis deleveraging by firms and banks; households' share repays their
         // debt and reaches demand through the new-borrowing channel.
         $crisisDeleveragingDrag = CreditFiscalSubsystem::crisisDirectDrag($state->creditCrisisDrag);
 
-        // Baker, Bloom & Davis (2016) real options investment deferral under policy uncertainty.
-        $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * max(0.0, log(max(1.0, $state->policyUncertaintyIndexEma) / MacroConstants::EPU_BASELINE));
+        // Baker, Bloom & Davis (2016) real options investment deferral under policy uncertainty, past its noise's toll.
+        $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * (max(0.0, log(max(1.0, $state->policyUncertaintyIndexEma) / MacroConstants::EPU_BASELINE)) - self::EPU_NOISE_ADVERSE_LOG_MEAN);
 
         // Metzler (1941) & Blinder (1982) inventory investment cycle step, on domestic demand against its own average:
         // like with like, so the level parts riding beside the demand equation set off no surprise. Inventory
@@ -859,6 +892,16 @@ class MacroAggregateSubsystem
         $inventoryInvestment = self::inventoryInvestmentAt($state->inventoryStockGap - $openingStock, $dt);
         $inventoryChange = $inventoryInvestment - $state->inventoryInvestmentGap;
         $state->inventoryInvestmentGap = $inventoryInvestment;
+
+        // Spending moved between quarters (Mian & Sufi 2012): purchases brought forward are missing from the quarters
+        // they came from, so the stock of them is paid back and timing adds no spending over time. The stock's change
+        // over the step is the timing's flow, a level part of GDP beside final demand.
+        $state->spendingTimingShock = StochasticProcesses::calculateOrnsteinUhlenbeckStep($state->spendingTimingShock, self::SPENDING_TIMING_SHOCK_REVERSION, self::SPENDING_TIMING_SHOCK_SD, $dt, $timingZ);
+        $pulledForward = self::spendingPulledForwardAfter($state->spendingPulledForward, $state->spendingTimingShock, $dt);
+        $spendingTiming = ($pulledForward - $state->spendingPulledForward) / $dt;
+        $state->spendingPulledForward = $pulledForward;
+        $timingChange = $spendingTiming - $state->spendingTimingGap;
+        $state->spendingTimingGap = $spendingTiming;
 
         // Smets & Wouters (2007) persistent AR(1) aggregate demand disturbance.
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
@@ -936,6 +979,8 @@ class MacroAggregateSubsystem
             'financeOutput' => $financeChange / $dt,
             // Blinder & Maccini (1991): output is final sales plus the change in inventories.
             'inventoryInvestment' => $inventoryChange / $dt,
+            // Purchases moved between quarters, paid back by the quarters they were taken from.
+            'spendingTiming' => $timingChange / $dt,
         ];
 
         $drift = array_sum($contributions) * $dt;
@@ -1076,23 +1121,38 @@ class MacroAggregateSubsystem
      */
     public static function domesticDemandGap(MacroState $state): float
     {
-        return self::domesticDemandGapAt($state->outputGap, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap, $state->inventoryInvestmentGap);
+        return self::domesticDemandGapAt($state->outputGap, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap, $state->inventoryInvestmentGap, $state->spendingTimingGap);
     }
 
     /**
-     * The domestic-demand part of a gap made of the given level parts, at domestic demand's own scale: final sales,
-     * once inventory investment is out of it.
+     * The domestic-demand part of a gap made of the given level parts, at domestic demand's own scale: the demand the
+     * demand equation runs on, once inventory investment and the quarters' spending timing are out of it.
      *
      * @param float $outputGap              The whole output gap (fraction).
      * @param float $supplyGap              The productivity supply gap riding beside demand.
      * @param float $netExportGap           Net exports away from the structural balance (share of GDP).
      * @param float $financeOutputGap       The banks' credit-driven output (share of GDP).
      * @param float $inventoryInvestmentGap Inventory investment, a share of GDP a year.
+     * @param float $spendingTimingGap      Purchases moved into the quarter from others, a share of GDP a year.
      * @return float Domestic demand gap (fraction).
      */
-    public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap, float $inventoryInvestmentGap): float
+    public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap, float $inventoryInvestmentGap, float $spendingTimingGap): float
     {
-        return ($outputGap - $supplyGap - $netExportGap - $financeOutputGap - $inventoryInvestmentGap) / self::DOMESTIC_GAP_WEIGHT;
+        return ($outputGap - $supplyGap - $netExportGap - $financeOutputGap - $inventoryInvestmentGap - $spendingTimingGap) / self::DOMESTIC_GAP_WEIGHT;
+    }
+
+    /**
+     * The purchases brought forward and not yet missed from later quarters, a share of a year's GDP, after a step: the
+     * timing flow adds to them and they are paid back at SPENDING_TIMING_PAYBACK_SPEED, exact for a flow held through
+     * the step.
+     *
+     * @param float $pulledForward Purchases brought forward outstanding (negative: put off).
+     * @param float $timingShock   Purchases being brought forward, a share of GDP a year.
+     * @param float $dt            Time step in years.
+     */
+    public static function spendingPulledForwardAfter(float $pulledForward, float $timingShock, float $dt): float
+    {
+        return TimeSeries::calculateDistributedLag($pulledForward, $timingShock / self::SPENDING_TIMING_PAYBACK_SPEED, $dt, 1.0 / self::SPENDING_TIMING_PAYBACK_SPEED);
     }
 
     /**

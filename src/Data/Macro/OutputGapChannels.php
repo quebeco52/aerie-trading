@@ -54,7 +54,7 @@ final class OutputGapChannels
         'disturbance' => [
             'label' => 'Demand disturbance',
             'colour' => '#199e70',
-            'channels' => ['demandShock', 'demandDisaster', 'disasterCompensator'],
+            'channels' => ['demandShock', 'demandDisaster', 'disasterCompensator', 'spendingTiming'],
         ],
         'credit' => [
             'label' => 'Credit',

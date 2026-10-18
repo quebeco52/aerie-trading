@@ -918,7 +918,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
     /**
      * Gilchrist & Zakrajsek (2012) premium, Barnichon, Matthes & Ziegenbein (2022) asymmetry: a premium over its trend
-     * drags at the one credit slope, one under it lifts nothing, and a premium at its trend leaves demand alone.
+     * drags at the one credit slope, one under it lifts nothing more than calm credit does, and a premium at its trend
+     * is calm credit.
      */
     public function testAPremiumOverItsTrendCutsDemandAndOneUnderItLiftsNothing(): void
     {
@@ -939,6 +940,27 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($run($base), $gapNeutral, 1e-12, 'A premium at its trend is no credit shock.');
         $this->assertEqualsWithDelta(-MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_CREDIT_PREMIUM_DRAG * 0.01 * 0.25, $run($adverse) - $gapNeutral, 1e-12);
         $this->assertEqualsWithDelta(0.0, $run($favorable) - $gapNeutral, 1e-12, 'Easy credit does not lift demand.');
+    }
+
+    /**
+     * Calm credit, an average catastrophe season and baseline uncertainty hand back the toll each drag's noise takes on
+     * average, so on a calm day the three lift demand by exactly their compensators.
+     */
+    public function testACalmEconomyGetsItsDragsAverageTollBack(): void
+    {
+        $probe = new OutputGapProbe();
+        $probe->enable();
+        $state = $this->neutralBorrowingState();
+        $state->catastropheLossIndexEma = 1.0;
+        $state->policyUncertaintyIndexEma = MacroConstants::EPU_BASELINE;
+        $dt = 0.25;
+        $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $contributions = $this->openWindow($probe)['contributions'];
+
+        $weight = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * $dt;
+        $this->assertEqualsWithDelta($weight * MacroAggregateSubsystem::KALDOR_CREDIT_PREMIUM_DRAG * MacroAggregateSubsystem::CREDIT_PREMIUM_NOISE_ADVERSE_MEAN, $contributions['creditPremiumDrag'], 1e-15);
+        $this->assertEqualsWithDelta($weight * MacroAggregateSubsystem::KALDOR_CATASTROPHE_DRAG * MacroAggregateSubsystem::CATASTROPHE_ADVERSE_BURDEN_MEAN, $contributions['catastropheSupplyDrag'], 1e-15);
+        $this->assertEqualsWithDelta($weight * MacroAggregateSubsystem::KALDOR_EPU_DRAG * MacroAggregateSubsystem::EPU_NOISE_ADVERSE_LOG_MEAN, $contributions['policyUncertaintyDrag'], 1e-15);
     }
 
     /**
@@ -1105,6 +1127,60 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($stock * ($state->inventoryStockGap + $state->domesticDemandGapEma), $sold, 1e-12, 'The summed flow is the stock\'s change.');
         $this->assertEqualsWithDelta($stock * $sales, $sold, 1e-5, 'Twenty-five years on, the stock is the lower target.');
         $this->assertEqualsWithDelta(0.0, $state->inventoryStockGap, 1e-5, 'Nothing is left over the target.');
+    }
+
+    /**
+     * Purchases moved between quarters are spending in the quarter they land in: the stock of them brought forward
+     * changes by the step's flow, the gap moves by the flow's change, and the demand the demand equation runs on does
+     * not move.
+     */
+    public function testSpendingTimingReachesGdpAsTheStocksChange(): void
+    {
+        $dt = 1.0 / 360.0;
+        $step = function (float $pulledForward, float $timingShock) use ($dt): array {
+            $probe = new OutputGapProbe();
+            $probe->enable();
+            $state = $this->neutralBorrowingState();
+            $state->spendingPulledForward = $pulledForward;
+            $state->spendingTimingShock = $timingShock;
+            $state->spendingTimingGap = 0.001;
+            $state->outputGap = 0.001;
+            $state->outputGap = $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+
+            return [$state, $this->openWindow($probe)['contributions']['spendingTiming']];
+        };
+        [$quiet] = $step(0.0, 0.0);
+        [$state, $contribution] = $step(0.002, 0.006);
+
+        $this->assertEqualsWithDelta(($state->spendingPulledForward - 0.002) / $dt, $state->spendingTimingGap, 1e-15, 'The flow is the stock\'s change.');
+        $this->assertEqualsWithDelta($state->spendingTimingGap - 0.001, $contribution, 1e-15, 'The gap moves by the flow\'s change.');
+        $this->assertEqualsWithDelta($state->spendingTimingGap - $quiet->spendingTimingGap, $state->outputGap - $quiet->outputGap, 1e-15, 'GDP differs by the timing.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::domesticDemandGap($quiet), MacroAggregateSubsystem::domesticDemandGap($state), 1e-15, 'Underlying demand does not.');
+    }
+
+    /**
+     * What is bought early is not bought later: spending brought forward lifts GDP while it lands and leaves it below
+     * trend while the quarters it came from go without, and once it is paid back it has added nothing.
+     */
+    public function testSpendingBroughtForwardIsNotSpentAgain(): void
+    {
+        $dt = 0.02;
+        $shock = 0.01;
+        $pulledForward = 0.0;
+        $spent = 0.0;
+        $path = [];
+        for ($step = 0; $step < 1500; ++$step) {
+            $shock = StochasticProcesses::calculateOrnsteinUhlenbeckStep($shock, MacroAggregateSubsystem::SPENDING_TIMING_SHOCK_REVERSION, MacroAggregateSubsystem::SPENDING_TIMING_SHOCK_SD, $dt, 0.0);
+            $next = MacroAggregateSubsystem::spendingPulledForwardAfter($pulledForward, $shock, $dt);
+            $flow = ($next - $pulledForward) / $dt;
+            $pulledForward = $next;
+            $spent += $flow * $dt;
+            $path[] = $flow;
+        }
+
+        $this->assertGreaterThan(0.0, $path[0], 'Purchases brought forward land as spending.');
+        $this->assertLessThan(0.0, min($path), 'The quarters they came from go without.');
+        $this->assertEqualsWithDelta(0.0, $spent, 1e-9, 'Thirty years on, the timing has added no spending.');
     }
 
     /**
@@ -1475,7 +1551,7 @@ class MacroAggregateSubsystemTest extends TestCase
     /**
      * The aggregate demand disturbance and the output gap's own diffusion are separate innovations in
      * the estimated system (Smets & Wouters 2007); one draw serving both correlates them at unity. Production
-     * over plan, a cost shock, is a third.
+     * over plan, a cost shock, is a third, and spending moved between quarters a fourth.
      */
     public function testDemandDisturbanceAndGapDiffusionDrawSeparateInnovations(): void
     {
@@ -1509,8 +1585,8 @@ class MacroAggregateSubsystemTest extends TestCase
         };
         $subsystem = new MacroAggregateSubsystem($math);
 
-        $run = function (float $demandDraw, float $diffusionDraw, float $inventoryDraw = 0.0) use ($subsystem, $math, $dt): array {
-            $math->script($demandDraw, $diffusionDraw, $inventoryDraw);
+        $run = function (float $demandDraw, float $diffusionDraw, float $inventoryDraw = 0.0, float $timingDraw = 0.0) use ($subsystem, $math, $dt): array {
+            $math->script($demandDraw, $diffusionDraw, $inventoryDraw, $timingDraw);
             $state = new MacroState();
             $state->outputGap = 0.0;
             $state->inflation = 0.02;
@@ -1518,12 +1594,12 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->wageGrowth = 0.035;
             $gap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
-            return [$gap, $state->demandShock, $math->drawCount(), $state->inventoryCostShock];
+            return [$gap, $state->demandShock, $math->drawCount(), $state->inventoryCostShock, $state->spendingTimingShock];
         };
 
         [$neutralGap, $neutralShock, $calls] = $run(0.0, 0.0);
-        // A shared draw fails here first: it consumes one innovation, not three.
-        $this->assertSame(3, $calls, 'One innovation each for the demand disturbance, the gap diffusion and production over plan');
+        // A shared draw fails here first: it consumes one innovation, not four.
+        $this->assertSame(4, $calls, 'One innovation each for the demand disturbance, the gap diffusion, production over plan and spending timing');
         // With both innovations silent the disturbance still carries the disaster jump's compensator, which
         // is a deterministic function of dt and is therefore the baseline the other two runs are read against.
 
@@ -1548,6 +1624,13 @@ class MacroAggregateSubsystemTest extends TestCase
         $decay = exp(-MacroAggregateSubsystem::INVENTORY_COST_SHOCK_REVERSION * $dt);
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::INVENTORY_COST_SHOCK_SD * sqrt(1.0 - ($decay * $decay)), $inventoryCost, 1e-15);
         $this->assertEqualsWithDelta($neutralShock, $inventoryShock, 1e-15, 'A cost innovation must not enter the demand disturbance');
+
+        // Fourth draw only: spending timing takes it whole, and neither the disturbance nor production over plan moves.
+        [, $timedShock, , $timedCost, $timing] = $run(0.0, 0.0, 0.0, 1.0);
+        $timingDecay = exp(-MacroAggregateSubsystem::SPENDING_TIMING_SHOCK_REVERSION * $dt);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::SPENDING_TIMING_SHOCK_SD * sqrt(1.0 - ($timingDecay * $timingDecay)), $timing, 1e-15);
+        $this->assertEqualsWithDelta($neutralShock, $timedShock, 1e-15);
+        $this->assertSame(0.0, $timedCost);
     }
 
     /**
@@ -1725,7 +1808,7 @@ class MacroAggregateSubsystemTest extends TestCase
         // Every channel in the drift is named, so the panel cannot silently drop one.
         $contributions = $window['contributions'];
         $this->assertIsArray($contributions);
-        $this->assertCount(26, $contributions);
+        $this->assertCount(27, $contributions);
         $this->assertArrayHasKey('productivitySupply', $contributions);
         $this->assertArrayHasKey('fundDraw', $contributions);
         $this->assertArrayHasKey('creditPremiumDrag', $contributions);
@@ -1887,8 +1970,10 @@ class MacroAggregateSubsystemTest extends TestCase
         $shocked = $this->probedState();
         $shocked->tfpOutputStage1 = 0.004;
         $shocked->tfpOutputStage2 = 0.004;
-        $plainSubsystem = $this->probedSubsystem(new OutputGapProbe(), 0.8);
-        $shockedSubsystem = $this->probedSubsystem($probe, 0.8);
+        // Silent draws: a draw held at one value every tick walks the OU shocks far past their size and both runs onto
+        // the ceiling, where the gaps no longer differ.
+        $plainSubsystem = $this->probedSubsystem(new OutputGapProbe(), 0.0);
+        $shockedSubsystem = $this->probedSubsystem($probe, 0.0);
 
         $dt = 1.0 / 3600.0;
         for ($tick = 0; $tick < 900; ++$tick) {

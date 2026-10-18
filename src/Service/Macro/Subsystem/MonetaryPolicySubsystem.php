@@ -343,18 +343,20 @@ class MonetaryPolicySubsystem
      * gap below zero within ten quarters. With the forecast horizon equal to the EMA horizon, the total gap's
      * level-plus-trend forecast less today's supply part is exactly the demand gap's own forecast.
      *
-     * Inventory investment is seen through the same way: a restocking or a sell-down is over before a rate move
-     * reaches spending, so leaning on it only tightens into the bust that follows (the rule answers final sales, as
-     * Furman's 2015 "core GDP" reads the economy).
+     * Inventory investment and spending moved between quarters are seen through the same way: a restocking, a sell-down
+     * or a quarter's pulled-forward purchases are over before a rate move reaches spending, so leaning on them only
+     * tightens into the bust that follows (the rule answers underlying demand, as Furman's 2015 "core GDP" reads the
+     * economy).
      *
      * @param MacroState $state Current macroeconomic state.
-     * @return float Demand-driven output gap, less inventory investment, projected TAYLOR_GAP_FORECAST_YEARS ahead.
+     * @return float Demand-driven output gap, less inventory investment and spending timing, projected
+     *               TAYLOR_GAP_FORECAST_YEARS ahead.
      */
     private function cyclicalGapForecast(MacroState $state): float
     {
         $openingGap = MacroFieldRegistry::defaults()['outputGapEma'];
         if ($state->outputGapEma === $openingGap && $state->outputGap !== $openingGap) {
-            return $state->outputGap - $state->productivitySupplyGap - $state->inventoryInvestmentGap;
+            return $state->outputGap - $state->productivitySupplyGap - $state->inventoryInvestmentGap - $state->spendingTimingGap;
         }
 
         $trend = ($state->outputGap - $state->outputGapEma) / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS;
@@ -363,7 +365,8 @@ class MonetaryPolicySubsystem
         return $state->outputGapEma
             + max(-self::TAYLOR_GAP_FORECAST_CAP, min(self::TAYLOR_GAP_FORECAST_CAP, $projection))
             - $state->productivitySupplyGap
-            - $state->inventoryInvestmentGap;
+            - $state->inventoryInvestmentGap
+            - $state->spendingTimingGap;
     }
 
     /**
@@ -416,9 +419,10 @@ class MonetaryPolicySubsystem
                 'inflationTarget' => $targetInflation * (self::TAYLOR_INFLATION_CORE_WEIGHT + self::TAYLOR_INFLATION_ANCHOR_WEIGHT),
                 'coreInflationGap' => $inflationResponse * self::TAYLOR_INFLATION_CORE_WEIGHT * ($this->realizedCoreInflation($state, $targetInflation) - $targetInflation),
                 'expectationsGap' => $inflationResponse * self::TAYLOR_INFLATION_ANCHOR_WEIGHT * ($state->tipsBreakeven - $targetInflation),
-                'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * ($cyclicalGap + $state->productivitySupplyGap + $state->inventoryInvestmentGap),
+                'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * ($cyclicalGap + $state->productivitySupplyGap + $state->inventoryInvestmentGap + $state->spendingTimingGap),
                 'productivitySeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->productivitySupplyGap,
                 'inventoriesSeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->inventoryInvestmentGap,
+                'spendingTimingSeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->spendingTimingGap,
                 'longRateOffset' => -$longRateOffset,
                 'committeeMajority' => $committee,
             ], $target, $dt);

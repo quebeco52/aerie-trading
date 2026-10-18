@@ -282,3 +282,122 @@ C-B: longest negative spell +10.7 (3.5) t 3, infl sd -0.17 (0.05) t -3, overhang
 Reproduction: A vs the 10-18 arm C (runs/IC) on seeds 1-16: inventory rows equal within noise (rec_ic -0.011 (0.022),
 slopes +0.004/-0.001), but gap sd A 1.73 vs 2.12: HEAD d191ee10 raised CB_SMOOTHING_SPEED 0.65 -> 1.4 after that run.
 Caveats: recession = recessionDeclared; the model's recession GDP growth is near zero so the share ratio is unstable.
+
+## 2026-10-18 Why the gap averages below zero (A Diet / B founding levers / C linear Phillips + Diet / D C + founding)
+Question: why does the output gap average below zero, and how much comes from the convex Phillips curve, the Diet and
+the one-sided drags? Harness `GapBiasHarnessTest.php` via `gb_run.sh` on `git archive 9344b2de`; 16 paired seeds x 33 y,
+TPY 360, years 0-2 dropped. Stopped at 16 (the caller's cap). Tables: `gb_s16.out` (`gb_s8.out` stage 1),
+`gb_inputs_s16.out` (drag inputs, 4-7 seeds of 9-16 per arm).
+
+| quantity | A | B | C | D | B-A (se) | C-A (se) |
+|---|---|---|---|---|---|---|
+| gap mean % | -0.755 | -0.432 | -0.775 | -0.582 | +0.323 (0.165) | -0.020 (0.195) |
+| share gap>0 | 0.393 | 0.461 | 0.390 | 0.458 | +0.069 (0.034) | -0.003 (0.040) |
+| inflation % | 2.091 | 2.054 | 1.962 | 1.951 | -0.036 (0.039) | -0.128 (0.036) |
+| u - NAIRU pp | 0.775 | 0.591 | 0.755 | 0.658 | -0.184 (0.099) | -0.020 (0.120) |
+| policy - (r*+2%) pp | -0.227 | -0.483 | -0.457 | -0.465 | -0.256 (0.168) | -0.231 (0.170) |
+
+Attribution closes: A predicted -0.747 against measured -0.755 (domestic part -0.600 vs -0.608). A's mean gap:
+credit premium -0.41, supply level part -0.19, crisis deleveraging -0.10, monetary -0.08, cubic -0.06, catastrophe
+-0.06, housing wealth -0.055, finance level -0.06, EPU -0.05; disaster -0.50 against compensator +0.49 (net zero);
+offsets: demand shock +0.15 (noise), net exports +0.10, migration +0.07, crisis scar +0.06.
+Diet (B-A): supply level part +0.41 (t 2.9), fiscal stimulus +0.10 (t 4.7), household borrowing +0.12 (t 2.3), net
+exports -0.13 (t -1.1); the domestic-demand total moves only +0.02. Levers: corporate tax 16.7 vs 17.0%, spending share
+14.9 vs 15.0%, LF growth 1.07 vs 1.04%, primary deficit 0.16 vs 0.39% GDP, bank capital shortfall 0.26 vs 0.02pp.
+Rectification: EBP less its own 10-year trend has mean 0.0002, sd 0.0048, E[x+] 0.0018: about 0.3pp of the 0.41pp
+credit-premium drag is max(0, .) of a zero-mean deviation. Catastrophe index ema - 1 has mean ~0: ~0.06pp; EPU ~0.02pp.
+Caveats: 16 seeds; C-A's 2-se interval is +/-0.39pp. The wage curve's downward rigidity (LaborMarketSubsystem
+WAGE_DOWNWARD_RIGIDITY_FACTOR 0.30) is a second asymmetry not switched off in C. The monetary-stance rectification
+in gb_inputs.py doesn't reconcile with the probe's monetaryDrag (sign differs); use the probe figure.
+
+## 2026-10-18 Spending timing as a level part of GDP (A HEAD 9344b2de / B sd 0.002 / C 0.004 / D 0.006)
+Question: does an OU spending-timing shock (kappa 4/yr) paid back at 2/yr bring GDP and final-sales growth AR1 into
+the range real economies show, and at which SPENDING_TIMING_SHOCK_SD, without breaking the cycle?
+Harness `TimingHarnessTest.php` (InventoryHarnessTest + `tim`, `tim_stock`), trees from `tim_setup.sh`, run
+`tim_run.sh`, analysis `tim_analyse.py A B C D` (see RUN.md). 16 paired seeds x 33 y (years 2-33), TPY 360,
+POLITICS 1. Stage 8 then 16; stopped at 16 (targets |t| 5-19 for B fs, C, D). Table: `tim_s16.out` (8-seed: `tim_s8.out`).
+
+| quantity | A | B 0.002 | C 0.004 | D 0.006 | US | C-A (se) t |
+|---|---|---|---|---|---|---|
+| GDP growth AR1, end of quarter | 0.66 | 0.57 | 0.37 | 0.07 | 0.37 | -0.29 (0.03) -11 |
+| GDP growth AR1, published (qtr avg) | 0.77 | 0.71 | 0.57 | 0.36 | 0.37 | -0.21 (0.03) -8 |
+| GDP growth sd (eoq / pub) | 0.62/0.59 | 0.69/0.64 | 0.78/0.71 | 0.89/0.73 | 0.56 | +0.16 (0.02) +6 |
+| final-sales growth AR1 | 0.71 | 0.59 | 0.37 | 0.05 | 0.28 | -0.34 (0.02) -14 |
+| final-sales growth sd | 0.58 | 0.65 | 0.74 | 0.87 | 0.52 | +0.15 (0.03) +6 |
+| underlying final sales (ex timing) AR1 | 0.71 | 0.71 | 0.71 | 0.68 | - | +0.01 (0.02) +0 |
+| timing level sd / AR1 (pp) | 0 | 0.16/0.13 | 0.32/0.14 | 0.49/0.10 | - | |
+| timing contribution sd / AR1 | 0 | 0.21/-0.36 | 0.43/-0.34 | 0.65/-0.39 | - | |
+| peak-to-trough g / fs / inv / timing | -0.51/-0.42/-0.10/0 | -0.64/-0.52/-0.12/-0.04 | -0.63/-0.49/-0.13/-0.18 | -0.73/-0.64/-0.09/-0.35 | -0.36/-0.07/-0.29 | g -0.11 (0.06) -2 |
+| flagged recession quarters g / fs | -0.13/-0.02 | -0.23/-0.04 | +0.04/+0.20 | +0.09/+0.20 | | g +0.17 (0.07) +3 |
+| recessions per decade | 1.39 | 1.27 | 1.65 | 1.41 | | +0.26 (0.12) +2 |
+| gap acf1 / HP AR1 / HP spell q | .957/.909/7.3 | .944/.889/6.0 | .933/.850/6.2 | .883/.762/4.7 | | HP AR1 -0.06 (0.01) -6 |
+Guards inside noise for B and C: gap sd/mean, acf4/8, inflation, unemployment, policy lag, 4q cut, ELB share, crises,
+drawdown, inventory contribution sd/AR1. Inventory share of growth variance 0.15 -> 0.11 (C), 0.07 (D).
+Caveats: the timing part lowers measured AR1 by adding negatively autocorrelated noise; the underlying demand's
+growth AR1 stays 0.71. US AR1 is on quarter-average data, so the published column is the like-for-like one.
+The flagged-quarter mean includes the flag's two exit quarters (growth), hence peak-to-trough is the depth measure.
+
+## 2026-10-18 Drag compensators (A compensators 0.0 = timing arm C / B working tree)
+Question: how much do the credit-premium, catastrophe and EPU compensators lift the mean gap and lower u - NAIRU, and
+do they keep the cycle's shape? Harness `DragCompHarnessTest.php` (GapBias + tim, dti), trees `dc_setup.sh`, run
+`dc_run.sh`, analysis `dc_analyse.py` + `PFX=D tim_analyse.py A B` (RUN.md). 16 paired seeds x 33 y (years 2-33), TPY
+360, POLITICS 1. Stage 8 then 16; stopped at 16 (32-run budget) with the gap-mean target inconclusive. Tables
+`dc_s16.out`, `dc_shape_s16.out` (8-seed: `dc_s8.out`, `dc_shape_s8.out`).
+
+| quantity | A | B | B-A (se) t |
+|---|---|---|---|
+| three drags' attribution, pp | -0.509 | -0.139 | +0.370 (credit +0.288 (0.031), cat +0.049 (0.014), EPU +0.033 (0.003)) |
+| gap mean / median % | -0.53 / -0.24 | -0.63 / -0.48 | -0.11 (0.19) -0.6 / -0.24 (0.17) -1.4 |
+| gap ex supply part % | | | +0.15 (0.12) +1.3 |
+| supply part (TFP level) % | 0.14 | -0.12 | -0.26 (0.13) -2.0 (exogenous TFP; path divergence) |
+| share gap>0 / gap<-3% | .458/.142 | .419/.138 | -0.04 (0.04) / -0.00 (0.02) |
+| u - NAIRU pp | 0.68 | 0.73 | +0.05 (0.11) |
+| infl mean / sd % | 2.08/1.10 | 2.09/1.07 | +0.00 (0.04) / -0.04 (0.05) |
+| policy / rule target - (r*+2%) pp | -0.40/-0.77 | -0.20/-0.47 | +0.19 (0.14) / +0.31 (0.20) |
+| monetaryDrag attribution pp | -0.03 | -0.10 | -0.07 (0.06) |
+| gap skew / quarterly growth skew | -0.41/-0.28 | -0.31/-0.16 | +0.10 (0.14) / +0.11 (0.12) |
+| peak-to-trough growth pp/q | -0.63 | -0.58 | +0.05 (0.06) |
+| gap sd / acf4 / acf8 / HP AR1 | 2.17/.59/.25/.850 | 2.06/.55/.18/.842 | -0.11 (0.16) / -0.03 (0.05) / -0.07 (0.08) / -0.01 (0.01) |
+| growth AR1 eoq / published | .371/.565 | .335/.551 | -0.04 (0.04) / -0.01 (0.03) |
+| recessions/decade, crises, drawdown % | 1.65/1.19/-3.8 | 1.71/1.06/-4.0 | inside noise |
+| ELB share | 0.027 | 0.004 | -0.023 (0.010) -2.3 |
+| annual DTI change AR1 | 0.37 | 0.33 | -0.05 (0.07) |
+Caveats: the arms' paths diverge (exogenous TFP supply part differs by 0.26pp), so the gap-mean se (0.19) is half the
+drags' 0.37pp lift; the drift lift is measured exactly but its pass-through to the gap is not resolved at 16 seeds. Part
+of it is offset by policy (rule target +0.31pp, monetaryDrag -0.07pp). 48 seeds per arm (64 more runs) would bring
+the gap-mean se to ~0.11. No blow-ups.
+
+## 2026-10-18 Wage downward rigidity (A factor 0.30 as is / B 0.60 / C 1.00)
+Question: does the slow downward wage adjustment hold wage growth and supercore inflation up, so the Authority keeps
+the gap below zero; what should WAGE_DOWNWARD_RIGIDITY_FACTOR be? Harness `WageRigidityHarnessTest.php`, trees
+`wr_setup.sh`, run `wr_run.sh`, analysis `wr_analyse.py`, `PFX=W tim_analyse.py A B C`, `wr_recovery.py` (RUN.md).
+Base = working tree on 9344b2de (timing SD 0.004 + drag compensators). 16 paired seeds x 33 y (years 2-33), TPY 360,
+POLITICS 1. Stage 8 then 16; stopped at 16 (48-run budget): wage and inflation targets inside +-0.1pp at 2 se.
+Tables `wr_s16.out`, `wr_shape_s16.out`, `wr_recovery_s16.out` (stage 8: `wr_s8.out`, `wr_shape_s8.out`).
+
+| quantity | A | B | C | B-A (se) | C-A (se) |
+|---|---|---|---|---|---|
+| wage - target pp | 0.247 | 0.079 | -0.002 | -0.168 (0.012) | -0.249 (0.011) |
+| wage growth % / target % | 3.34/3.09 | 3.41/3.33 | 3.37/3.37 | +0.07 (0.15) / +0.24 (0.16) | +0.03 (0.11) / +0.28 (0.11) |
+| wage growth sd % | 0.92 | 0.94 | 1.00 | +0.01 (0.09) | +0.08 (0.10) |
+| infl mean / sd % | 2.087/1.066 | 2.072/1.024 | 2.057/1.039 | -0.015 (0.032) / -0.04 (0.05) | -0.030 (0.034) / -0.03 (0.04) |
+| supercore mean / sd % | 2.095/0.275 | 2.058/0.255 | 2.069/0.300 | -0.037 (0.028) / -0.02 (0.02) | -0.026 (0.034) / +0.03 (0.03) |
+| gap mean / median % | -0.63/-0.48 | -0.44/-0.34 | -0.61/-0.46 | +0.19 (0.24) / +0.14 (0.25) | +0.03 (0.20) / +0.02 (0.18) |
+| gap ex supply % | -0.52 | -0.53 | -0.59 | -0.02 (0.13) | -0.07 (0.16) |
+| share gap>0 / gap<-3% | .419/.138 | .446/.088 | .403/.127 | +.03 (.05) / -.05 (.03) | -.02 (.03) / -.01 (.03) |
+| u - NAIRU pp | 0.73 | 0.57 | 0.73 | -0.16 (0.14) | +0.00 (0.11) |
+| policy / rule target - (r*+2%) pp | -0.20/-0.47 | -0.38/-0.55 | -0.35/-0.60 | -0.17 (0.17) / -0.08 (0.21) | -0.15 (0.17) / -0.13 (0.27) |
+| gap skew / growth skew | -0.31/-0.16 | -0.35/-0.36 | -0.23/-0.27 | -0.04 (0.18) / -0.20 (0.16) | +0.08 (0.20) / -0.11 (0.14) |
+| peak-to-trough growth pp/q | -0.58 | -0.65 | -0.61 | -0.09 (0.09) | -0.04 (0.07) |
+| gap sd / acf4 / acf8 / HP AR1 | 2.06/.55/.18/.842 | 1.89/.58/.26/.821 | 2.10/.59/.21/.848 | all inside 1.3 se | all inside 1 se |
+| growth AR1 eoq / published | .335/.551 | .279/.502 | .331/.540 | -0.06 (0.05) / -0.05 (0.03) | -0.00 (0.04) / -0.01 (0.03) |
+| recessions/decade, crises, drawdown % | 1.71/1.06/-4.0 | 1.43/1.44/-3.5 | 1.57/1.06/-3.9 | inside noise | inside noise |
+| ELB share | 0.004 | 0.010 | 0.025 | +0.006 (0.006) | +0.021 (0.011) |
+| slumps (gap<-2%): q trough->0 | 11.2 | 11.8 | 10.9 | +0.7 (1.9) | -0.3 (1.6) |
+| slumps: 8q rise pp / policy-(r*+2%) pp | 3.78/-1.72 | 3.44/-1.59 | 3.47/-1.68 | -0.27 (0.40) / +0.11 (0.22) | -0.31 (0.44) / +0.05 (0.30) |
+| slumps: infl / supercore 8q % | 2.25/1.94 | 2.09/1.93 | 2.02/1.89 | -0.14 (0.14) / -0.03 (0.05) | -0.23 (0.15) / -0.05 (0.04) |
+Reading: the asymmetry does keep wages 0.25pp above their target, but the realised wage path does not move: the real
+wage level error correction (WAGE_ERROR_CORRECTION_SPEED on realWageGap) lowers the target by the same amount, so the
+target, not wage growth, absorbs the rigidity. Supercore and headline move by -0.03pp (2-se bound ~0.07pp), the gap
+ex supply part by -0.07 (0.16). The B gap lift (+0.19) is the exogenous TFP supply part (+0.21), not demand.
+Caveats: paths diverge across arms (Diet tariffs, TFP); slump rows pool 42-51 episodes; no blow-ups.

@@ -112,7 +112,7 @@ not the code. Comments wrap at 120 characters; `php bin/reflow-comments.php <fil
   `bin/php-slot php vendor/bin/php-cs-fixer fix` or `make cs-fix` before handing back.
 - Tests and verification: `bin/verify` (PHPStan and format on changed files + quick tests, ~20 s; works in sandboxes
   without Docker).
-  With Docker: `make test-unit` (~0.2 s), `make test` (Fast suite, ~1 min), `make test-realism` (seven multi-seed
+  With Docker: `make test-unit` (~0.2 s), `make test` (Fast suite, ~1 min), `make test-realism` (eight multi-seed
   long-run tests, ~3.5 min serial), `make phpstan FILE=<path>`. Before committing: `bin/verify --full` (~1 min).
 - A realism test that runs over ~5 s belongs in the Realism suite in `phpunit.dist.xml`, not Fast.
 
