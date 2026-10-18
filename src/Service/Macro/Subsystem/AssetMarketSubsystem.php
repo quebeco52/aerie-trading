@@ -1085,12 +1085,16 @@ class AssetMarketSubsystem
      *
      * @param MacroState $state Current macroeconomic state; its clock has already been advanced by dt.
      * @param float      $dt    Time increment in years.
+     * @return float The mainland's gap surprises this tick, standard normals summed over the quarters turned (zero
+     *               between turns): the region's common demand shock, which the district's demand disturbance loads on
+     *               (MacroAggregateSubsystem::calculateOutputGap()).
      */
-    public function calculateForeignEconomy(MacroState $state, float $dt): void
+    public function calculateForeignEconomy(MacroState $state, float $dt): float
     {
+        $surprise = 0.0;
         $quartersTurned = self::quarterCount($state->totalTime) - self::quarterCount($state->totalTime - $dt);
         for ($quarter = 0; $quarter < $quartersTurned; $quarter++) {
-            $this->stepMainlandQuarter($state);
+            $surprise += $this->stepMainlandQuarter($state);
         }
 
         // World demand weighs each economy at its share of world GDP: the District, the mainland, and the rest. The
@@ -1099,6 +1103,8 @@ class AssetMarketSubsystem
         $state->globalDemandGap = (self::DOMESTIC_DEMAND_WEIGHT * $state->outputGap)
             + (self::MAINLAND_DEMAND_WEIGHT * $state->foreignOutputGap)
             + ((1.0 - self::DOMESTIC_DEMAND_WEIGHT - self::MAINLAND_DEMAND_WEIGHT) * $state->worldActivityGap);
+
+        return $surprise;
     }
 
     /**
@@ -1151,10 +1157,13 @@ class AssetMarketSubsystem
      * One quarter of the mainland: the gap on its two lags around the mean the district's imports set, core inflation
      * on its four lags and last quarter's gap, then the Fed's partial adjustment toward its rule on four-quarter core
      * inflation and the new gap, floored at the effective lower bound. The rest of the world's quarter follows.
+     *
+     * @return float The quarter's gap surprise, as the standard normal drawn.
      */
-    private function stepMainlandQuarter(MacroState $state): void
+    private function stepMainlandQuarter(MacroState $state): float
     {
-        $gapShock = self::MAINLAND_GAP_SIGMA * $this->mathUtility->generateStandardNormal();
+        $surprise = $this->mathUtility->generateStandardNormal();
+        $gapShock = self::MAINLAND_GAP_SIGMA * $surprise;
         $inflationShock = self::MAINLAND_INFLATION_SIGMA * $this->mathUtility->generateStandardNormal();
         $rateShock = self::FED_RULE_SIGMA * $this->mathUtility->generateStandardNormal();
         $next = self::mainlandNextQuarter($state, $gapShock, $inflationShock, $rateShock);
@@ -1173,6 +1182,8 @@ class AssetMarketSubsystem
         $state->worldActivityIdiosyncratic = (self::WORLD_GAP_AR1 * $state->worldActivityIdiosyncratic)
             + (self::WORLD_GAP_SIGMA * $this->mathUtility->generateStandardNormal());
         $state->worldActivityGap = max(-self::MAX_WORLD_GAP, min(self::MAX_WORLD_GAP, (self::WORLD_MAINLAND_LOADING * $state->foreignOutputGap) + $state->worldActivityIdiosyncratic));
+
+        return $surprise;
     }
 
     /**

@@ -830,10 +830,10 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertGreaterThan(0.0, $impulse, 'The innovation must land on the disturbance.');
         $this->assertEqualsWithDelta(
-            MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt),
+            self::ownDemandSigma() * sqrt($dt),
             $impulse,
             1e-9,
-            'A unit innovation scales by sigma * sqrt(dt).',
+            'A unit own innovation scales by its own sigma * sqrt(dt).',
         );
 
         // Half a reversion half-life later the disturbance must still be most of the way there.
@@ -849,6 +849,55 @@ class MacroAggregateSubsystemTest extends TestCase
             0.02 * $impulse,
             'After one half-life the disturbance must retain half the impulse, not have been redrawn away.',
         );
+    }
+
+    /**
+     * The mainland's quarterly surprise is the shared part of the demand innovation: it lands on the disturbance whole,
+     * as the impulse a quarter of the disturbance's OU accumulates at the loading, reaches the gap only through the
+     * drift, and is booked to the mainland, not to the district's own disturbance.
+     */
+    public function testTheMainlandsSurpriseIsTheSharedPartOfTheDemandInnovation(): void
+    {
+        $dt = 1.0 / 360.0;
+        $calm = new MacroState();
+        $calm->outputGap = 0.0;
+        $surprised = clone $calm;
+
+        $calmGap = $this->subsystem->calculateOutputGap($calm, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $surprisedGap = $this->subsystem->calculateOutputGap($surprised, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0, 1.0);
+
+        $kappa = MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION;
+        $quarterInnovationSd = MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt((1.0 - exp(-2.0 * $kappa / 4.0)) / (2.0 * $kappa));
+        $impulse = MacroAggregateSubsystem::DEMAND_SHOCK_MAINLAND_LOADING * $quarterInnovationSd;
+        $this->assertEqualsWithDelta($impulse, MacroAggregateSubsystem::mainlandDemandImpulse(1.0), 1e-15, 'A unit surprise is a quarter\'s OU innovation at the loading.');
+        $this->assertEqualsWithDelta($impulse, $surprised->demandShock - $calm->demandShock, 1e-15, 'It lands on the disturbance whole.');
+        $this->assertEqualsWithDelta($impulse, $surprised->demandMainlandShock, 1e-15, 'and is booked to the mainland');
+        $this->assertEqualsWithDelta(
+            $calm->demandShock - $calm->demandMainlandShock,
+            $surprised->demandShock - $surprised->demandMainlandShock,
+            1e-15,
+            'leaving the district\'s own disturbance as it was.',
+        );
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * $impulse * $dt, $surprisedGap - $calmGap, 1e-12, 'It reaches the gap through the drift.');
+    }
+
+    /**
+     * The own and shared parts split the disturbance's innovation variance between them: over a quarter the own part
+     * carries 1 - loading^2 of it and a unit-variance surprise the rest, so the loading moves co-movement, not size.
+     */
+    public function testTheSharedAndOwnPartsKeepTheDisturbancesVariance(): void
+    {
+        $kappa = MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION;
+        $quarterVariance = (MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA ** 2) * (1.0 - exp(-2.0 * $kappa / 4.0)) / (2.0 * $kappa);
+        $ownQuarterVariance = (self::ownDemandSigma() ** 2) * (1.0 - exp(-2.0 * $kappa / 4.0)) / (2.0 * $kappa);
+
+        $this->assertEqualsWithDelta($quarterVariance, $ownQuarterVariance + (MacroAggregateSubsystem::mainlandDemandImpulse(1.0) ** 2), 1e-18);
+    }
+
+    /** The district's own part of the demand innovation's volatility: what the mainland's surprises leave it. */
+    private static function ownDemandSigma(): float
+    {
+        return MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt(1.0 - (MacroAggregateSubsystem::DEMAND_SHOCK_MAINLAND_LOADING ** 2));
     }
 
     /** The disturbance is a demand impulse in gap-drift units, so it moves the gap alongside the other Kaldor terms. */
@@ -1643,7 +1692,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         // First draw only: the disturbance takes it whole and reaches the gap only through the drift.
         [$demandGap, $demandShock] = $run(1.0, 0.0);
-        $expectedShock = MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt);
+        $expectedShock = self::ownDemandSigma() * sqrt($dt);
         $this->assertEqualsWithDelta($expectedShock, $demandShock - $neutralShock, 1e-15);
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * $expectedShock * $dt, $demandGap - $neutralGap, 1e-12);
 
@@ -1836,7 +1885,7 @@ class MacroAggregateSubsystemTest extends TestCase
         // Every channel in the drift is named, so the panel cannot silently drop one.
         $contributions = $window['contributions'];
         $this->assertIsArray($contributions);
-        $this->assertCount(27, $contributions);
+        $this->assertCount(28, $contributions);
         $this->assertArrayHasKey('productivitySupply', $contributions);
         $this->assertArrayHasKey('fundDraw', $contributions);
         $this->assertArrayHasKey('creditPremiumDrag', $contributions);
@@ -1893,7 +1942,7 @@ class MacroAggregateSubsystemTest extends TestCase
         // What is left is the Gaussian disturbance alone, as if no disaster or compensator had ever touched it.
         $noise = 0.004;
         for ($tick = 0; $tick < 90; ++$tick) {
-            $noise = ($noise * $decay) + (MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt) * 0.3);
+            $noise = ($noise * $decay) + (self::ownDemandSigma() * sqrt($dt) * 0.3);
         }
         $this->assertEqualsWithDelta($noise, $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation, 1e-12);
         $this->assertLessThan(0.0, $this->openWindow($probe)['contributions']['demandDisaster']);

@@ -381,18 +381,24 @@ class MacroAggregateSubsystem
      */
     public const DEMAND_SHOCK_REVERSION = 0.60;
     /**
-     * Innovation volatility of the aggregate demand disturbance, in annualized gap-drift units: one scale, shared with
-     * the disaster sizes below, set so the gap's sd and quarterly moves under the fitted loop are the CBO 1985-2019
-     * 1.63% and 0.53pp, the era the policy rule is fitted on, beside a ~1.0% TFP supply gap.
+     * Innovation volatility of the aggregate demand disturbance, in annualized gap-drift units, own and shared parts
+     * together: 2.5pp, so with the rarer local disasters below the gap's sd is about 2.1%.
      */
-    public const DEMAND_SHOCK_SIGMA = 0.0125;
+    public const DEMAND_SHOCK_SIGMA = 0.025;
+    /**
+     * Correlation of the district's demand innovation with the mainland's quarterly gap surprise, one regional factor
+     * (Kose, Otrok & Whiteman 2003): the same news, credit and confidence reach both, so the district's gap moves with
+     * the mainland's at about 0.55.
+     */
+    public const DEMAND_SHOCK_MAINLAND_LOADING = 0.95;
 
     // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
     /**
      * Disaster arrivals per year in either direction: the one-sided cause a slump needs, since the Gaussian innovation
-     * above is symmetric.
+     * above is symmetric. One in 25 years: most busts now reach the district from the mainland's cycle, so the local
+     * ones are rare.
      */
-    public const DEMAND_DISASTER_INTENSITY = 0.20;
+    public const DEMAND_DISASTER_INTENSITY = 0.04;
     /**
      * Probability a disaster is an upside demand surprise. Barro's disaster set is one-sided; a quarter weight keeps
      * booms possible while leaving the left tail three times heavier.
@@ -773,9 +779,11 @@ class MacroAggregateSubsystem
      *                                      (MonetaryPolicySubsystem::calculateExpectedInflation).
      * @param float      $dt                Time increment in years.
      * @param float      $stressMultiplier  Non-linear crisis volatility multiplier.
+     * @param float      $mainlandSurprise  The mainland's gap surprises this tick, standard normals summed over the
+     *                                      quarters that turned (AssetMarketSubsystem::calculateForeignEconomy()).
      * @return float Updated cyclical output gap bounded between -12% and +10%.
      */
-    public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier): float
+    public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier, float $mainlandSurprise = 0.0): float
     {
         // The gap is GDP by industry: domestic demand on its share of the economy, plus, as levels each on its own
         // measured path, the supply part a productivity shock opens (absorbProductivityShocks), net exports, the
@@ -912,9 +920,13 @@ class MacroAggregateSubsystem
         $timingChange = $spendingTiming - $state->spendingTimingGap;
         $state->spendingTimingGap = $spendingTiming;
 
-        // Smets & Wouters (2007) persistent AR(1) aggregate demand disturbance.
+        // Smets & Wouters (2007) persistent AR(1) aggregate demand disturbance, its innovation one regional factor: the
+        // mainland's quarterly surprise lands whole at the quarter's turn, the rest is the district's own.
+        $mainlandImpulse = $stressMultiplier * self::mainlandDemandImpulse($mainlandSurprise);
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
-            + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $demandZ);
+            + (self::DEMAND_SHOCK_SIGMA * sqrt(1.0 - (self::DEMAND_SHOCK_MAINLAND_LOADING ** 2)) * $stressMultiplier * sqrt($dt) * $demandZ)
+            + $mainlandImpulse;
+        $state->demandMainlandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandMainlandShock * $dt) + $mainlandImpulse;
 
         // Barro (2006) rare demand disaster: the one-sided cause a slump needs, since the Gaussian
         // innovation above is symmetric and too small to dig one. Compensated, so it bends the shape
@@ -969,7 +981,8 @@ class MacroAggregateSubsystem
             'householdNewBorrowing' => $householdNewBorrowing,
             'householdDeleveragingDrag' => -$householdDeleveragingDrag,
             'crisisDeleveragingDrag' => -$crisisDeleveragingDrag,
-            'demandShock' => $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation,
+            'demandShock' => $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation - $state->demandMainlandShock,
+            'mainlandDemand' => $state->demandMainlandShock,
             'demandDisaster' => $state->demandDisasterShock,
             'disasterCompensator' => -$state->demandDisasterCompensation,
         ];
@@ -1148,6 +1161,20 @@ class MacroAggregateSubsystem
     public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap, float $inventoryInvestmentGap, float $spendingTimingGap): float
     {
         return ($outputGap - $supplyGap - $netExportGap - $financeOutputGap - $inventoryInvestmentGap - $spendingTimingGap) / self::DOMESTIC_GAP_WEIGHT;
+    }
+
+    /**
+     * The mainland's surprises as the shared part of the district's demand innovation: each quarter's draw is the
+     * innovation a quarter of the disturbance's OU accumulates, at DEMAND_SHOCK_MAINLAND_LOADING, so the shared and own
+     * parts together keep the disturbance's stationary variance at any tick length.
+     *
+     * @param float $mainlandSurprise Standard normals summed over the quarters that turned this tick.
+     */
+    public static function mainlandDemandImpulse(float $mainlandSurprise): float
+    {
+        $stationarySd = self::DEMAND_SHOCK_SIGMA / sqrt(2.0 * self::DEMAND_SHOCK_REVERSION);
+
+        return self::DEMAND_SHOCK_MAINLAND_LOADING * StochasticProcesses::calculateOrnsteinUhlenbeckStep(0.0, self::DEMAND_SHOCK_REVERSION, $stationarySd, 1.0 / AssetMarketSubsystem::MAINLAND_QUARTERS_PER_YEAR, $mainlandSurprise);
     }
 
     /**

@@ -795,6 +795,34 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(TimeSeries::calculateAr2Autocorrelation($a1, $a2, 4), $covariance / $variance, 0.04, 'and a year on it still carries ~0.72 of itself (the CBO gap 0.66).');
     }
 
+    /**
+     * The quarter's gap surprise is handed back as the standard normal drawn for it, the region's common demand shock;
+     * between turns there is none.
+     */
+    public function testTheMainlandHandsBackItsGapSurpriseAtTheTurn(): void
+    {
+        $draws = new class extends MathUtility {
+            public int $calls = 0;
+            public function generateStandardNormal(): float
+            {
+                // The gap's draw leads each quarter; core inflation, the rate and the rest of the world follow.
+                return $this->calls++ % 4 === 0 ? 1.5 : 0.0;
+            }
+        };
+        $subsystem = new AssetMarketSubsystem($draws);
+        $state = new MacroState();
+
+        $state->totalTime = 0.10;
+        $this->assertSame(0.0, $subsystem->calculateForeignEconomy($state, 0.01), 'Inside a quarter there is no surprise.');
+
+        $state->totalTime = 0.25;
+        $this->assertSame(1.5, $subsystem->calculateForeignEconomy($state, 0.01), 'The turn hands back the gap\'s draw.');
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::MAINLAND_GAP_SIGMA * 1.5, $state->foreignOutputGap, 1e-12, 'the same draw the mainland gap took.');
+
+        $state->totalTime = 1.25;
+        $this->assertSame(6.0, $subsystem->calculateForeignEconomy($state, 1.0), 'A year-long step sums its four quarters\' surprises.');
+    }
+
     /** The mainland's statistics and its rate decision arrive at the quarter's turn, not between. */
     public function testTheMainlandMovesOnlyAtTheTurnOfAQuarter(): void
     {

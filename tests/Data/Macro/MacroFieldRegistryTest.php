@@ -44,6 +44,7 @@ class MacroFieldRegistryTest extends TestCase
         'spendingTimingShock' => 'Latent OU state behind spending_timing_gap, which is recorded.',
         'spendingPulledForward' => 'The stock spending_timing_gap is the change of, which is recorded.',
         'servicesPriceShock' => 'Latent OU part of supercore_inflation, which is recorded.',
+        'demandMainlandShock' => 'The mainland\'s share of demand_shock, which is recorded; the gap channels carry its contribution.',
         'inflationEndpointGap' => 'Learned state behind tipsBreakeven, which is recorded.',
         'policyRateShadow' => 'The Authority\'s unrounded view behind policy_rate, which is recorded.',
         'policyRateExpected' => 'The next meeting\'s expected decision; policy_rate records the decisions.',

@@ -377,6 +377,7 @@ readonly class MacroStateDTO
         public float $demandShock = 0.0,
         public float $demandDisasterShock = 0.0,
         public float $demandDisasterCompensation = 0.0,
+        public float $demandMainlandShock = 0.0,
         public float $energyInventoryIndex = MacroConstants::COMMODITY_INVENTORY_BASELINE,
         public float $energyInventoryIndexEma = MacroConstants::COMMODITY_INVENTORY_BASELINE,
         public float $capacityUtilizationRate = MacroConstants::CU_BASELINE,

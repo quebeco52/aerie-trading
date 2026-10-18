@@ -339,6 +339,8 @@ class MacroState
     // the total.
     public float $demandDisasterShock;
     public float $demandDisasterCompensation;
+    // The part of demandShock the mainland's surprises put there, reverting with it.
+    public float $demandMainlandShock;
 
     public float $energyInventoryIndex;
     public float $energyInventoryIndexEma;
