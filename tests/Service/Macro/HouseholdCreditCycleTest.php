@@ -16,13 +16,9 @@ use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The household credit cycle the whole engine produces, against the US record (FRED CMDEBT / DSPI and GDPC1 / GDPPOT,
- * 1977-2019, var/harness/djk_an.py): credit expansions are booms, and a year of new borrowing is followed by more.
- *
- * The three-year change in debt to income correlates +0.51 with the output gap in the same quarter, and the year-end
- * annual change in leverage carries 0.58 of itself into the next year (Drehmann, Juselius & Korinek 2018 find 0.88
- * across sixteen countries). Until 2026-09-28 the engine read +0.01 and 0.23: house prices had no momentum, so
- * credit growth was noise around them, and borrowing reached demand only as the debt service it later costs.
+ * The household credit cycle the whole engine produces: credit expansions are booms, and a year of new borrowing is
+ * followed by more, as leverage growth carries most of itself into the next year across sixteen countries (Drehmann,
+ * Juselius & Korinek 2018). An engine whose house prices have no momentum makes credit growth noise around them.
  */
 class HouseholdCreditCycleTest extends TestCase
 {
@@ -50,10 +46,10 @@ class HouseholdCreditCycleTest extends TestCase
             }
         }
 
-        // Three seeds read this correlation to about 0.15 either side of the harness's, so it guards the sign; the
-        // strength of the borrowing leg is MacroAggregateSubsystemTest's, and its fit is djk_an.py's.
-        $this->assertGreaterThan(0.10, $this->correlation($changes, $gaps), 'Three years of rising leverage are a boom (US +0.51; the harness reads +0.44 over 36 seeds).');
-        $this->assertGreaterThan(0.25, $this->correlation($annual, $annualLagged), 'A year of new borrowing is followed by more (US 0.58; the harness reads 0.59).');
+        // Three seeds read these correlations to about 0.15 either way, so they guard the signs; the strength of the
+        // borrowing leg is MacroAggregateSubsystemTest's.
+        $this->assertGreaterThan(0.10, $this->correlation($changes, $gaps), 'Three years of rising leverage are a boom.');
+        $this->assertGreaterThan(0.25, $this->correlation($annual, $annualLagged), 'A year of new borrowing is followed by more.');
     }
 
     /**

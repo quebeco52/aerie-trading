@@ -50,6 +50,8 @@
             <exclude>tests/Service/Politics/ElectionForecastTest.php</exclude>
             <exclude>tests/Service/Macro/BusinessCycleRealismTest.php</exclude>
             <exclude>tests/Service/Macro/YieldCurveRealismTest.php</exclude>
+            <exclude>tests/Service/Macro/PlayedDistrictRealismTest.php</exclude>
+            <exclude>tests/Financial/SovereignFundDynamicsTest.php</exclude>
         </testsuite>
 
         <!-- Realism: multi-seed long-run runs, 10-60 s each. The full bin/verify runs them one process per file. -->
@@ -59,6 +61,8 @@
             <file>tests/Service/Politics/ElectionForecastTest.php</file>
             <file>tests/Service/Macro/BusinessCycleRealismTest.php</file>
             <file>tests/Service/Macro/YieldCurveRealismTest.php</file>
+            <file>tests/Service/Macro/PlayedDistrictRealismTest.php</file>
+            <file>tests/Financial/SovereignFundDynamicsTest.php</file>
         </testsuite>
 
         <!-- Unit: no I/O, no kernel, no database. Pure collaborator-free logic. -->

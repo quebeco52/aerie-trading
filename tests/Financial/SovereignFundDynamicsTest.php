@@ -22,9 +22,8 @@ use PHPUnit\Framework\TestCase;
  * The sovereign fund over a lifetime of the real macro engine, against a board that moves on the engine's own
  * market factor: it has to stay a fund of roughly the size it opened at, keep its footprint on the board bounded,
  * rebalance now and then rather than never or constantly, and carry the fiscal consequence the plan states --
- * a budget that no longer borrows for its structural deficit settles on lower net financial liabilities, which is
- * what the Bohn rule targets. Gross debt need not fall: with net liabilities under the rule's threshold the surplus
- * response rests, and on 48 seeds gross debt ends about 8pp higher with the fund (var/harness/cbsmooth, 2026-10-10).
+ * a budget that no longer borrows for its structural deficit settles on lower net financial liabilities. Gross debt
+ * need not fall, since the fund holds assets against it; it only has to stay well off its floor.
  *
  * The board is synthetic on purpose. The whole-ticker harness measures the fund's effect on prices; this pins the
  * fund's own arithmetic over decades, which that harness is far too slow to run in a suite.

@@ -297,6 +297,8 @@ class MacroState
     public float $domesticDemandGapEma;
     // The banks' credit-driven output (a share of GDP, a level part of the gap): loan balances against their trend.
     public float $financeOutputGap;
+    // Inventory investment (a share of GDP a year, a level part of the gap): the stock the overhang carries, changing.
+    public float $inventoryInvestmentGap;
     // The currency index over its fundamental: the purchasing-power deviation that decays while the fundamental jumps.
     public float $exchangeRateDeviation;
     public float $realExchangeRateTradeLag;
@@ -322,6 +324,8 @@ class MacroState
 
     public float $inventoryStockGap;
     public float $inventoryStockGapEma;
+    // Production over plan, a share of a year's domestic sales a year (an OU cost shock): it goes into stock.
+    public float $inventoryCostShock;
 
     public float $demandShock;
     // The parts of demandShock the Kou disasters and their compensator put there, reverting with it; demandShock stays
@@ -790,7 +794,7 @@ class MacroState
                 MacroAggregateSubsystem::dealActivityGap($state->dealActivityIndexEma, $state->dealActivityIndexTrend),
             );
             if (isset($carried['financeOutputGap'], $carried['domesticDemandGapEma'])) {
-                $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $state->financeOutputGap - $carriedFinance);
+                $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $state->financeOutputGap - $carriedFinance, 0.0);
             }
         }
         // The capital built counted the requirement alone in a payload predating the last tick's requirement; the
@@ -803,7 +807,13 @@ class MacroState
         // The inventory cycle's reference opens where domestic demand's smoothed part of the gap stands, so the upgrade
         // sets off no sales surprise.
         if (!isset($carried['domesticDemandGapEma'])) {
-            $state->domesticDemandGapEma = MacroAggregateSubsystem::domesticDemandGapAt($state->outputGapEma, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap);
+            $state->domesticDemandGapEma = MacroAggregateSubsystem::domesticDemandGapAt($state->outputGapEma, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap, $state->inventoryInvestmentGap);
+        }
+        // Inventory investment opens at the flow the carried stock is already making, taken out of final sales and
+        // their smoothed reading alike, so the upgrade moves no GDP and sets off no sales surprise.
+        if (!isset($carried['inventoryInvestmentGap'])) {
+            $state->inventoryInvestmentGap = MacroAggregateSubsystem::plannedInventoryInvestment($state);
+            $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, 0.0, $state->inventoryInvestmentGap);
         }
 
         return $state;

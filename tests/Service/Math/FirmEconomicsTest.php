@@ -166,15 +166,26 @@ class FirmEconomicsTest extends TestCase
         $this->assertSame(0.0, FirmEconomics::calculateInventoryCycleStep(0.0, -0.05, -0.05, 0.5, 0.4, 0.25, 1.0), 'A slump that surprises no one builds no stock.');
     }
 
-    /** One year in one step or in 48 lands on the same stock for a held miss. */
+    /** One year in one step or in 48 lands on the same stock for a held miss and production over plan. */
     public function testInventoryCycleStepIsTimestepNeutral(): void
     {
-        $oneStep = FirmEconomics::calculateInventoryCycleStep(0.05, -0.02, 0.01, 0.8, 0.6, 1.0, 1.0);
+        $oneStep = FirmEconomics::calculateInventoryCycleStep(0.05, -0.02, 0.01, 0.8, 0.6, 1.0, 1.0, 0.004);
         $stock = 0.05;
         for ($i = 0; $i < 48; $i++) {
-            $stock = FirmEconomics::calculateInventoryCycleStep($stock, -0.02, 0.01, 0.8, 0.6, 1.0 / 48, 1.0);
+            $stock = FirmEconomics::calculateInventoryCycleStep($stock, -0.02, 0.01, 0.8, 0.6, 1.0 / 48, 1.0, 0.004);
         }
         $this->assertEqualsWithDelta($oneStep, $stock, 1e-12);
+    }
+
+    /** Production over plan goes into stock as a demand miss of the same size does. */
+    public function testProductionOverPlanBuildsStockAsAnEqualDemandMissDoes(): void
+    {
+        $this->assertEqualsWithDelta(
+            FirmEconomics::calculateInventoryCycleStep(0.02, -0.01, 0.0, 0.8, 0.6, 0.25, 0.15),
+            FirmEconomics::calculateInventoryCycleStep(0.02, 0.0, 0.0, 0.8, 0.6, 0.25, 0.15, 0.006),
+            1e-15,
+        );
+        $this->assertLessThan(0.0, FirmEconomics::calculateInventoryCycleStep(0.0, 0.0, 0.0, 0.8, 0.6, 0.25, 0.15, -0.006), 'Production behind plan draws stock down.');
     }
 
     public function testFringeAdjustedPriceLevelReducesToCournotWithNoFringeResponseAndSoftensItOtherwise(): void

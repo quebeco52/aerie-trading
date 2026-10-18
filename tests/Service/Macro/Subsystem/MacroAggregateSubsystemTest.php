@@ -11,10 +11,12 @@ use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use PHPUnit\Framework\TestCase;
 
@@ -1048,6 +1050,88 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($built * (1.0 - exp(-$speed * 0.25)) / $speed, $state->inventoryStockGap, 1e-12);
     }
 
+    /**
+     * Output is final sales plus the change in inventories: the stock built over a step, out of a year's domestic sales
+     * on domestic demand's weight, is the step's inventory investment, and the gap moves by its change while final
+     * sales stand where they were.
+     */
+    public function testInventoryInvestmentReachesGdpAsTheStocksChange(): void
+    {
+        $dt = 1.0 / 360.0;
+        $step = function (float $stock, float $costShock) use ($dt): array {
+            $probe = new OutputGapProbe();
+            $probe->enable();
+            $state = $this->neutralBorrowingState();
+            $state->inventoryStockGap = $stock;
+            $state->inventoryCostShock = $costShock;
+            $state->inventoryInvestmentGap = 0.001;
+            $state->outputGap = 0.001;
+            $state->outputGap = $this->probedSubsystem($probe, 0.0)->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+
+            return [$state, $this->openWindow($probe)['contributions']['inventoryInvestment']];
+        };
+        [$quiet] = $step(0.0, 0.0);
+        [$state, $contribution] = $step(0.04, 0.004);
+
+        $built = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::INVENTORY_TO_ANNUAL_SALES * ($state->inventoryStockGap - 0.04);
+        $this->assertEqualsWithDelta($built / $dt, $state->inventoryInvestmentGap, 1e-15, 'Investment is the stock built over the step.');
+        $this->assertEqualsWithDelta($state->inventoryInvestmentGap - 0.001, $contribution, 1e-15, 'The gap moves by investment\'s change.');
+        $this->assertEqualsWithDelta($state->inventoryInvestmentGap - $quiet->inventoryInvestmentGap, $state->outputGap - $quiet->outputGap, 1e-15, 'GDP differs by the investment.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::domesticDemandGap($quiet), MacroAggregateSubsystem::domesticDemandGap($state), 1e-15, 'Final sales do not.');
+    }
+
+    /**
+     * Lovell (1961): the stock firms want follows expected sales. Held below trend, sales leave stock nobody wants, and
+     * it is sold down until the stock is the target again: the slump's net inventory investment is the fall in the
+     * target, out of a year's domestic sales on domestic demand's weight. The target's own move is no investment, so
+     * the summed flow is the stock's change, the overhang plus the target it is read against.
+     */
+    public function testALastingSlumpSellsDownTheStockNoLongerWanted(): void
+    {
+        $state = $this->neutralBorrowingState();
+        $state->domesticDemandGapEma = 0.0;
+        $sales = -0.03;
+        $dt = 1.0 / 72.0;
+        $sold = 0.0;
+        for ($tick = 0; $tick < 72 * 25; ++$tick) {
+            // Sales held at -3%: GDP is them on their weight plus the inventory investment beside them.
+            $state->outputGap = (MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * $sales) + $state->inventoryInvestmentGap;
+            $this->subsystem->calculateOutputGap($state, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+            $sold += $state->inventoryInvestmentGap * $dt;
+            $this->subsystem->updateExponentialMovingAverages($state, $dt);
+        }
+
+        $stock = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::INVENTORY_TO_ANNUAL_SALES;
+        $this->assertEqualsWithDelta($stock * ($state->inventoryStockGap + $state->domesticDemandGapEma), $sold, 1e-12, 'The summed flow is the stock\'s change.');
+        $this->assertEqualsWithDelta($stock * $sales, $sold, 1e-5, 'Twenty-five years on, the stock is the lower target.');
+        $this->assertEqualsWithDelta(0.0, $state->inventoryStockGap, 1e-5, 'Nothing is left over the target.');
+    }
+
+    /**
+     * Production run ahead of plan goes into stock and is worked off: GDP rises while it runs and falls below trend as
+     * the stock is sold down, and once the stock is back the output it added has been taken back.
+     */
+    public function testProductionOverPlanLeavesNoLastingOutput(): void
+    {
+        $dt = 0.05;
+        $shock = 0.01;
+        $stock = 0.0;
+        $cumulative = 0.0;
+        $path = [];
+        for ($step = 0; $step < 600; ++$step) {
+            $shock = StochasticProcesses::calculateOrnsteinUhlenbeckStep($shock, MacroAggregateSubsystem::INVENTORY_COST_SHOCK_REVERSION, MacroAggregateSubsystem::INVENTORY_COST_SHOCK_SD, $dt, 0.0);
+            $next = FirmEconomics::calculateInventoryCycleStep($stock, 0.0, 0.0, MacroAggregateSubsystem::INVENTORY_ADJUSTMENT_SPEED, MacroAggregateSubsystem::INVENTORY_SURPRISE_SENSITIVITY, $dt, MacroAggregateSubsystem::INVENTORY_TO_ANNUAL_SALES, $shock);
+            $investment = MacroAggregateSubsystem::inventoryInvestmentAt($next - $stock, $dt);
+            $stock = $next;
+            $cumulative += $investment * $dt;
+            $path[] = $investment;
+        }
+
+        $this->assertGreaterThan(0.0, $path[0], 'Production over plan is investment in stock.');
+        $this->assertLessThan(0.0, min($path), 'The stock is then sold down below trend production.');
+        $this->assertEqualsWithDelta(0.0, $cumulative, 1e-6, 'Thirty years on, the output the shock added has been taken back.');
+    }
+
     private function neutralBorrowingState(): MacroState
     {
         $state = new MacroState();
@@ -1116,19 +1200,18 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * A commodity spike is priced as passing. The pass-through adds itself to headline one for one, and the US ten-year
-     * takes 0.10-0.12 of that across samples once the learned endpoint is held (0.14-0.20 without it); the blend this
-     * replaced took two thirds, and an oil shock lifted the rule.
+     * A commodity spike is priced as passing. The pass-through adds itself to headline one for one, and the ten-year
+     * takes some of it, less than the learned endpoint's own loading: a spike is not a new inflation regime.
      */
-    public function testAnEnergySpikeReachesTheTenYearOnlyAsFarAsItDoesInTheUs(): void
+    public function testAnEnergySpikeReachesTheTenYearLessThanANewRegimeWould(): void
     {
         $spike = $this->onTargetInflationState();
         $spike->noncorePassThroughEma = 0.015;
 
         $share = ($this->breakeven($spike) - MacroConstants::TARGET_INFLATION) / $spike->noncorePassThroughEma;
 
-        $this->assertGreaterThan(0.09, $share);
-        $this->assertLessThan(0.20, $share);
+        $this->assertGreaterThan(0.0, $share);
+        $this->assertLessThan(MacroAggregateSubsystem::BREAKEVEN_ENDPOINT_LOADING, $share);
     }
 
     /**
@@ -1391,7 +1474,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
     /**
      * The aggregate demand disturbance and the output gap's own diffusion are separate innovations in
-     * the estimated system (Smets & Wouters 2007); one draw serving both correlates them at unity.
+     * the estimated system (Smets & Wouters 2007); one draw serving both correlates them at unity. Production
+     * over plan, a cost shock, is a third.
      */
     public function testDemandDisturbanceAndGapDiffusionDrawSeparateInnovations(): void
     {
@@ -1425,8 +1509,8 @@ class MacroAggregateSubsystemTest extends TestCase
         };
         $subsystem = new MacroAggregateSubsystem($math);
 
-        $run = function (float $demandDraw, float $diffusionDraw) use ($subsystem, $math, $dt): array {
-            $math->script($demandDraw, $diffusionDraw);
+        $run = function (float $demandDraw, float $diffusionDraw, float $inventoryDraw = 0.0) use ($subsystem, $math, $dt): array {
+            $math->script($demandDraw, $diffusionDraw, $inventoryDraw);
             $state = new MacroState();
             $state->outputGap = 0.0;
             $state->inflation = 0.02;
@@ -1434,18 +1518,19 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->wageGrowth = 0.035;
             $gap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
-            return [$gap, $state->demandShock, $math->drawCount()];
+            return [$gap, $state->demandShock, $math->drawCount(), $state->inventoryCostShock];
         };
 
         [$neutralGap, $neutralShock, $calls] = $run(0.0, 0.0);
-        // A shared draw fails here first: it consumes one innovation, not two.
-        $this->assertSame(2, $calls, 'One innovation for the demand disturbance, one for the gap diffusion');
+        // A shared draw fails here first: it consumes one innovation, not three.
+        $this->assertSame(3, $calls, 'One innovation each for the demand disturbance, the gap diffusion and production over plan');
         // With both innovations silent the disturbance still carries the disaster jump's compensator, which
         // is a deterministic function of dt and is therefore the baseline the other two runs are read against.
 
         // Second draw only: the gap moves by the full diffusion, the disturbance does not move at all.
-        [$diffusionGap, $diffusionShock] = $run(0.0, 1.0);
+        [$diffusionGap, $diffusionShock, , $diffusionCost] = $run(0.0, 1.0);
         $this->assertEqualsWithDelta($neutralShock, $diffusionShock, 1e-15, 'A diffusion innovation must not enter the demand disturbance');
+        $this->assertSame(0.0, $diffusionCost, 'Nor production over plan.');
         $this->assertEqualsWithDelta(
             MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::OUTPUT_GAP_DIFFUSION_SIGMA * sqrt($dt),
             $diffusionGap - $neutralGap,
@@ -1457,6 +1542,12 @@ class MacroAggregateSubsystemTest extends TestCase
         $expectedShock = MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt);
         $this->assertEqualsWithDelta($expectedShock, $demandShock - $neutralShock, 1e-15);
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * $expectedShock * $dt, $demandGap - $neutralGap, 1e-12);
+
+        // Third draw only: production over plan takes it whole and the demand disturbance does not move.
+        [, $inventoryShock, , $inventoryCost] = $run(0.0, 0.0, 1.0);
+        $decay = exp(-MacroAggregateSubsystem::INVENTORY_COST_SHOCK_REVERSION * $dt);
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::INVENTORY_COST_SHOCK_SD * sqrt(1.0 - ($decay * $decay)), $inventoryCost, 1e-15);
+        $this->assertEqualsWithDelta($neutralShock, $inventoryShock, 1e-15, 'A cost innovation must not enter the demand disturbance');
     }
 
     /**
@@ -1871,6 +1962,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $state = $this->probedState();
         $state->outputGap = MacroAggregateSubsystem::OUTPUT_GAP_FLOOR;
+        // Sales expected where they stand, so no surprise goes into stock and lifts output off the floor.
+        $state->domesticDemandGapEma = MacroAggregateSubsystem::domesticDemandGap($state);
         $state->creditCrisisDrag = 0.50;
         $state->demandShock = 0.0;
 

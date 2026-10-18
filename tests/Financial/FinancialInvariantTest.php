@@ -376,26 +376,6 @@ class FinancialInvariantTest extends TestCase
         );
     }
 
-    public function testEvansRulePreservesContinuousShadowRateWhileHoldingPolicyRate(): void
-    {
-        $monetary = new MonetaryPolicySubsystem($this->math);
-
-        $zlbState = MacroStateBuilder::create()
-            ->withPolicyRate(0.00) // At ZLB
-            ->withOutputGap(-0.01)
-            ->withInflation(0.019) // Below Evans ceiling 2.5%
-            ->build();
-        $zlbState->unemploymentRateEma = 0.065; // Elevated above 5.0%
-
-        $shadowRate = $monetary->calculateTargetRate($zlbState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, 0.25);
-        $newPolicyRate = $monetary->updatePolicyRate($zlbState, $shadowRate, 0.25);
-
-        // Invariant 1: Wu-Xia shadow rate must remain continuous and positive (not flatlined to 0.00)
-        $this->assertGreaterThan(0.0, $shadowRate, 'Wu-Xia shadow rate must calculate continuously without artificial zero clamping.');
-        // Invariant 2: Policy rate under Evans Rule forward guidance must hold at ZLB (0.00%)
-        $this->assertEquals(0.00, $newPolicyRate, 'Evans Rule must lock actual policy rate at lower bound during elevated unemployment.');
-    }
-
     public function testOutputGapBoundedWithinRealisticHistoricalBounds(): void
     {
         // No diffusion and no jump arrivals: the uniform gate sits above every per-tick jump probability.

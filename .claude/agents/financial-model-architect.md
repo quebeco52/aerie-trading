@@ -70,8 +70,7 @@ historically been silent; check the known traps in AGENTS.md by name, and also:
   a value). Any rate, variance or fitness measure crossing a model boundary must be explicitly annual or per-tick.
 - **Accounting identities.** Balance sheet must close; cash flow must tie to the balance sheet delta; M&A consideration must equal what leaves the acquirer.
 
-**Verify numerically, not rhetorically**, at the evidence tier AGENTS.md sets for the claim. You cannot launch
-agents. For a quick emergent check, run 3-4 seeds yourself as `bin/php-slot php ...`:
+**Verify numerically, not rhetorically**, at the evidence tier AGENTS.md sets for the claim. For a quick emergent check, run 3-4 seeds yourself as `bin/php-slot php ...`:
 `var/harness/polls/lever_means.php` is the macro loop **without** `SovereignFundSubsystem` (the no-fund arm; pass the
 fund to judge the District), and `var/harness/polls/ExtractionMarginTest.php` seeds the full board under
 `HarnessKernel`. For a staged multi-seed run, put a harness request in your report (question, arms, 1-3 target

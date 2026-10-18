@@ -293,18 +293,21 @@ final class FirmEconomics
 
     /**
      * Metzler (1941) & Blinder (1982) inventory cycle: a demand miss builds stock involuntarily, and firms work the
-     * stock back to the level they want at their adjustment speed. Desired stocks follow expected sales (Metzler), so
-     * a slump's overhang is the miss itself, not a higher target. Exact over the step for a flow held through it.
-     * The miss is a share of a year's output; over the stock-to-sales ratio it is the overhang in that ratio.
+     * stock back to the level they want at their adjustment speed; the overhang's change over the step is inventory
+     * investment. Production run ahead of plan (Ramey & West 1999 cost shocks: output bunched into cheap quarters) goes
+     * into stock the same way. Exact over the step for flows held through it, the target held too: where it follows
+     * expected sales, the caller moves the overhang as it moves. The miss is a share of a year's output; over the
+     * stock-to-sales ratio it is the overhang in that ratio.
      *
      * @param float $currentInventoryGap Current overhang in the inventory-to-sales ratio (+gap is excess stock, -gap is
      *                                   depleted).
-     * @param float $outputGap           Current output gap level.
-     * @param float $outputGapEma        Smoothed output gap trend.
+     * @param float $outputGap           Current sales gap.
+     * @param float $outputGapEma        Expected sales gap (its smoothed reading).
      * @param float $speed               Annual speed of inventory adjustment toward desired stock.
      * @param float $surpriseSens        Sensitivity of involuntary inventory build to growth slowdown.
      * @param float $dt                  Time step in years.
      * @param float $inventoryToSales    Inventories over a year's sales.
+     * @param float $productionShock     Production over plan, a share of a year's sales a year.
      */
     public static function calculateInventoryCycleStep(
         float $currentInventoryGap,
@@ -314,8 +317,9 @@ final class FirmEconomics
         float $surpriseSens,
         float $dt,
         float $inventoryToSales,
+        float $productionShock = 0.0,
     ): float {
-        $involuntaryFlow = $surpriseSens * ($outputGapEma - $outputGap) / $inventoryToSales;
+        $involuntaryFlow = (($surpriseSens * ($outputGapEma - $outputGap)) + $productionShock) / $inventoryToSales;
         $decay = exp(-$speed * $dt);
 
         return ($currentInventoryGap * $decay) + ($involuntaryFlow * (1.0 - $decay) / $speed);

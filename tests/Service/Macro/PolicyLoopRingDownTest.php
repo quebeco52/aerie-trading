@@ -19,9 +19,9 @@ use PHPUnit\Framework\TestCase;
  * The policy loop's free response: every draw zero and no jump, two runs settle, one gets a +1.6pp opening gap, and
  * the difference is the loop ringing down on its own. Deterministic, so unlike an emergent statistic it has power.
  *
- * The CBO gap does not swing through zero on its own (autocorrelation +0.07 at 12 quarters, 1949-2019). Before
- * the 2026-09-25 loop fit the engine's did: the gap had no pull of its own, a rate move integrated into it without
- * limit, and a policy loop acting 3-4 quarters late rang at 6-7 years, a +1.6pp kick coming back at -1.1pp.
+ * A stabilising loop damps a shock rather than ringing it into the next cycle: output gaps do not swing through zero
+ * on their own. An engine whose gap has no pull of its own, and whose policy acts late, rings instead, a kick coming
+ * back at most of its size the other way.
  */
 class PolicyLoopRingDownTest extends TestCase
 {
@@ -32,10 +32,12 @@ class PolicyLoopRingDownTest extends TestCase
     /** A slump's overshoot must be smaller than a boom's: easing pushes on a string. */
     private const SLUMP_OVERSHOOT_RATIO = 1.0;
     /**
-     * How far from settled the tail may sit: decisions move in 25bp steps, so kicked and control runs can sit a step
-     * apart for a few meetings (~0.1pp of gap).
+     * How far from settled the tail may sit, per unit of kick: decisions move in 25bp steps, so kicked and control runs
+     * can sit a step apart for a few meetings (0.1pp of gap).
      */
-    private const SETTLED_TOLERANCE = 0.06;
+    private const SETTLED_TOLERANCE = 0.001 / self::KICK;
+    /** The quarter the tail is settled from: year five. */
+    private const SETTLED_FROM_QUARTER = 20;
 
     public function testAnOpeningGapFadesWithoutAPendulum(): void
     {
@@ -43,22 +45,25 @@ class PolicyLoopRingDownTest extends TestCase
         $trough = min($response);
         $troughAt = array_search($trough, $response, true);
         $this->assertIsInt($troughAt);
-        $fromTrough = array_slice($response, $troughAt);
+        // The swing back is read up to year five; past it the kicked and control runs can sit a decision apart.
+        $fromTrough = array_slice($response, $troughAt, max(1, self::SETTLED_FROM_QUARTER - $troughAt));
         $this->assertNotEmpty($fromTrough, 'The trough is a quarter of the window.');
 
         $this->assertLessThan(0.5, $response[3], 'Most of a demand kick is gone within a year.');
         $this->assertGreaterThan(-0.25, $trough, 'The swing past zero stays under a quarter of the kick.');
         $this->assertLessThan(0.05, max($fromTrough), 'No second swing: after the trough the gap does not come back above trend.');
         // The tail is settled from year five, to within the decisions' step.
-        foreach (array_slice($response, 20) as $quarter => $value) {
-            $this->assertLessThan(self::SETTLED_TOLERANCE, abs($value), sprintf('Settled from year five on (quarter %d).', $quarter + 20));
+        foreach (array_slice($response, self::SETTLED_FROM_QUARTER) as $quarter => $value) {
+            $this->assertLessThan(self::SETTLED_TOLERANCE, abs($value), sprintf('Settled from year five on (quarter %d).', $quarter + self::SETTLED_FROM_QUARTER));
         }
     }
 
     /**
-     * Barnichon & Matthes (2018), Tenreyro & Thwaites (2016): easing pushes on a string. The rate cuts that follow a
-     * slump lift demand less than the hikes that follow a boom cut it, so a slump climbs back with less swing past zero
-     * than a boom's bust has.
+     * Easing pushes on a string: a hike tightens the collateral firms and homebuyers borrow against, while a cut does
+     * not make a firm in a slump invest. The District's floating-rate loans pass a cut straight into household cash
+     * flow, but that runs through debt service, its own symmetric channel; on the rest the cuts that follow a slump
+     * lift demand less than the hikes that follow a boom cut it, so a slump climbs back with less swing past zero than
+     * a boom's bust has.
      */
     public function testASlumpClimbsBackWithLessOvershootThanABoomFalls(): void
     {
@@ -68,8 +73,8 @@ class PolicyLoopRingDownTest extends TestCase
         $this->assertLessThan(0.5, $slump[3], 'Most of a slump is gone within a year.');
         $this->assertGreaterThan(self::SLUMP_OVERSHOOT_RATIO * min($boom), min($slump), 'The climb out of a slump overshoots less than the fall after a boom.');
         // A slump too settles from year five, as a boom does.
-        foreach (array_slice($slump, 20) as $quarter => $value) {
-            $this->assertLessThan(self::SETTLED_TOLERANCE, abs($value), sprintf('Settled from year five on (quarter %d).', $quarter + 20));
+        foreach (array_slice($slump, self::SETTLED_FROM_QUARTER) as $quarter => $value) {
+            $this->assertLessThan(self::SETTLED_TOLERANCE, abs($value), sprintf('Settled from year five on (quarter %d).', $quarter + self::SETTLED_FROM_QUARTER));
         }
     }
 

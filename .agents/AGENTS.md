@@ -80,9 +80,9 @@ spend them where the answer is emergent.
 All PHP processes on the machine share 12 slots through `bin/php-slot`, at most 8 per session.
 
 ## Research
-Research is for borrowing a mechanism or a plausible range, and is rarely needed. Look across several economies, not
+Research is for borrowing a mechanism or a plausible range. Look across several economies, not
 one.
-- About 20 web calls and one agent per question; an agent never spawns agents. Put this budget in any research
+- About 20 web calls and one agent per question. Put this budget in any research
   prompt you delegate.
 - Paywalled or unreadable source: take the abstract or a citing paper's figure. Don't hunt mirrors, scrape Scholar or
   render PDF pages to images.
@@ -112,8 +112,8 @@ not the code. Comments wrap at 120 characters; `php bin/reflow-comments.php <fil
   `bin/php-slot php vendor/bin/php-cs-fixer fix` or `make cs-fix` before handing back.
 - Tests and verification: `bin/verify` (PHPStan and format on changed files + quick tests, ~20 s; works in sandboxes
   without Docker).
-  With Docker: `make test-unit` (~0.2 s), `make test` (Fast suite, ~1 min), `make test-realism` (five multi-seed
-  long-run tests, ~3 min serial), `make phpstan FILE=<path>`. Before committing: `bin/verify --full` (~1 min).
+  With Docker: `make test-unit` (~0.2 s), `make test` (Fast suite, ~1 min), `make test-realism` (seven multi-seed
+  long-run tests, ~3.5 min serial), `make phpstan FILE=<path>`. Before committing: `bin/verify --full` (~1 min).
 - A realism test that runs over ~5 s belongs in the Realism suite in `phpunit.dist.xml`, not Fast.
 
 ## Database

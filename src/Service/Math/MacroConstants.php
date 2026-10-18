@@ -242,28 +242,22 @@ final class MacroConstants
     /** Baseline index value for Total Factor Productivity (neutral technology baseline). */
     public const TFP_BASELINE = 100.0;
     /**
-     * Trend growth of output per worker: US potential output 2.58% a year (CBO GDPPOT) less the labour force's 1.04%
-     * (CLF16OV), 1985-2019.
+     * Trend growth of output per worker: 1.5% a year, a mature financial centre's pace, inside the 0.5-2% advanced
+     * economies span.
      */
     public const TFP_DRIFT = 0.015;
-    /**
-     * Labour-force growth from the resident population: the US labour force's 1.04% a year (CLF16OV, 1985-2019) less
-     * the US net migration rate.
-     */
+    /** Labour-force growth from the resident population: 0.54% a year, a settled population still growing slowly. */
     public const NATURAL_LABOR_FORCE_GROWTH = 0.0054;
     /**
-     * Net migration the District's average party admits, a year as a share of population: the US's 0.50% (World Bank
-     * SM.POP.NETM over SP.POP.TOTL, 2000-2019 mean).
+     * Net migration the District's average party admits, a year as a share of population (0.50%); each government's
+     * regime moves it from there.
      */
     public const STRUCTURAL_NET_MIGRATION_RATE = 0.0050;
-    /**
-     * Labour-force growth at the average party's migration regime: natural growth plus its newcomers, the US's 1.04% a
-     * year.
-     */
+    /** Labour-force growth at the average party's migration regime: natural growth plus its newcomers, 1.04% a year. */
     public const STRUCTURAL_LABOR_GROWTH_RATE = self::NATURAL_LABOR_FORCE_GROWTH + self::STRUCTURAL_NET_MIGRATION_RATE;
     /**
-     * Trend real growth of potential output: labour force plus productivity, the pace a sector with no secular story
-     * grows at.
+     * Trend real growth of potential output: labour force plus productivity, 2.6% a year (advanced economies ran
+     * 1.6-3.0% in 1996-2019), the pace a sector with no secular story grows at.
      */
     public const TREND_REAL_GROWTH = self::TFP_DRIFT + self::STRUCTURAL_LABOR_GROWTH_RATE;
 

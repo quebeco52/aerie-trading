@@ -62,3 +62,29 @@ unemployment, floor share), and which gap channels carry the gap's quarterly mov
 - Analysis `pers_analyse.py A B C` (env SEEDS, BURN 2, YEARS 33) uses `gapstats_lib.py` (the dump analysis' hp/acf/
   spell definitions): gap ACFs and spells, HP(1600) cycle of log(pot x (1+gap)), growth AR1, rate-vs-gap and
   rate-vs-rule lag argmax, 4q moves, guards; paired vs the first arm; arm A spread against the live dump's values.
+
+## Inventory investment as a level part of GDP (2026-10-18, inv_run.sh)
+- Harness `InventoryHarnessTest.php`: `PersistenceHarnessTest.php` plus row columns `inv` (inventoryInvestmentGap, 0 on
+  trees without it), `inv_stock`, `inv_ema` (inventoryStockGap and its EMA), `inv_shock` (inventoryCostShock),
+  `rgq` (published realGdpQuarterlyGrowth), `rec` (recessionDeclared), `W` (DOMESTIC_GAP_WEIGHT). The final-sales gap
+  is computed in the analysis as (gap - supply - nx - fin - inv)/W (the row holds a DTO, not a MacroState).
+- Snapshots: `$SNAP/pstree` = git archive HEAD (arm A); `$SNAP/invtree` = git archive HEAD + the working tree's
+  changed src files copied over (arms B-E, so the DTO/entity constructor change gets its own cache `cache-invtree`).
+  OVR `$SNAP/ovr<arm>/Service/Macro/Subsystem/MacroAggregateSubsystem.php` = working-tree file with sed on
+  INVENTORY_COST_SHOCK_SD: B 0.0, C 0.003, D 0.006, E 0.012. Delete `var/harness/cache-invtree` after changing it.
+- Run: `SNAP=<dir> YEARS=33 bin/harness-batch var/harness/cycle_amp/inv_run.sh 1-8 A B C D E &&
+  SEEDS=1-8 python3 var/harness/cycle_amp/inv_analyse.py A B C D E > var/harness/cycle_amp/inv_s8.out`
+  Outputs `runs/I<arm>-<seed>.*`. TPY 360, POLITICS 1.
+- Analysis `inv_analyse.py A B ...` (env SEEDS, BURN 2, YEARS 33): growth targets (end-of-quarter and published),
+  final sales growth, inventory level/contribution moments, then cycle guards; paired vs the first and the second arm.
+
+## Inventory accelerator, step 2 (2026-10-18, inv2_run.sh)
+- Same harness `InventoryHarnessTest.php`. Trees from `inv2_setup.sh <SNAP> <step1 src copies>`: `s1tree` = git
+  archive HEAD + the six step-1 files (arm A); `s2tree` = HEAD + working-tree src (B). C = s2tree + `ovrC` (HEAD's
+  MonetaryPolicySubsystem, no look-through); D = ovrD (INVENTORY_SURPRISE_SENSITIVITY 0.3); E = ovrE
+  (INVENTORY_ADJUSTMENT_SPEED 1.6). Setup deletes `cache-s1tree`/`cache-s2tree`.
+- Run: `SNAP=<dir> YEARS=33 bin/harness-batch var/harness/cycle_amp/inv2_run.sh 1-8 A B C D E &&
+  SEEDS=1-8 python3 var/harness/cycle_amp/inv2_analyse.py A B C D E > var/harness/cycle_amp/inv2_s8.out`
+  (~20 min per 40 runs). Outputs `runs/J<arm>-<seed>.*`. `PFX= ... inv2_analyse.py JA IC` pairs across prefixes.
+- `inv2_analyse.py` = inv_analyse plus recession-quarter means (rec flag), OLS slopes of the contribution on same and
+  last quarter's final-sales growth, corr(overhang, gap - inv) and the pooled recession share.

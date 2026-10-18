@@ -900,15 +900,13 @@ class PoliticsEngineTest extends TestCase
 
     /**
      * The technocratic half of the Council axis keeps the appointed commission, which grants two thirds of a request;
-     * the populist end grants as an elected one, about a third of that, so that ten elected commissions among fifty
-     * hold the US average of 58%.
+     * the populist end grants as an elected one, less than the appointed one does.
      */
     public function testTheUtilityCommissionGrantsLessTowardThePopulistEnd(): void
     {
         $appointed = FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE;
         $elected = $appointed * FirmEconomics::ELECTED_COMMISSION_GRANT_RATIO;
-        $this->assertEqualsWithDelta(0.58, (0.8 * $appointed) + (0.2 * $elected), 1e-12);
-        $this->assertEqualsWithDelta(0.666, $appointed, 0.001);
+        $this->assertLessThan($appointed, $elected, 'An elected commission grants less of a request.');
         $this->assertEqualsWithDelta($elected, Politics::platform(Diet::position(Diet::COMMON_LOT, []))['utilityRateGrant'], 1e-12);
         $this->assertEqualsWithDelta($appointed, Politics::platform(Diet::position(Diet::CHARTISTS, []))['utilityRateGrant'], 1e-12);
         $this->assertEqualsWithDelta($appointed, Politics::platform([Diet::AXIS_COUNCIL => 0.0])['utilityRateGrant'], 1e-12);

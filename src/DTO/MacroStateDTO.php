@@ -312,6 +312,7 @@ readonly class MacroStateDTO
         public float $netExportGap = 0.0,
         public float $domesticDemandGapEma = 0.0,
         public float $financeOutputGap = 0.0,
+        public float $inventoryInvestmentGap = 0.0,
         public float $realExchangeRateTradeLag = 0.0,
         public float $mainlandDemandExportLag = 0.0,
         public float $alliedDefenseDeliveryLag = 0.0,
@@ -368,6 +369,7 @@ readonly class MacroStateDTO
         public float $highYieldCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
         public float $inventoryStockGap = 0.0,
         public float $inventoryStockGapEma = 0.0,
+        public float $inventoryCostShock = 0.0,
         public float $demandShock = 0.0,
         public float $demandDisasterShock = 0.0,
         public float $demandDisasterCompensation = 0.0,
@@ -499,7 +501,7 @@ readonly class MacroStateDTO
          * fund's consent above the ceiling.
          */
         public float $reserveDrawShare = MacroConstants::RESERVE_DRAW_CEILING,
-        /** Share of the Bohn reaction's surplus the Diet raises by tax rather than by cutting purchases. */
+        /** Share of a consolidation the Diet raises by tax rather than by cutting purchases. */
         public float $consolidationTaxShare = CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
         /** Share of the reserve fund's equities the Diet has it hold on the board. */
         public float $reserveHomeEquityShare = SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,

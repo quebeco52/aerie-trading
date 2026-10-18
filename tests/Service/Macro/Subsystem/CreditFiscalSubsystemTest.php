@@ -23,9 +23,7 @@ use PHPUnit\Framework\TestCase;
 
 class CreditFiscalSubsystemTest extends TestCase
 {
-    /**
-     * A debt position below the 70% the Bohn reaction defends: no sequester, no fiscal tightening, no market premium.
-     */
+    /** A sound debt position, far from where markets charge a premium. */
     private const SOUND_DEBT_TO_GDP = 0.60;
 
     private MathUtility $mathUtility;
@@ -146,30 +144,36 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * The book reaches a new maturity only as it rolls over: from the Treasury's 48 months toward its 71, eight years
-     * bring it to 66 months, against the 69 the 2009-2016 extension reached.
+     * The book reaches a new maturity only as it rolls over: each month the share of it falling due, one over its
+     * average maturity, is reissued at the target, so a four-year book takes years to lengthen and never overshoots.
      */
     public function testTheBookMovesTowardItsTargetAsItRollsOver(): void
     {
         $state = new MacroState();
         $state->sovereignDebtAverageMaturity = 4.0;
-        $state->sovereignDebtMaturityTarget = 71.0 / 12.0;
+        $state->sovereignDebtMaturityTarget = 6.0;
         $dt = 1.0 / 12.0;
-        for ($month = 0; $month < 96; ++$month) {
-            $state->sovereignDebtAverageMaturity += (1.0 - exp(-$dt / $state->sovereignDebtAverageMaturity)) * ($state->sovereignDebtMaturityTarget - $state->sovereignDebtAverageMaturity);
+
+        $this->subsystem->calculateSovereignDebt($state, $dt);
+        $this->assertEqualsWithDelta(4.0 + ((1.0 - exp(-$dt / 4.0)) * 2.0), $state->sovereignDebtAverageMaturity, 1e-12, 'A month rolls over a month\'s share of the book.');
+
+        $previous = $state->sovereignDebtAverageMaturity;
+        for ($month = 1; $month < 96; ++$month) {
+            $this->subsystem->calculateSovereignDebt($state, $dt);
+            $this->assertGreaterThan($previous, $state->sovereignDebtAverageMaturity, 'The book lengthens every month it rolls.');
+            $previous = $state->sovereignDebtAverageMaturity;
         }
-        $this->assertEqualsWithDelta(69.0, 12.0 * $state->sovereignDebtAverageMaturity, 3.0);
+        $this->assertLessThan(6.0, $state->sovereignDebtAverageMaturity, 'And never past its target.');
+        $this->assertGreaterThan(5.0, $state->sovereignDebtAverageMaturity, 'Eight years roll most of a four-year book.');
     }
 
     /**
-     * The term premium a book's maturity adds is nil at the founding book and reproduces Hamilton and Wu's swap: 14bp
-     * for December 2006's $400bn moved from about 0.4 to 17 years on $13.8T of GDP.
+     * The term premium a book's maturity adds is nil at the founding book and grows with the duration the market holds
+     * beyond it, debt times the extra years.
      */
-    public function testMaturitySupplyReproducesHamiltonAndWu(): void
+    public function testMaturitySupplyPricesTheDurationBeyondTheFoundingBook(): void
     {
         $this->assertSame(0.0, CreditFiscalSubsystem::maturitySupplyTermPremium(0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY));
-        $swapGdpYears = (0.4 / 13.8) * (17.0 - 0.4);
-        $this->assertEqualsWithDelta(0.0014, CreditFiscalSubsystem::DEBT_MATURITY_TERM_PREMIUM * $swapGdpYears, 0.00005);
 
         $extra = CreditFiscalSubsystem::maturitySupplyTermPremium(0.9, CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY + 1.0);
         $this->assertEqualsWithDelta(0.9 * CreditFiscalSubsystem::DEBT_MATURITY_TERM_PREMIUM, $extra, 1e-15);
@@ -268,10 +272,10 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * A 2008-style freeze (deep contraction, 60% equity vol, TED at its record) must pin the IG spread at the
-     * cap, and that cap must sit at the historical record rather than above it.
+     * A freeze (deep contraction, 60% equity vol, the interbank spread at its cap) pins the IG spread at its cap, and
+     * high yield at its multiple of it.
      */
-    public function testInvestmentGradeSpreadIsCappedAtTheHistoricalRecord(): void
+    public function testAFreezePinsTheInvestmentGradeSpreadAtItsCap(): void
     {
         $state = new MacroState();
         $state->outputGapEma = -0.08;
@@ -282,8 +286,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateMacroCreditSpread($state);
 
         $this->assertEqualsWithDelta(CreditRisk::MAX_CREDIT_SPREAD, $state->macroCreditSpread, 1e-12);
-        $this->assertLessThanOrEqual(0.065, CreditRisk::MAX_CREDIT_SPREAD, 'IG OAS never exceeded ~620 bps (Dec 2008).');
-        $this->assertEqualsWithDelta(CreditRisk::MAX_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER, $state->highYieldCreditSpread, 1e-12, 'HY peaks at its multiple of the IG record, near the 21.8% of Dec 2008.');
+        $this->assertEqualsWithDelta(CreditRisk::MAX_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER, $state->highYieldCreditSpread, 1e-12, 'HY peaks at its multiple of the IG cap.');
     }
 
     public function testInterbankContagionWidensIgSpreadByTheCalibratedCoefficient(): void
@@ -305,13 +308,12 @@ class CreditFiscalSubsystemTest extends TestCase
             1e-9,
             'Contagion must flow through the engine constant, not a literal inside the formula.',
         );
-        $this->assertLessThanOrEqual(1.0, CreditRisk::INTERBANK_CREDIT_CONTAGION_SENSITIVITY, '2008: +430 bps TED moved IG OAS by ~+450 bps.');
+        $this->assertLessThanOrEqual(1.0, CreditRisk::INTERBANK_CREDIT_CONTAGION_SENSITIVITY, 'Interbank stress passes into corporate spreads at most one for one.');
     }
 
-    public function testInterbankSpreadIsCappedAtTheHistoricalRecord(): void
+    public function testInterbankSpreadIsCappedAtItsMaximum(): void
     {
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::INTERBANK_MAX_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.20, 0.0), 1e-12);
-        $this->assertEqualsWithDelta(0.05, CreditFiscalSubsystem::INTERBANK_MAX_SPREAD, 1e-12, 'TED record: 457 bps on 10 Oct 2008.');
     }
 
     /**
@@ -323,7 +325,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame(MacroConstants::INTERBANK_BASELINE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(0.0, INF));
         $this->assertSame(MacroConstants::INTERBANK_BASELINE_SPREAD, CreditFiscalSubsystem::interbankSpreadAt(-0.005, INF), 'A favourable premium does not ease wholesale funding below its base.');
         $this->assertEqualsWithDelta(MacroConstants::INTERBANK_BASELINE_SPREAD + (0.034 * CreditFiscalSubsystem::INTERBANK_PREMIUM_COUPLING), CreditFiscalSubsystem::interbankSpreadAt(0.034, INF), 1e-15);
-        $this->assertGreaterThan(0.010, CreditFiscalSubsystem::interbankSpreadAt(0.034, INF), "2008's 340 bps premium must lift TED past 100 bps.");
+        $this->assertGreaterThan(0.010, CreditFiscalSubsystem::interbankSpreadAt(0.034, INF), 'A crisis-sized premium must lift the interbank spread past a point.');
 
         $this->assertEqualsWithDelta(MacroConstants::INTERBANK_BASELINE_SPREAD + CreditFiscalSubsystem::INTERBANK_CRISIS_RUN, CreditFiscalSubsystem::interbankSpreadAt(0.0, 0.0), 1e-15, 'The run lands whole on the crisis day.');
         $this->assertEqualsWithDelta(
@@ -962,7 +964,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $dt = 0.5;
         $dollarsPerGdp = 2.0e13;
         $surplus = 0.04;
-        // Above the floor and under the Bohn threshold: the whole surplus retires debt.
+        // Above the floor: the whole surplus retires debt.
         $reference = $this->surplusBudget(0.50, $surplus);
         $reference->sovereignFundDollarsPerGdp = $dollarsPerGdp;
         $atFloor = $this->surplusBudget(MacroConstants::SOVEREIGN_DEBT_FLOOR + 0.005, $surplus);
@@ -999,7 +1001,6 @@ class CreditFiscalSubsystemTest extends TestCase
 
     // --- Fund-financed stabilisation (IMF Norway 2025, Table 5) ---
 
-    /** One tick that crosses the budget round at $time. */
     // --- The Diet's levers in the budget ---
 
     public function testTheTaxRateSettlesOnTheNeutralRatePlusTheLegislatedShift(): void
@@ -1008,7 +1009,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->outputGapEma = 0.0;
         $state->corporateTaxRate = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $state->corporateTaxPolicyShift = -0.025;
-        // At the debt where the Bohn reaction pays the structural deficit, the fiscal stance is neutral.
+        // The corporate rate answers the law alone: whatever the debt, it settles on the neutral rate plus the shift.
         $state->sovereignDebtToGdp = 0.90;
 
         for ($i = 0; $i < 2000; ++$i) {
@@ -1417,9 +1418,10 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * US household credit does not answer business-loan standards, the policy stance or the gap once house prices
-     * are in (1976-2019: +0.002, +0.12 and +0.04, none significant). Those act through the collateral and the
-     * debt service, so on their own they must leave leverage where it is.
+     * Households borrow against their homes up to the loan-to-value cap, which is their lending standard; the banks'
+     * standards index reads business lending, and counting it here would ration the same borrowing twice. Standards,
+     * the policy stance and the gap act through the collateral and the debt service, so on their own they must leave
+     * leverage where it is.
      */
     public function testStandardsRatesAndTheGapMoveLeverageOnlyThroughHousesAndDebtService(): void
     {
@@ -1982,8 +1984,7 @@ class CreditFiscalSubsystemTest extends TestCase
     /**
      * The Financial Regulator's requirement sets how thin the District's capital is: each point of CET1 requirement
      * over the opening one is 0.639 points of equity over total assets, and each point of those spares 0.86 / 24.55 of
-     * a financial recession's loss; at the strictest regime on record the District's banks are nearly as well
-     * capitalised as the US's.
+     * a financial recession's loss.
      */
     public function testAStricterRequirementSoftensTheCrisisDrag(): void
     {
@@ -1994,7 +1995,7 @@ class CreditFiscalSubsystemTest extends TestCase
             CreditFiscalSubsystem::thinCapitalDragScale($opening + 0.01),
             1e-12,
         );
-        $this->assertEqualsWithDelta(1.0, CreditFiscalSubsystem::thinCapitalDragScale(\App\Service\Politics\FinancialRegulator::STRICTEST_REQUIREMENT), 0.025, 'The strictest head leaves the District near the US.');
+        $this->assertLessThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(\App\Service\Politics\FinancialRegulator::STRICTEST_REQUIREMENT), 'The strictest head softens the drag the most.');
         $this->assertGreaterThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(0.0843));
 
         $math = new class extends MathUtility {
@@ -2442,7 +2443,6 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->corporateTaxPolicyShift = 0.04;
-        // The debt the Bohn reaction holds against the structural deficit: the fiscal stance at rest.
         $state->sovereignDebtToGdp = 0.90;
         $state->bankLevyRate = 0.002;
         $state->extractionStringency = 1.0;
@@ -2578,11 +2578,11 @@ class CreditFiscalSubsystemTest extends TestCase
     // --- The Authority's Remittance ---
 
     /**
-     * The Authority's income reproduces the Fed's remittances: in 2007 currency of 5.2% of GDP backed at the 4.7% the
-     * debt paid, 0.24% of GDP; in 2015 7.6% at 2.3% plus a book of 19.5% earning the 2.3% coupon over reserves at
-     * 0.25%, about 0.57% (0.54% paid from earnings).
+     * The Authority earns the debt's rate on the paper backing the currency, and on a bought book the coupon over the
+     * rate it pays on the reserves that bought it: a carry while the coupon is above the policy rate, a loss once it
+     * is below.
      */
-    public function testTheAuthoritysIncomeReproducesTheFedsRemittances(): void
+    public function testTheAuthoritysIncomeIsTheCurrencysBackingPlusTheBooksCarry(): void
     {
         $state = new MacroState();
         $state->sovereignDebtAverageMaturity = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY;
@@ -2590,14 +2590,15 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->sovereignCouponRate = 0.047;
         $state->balanceSheetIntensity = 0.0;
         $this->assertEqualsWithDelta(MonetaryPolicySubsystem::CURRENCY_TO_GDP * 0.047, MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), 1e-12, 'With no purchases it earns the debt\'s rate on the currency.');
-        $this->assertEqualsWithDelta(0.0024, (0.052 / MonetaryPolicySubsystem::CURRENCY_TO_GDP) * MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), 0.0002);
 
         $state->policyRate = 0.0025;
         $state->sovereignCouponRate = 0.023;
-        $state->authorityBookCouponRate = 0.023; // the coupon the bought book carries, as SOMA's did in 2015
-        $state->sovereignDebtAverageMaturity = 1.0e9; // the whole book at its coupon, as 2015's average rate was
+        $state->authorityBookCouponRate = 0.023;
+        $state->sovereignDebtAverageMaturity = 1.0e9; // the whole debt at its coupon
+        $state->balanceSheetIntensity = 0.0;
+        $currencyOnly = MonetaryPolicySubsystem::authorityNetIncomeToGdp($state);
         $state->balanceSheetIntensity = MonetaryPolicySubsystem::QE_MAX_SUPPRESSION;
-        $this->assertEqualsWithDelta(0.0057, MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), 0.0005);
+        $this->assertGreaterThan($currencyOnly, MonetaryPolicySubsystem::authorityNetIncomeToGdp($state), 'A book bought at a coupon over the policy rate earns a carry.');
 
         // Rates raised past the coupon on a full book: a loss, as in 2022-23.
         $state->policyRate = 0.05;

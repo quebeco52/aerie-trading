@@ -29,8 +29,8 @@ class LaborMarketSubsystemTest extends TestCase
     }
 
     /**
-     * Unemployment settles on Okun's law against the WHOLE gap, the part a productivity gain opens included: US
-     * unemployment falls 0.37pp ten quarters after a 1% Fernald TFP gain, as Okun on the CBO gap predicts.
+     * Unemployment settles on Okun's law against the WHOLE published gap, the part a productivity gain opens
+     * included: hours follow output, whatever opened the gap.
      */
     public function testUnemploymentSettlesOnOkunsLawAgainstTheWholeGap(): void
     {

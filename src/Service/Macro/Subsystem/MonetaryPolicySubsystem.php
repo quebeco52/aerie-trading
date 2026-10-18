@@ -343,14 +343,18 @@ class MonetaryPolicySubsystem
      * gap below zero within ten quarters. With the forecast horizon equal to the EMA horizon, the total gap's
      * level-plus-trend forecast less today's supply part is exactly the demand gap's own forecast.
      *
+     * Inventory investment is seen through the same way: a restocking or a sell-down is over before a rate move
+     * reaches spending, so leaning on it only tightens into the bust that follows (the rule answers final sales, as
+     * Furman's 2015 "core GDP" reads the economy).
+     *
      * @param MacroState $state Current macroeconomic state.
-     * @return float Demand-driven output gap projected TAYLOR_GAP_FORECAST_YEARS ahead.
+     * @return float Demand-driven output gap, less inventory investment, projected TAYLOR_GAP_FORECAST_YEARS ahead.
      */
     private function cyclicalGapForecast(MacroState $state): float
     {
         $openingGap = MacroFieldRegistry::defaults()['outputGapEma'];
         if ($state->outputGapEma === $openingGap && $state->outputGap !== $openingGap) {
-            return $state->outputGap - $state->productivitySupplyGap;
+            return $state->outputGap - $state->productivitySupplyGap - $state->inventoryInvestmentGap;
         }
 
         $trend = ($state->outputGap - $state->outputGapEma) / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS;
@@ -358,7 +362,8 @@ class MonetaryPolicySubsystem
 
         return $state->outputGapEma
             + max(-self::TAYLOR_GAP_FORECAST_CAP, min(self::TAYLOR_GAP_FORECAST_CAP, $projection))
-            - $state->productivitySupplyGap;
+            - $state->productivitySupplyGap
+            - $state->inventoryInvestmentGap;
     }
 
     /**
@@ -411,8 +416,9 @@ class MonetaryPolicySubsystem
                 'inflationTarget' => $targetInflation * (self::TAYLOR_INFLATION_CORE_WEIGHT + self::TAYLOR_INFLATION_ANCHOR_WEIGHT),
                 'coreInflationGap' => $inflationResponse * self::TAYLOR_INFLATION_CORE_WEIGHT * ($this->realizedCoreInflation($state, $targetInflation) - $targetInflation),
                 'expectationsGap' => $inflationResponse * self::TAYLOR_INFLATION_ANCHOR_WEIGHT * ($state->tipsBreakeven - $targetInflation),
-                'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * ($cyclicalGap + $state->productivitySupplyGap),
+                'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * ($cyclicalGap + $state->productivitySupplyGap + $state->inventoryInvestmentGap),
                 'productivitySeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->productivitySupplyGap,
+                'inventoriesSeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->inventoryInvestmentGap,
                 'longRateOffset' => -$longRateOffset,
                 'committeeMajority' => $committee,
             ], $target, $dt);

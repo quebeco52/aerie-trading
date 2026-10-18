@@ -126,13 +126,14 @@ class MacroDiagnosticsClosureTest extends TestCase
         }
     }
 
-    /** The rule's gap response is reported as the whole projected gap and the productivity part it sees through. */
-    public function testTheRuleReportsTheProductivityPartItSeesThrough(): void
+    /** The rule's gap response is reported as the whole projected gap and the parts it sees through. */
+    public function testTheRuleReportsThePartsItSeesThrough(): void
     {
         foreach (self::$quarters as $index => $quarter) {
             $terms = $quarter['diagnostics']['policy']['terms'];
             $this->assertArrayHasKey('outputGap', $terms, "Quarter {$index}");
             $this->assertArrayHasKey('productivitySeenThrough', $terms, "Quarter {$index}");
+            $this->assertArrayHasKey('inventoriesSeenThrough', $terms, "Quarter {$index}");
             $this->assertArrayHasKey('productivitySupplyGap', $quarter['diagnostics']['averages'], "Quarter {$index}");
         }
     }

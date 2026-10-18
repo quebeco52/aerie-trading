@@ -212,7 +212,7 @@ class MacroStateHydrationTest extends TestCase
     {
         $payload = [
             'output_gap' => 0.02, 'output_gap_ema' => 0.018, 'finance_output_gap' => 0.012, 'domestic_demand_gap_ema' => 0.01,
-            'finance_market_trend' => 1.4, 'finance_market_trend_slope' => 0.005,
+            'inventory_investment_gap' => 0.0, 'finance_market_trend' => 1.4, 'finance_market_trend_slope' => 0.005,
             'credit_to_gdp_gap' => 0.05, 'credit_to_gdp_trend' => 1.0, 'equity_wealth_ratio' => 1.6,
         ];
         $credit = MacroAggregateSubsystem::financeOutputGapAt(log(1.05));
@@ -233,6 +233,43 @@ class MacroStateHydrationTest extends TestCase
         $saved['credit_to_gdp_gap'] = 0.08;
         $this->assertSame($state->financeOutputGap, MacroState::fromArray($saved)->financeOutputGap, 'A payload under the new keys is carried, not rebuilt.');
         $this->assertSame($state->domesticDemandGapEma, MacroState::fromArray($saved)->domesticDemandGapEma);
+    }
+
+    /**
+     * A payload predating inventory investment as a level part opens it at the flow its stock is already making, taken
+     * out of final sales and their smoothed reading alike: GDP does not move and no sales surprise opens.
+     */
+    public function testAPayloadPredatingInventoryInvestmentLoadsWithoutMovingGdp(): void
+    {
+        $payload = ['output_gap' => -0.02, 'output_gap_ema' => -0.015, 'domestic_demand_gap_ema' => -0.02, 'inventory_stock_gap' => 0.05];
+        $sales = -0.02 / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT;
+        $miss = -0.02 - $sales;
+        $flow = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * ((MacroAggregateSubsystem::INVENTORY_SURPRISE_SENSITIVITY * $miss)
+            - (MacroAggregateSubsystem::INVENTORY_ADJUSTMENT_SPEED * MacroAggregateSubsystem::INVENTORY_TO_ANNUAL_SALES * 0.05));
+
+        $state = MacroState::fromArray($payload);
+        $this->assertSame(-0.02, $state->outputGap, 'GDP is what it was.');
+        $this->assertEqualsWithDelta($flow, $state->inventoryInvestmentGap, 1e-15);
+        $this->assertLessThan(0.0, $state->inventoryInvestmentGap, 'An overhang being worked off is investment below normal.');
+        $this->assertEqualsWithDelta($miss, $state->domesticDemandGapEma - MacroAggregateSubsystem::domesticDemandGap($state), 1e-15, 'No sales surprise opens.');
+        $this->assertEqualsWithDelta($state->inventoryInvestmentGap, MacroStateDTO::fromArray($payload)->inventoryInvestmentGap, 1e-15, 'The snapshot reader opens it the same way.');
+
+        $saved = $state->toArray();
+        $saved['inventory_stock_gap'] = 0.0;
+        $this->assertSame($state->inventoryInvestmentGap, MacroState::fromArray($saved)->inventoryInvestmentGap, 'A carried level is not rebuilt.');
+    }
+
+    /**
+     * A payload older still, with no smoothed domestic reading either: both open, and the miss expected sales stand at
+     * is the smoothed gap's own, over domestic demand's weight.
+     */
+    public function testAPayloadPredatingBothTheSalesReadingAndInventoryInvestmentLoadsWithoutMovingGdp(): void
+    {
+        $state = MacroState::fromArray(['output_gap' => -0.02, 'output_gap_ema' => -0.015, 'inventory_stock_gap' => 0.05]);
+
+        $this->assertSame(-0.02, $state->outputGap, 'GDP is what it was.');
+        $this->assertLessThan(0.0, $state->inventoryInvestmentGap);
+        $this->assertEqualsWithDelta(0.005 / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT, $state->domesticDemandGapEma - MacroAggregateSubsystem::domesticDemandGap($state), 1e-15);
     }
 
     /**

@@ -52,7 +52,7 @@ class GovernmentPolicyTest extends TestCase
     public function testTheMortgageCapGoesIntoForceAsHandedOver(): void
     {
         $state = new MacroState();
-        $this->assertNull($state->mortgageLtvCap, 'The District opens with no cap, as the US runs none.');
+        $this->assertNull($state->mortgageLtvCap, 'The District opens with no cap until a regulator sets one.');
 
         $this->enactPolicyDto($state, new GovernmentPolicyDTO(
             publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,

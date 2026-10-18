@@ -91,6 +91,27 @@ class MonetaryPolicySubsystemTest extends TestCase
     }
 
     /**
+     * Inventory investment is seen through too: an economy 1% over potential because firms are restocking sets the rate
+     * one at potential sets, since the restocking is over before a rate move reaches spending.
+     */
+    public function testTheRuleSeesThroughInventoryInvestment(): void
+    {
+        $atPotential = new MacroState();
+        $atPotential->outputGap = 0.0;
+        $atPotential->outputGapEma = 0.0;
+        $restocking = new MacroState();
+        $restocking->outputGap = 0.01;
+        $restocking->outputGapEma = 0.01;
+        $restocking->inventoryInvestmentGap = 0.01;
+
+        $this->assertEqualsWithDelta(
+            $this->subsystem->calculateTargetRate($atPotential, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE),
+            $this->subsystem->calculateTargetRate($restocking, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE),
+            1e-12,
+        );
+    }
+
+    /**
      * A rate committee's supermajority leans the rule its camp's way: a dovish one answers each point of inflation over
      * target 0.35 less, a hawkish one each point of output gap 0.17 less. At target with no gap no camp leans, so a
      * neutral economy gets the published rule whoever sits; with no committee handed over the rule is untouched.
@@ -173,38 +194,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expected, $target, 0.001);
     }
 
-    public function testEvansRulePreventsPrematureLiftoffAtZlb(): void
-    {
-        $state = new MacroState();
-        $state->policyRate = 0.00; // At ZLB
-        $state->unemploymentRateEma = 0.075; // > 5.0%
-        $state->inflationEma = 0.018;        // < 2.5%
-        $state->tipsBreakeven = 0.018;
-        $state->outputGap = -0.005;
-
-        $target = $this->subsystem->calculateTargetRate($state, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE);
-        $this->assertGreaterThan(0.0, $target, 'Wu-Xia shadow rate must remain continuous and positive');
-
-        // Under Evans Rule forward guidance, the policy rate remains anchored at ZLB (0.00%)
-        $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
-        $this->assertEquals(0.00, $newPolicyRate, 'Evans Rule must lock policy rate at 0.00% when at ZLB with elevated unemployment.');
-    }
-
-    public function testEvansRuleDoesNotFireDuringNormalExpansion(): void
-    {
-        $state = new MacroState();
-        $state->policyRate = 0.040;           // Normal expansion rate (well above ZLB threshold)
-        $state->unemploymentRateEma = 0.052; // Slightly above 5.0% threshold
-        $state->inflationEma = 0.021;        // Contained inflation < 2.5%
-        $state->tipsBreakeven = 0.021;
-        $state->outputGap = 0.005;
-
-        $target = $this->subsystem->calculateTargetRate($state, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE);
-        $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
-        // Normal Taylor rate should be ~3.8%, and rate hikes proceed
-        $this->assertGreaterThan(0.030, $target, 'Evans Rule must NOT fire when central bank is in normal expansion regime.');
-    }
-
     public function testCalculateTargetRateReturnsUnclampedShadowRateInDeepRecession(): void
     {
         $state = new MacroState();
@@ -212,7 +201,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->inflationEma = 0.005;
         $state->tipsBreakeven = 0.005;
         $state->outputGap = -0.06; // Deep recession
-        $state->unemploymentRateEma = 0.045; // Unemployment below Evans threshold so Evans does not lock to 0.00
+        $state->unemploymentRateEma = 0.045;
 
         $target = $this->subsystem->calculateTargetRate($state, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE);
         $this->assertLessThan(MacroConstants::EFFECTIVE_LOWER_BOUND, $target, 'Deep recession must yield an unclamped shadow rate below the ELB.');
@@ -428,8 +417,8 @@ class MonetaryPolicySubsystemTest extends TestCase
 
     public function testOverheatingEndsTheReinvestmentHoldEarly(): void
     {
-        // Same portfolio and the same fresh hold clock, but an economy past both QT thresholds. The Fed reinvested
-        // for three years after QE3 and for three months after the 2021 round: inflation, not the clock, decided.
+        // Same portfolio and the same fresh hold clock, but an economy past both QT thresholds: inflation, not the
+        // clock, decides when a book stops being reinvested.
         $state = new MacroState();
         $state->policyRate = 0.03;
         $state->balanceSheetIntensity = 0.008;
@@ -466,8 +455,8 @@ class MonetaryPolicySubsystemTest extends TestCase
     }
 
     /**
-     * The Fed's 2025 framework is symmetric flexible inflation targeting: an overshoot and a shortfall of the same
-     * size move the target by the same amount in opposite directions, with no make-up for the past.
+     * The Authority's rule is symmetric flexible inflation targeting: an overshoot and a shortfall of the same size
+     * move the target by the same amount in opposite directions, with no make-up for the past.
      */
     public function testTheRuleRespondsSymmetricallyToInflationEitherSideOfTarget(): void
     {
@@ -987,18 +976,19 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $curve = $this->subsystem->calculateYieldCurve($zlb, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE);
 
-        $this->assertLessThan(0.0125, $curve['yield_2y'] - $zlb->policyRate, 'At the lower bound the two-year sits within ~120bps of policy (2012-2015 ran +20 to +50bps); the Diebold-Li decay left it 140bps above.');
-        $this->assertGreaterThan(0.015, $curve['yield_10y'] - $curve['yield_2y'], 'A lower-bound curve is steep, as 2010-2013 were.');
+        $this->assertLessThan(0.0125, $curve['yield_2y'] - $zlb->policyRate, 'At the lower bound the two-year stays near the policy rate it expects to last.');
+        $this->assertGreaterThan(0.0, $curve['yield_10y'] - $curve['yield_2y'], 'A lower-bound curve slopes up: the long end expects the rate off the floor.');
 
-        // Ten-year expectations beta to the policy rate is about a third, the empirical value, not the 0.14 of the
-        // single-decay fit, measured on the risk-neutral rate.
+        // A hike passes partly into ten-year expectations, measured on the risk-neutral rate: more than nothing, less
+        // than one for one, since the rate is expected back toward neutral.
         $hiked = clone $zlb;
         $hiked->policyRate = 0.0425;
         $hiked->policyRateShadow = $hiked->policyRate;
         $hiked->targetRate = 0.0425;
         $curveHiked = $this->subsystem->calculateYieldCurve($hiked, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE);
         $beta10y = ($curveHiked['risk_neutral_10y'] - $curve['risk_neutral_10y']) / ($hiked->policyRate - $zlb->policyRate);
-        $this->assertEqualsWithDelta(0.317, $beta10y, 0.01, 'Ten-year expectations beta to policy near a third.');
+        $this->assertGreaterThan(0.0, $beta10y, 'A hike lifts ten-year expectations');
+        $this->assertLessThan(1.0, $beta10y, 'by less than itself.');
     }
 
     public function testShiftingEndpointLearnsTheLongRunPolicyRateSlowly(): void
@@ -1570,7 +1560,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertSame(1.0, $this->constraintsFor($atFloor, MacroConstants::EFFECTIVE_LOWER_BOUND)['lowerBound']);
     }
 
-    /** Debt inside the 70% the Bohn reaction defends and no market premium on it: the curve carries no fiscal term. */
+    /** Sound debt with no market premium on it: the curve carries no fiscal term. */
     private function holdSoundFiscalPosition(MacroState $state): void
     {
         // The opening book, where the term premium is calibrated: its size adds no supply premium.

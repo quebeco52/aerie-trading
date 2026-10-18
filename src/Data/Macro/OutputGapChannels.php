@@ -92,7 +92,7 @@ final class OutputGapChannels
                 'automaticStabiliser',
                 'cubicConstraint',
                 'capitalDrag',
-                'inventoryDrag',
+                'inventoryInvestment',
                 'policyUncertaintyDrag',
             ],
         ],

@@ -269,13 +269,15 @@ class MacroAggregateSubsystem
      */
     public const KALDOR_CAPACITY = 600.0;
     /**
-     * Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds collateral constraints (Guerrieri
-     * & Iacoviello 2017), beside the wealth and trade routes the engine carries separately.
+     * Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds the collateral firms and
+     * homebuyers borrow against (Guerrieri & Iacoviello 2017), beside the wealth, trade and debt-service routes the
+     * engine carries separately.
      */
     public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.2505;
     /**
-     * Demand per unit of an ACCOMMODATIVE stance, under half the restrictive slope: easing pushes on a string (Tenreyro
-     * & Thwaites 2016; Barnichon & Matthes 2018).
+     * Demand per unit of an ACCOMMODATIVE stance, under half the restrictive slope: easing pushes on a string, since a
+     * cut does not make a firm in a slump invest. The District's floating-rate loans pass cuts into household cash flow
+     * through the debt-service channel, which is symmetric.
      */
     public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.5505;
 
@@ -396,8 +398,8 @@ class MacroAggregateSubsystem
     public const DEMAND_DISASTER_CAP = 0.175;
 
     /**
-     * Stochastic micro-diffusion volatility of the output gap: realistic quarterly variance without breaking cycle
-     * phase.
+     * Stochastic micro-diffusion volatility of final sales, which integrates into the gap; the quarter-to-quarter noise
+     * in GDP comes from production over plan (INVENTORY_COST_SHOCK_SD).
      */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.0025;
 
@@ -423,15 +425,20 @@ class MacroAggregateSubsystem
      * ratio by that share over this.
      */
     public const INVENTORY_TO_ANNUAL_SALES = 0.15;
-    /**
-     * Demand drag per unit of inventory-to-sales deviation: the coefficient is the inventory share of annual GDP, so a
-     * 16% overhang costs 2.4pp over a year (Blinder & Maccini 1991).
-     */
-    public const METZLER_INVENTORY_DRAG = self::INVENTORY_TO_ANNUAL_SALES;
-    /** Annual adjustment speed of firm inventory target replenishment. */
+    /** Speed (a year) at which firms work an overhang back to their target stock: half of it goes in 0.87 years. */
     public const INVENTORY_ADJUSTMENT_SPEED = 0.80;
-    /** Sensitivity of involuntary inventory accumulation to unexpected output gap deceleration. */
+    /**
+     * Share of a miss on expected sales that goes into stock before production adjusts: 0.6, so on a quarter's
+     * expectation output trails final sales by about 0.15 years.
+     */
     public const INVENTORY_SURPRISE_SENSITIVITY = 0.60;
+    /** Mean reversion (a year) of production run ahead of or behind plan: a cost window lasts about half a year. */
+    public const INVENTORY_COST_SHOCK_REVERSION = 2.0;
+    /**
+     * Stationary sd of production over plan, a share of a year's domestic sales (Ramey & West 1999 cost shocks): 0.3%,
+     * so inventory investment moves about 0.3% of GDP, under the US's 0.4% as a services centre holds less stock.
+     */
+    public const INVENTORY_COST_SHOCK_SD = 0.003;
 
     // --- Effective Corporate Borrowing Cost Weights ---
     /**
@@ -715,8 +722,8 @@ class MacroAggregateSubsystem
     /**
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
-     * Solves continuous domestic demand dynamics, weighted by its share of GDP, to which the productivity supply part,
-     * net exports and the banks' credit-driven output are added as levels:
+     * Solves continuous domestic final sales dynamics, weighted by their share of GDP, to which the productivity supply
+     * part, net exports, the banks' credit-driven output and inventory investment are added as levels:
      *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag - CreditPremium + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect + NewBorrowing - DebtService - CrisisDeleveraging + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
@@ -731,9 +738,9 @@ class MacroAggregateSubsystem
     public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier): float
     {
         // The gap is GDP by industry: domestic demand on its share of the economy, plus, as levels each on its own
-        // measured path, the supply part a productivity shock opens (absorbProductivityShocks), net exports, and the
-        // banks' credit-driven output. The demand equation below runs on domestic demand only: momentum,
-        // stabilisers and drags answer spending.
+        // measured path, the supply part a productivity shock opens (absorbProductivityShocks), net exports, the
+        // banks' credit-driven output and inventory investment. The demand equation below runs on domestic final
+        // sales only: momentum, stabilisers and drags answer spending.
         $openingGap = $state->outputGap;
         $y = self::domesticDemandGap($state);
         $supplyGap = $state->tfpOutputStage2 - $state->tfpPotentialAbsorbed;
@@ -752,6 +759,7 @@ class MacroAggregateSubsystem
         // component as separate innovations; one draw serving both correlates them at unity.
         $demandZ = $this->mathUtility->generateStandardNormal();
         $outZ = $this->mathUtility->generateStandardNormal();
+        $inventoryZ = $this->mathUtility->generateStandardNormal();
 
         // Curdia & Woodford (2010) ex-ante real borrowing cost, the 5-year leg deflated by the market's breakeven.
         $expectedInflation5y = $state->tipsBreakeven;
@@ -834,17 +842,23 @@ class MacroAggregateSubsystem
         $policyUncertaintyDrag = self::KALDOR_EPU_DRAG * max(0.0, log(max(1.0, $state->policyUncertaintyIndexEma) / MacroConstants::EPU_BASELINE));
 
         // Metzler (1941) & Blinder (1982) inventory investment cycle step, on domestic demand against its own average:
-        // like with like, so the level parts riding beside the demand equation set off no surprise.
+        // like with like, so the level parts riding beside the demand equation set off no surprise. Inventory
+        // investment is the stock's change over the step, a level part of GDP beside final sales.
+        $state->inventoryCostShock = StochasticProcesses::calculateOrnsteinUhlenbeckStep($state->inventoryCostShock, self::INVENTORY_COST_SHOCK_REVERSION, self::INVENTORY_COST_SHOCK_SD, $dt, $inventoryZ);
+        $openingStock = $state->inventoryStockGap;
         $state->inventoryStockGap = FirmEconomics::calculateInventoryCycleStep(
-            currentInventoryGap: $state->inventoryStockGap,
+            currentInventoryGap: $openingStock,
             outputGap: $y,
             outputGapEma: $state->domesticDemandGapEma,
             speed: self::INVENTORY_ADJUSTMENT_SPEED,
             surpriseSens: self::INVENTORY_SURPRISE_SENSITIVITY,
             dt: $dt,
             inventoryToSales: self::INVENTORY_TO_ANNUAL_SALES,
+            productionShock: $state->inventoryCostShock,
         );
-        $inventoryDrag = self::METZLER_INVENTORY_DRAG * $state->inventoryStockGap;
+        $inventoryInvestment = self::inventoryInvestmentAt($state->inventoryStockGap - $openingStock, $dt);
+        $inventoryChange = $inventoryInvestment - $state->inventoryInvestmentGap;
+        $state->inventoryInvestmentGap = $inventoryInvestment;
 
         // Smets & Wouters (2007) persistent AR(1) aggregate demand disturbance.
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
@@ -894,7 +908,6 @@ class MacroAggregateSubsystem
             'fundDraw' => $fundDraw,
             'automaticStabiliser' => $automaticStabiliser,
             'capitalDrag' => -$capitalDrag,
-            'inventoryDrag' => -$inventoryDrag,
             'housingWealthEffect' => $housingWealthEffect,
             'equityWealthEffect' => $equityWealthEffect,
             'energySupplyDrag' => -$energySupplyDrag,
@@ -921,6 +934,8 @@ class MacroAggregateSubsystem
             // ESA 2010 deflated balances and deal fees: the banks produce as their loans do, the deal-makers as the
             // world's deals do.
             'financeOutput' => $financeChange / $dt,
+            // Blinder & Maccini (1991): output is final sales plus the change in inventories.
+            'inventoryInvestment' => $inventoryChange / $dt,
         ];
 
         $drift = array_sum($contributions) * $dt;
@@ -1053,28 +1068,57 @@ class MacroAggregateSubsystem
 
     /**
      * The domestic-demand part of the gap, at domestic demand's own scale: the gap less the level parts that ride
-     * beside the demand equation (supply, net exports, the banks' credit cycle), over domestic demand's weight.
+     * beside the demand equation (supply, net exports, the banks' credit cycle, inventory investment), over domestic
+     * demand's weight.
      *
      * @param MacroState $state Current macroeconomic state.
      * @return float Domestic demand gap (fraction).
      */
     public static function domesticDemandGap(MacroState $state): float
     {
-        return self::domesticDemandGapAt($state->outputGap, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap);
+        return self::domesticDemandGapAt($state->outputGap, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap, $state->inventoryInvestmentGap);
     }
 
     /**
-     * The domestic-demand part of a gap made of the given level parts, at domestic demand's own scale.
+     * The domestic-demand part of a gap made of the given level parts, at domestic demand's own scale: final sales,
+     * once inventory investment is out of it.
      *
-     * @param float $outputGap        The whole output gap (fraction).
-     * @param float $supplyGap        The productivity supply gap riding beside demand.
-     * @param float $netExportGap     Net exports away from the structural balance (share of GDP).
-     * @param float $financeOutputGap The banks' credit-driven output (share of GDP).
+     * @param float $outputGap              The whole output gap (fraction).
+     * @param float $supplyGap              The productivity supply gap riding beside demand.
+     * @param float $netExportGap           Net exports away from the structural balance (share of GDP).
+     * @param float $financeOutputGap       The banks' credit-driven output (share of GDP).
+     * @param float $inventoryInvestmentGap Inventory investment, a share of GDP a year.
      * @return float Domestic demand gap (fraction).
      */
-    public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap): float
+    public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap, float $inventoryInvestmentGap): float
     {
-        return ($outputGap - $supplyGap - $netExportGap - $financeOutputGap) / self::DOMESTIC_GAP_WEIGHT;
+        return ($outputGap - $supplyGap - $netExportGap - $financeOutputGap - $inventoryInvestmentGap) / self::DOMESTIC_GAP_WEIGHT;
+    }
+
+    /**
+     * Inventory investment over a step, a share of GDP a year: the change in the inventory-to-sales overhang with the
+     * target held, times the ratio, is the stock built out of a year's domestic sales, which reach GDP on domestic
+     * demand's weight. The target's own moves shift the overhang, not the stock, and are no investment.
+     *
+     * @param float $overhangChange Change in the inventory-to-sales overhang over the step, the target held.
+     * @param float $dt             Time step in years.
+     */
+    public static function inventoryInvestmentAt(float $overhangChange, float $dt): float
+    {
+        return self::DOMESTIC_GAP_WEIGHT * self::INVENTORY_TO_ANNUAL_SALES * $overhangChange / $dt;
+    }
+
+    /**
+     * Inventory investment the stock's motion implies with production on plan: the miss on expected sales going into
+     * stock less the overhang being worked off. A state predating inventory investment as a level part opens with it.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    public static function plannedInventoryInvestment(MacroState $state): float
+    {
+        $missFlow = self::INVENTORY_SURPRISE_SENSITIVITY * ($state->domesticDemandGapEma - self::domesticDemandGap($state));
+
+        return self::DOMESTIC_GAP_WEIGHT * ($missFlow - (self::INVENTORY_ADJUSTMENT_SPEED * self::INVENTORY_TO_ANNUAL_SALES * $state->inventoryStockGap));
     }
 
     /**
@@ -1555,7 +1599,11 @@ class MacroAggregateSubsystem
         foreach (self::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
             $state->$field = TimeSeries::calculateDistributedLag($state->$field, $state->outputGapEma, $dt, $lagYears);
         }
+        $expectedSales = $state->domesticDemandGapEma;
         $state->domesticDemandGapEma += $emaWeight * (self::domesticDemandGap($state) - $state->domesticDemandGapEma);
+        // Lovell (1961): the stock firms want follows expected sales. The stock held does not move with it, so the
+        // overhang takes the shift and is worked off as investment (calculateOutputGap()).
+        $state->inventoryStockGap -= $state->domesticDemandGapEma - $expectedSales;
         $state->policyRateEma += $emaWeight * ($state->policyRate - $state->policyRateEma);
         $state->inflationEma += $emaWeight * ($state->inflation - $state->inflationEma);
         $state->tipsBreakevenEma += $emaWeight * ($state->tipsBreakeven - $state->tipsBreakevenEma);

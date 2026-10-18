@@ -218,3 +218,67 @@ faster smoothing leaves gap acf4 flat and raises acf8/acf12 slightly; it trims H
 Arm A's gap (acf4 0.58, spell 12q) is US-like; the live path (acf4 0.74, spell 18q) is a tail draw (2/16 and 1/16 seeds
 at or above). HP AR1 0.91 and growth AR1 0.73 sit at or above the top of the 15-economy range in every arm.
 Caveats: TPY 360 vs the live 3600; supply-gap variance share 0.26 here vs 0.40 on the live path.
+
+## 2026-10-18 Inventory investment as a level part of GDP, with a production cost shock (A HEAD / B-E SD sweep)
+Question: does inventory investment as a level part of the gap (Δg/dt, replacing the inventoryDrag rate channel) plus
+an OU production cost shock (κ 2/yr) give plausible high-frequency GDP, and at what INVENTORY_COST_SHOCK_SD?
+Harness `InventoryHarnessTest.php` + `inv_run.sh` + `inv_analyse.py` (see RUN.md). A = HEAD d191ee10 (CB speed 1.4);
+B-E = working-tree src with SD 0 / 0.003 / 0.006 / 0.012. Live macro, whole board, POLITICS=1, TPY 360, 33 y,
+years 0-2 dropped (124 q). Stage 8 (all five arms, `inv_s8.out`), then 9-16 on A-D (`inv_s16.out`: recession call
+unclear at 8; E clearly out of range at 8). 72 runs, ~35 min wall. No blow-ups.
+
+    quantity (16 seeds; E at 8)   A      B      C      D      E(8)   C-A (se)        D-A (se)        US ref
+    g_ar1 (end of quarter)      0.671  0.796  0.661  0.412  0.075  -0.010 (0.019)  -0.259 (0.019)  0.37
+    pub_ar1 (quarter averages)  0.740  0.831  0.765  0.601  0.365  +0.025 (0.015)  -0.139 (0.015)
+    g_sd                        0.585  0.547  0.606  0.739  1.062  +0.021 (0.034)  +0.153 (0.032)  0.56
+    g_skew                     -0.83  -0.45  -0.48  -0.26  -0.20   +0.35 (0.18)    +0.57 (0.20)   -1.33
+    fs_g_ar1                    0.671  0.700  0.722  0.693  0.682  +0.051 (0.021)  +0.022 (0.016)  0.28
+    inv level sd (% GDP)        0      0.191  0.295  0.481  0.887                                  0.40
+    inv level AR1 / acf4        -      .72/-.16 .59/-.11 .51/-.10 .51/-.07                         0.65/0.15
+    inv contribution sd (pp)    0      0.140  0.264  0.472  0.875                                  0.36
+    inv contribution AR1        -      +0.22  -0.10  -0.18  -0.21                                  -0.25
+    inv share of growth var     0     -0.012  0.133  0.378  0.702                                  0.28
+    corr(fs growth, contrib)    -     -0.29  -0.14  -0.08  +0.04                                  -0.19
+    var(g)/var(fs growth)       1.000  0.915  1.083  1.545  3.72                                   >= 1
+    stock sd (%)                1.12   1.04   1.69   3.02   5.82
+    corr(stock, final-sales gap)-0.72 -0.77  -0.49  -0.31  -0.03
+    recessions / decade         1.33   1.35   1.37   1.71   2.30(8: A 1.05)  +0.04 (0.19)  +0.38 (0.22)
+    hp_ar1                      0.887  0.923  0.907  0.862  0.743  +0.020 (0.011)  -0.025 (0.012)
+    gap_acf4 / acf8             .62/.30 .58/.18 .64/.28 .51/.13 .42/.09
+
+Reading: B (level part alone) makes production smoother than sales (var ratio 0.92), raises growth AR1 (+0.13, t 7)
+and HP AR1; the stock buffers demand. C gives inventory moments a little below the US with var ratio > 1 and leaves
+growth AR1 and every cycle guard and the recession count at A's values. D gets growth AR1 to 0.41 only by inventory
+noise above the US (share 0.38, contribution sd 0.47) and +0.38 recessions/decade (t 1.8). Final-sales growth AR1
+~0.70 in every arm: the excess persistence is in final sales, not inventories. Symmetric shock dilutes growth skew.
+Caveats: TPY 360 (live 3600); point samples of inv at quarter end (not quarter averages).
+
+## 2026-10-18 Inventory accelerator step 2 (A step 1 / B accel + look-through / C no look-through / D mu 0.3 / E lambda 1.6)
+Question: does a target stock that follows expected sales, with the rule seeing through inventory investment, make
+inventories deepen recessions without breaking the cycle? Harness InventoryHarnessTest.php via inv2_run.sh (RUN.md),
+16 seeds x 33 years (first 2 dropped), TPY 360, POLITICS 1, SD 0.003 in all arms. Table: inv2_s16.out (stage 8:
+inv2_s8.out). Stopped at 16 (user cap); recession targets inside noise.
+
+| quantity | A | B | C | D | E | US | B-A (se) t |
+|---|---|---|---|---|---|---|---|
+| recession quarters (16 seeds) | 215 | 266 | 235 | 237 | 274 | | |
+| rec GDP growth | -0.073 | -0.129 | -0.013 | -0.038 | -0.005 | -0.36 | -0.056 (0.042) -1.3 |
+| rec final-sales growth | 0.037 | -0.021 | 0.099 | 0.031 | 0.134 | -0.07 | -0.058 (0.041) -1.4 |
+| rec inventory contribution | -0.108 | -0.104 | -0.109 | -0.066 | -0.135 | -0.29 | +0.003 (0.025) +0.1 |
+| pooled rec share sum ic/sum g | 1.57 | 0.79 | 1.70 | 1.57 | 3.56 | 0.8 | |
+| slope ic on fs_g same q | -0.068 | -0.045 | -0.041 | -0.004 | +0.023 | -0.04 | +0.022 (0.015) +1.5 |
+| slope ic on fs_g last q | 0.087 | 0.111 | 0.122 | 0.081 | 0.157 | +0.22 | +0.023 (0.010) +2.3 |
+| g skew (end) | -0.418 | -0.317 | -0.325 | -0.259 | -0.289 | -0.29 / -1.33 | +0.101 (0.141) +0.7 |
+| skew published | -0.408 | -0.321 | -0.316 | -0.243 | -0.297 | | +0.087 (0.147) +0.6 |
+| overhang sd pp | 1.64 | 2.67 | 2.27 | 1.97 | 1.48 | | +1.04 (0.15) +6.8 |
+| corr(overhang, dd gap) | -0.47 | -0.66 | -0.61 | -0.52 | -0.56 | | -0.19 (0.07) -2.6 |
+| corr(overhang, fs gap) | -0.33 | -0.41 | -0.42 | -0.35 | -0.36 | | -0.08 (0.08) -1.0 |
+| gap sd | 1.73 | 2.10 | 1.97 | 1.93 | 1.82 | | +0.37 (0.12) +3.0 |
+| gap acf8 | 0.13 | 0.26 | 0.30 | 0.21 | 0.19 | | +0.13 (0.05) +2.5 |
+| u sd | 0.99 | 1.26 | 1.21 | 1.12 | 1.04 | | +0.27 (0.09) +3.0 |
+| longest neg gap spell q | 28.3 | 32.5 | 43.2 | 33.8 | 32.9 | | +4.3 (3.8) +1.1 |
+
+C-B: longest negative spell +10.7 (3.5) t 3, infl sd -0.17 (0.05) t -3, overhang sd -0.41 (0.18); targets ~0.
+Reproduction: A vs the 10-18 arm C (runs/IC) on seeds 1-16: inventory rows equal within noise (rec_ic -0.011 (0.022),
+slopes +0.004/-0.001), but gap sd A 1.73 vs 2.12: HEAD d191ee10 raised CB_SMOOTHING_SPEED 0.65 -> 1.4 after that run.
+Caveats: recession = recessionDeclared; the model's recession GDP growth is near zero so the share ratio is unstable.

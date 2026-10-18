@@ -410,7 +410,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertSame(3, array_search(min(array_map($month, range(0, 11))), array_map($month, range(0, 11)), true));
     }
 
-    public function testTheHeatRateIsAsVolatileAndAsPersistentAsTheHubsAtTheQuarterFirmsBook(): void
+    public function testTheHeatRateHasTheSpreadAndPersistenceItsProcessGivesAtTheQuarterFirmsBook(): void
     {
         mt_srand(20260925);
         $state = new MacroState();
@@ -439,9 +439,16 @@ class CommodityLogisticsSubsystemTest extends TestCase
             $lagged += ($quarterly[$i] - $mean) * ($quarterly[$i - 1] - $mean);
         }
 
-        // Four-hub quarterly means of the de-seasonalised log heat rate, 2017-2025: sd 0.183, AR1 0.37.
-        $this->assertEqualsWithDelta(0.183, sqrt($variance), 0.03);
-        $this->assertEqualsWithDelta(0.37, $lagged / ($variance * $n), 0.12);
+        // A quarter's mean of the daily OU log heat rate: variance 2v/h^2 [h/k - (1 - e^-kh)/k^2] and lag-one
+        // covariance v/h^2 ((1 - e^-kh)/k)^2, v = sigma^2/2k its stationary variance.
+        $kappa = CommodityLogisticsSubsystem::POWER_HEAT_RATE_KAPPA;
+        $stationary = (CommodityLogisticsSubsystem::POWER_HEAT_RATE_SIGMA ** 2) / (2.0 * $kappa);
+        $h = 0.25;
+        $decayed = 1.0 - exp(-$kappa * $h);
+        $quarterVariance = (2.0 * $stationary / ($h * $h)) * (($h / $kappa) - ($decayed / ($kappa * $kappa)));
+        $quarterCovariance = ($stationary / ($h * $h)) * (($decayed / $kappa) ** 2);
+        $this->assertEqualsWithDelta(sqrt($quarterVariance), sqrt($variance), 0.03);
+        $this->assertEqualsWithDelta($quarterCovariance / $quarterVariance, $lagged / ($variance * $n), 0.12);
         $this->assertEqualsWithDelta(MacroConstants::WHOLESALE_POWER_BASELINE, array_sum($levels) / count($levels), 2.0, 'centred on the baseline, not its median');
     }
 

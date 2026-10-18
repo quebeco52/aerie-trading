@@ -209,20 +209,19 @@ class MacroEngineTest extends TestCase
     }
 
     /**
+     * Trend growth is productivity plus the labour force, and the labour force grows by its residents and the average
+     * party's newcomers.
+     */
+    public function testTrendGrowthIsProductivityPlusTheLabourForce(): void
+    {
+        $this->assertEqualsWithDelta(MacroConstants::NATURAL_LABOR_FORCE_GROWTH + MacroConstants::STRUCTURAL_NET_MIGRATION_RATE, MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, MacroConstants::TREND_REAL_GROWTH, 1e-15);
+    }
+
+    /**
      * A productivity level shock opens a supply gap but leaves r* alone: it moves potential, not its trend growth
      * (HLW's sigma_y*).
      */
-    /**
-     * Trend growth is the US's 1985-2019 potential: the labour force grows by its residents and the average party's
-     * newcomers.
-     */
-    public function testTrendGrowthIsTheUsLongRunPotential(): void
-    {
-        $this->assertEqualsWithDelta(MacroConstants::NATURAL_LABOR_FORCE_GROWTH + MacroConstants::STRUCTURAL_NET_MIGRATION_RATE, MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, 1e-15);
-        $this->assertEqualsWithDelta(0.0104, MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, 1e-9, 'US civilian labour force growth, 1985-2019.');
-        $this->assertEqualsWithDelta(0.0258, MacroConstants::TREND_REAL_GROWTH, 0.0005, 'CBO potential output growth, 1985-2019.');
-    }
-
     public function testAProductivityLevelShockLeavesTheNaturalRateAlone(): void
     {
         $calm = ['natural_rate' => MacroConstants::BASE_NATURAL_RATE, 'tfp_shock_level' => 0.0];
@@ -735,58 +734,6 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(100.0, $result->residentialPropertyIndex, 'Tight labor market should expand residential housing index above neutral baseline.');
     }
 
-    public function testEvansRuleLiftsOffWhenInflationBreachesThreshold(): void
-    {
-        // Unemployment > 5.0% but Inflation > 2.5% -> Evans Rule allows lift-off to protect price stability
-        $stagflationState = [
-            'unemployment_rate' => 0.055,
-            'unemployment_rate_ema' => 0.055,
-            'inflation' => 0.030,
-            'inflation_ema' => 0.030,
-            'output_gap' => -0.010,
-            'output_gap_ema' => -0.010,
-            'policy_rate' => 0.02,
-            'policy_rate_ema' => 0.02,
-            'yield_5y' => 0.04,
-        ];
-
-        $this->redisMock->expects($this->once())
-            ->method('get')
-            ->with('macroeconomic_state')
-            ->willReturn(json_encode($stagflationState));
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $result = $this->engine->updateMacroState(0.25);
-
-        $this->assertGreaterThan(0.00, $result->targetRate, 'Target rate must lift off from ZLB when inflation exceeds the 2.5% Evans Rule threshold.');
-    }
-
-    public function testEvansRuleLiftsOffWhenUnemploymentNormalizes(): void
-    {
-        // Unemployment <= 5.0% and normal inflation -> standard Taylor Rule applies
-        $normalizedLaborState = [
-            'unemployment_rate' => 0.045,
-            'unemployment_rate_ema' => 0.045,
-            'inflation' => 0.020,
-            'inflation_ema' => 0.020,
-            'output_gap' => 0.00,
-            'output_gap_ema' => 0.00,
-            'policy_rate' => 0.03,
-            'policy_rate_ema' => 0.03,
-            'yield_5y' => 0.04,
-        ];
-
-        $this->redisMock->expects($this->once())
-            ->method('get')
-            ->with('macroeconomic_state')
-            ->willReturn(json_encode($normalizedLaborState));
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $result = $this->engine->updateMacroState(0.25);
-
-        $this->assertGreaterThan(0.00, $result->targetRate, 'Target rate must calculate normally when unemployment is <= 5.0%.');
-    }
-
     public function testCapitalOverhangDragsOutputGap(): void
     {
         // State with positive capital overhang (excess capacity / boom overbuild)
@@ -1185,7 +1132,7 @@ class MacroEngineTest extends TestCase
 
     public function testRateSmoothingClosesTheSameShareCuttingAsHiking(): void
     {
-        // US 1987-2008: 15% of the distance closed a quarter cutting, 13% hiking, not distinguishable (se 4-6%).
+        // One speed both ways: the simpler rule, and nothing in the Authority's charter makes it cut or hike faster.
         $hikingState = new \App\Service\Macro\MacroState();
         $hikingState->policyRate = 0.02;
         $hikingState->inflation = 0.02;
@@ -1936,11 +1883,11 @@ class MacroEngineTest extends TestCase
     }
 
     /**
-     * With no mood in it, the index is the Michigan fit: the trend level at NAIRU, on-target inflation and flat
-     * joblessness, less 4.56 a point of slack, 2.27 a point of year-on-year inflation over target and 3.06 a point of
-     * rise in unemployment over the year -- each read off the month-end records, two-sided.
+     * With no mood in it, the index is its fundamental: the trend level at NAIRU, on-target inflation and flat
+     * joblessness, moved by its loadings on slack, on year-on-year inflation over target and on the rise in
+     * unemployment over the year -- each read off the month-end records, two-sided.
      */
-    public function testConsumerSentimentIsTheMichiganFit(): void
+    public function testConsumerSentimentIsItsFundamentalWithNoMood(): void
     {
         $assetSubsystem = new AssetMarketSubsystem($this->mathUtilityMock);
         $dt = 0.25;
@@ -1962,7 +1909,14 @@ class MacroEngineTest extends TestCase
         $assetSubsystem->calculateConsumerSentiment($stagflation, $dt);
 
         $this->assertEqualsWithDelta(MacroConstants::SENTIMENT_TREND_LEVEL, $neutral->consumerSentimentIndex, 1e-9);
-        $this->assertEqualsWithDelta(MacroConstants::SENTIMENT_TREND_LEVEL - 6.84 - 4.54 - 4.59, $stagflation->consumerSentimentIndex, 1e-9);
+        $this->assertEqualsWithDelta(
+            MacroConstants::SENTIMENT_TREND_LEVEL
+                + (AssetMarketSubsystem::SENTIMENT_SLACK_LOADING * 0.015)
+                + (AssetMarketSubsystem::SENTIMENT_INFLATION_LOADING * (0.04 - MacroConstants::TARGET_INFLATION))
+                + (AssetMarketSubsystem::SENTIMENT_UNEMPLOYMENT_CHANGE_LOADING * 0.015),
+            $stagflation->consumerSentimentIndex,
+            1e-9,
+        );
     }
 
     /**
