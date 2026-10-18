@@ -15,7 +15,7 @@ let macroRatesChartInstance = null;
 let macroMortgageChartInstance = null;
 let macroRiskChartInstance = null;
 let macroLaborChartInstance = null;
-let macroLaborCreditChartInstance = null;
+let macroWagesChartInstance = null;
 let macroWealthEffectChartInstance = null;
 let macroCommoditiesChartInstance = null;
 let macroEnergySpreadsChartInstance = null;
@@ -99,8 +99,9 @@ function updateMacroHud(d) {
     setHud('hud-macroRiskChart', `Vol ${last(d.volData).toFixed(1)}% · ERP ${last(d.erpData).toFixed(1)}%`);
     const lastRealWageGap = [...(d.realWageGapData ?? [])].reverse().find(v => v !== null && !isNaN(v));
     // Real wage growth is pay growth less the inflation it is spent at, not less what markets expect inflation to be.
-    setHud('hud-macroLaborCreditChart', `Unemployment ${last(d.unemploymentData).toFixed(1)}% · Wages ${last(d.wageGrowthData).toFixed(1)}% · Real ${(last(d.wageGrowthData) - last(d.inflationData)).toFixed(1)}%`
-        + (lastRealWageGap === undefined ? '' : ` · vs productivity ${lastRealWageGap > 0 ? '+' : ''}${lastRealWageGap.toFixed(1)}%`));
+    setHud('hud-macroLaborChart', `Unemployment ${formatPercent(last(d.unemploymentData), 1, true)} · Structural ${formatPercent(last(d.nairuData), 1, true)} · Vacancies ${formatPercent(last(d.jobVacanciesData), 1, true)}`);
+    setHud('hud-macroWagesChart', `Wages ${formatPercent(last(d.wageGrowthData), 1, true)} · Real ${formatPercent(last(d.wageGrowthData) - last(d.inflationData), 1, true, true)}`
+        + (lastRealWageGap === undefined ? '' : ` · vs productivity ${formatPercent(lastRealWageGap, 1, true, true)}`));
     const lastEquityGap = [...d.equityWealthGapData].reverse().find(v => v !== null && !isNaN(v));
     const lastHousingGap = lastKnown(d.housingWealthGapData);
     setHud('hud-macroWealthEffectChart', `Equity ${lastEquityGap === undefined ? '-' : signed(lastEquityGap, 1) + '%'} · Housing ${lastHousingGap === undefined ? '-' : signed(lastHousingGap, 1) + '%'}`);
@@ -527,7 +528,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         balanceSheetHoldingsData, balanceSheetChangeData,
         inflationData, outputGapData, policyRateData, yield10yData,
         mortgageYieldData, spread30yData, volData, erpData, taxData,
-        unemploymentData, wageGrowthData, tipsBreakevenData, realWageGapData, interbankSpreadBpsData,
+        unemploymentData, nairuData, jobVacanciesData, wageGrowthData, tipsBreakevenData, realWageGapData, interbankSpreadBpsData,
         equityWealthGapData, housingWealthGapData,
         creEmaData, residentialEmaData, sentimentData, dealActivityData,
         energyPriceData, crackSpreadData, gscpiData, sovereignDebtData, govtSpendingEmaData,
@@ -554,7 +555,10 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     renderWhenVisible('macroRatesChart', () => renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData, targetRateData));
     renderWhenVisible('macroMortgageChart', () => renderMacroMortgageChart(labels, policyRateData, mortgageYieldData, spread30yData));
     renderWhenVisible('macroRiskChart', () => renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, corpBorrowingData));
-    renderWhenVisible('macroLaborCreditChart', () => renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData, tipsBreakevenData, realWageGapData));
+    renderWhenVisible('macroLaborChart', () => renderMacroLaborChart(labels, unemploymentData, nairuData, jobVacanciesData));
+    // Real wage growth is pay growth less the consumer inflation it is spent at, the header's 'Real' figure.
+    const realWageGrowthData = wageGrowthData.map((wage, i) => wage - inflationData[i]);
+    renderWhenVisible('macroWagesChart', () => renderMacroWagesChart(labels, wageGrowthData, tipsBreakevenData, realWageGrowthData, realWageGapData));
     // The wealth ratio has no unit, so the level pair is shown relative to where the window opens.
     const firstWealthRatio = equityWealthRatioData.find(v => v !== null && v > 0);
     const rebase = (arr) => firstWealthRatio ? arr.map(v => v === null ? null : (v / firstWealthRatio) * 100.0) : arr;
@@ -935,13 +939,13 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
     });
 }
 
-function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData, tipsBreakevenData, realWageGapData = []) {
-    const canvas = document.getElementById('macroLaborCreditChart');
+function renderMacroLaborChart(labels, unemploymentData, nairuData, jobVacanciesData) {
+    const canvas = document.getElementById('macroLaborChart');
     if (!canvas) return;
-    macroLaborCreditChartInstance = destroyChartInstance(macroLaborCreditChartInstance);
+    macroLaborChartInstance = destroyChartInstance(macroLaborChartInstance);
     const ctx = canvas.getContext('2d');
 
-    macroLaborCreditChartInstance = new Chart(ctx, {
+    macroLaborChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
@@ -950,10 +954,10 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     label: 'Unemployment',
                     data: unemploymentData,
                     borderColor: SERIES.blue,
-                    backgroundColor: withAlpha(SERIES.blue, 0.10),
+                    backgroundColor: SERIES.blue,
                     borderWidth: 2.2,
                     tension: 0.3,
-                    fill: true,
+                    fill: false,
                     pointRadius: labels.length > 50 ? 0 : 2
                 },
                 {
@@ -968,34 +972,86 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     pointRadius: labels.length > 50 ? 0 : 1
                 },
                 {
+                    // Vacancies and unemployment move against each other along the labour market's matching curve, so
+                    // the two lines crossing marks the market turning.
                     label: 'Vacancy rate',
                     data: jobVacanciesData,
                     borderColor: SERIES.aqua,
-                    backgroundColor: withAlpha(SERIES.aqua, 0.08),
+                    backgroundColor: SERIES.aqua,
                     borderWidth: 2,
                     tension: 0.3,
                     fill: false,
                     pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => ctx.raw === null ? `${ctx.dataset.label}: -` : `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    grace: '5%',
+                    grid: { color: GRID_COLOR },
+                    ticks: { callback: (val) => val.toFixed(1) + '%' },
+                    title: { display: true, text: 'Percent of the labour force' }
                 },
+                x: {
+                    grid: { color: GRID_COLOR },
+                    ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
+                }
+            }
+        }
+    });
+}
+
+function renderMacroWagesChart(labels, wageGrowthData, tipsBreakevenData, realWageGrowthData, realWageGapData = []) {
+    const canvas = document.getElementById('macroWagesChart');
+    if (!canvas) return;
+    macroWagesChartInstance = destroyChartInstance(macroWagesChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    macroWagesChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
                 {
                     label: 'Wage growth',
                     data: wageGrowthData,
-                    borderColor: SERIES.yellow,
+                    borderColor: SERIES.blue,
+                    backgroundColor: SERIES.blue,
                     borderWidth: 2.2,
                     tension: 0.3,
                     fill: false,
                     pointRadius: labels.length > 50 ? 0 : 2
                 },
                 {
-                    // Wage settlements are indexed to expected inflation one-for-one, so this is the line the
-                    // purple one is bargained against: the distance between them is productivity plus whatever
-                    // the labour market is worth, and a gap that opens is the spiral turning.
+                    // Wage settlements are indexed to expected inflation one-for-one, so this is the line wage growth is
+                    // bargained against: the distance between them is productivity plus whatever the labour market is
+                    // worth, and a gap that opens is the spiral turning.
                     label: 'Expected inflation',
                     data: tipsBreakevenData,
-                    borderColor: SERIES.magenta,
-                    backgroundColor: SERIES.magenta,
+                    borderColor: SERIES.orange,
+                    backgroundColor: SERIES.orange,
                     borderWidth: 1.8,
                     borderDash: [5, 4],
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    // What pay buys: it dips when energy or import prices lift consumer prices, while the panel below,
+                    // priced against what the District produces, need not.
+                    label: 'Real wage growth',
+                    data: realWageGrowthData,
+                    borderColor: SERIES.aqua,
+                    backgroundColor: SERIES.aqua,
+                    borderWidth: 1.8,
                     tension: 0.3,
                     fill: false,
                     pointRadius: labels.length > 50 ? 0 : 1
@@ -1006,8 +1062,8 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     label: 'Real wage vs productivity',
                     data: realWageGapData,
                     yAxisID: 'yRealWage',
-                    borderColor: SERIES.green,
-                    backgroundColor: withAlpha(SERIES.green, 0.10),
+                    borderColor: SERIES.yellow,
+                    backgroundColor: withAlpha(SERIES.yellow, 0.10),
                     borderWidth: 2,
                     tension: 0.3,
                     fill: 'origin',
@@ -1028,15 +1084,15 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                 y: {
                     type: 'linear',
                     display: true,
-                    position: 'left', stack: 'labor', stackWeight: 2, weight: 1,
+                    position: 'left', stack: 'wages', stackWeight: 2, weight: 1,
                     grace: '5%',
                     grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
-                    title: { display: true, text: 'Percent' }
+                    title: { display: true, text: 'Annual rate' }
                 },
                 yRealWage: {
                     type: 'linear',
-                    position: 'left', stack: 'labor', stackWeight: 1, weight: 0, offset: true,
+                    position: 'left', stack: 'wages', stackWeight: 1, weight: 0, offset: true,
                     // Zero is the productivity path itself, so it always stays on the axis.
                     suggestedMin: 0, suggestedMax: 0,
                     grid: { color: GRID_COLOR },
@@ -3284,7 +3340,7 @@ function renderMacroGdpChart(labels, gdpGrowthData, recessionData) {
 export function resizeMacroCharts() {
     const instances = [
         macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
-        macroRiskChartInstance, macroLaborChartInstance, macroLaborCreditChartInstance, macroWealthEffectChartInstance,
+        macroRiskChartInstance, macroLaborChartInstance, macroWagesChartInstance, macroWealthEffectChartInstance,
         macroCommoditiesChartInstance, macroEnergySpreadsChartInstance, macroPropertyChartInstance, macroTradeLogisticsChartInstance,
         macroSentimentChartInstance, macroGovtSpendingChartInstance, macroPublicDebtChartInstance, macroSovereignFundChartInstance, macroInterbankLiquidityChartInstance,
         macroTermPremiumChartInstance, macroGdpGrowthChartInstance, macroBalanceSheetChartInstance,
@@ -3310,7 +3366,7 @@ export function destroyMacroCharts() {
     macroMortgageChartInstance = destroyChartInstance(macroMortgageChartInstance);
     macroRiskChartInstance = destroyChartInstance(macroRiskChartInstance);
     macroLaborChartInstance = destroyChartInstance(macroLaborChartInstance);
-    macroLaborCreditChartInstance = destroyChartInstance(macroLaborCreditChartInstance);
+    macroWagesChartInstance = destroyChartInstance(macroWagesChartInstance);
     macroWealthEffectChartInstance = destroyChartInstance(macroWealthEffectChartInstance);
     macroCommoditiesChartInstance = destroyChartInstance(macroCommoditiesChartInstance);
     macroEnergySpreadsChartInstance = destroyChartInstance(macroEnergySpreadsChartInstance);

@@ -325,6 +325,25 @@
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
+									<h4 class="text-sm font-semibold text-on-surface">Output, quarter on quarter</h4>
+									<p class="text-xs text-on-surface-variant mt-0.5">Real output's change on the quarter before; two falling quarters in a row and the statistical office declares a recession, marked here until two quarters of growth end it</p>
+								</div>
+								<div class="flex items-start gap-3 shrink-0">
+									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGdpChart">-</p>
+									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
+										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
+									</button>
+								</div>
+							</div>
+							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+								<canvas id="macroGdpChart"></canvas>
+							</div>
+							<p class="source-note">{{ source_line('statistical-office') }}</p>
+						</div>
+
+						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
+							<div class="flex items-start justify-between gap-4 mb-3">
+								<div class="min-w-0">
 									<h4 class="text-sm font-semibold text-on-surface">Leading indicators</h4>
 									<p class="text-xs text-on-surface-variant mt-0.5">Manufacturing PMI, housing starts, money-supply growth, the trade balance and producer prices</p>
 								</div>
@@ -344,18 +363,18 @@
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Labour market and wages</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Unemployment against its structural rate, vacancies, wage growth against expected inflation, and the real wage against productivity</p>
+									<h4 class="text-sm font-semibold text-on-surface">Unemployment and vacancies</h4>
+									<p class="text-xs text-on-surface-variant mt-0.5">Unemployment against its structural rate, and job vacancies as a share of the labour force</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroLaborCreditChart">-</p>
+									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroLaborChart">-</p>
 									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
 										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 									</button>
 								</div>
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroLaborCreditChart"></canvas>
+								<canvas id="macroLaborChart"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
@@ -363,18 +382,18 @@
 						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
 							<div class="flex items-start justify-between gap-4 mb-3">
 								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Output, quarter on quarter</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Real output's change on the quarter before; two falling quarters in a row and the statistical office declares a recession, marked here until two quarters of growth end it</p>
+									<h4 class="text-sm font-semibold text-on-surface">Wages</h4>
+									<p class="text-xs text-on-surface-variant mt-0.5">Wage growth against the inflation workers expect and after consumer prices, and the real wage against productivity</p>
 								</div>
 								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGdpChart">-</p>
+									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroWagesChart">-</p>
 									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
 										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
 									</button>
 								</div>
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroGdpChart"></canvas>
+								<canvas id="macroWagesChart"></canvas>
 							</div>
 							<p class="source-note">{{ source_line('statistical-office') }}</p>
 						</div>
