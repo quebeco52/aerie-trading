@@ -190,3 +190,31 @@ before charge-off/capital/LTV. Reversion is overstated if the LTV cut was built 
 ltv_cut / mortgage_ltv_cap / bank_capital_required_last, so the live split cannot be closed.
 Caveats: residual t -1.2 (DA-DB) and -2.7 (DT) are inside 1-2.7 se of noise; DA seeds 1 and 9 (0.70 at y15) fall on
 house prices (hp -0.31, -0.36), not on the levers.
+
+## 2026-10-18 Gap persistence and the policy-rate lag (A HEAD / B speed 1.4 / C speed 1.4 + gap weight 1.0)
+Question: at HEAD 51b1d2c2 (8 meetings a year, 25bp steps) is the output gap too persistent, and how much is the rate
+trailing its rule? Live dump: gap acf4 0.74, acf8 0.35, mean spell 18q, rate peaks 7q behind the gap.
+Harness `PersistenceHarnessTest.php` + `pers_run.sh` (see RUN.md), live macro, whole board, POLITICS=1, TPY 360,
+33 years with years 0-2 dropped (124 quarters a seed). Seeds 1-16 per arm, paired. Staged 8 -> 16 (gap acf4/acf8/spell
+not clear at 8). 48 runs, ~22 min wall. No blow-ups. Table `pers_s16.out` (excerpt):
+
+    quantity        A       B       C       B-A (se) t           C-A (se) t
+    gap_acf4        0.577   0.620   0.644   +0.043 (0.036) +1.2   +0.067 (0.051) +1.3
+    gap_acf8        0.166   0.297   0.279   +0.131 (0.046) +2.8   +0.114 (0.077) +1.5
+    gap_spell_q    11.88   12.82   13.83    +0.95 (1.50) +0.6     +1.96 (1.42) +1.4
+    hp_ar1          0.913   0.887   0.905   -0.026 (0.010) -2.5   -0.008 (0.009) -0.9
+    hp_acf4         0.227   0.147   0.205   -0.079 (0.038) -2.1   -0.022 (0.047) -0.5
+    g_ar1           0.731   0.671   0.688   -0.060 (0.022) -2.7   -0.042 (0.022) -1.9
+    lag_gap_k (q)   4.56    2.31    2.63    -2.25 (0.40) -5.6     -1.94 (0.36) -5.4
+    lag_rule_k (q)  3.69    2.00    2.00    -1.69 (0.12) -14.1    -1.69 (0.12) -14.1
+    sd_rate_rule    2.17    1.55    1.01    -0.62 (0.25) -2.5     -1.15 (0.15) -7.7
+    cut4q_pp       -2.28   -3.16   -2.34    -0.88 (0.25) -3.5     -0.06 (0.15) -0.4
+    gap_sd          2.03    2.01    2.03    -0.03 (0.20) -0.1     -0.01 (0.23) -0.0
+    infl_mean       2.10    2.06    2.01    -0.04 (0.04) -1.1     -0.09 (0.04) -2.4
+    elb_share       0.001   0.016   0.013   +0.015 (0.006) +2.5   +0.012 (0.010) +1.2
+
+Reading: the rate's lag is set by the smoothing speed (4.6q -> 2.3q behind the gap), but the gap's persistence is not:
+faster smoothing leaves gap acf4 flat and raises acf8/acf12 slightly; it trims HP-cycle and growth persistence a little.
+Arm A's gap (acf4 0.58, spell 12q) is US-like; the live path (acf4 0.74, spell 18q) is a tail draw (2/16 and 1/16 seeds
+at or above). HP AR1 0.91 and growth AR1 0.73 sit at or above the top of the 15-economy range in every arm.
+Caveats: TPY 360 vs the live 3600; supply-gap variance share 0.26 here vs 0.40 on the live path.

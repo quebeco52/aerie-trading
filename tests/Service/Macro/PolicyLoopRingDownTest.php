@@ -49,10 +49,9 @@ class PolicyLoopRingDownTest extends TestCase
         $this->assertLessThan(0.5, $response[3], 'Most of a demand kick is gone within a year.');
         $this->assertGreaterThan(-0.25, $trough, 'The swing past zero stays under a quarter of the kick.');
         $this->assertLessThan(0.05, max($fromTrough), 'No second swing: after the trough the gap does not come back above trend.');
-        // An inertial rule (15% of the distance a quarter) lengthens the climb back from the single trough without a
-        // second swing, so the tail is settled from year six rather than five, to within the decisions' step.
-        foreach (array_slice($response, 24) as $quarter => $value) {
-            $this->assertLessThan(self::SETTLED_TOLERANCE, abs($value), sprintf('Settled from year six on (quarter %d).', $quarter + 24));
+        // The tail is settled from year five, to within the decisions' step.
+        foreach (array_slice($response, 20) as $quarter => $value) {
+            $this->assertLessThan(self::SETTLED_TOLERANCE, abs($value), sprintf('Settled from year five on (quarter %d).', $quarter + 20));
         }
     }
 
@@ -68,9 +67,9 @@ class PolicyLoopRingDownTest extends TestCase
 
         $this->assertLessThan(0.5, $slump[3], 'Most of a slump is gone within a year.');
         $this->assertGreaterThan(self::SLUMP_OVERSHOOT_RATIO * min($boom), min($slump), 'The climb out of a slump overshoots less than the fall after a boom.');
-        // A slump too settles from year six, as a boom does.
-        foreach (array_slice($slump, 24) as $quarter => $value) {
-            $this->assertLessThan(self::SETTLED_TOLERANCE, abs($value), sprintf('Settled from year six on (quarter %d).', $quarter + 24));
+        // A slump too settles from year five, as a boom does.
+        foreach (array_slice($slump, 20) as $quarter => $value) {
+            $this->assertLessThan(self::SETTLED_TOLERANCE, abs($value), sprintf('Settled from year five on (quarter %d).', $quarter + 20));
         }
     }
 

@@ -48,3 +48,17 @@ unemployment, floor share), and which gap channels carry the gap's quarterly mov
 - `YEARS=20 SNAP=<dir> bin/harness-batch var/harness/cycle_amp/dti_run.sh 1-16 DA DB && SEEDS=1-16 python3 var/harness/cycle_amp/dti.py DA DB`
 - Analysis `dti.py A [B]` (env SEEDS, H=15): levels at 5/10/15/20, decomposition 0..H, context, paired A-B at H.
 - Outputs: dti_s16.out (DA vs DB, 16 x 20 y), dti_tpy3600_s8.out (DT vs DA, 8 x 15 y).
+
+## Gap persistence and policy-rate lag (2026-10-18, pers_run.sh)
+- Harness `PersistenceHarnessTest.php`: a copy of `../FullMarketHarnessTest.php` (current BoardReadingDTO call; the
+  older CycleAmpHarnessTest fails at HEAD 51b1d2c2 on the removed `boardBankLevy` argument). Its MACRO_OUT row adds
+  `pot deflator target rstar shadow`.
+- Snapshot `$SNAP/pstree` = `git archive HEAD | tar -x -C $SNAP/pstree` + `ln -s <repo>/vendor $SNAP/pstree/vendor`.
+  Arm A = tree as is; B, C = OVR `$SNAP/ovrB`, `$SNAP/ovrC` holding `Service/Macro/Subsystem/MonetaryPolicySubsystem.php`
+  (sed: B CB_SMOOTHING_SPEED 0.65 -> 1.4; C also TAYLOR_OUTPUT_GAP_WEIGHT 1.5 -> 1.0). Cache: `var/harness/cache-pstree`.
+- Run: `SNAP=<dir> YEARS=33 bin/harness-batch var/harness/cycle_amp/pers_run.sh 1-16 A B C &&
+  SEEDS=1-16 python3 var/harness/cycle_amp/pers_analyse.py A B C > var/harness/cycle_amp/pers_s16.out`
+  (~11 min per 24 runs at TPY 360). Outputs `runs/P<arm>-<seed>.*`.
+- Analysis `pers_analyse.py A B C` (env SEEDS, BURN 2, YEARS 33) uses `gapstats_lib.py` (the dump analysis' hp/acf/
+  spell definitions): gap ACFs and spells, HP(1600) cycle of log(pot x (1+gap)), growth AR1, rate-vs-gap and
+  rate-vs-rule lag argmax, 4q moves, guards; paired vs the first arm; arm A spread against the live dump's values.

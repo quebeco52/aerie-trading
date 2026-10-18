@@ -153,10 +153,10 @@ class MonetaryPolicySubsystem
      */
     public const TAYLOR_GAP_FORECAST_CAP = 0.020;
     /**
-     * Speed (a year) at which the Authority's view of the right rate, its shadow rate, closes on the rule: 0.65, 15% of
-     * the distance a quarter.
+     * Speed (a year) at which the Authority's view of the right rate, its shadow rate, closes on the rule: 1.4, 30% of
+     * the distance a quarter, so the rate trails the cycle by about two quarters.
      */
-    public const CB_SMOOTHING_SPEED = 0.65;
+    public const CB_SMOOTHING_SPEED = 1.4;
 
     // --- Rate Meetings ---
     /** Rate meetings a year: the decision is taken at each and holds until the next. */
