@@ -92,20 +92,20 @@ final class AerieDiet
      */
     public const HOME_POSITIONS = [
         self::CIVIC => [self::AXIS_STATE => 0.65, self::AXIS_OPENNESS => -0.1, self::AXIS_COUNCIL => -0.1, self::AXIS_ENVIRONMENT => 0.34],
-        self::VANGUARD => [self::AXIS_STATE => -0.65, self::AXIS_OPENNESS => 0.1, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.48],
+        self::VANGUARD => [self::AXIS_STATE => -0.65, self::AXIS_OPENNESS => 0.3, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.45],
         self::IRON_HARBOR => [self::AXIS_STATE => 0.2, self::AXIS_OPENNESS => -0.8, self::AXIS_COUNCIL => -0.4, self::AXIS_ENVIRONMENT => -0.23],
-        self::EXCHANGE => [self::AXIS_STATE => -0.2, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4, self::AXIS_ENVIRONMENT => -0.02],
+        self::EXCHANGE => [self::AXIS_STATE => -0.3, self::AXIS_OPENNESS => 0.8, self::AXIS_COUNCIL => 0.4, self::AXIS_ENVIRONMENT => -0.1],
         self::CHARTISTS => [self::AXIS_STATE => -0.4, self::AXIS_OPENNESS => 0.6, self::AXIS_COUNCIL => 0.8, self::AXIS_ENVIRONMENT => -0.2],
-        self::COMMON_LOT => [self::AXIS_STATE => 0.3, self::AXIS_OPENNESS => -0.5, self::AXIS_COUNCIL => -0.8, self::AXIS_ENVIRONMENT => 0.04],
+        self::COMMON_LOT => [self::AXIS_STATE => 0.3, self::AXIS_OPENNESS => -0.5, self::AXIS_COUNCIL => -0.8, self::AXIS_ENVIRONMENT => 0.1],
         self::TIDELINE => [self::AXIS_STATE => 0.4, self::AXIS_OPENNESS => -0.2, self::AXIS_COUNCIL => -0.3, self::AXIS_ENVIRONMENT => 0.8],
-        self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.17],
+        self::NEW_HORIZON => [self::AXIS_STATE => -0.5, self::AXIS_OPENNESS => 0.7, self::AXIS_COUNCIL => 0.3, self::AXIS_ENVIRONMENT => -0.3],
     ];
 
     // --- Debt Planks ---
     /**
      * Each party's debt plank: the gross debt to GDP its budget steers to and the points of GDP a year it moves debt
      * there, from the small state's quick repair to the Common Lot's debt left where it stands. A cabinet's plan is its
-     * parties' planks weighted by seats (PoliticsEngine::debtPlanks()).
+     * parties' planks weighted by seats (Platforms::debtPlanks()).
      */
     public const DEBT_PLANKS = [
         self::VANGUARD => ['target' => 0.35, 'pace' => 0.010],
@@ -125,11 +125,11 @@ final class AerieDiet
     public const MAJORITY_SEATS = 151;
     /** Seats at the founding. */
     public const SEED_SEATS = [
-        self::CIVIC => 84.0,
+        self::CIVIC => 99.0,
         self::VANGUARD => 90.0,
-        self::IRON_HARBOR => 40.0,
-        self::EXCHANGE => 20.0,
-        self::CHARTISTS => 25.0,
+        self::IRON_HARBOR => 25.0,
+        self::EXCHANGE => 25.0,
+        self::CHARTISTS => 20.0,
         self::COMMON_LOT => 6.0,
         self::TIDELINE => 5.0,
         self::NEW_HORIZON => 30.0,
@@ -139,18 +139,18 @@ final class AerieDiet
      * support is pulled back toward (Converse 1966).
      */
     public const SEED_VOTE_SHARES = [
-        self::CIVIC => 84.0 / 300.0,
+        self::CIVIC => 99.0 / 300.0,
         self::VANGUARD => 90.0 / 300.0,
-        self::IRON_HARBOR => 40.0 / 300.0,
-        self::EXCHANGE => 20.0 / 300.0,
-        self::CHARTISTS => 25.0 / 300.0,
+        self::IRON_HARBOR => 25.0 / 300.0,
+        self::EXCHANGE => 25.0 / 300.0,
+        self::CHARTISTS => 20.0 / 300.0,
         self::COMMON_LOT => 6.0 / 300.0,
         self::TIDELINE => 5.0 / 300.0,
         self::NEW_HORIZON => 30.0 / 300.0,
     ];
     /**
      * The blocs the founding Diet votes in, by the leader of each party's bloc: the parties split around the two
-     * largest (App\Service\Politics\CoalitionFormation::declareBlocs).
+     * largest (App\Service\Politics\Diet\CoalitionFormation::declareBlocs).
      */
     public const SEED_BLOCS = [
         self::CIVIC => self::CIVIC,
