@@ -340,8 +340,10 @@ class MonetaryPolicySubsystem
      * does) is seen through: the rule answers spending, and meets supply only through the inflation it brings.
      * That is how the late-1990s productivity boom was run (Blinder & Yellen 2001), and it is what US data
      * shows: the gap still stands +0.5% two years after a TFP gain. Leaning on it instead pulled the engine's
-     * gap below zero within ten quarters. With the forecast horizon equal to the EMA horizon, the total gap's
-     * level-plus-trend forecast less today's supply part is exactly the demand gap's own forecast.
+     * gap below zero within ten quarters. A productivity shortfall is not seen through: the Authority eases into a
+     * supply slump as into any other and lets the inflation it brings run, where holding the rate up through it
+     * deepened the District's slumps. With the forecast horizon equal to the EMA horizon, the total gap's
+     * level-plus-trend forecast less today's supply gain is exactly the demand gap's own forecast.
      *
      * Inventory investment and spending moved between quarters are seen through the same way: a restocking, a sell-down
      * or a quarter's pulled-forward purchases are over before a rate move reaches spending, so leaning on them only
@@ -356,7 +358,7 @@ class MonetaryPolicySubsystem
     {
         $openingGap = MacroFieldRegistry::defaults()['outputGapEma'];
         if ($state->outputGapEma === $openingGap && $state->outputGap !== $openingGap) {
-            return $state->outputGap - $state->productivitySupplyGap - $state->inventoryInvestmentGap - $state->spendingTimingGap;
+            return $state->outputGap - self::productivityGainSeenThrough($state) - $state->inventoryInvestmentGap - $state->spendingTimingGap;
         }
 
         $trend = ($state->outputGap - $state->outputGapEma) / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS;
@@ -364,9 +366,15 @@ class MonetaryPolicySubsystem
 
         return $state->outputGapEma
             + max(-self::TAYLOR_GAP_FORECAST_CAP, min(self::TAYLOR_GAP_FORECAST_CAP, $projection))
-            - $state->productivitySupplyGap
+            - self::productivityGainSeenThrough($state)
             - $state->inventoryInvestmentGap
             - $state->spendingTimingGap;
+    }
+
+    /** The part of the gap a productivity gain opens, which the rule sees through; a shortfall it answers. */
+    private static function productivityGainSeenThrough(MacroState $state): float
+    {
+        return max(0.0, $state->productivitySupplyGap);
     }
 
     /**
@@ -419,8 +427,8 @@ class MonetaryPolicySubsystem
                 'inflationTarget' => $targetInflation * (self::TAYLOR_INFLATION_CORE_WEIGHT + self::TAYLOR_INFLATION_ANCHOR_WEIGHT),
                 'coreInflationGap' => $inflationResponse * self::TAYLOR_INFLATION_CORE_WEIGHT * ($this->realizedCoreInflation($state, $targetInflation) - $targetInflation),
                 'expectationsGap' => $inflationResponse * self::TAYLOR_INFLATION_ANCHOR_WEIGHT * ($state->tipsBreakeven - $targetInflation),
-                'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * ($cyclicalGap + $state->productivitySupplyGap + $state->inventoryInvestmentGap + $state->spendingTimingGap),
-                'productivitySeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->productivitySupplyGap,
+                'outputGap' => self::TAYLOR_OUTPUT_GAP_WEIGHT * ($cyclicalGap + self::productivityGainSeenThrough($state) + $state->inventoryInvestmentGap + $state->spendingTimingGap),
+                'productivitySeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * self::productivityGainSeenThrough($state),
                 'inventoriesSeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->inventoryInvestmentGap,
                 'spendingTimingSeenThrough' => -self::TAYLOR_OUTPUT_GAP_WEIGHT * $state->spendingTimingGap,
                 'longRateOffset' => -$longRateOffset,

@@ -310,6 +310,8 @@ readonly class MacroStateDTO
         public float $tfpPotentialAbsorbed = 0.0,
         public float $productivitySupplyGap = 0.0,
         public float $netExportGap = 0.0,
+        /** The mainland's cycle as a level part of the gap (MAINLAND_CYCLE_LOADING times its gap). */
+        public float $mainlandCycleGap = 0.0,
         public float $domesticDemandGapEma = 0.0,
         public float $financeOutputGap = 0.0,
         public float $inventoryInvestmentGap = 0.0,
@@ -377,7 +379,6 @@ readonly class MacroStateDTO
         public float $demandShock = 0.0,
         public float $demandDisasterShock = 0.0,
         public float $demandDisasterCompensation = 0.0,
-        public float $demandMainlandShock = 0.0,
         public float $energyInventoryIndex = MacroConstants::COMMODITY_INVENTORY_BASELINE,
         public float $energyInventoryIndexEma = MacroConstants::COMMODITY_INVENTORY_BASELINE,
         public float $capacityUtilizationRate = MacroConstants::CU_BASELINE,

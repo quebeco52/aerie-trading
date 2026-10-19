@@ -269,17 +269,12 @@ class MacroAggregateSubsystem
      */
     public const KALDOR_CAPACITY = 600.0;
     /**
-     * Demand per unit of a RESTRICTIVE transmitted real-rate stance: tightening binds the collateral firms and
-     * homebuyers borrow against (Guerrieri & Iacoviello 2017), beside the wealth, trade and debt-service routes the
-     * engine carries separately.
+     * Demand per unit of the transmitted real-rate stance, either side of neutral: tightening binds the collateral
+     * firms and homebuyers borrow against (Guerrieri & Iacoviello 2017), beside the wealth, trade and debt-service
+     * routes the engine carries separately. The District borrows at floating rates, so a cut reaches borrowers as
+     * fully as a hike; where fixed-rate debt locks borrowers in, easing pushes on a string (Tenreyro & Thwaites 2016).
      */
-    public const KALDOR_MONETARY_DRAG_RESTRICTIVE = 1.2505;
-    /**
-     * Demand per unit of an ACCOMMODATIVE stance, under half the restrictive slope: easing pushes on a string, since a
-     * cut does not make a firm in a slump invest. The District's floating-rate loans pass cuts into household cash flow
-     * through the debt-service channel, which is symmetric.
-     */
-    public const KALDOR_MONETARY_DRAG_ACCOMMODATIVE = 0.5505;
+    public const KALDOR_MONETARY_DRAG = 1.2505;
 
     /**
      * Time constant of each of the two Pascal stages the real-rate stance passes through before it moves demand (Solow
@@ -381,16 +376,17 @@ class MacroAggregateSubsystem
      */
     public const DEMAND_SHOCK_REVERSION = 0.60;
     /**
-     * Innovation volatility of the aggregate demand disturbance, in annualized gap-drift units, own and shared parts
-     * together: 2.5pp, so with the rarer local disasters below the gap's sd is about 2.1%.
+     * Innovation volatility of the district's own aggregate demand disturbance, in annualized gap-drift units: 0.78pp.
+     * The mainland's cycle reaches output beside it (MAINLAND_CYCLE_LOADING), so this is what the district's own news,
+     * credit and confidence add.
      */
-    public const DEMAND_SHOCK_SIGMA = 0.025;
+    public const DEMAND_SHOCK_SIGMA = 0.0078;
     /**
-     * Correlation of the district's demand innovation with the mainland's quarterly gap surprise, one regional factor
-     * (Kose, Otrok & Whiteman 2003): the same news, credit and confidence reach both, so the district's gap moves with
-     * the mainland's at about 0.55.
+     * Share of the mainland's gap the district's output carries in the same quarter, one regional factor (Kose, Otrok &
+     * Whiteman 2003): the same news, credit and confidence reach both, so a mainland slump is a district one at half
+     * its depth, beside what it takes off exports.
      */
-    public const DEMAND_SHOCK_MAINLAND_LOADING = 0.95;
+    public const MAINLAND_CYCLE_LOADING = 0.5;
 
     // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
     /**
@@ -769,7 +765,8 @@ class MacroAggregateSubsystem
      * Kaldor (1940) Non-Linear Business Cycle with Modigliani Wealth Effect & Marshall-Lerner FX Drag.
      *
      * Solves continuous domestic final sales dynamics, weighted by their share of GDP, to which the productivity supply
-     * part, net exports, the banks' credit-driven output and inventory investment are added as levels:
+     * part, net exports, the mainland's cycle, the banks' credit-driven output and inventory investment are added as
+     * levels:
      *   dy = [Momentum - CapacityCeiling(y>0) - RealRateDrag - CreditPremium + FiscalStimulus + AutomaticStabilisers - CapitalOverhang + WealthEffect + NewBorrowing - DebtService - CrisisDeleveraging + DemandShock] * dt
      *
      * @param MacroState $state             Current macroeconomic state.
@@ -779,12 +776,9 @@ class MacroAggregateSubsystem
      *                                      (MonetaryPolicySubsystem::calculateExpectedInflation).
      * @param float      $dt                Time increment in years.
      * @param float      $stressMultiplier  Non-linear crisis volatility multiplier.
-     * @param float      $mainlandSurprise  The mainland's unit-variance gap surprises this tick, crashes included,
-     *                                      summed over the quarters that turned
-     *                                      (AssetMarketSubsystem::calculateForeignEconomy()).
      * @return float Updated cyclical output gap bounded between -12% and +10%.
      */
-    public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier, float $mainlandSurprise = 0.0): float
+    public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier): float
     {
         // The gap is GDP by industry: domestic demand on its share of the economy, plus, as levels each on its own
         // measured path, the supply part a productivity shock opens (absorbProductivityShocks), net exports, the
@@ -804,6 +798,11 @@ class MacroAggregateSubsystem
         );
         $financeChange = $financeGap - $state->financeOutputGap;
         $state->financeOutputGap = $financeGap;
+        // Kose, Otrok & Whiteman (2003) regional factor: the mainland's cycle is a level part of output, as net exports
+        // are, so a mainland quarter reaches the gap in that quarter and leaves it as the mainland recovers.
+        $mainlandCycleGap = self::mainlandCycleGapAt($state->foreignOutputGap);
+        $mainlandCycleChange = $mainlandCycleGap - $state->mainlandCycleGap;
+        $state->mainlandCycleGap = $mainlandCycleGap;
         // Smets & Wouters (2007) estimate the demand disturbance and the measurement-frequency
         // component as separate innovations; one draw serving both correlates them at unity.
         $demandZ = $this->mathUtility->generateStandardNormal();
@@ -829,7 +828,7 @@ class MacroAggregateSubsystem
         // Rudebusch & Svensson 1999 lag the real rate a year): investment is planned, ordered and built.
         $state->monetaryStanceStage1 = TimeSeries::calculateDistributedLag($state->monetaryStanceStage1, $realRate - $neutralRealRate, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
         $state->monetaryStanceTransmitted = TimeSeries::calculateDistributedLag($state->monetaryStanceTransmitted, $state->monetaryStanceStage1, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
-        $monetaryDrag = ResponseCurves::calculateAsymmetricResponse($state->monetaryStanceTransmitted, self::KALDOR_MONETARY_DRAG_RESTRICTIVE, self::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
+        $monetaryDrag = self::KALDOR_MONETARY_DRAG * $state->monetaryStanceTransmitted;
 
         // Gilchrist & Zakrajsek (2012): the excess bond premium is the price of credit supply, and spending pays it on
         // its adverse side only (Barnichon, Matthes & Ziegenbein 2022: easy credit does not lift output). Read against
@@ -921,13 +920,10 @@ class MacroAggregateSubsystem
         $timingChange = $spendingTiming - $state->spendingTimingGap;
         $state->spendingTimingGap = $spendingTiming;
 
-        // Smets & Wouters (2007) persistent AR(1) aggregate demand disturbance, its innovation one regional factor: the
-        // mainland's quarterly surprise lands whole at the quarter's turn, the rest is the district's own.
-        $mainlandImpulse = $stressMultiplier * self::mainlandDemandImpulse($mainlandSurprise);
+        // Smets & Wouters (2007) persistent AR(1) aggregate demand disturbance, the district's own: the mainland's
+        // cycle reaches output as a level part instead.
         $state->demandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandShock * $dt)
-            + (self::DEMAND_SHOCK_SIGMA * sqrt(1.0 - (self::DEMAND_SHOCK_MAINLAND_LOADING ** 2)) * $stressMultiplier * sqrt($dt) * $demandZ)
-            + $mainlandImpulse;
-        $state->demandMainlandShock += (-self::DEMAND_SHOCK_REVERSION * $state->demandMainlandShock * $dt) + $mainlandImpulse;
+            + (self::DEMAND_SHOCK_SIGMA * $stressMultiplier * sqrt($dt) * $demandZ);
 
         // Barro (2006) rare demand disaster: the one-sided cause a slump needs, since the Gaussian
         // innovation above is symmetric and too small to dig one. Compensated, so it bends the shape
@@ -982,8 +978,7 @@ class MacroAggregateSubsystem
             'householdNewBorrowing' => $householdNewBorrowing,
             'householdDeleveragingDrag' => -$householdDeleveragingDrag,
             'crisisDeleveragingDrag' => -$crisisDeleveragingDrag,
-            'demandShock' => $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation - $state->demandMainlandShock,
-            'mainlandDemand' => $state->demandMainlandShock,
+            'demandShock' => $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation,
             'demandDisaster' => $state->demandDisasterShock,
             'disasterCompensator' => -$state->demandDisasterCompensation,
         ];
@@ -993,6 +988,8 @@ class MacroAggregateSubsystem
             // Obstfeld & Rogoff (1996): the mainland's demand and the real exchange rate move what the district sells
             // abroad.
             'netExports' => $tradeChange / $dt,
+            // Kose, Otrok & Whiteman (2003): the mainland's cycle, the regional factor in output.
+            'mainlandCycle' => $mainlandCycleChange / $dt,
             // Blanchard & Summers (1986): the same output over a potential the crisis scar has lowered is less slack.
             'crisisScar' => -$state->crisisScarStep / $dt,
             // Blanchard & Katz (1992): newcomers drawn by jobs add to potential before they add to output.
@@ -1144,7 +1141,17 @@ class MacroAggregateSubsystem
      */
     public static function domesticDemandGap(MacroState $state): float
     {
-        return self::domesticDemandGapAt($state->outputGap, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap, $state->inventoryInvestmentGap, $state->spendingTimingGap);
+        return self::domesticDemandGapAt($state->outputGap, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap, $state->inventoryInvestmentGap, $state->spendingTimingGap, $state->mainlandCycleGap);
+    }
+
+    /**
+     * The mainland's cycle as a level part of the district's gap, at MAINLAND_CYCLE_LOADING.
+     *
+     * @param float $mainlandGap The mainland's output gap (fraction).
+     */
+    public static function mainlandCycleGapAt(float $mainlandGap): float
+    {
+        return self::MAINLAND_CYCLE_LOADING * $mainlandGap;
     }
 
     /**
@@ -1157,26 +1164,12 @@ class MacroAggregateSubsystem
      * @param float $financeOutputGap       The banks' credit-driven output (share of GDP).
      * @param float $inventoryInvestmentGap Inventory investment, a share of GDP a year.
      * @param float $spendingTimingGap      Purchases moved into the quarter from others, a share of GDP a year.
+     * @param float $mainlandCycleGap       The mainland's cycle riding beside demand (MAINLAND_CYCLE_LOADING).
      * @return float Domestic demand gap (fraction).
      */
-    public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap, float $inventoryInvestmentGap, float $spendingTimingGap): float
+    public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap, float $inventoryInvestmentGap, float $spendingTimingGap, float $mainlandCycleGap): float
     {
-        return ($outputGap - $supplyGap - $netExportGap - $financeOutputGap - $inventoryInvestmentGap - $spendingTimingGap) / self::DOMESTIC_GAP_WEIGHT;
-    }
-
-    /**
-     * The mainland's surprises as the shared part of the district's demand innovation: each quarter's draw is the
-     * innovation a quarter of the disturbance's OU accumulates, at DEMAND_SHOCK_MAINLAND_LOADING, so the shared and own
-     * parts together keep the disturbance's stationary variance at any tick length.
-     *
-     * @param float $mainlandSurprise Unit-variance surprises, crashes included, summed over the quarters that turned
-     *                                this tick.
-     */
-    public static function mainlandDemandImpulse(float $mainlandSurprise): float
-    {
-        $stationarySd = self::DEMAND_SHOCK_SIGMA / sqrt(2.0 * self::DEMAND_SHOCK_REVERSION);
-
-        return self::DEMAND_SHOCK_MAINLAND_LOADING * StochasticProcesses::calculateOrnsteinUhlenbeckStep(0.0, self::DEMAND_SHOCK_REVERSION, $stationarySd, 1.0 / AssetMarketSubsystem::MAINLAND_QUARTERS_PER_YEAR, $mainlandSurprise);
+        return ($outputGap - $supplyGap - $netExportGap - $financeOutputGap - $inventoryInvestmentGap - $spendingTimingGap - $mainlandCycleGap) / self::DOMESTIC_GAP_WEIGHT;
     }
 
     /**

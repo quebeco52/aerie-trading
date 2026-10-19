@@ -602,13 +602,6 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($amplification * $equityLevel, $settle(0.0, 0.10) - $base, 0.005 * $equityLevel, 'Ten percent on the board is ~0.1% of GDP of District spending.');
     }
 
-    /** Easing lifts demand directly, but less than tightening cuts it: it pushes on a string. */
-    public function testEasingPushesOnAString(): void
-    {
-        $this->assertGreaterThan(0.0, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
-        $this->assertLessThan(MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE, MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE);
-    }
-
     /**
      * The gap is a deviation from potential, so a valuation households have lived with for years cannot go
      * on buying extra output. Measured against a fixed opening instead, any lasting difference between how
@@ -830,7 +823,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertGreaterThan(0.0, $impulse, 'The innovation must land on the disturbance.');
         $this->assertEqualsWithDelta(
-            self::ownDemandSigma() * sqrt($dt),
+            MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt),
             $impulse,
             1e-9,
             'A unit own innovation scales by its own sigma * sqrt(dt).',
@@ -852,52 +845,48 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * The mainland's quarterly surprise is the shared part of the demand innovation: it lands on the disturbance whole,
-     * as the impulse a quarter of the disturbance's OU accumulates at the loading, reaches the gap only through the
-     * drift, and is booked to the mainland, not to the district's own disturbance.
+     * The mainland's cycle is a level part of output beside domestic demand (Kose, Otrok & Whiteman 2003): a mainland
+     * quarter moves the district's gap by the loading in the same tick, and domestic demand, which the stabilisers and
+     * momentum answer, is as it was.
      */
-    public function testTheMainlandsSurpriseIsTheSharedPartOfTheDemandInnovation(): void
+    public function testTheMainlandsCycleMovesTheGapAtItsLoadingBesideDomesticDemand(): void
     {
         $dt = 1.0 / 360.0;
         $calm = new MacroState();
         $calm->outputGap = 0.0;
-        $surprised = clone $calm;
+        $slumping = clone $calm;
+        $slumping->foreignOutputGap = -0.02;
 
         $calmGap = $this->subsystem->calculateOutputGap($calm, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
-        $surprisedGap = $this->subsystem->calculateOutputGap($surprised, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0, 1.0);
+        $slumpGap = $this->subsystem->calculateOutputGap($slumping, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
-        $kappa = MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION;
-        $quarterInnovationSd = MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt((1.0 - exp(-2.0 * $kappa / 4.0)) / (2.0 * $kappa));
-        $impulse = MacroAggregateSubsystem::DEMAND_SHOCK_MAINLAND_LOADING * $quarterInnovationSd;
-        $this->assertEqualsWithDelta($impulse, MacroAggregateSubsystem::mainlandDemandImpulse(1.0), 1e-15, 'A unit surprise is a quarter\'s OU innovation at the loading.');
-        $this->assertEqualsWithDelta($impulse, $surprised->demandShock - $calm->demandShock, 1e-15, 'It lands on the disturbance whole.');
-        $this->assertEqualsWithDelta($impulse, $surprised->demandMainlandShock, 1e-15, 'and is booked to the mainland');
-        $this->assertEqualsWithDelta(
-            $calm->demandShock - $calm->demandMainlandShock,
-            $surprised->demandShock - $surprised->demandMainlandShock,
-            1e-15,
-            'leaving the district\'s own disturbance as it was.',
-        );
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * $impulse * $dt, $surprisedGap - $calmGap, 1e-12, 'It reaches the gap through the drift.');
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::MAINLAND_CYCLE_LOADING * -0.02, $slumpGap - $calmGap, 1e-15, 'Half the mainland\'s slump, at once.');
+        $this->assertSame(MacroAggregateSubsystem::MAINLAND_CYCLE_LOADING * -0.02, $slumping->mainlandCycleGap);
+        $calm->outputGap = $calmGap;
+        $slumping->outputGap = $slumpGap;
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::domesticDemandGap($calm), MacroAggregateSubsystem::domesticDemandGap($slumping), 1e-15, 'Domestic demand is untouched.');
     }
 
     /**
-     * The own and shared parts split the disturbance's innovation variance between them: over a quarter the own part
-     * carries 1 - loading^2 of it and a unit-variance surprise the rest, so the loading moves co-movement, not size.
+     * The district's gap leaves the mainland's slump as the mainland recovers, not before: nothing pulls the part back.
      */
-    public function testTheSharedAndOwnPartsKeepTheDisturbancesVariance(): void
+    public function testTheMainlandsPartStaysWhileTheMainlandDoes(): void
     {
-        $kappa = MacroAggregateSubsystem::DEMAND_SHOCK_REVERSION;
-        $quarterVariance = (MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA ** 2) * (1.0 - exp(-2.0 * $kappa / 4.0)) / (2.0 * $kappa);
-        $ownQuarterVariance = (self::ownDemandSigma() ** 2) * (1.0 - exp(-2.0 * $kappa / 4.0)) / (2.0 * $kappa);
+        $dt = 1.0 / 360.0;
+        $calm = new MacroState();
+        $calm->outputGap = 0.0;
+        $slumping = clone $calm;
+        $slumping->foreignOutputGap = -0.02;
+        for ($tick = 0; $tick < 360; $tick++) {
+            $calm->outputGap = $this->subsystem->calculateOutputGap($calm, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+            $slumping->outputGap = $this->subsystem->calculateOutputGap($slumping, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        }
+        $this->assertEqualsWithDelta(MacroAggregateSubsystem::MAINLAND_CYCLE_LOADING * -0.02, $slumping->outputGap - $calm->outputGap, 1e-9, 'A year on, the same part.');
 
-        $this->assertEqualsWithDelta($quarterVariance, $ownQuarterVariance + (MacroAggregateSubsystem::mainlandDemandImpulse(1.0) ** 2), 1e-18);
-    }
-
-    /** The district's own part of the demand innovation's volatility: what the mainland's surprises leave it. */
-    private static function ownDemandSigma(): float
-    {
-        return MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt(1.0 - (MacroAggregateSubsystem::DEMAND_SHOCK_MAINLAND_LOADING ** 2));
+        $slumping->foreignOutputGap = 0.0;
+        $recovered = $this->subsystem->calculateOutputGap($slumping, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $calmNext = $this->subsystem->calculateOutputGap($calm, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+        $this->assertEqualsWithDelta($calmNext, $recovered, 1e-9, 'and it goes with the mainland\'s recovery.');
     }
 
     /** The disturbance is a demand impulse in gap-drift units, so it moves the gap alongside the other Kaldor terms. */
@@ -951,17 +940,15 @@ class MacroAggregateSubsystemTest extends TestCase
 
         // One percentage point of expected inflation on a 0.50 policy leg is 50bps of real easing, through the drag
         // coefficient over a quarter, of which a one-quarter step has passed w^2 through the two Pascal stages.
-        $expectedLift = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $expectedLift = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapUnanchored - $gapAnchored, 1e-9);
     }
 
     /**
      * The mirror of the case above on the restrictive side: from a stance already restrictive, lower expected inflation
-     * raises the real policy leg further, and drags at the restrictive rate. (The neutral fixture's five-year sits a
-     * term premium under its neutral, so the fixture itself is slightly accommodative; starting from it would cross the
-     * kink.)
+     * raises the real policy leg further, and drags at the same slope.
      */
-    public function testLowerExpectedInflationTightensAtTheRestrictiveRate(): void
+    public function testLowerExpectedInflationTightensAtTheSameSlope(): void
     {
         $anchored = $this->neutralBorrowingState();
         $tightened = $this->neutralBorrowingState();
@@ -970,15 +957,15 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapTightened = $this->subsystem->calculateOutputGap($tightened, 0.035, MacroConstants::BASE_NATURAL_RATE, 0.0, 0.25, 1.0);
         $this->assertGreaterThan(0.0, $anchored->monetaryStanceTransmitted, 'Both legs sit on the restrictive side.');
 
-        $expectedDrag = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_RESTRICTIVE * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $expectedDrag = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta(-$expectedDrag, $gapTightened - $gapAnchored, 1e-9);
     }
 
     /**
-     * Barnichon & Matthes (2018), Tenreyro & Thwaites (2016): tightening moves spending, easing pushes on a string.
-     * An equal real-rate move either side of neutral cuts demand more than it lifts it.
+     * The District borrows at floating rates, so easing does not push on a string (Tenreyro & Thwaites 2016): an equal
+     * real-rate move either side of neutral lifts demand as much as it cuts it.
      */
-    public function testTighteningCutsDemandMoreThanAnEqualEasingLiftsIt(): void
+    public function testAnEqualEasingLiftsDemandAsMuchAsTighteningCutsIt(): void
     {
         $neutral = $this->neutralBorrowingState();
         $tight = $this->neutralBorrowingState();
@@ -990,7 +977,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->assertLessThan($gapNeutral, $gapTight);
         $this->assertGreaterThan($gapNeutral, $gapEasy);
-        $this->assertLessThan($gapNeutral - $gapTight, $gapEasy - $gapNeutral, 'Easing must lift demand by less than an equal tightening cuts it.');
+        $this->assertEqualsWithDelta($gapNeutral - $gapTight, $gapEasy - $gapNeutral, 1e-12);
     }
 
     /**
@@ -1076,7 +1063,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $gapRepriced = $this->subsystem->calculateOutputGap($repriced, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
-        $expectedLift = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG_ACCOMMODATIVE * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $expectedLift = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * MacroAggregateSubsystem::KALDOR_MONETARY_DRAG * MacroAggregateSubsystem::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapRepriced - $gapAnchored, 1e-9);
     }
 
@@ -1692,7 +1679,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         // First draw only: the disturbance takes it whole and reaches the gap only through the drift.
         [$demandGap, $demandShock] = $run(1.0, 0.0);
-        $expectedShock = self::ownDemandSigma() * sqrt($dt);
+        $expectedShock = MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt);
         $this->assertEqualsWithDelta($expectedShock, $demandShock - $neutralShock, 1e-15);
         $this->assertEqualsWithDelta(MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * $expectedShock * $dt, $demandGap - $neutralGap, 1e-12);
 
@@ -1942,7 +1929,7 @@ class MacroAggregateSubsystemTest extends TestCase
         // What is left is the Gaussian disturbance alone, as if no disaster or compensator had ever touched it.
         $noise = 0.004;
         for ($tick = 0; $tick < 90; ++$tick) {
-            $noise = ($noise * $decay) + (self::ownDemandSigma() * sqrt($dt) * 0.3);
+            $noise = ($noise * $decay) + (MacroAggregateSubsystem::DEMAND_SHOCK_SIGMA * sqrt($dt) * 0.3);
         }
         $this->assertEqualsWithDelta($noise, $state->demandShock - $state->demandDisasterShock + $state->demandDisasterCompensation, 1e-12);
         $this->assertLessThan(0.0, $this->openWindow($probe)['contributions']['demandDisaster']);

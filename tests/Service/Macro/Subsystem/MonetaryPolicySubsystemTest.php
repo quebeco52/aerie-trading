@@ -91,6 +91,27 @@ class MonetaryPolicySubsystemTest extends TestCase
     }
 
     /**
+     * A productivity shortfall is not seen through: an economy 1% under potential because output fell with productivity
+     * before potential did gets the rate a 1% demand slump gets.
+     */
+    public function testTheRuleAnswersAProductivityShortfallAsAnySlump(): void
+    {
+        $shortfall = new MacroState();
+        $shortfall->outputGap = -0.01;
+        $shortfall->outputGapEma = -0.01;
+        $shortfall->productivitySupplyGap = -0.01;
+        $demand = new MacroState();
+        $demand->outputGap = -0.01;
+        $demand->outputGapEma = -0.01;
+
+        $this->assertEqualsWithDelta(
+            $this->subsystem->calculateTargetRate($demand, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE),
+            $this->subsystem->calculateTargetRate($shortfall, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE),
+            1e-12,
+        );
+    }
+
+    /**
      * Inventory investment is seen through too: an economy 1% over potential because firms are restocking sets the rate
      * one at potential sets, since the restocking is over before a rate move reaches spending.
      */

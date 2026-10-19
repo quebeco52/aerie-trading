@@ -811,11 +811,8 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(TimeSeries::calculateAr2Autocorrelation($a1, $a2, 4), $covariance / $variance, 0.04, 'and a year on it still carries ~0.72 of itself (the CBO gap 0.66).');
     }
 
-    /**
-     * The quarter's gap innovation is handed back over its sd, the region's common demand shock; between turns there is
-     * none.
-     */
-    public function testTheMainlandHandsBackItsGapSurpriseAtTheTurn(): void
+    /** The quarter's gap innovation lands at the turn, and between turns there is none. */
+    public function testTheMainlandsInnovationLandsAtTheTurn(): void
     {
         $draws = new class extends MathUtility {
             public int $calls = 0;
@@ -835,24 +832,21 @@ class AssetMarketSubsystemTest extends TestCase
         $state = new MacroState();
 
         $state->totalTime = 0.10;
-        $this->assertSame(0.0, $subsystem->calculateForeignEconomy($state, 0.01), 'Inside a quarter there is no surprise.');
+        $subsystem->calculateForeignEconomy($state, 0.01);
+        $this->assertSame(0.0, $state->foreignOutputGap, 'Inside a quarter nothing lands.');
 
         $state->totalTime = 0.25;
+        $subsystem->calculateForeignEconomy($state, 0.01);
         $crashCover = AssetMarketSubsystem::MAINLAND_CRASH_INTENSITY / AssetMarketSubsystem::MAINLAND_QUARTERS_PER_YEAR * AssetMarketSubsystem::MAINLAND_CRASH_MEAN;
         $shock = (AssetMarketSubsystem::MAINLAND_GAP_SIGMA * 1.5) + $crashCover;
-        $surprise = $shock / AssetMarketSubsystem::mainlandGapInnovationSd();
-        $this->assertEqualsWithDelta($surprise, $subsystem->calculateForeignEconomy($state, 0.01), 1e-12, 'The turn hands back the gap\'s innovation over its sd,');
-        $this->assertEqualsWithDelta($shock, $state->foreignOutputGap, 1e-12, 'the innovation the mainland gap took: its draw, and the crash cover a quiet quarter earns.');
-
-        $state->totalTime = 1.25;
-        $this->assertEqualsWithDelta(4.0 * $surprise, $subsystem->calculateForeignEconomy($state, 1.0), 1e-12, 'A year-long step sums its four quarters\' surprises.');
+        $this->assertEqualsWithDelta($shock, $state->foreignOutputGap, 1e-12, 'The turn lands its draw and the crash cover a quiet quarter earns.');
     }
 
     /**
-     * A crash strikes the mainland whole in its quarter, about 2008Q4's 2.3pp, and the district takes it as a surprise
-     * of over four sd; the Fed starts cutting at once.
+     * A crash strikes the mainland whole in its quarter, about 2008Q4's 2.3pp, an innovation of over four sd, and the
+     * Fed starts cutting at once.
      */
-    public function testAMainlandCrashLandsWholeAndReachesTheDistrictAsItsSurprise(): void
+    public function testAMainlandCrashLandsWholeInItsQuarter(): void
     {
         $draws = new class extends MathUtility {
             public function generateStandardNormal(): float
@@ -868,13 +862,12 @@ class AssetMarketSubsystemTest extends TestCase
         $subsystem = new AssetMarketSubsystem($draws);
         $state = new MacroState();
         $state->totalTime = 0.25;
-        $surprise = $subsystem->calculateForeignEconomy($state, 0.01);
+        $subsystem->calculateForeignEconomy($state, 0.01);
 
         $median = AssetMarketSubsystem::MAINLAND_CRASH_MEAN * exp(-(AssetMarketSubsystem::MAINLAND_CRASH_LOG_SD ** 2) / 2.0);
         $crashCover = AssetMarketSubsystem::MAINLAND_CRASH_INTENSITY / AssetMarketSubsystem::MAINLAND_QUARTERS_PER_YEAR * AssetMarketSubsystem::MAINLAND_CRASH_MEAN;
-        $this->assertEqualsWithDelta($crashCover - $median, $state->foreignOutputGap, 1e-12, 'The median crash takes 2.2pp off the gap in one quarter.');
-        $this->assertEqualsWithDelta($state->foreignOutputGap / AssetMarketSubsystem::mainlandGapInnovationSd(), $surprise, 1e-12, 'The district takes the same innovation over its sd,');
-        $this->assertLessThan(-4.0, $surprise, 'a quarter no Gaussian of the fitted sd produces in a thousand years.');
+        $this->assertEqualsWithDelta($crashCover - $median, $state->foreignOutputGap, 1e-12, 'The median crash takes 2.2pp off the gap in one quarter,');
+        $this->assertLessThan(-4.0, $state->foreignOutputGap / AssetMarketSubsystem::mainlandGapInnovationSd(), 'a quarter no Gaussian of the fitted sd produces in a thousand years.');
         $this->assertLessThan(MacroConstants::MAINLAND_NEUTRAL_RATE, $state->foreignPolicyRate, 'The Fed cuts in the same quarter.');
     }
 

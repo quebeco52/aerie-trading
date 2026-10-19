@@ -567,11 +567,11 @@ class FinancialInvariantTest extends TestCase
     }
 
     /**
-     * Tenreyro & Thwaites (2016), Barnichon & Matthes (2018): easing still lifts demand in a slump with blown-out
-     * spreads, but it pushes on a string -- a 300bp cut lifts the gap by less than a 300bp hike from the same state
-     * cuts it.
+     * Easing still lifts demand in a slump with blown-out spreads, and the District borrows at floating rates, so it
+     * does not push on a string (Tenreyro & Thwaites 2016): a 300bp cut lifts the gap as much as a 300bp hike from the
+     * same state cuts it.
      */
-    public function testMonetaryEasingStillStimulatesInARecessionButLessThanTighteningRestrains(): void
+    public function testMonetaryEasingLiftsARecessionAsMuchAsTighteningRestrains(): void
     {
         $deterministicMath = new class extends MathUtility {
             public function generateStandardNormal(): float
@@ -606,7 +606,7 @@ class FinancialInvariantTest extends TestCase
         $tighter = $gapAt(0.075, 0.065);
 
         $this->assertGreaterThan($tight, $eased, 'Rate cuts during a downturn must still lift the output gap despite credit spreads.');
-        $this->assertLessThan($tight - $tighter, $eased - $tight, 'A 300bp cut must lift demand by less than a 300bp hike cuts it.');
+        $this->assertEqualsWithDelta($tight - $tighter, $eased - $tight, 1e-12, 'A 300bp cut lifts demand as much as a 300bp hike cuts it.');
     }
 
     public function testFinancialConditionsIndexEmpiricalBalanceAcrossRegimes(): void

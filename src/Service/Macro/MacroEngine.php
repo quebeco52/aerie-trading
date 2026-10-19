@@ -269,12 +269,12 @@ class MacroEngine
         $this->creditFiscalSubsystem->calculatePolicyUncertainty($state, $dt);
         // Mundell-Fleming multi-country foreign output gap and global policy transmission.
         $openingMainlandGap = $state->foreignOutputGap;
-        $mainlandSurprise = $this->assetSubsystem->calculateForeignEconomy($state, $dt);
+        $this->assetSubsystem->calculateForeignEconomy($state, $dt);
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
         $expectedInflation = $this->monetarySubsystem->calculateExpectedInflation($state, MacroConstants::TARGET_INFLATION);
         $openingGap = $state->outputGap;
-        $state->outputGap = $this->aggregateSubsystem->calculateOutputGap($state, $state->yield5y, $state->naturalRate, $expectedInflation, $dt, $stressMultiplier, $mainlandSurprise);
+        $state->outputGap = $this->aggregateSubsystem->calculateOutputGap($state, $state->yield5y, $state->naturalRate, $expectedInflation, $dt, $stressMultiplier);
 
         $this->aggregateSubsystem->calculateCapacityUtilization($state);
         $this->commoditySubsystem->calculateEnergyShock($state, $dt);

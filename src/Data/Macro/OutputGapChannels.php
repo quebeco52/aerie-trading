@@ -80,7 +80,7 @@ final class OutputGapChannels
         'external' => [
             'label' => 'External demand',
             'colour' => '#9085e9',
-            'channels' => ['netExports', 'mainlandDemand'],
+            'channels' => ['netExports', 'mainlandCycle'],
         ],
         // The gap's own pull back to trend (stabilisers and income smoothing) sits with its own momentum: both are
         // demand answering the gap it is in, not a decision anyone took.
