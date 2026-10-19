@@ -24,6 +24,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
+use App\Service\Politics\BudgetBargain;
 use App\Service\Politics\CoalitionFormation;
 use App\Service\Politics\ElectionForecast;
 use App\Service\Politics\PoliticsEngine as Politics;
@@ -958,39 +959,44 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * A supporter accepts a lever no further from its own policy than the one in force (Romer & Rosenthal 1978): it
-     * stops a move away from it, lets through one that comes its way or passes it by no more than it stood off, and a
-     * cabinet with two supporters gets what both accept.
+     * A supporter accepts a budget it likes no less than the levers in force, weighing the whole package (Romer &
+     * Rosenthal 1978; Tsebelis 2002): a supporter the cabinet's programme would leave worse off holds the budget at its
+     * own indifference, every supporter of a cabinet with two is left no worse off, and a majority cabinet answers to
+     * no supporter.
      */
-    public function testASupporterAcceptsNothingFurtherFromItsOwnPolicyThanTheLeverInForce(): void
+    public function testASupporterAcceptsABudgetItLikesNoLessThanTheLeversInForce(): void
     {
         $seats = Diet::SEED_SEATS;
         $positions = Diet::HOME_POSITIONS;
         $standing = static fn(float $tax): array => ['corporateTax' => $tax] + Politics::standingLevers(new PoliticsStateDTO());
-        $gap = Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP;
-        $civicIdeal = Politics::platform(Diet::position(Diet::CIVIC, $positions))['corporateTax'];
-        $vanguardIdeal = Politics::platform(Politics::coalitionPosition(Diet::membership([Diet::VANGUARD]), $seats, $positions))['corporateTax'];
-        $this->assertEqualsWithDelta($gap / 2.0, $civicIdeal, 1e-12);
-        $this->assertEqualsWithDelta(-$gap / 2.0, $vanguardIdeal, 1e-12);
+        $programme = static fn(string $party): array => Politics::partyProgramme($party, $positions);
 
-        $blocked = Politics::budget([Diet::VANGUARD], [Diet::CIVIC], $seats, $positions, $standing(0.0));
-        $this->assertSame(0.0, $blocked['levers']['corporateTax'], 'The Civic Front will not vote the rate further from its own.');
-        $this->assertTrue($blocked['supportHeld']['corporateTax']);
+        $civicHeld = Politics::budget([Diet::VANGUARD], [Diet::CIVIC], $seats, $positions, $standing(0.0));
+        $this->assertGreaterThan(
+            BudgetBargain::separation($standing(0.0), $programme(Diet::CIVIC)),
+            BudgetBargain::separation($civicHeld['platform'], $programme(Diet::CIVIC)),
+            'The Vanguard\'s programme would leave the Civic Front worse off than the levers in force',
+        );
+        $this->assertEqualsWithDelta(
+            BudgetBargain::separation($standing(0.0), $programme(Diet::CIVIC)),
+            BudgetBargain::separation($civicHeld['levers'], $programme(Diet::CIVIC)),
+            1e-9,
+            'so the budget stops where the Civic Front is indifferent.',
+        );
+        $this->assertTrue($civicHeld['supportHeld']['corporateTax']);
 
-        // The Exchange Party's own rate is just under the neutral one: from half the gap above neutral, a cut to the
-        // Vanguard's half below is no further from the Exchange's rate than the rate in force stands.
-        $exchangeIdeal = Politics::platform(Diet::position(Diet::EXCHANGE, $positions))['corporateTax'];
-        $through = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing($gap / 2.0));
-        $this->assertEqualsWithDelta($vanguardIdeal, $through['levers']['corporateTax'], 1e-12);
-        $this->assertFalse($through['supportHeld']['corporateTax']);
-
-        $inForce = $gap / 7.0;
-        $partial = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE], $seats, $positions, $standing($inForce));
-        $this->assertEqualsWithDelta($exchangeIdeal - ($inForce - $exchangeIdeal), $partial['levers']['corporateTax'], 1e-12, 'A cut goes only as far past the Exchange Party\'s rate as the rate in force stood above it.');
-        $this->assertTrue($partial['supportHeld']['corporateTax']);
-
+        $inForce = Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 7.0;
         $both = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CIVIC], $seats, $positions, $standing($inForce));
-        $this->assertEqualsWithDelta($inForce, $both['levers']['corporateTax'], 1e-12, 'With the Civic Front also needed, the rate cannot fall at all.');
+        foreach ([Diet::EXCHANGE, Diet::CIVIC] as $supporter) {
+            $this->assertLessThanOrEqual(
+                BudgetBargain::separation($standing($inForce), $programme($supporter)) + 1e-9,
+                BudgetBargain::separation($both['levers'], $programme($supporter)),
+                "{$supporter} is no worse off.",
+            );
+        }
+        foreach ($both['levers'] as $lever => $value) {
+            $this->assertSame($value !== $both['platform'][$lever], $both['supportHeld'][$lever], "{$lever} is held exactly where it falls short of the programme.");
+        }
 
         $majority = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], [], $seats, $positions, $standing(0.0));
         $this->assertSame(array_fill_keys(array_keys(Politics::LEVER_FIELDS), false), $majority['supportHeld'], 'A majority cabinet answers to no supporter.');
@@ -1303,7 +1309,11 @@ class PoliticsEngineTest extends TestCase
         $this->assertFalse($kept['fundHeld']);
     }
 
-    /** A cabinet's debt plan is its parties' planks weighted by seats; a supporter can hold it short as any lever. */
+    /**
+     * A cabinet's debt plan is its parties' planks weighted by seats. A supporter that does not own the size-of-state
+     * question trades debt within the package; one that does will not vote debt further from its own target than it
+     * stands.
+     */
     public function testTheDebtPlanIsTheCabinetsPlanksWeightedBySeats(): void
     {
         $seats = [Diet::VANGUARD => 60, Diet::EXCHANGE => 40];
@@ -1316,8 +1326,12 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(Diet::DEBT_PLANKS[Diet::VANGUARD]['target'], $alone['levers']['debtTarget']);
         $this->assertSame(Diet::DEBT_PLANKS[Diet::VANGUARD]['pace'], $alone['levers']['debtPace']);
 
-        $propped = Politics::budget([Diet::VANGUARD], [Diet::COMMON_LOT], Diet::SEED_SEATS, Diet::HOME_POSITIONS, $standing);
-        $this->assertSame($standing['debtTarget'], $propped['levers']['debtTarget'], 'The Common Lot will not vote debt further from its own target than it stands.');
-        $this->assertTrue($propped['supportHeld']['debtTarget']);
+        $traded = Politics::budget([Diet::VANGUARD], [Diet::COMMON_LOT], Diet::SEED_SEATS, Diet::HOME_POSITIONS, $standing);
+        $this->assertLessThan($standing['debtTarget'], $traded['levers']['debtTarget'], 'The Common Lot trades debt for the rest of the package');
+        $this->assertGreaterThan(Diet::DEBT_PLANKS[Diet::VANGUARD]['target'], $traded['levers']['debtTarget'], 'but not all of it.');
+        $this->assertTrue($traded['supportHeld']['debtTarget']);
+
+        $guarded = Politics::budget([Diet::VANGUARD], [Diet::CIVIC], Diet::SEED_SEATS, Diet::HOME_POSITIONS, $standing);
+        $this->assertSame($standing['debtTarget'], $guarded['levers']['debtTarget'], 'The Civic Front owns the size of the state and will not vote debt down.');
     }
 }

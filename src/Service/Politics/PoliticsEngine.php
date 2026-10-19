@@ -53,9 +53,10 @@ use Psr\Log\LoggerInterface;
  * the environment axis the green belt, the carbon price and the rules on extraction, none of them for a cabinet that
  * puts growth first and the strictest on record at the Tideline Accord's place. Each party also runs on a debt plank,
  * the debt its budget steers to and how fast (AerieDiet::DEBT_PLANKS), which a cabinet weighs by seats. A minority
- * cabinet proposes and its support parties can refuse: each accepts a lever no further from its own policy than the one
- * in force, so a supporter can stop the cabinet moving away from it but cannot pull policy its way (Romer & Rosenthal
- * 1978). The bond market, not the Council, prices what the Diet borrows.
+ * cabinet proposes and its support parties can refuse: each accepts a budget it likes no less than the levers in force,
+ * weighing the whole package, so a supporter can give ground on one lever for what it gains on another but is never
+ * made worse off (Romer & Rosenthal 1978; Tsebelis 2002), and on the question it owns it moves no lever further from
+ * its own than the one in force (Budge & Farlie 1983). The bond market, not the Council, prices what the Diet borrows.
  *
  * Politics runs beside the economy, not inside it: the ticker advances it after each macro tick on that tick's
  * snapshot, and the economy reads back only what the government hands it (PoliticsStateDTO::policy()), on the next
@@ -657,9 +658,10 @@ class PoliticsEngine
     /**
      * What a budget round would enact: the cabinet's programme, as far as its support parties let it.
      *
-     * The cabinet proposes and each support party accepts a lever no further from its own programme than the one in
-     * force (Romer & Rosenthal 1978), so the proposal is the cabinet's programme held inside every supporter's
-     * acceptable range, which always holds the lever in force. The reserve fund holds the second key on its draw: a
+     * The cabinet proposes and each support party accepts a budget it likes no less than the levers in force, weighing
+     * the whole package, but moves no lever on the question it owns further from its own than the one in force
+     * (BudgetBargain): the cabinet enacts the budget closest to its programme that all its supporters accept, which the
+     * levers in force always are. The reserve fund holds the second key on its draw: a
      * budget spends more than half the fund's expected return only with its consent, which it gives while the
      * statistics office has a recession declared (MacroEngine::recessionDeclared()), as Singapore's President consented
      * to drawing on the reserves in 2009 and 2020 and in no other year. Out of a recession the share above the ceiling
@@ -679,25 +681,27 @@ class PoliticsEngine
     public static function budget(array $cabinet, array $support, array $seats, array $positions, array $standing, bool $recession = false): array
     {
         $platform = self::platform(self::coalitionPosition(AerieDiet::membership($cabinet), $seats, $positions)) + self::debtPlanks($cabinet, $seats);
-        $supporterPlatforms = array_map(static fn(string $party): array => self::partyProgramme($party, $positions), $support);
+        $supporters = array_map(static fn(string $party): array => [
+            'programme' => self::partyProgramme($party, $positions),
+            'redLines' => BudgetBargain::redLines($party),
+        ], $support);
 
-        $levers = array_fill_keys(array_keys(self::LEVER_FIELDS), 0.0);
-        $supportHeld = [];
+        $proposal = [];
         foreach (array_keys(self::LEVER_FIELDS) as $lever) {
-            $low = -INF;
-            $high = INF;
-            foreach ($supporterPlatforms as $own) {
-                $reach = abs($standing[$lever] - $own[$lever]);
-                $low = max($low, $own[$lever] - $reach);
-                $high = min($high, $own[$lever] + $reach);
-            }
-            $levers[$lever] = max($low, min($high, $platform[$lever]));
-            $supportHeld[$lever] = $levers[$lever] !== $platform[$lever];
+            $proposal[$lever] = $platform[$lever];
         }
-
-        $fundHeld = !$recession && $levers['reserveDrawShare'] > MacroConstants::RESERVE_DRAW_CEILING;
+        // Out of a recession every party knows the fund will not consent above the ceiling, so the bargain is struck
+        // within it.
+        $caps = $recession ? [] : ['reserveDrawShare' => MacroConstants::RESERVE_DRAW_CEILING];
+        $levers = BudgetBargain::winSetPoint($proposal, $standing, $supporters, $caps);
+        $fundHeld = !$recession && $platform['reserveDrawShare'] > MacroConstants::RESERVE_DRAW_CEILING
+            && $levers['reserveDrawShare'] >= MacroConstants::RESERVE_DRAW_CEILING * (1.0 - 1e-12);
         if ($fundHeld) {
             $levers['reserveDrawShare'] = MacroConstants::RESERVE_DRAW_CEILING;
+        }
+        $supportHeld = [];
+        foreach ($levers as $lever => $value) {
+            $supportHeld[$lever] = $value !== $platform[$lever] && !($lever === 'reserveDrawShare' && $fundHeld);
         }
 
         return ['levers' => $levers, 'platform' => $platform, 'supportHeld' => $supportHeld, 'fundHeld' => $fundHeld];
