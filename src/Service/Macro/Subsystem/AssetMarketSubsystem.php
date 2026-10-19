@@ -216,9 +216,9 @@ class AssetMarketSubsystem
     /** The mainland's weight in the world demand that prices commodities: its share of world GDP. */
     public const MAINLAND_DEMAND_WEIGHT = self::MAINLAND_GDP_USD / self::WORLD_GDP_USD;
     /**
-     * Share of the district's cycle that reaches the mainland's demand in the long run: its imports for home use are
-     * the mainland's exports, moving 1.4 times its demand (IMF WEO 2015) at their share of its GDP, scaled to the
-     * mainland's size.
+     * Share of the district's domestic demand cycle that reaches the mainland's demand in the long run: its imports for
+     * home use are the mainland's exports, its main trading partner's, moving 1.4 times its demand (IMF WEO 2015) at
+     * their share of its GDP, scaled to the mainland's size.
      */
     public const FOREIGN_IMPORT_SPILLOVER = MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroConstants::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
     /** Guard on the mainland gap, beyond the deepest postwar CBO gap; the fitted process does not reach it. */
@@ -1090,7 +1090,7 @@ class AssetMarketSubsystem
      * Greenspan and Bernanke. Simulated together they give the CBO gap's persistence, core PCE's level and spread and
      * the funds rate's (var/harness/mainland_fit.py). The equations are quarterly and are stepped at each quarter's
      * turn, which is also how the district sees them: a statistical release and a rate decision. The district's own
-     * cycle moves the mainland gap's mean a little (two-country Mundell-Fleming, Obstfeld & Rogoff 1996), and
+     * spending moves the mainland gap's mean a little (two-country Mundell-Fleming, Obstfeld & Rogoff 1996), and
      * everything else -- the currency through the rate differential, the trade balance and exports through the
      * mainland gap, and the district's output through the regional factor in it -- reads these series. The gap's
      * shocks are Gaussian but for a rare crash, the region's shared slump.
@@ -1232,7 +1232,10 @@ class AssetMarketSubsystem
      */
     private static function mainlandNextQuarter(MacroState $state, float $gapShock, float $inflationShock, float $rateShock): array
     {
-        $spilloverMean = self::FOREIGN_IMPORT_SPILLOVER * $state->outputGapEma;
+        // The fitted cycle already holds its trading partners' answer to it, the district's among them, so the mean
+        // reads the district's own spending: its domestic demand, not the part of its gap that is the mainland's cycle
+        // come back through exports and the regional factor.
+        $spilloverMean = self::FOREIGN_IMPORT_SPILLOVER * $state->domesticDemandGapEma;
         $lastGap = $state->foreignOutputGap;
         $gap = ((1.0 - self::MAINLAND_GAP_AR1 - self::MAINLAND_GAP_AR2) * $spilloverMean)
             + (self::MAINLAND_GAP_AR1 * $lastGap)

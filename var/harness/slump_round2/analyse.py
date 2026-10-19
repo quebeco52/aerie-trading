@@ -1,14 +1,16 @@
-"""analyse.py [arms]: slump length/depth moments from runs/<arm>-<seed>.macro.jsonl (default arms A B C D E F).
-Env SEEDS (1-8), BURN (2 years). Quarterly rows with t > BURN. Prints per arm mean [min, max] over seeds, the paired
-difference vs A (mean, se, t), and F against the best single arm (largest fall in share gap < -2% vs A)."""
+"""analyse.py [arms]: round-2 slump moments from runs/<arm>-<seed>.macro.jsonl (default arms A G P1 P2 H2 N1 S1).
+Env SEEDS (1-8), BURN (2 years), YEARS (52, completeness check). Quarterly rows with t > BURN.
+Prints the pairing check (corr of the quarterly fgap series with the control's, same seed), per arm mean [min, max]
+over seeds, and paired differences G - A and <arm> - G: mean (se) t, and the mainland-adjusted figure (intercept of
+the paired difference regressed on the paired difference of fgap means: est (se) t)."""
 import json, math, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cycle_amp'))
-from gapstats_lib import hp, mean, sd, acf
+from gapstats_lib import mean, sd, acf
 
 H = os.path.dirname(os.path.abspath(__file__))
 BURN = float(os.environ.get('BURN', 2))
 NAN = float('nan')
-ARMS = sys.argv[1:] or ['A', 'B', 'C', 'D', 'E', 'F']
+ARMS = sys.argv[1:] or ['A', 'G', 'P1', 'P2', 'H2', 'N1', 'S1']
 
 
 def seeds():
@@ -39,26 +41,27 @@ def runs_below(x, h):
     return out
 
 
-KEYS = [
-    ('gap_mean%', 'gap mean %'), ('gap_sd%', 'gap sd %'), ('sh<-2', 'share gap < -2%'), ('sh>+2', 'share gap > +2%'),
-    ('sh<-1sd', 'share gap < -1 own sd'), ('longest<-1.5', 'longest run < -1.5% (q)'),
-    ('deep/cent', 'runs >= 8q < -1.5% per century'), ('len>=4q', 'mean length of runs >= 4q < -1.5%'),
-    ('acf4', 'gap acf lag 4'), ('acf13', 'gap acf lag 13'),
-    ('infl4_mean%', 'infl 4q-avg mean %'), ('infl4_sd%', 'infl 4q-avg sd %'),
-    ('sc_mean%', 'supercore mean %'), ('sc_sd%', 'supercore sd %'),
-    ('floor', 'policy floor share (<= 0.25%)'), ('pol_sd%', 'policy sd %'),
-    ('hp_corr', 'HP cycle corr log Y vs fgap'), ('c(rgq,dfg)', 'corr rgq, d fgap (same q)'),
-    ('c(dg,dfg)', 'corr d gap, d fgap (E check)'),
-    ('worst_rgq%', 'worst rgq %'), ('rgq<-1/cent', 'quarters rgq < -1% per century'), ('rec/dec', 'recession starts per decade'),
+TARGETS = [('sh<-2', 'share gap < -2%'), ('longest<-1.5', 'longest run < -1.5% (q)'), ('gap_mean%', 'gap mean %')]
+WATCH = [
+    ('u-nairu%', 'u - nairu mean (pp)'), ('infl4_mean%', 'infl 4q-avg mean %'), ('infl4_sd%', 'infl 4q-avg sd %'),
+    ('sc_sd%', 'supercore sd %'), ('floor', 'policy floor share (<= 0.25%)'), ('rec/dec', 'recession starts / decade'),
+    ('crises/cent', 'credit crises / century'), ('acf13', 'gap acf lag 13'), ('c(infl,gap-4)', 'corr(infl, gap 4q earlier)'),
+    ('sh>+2', 'share gap > +2%'), ('gap_sd%', 'gap sd %'), ('fgap_mean%', 'fgap mean % (mainland)'),
 ]
+KEYS = TARGETS + WATCH
+
+
+def load(arm, seed):
+    path = f'{H}/runs/{arm}-{seed}.macro.jsonl'
+    if not os.path.exists(path):
+        return None
+    return [r for r in (json.loads(l) for l in open(path)) if r['t'] > 0]
 
 
 def stats(arm, seed):
-    path = f'{H}/runs/{arm}-{seed}.macro.jsonl'
-    if not os.path.exists(path):
-        return None, f'{arm}-{seed}: missing'
-    rows = [json.loads(l) for l in open(path)]
-    rows = [r for r in rows if r['t'] > 0]
+    rows = load(arm, seed)
+    if rows is None:
+        return None, None, f'{arm}-{seed}: missing'
     flag = ''
     if any(not math.isfinite(r['gap']) or not math.isfinite(r['policy']) for r in rows):
         flag = f'{arm}-{seed}: non-finite macro value'
@@ -66,38 +69,32 @@ def stats(arm, seed):
     R = [r for r in rows if r['t'] > BURN]
     yrs = len(R) / 4
     g = [r['gap'] for r in R]
-    f = [r['fgap'] for r in R]
-    dg = [g[i] - g[i - 1] for i in range(1, len(g))]
-    df = [f[i] - f[i - 1] for i in range(1, len(f))]
-    q = [r['rgq'] for r in R]
     infl = [r['infl'] for r in R]
     i4 = [mean(infl[i - 3:i + 1]) for i in range(3, len(infl))]
-    sc = [r['supercore'] for r in R]
     pol = [r['policy'] for r in R]
-    lny = [math.log(r['pot'] * (1 + r['gap'])) for r in R]
-    cy = [a - b for a, b in zip(lny, hp(lny))]
-    cf = [a - b for a, b in zip(f, hp(f))]
     rec = [1 if r['rec'] else 0 for r in R]
     rec0 = 1 if (pre and pre[-1]['rec']) else 0
     starts = sum(1 for i, v in enumerate(rec) if v == 1 and (rec[i - 1] if i else rec0) == 0)
-    s = sd(g)
+    seen, crises = (pre[-1].get('crisis_at') if pre else None), 0
+    for r in R:
+        c = r.get('crisis_at')
+        if c is not None and c != seen and c > BURN:
+            crises += 1
+        seen = c
     rb = runs_below(g, -0.015)
-    long4 = [n for n in rb if n >= 4]
     out = {
-        'gap_mean%': 100 * mean(g), 'gap_sd%': 100 * s,
+        'gap_mean%': 100 * mean(g), 'gap_sd%': 100 * sd(g),
         'sh<-2': sum(v < -0.02 for v in g) / len(g), 'sh>+2': sum(v > 0.02 for v in g) / len(g),
-        'sh<-1sd': sum(v < -s for v in g) / len(g),
-        'longest<-1.5': max(rb) if rb else 0, 'deep/cent': 100 * sum(n >= 8 for n in rb) / yrs,
-        'len>=4q': mean(long4) if long4 else NAN,
-        'acf4': acf(g, 4), 'acf13': acf(g, 13),
-        'infl4_mean%': 100 * mean(i4), 'infl4_sd%': 100 * sd(i4), 'sc_mean%': 100 * mean(sc), 'sc_sd%': 100 * sd(sc),
-        'floor': sum(p <= 0.0025 for p in pol) / len(pol), 'pol_sd%': 100 * sd(pol),
-        'hp_corr': corr(cy, cf), 'c(rgq,dfg)': corr(q[1:], df), 'c(dg,dfg)': corr(dg, df),
-        'worst_rgq%': 100 * min(q), 'rgq<-1/cent': 100 * sum(v < -0.01 for v in q) / yrs, 'rec/dec': 10 * starts / yrs,
+        'longest<-1.5': max(rb) if rb else 0,
+        'u-nairu%': 100 * mean([r['u'] - r['nairu'] for r in R]),
+        'infl4_mean%': 100 * mean(i4), 'infl4_sd%': 100 * sd(i4), 'sc_sd%': 100 * sd([r['supercore'] for r in R]),
+        'floor': sum(p <= 0.0025 for p in pol) / len(pol), 'rec/dec': 10 * starts / yrs,
+        'crises/cent': 100 * crises / yrs, 'acf13': acf(g, 13), 'c(infl,gap-4)': corr(infl[4:], g[:-4]),
+        'fgap_mean%': 100 * mean([r['fgap'] for r in R]),
     }
     if len(R) < 4 * (float(os.environ.get('YEARS', 52)) - BURN) - 2:
         flag = (flag + '; ' if flag else '') + f'{arm}-{seed}: only {len(R)} quarters'
-    return out, flag
+    return out, [r['fgap'] for r in rows], flag
 
 
 def fmt(v):
@@ -109,61 +106,68 @@ def summary(xs):
     return f'{fmt(mean(xs))} [{fmt(min(xs))}, {fmt(max(xs))}]' if xs else 'nan'
 
 
-def paired(a, b):
-    d = [y - x for x, y in zip(a, b) if math.isfinite(x) and math.isfinite(y)]
+def paired(d):
     if len(d) < 2:
         return 'n/a'
     m, se = mean(d), sd(d) / math.sqrt(len(d))
-    t = m / se if se > 0 else NAN
-    return f'{fmt(m)} ({fmt(se)}) t={t:+.1f}'
+    return f'{fmt(m)} ({fmt(se)}) t={m / se if se > 0 else NAN:+.1f}'
+
+
+def ancova(d, x):
+    """Intercept of d = a + b x (OLS): the paired difference at equal mainland means."""
+    n = len(d)
+    if n < 4:
+        return 'n/a'
+    mx, md = mean(x), mean(d)
+    sxx = sum((v - mx) ** 2 for v in x)
+    if sxx <= 0:
+        return 'n/a'
+    b = sum((u - mx) * (v - md) for u, v in zip(x, d)) / sxx
+    a = md - b * mx
+    s2 = sum((v - a - b * u) ** 2 for u, v in zip(x, d)) / (n - 2)
+    se = math.sqrt(s2 * (1 / n + mx * mx / sxx))
+    return f'{fmt(a)} ({fmt(se)}) t={a / se if se > 0 else NAN:+.1f}'
 
 
 S = seeds()
-data, flags = {}, []
+data, fg, flags = {}, {}, []
 for arm in ARMS:
-    for sd_ in S:
-        st, fl = stats(arm, sd_)
+    for s_ in S:
+        st, f, fl = stats(arm, s_)
         if fl:
             flags.append(fl)
         if st:
-            data[(arm, sd_)] = st
+            data[(arm, s_)], fg[(arm, s_)] = st, f
 common = [s for s in S if all((a, s) in data for a in ARMS)]
 print(f'BURN {BURN} y; seeds with every arm: {len(common)} of {len(S)} ({",".join(map(str, common))})')
 print('flags: ' + ('; '.join(flags) if flags else 'none'))
 col = lambda arm, k: [data[(arm, s)][k] for s in common]
+PAIRS = ([('G', 'A')] if 'G' in ARMS and 'A' in ARMS else []) + [(a, 'G') for a in ARMS if a not in ('A', 'G') and 'G' in ARMS]
+
+print('\n== pairing: corr of quarterly fgap with the control, same seed (min [arm-seed]) ==')
+for a, c in PAIRS:
+    cs = [(corr(*[x[:min(len(fg[(a, s)]), len(fg[(c, s)]))] for x in (fg[(a, s)], fg[(c, s)])]), s) for s in common]
+    lo = min(cs)
+    print(f'  {a} vs {c}: min {lo[0]:.4f} (seed {lo[1]}), mean {mean([v for v, _ in cs]):.4f}')
 
 print('\n== per arm: mean [min, max] over seeds ==')
+print('quantity'.ljust(34) + ''.join(a.ljust(25) for a in ARMS))
 for k, label in KEYS:
-    print(f'{label}')
-    for arm in ARMS:
-        print(f'    {arm}: {summary(col(arm, k))}')
+    print(label.ljust(34) + ''.join(summary(col(a, k)).ljust(25) for a in ARMS))
 
-print('\n== paired difference vs A: mean (se) t ==')
-print('quantity'.ljust(40) + ''.join(a.ljust(30) for a in ARMS if a != 'A'))
-for k, label in KEYS:
-    print(label.ljust(40) + ''.join(paired(col('A', k), col(a, k)).ljust(30) for a in ARMS if a != 'A'))
+for a, c in PAIRS:
+    print(f'\n== {a} - {c}: paired mean (se) t | mainland-adjusted intercept (se) t ==')
+    x = [p - q for p, q in zip(col(a, 'fgap_mean%'), col(c, 'fgap_mean%'))]
+    for k, label in KEYS:
+        d = [p - q for p, q in zip(col(a, k), col(c, k))]
+        ok = [i for i, v in enumerate(d) if math.isfinite(v)]
+        dd, xx = [d[i] for i in ok], [x[i] for i in ok]
+        adj = ancova(dd, xx) if k != 'fgap_mean%' else ''
+        print(label.ljust(34) + paired(dd).ljust(30) + adj)
 
-singles = [a for a in ARMS if a not in ('A', 'F')]
-if 'F' in ARMS and singles and 'A' in ARMS:
-    best = min(singles, key=lambda a: mean(col(a, 'sh<-2')) - mean(col('A', 'sh<-2')))
-    print(f'\n== F minus best single arm ({best}, largest fall in share gap < -2%): mean (se) t ==')
-    for k, label in KEYS:
-        print(label.ljust(40) + paired(col(best, k), col('F', k)))
-
-if 'G' in ARMS and 'H' in ARMS:
-    print('\n== G minus H (what E adds on top of B + D): mean (se) t ==')
-    for k, label in KEYS:
-        print(label.ljust(40) + paired(col('H', k), col('G', k)))
-if 'G' in ARMS and 'E' in ARMS:
-    print('\n== G minus E (what B + D add on top of E): mean (se) t ==')
-    for k, label in KEYS:
-        print(label.ljust(40) + paired(col('E', k), col('G', k)))
-PER = [k for k in ('sh<-2', 'longest<-1.5', 'gap_mean%')]
-shown = [a for a in ('A', 'E', 'H', 'G') if a in ARMS]
-if os.environ.get('PERSEED') and shown:
-    lab = dict(KEYS)
-    for k in PER:
-        print(f'\n== per seed: {lab[k]} ==')
-        print('seed'.ljust(6) + ''.join(a.rjust(10) for a in shown))
+if os.environ.get('PERSEED'):
+    for k, label in TARGETS:
+        print(f'\n== per seed: {label} ==')
+        print('seed'.ljust(6) + ''.join(a.rjust(9) for a in ARMS))
         for s_ in common:
-            print(str(s_).ljust(6) + ''.join(fmt(data[(a, s_)][k]).rjust(10) for a in shown))
+            print(str(s_).ljust(6) + ''.join(fmt(data[(a, s_)][k]).rjust(9) for a in ARMS))

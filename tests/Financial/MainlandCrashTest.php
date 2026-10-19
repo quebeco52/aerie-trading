@@ -33,7 +33,7 @@ class MainlandCrashTest extends TestCase
             mt_srand($seed);
             $subsystem = new AssetMarketSubsystem(new MathUtility());
             $state = new MacroState();
-            $state->outputGapEma = 0.0; // the district at trend sets the mainland's mean at zero
+            $state->domesticDemandGapEma = 0.0; // the district's spending at trend sets the mainland's mean at zero
             for ($q = 0; $q < self::QUARTERS_PER_SEED; ++$q) {
                 $state->totalTime += 0.25;
                 $last = $state->foreignOutputGap;

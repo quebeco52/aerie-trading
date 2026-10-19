@@ -782,7 +782,7 @@ class AssetMarketSubsystemTest extends TestCase
         mt_srand(20260928);
         $subsystem = new AssetMarketSubsystem(new MathUtility()); // real draws: the fixture's stub is silent
         $state = new MacroState();
-        $state->outputGapEma = 0.0;
+        $state->domesticDemandGapEma = 0.0;
         $samples = [];
         for ($q = 0; $q < 40000; $q++) {
             $this->runMainlandQuarters($subsystem, $state, 1);
@@ -896,7 +896,7 @@ class AssetMarketSubsystemTest extends TestCase
         };
         $subsystem = new AssetMarketSubsystem($draws);
         $state = new MacroState();
-        $state->outputGapEma = 0.04;
+        $state->domesticDemandGapEma = 0.04;
 
         $state->totalTime = 0.10;
         $subsystem->calculateForeignEconomy($state, 0.01);
@@ -916,7 +916,7 @@ class AssetMarketSubsystemTest extends TestCase
     public function testTheDistrictsBoomSpillsIntoTheMainlandOnlyInPart(): void
     {
         $state = new MacroState();
-        $state->outputGapEma = 0.04;
+        $state->domesticDemandGapEma = 0.04;
         $this->runMainlandQuarters($this->subsystem, $state, 400);
 
         $this->assertEqualsWithDelta((0.04 * AssetMarketSubsystem::FOREIGN_IMPORT_SPILLOVER) + self::quietMainlandLift(), $state->foreignOutputGap, 1e-6, 'The mainland feels the district\'s imports, not its whole cycle.');
@@ -926,6 +926,21 @@ class AssetMarketSubsystemTest extends TestCase
         $expectedGlobal = (AssetMarketSubsystem::DOMESTIC_DEMAND_WEIGHT * $state->outputGap) + (AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT * $state->foreignOutputGap) + ($restOfWorld * $state->worldActivityGap);
         $this->assertEqualsWithDelta($expectedGlobal, $state->globalDemandGap, 1e-9, 'World demand weighs the three economies at their GDP shares.');
         $this->assertEqualsWithDelta(0.63, $restOfWorld, 0.01, 'Most of the world is neither the District nor the mainland.');
+    }
+
+    /**
+     * The mainland's own cycle does not come back to it through the district: a district gap that is the mainland's
+     * regional factor and its exports, with the district's own spending at trend, leaves the mainland's mean where it
+     * was.
+     */
+    public function testTheMainlandsOwnCycleDoesNotComeBackThroughTheDistrict(): void
+    {
+        $state = new MacroState();
+        $state->outputGapEma = 0.04;
+        $state->domesticDemandGapEma = 0.0;
+        $this->runMainlandQuarters($this->subsystem, $state, 400);
+
+        $this->assertEqualsWithDelta(self::quietMainlandLift(), $state->foreignOutputGap, 1e-6);
     }
 
     /** The fitted AR(2)'s stationary sd, as the constant the world loading divides by states it. */
@@ -950,7 +965,7 @@ class AssetMarketSubsystemTest extends TestCase
         mt_srand(20261014);
         $subsystem = new AssetMarketSubsystem(new MathUtility());
         $state = new MacroState();
-        $state->outputGapEma = 0.0;
+        $state->domesticDemandGapEma = 0.0;
         $world = [];
         $mainland = [];
         for ($q = 0; $q < 20000; $q++) {
@@ -986,7 +1001,7 @@ class AssetMarketSubsystemTest extends TestCase
     {
         $settle = function (float $inflation): array {
             $state = new MacroState();
-            $state->outputGapEma = 0.0;
+            $state->domesticDemandGapEma = 0.0;
             $this->runMainlandQuarters($this->subsystem, $state, 200, static function (MacroState $s) use ($inflation): void {
                 $s->foreignCoreInflation = $s->foreignCoreInflationLag1 = $s->foreignCoreInflationLag2 = $s->foreignCoreInflationLag3 = $inflation;
             });
@@ -1009,7 +1024,7 @@ class AssetMarketSubsystemTest extends TestCase
     public function testTheFedStopsAtTheLowerBound(): void
     {
         $state = new MacroState();
-        $state->outputGapEma = 0.0;
+        $state->domesticDemandGapEma = 0.0;
         $this->runMainlandQuarters($this->subsystem, $state, 60, static function (MacroState $s): void {
             $s->foreignOutputGap = $s->foreignOutputGapLag = -0.06;
         });
