@@ -21,3 +21,13 @@ does it move the cycle guards (gap mean/sd, recessions per decade, policy floor 
   (peak_k < 0: mainland leads), HP(1600) cycle corr of log(pot x (1+gap)) with fgap's, corr(rgq, d fgap) at lags
   0/-1/-2 (mainland ahead), disaster arrivals per decade.
 - Evidence: `mainland_crash_evidence.md`.
+
+## TPY check (does the tick rate change District slumps?)
+- `run_tpy.sh <arm> <seed>`: arm B (the `mctree` from `setup.sh`, no OVR) at `B360` (TPY 360) or `B3600` (TPY 3600,
+  the live game's rate; ~10x the cost per simulated year). Env YEARS (18), POLITICS (1), SNAP. Outputs `runs/<arm>-<seed>.*`.
+- `bash var/harness/mainland_crash/setup.sh <SNAP> && SNAP=<SNAP> YEARS=18 bin/harness-batch var/harness/mainland_crash/run_tpy.sh 1-8 B3600 B360 &&
+  python3 var/harness/mainland_crash/tpy.py > var/harness/mainland_crash/tpy_check.out`
+- `tpy.py [arms]`: all 72 quarters from year 0 (no burn-in, like a fresh-reset live dump): gap mean, share < -2%, longest
+  runs gap < -1.5% and < 0, policy and Fed floor shares, fgap mean and longest run < 0, shared push
+  (cumsum dmain x 0.25 x DOMESTIC_GAP_WEIGHT, total and worst drawdown in pp), worst rgq; per arm mean [min, max],
+  seeds reaching the live dump's values, and the unpaired B3600 - B360 difference (se, t).

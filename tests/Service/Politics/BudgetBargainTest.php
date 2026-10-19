@@ -57,6 +57,44 @@ class BudgetBargainTest extends TestCase
     }
 
     /**
+     * The same supporter with its programme recomputed, off the levers in force only by rounding, still blocks
+     * everything: a ball that small has no budget on it but the levers in force. Projecting onto it drifted the budget
+     * by rounding, or, in the second case, ran the supporter's term to infinity and every lever its red lines leave
+     * free to NaN. That case is a cabinet the talks weighed after the Civic Front's government fell mid-term, its
+     * programme still in force, recomputed one rounding step low on the environment.
+     */
+    public function testASupporterWhoseProgrammeIsInForceUpToRoundingBlocksEverything(): void
+    {
+        [$foundingLevers, $vanguard] = $this->standingAndProposal();
+        $inForce = $this->ordered([
+            'publicSpending' => 0.15354115278722869, 'corporateTax' => 0.01, 'tariff' => 0.0, 'laborGrowth' => 0.010700306087436691,
+            'foreignBuyerTax' => 0.0, 'greenBeltStringency' => 0.285535642676012, 'carbonPrice' => 20.093143175110967,
+            'extractionStringency' => 0.285535642676012, 'stampDutyRate' => 0.0013, 'bankLevyRate' => 0.00122, 'reserveDrawShare' => 0.6,
+            'consolidationTaxShare' => 0.47042253521126765, 'reserveHomeShare' => 0.22442026512464303, 'utilityRateGrant' => 0.6542281190303101,
+            'dividendTax' => 0.15, 'debtTarget' => 0.8, 'debtPace' => 0.0025,
+        ]);
+        $talksCabinet = $this->ordered([
+            'publicSpending' => 0.1507232198719658, 'corporateTax' => 0.0020613770455791785, 'tariff' => 0.1088773731089339,
+            'laborGrowth' => 0.007642715875812712, 'foreignBuyerTax' => 0.42419755756727495, 'greenBeltStringency' => 0.0, 'carbonPrice' => 0.0,
+            'extractionStringency' => 0.0, 'stampDutyRate' => 0.000982455081823167, 'bankLevyRate' => 0.0007357439997803299,
+            'reserveDrawShare' => 0.5603068852278958, 'consolidationTaxShare' => 0.4145167397575999, 'reserveHomeShare' => 0.42674898231969793,
+            'utilityRateGrant' => 0.33654495173865845, 'dividendTax' => 0.15, 'debtTarget' => 0.728125, 'debtPace' => 0.0018750000000000001,
+        ]);
+        $roundedLow = $inForce;
+        foreach (['greenBeltStringency', 'carbonPrice', 'extractionStringency'] as $lever) {
+            $roundedLow[$lever] *= 1.0 - PHP_FLOAT_EPSILON;
+        }
+
+        foreach ([
+            'founding levers' => [$foundingLevers, $vanguard, array_map(static fn(float $lever): float => $lever * (1.0 + (2.0 * PHP_FLOAT_EPSILON)), $foundingLevers)],
+            'mid-term talks' => [$inForce, $talksCabinet, $roundedLow],
+        ] as $case => [$standing, $proposal, $programme]) {
+            $this->assertNotSame($standing, $programme, $case);
+            $this->assertSame($standing, BudgetBargain::winSetPoint($proposal, $standing, [['programme' => $programme, 'redLines' => BudgetBargain::redLines(Diet::CIVIC)]]), $case);
+        }
+    }
+
+    /**
      * With one supporter the budget is the cabinet's programme drawn toward the supporter's until the supporter likes
      * it exactly as well as the levers in force: on the line between the two programmes, at the supporter's
      * indifference.

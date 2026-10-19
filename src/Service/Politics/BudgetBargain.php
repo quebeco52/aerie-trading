@@ -34,6 +34,12 @@ final class BudgetBargain
      * or more.
      */
     private const STANDSTILL_TOLERANCE = 1e-10;
+    /**
+     * Distance from the levers in force, in the parties' weighing, within which a supporter's programme is in force: a
+     * programme recomputed from the positions that enacted it lands within rounding (about 1e-16), and a ball smaller
+     * than the rounding of the sweeps' sums has no budget on it the sweeps can find.
+     */
+    private const PROGRAMME_IN_FORCE_TOLERANCE = 1e-12;
 
     /** @var array<string, float>|null The weight each lever carries, memoized from the platforms. */
     private static ?array $scales = null;
@@ -94,9 +100,9 @@ final class BudgetBargain
             }
         }
 
-        // A supporter whose own programme is in force accepts nothing else.
+        // A supporter whose own programme is in force, to rounding, accepts nothing else.
         foreach ($radii as $radius) {
-            if ($radius <= 0.0) {
+            if ($radius <= self::PROGRAMME_IN_FORCE_TOLERANCE) {
                 return $inForce;
             }
         }
