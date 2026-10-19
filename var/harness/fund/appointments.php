@@ -4,7 +4,11 @@
 require '/home/quebeco/Projects/Code/Private/aerie-trading/tests/bootstrap.php';
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
-use App\Service\Politics\{CouncilAppointments as A, MonetaryAuthority as M, FinancialRegulator as R, SovereignReserveFund as F, PoliticsState};
+use App\Service\Politics\Council\CouncilAppointments as A;
+use App\Service\Politics\Department\FinancialRegulator as R;
+use App\Service\Politics\Department\MonetaryAuthority as M;
+use App\Service\Politics\Department\SovereignReserveFund as F;
+use App\Service\Politics\PoliticsState;
 [$script, $seeds, $years] = $argv;
 $dt = 1.0 / 52.0;
 $shares = []; $firstMoves = []; $labels = ['cautious' => 0, 'balanced' => 0, 'bold' => 0]; $heads = 0; $maj = [1 => 0, 0 => 0, -1 => 0]; $cmedChanges = 0; $n = 0;

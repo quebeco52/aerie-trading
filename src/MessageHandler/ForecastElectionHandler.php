@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\MessageHandler;
 
 use App\Message\ForecastElectionMessage;
-use App\Service\Politics\ElectionForecast;
+use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;

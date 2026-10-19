@@ -1995,7 +1995,7 @@ class CreditFiscalSubsystemTest extends TestCase
             CreditFiscalSubsystem::thinCapitalDragScale($opening + 0.01),
             1e-12,
         );
-        $this->assertLessThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(\App\Service\Politics\FinancialRegulator::STRICTEST_REQUIREMENT), 'The strictest head softens the drag the most.');
+        $this->assertLessThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(\App\Service\Politics\Department\FinancialRegulator::STRICTEST_REQUIREMENT), 'The strictest head softens the drag the most.');
         $this->assertGreaterThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(0.0843));
 
         $math = new class extends MathUtility {

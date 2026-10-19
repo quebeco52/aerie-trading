@@ -11,9 +11,9 @@ use Doctrine\ORM\Mapping as ORM;
  * The market's forecast of a vote as it stood when it was made: each party's chance of leading the next government,
  * the likeliest governments, and the seats expected.
  *
- * Written by App\Service\Politics\PoliticsHistoryRecorder each time App\Service\Politics\ElectionForecast publishes,
- * on every poll, on the day of a vote and when a cabinet takes office; the politics state keeps only the latest, so
- * this is the odds' path. Party-keyed maps are keyed by App\Data\Politics\AerieDiet::PARTIES.
+ * Written by App\Service\Politics\Recorder\PoliticsHistoryRecorder each time App\Service\Politics\Diet\ElectionForecast
+ * publishes, on every poll, on the day of a vote and when a cabinet takes office; the politics state keeps only the
+ * latest, so this is the odds' path. Party-keyed maps are keyed by App\Data\Politics\AerieDiet::PARTIES.
  */
 #[ORM\Entity(repositoryClass: \App\Repository\ElectionOddsRepository::class)]
 #[ORM\Table(name: 'election_odds')]

@@ -6,7 +6,7 @@ require __DIR__ . '/../../../vendor/autoload.php';
 
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
-use App\Service\Politics\MonetaryAuthority as A;
+use App\Service\Politics\Department\MonetaryAuthority as A;
 use App\Service\Politics\PoliticsState;
 
 $seeds = (int) ($argv[1] ?? 64);

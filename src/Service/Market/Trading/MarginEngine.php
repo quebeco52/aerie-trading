@@ -9,13 +9,13 @@ use App\Entity\User;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Option\OptionMarginCalculator;
 use App\Service\Math\FinancialConstants;
-use App\Service\Politics\SecuritiesCommission;
+use App\Service\Politics\Department\SecuritiesCommission;
 use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
  * Regulation T margin accounting: what an account is worth, what it must keep, and when it gets called, at the
- * margins the Securities Commission sets (App\Service\Politics\SecuritiesCommission).
+ * margins the Securities Commission sets (App\Service\Politics\Department\SecuritiesCommission).
  *
  * Leverage is what makes a market position able to end an account rather than merely dent it. Without it a
  * player can lose their stake and no more, so every position is survivable and nothing ever forces a hand.

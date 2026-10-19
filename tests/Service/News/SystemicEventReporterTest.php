@@ -301,8 +301,8 @@ class SystemicEventReporterTest extends TestCase
             'regulatorPassedOver' => [['name' => 'Bram Ellery', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
             'requirementPhaseFrom' => 0.094, 'requirementPhaseStart' => 7.0, 'bankCapitalRequirement' => 0.094,
         ];
-        $raising = new PoliticsStateDTO(...($head + ['regulatorStance' => \App\Service\Politics\FinancialRegulator::stance(0.1230)]));
-        $cutting = new PoliticsStateDTO(...($head + ['regulatorStance' => \App\Service\Politics\FinancialRegulator::stance(0.0850)]));
+        $raising = new PoliticsStateDTO(...($head + ['regulatorStance' => \App\Service\Politics\Department\FinancialRegulator::stance(0.1230)]));
+        $cutting = new PoliticsStateDTO(...($head + ['regulatorStance' => \App\Service\Politics\Department\FinancialRegulator::stance(0.0850)]));
 
         for ($i = 0; $i < 20; ++$i) {
             $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 7.0), $raising, $this->benchmarkAt('100'))[0] ?? null;
@@ -338,7 +338,7 @@ class SystemicEventReporterTest extends TestCase
         ];
         // A $5T fund 70% in equities, 16% of it in a $15T board float: the board is 0.16 / 0.70 of its equities.
         $macro = new MacroStateDTO(totalTime: 4.0, sovereignFundPolicyEquityShare: 0.70, sovereignFundTargetWeight: 0.16, sovereignFundToGdp: 0.5, sovereignFundDollarsPerGdp: 1.0e11, nominalGdpIndex: 100.0, boardFloatCap: 15.0e12);
-        $cautious = new PoliticsStateDTO(...($head + ['fundHeadStance' => \App\Service\Politics\SovereignReserveFund::stance(0.50)]));
+        $cautious = new PoliticsStateDTO(...($head + ['fundHeadStance' => \App\Service\Politics\Department\SovereignReserveFund::stance(0.50)]));
         $sold = (0.16 / 0.70) * 0.20 * 5.0e12 / 15.0e12;
 
         for ($i = 0; $i < 20; ++$i) {
@@ -365,7 +365,7 @@ class SystemicEventReporterTest extends TestCase
             exchequerHeadName: 'Rosalind Tate',
             exchequerHeadBirth: -51.0,
             exchequerHeadTermStart: 3.0,
-            exchequerHeadStance: \App\Service\Politics\Exchequer::stance(4.0),
+            exchequerHeadStance: \App\Service\Politics\Department\Exchequer::stance(4.0),
             exchequerHeadPassedOver: [['name' => 'Hal Brennan', 'birth' => -47.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 1.0, 'competition' => 0.0, 'markets' => 0.0]],
         );
         $macro = new MacroStateDTO(totalTime: 3.0, sovereignDebtToGdpEma: 0.9, sovereignDebtAverageMaturity: 5.0);

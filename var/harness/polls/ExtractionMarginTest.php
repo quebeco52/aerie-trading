@@ -64,7 +64,7 @@ final class ExtractionMarginTest extends KernelTestCase
         // state's duty for the broker, against no forecast.
         $rook = $this->arm(0.0, 1, 'ROOK');
         fwrite(STDERR, sprintf("ROOK  stamp-duty turnover base / market value %.3f, / revenue %.3f\n", $rook['ROOK']['dutyValue'], $rook['ROOK']['duty']));
-        foreach (['CNDR' => ['extractionStringency' => 1.0], 'SINK' => ['extractionStringency' => 1.0], 'ROOK' => ['stampDutyRate' => \App\Service\Politics\PoliticsEngine::POLICY_BIG_STATE_STAMP_DUTY]] as $ticker => $law) {
+        foreach (['CNDR' => ['extractionStringency' => 1.0], 'SINK' => ['extractionStringency' => 1.0], 'ROOK' => ['stampDutyRate' => \App\Service\Politics\Policy\Platforms::POLICY_BIG_STATE_STAMP_DUTY]] as $ticker => $law) {
             $this->arm(0.0, 1, $ticker);
             $stock = $this->stocks[$ticker];
             $c = static::getContainer();

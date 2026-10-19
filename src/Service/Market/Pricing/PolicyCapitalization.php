@@ -11,7 +11,7 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
-use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\Diet\Election;
 
 /**
  * The laws the market expects, in the price: a firm is worth its cash flows under the laws it expects over its life,
@@ -24,16 +24,15 @@ use App\Service\Politics\PoliticsEngine;
  * but every payer's holders price in the return they require.
  *
  * The expected path runs from the laws in force, through the budget the sitting government will pass at its next round
- * and the next government's first budget as the market's forecast has it (App\Service\Politics\ElectionForecast), and
- * from the end of that government's term back toward the laws the District has in force on average, as far each term
- * as the Diet's own laws have drifted back from one term to the next. Each part counts for the share of the firm's
+ * and the next government's first budget as the market's forecast has it (App\Service\Politics\Diet\ElectionForecast),
+ * and from the end of that government's term back toward the laws the District has in force on average, as far each
+ * term as the Diet's own laws have drifted back from one term to the next. Each part counts for the share of the firm's
  * value accruing while it holds (Valuation::perpetuityShareAfter()), the tax phasing in at the speed the tax rate
  * follows the law. A law is measured as the earnings feel it: the levy and the tax shift as they stand, the rules on
  * extraction by the cost factor they put on each unit, the duty by the turnover it leaves, the carbon price by what it
- * adds to the power price, public spending by the purchases it sets against the founding level, phasing in at the
- * speed purchases follow the budget. What the trailing earnings
- * already carry is not counted again, so a law the market foresaw neither moves the price when it is passed nor when
- * the earnings take it in.
+ * adds to the power price, public spending by the purchases it sets against the founding level, phasing in at the speed
+ * purchases follow the budget. What the trailing earnings already carry is not counted again, so a law the market
+ * foresaw neither moves the price when it is passed nor when the earnings take it in.
  */
 final class PolicyCapitalization
 {
@@ -95,7 +94,7 @@ final class PolicyCapitalization
 
     // --- Laws Priced per Firm ---
     /**
-     * The laws a firm's own accounts answer to, keyed as PoliticsEngine::LEVER_FIELDS; the corporate tax reaches every
+     * The laws a firm's own accounts answer to, keyed as Platforms::LEVER_FIELDS; the corporate tax reaches every
      * firm through its effective rate instead.
      */
     public const PER_FIRM_LEVERS = ['bankLevyRate', 'extractionStringency', 'stampDutyRate', 'carbonPrice', 'publicSpending', 'utilityRateGrant'];
@@ -313,7 +312,7 @@ final class PolicyCapitalization
      * end of that government's term the drift back toward the long-run law, each counting for the share of the firm's
      * value accruing after it starts.
      *
-     * @param string                $lever       The lever, keyed as PoliticsEngine::LEVER_FIELDS.
+     * @param string                $lever       The lever, keyed as Platforms::LEVER_FIELDS.
      * @param float                 $law         The law in force.
      * @param \Closure(float, array<string, float>): float $measure The law as the earnings feel it, given the rest of
      *                                                              that government's laws.
@@ -342,7 +341,7 @@ final class PolicyCapitalization
      */
     private static function undoneLater(float $capRate, float $persistence): float
     {
-        $termDiscount = exp(-$capRate * PoliticsEngine::ELECTION_TERM_YEARS);
+        $termDiscount = exp(-$capRate * Election::TERM_YEARS);
 
         return (1.0 - $persistence) * $termDiscount / (1.0 - ($persistence * $termDiscount));
     }

@@ -19,7 +19,7 @@ use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
-use App\Service\Politics\SecuritiesCommission;
+use App\Service\Politics\Department\SecuritiesCommission;
 use Psr\Log\LoggerInterface;
 
 class MacroEngine

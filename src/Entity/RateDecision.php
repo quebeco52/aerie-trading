@@ -11,8 +11,9 @@ use Doctrine\ORM\Mapping as ORM;
  * One meeting of the Monetary Authority's rate committee: the rate it left, the move since the meeting before, every
  * member's vote, and who was in the chair.
  *
- * Written by App\Service\Politics\PoliticsHistoryRecorder on the tick the meeting sits (MonetaryAuthority::advance()),
- * eight times a year; the politics state keeps only the last meeting, so this is the committee's record.
+ * Written by App\Service\Politics\Recorder\PoliticsHistoryRecorder on the tick the meeting sits
+ * (MonetaryAuthority::advance()), eight times a year; the politics state keeps only the last meeting, so this is the
+ * committee's record.
  */
 #[ORM\Entity(repositoryClass: \App\Repository\RateDecisionRepository::class)]
 #[ORM\Table(name: 'rate_decision')]

@@ -11,7 +11,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
 use App\Service\Math\MathUtility;
-use App\Service\Politics\CouncilAppointments;
+use App\Service\Politics\Council\CouncilAppointments;
 use App\Service\Politics\PoliticalPressure;
 
 $seed = (int) $seed;
@@ -49,7 +49,7 @@ for ($i = 1; $i <= (int) $years * $tpy; ++$i) {
     } elseif ($m->totalTime >= $at && $conceding === null) {
         $conceding = true;
     } elseif ($conceding === true && $crossedQuarter($m->totalTime, 1.0 / $tpy)
-        && CouncilAppointments::uniform($seed, "concede:{$quarter}") >= PoliticalPressure::CONTINUATION) {
+        && MathUtility::hashedUniform($seed, "concede:{$quarter}") >= PoliticalPressure::CONTINUATION) {
         $conceding = false;
     }
     $args = [];

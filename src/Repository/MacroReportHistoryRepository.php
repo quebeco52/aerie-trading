@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repository;
 
-use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\Policy\Platforms;
 use Doctrine\DBAL\Connection;
 
 /**
@@ -19,7 +19,7 @@ class MacroReportHistoryRepository
     public function __construct(private readonly Connection $connection) {}
 
     /**
-     * The laws in force at each recorded quarter, oldest first: each Diet lever (PoliticsEngine::LEVER_FIELDS keys),
+     * The laws in force at each recorded quarter, oldest first: each Diet lever (Platforms::LEVER_FIELDS keys),
      * the core capital requirement and where merger review stood. A quarter recorded before a column existed carries
      * null for it.
      *
@@ -27,7 +27,7 @@ class MacroReportHistoryRepository
      */
     public function laws(int $quarters = self::QUARTERS): array
     {
-        $columns = array_map(self::column(...), PoliticsEngine::LEVER_FIELDS);
+        $columns = array_map(self::column(...), Platforms::LEVER_FIELDS);
         $rows = $this->connection->fetchAllAssociative(sprintf(
             'SELECT total_time, bank_capital_requirement, merger_review_leniency, %s FROM macro_report WHERE total_time IS NOT NULL ORDER BY id DESC LIMIT %d',
             implode(', ', $columns),

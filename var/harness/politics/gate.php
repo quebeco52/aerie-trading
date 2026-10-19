@@ -15,6 +15,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\Diet\Election;
 [$script, $seedFrom, $seedTo, $years, $tpy, $arm, $out] = $argv;
 $fh = fopen($out, 'w');
 $tpy = (int) $tpy;
@@ -58,7 +59,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             );
         } elseif ($arm === 'calendar') {
             // What the economy read before politics left it: the term's ramp and the vote's own tick, no talks.
-            $vote = TimeSeries::crossedSimulatedBoundary($m->totalTime, 1.0 / $tpy, PoliticsEngine::ELECTION_TERM_YEARS);
+            $vote = TimeSeries::crossedSimulatedBoundary($m->totalTime, 1.0 / $tpy, Election::TERM_YEARS);
             $policy = new \App\DTO\GovernmentPolicyDTO(
                 publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,
                 corporateTaxPolicyShift: 0.0,
@@ -76,7 +77,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 reserveHomeEquityShare: \App\Service\Macro\Subsystem\SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
                 utilityRateCaseGrantShare: \App\Service\Math\FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
                 dividendTaxRate: \App\Service\Math\Valuation::FOUNDING_DIVIDEND_TAX_RATE,
-                electionPulse: PoliticsEngine::electionPulse($m->totalTime, $vote ? $m->totalTime : -1.0, -1.0),
+                electionPulse: Election::pulse($m->totalTime, $vote ? $m->totalTime : -1.0, -1.0),
             );
         }
         if ($i % $perQuarter === 0) {
@@ -87,11 +88,11 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 'pop' => $m->immigrationPopulationShift, 'house' => $m->residentialPropertyIndex, 'pot' => $m->potentialGdpIndex, 'anchor' => $m->inflationAnchorDrift, 'be' => $m->tipsBreakeven, 'defl' => $m->gdpDeflator, 'nx' => $m->netExportGap,
                 'green' => $m->greenBeltStringency, 'carbon' => $m->carbonPrice, 'extract' => $m->extractionStringency, 'duty' => $m->stampDutyRate, 'levy' => $m->bankLevyRate, 'power' => $m->wholesalePowerPriceIndex, 'starts' => $m->housingStartsIndex,
                 'brake' => $p->lastCouncilBrakeAt, 'coal' => AerieDiet::governingParties($p->governingCoalition), 'sup' => AerieDiet::governingParties($p->supportParties), 'talks' => $p->coalitionTakesOfficeAt > $m->totalTime, 'epu' => $m->policyUncertaintyIndex, 'y10' => $m->yield10y, 'unemp' => $m->unemploymentRate,
-                'bal' => $p->committeeBalance, 'maj' => $p->committeeMajority, 'gst' => $p->governorStance, 'cmed' => \App\Service\Politics\CouncilAppointments::median($p->councilStances),
+                'bal' => $p->committeeBalance, 'maj' => $p->committeeMajority, 'gst' => $p->governorStance, 'cmed' => \App\Service\Politics\Council\CouncilAppointments::median($p->councilStances),
                 'req' => $m->bankCapitalRequirement, 'built' => $m->bankCapitalBuilt, 'sloos' => $m->sloosTighteningIndex, 'ccyb' => $m->countercyclicalBufferRate, 'cdrag' => $m->creditCrisisDrag, 'lastcrisis' => $m->lastCreditCrisisAt, 'hdti' => $m->householdDebtToIncome, 'cgap' => $m->creditToGdpGap,
-                'regst' => $p->regulatorStance, 'creg' => \App\Service\Politics\CouncilAppointments::median($p->councilRegulationStances), 'regstart' => $p->regulatorTermStart, 'regname' => $p->regulatorName, 'seated' => $m->authorityCommitteeSeated, 'mmaj' => $m->authorityMajority,
-                'cc' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_COUNCIL] ?? null,
-                'cs' => \App\Service\Politics\PoliticsEngine::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_STATE] ?? null, 'g' => $m->governmentSpendingIndex, 'spend' => $m->publicSpendingShare, 'fbt' => $m->foreignBuyerTaxRate, 'cts' => $m->consolidationTaxShare ?? null, 'line' => class_exists(\App\Service\Politics\DebtBrake::class) ? \App\Service\Politics\DebtBrake::councilLine($p) : 0.90, 'wam' => $m->sovereignDebtAverageMaturity, 'ndebt' => $m->sovereignNetDebtToGdpEma, 'eff' => $m->sovereignCouponRate, 'pr' => $m->policyRate, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
+                'regst' => $p->regulatorStance, 'creg' => \App\Service\Politics\Council\CouncilAppointments::median($p->councilRegulationStances), 'regstart' => $p->regulatorTermStart, 'regname' => $p->regulatorName, 'seated' => $m->authorityCommitteeSeated, 'mmaj' => $m->authorityMajority,
+                'cc' => \App\Service\Politics\Policy\Platforms::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_COUNCIL] ?? null,
+                'cs' => \App\Service\Politics\Policy\Platforms::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_STATE] ?? null, 'g' => $m->governmentSpendingIndex, 'spend' => $m->publicSpendingShare, 'fbt' => $m->foreignBuyerTaxRate, 'cts' => $m->consolidationTaxShare ?? null, 'line' => class_exists(\App\Service\Politics\DebtBrake::class) ? \App\Service\Politics\DebtBrake::councilLine($p) : 0.90, 'wam' => $m->sovereignDebtAverageMaturity, 'ndebt' => $m->sovereignNetDebtToGdpEma, 'eff' => $m->sovereignCouponRate, 'pr' => $m->policyRate, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
                 'conc' => $m->authorityConcession, 'nairu' => $m->nairu, 'psg' => $m->productivitySupplyGap, 'pn' => $m->perceivedNeutralRate, 'tr' => $m->targetRate,
             ]) . "\n");
         }

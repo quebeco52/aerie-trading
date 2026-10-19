@@ -94,7 +94,7 @@ final readonly class GovernmentPolicyDTO
         public ?float $debtAverageMaturity = null,
         /**
          * @var array<string, float>|null The levers the sitting government will pass at its next budget round, keyed as
-         *                                App\Service\Politics\PoliticsEngine::LEVER_FIELDS; null before they have been
+         *                                \App\Service\Politics\Policy\Platforms::LEVER_FIELDS; null before they have been
          *                                read.
          */
         public ?array $sittingLevers = null,
@@ -102,7 +102,7 @@ final readonly class GovernmentPolicyDTO
         public ?float $sittingPolicyFrom = null,
         /**
          * @var array<string, float>|null The levers the market expects from the next government's first budget
-         *                                (App\Service\Politics\ElectionForecast), keyed the same way; null before it
+         *                                (App\Service\Politics\Diet\ElectionForecast), keyed the same way; null before it
          *                                has a forecast.
          */
         public ?array $expectedLevers = null,

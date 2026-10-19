@@ -10,7 +10,7 @@ use App\MessageHandler\ForecastElectionHandler;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
-use App\Service\Politics\ElectionForecast;
+use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\PoliticsEngine;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Messenger\Envelope;

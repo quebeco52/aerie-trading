@@ -11,7 +11,7 @@ use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
-use App\Service\Politics\FairTradingBoard;
+use App\Service\Politics\Department\FairTradingBoard;
 use App\Service\View\DepartmentPageBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -31,7 +31,7 @@ final class DepartmentPageBuilderTest extends TestCase
             exchequerHeadName: 'Rosalind Tate',
             exchequerHeadBirth: -38.0,
             exchequerHeadTermStart: 13.0,
-            exchequerHeadStance: \App\Service\Politics\Exchequer::stance(4.3),
+            exchequerHeadStance: \App\Service\Politics\Department\Exchequer::stance(4.3),
             councilDebtStances: [-0.5, 0.0, 0.5],
         );
         $macro = new MacroStateDTO(
@@ -57,7 +57,7 @@ final class DepartmentPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(($share * 0.04) + ((1.0 - $share) * 0.03), $panel['rate'], 1e-12);
         $this->assertEqualsWithDelta($panel['rate'] * 0.9, $panel['interestToGdp'], 1e-12);
         $this->assertLessThan(0, $panel['maturityBp'], 'A book shorter than the founding one takes duration off the ten-year.');
-        $this->assertEqualsWithDelta(\App\Service\Politics\Exchequer::averageMaturity(0.0), $panel['councilMaturity'], 1e-12);
+        $this->assertEqualsWithDelta(\App\Service\Politics\Department\Exchequer::averageMaturity(0.0), $panel['councilMaturity'], 1e-12);
         $this->assertSame(10, $panel['riskSpreadBp'], 'The default charge the market asks, in basis points.');
     }
 

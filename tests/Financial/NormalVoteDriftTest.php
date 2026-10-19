@@ -6,8 +6,8 @@ namespace App\Tests\Financial;
 
 use App\Data\Politics\AerieDiet as Diet;
 use App\Service\Math\MathUtility;
-use App\Service\Politics\OpinionPolls;
-use App\Service\Politics\PoliticsEngine as Politics;
+use App\Service\Politics\Diet\Election;
+use App\Service\Politics\Diet\OpinionPolls;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -43,7 +43,7 @@ class NormalVoteDriftTest extends TestCase
             $shares = array_column($final, $party);
             $mean = array_sum($shares) / self::PATHS;
             $variance = array_sum(array_map(static fn(float $x): float => ($x - $mean) ** 2, $shares)) / (self::PATHS - 1);
-            $expected = Politics::NORMAL_VOTE_DRIFT_VARIANCE * self::YEARS * $start * (1.0 - $start);
+            $expected = Election::NORMAL_VOTE_DRIFT_VARIANCE * self::YEARS * $start * (1.0 - $start);
 
             $this->assertLessThan(4.0 * sqrt($variance / self::PATHS), abs($mean - $start), "{$party} drifts on average.");
             // Over forty years the variance compounds a little beyond the linear term (the shares themselves move), so

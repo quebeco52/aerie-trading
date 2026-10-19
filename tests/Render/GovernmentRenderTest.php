@@ -37,9 +37,10 @@ use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\News\NarrativeEngine;
-use App\Service\Politics\ElectionRecorder;
+use App\Service\Politics\Policy\BudgetRound;
 use App\Service\Politics\PoliticsEngine;
-use App\Service\Politics\PoliticsHistoryRecorder;
+use App\Service\Politics\Recorder\ElectionRecorder;
+use App\Service\Politics\Recorder\PoliticsHistoryRecorder;
 use App\Service\View\GovernmentPageBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
@@ -123,7 +124,7 @@ final class GovernmentRenderTest extends KernelTestCase
             $history->record($politics);
             // The quarterly record the law charts read, as macro_report keeps it: the last 25 years.
             if (TimeSeries::crossedSimulatedBoundary($macro->totalTime, 1.0 / self::TICKS_PER_YEAR, 0.25)) {
-                $laws[] = ['t' => $macro->totalTime, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement, 'mergerReviewLeniency' => $politics->policy()->mergerReviewLeniency];
+                $laws[] = ['t' => $macro->totalTime, 'levers' => BudgetRound::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement, 'mergerReviewLeniency' => $politics->policy()->mergerReviewLeniency];
                 $laws = array_slice($laws, -MacroReportHistoryRepository::QUARTERS);
                 $inflation[] = ['t' => $macro->totalTime, 'inflation' => $macro->inflationEma];
             }

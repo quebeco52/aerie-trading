@@ -10,7 +10,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
-use App\Service\Politics\SecuritiesCommission;
+use App\Service\Politics\Department\SecuritiesCommission;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;

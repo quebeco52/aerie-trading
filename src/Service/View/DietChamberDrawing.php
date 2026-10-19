@@ -6,7 +6,7 @@ namespace App\Service\View;
 
 use App\Data\Politics\AerieDiet;
 use App\Entity\DietElection;
-use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\Policy\Platforms;
 
 /**
  * The Diet's two drawings: the chamber, seat by seat, and the compass that places each party on the policy questions.
@@ -255,7 +255,7 @@ final class DietChamberDrawing
         return [
             'axis' => $axis,
             'name' => DietStyle::AXIS_NAMES[$axis]['name'],
-            'laws' => array_map(static fn(string $lever): string => self::LEVER_SHORT_NAMES[$lever], array_keys(PoliticsEngine::LEVER_AXES, $axis, true)),
+            'laws' => array_map(static fn(string $lever): string => self::LEVER_SHORT_NAMES[$lever], array_keys(Platforms::LEVER_AXES, $axis, true)),
             'summary' => sprintf(
                 '%s, from %s on the left to %s on the right: %s%s',
                 DietStyle::AXIS_NAMES[$axis]['name'],

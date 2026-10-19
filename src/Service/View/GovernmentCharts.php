@@ -10,9 +10,9 @@ use App\DTO\PoliticsStateDTO;
 use App\Entity\ElectionOdds;
 use App\Entity\RateDecision;
 use App\Service\Math\MacroConstants;
-use App\Service\Politics\ElectionForecast;
-use App\Service\Politics\MonetaryAuthority;
-use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Diet\Election;
+use App\Service\Politics\Diet\ElectionForecast;
 
 /**
  * The charts the government pages draw over time: the rate each meeting left, the market's odds on the next
@@ -293,7 +293,7 @@ final class GovernmentCharts
         // The market's expected seats while its forecast is for the coming vote; the average's own D'Hondt result
         // otherwise.
         $marketSeats = $politics->forecastSeats !== [] && $politics->forecastFor > $politics->totalTime;
-        $expected = $marketSeats ? $politics->forecastSeats : PoliticsEngine::dHondt($latest['shares'], AerieDiet::SEATS);
+        $expected = $marketSeats ? $politics->forecastSeats : Election::dHondt($latest['shares'], AerieDiet::SEATS);
         $coalition = AerieDiet::governingParties($politics->governingCoalition);
         $support = AerieDiet::governingParties($politics->supportParties);
         $sumSeats = static fn(array $members): float => array_sum(array_map(static fn(string $party): float => (float) ($expected[$party] ?? 0.0), $members));

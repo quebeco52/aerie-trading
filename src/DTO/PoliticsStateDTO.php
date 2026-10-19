@@ -11,13 +11,13 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
-use App\Service\Politics\ElectionForecast;
-use App\Service\Politics\Exchequer;
-use App\Service\Politics\FairTradingBoard;
-use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\Department\Exchequer;
+use App\Service\Politics\Department\FairTradingBoard;
+use App\Service\Politics\Department\SecuritiesCommission;
+use App\Service\Politics\Department\SovereignReserveFund;
+use App\Service\Politics\Diet\Election;
+use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\PoliticsState;
-use App\Service\Politics\SecuritiesCommission;
-use App\Service\Politics\SovereignReserveFund;
 
 /**
  * Immutable snapshot of the District's politics: the Diet, the government, the talks, and the levers in force.
@@ -52,7 +52,7 @@ readonly class PoliticsStateDTO
         public array $dietBlocs = AerieDiet::SEED_BLOCS,
         /**
          * @var array<string, float> Each party's short-term log swing in support, fading between votes
-         *                           (App\Service\Politics\OpinionPolls).
+         *                           (App\Service\Politics\Diet\OpinionPolls).
          */
         public array $partyShortTermShocks = [],
         public float $coalitionFormedAt = 0.0,
@@ -116,7 +116,7 @@ readonly class PoliticsStateDTO
         public float $lastBudgetEnactedAt = -1.0,
         /**
          * Salt the Council's hashed draws are taken from, drawn once when it forms (-1: not yet formed;
-         * App\Service\Politics\CouncilAppointments).
+         * App\Service\Politics\Council\CouncilAppointments).
          */
         public float $authoritySalt = -1.0,
         /** @var list<string> Each Council seat's holder, by seat. */
@@ -152,27 +152,27 @@ readonly class PoliticsStateDTO
         public array $councilSwingers = [],
         /**
          * @var array<int, float> Each councillor's stance on the banks: -1 the lightest regime on record, 1 the
-         *                        strictest (App\Service\Politics\FinancialRegulator).
+         *                        strictest (App\Service\Politics\Department\FinancialRegulator).
          */
         public array $councilRegulationStances = [],
         /**
          * @var array<int, float> Each councillor's stance on the reserves: -1 the most cautious policy mix on record, 1
-         *                        the boldest (App\Service\Politics\SovereignReserveFund).
+         *                        the boldest (App\Service\Politics\Department\SovereignReserveFund).
          */
         public array $councilFundStances = [],
         /**
          * @var array<int, float> Each councillor's stance on the debt: -1 the shortest average maturity on record, 1
-         *                        the longest (App\Service\Politics\Exchequer).
+         *                        the longest (App\Service\Politics\Department\Exchequer).
          */
         public array $councilDebtStances = [],
         /**
          * @var array<int, float> Each councillor's stance on competition: -1 the lightest merger guidelines on record,
-         *                        1 the strictest (App\Service\Politics\FairTradingBoard).
+         *                        1 the strictest (App\Service\Politics\Department\FairTradingBoard).
          */
         public array $councilCompetitionStances = [],
         /**
          * @var array<int, float> Each councillor's stance on the markets: -1 the lightest rules on record, 1 the
-         *                        strictest (App\Service\Politics\SecuritiesCommission).
+         *                        strictest (App\Service\Politics\Department\SecuritiesCommission).
          */
         public array $councilMarketsStances = [],
         /**
@@ -180,7 +180,7 @@ readonly class PoliticsStateDTO
          */
         public array $councillorPassedOver = [],
         /**
-         * @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> The Council Appointment Board's members, by seat (App\Service\Politics\CouncilAppointments::boardShortlist()).
+         * @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> The Council Appointment Board's members, by seat (App\Service\Politics\Council\CouncilAppointments::boardShortlist()).
          */
         public array $boardMembers = [],
         /** @var array<int, float> When each board member's term began. */
@@ -348,7 +348,8 @@ readonly class PoliticsStateDTO
          */
         public array $formerNames = [],
         /**
-         * @var array<string, string> Each party's leader (App\Service\Politics\PartyLeaders), drawn on the first tick;
+         * @var array<string, string> Each party's leader (App\Service\Politics\Diet\PartyLeaders), drawn on the first
+         *                            tick;
          *                            the prime minister is the leader of the cabinet's largest party.
          */
         public array $leaderNames = [],
@@ -370,7 +371,8 @@ readonly class PoliticsStateDTO
         public float $lastLeaderChangeAt = -1.0,
         public string $lastLeaderChangeParty = '',
         /**
-         * @var array<string, float> Support between votes (App\Service\Politics\OpinionPolls): each party's lasting
+         * @var array<string, float> Support between votes (App\Service\Politics\Diet\OpinionPolls): each party's
+         *                           lasting
          *                           share, its short-term swing set aside (empty: read off the last vote).
          */
         public array $supportLasting = [],
@@ -383,12 +385,12 @@ readonly class PoliticsStateDTO
         public array $supportIncumbency = [],
         /**
          * @var array<string, float> Each party's years of lasting drift so far this term
-         *                           (App\Service\Politics\OpinionPolls::driftYears()); empty at a vote.
+         *                           (App\Service\Politics\Diet\OpinionPolls::driftYears()); empty at a vote.
          */
         public array $supportDriftYears = [],
         /**
          * @var array<string, float> Each party's unsettled opinion the polls misread, in standard deviations
-         *                           (App\Service\Politics\OpinionPolls::unsettledSd()).
+         *                           (App\Service\Politics\Diet\OpinionPolls::unsettledSd()).
          */
         public array $pollUnsettled = [],
         /**
@@ -404,7 +406,8 @@ readonly class PoliticsStateDTO
          */
         public array $polls = [],
         /**
-         * @var array<string, float> The market's average of the polls (App\Service\Politics\ElectionForecast), by party
+         * @var array<string, float> The market's average of the polls (App\Service\Politics\Diet\ElectionForecast), by
+         *                           party
          *                           (empty: none yet).
          */
         public array $pollAverage = [],
@@ -422,7 +425,7 @@ readonly class PoliticsStateDTO
         public array $forecastSeats = [],
         /**
          * @var array<string, float> The laws the market expects after the vote, each government's budget weighted by
-         *                           its chance (PoliticsEngine::LEVER_FIELDS keys).
+         *                           its chance (Platforms::LEVER_FIELDS keys).
          */
         public array $forecastLevers = [],
         /**
@@ -488,7 +491,7 @@ readonly class PoliticsStateDTO
             dividendTaxRate: $this->dividendTaxRate,
             debtTarget: $this->debtTarget,
             debtPace: $this->debtPace,
-            electionPulse: PoliticsEngine::electionPulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
+            electionPulse: Election::pulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
             bankCapitalRequirement: $this->regulatorName === '' ? null : $this->bankCapitalRequirement,
             mortgageLtvCap: $this->regulatorLtvCap,

@@ -19,7 +19,8 @@ US, Singapore, Switzerland and Sweden share the principles and differ in everyth
 src/Service/Math/       shared formulas by domain (FixedIncome, OptionPricing, CreditRisk, Valuation, TimeSeries, ...),
                         MathUtility (the random source), FinancialConstants and MacroConstants (shared constants)
 src/Service/Macro/      MacroEngine and its six subsystems
-src/Service/Politics/   Diet, cabinets, polls, elections, policy levers
+src/Service/Politics/   PoliticsEngine (the tick) over Diet/ (the vote, polls, forecast, talks), Policy/ (levers,
+                        budgets), Council/, Department/ and Recorder/
 src/Service/Corporate/  earnings, debt, treasury, capital allocation, M&A
 src/Service/Model/      business models: Standard*Trait defaults, Sector/ overrides
 src/Service/Market/     price formation, order flow, bonds, options, margin

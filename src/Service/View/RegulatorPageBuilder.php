@@ -6,7 +6,7 @@ namespace App\Service\View;
 
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
-use App\Service\Politics\FinancialRegulator;
+use App\Service\Politics\Department\FinancialRegulator;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**

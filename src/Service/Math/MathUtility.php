@@ -6,9 +6,9 @@ namespace App\Service\Math;
 
 /**
  * The simulation's random source: uniform, normal, Student-t, exponential, Poisson and Pareto draws on the global or a
- * private stream, draw logging and replay, and the steps that make their own draws (jump diffusion, QE variance, SVJJ
- * and Kou jumps, two-factor OU and Schwartz, lognormal synergy). A step handed its draws is deterministic and lives in
- * StochasticProcesses. Tests subclass or mock this class to script draws.
+ * private stream, uniforms hashed from a key, draw logging and replay, and the steps that make their own draws (jump
+ * diffusion, QE variance, SVJJ and Kou jumps, two-factor OU and Schwartz, lognormal synergy). A step handed its draws
+ * is deterministic and lives in StochasticProcesses. Tests subclass or mock this class to script draws.
  */
 class MathUtility
 {
@@ -126,6 +126,15 @@ class MathUtility
         $stream->privateGenerator = new \Random\Randomizer(new \Random\Engine\Mt19937($seed));
 
         return $stream;
+    }
+
+    /**
+     * A uniform on (0, 1) hashed from a salt and a key: the same pair always gives the same draw and takes nothing from
+     * any stream, so keyed draws (an appointment, a poll, a name) replay exactly.
+     */
+    public static function hashedUniform(int $salt, string $key): float
+    {
+        return (hexdec(substr(hash('sha256', "{$salt}:{$key}"), 0, 13)) + 0.5) / (2 ** 52);
     }
 
     /**

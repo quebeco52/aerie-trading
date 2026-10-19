@@ -10,7 +10,7 @@ use App\Entity\WatchlistItem;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
-use App\Service\Politics\SecuritiesCommission;
+use App\Service\Politics\Department\SecuritiesCommission;
 use App\Service\Season\SeasonService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;

@@ -15,17 +15,17 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MacroConstants;
-use App\Service\Politics\CoastGuard;
-use App\Service\Politics\CouncilAppointments;
-use App\Service\Politics\ElectionForecast;
-use App\Service\Politics\Exchequer;
-use App\Service\Politics\FairTradingBoard;
-use App\Service\Politics\FinancialRegulator;
-use App\Service\Politics\PoliticsEngine;
-use App\Service\Politics\SecuritiesCommission;
-use App\Service\Politics\SecurityBureau;
-use App\Service\Politics\SovereignReserveFund;
-use App\Service\Politics\StateGuard;
+use App\Service\Politics\Council\CouncilAppointments;
+use App\Service\Politics\Department\CoastGuard;
+use App\Service\Politics\Department\Exchequer;
+use App\Service\Politics\Department\FairTradingBoard;
+use App\Service\Politics\Department\FinancialRegulator;
+use App\Service\Politics\Department\SecuritiesCommission;
+use App\Service\Politics\Department\SecurityBureau;
+use App\Service\Politics\Department\SovereignReserveFund;
+use App\Service\Politics\Department\StateGuard;
+use App\Service\Politics\Diet\ElectionForecast;
+use App\Service\Politics\Policy\Platforms;
 
 /**
  * The Council's departments' pages, and the headline each gives the government's front page: the Trade Office, the
@@ -100,8 +100,8 @@ final class DepartmentPageBuilder
                 'structural' => MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
                 'natural' => MacroConstants::NATURAL_LABOR_FORCE_GROWTH,
                 'structuralMigration' => MacroConstants::STRUCTURAL_NET_MIGRATION_RATE,
-                'closed' => PoliticsEngine::MIGRATION_CLOSED_REGIME,
-                'open' => PoliticsEngine::MIGRATION_OPEN_REGIME,
+                'closed' => Platforms::MIGRATION_CLOSED_REGIME,
+                'open' => Platforms::MIGRATION_OPEN_REGIME,
                 'populationShift' => $macro->immigrationPopulationShift,
                 'cyclical' => $macro->cyclicalMigrationRate,
                 // Newcomers a year per point (a hundredth) of unemployment under its natural rate.
@@ -110,7 +110,7 @@ final class DepartmentPageBuilder
             'foreignBuyers' => $law('foreignBuyerTax', $politics->foreignBuyerTaxRate) + [
                 'priceEffect' => 1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($politics->foreignBuyerTaxRate),
                 'revenueToGdp' => AssetMarketSubsystem::foreignBuyerTaxRevenueToGdp($politics->foreignBuyerTaxRate),
-                'strictest' => PoliticsEngine::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX,
+                'strictest' => Platforms::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX,
             ],
             'expectedFrom' => $politics->forecastLevers === [] ? null : DistrictCalendar::quarter(ElectionForecast::takesEffect($politics)),
         ];

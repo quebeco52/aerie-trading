@@ -17,13 +17,13 @@ use App\Service\Math\TimeSeries;
  * Three published rules and the head's mandate:
  *  - It pays the budget the share of its expected long-term real return the Diet passes, fixed once a year and redrawn
  *    when a budget moves the share (Singapore's Net Investment Returns framework, 2008): up to half, and more only with
- *    the fund's consent (App\Service\Politics\PoliticsEngine::budget()). The rest stays invested, so a fund compounding at about twice potential
+ *    the fund's consent (\App\Service\Politics\Policy\BudgetRound::budget()). The rest stays invested, so a fund compounding at about twice potential
  *    growth keeps pace with the economy. "Long-term" is the COMPOUND rate: spending half the arithmetic mean of a
  *    volatile portfolio overspends by half its variance every year and erodes the fund it is meant to preserve.
  *  - It holds three sleeves at policy weights: a cap-weighted slice of the whole board, and foreign equities and
  *    foreign sovereign paper, opening on GIC's 65/35 reference mix. Each drifts with its own market between rebalances;
  *    the paper is a constant-duration index on the foreign curve, so it carries, rolls down and reprices with the
- *    foreign rate. The policy equity share is the head's to set (App\Service\Politics\SovereignReserveFund), and the
+ *    foreign rate. The policy equity share is the head's to set (App\Service\Politics\Department\SovereignReserveFund), and the
  *    board's part of the fund's equities the Diet's (Norway's fund holds none at home, GPIF half since 2014): either
  *    change puts the foreign sleeves on their new split at once and moves the board to its new weight over a transition
  *    programme.

@@ -14,25 +14,27 @@ use App\Data\District\Institutions;
  * reserves, and the Council's work is its appointments. A councillor whose term ends is replaced by the candidate the
  * sitting members elect from a shortlist of three that the Council Appointment Board puts forward, its members named by
  * the District's bar, judges, universities and the Aerie Exchange, after Canada's advisory board for its Supreme Court
- * (App\Service\Politics\CouncilAppointments::boardShortlist()); so the Council renews itself one seat at a time, no
- * election touches it, and it cannot fill itself with its own likeness for good. The seats are staggered so one falls
- * vacant a little under once a year, as the Federal Reserve Board's seven fourteen-year seats fall one every two years;
- * the councillors sitting at Year 1 took their seats before the District's records begin. A councillor who dies or
- * resigns mid-term is succeeded the same way, the successor serving out the term
- * (App\Service\Politics\CouncilAppointments::departure()). Like the election calendar, the seats' terms are derived
- * from simulation time and never stored; who holds them, chosen from the shortlists, is kept in the politics state.
+ * (App\Service\Politics\Council\CouncilAppointments::boardShortlist()); so the Council renews itself one seat at a
+ * time, no election touches it, and it cannot fill itself with its own likeness for good. The seats are staggered so
+ * one falls vacant a little under once a year, as the Federal Reserve Board's seven fourteen-year seats fall one every
+ * two years; the councillors sitting at Year 1 took their seats before the District's records begin. A councillor who
+ * dies or resigns mid-term is succeeded the same way, the successor serving out the term
+ * (App\Service\Politics\Council\CouncilAppointments::departure()). Like the election calendar, the seats' terms are
+ * derived from simulation time and never stored; who holds them, chosen from the shortlists, is kept in the politics
+ * state.
  *
  * The Council appoints the heads of the District's departments, which then act independently of it: the Monetary
- * Authority's governor, who picks the rate committee (App\Service\Politics\MonetaryAuthority), the Financial
- * Regulator's head, who sets the banks' capital requirement (App\Service\Politics\FinancialRegulator), the
- * Sovereign Reserve Fund's head, who sets its share in equities (App\Service\Politics\SovereignReserveFund), the
- * Exchequer's head, who sets the debt's maturity (App\Service\Politics\Exchequer), the Fair Trading Board's head, who
- * sets the screens merger review applies (App\Service\Politics\FairTradingBoard), and the Securities Commission's
- * head, who sets the margin investors put up and what listed firms must disclose
- * (App\Service\Politics\SecuritiesCommission). It also names the Security Bureau's director, who sets no rule
- * (App\Service\Politics\SecurityBureau), and the commanders of the Coast Guard and the State Guard, the District's
- * armed services in all but law, which the Council alone commands (App\Service\Politics\CoastGuard,
- * App\Service\Politics\StateGuard). The budget is the Diet's alone. No party sits on the Council.
+ * Authority's governor, who picks the rate committee (App\Service\Politics\Department\MonetaryAuthority), the Financial
+ * Regulator's head, who sets the banks' capital requirement (App\Service\Politics\Department\FinancialRegulator), the
+ * Sovereign Reserve Fund's head, who sets its share in equities (App\Service\Politics\Department\SovereignReserveFund),
+ * the Exchequer's head, who sets the debt's maturity (App\Service\Politics\Department\Exchequer), the Fair Trading
+ * Board's head, who sets the screens merger review applies (App\Service\Politics\Department\FairTradingBoard), and the
+ * Securities Commission's head, who sets the margin investors put up and what listed firms must disclose
+ * (App\Service\Politics\Department\SecuritiesCommission). It also names the Security Bureau's director, who sets no
+ * rule (App\Service\Politics\Department\SecurityBureau), and the commanders of the Coast Guard and the State Guard, the
+ * District's armed services in all but law, which the Council alone commands
+ * (App\Service\Politics\Department\CoastGuard, App\Service\Politics\Department\StateGuard). The budget is the Diet's
+ * alone. No party sits on the Council.
  */
 final class AerieCouncil
 {

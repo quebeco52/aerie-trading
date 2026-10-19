@@ -16,7 +16,7 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
 use App\Service\Math\MathUtility;
-use App\Service\Politics\ElectionRecorder;
+use App\Service\Politics\Recorder\ElectionRecorder;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\View\GovernmentPageBuilder;
 use Doctrine\ORM\EntityManagerInterface;

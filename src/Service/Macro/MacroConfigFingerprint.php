@@ -15,7 +15,9 @@ use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
-use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\Diet\CoalitionFormation;
+use App\Service\Politics\Diet\Election;
+use App\Service\Politics\Policy\Platforms;
 use App\Service\Politics\PoliticsEngine;
 
 /**
@@ -47,6 +49,8 @@ final class MacroConfigFingerprint
         CreditRisk::class,
         MacroTransmission::class,
         PoliticsEngine::class,
+        Election::class,
+        Platforms::class,
         CoalitionFormation::class,
         AerieDiet::class,
     ];

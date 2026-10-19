@@ -24,9 +24,12 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
-use App\Service\Politics\BudgetBargain;
-use App\Service\Politics\CoalitionFormation;
-use App\Service\Politics\ElectionForecast;
+use App\Service\Politics\Diet\CoalitionFormation;
+use App\Service\Politics\Diet\Election;
+use App\Service\Politics\Diet\ElectionForecast;
+use App\Service\Politics\Policy\BudgetBargain;
+use App\Service\Politics\Policy\BudgetRound;
+use App\Service\Politics\Policy\Platforms;
 use App\Service\Politics\PoliticsEngine as Politics;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
@@ -37,21 +40,21 @@ class PoliticsEngineTest extends TestCase
     private const RIGHT_BLOC = [Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON];
 
     /** The first vote on the calendar. */
-    private const ELECTION_AT = Politics::ELECTION_TERM_YEARS;
+    private const ELECTION_AT = Election::TERM_YEARS;
 
     // --- Seats ---
 
     /** The textbook D'Hondt case: 100k/80k/30k/20k votes for 8 seats go 4/3/1/0. */
     public function testDHondtAllocatesTheTextbookCase(): void
     {
-        $seats = Politics::dHondt(['a' => 100000.0, 'b' => 80000.0, 'c' => 30000.0, 'd' => 20000.0], 8);
+        $seats = Election::dHondt(['a' => 100000.0, 'b' => 80000.0, 'c' => 30000.0, 'd' => 20000.0], 8);
 
         $this->assertSame(['a' => 4, 'b' => 3, 'c' => 1, 'd' => 0], $seats);
     }
 
     public function testTheFoundingVoteReproducesTheFoundingDiet(): void
     {
-        $seats = Politics::dHondt(Diet::SEED_VOTE_SHARES, Diet::SEATS);
+        $seats = Election::dHondt(Diet::SEED_VOTE_SHARES, Diet::SEATS);
 
         $this->assertSame(Diet::SEATS, array_sum($seats));
         $this->assertSame((float) Diet::SEATS, array_sum(Diet::SEED_SEATS));
@@ -87,7 +90,7 @@ class PoliticsEngineTest extends TestCase
     public function testTheGovernmentsPositionIsItsPartiesWeightedBySeats(): void
     {
         $seats = array_merge(Diet::SEED_SEATS, [Diet::VANGUARD => 95.0, Diet::EXCHANGE => 25.0, Diet::CHARTISTS => 20.0]);
-        $position = Politics::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), $seats, Diet::HOME_POSITIONS);
+        $position = Platforms::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), $seats, Diet::HOME_POSITIONS);
 
         // Vanguard 95 at (-0.65, +0.1, +0.3), Exchange 25 at (-0.2, +0.8, +0.4), Chartists 20 at (-0.4, +0.6, +0.8).
         $this->assertEqualsWithDelta((95.0 * -0.65 + 25.0 * -0.2 + 20.0 * -0.4) / 140.0, $position[Diet::AXIS_STATE], 1e-12);
@@ -101,14 +104,14 @@ class PoliticsEngineTest extends TestCase
     public function testTheEconomicVoteCreditsGrowthOnlyToAPartyGoverningAlone(): void
     {
         foreach ([true, false] as $alone) {
-            $atTrend = Politics::economicVote(0.0, 0.0, 0.0, $alone);
+            $atTrend = Election::economicVote(0.0, 0.0, 0.0, $alone);
 
-            $this->assertEqualsWithDelta(-Politics::ELECTION_COST_OF_RULING, $atTrend, 1e-12);
-            $this->assertEqualsWithDelta(-Politics::ELECTION_INFLATION_SLOPE * 0.01, Politics::economicVote(0.0, 0.01, 0.0, $alone) - $atTrend, 1e-12);
-            $this->assertEqualsWithDelta(Politics::ELECTION_RESIDUAL_SD, Politics::economicVote(0.0, 0.0, 1.0, $alone) - $atTrend, 1e-12);
+            $this->assertEqualsWithDelta(-Election::COST_OF_RULING, $atTrend, 1e-12);
+            $this->assertEqualsWithDelta(-Election::INFLATION_SLOPE * 0.01, Election::economicVote(0.0, 0.01, 0.0, $alone) - $atTrend, 1e-12);
+            $this->assertEqualsWithDelta(Election::RESIDUAL_SD, Election::economicVote(0.0, 0.0, 1.0, $alone) - $atTrend, 1e-12);
         }
-        $this->assertEqualsWithDelta(Politics::ELECTION_SINGLE_PARTY_GROWTH_SLOPE * 0.01, Politics::economicVote(0.01, 0.0, 0.0, true) - Politics::economicVote(0.0, 0.0, 0.0, true), 1e-12);
-        $this->assertSame(Politics::economicVote(0.0, 0.0, 0.0, false), Politics::economicVote(0.01, 0.0, 0.0, false), 'A coalition gets no credit for growth.');
+        $this->assertEqualsWithDelta(Election::SINGLE_PARTY_GROWTH_SLOPE * 0.01, Election::economicVote(0.01, 0.0, 0.0, true) - Election::economicVote(0.0, 0.0, 0.0, true), 1e-12);
+        $this->assertSame(Election::economicVote(0.0, 0.0, 0.0, false), Election::economicVote(0.01, 0.0, 0.0, false), 'A coalition gets no credit for growth.');
     }
 
     /**
@@ -153,7 +156,7 @@ class PoliticsEngineTest extends TestCase
                 }
                 // The first vote has no earlier short-term swing to give back, so it is not yet the steady state.
                 if ($vote > 0) {
-                    $volatility[] = Politics::pedersenVolatility($state->dietVoteSwings);
+                    $volatility[] = Election::pedersenVolatility($state->dietVoteSwings);
                     $cabinetLosses[] = array_sum(array_map(static fn(string $party): float => $before[$party] - $state->dietVoteShares[$party], $outgoing));
                     $this->assertNotEmpty($state->dietSeats);
                     $singlePartyMajority += max($state->dietSeats) >= Diet::MAJORITY_SEATS ? 1 : 0;
@@ -185,7 +188,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertGreaterThan(3 * $radicalIn, $radicalSupports, 'The Council axis\'s ends govern rather than support.');
 
         // The outgoing cabinet's own parties, as Nannestad & Paldam count them.
-        $this->assertEqualsWithDelta(Politics::ELECTION_RECORDED_COST_OF_RULING, array_sum($cabinetLosses) / count($cabinetLosses), 0.0075);
+        $this->assertEqualsWithDelta(Election::RECORDED_COST_OF_RULING, array_sum($cabinetLosses) / count($cabinetLosses), 0.0075);
         $this->assertEqualsWithDelta(0.133, array_sum($volatility) / count($volatility), 0.015);
         $this->assertEqualsWithDelta(array_sum($bigTwo['early']) / count($bigTwo['early']), array_sum($bigTwo['late']) / count($bigTwo['late']), 6.0, 'The two big parties drift away from their normal votes.');
         $this->assertLessThan(0.05, $singlePartyMajority / count($volatility), 'The party system has drifted toward one-party rule.');
@@ -195,8 +198,8 @@ class PoliticsEngineTest extends TestCase
     public function testAShortTermSwingIsUndoneByItsNegation(): void
     {
         $shocks = [Diet::CIVIC => 0.3, Diet::VANGUARD => -0.2, Diet::IRON_HARBOR => 0.1, Diet::EXCHANGE => -0.05, Diet::CHARTISTS => 0.2, Diet::COMMON_LOT => -0.1];
-        $swung = Politics::applyShortTermShocks(Diet::SEED_VOTE_SHARES, $shocks);
-        $restored = Politics::applyShortTermShocks($swung, array_map(static fn(float $shock): float => -$shock, $shocks));
+        $swung = Election::applyShortTermShocks(Diet::SEED_VOTE_SHARES, $shocks);
+        $restored = Election::applyShortTermShocks($swung, array_map(static fn(float $shock): float => -$shock, $shocks));
 
         $this->assertEqualsWithDelta(1.0, array_sum($swung), 1e-12);
         $this->assertGreaterThan(Diet::SEED_VOTE_SHARES[Diet::CIVIC], $swung[Diet::CIVIC]);
@@ -211,10 +214,10 @@ class PoliticsEngineTest extends TestCase
      */
     public function testSmallPartiesSwingFurtherInLogShare(): void
     {
-        $large = Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::SEED_VOTE_SHARES[Diet::CIVIC]);
-        $small = Politics::swingSd(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE, Diet::SEED_VOTE_SHARES[Diet::COMMON_LOT]);
+        $large = Election::swingSd(Election::SHORT_TERM_SWING_VARIANCE, Diet::SEED_VOTE_SHARES[Diet::CIVIC]);
+        $small = Election::swingSd(Election::SHORT_TERM_SWING_VARIANCE, Diet::SEED_VOTE_SHARES[Diet::COMMON_LOT]);
 
-        $this->assertEqualsWithDelta(sqrt(Politics::ELECTION_SHORT_TERM_SWING_VARIANCE / Diet::SEED_VOTE_SHARES[Diet::CIVIC]), $large, 1e-12);
+        $this->assertEqualsWithDelta(sqrt(Election::SHORT_TERM_SWING_VARIANCE / Diet::SEED_VOTE_SHARES[Diet::CIVIC]), $large, 1e-12);
         $this->assertEqualsWithDelta(sqrt(Diet::SEED_VOTE_SHARES[Diet::CIVIC] / Diet::SEED_VOTE_SHARES[Diet::COMMON_LOT]), $small / $large, 1e-12);
     }
 
@@ -231,15 +234,15 @@ class PoliticsEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(0.03, $boomAlone->electionGrowthGap, 1e-9);
         $this->assertEqualsWithDelta(0.03, $inflation->electionInflationGap, 1e-9);
-        $this->assertEqualsWithDelta(Politics::ELECTION_SINGLE_PARTY_GROWTH_SLOPE * 0.03, $boomAlone->electionIncumbentSwing - $alone->electionIncumbentSwing, 1e-9, 'A boom returns a party governing alone stronger,');
+        $this->assertEqualsWithDelta(Election::SINGLE_PARTY_GROWTH_SLOPE * 0.03, $boomAlone->electionIncumbentSwing - $alone->electionIncumbentSwing, 1e-9, 'A boom returns a party governing alone stronger,');
         $this->assertEqualsWithDelta($coalition->electionIncumbentSwing, $boomCoalition->electionIncumbentSwing, 1e-12, 'and a coalition no stronger.');
-        $this->assertEqualsWithDelta(-Politics::ELECTION_INFLATION_SLOPE * 0.03, $inflation->electionIncumbentSwing - $coalition->electionIncumbentSwing, 1e-9, 'Inflation costs a coalition too.');
+        $this->assertEqualsWithDelta(-Election::INFLATION_SLOPE * 0.03, $inflation->electionIncumbentSwing - $coalition->electionIncumbentSwing, 1e-9, 'Inflation costs a coalition too.');
     }
 
     /** The opposition takes what the government loses, each opposition party in proportion to its own share. */
     public function testTheSwingIsSharedInProportion(): void
     {
-        $shares = Politics::applyIncumbentSwing(Diet::SEED_VOTE_SHARES, Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), -0.04);
+        $shares = Election::applyIncumbentSwing(Diet::SEED_VOTE_SHARES, Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), -0.04);
         $seed = Diet::SEED_VOTE_SHARES;
 
         $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-12);
@@ -257,11 +260,11 @@ class PoliticsEngineTest extends TestCase
         $seed = Diet::SEED_VOTE_SHARES;
         $cabinet = Diet::membership([Diet::VANGUARD]);
         $support = Diet::membership([Diet::EXCHANGE]);
-        $weight = Politics::ELECTION_SUPPORT_ACCOUNTABILITY;
+        $weight = Election::SUPPORT_ACCOUNTABILITY;
         $governing = $seed[Diet::VANGUARD] + ($weight * $seed[Diet::EXCHANGE]);
         $opposition = 1.0 - $governing;
 
-        $shares = Politics::applyIncumbentSwing($seed, $cabinet, -0.04, $support);
+        $shares = Election::applyIncumbentSwing($seed, $cabinet, -0.04, $support);
 
         $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-12);
         $this->assertEqualsWithDelta($seed[Diet::VANGUARD] * (1.0 - (0.04 / $governing)), $shares[Diet::VANGUARD], 1e-12);
@@ -281,9 +284,9 @@ class PoliticsEngineTest extends TestCase
     public function testAPartyIsPulledBackTowardItsHome(): void
     {
         foreach ([Diet::AXIS_STATE, Diet::AXIS_OPENNESS, Diet::AXIS_COUNCIL] as $axis) {
-            $persistence = Politics::POSITION_ANNUAL_PERSISTENCE[$axis] ** Politics::ELECTION_TERM_YEARS;
-            $this->assertEqualsWithDelta(0.1 + (0.5 * $persistence), Politics::movePosition(0.6, 0.1, $axis, 0.0), 1e-12, "{$axis}: the pull home.");
-            $this->assertEqualsWithDelta(0.1, Politics::movePosition(0.1, 0.1, $axis, 0.0), 1e-12, "{$axis}: a party at home stays there.");
+            $persistence = Election::POSITION_ANNUAL_PERSISTENCE[$axis] ** Election::TERM_YEARS;
+            $this->assertEqualsWithDelta(0.1 + (0.5 * $persistence), Election::movePosition(0.6, 0.1, $axis, 0.0), 1e-12, "{$axis}: the pull home.");
+            $this->assertEqualsWithDelta(0.1, Election::movePosition(0.1, 0.1, $axis, 0.0), 1e-12, "{$axis}: a party at home stays there.");
         }
     }
 
@@ -297,7 +300,7 @@ class PoliticsEngineTest extends TestCase
         $engine = $this->engine(new MathUtility());
         $deviations = [Diet::AXIS_OPENNESS => [], Diet::AXIS_COUNCIL => []];
         $state = $this->electionTick();
-        for ($vote = 0, $at = self::ELECTION_AT; $vote < 2000; ++$vote, $at += Politics::ELECTION_TERM_YEARS) {
+        for ($vote = 0, $at = self::ELECTION_AT; $vote < 2000; ++$vote, $at += Election::TERM_YEARS) {
             $engine->advance($state, $this->economy($at), 0.01);
             Politics::takeOffice($state);
             foreach (Diet::PARTIES as $party) {
@@ -318,18 +321,18 @@ class PoliticsEngineTest extends TestCase
             $mean = array_sum($axisDeviations) / count($axisDeviations);
             $sd = sqrt(array_sum(array_map(static fn(float $d): float => ($d - $mean) ** 2, $axisDeviations)) / count($axisDeviations));
             $this->assertEqualsWithDelta(0.0, $mean, 0.05, "The Vanguard has wandered from home on {$axis}.");
-            $this->assertEqualsWithDelta(Politics::POSITION_WITHIN_SD[$axis], $sd, 0.025, "The {$axis} spread is off the survey's.");
+            $this->assertEqualsWithDelta(Election::POSITION_WITHIN_SD[$axis], $sd, 0.025, "The {$axis} spread is off the survey's.");
         }
     }
 
     /** A step past the end of the axis comes back off it by the overshoot, rather than sticking at the end. */
     public function testAStepPastTheEndOfTheAxisIsReflected(): void
     {
-        $persistence = Politics::POSITION_ANNUAL_PERSISTENCE[Diet::AXIS_OPENNESS] ** Politics::ELECTION_TERM_YEARS;
-        $overshoot = (0.95 * $persistence) + (Politics::POSITION_WITHIN_SD[Diet::AXIS_OPENNESS] * sqrt(1.0 - ($persistence ** 2)) * 3.0);
+        $persistence = Election::POSITION_ANNUAL_PERSISTENCE[Diet::AXIS_OPENNESS] ** Election::TERM_YEARS;
+        $overshoot = (0.95 * $persistence) + (Election::POSITION_WITHIN_SD[Diet::AXIS_OPENNESS] * sqrt(1.0 - ($persistence ** 2)) * 3.0);
 
         $this->assertGreaterThan(1.0, $overshoot);
-        $this->assertEqualsWithDelta(2.0 - $overshoot, Politics::movePosition(0.95, 0.0, Diet::AXIS_OPENNESS, 3.0), 1e-12);
+        $this->assertEqualsWithDelta(2.0 - $overshoot, Election::movePosition(0.95, 0.0, Diet::AXIS_OPENNESS, 3.0), 1e-12);
     }
 
     // --- The calendar and the talks ---
@@ -373,10 +376,10 @@ class PoliticsEngineTest extends TestCase
     {
         $seats = [Diet::CIVIC => 160.0, Diet::VANGUARD => 60.0, Diet::IRON_HARBOR => 40.0, Diet::EXCHANGE => 40.0];
 
-        $this->assertSame(0.0, Politics::fallHazard([Diet::CIVIC], $seats));
-        $this->assertSame(Politics::CABINET_FALL_HAZARD_MAJORITY_COALITION, Politics::fallHazard([Diet::CIVIC, Diet::IRON_HARBOR], $seats));
-        $this->assertSame(Politics::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY, Politics::fallHazard([Diet::VANGUARD], $seats));
-        $this->assertSame(Politics::CABINET_FALL_HAZARD_MINORITY_COALITION, Politics::fallHazard([Diet::VANGUARD, Diet::EXCHANGE], $seats));
+        $this->assertSame(0.0, Election::fallHazard([Diet::CIVIC], $seats));
+        $this->assertSame(Election::CABINET_FALL_HAZARD_MAJORITY_COALITION, Election::fallHazard([Diet::CIVIC, Diet::IRON_HARBOR], $seats));
+        $this->assertSame(Election::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY, Election::fallHazard([Diet::VANGUARD], $seats));
+        $this->assertSame(Election::CABINET_FALL_HAZARD_MINORITY_COALITION, Election::fallHazard([Diet::VANGUARD, Diet::EXCHANGE], $seats));
     }
 
     /**
@@ -469,7 +472,7 @@ class PoliticsEngineTest extends TestCase
             $waits[] = $state->cabinetFallsAt - $state->totalTime;
         }
 
-        $this->assertEqualsWithDelta(1.0 / Politics::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY, array_sum($waits) / count($waits), 0.05 / Politics::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY);
+        $this->assertEqualsWithDelta(1.0 / Election::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY, array_sum($waits) / count($waits), 0.05 / Election::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY);
 
         $majority = $this->governedBy([Diet::VANGUARD => 160.0]);
         $majority->cabinetFallsAt = -1.0;
@@ -576,14 +579,14 @@ class PoliticsEngineTest extends TestCase
         $state->termStartDeflator = 1.0;
 
         // Ticks of 0.01y, the last before the campaign and the one it opens on.
-        $campaignOpens = self::ELECTION_AT - Politics::ELECTION_CAMPAIGN_WINDOW_YEARS;
+        $campaignOpens = self::ELECTION_AT - Election::CAMPAIGN_WINDOW_YEARS;
         $engine->advance($state, $this->economy($campaignOpens - 0.01), 0.01);
         $this->assertSame(0.0, $state->campaignStartedAt);
 
         $economy = new MacroStateDTO(totalTime: $campaignOpens, outputGap: 0.02);
         $engine->advance($state, $economy, 0.01);
         $this->assertSame($campaignOpens, $state->campaignStartedAt);
-        $this->assertSame(Politics::realGdp($economy), $state->campaignStartRealGdp);
+        $this->assertSame(Election::realGdp($economy), $state->campaignStartRealGdp);
     }
 
     /**
@@ -755,11 +758,11 @@ class PoliticsEngineTest extends TestCase
      */
     public function testThePulseBuildsIntoAScheduledElection(): void
     {
-        $midTerm = Politics::electionPulse(1.5, -1.0, -1.0);
-        $eve = Politics::electionPulse(3.95, -1.0, -1.0);
+        $midTerm = Election::pulse(1.5, -1.0, -1.0);
+        $eve = Election::pulse(3.95, -1.0, -1.0);
 
-        $this->assertEqualsWithDelta(-Politics::MEAN_ELECTION_PROXIMITY, $midTerm, 1e-12);
-        $this->assertEqualsWithDelta(0.95 - Politics::MEAN_ELECTION_PROXIMITY, $eve, 1e-9);
+        $this->assertEqualsWithDelta(-Election::MEAN_ELECTION_PROXIMITY, $midTerm, 1e-12);
+        $this->assertEqualsWithDelta(0.95 - Election::MEAN_ELECTION_PROXIMITY, $eve, 1e-9);
     }
 
     /**
@@ -768,12 +771,12 @@ class PoliticsEngineTest extends TestCase
      */
     public function testThePulseHoldsThroughTheTalks(): void
     {
-        $peak = 1.0 - Politics::MEAN_ELECTION_PROXIMITY;
+        $peak = 1.0 - Election::MEAN_ELECTION_PROXIMITY;
 
-        $this->assertSame($peak, Politics::electionPulse(4.0, 4.0, -1.0), 'The vote\'s own tick is the peak, even with a majority seated the same day.');
-        $this->assertSame($peak, Politics::electionPulse(4.1, 4.0, 4.2), 'The talks settle nothing.');
-        $this->assertSame($peak, Politics::electionPulse(6.3, 4.0, 6.4), 'Nor do the talks after a fall.');
-        $this->assertEqualsWithDelta(-Politics::MEAN_ELECTION_PROXIMITY, Politics::electionPulse(4.2, 4.0, -1.0), 1e-12, 'A seated government settles the regime.');
+        $this->assertSame($peak, Election::pulse(4.0, 4.0, -1.0), 'The vote\'s own tick is the peak, even with a majority seated the same day.');
+        $this->assertSame($peak, Election::pulse(4.1, 4.0, 4.2), 'The talks settle nothing.');
+        $this->assertSame($peak, Election::pulse(6.3, 4.0, 6.4), 'Nor do the talks after a fall.');
+        $this->assertEqualsWithDelta(-Election::MEAN_ELECTION_PROXIMITY, Election::pulse(4.2, 4.0, -1.0), 1e-12, 'A seated government settles the regime.');
     }
 
     /**
@@ -783,12 +786,12 @@ class PoliticsEngineTest extends TestCase
     public function testThePulseAveragesNothingOverATermOfAverageTalks(): void
     {
         $ticksPerYear = 3650;
-        $talkYears = (CoalitionFormation::FORMATION_MEAN_DAYS + Politics::FALL_TALK_DAYS_PER_TERM) / FinancialConstants::DAYS_PER_YEAR;
+        $talkYears = (CoalitionFormation::FORMATION_MEAN_DAYS + Election::FALL_TALK_DAYS_PER_TERM) / FinancialConstants::DAYS_PER_YEAR;
         $sum = 0.0;
-        $ticks = (int) round(Politics::ELECTION_TERM_YEARS * $ticksPerYear);
+        $ticks = (int) round(Election::TERM_YEARS * $ticksPerYear);
         for ($tick = 1; $tick <= $ticks; ++$tick) {
-            $time = Politics::ELECTION_TERM_YEARS + ($tick / $ticksPerYear);
-            $sum += Politics::electionPulse($time, Politics::ELECTION_TERM_YEARS, Politics::ELECTION_TERM_YEARS + $talkYears);
+            $time = Election::TERM_YEARS + ($tick / $ticksPerYear);
+            $sum += Election::pulse($time, Election::TERM_YEARS, Election::TERM_YEARS + $talkYears);
         }
 
         $this->assertEqualsWithDelta(0.0, $sum / $ticks, 1e-3);
@@ -799,19 +802,19 @@ class PoliticsEngineTest extends TestCase
     /** Each lever runs between the policies of the parties at the two ends of its axis. */
     public function testThePlatformRunsBetweenThePartiesAtTheEndsOfEachAxis(): void
     {
-        $civic = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => 0.0]);
-        $vanguard = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => 0.0]);
-        $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP, $civic['corporateTax'] - $vanguard['corporateTax'], 1e-12, 'The two big parties are a manifesto gap apart.');
+        $civic = Platforms::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => 0.0]);
+        $vanguard = Platforms::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => 0.0]);
+        $this->assertEqualsWithDelta(Platforms::POLICY_MANIFESTO_CORPORATE_TAX_GAP, $civic['corporateTax'] - $vanguard['corporateTax'], 1e-12, 'The two big parties are a manifesto gap apart.');
         $this->assertEqualsWithDelta(0.0, $civic['corporateTax'] + $vanguard['corporateTax'], 1e-12, 'The gap is centred on the neutral rate.');
 
-        $harbor = Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS]]);
-        $exchange = Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::EXCHANGE][Diet::AXIS_OPENNESS]]);
-        $this->assertEqualsWithDelta(Politics::POLICY_PROTECTIONIST_TARIFF, $harbor['tariff'], 1e-12, 'The protectionist party enacts its own tariff.');
+        $harbor = Platforms::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS]]);
+        $exchange = Platforms::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::EXCHANGE][Diet::AXIS_OPENNESS]]);
+        $this->assertEqualsWithDelta(Platforms::POLICY_PROTECTIONIST_TARIFF, $harbor['tariff'], 1e-12, 'The protectionist party enacts its own tariff.');
         $this->assertSame(0.0, $exchange['tariff']);
-        $this->assertEqualsWithDelta(Politics::MIGRATION_OPEN_REGIME - Politics::MIGRATION_CLOSED_REGIME, $exchange['laborGrowth'] - $harbor['laborGrowth'], 1e-12, 'The two immigration regimes are a regime apart.');
-        $this->assertEqualsWithDelta(MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => 0.0])['laborGrowth'], 1e-12, 'A neutral government keeps the structural rate.');
-        $this->assertEqualsWithDelta(MacroConstants::NATURAL_LABOR_FORCE_GROWTH + Politics::MIGRATION_CLOSED_REGIME, $harbor['laborGrowth'], 1e-12, 'The closed end admits Japan\'s regime on top of natural growth.');
-        $this->assertEqualsWithDelta(MacroConstants::NATURAL_LABOR_FORCE_GROWTH + Politics::MIGRATION_OPEN_REGIME, $exchange['laborGrowth'], 1e-12, 'The open end admits Canada\'s and Australia\'s.');
+        $this->assertEqualsWithDelta(Platforms::MIGRATION_OPEN_REGIME - Platforms::MIGRATION_CLOSED_REGIME, $exchange['laborGrowth'] - $harbor['laborGrowth'], 1e-12, 'The two immigration regimes are a regime apart.');
+        $this->assertEqualsWithDelta(MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, Platforms::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => 0.0])['laborGrowth'], 1e-12, 'A neutral government keeps the structural rate.');
+        $this->assertEqualsWithDelta(MacroConstants::NATURAL_LABOR_FORCE_GROWTH + Platforms::MIGRATION_CLOSED_REGIME, $harbor['laborGrowth'], 1e-12, 'The closed end admits Japan\'s regime on top of natural growth.');
+        $this->assertEqualsWithDelta(MacroConstants::NATURAL_LABOR_FORCE_GROWTH + Platforms::MIGRATION_OPEN_REGIME, $exchange['laborGrowth'], 1e-12, 'The open end admits Canada\'s and Australia\'s.');
     }
 
     /**
@@ -820,31 +823,31 @@ class PoliticsEngineTest extends TestCase
      */
     public function testEachSideOfTheStateAxisIsScaledToItsOwnEnd(): void
     {
-        $civic = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE] / 2.0]);
-        $vanguard = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE] / 2.0]);
-        $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $civic['corporateTax'], 1e-12);
-        $this->assertEqualsWithDelta(-Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $vanguard['corporateTax'], 1e-12);
-        $this->assertEqualsWithDelta(MacroConstants::PUBLIC_PURCHASES_TO_GDP * exp(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 4.0), $civic['publicSpending'], 1e-12);
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE - (Politics::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 4.0), $vanguard['consolidationTaxShare'], 1e-12);
-        $this->assertSame(Politics::platform([Diet::AXIS_STATE => -2.0])['corporateTax'], Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE]])['corporateTax'], 'Past its end a government enacts the end party\'s law and no more.');
+        $civic = Platforms::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE] / 2.0]);
+        $vanguard = Platforms::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE] / 2.0]);
+        $this->assertEqualsWithDelta(Platforms::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $civic['corporateTax'], 1e-12);
+        $this->assertEqualsWithDelta(-Platforms::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 4.0, $vanguard['corporateTax'], 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::PUBLIC_PURCHASES_TO_GDP * exp(Platforms::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP / 4.0), $civic['publicSpending'], 1e-12);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE - (Platforms::POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP / 4.0), $vanguard['consolidationTaxShare'], 1e-12);
+        $this->assertSame(Platforms::platform([Diet::AXIS_STATE => -2.0])['corporateTax'], Platforms::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE]])['corporateTax'], 'Past its end a government enacts the end party\'s law and no more.');
     }
 
     public function testANeutralOrOpenGovernmentKeepsTheFreePort(): void
     {
         foreach ([0.0, 0.2, 1.0] as $openness) {
-            $this->assertSame(0.0, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => $openness])['tariff']);
+            $this->assertSame(0.0, Platforms::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => $openness])['tariff']);
         }
-        $this->assertGreaterThan(0.0, Politics::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => -0.1])['tariff'], 'Any closed lean raises the tariff.');
+        $this->assertGreaterThan(0.0, Platforms::platform([Diet::AXIS_STATE => 0.0, Diet::AXIS_OPENNESS => -0.1])['tariff'], 'Any closed lean raises the tariff.');
     }
 
     public function testNoGovernmentGoesFurtherThanThePartyAtTheEndOfTheAxis(): void
     {
-        $pole = Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS]]);
+        $pole = Platforms::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS]]);
 
-        $this->assertSame($pole, Politics::platform([Diet::AXIS_STATE => 1.0, Diet::AXIS_OPENNESS => -1.0]));
+        $this->assertSame($pole, Platforms::platform([Diet::AXIS_STATE => 1.0, Diet::AXIS_OPENNESS => -1.0]));
         $this->assertSame(
-            Politics::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::EXCHANGE][Diet::AXIS_OPENNESS]]),
-            Politics::platform([Diet::AXIS_STATE => -1.0, Diet::AXIS_OPENNESS => 1.0]),
+            Platforms::platform([Diet::AXIS_STATE => Diet::FIXED_POSITIONS[Diet::VANGUARD][Diet::AXIS_STATE], Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::EXCHANGE][Diet::AXIS_OPENNESS]]),
+            Platforms::platform([Diet::AXIS_STATE => -1.0, Diet::AXIS_OPENNESS => 1.0]),
         );
     }
 
@@ -862,7 +865,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(0.0, $state->corporateTaxPolicyShift, 'nor between rounds.');
 
         $engine->advance($state, $this->economy(4.5), 0.01);
-        $platform = Politics::platform(Politics::coalitionPosition($state->governingCoalition, $state->dietSeats, $state->partyPositions));
+        $platform = Platforms::platform(Platforms::coalitionPosition($state->governingCoalition, $state->dietSeats, $state->partyPositions));
         $this->assertLessThan(0.0, $platform['corporateTax'], 'The Vanguard-led government cuts the rate');
         $this->assertSame($platform['corporateTax'], $state->corporateTaxPolicyShift, 'and its first budget enacts the cut,');
         $this->assertSame($platform['tariff'], $state->importTariffRate);
@@ -881,10 +884,10 @@ class PoliticsEngineTest extends TestCase
      */
     public function testTheClosedEndTaxesForeignHomeBuyers(): void
     {
-        $this->assertSame(Politics::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX, Politics::platform(Diet::position(Diet::IRON_HARBOR, []))['foreignBuyerTax']);
-        $this->assertSame(0.0, Politics::platform(Diet::position(Diet::EXCHANGE, []))['foreignBuyerTax']);
-        $this->assertSame(0.0, Politics::platform([Diet::AXIS_OPENNESS => 0.0])['foreignBuyerTax']);
-        $this->assertEqualsWithDelta(Politics::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX / 2.0, Politics::platform([Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS] / 2.0])['foreignBuyerTax'], 1e-15);
+        $this->assertSame(Platforms::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX, Platforms::platform(Diet::position(Diet::IRON_HARBOR, []))['foreignBuyerTax']);
+        $this->assertSame(0.0, Platforms::platform(Diet::position(Diet::EXCHANGE, []))['foreignBuyerTax']);
+        $this->assertSame(0.0, Platforms::platform([Diet::AXIS_OPENNESS => 0.0])['foreignBuyerTax']);
+        $this->assertEqualsWithDelta(Platforms::POLICY_PROTECTIONIST_FOREIGN_BUYER_TAX / 2.0, Platforms::platform([Diet::AXIS_OPENNESS => Diet::FIXED_POSITIONS[Diet::IRON_HARBOR][Diet::AXIS_OPENNESS] / 2.0])['foreignBuyerTax'], 1e-15);
     }
 
     /**
@@ -893,12 +896,12 @@ class PoliticsEngineTest extends TestCase
      */
     public function testTheConsolidationMixPlatformsSpanTheManifestoGap(): void
     {
-        $civic = Politics::platform(Diet::position(Diet::CIVIC, []))['consolidationTaxShare'];
-        $vanguard = Politics::platform(Diet::position(Diet::VANGUARD, []))['consolidationTaxShare'];
+        $civic = Platforms::platform(Diet::position(Diet::CIVIC, []))['consolidationTaxShare'];
+        $vanguard = Platforms::platform(Diet::position(Diet::VANGUARD, []))['consolidationTaxShare'];
         $this->assertEqualsWithDelta(10.0 / 71.0, $civic - $vanguard, 1e-12, 'Labour\'s 2:1 against the Conservatives\' 4:1.');
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE, Politics::platform([Diet::AXIS_STATE => 0.0])['consolidationTaxShare'], 1e-12);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE, Platforms::platform([Diet::AXIS_STATE => 0.0])['consolidationTaxShare'], 1e-12);
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE, (new PoliticsStateDTO())->consolidationTaxShare, 1e-12);
-        $this->assertSame(Diet::AXIS_STATE, Politics::LEVER_AXES['consolidationTaxShare']);
+        $this->assertSame(Diet::AXIS_STATE, Platforms::LEVER_AXES['consolidationTaxShare']);
     }
 
     /**
@@ -910,10 +913,10 @@ class PoliticsEngineTest extends TestCase
         $appointed = FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE;
         $elected = $appointed * FirmEconomics::ELECTED_COMMISSION_GRANT_RATIO;
         $this->assertLessThan($appointed, $elected, 'An elected commission grants less of a request.');
-        $this->assertEqualsWithDelta($elected, Politics::platform(Diet::position(Diet::COMMON_LOT, []))['utilityRateGrant'], 1e-12);
-        $this->assertEqualsWithDelta($appointed, Politics::platform(Diet::position(Diet::CHARTISTS, []))['utilityRateGrant'], 1e-12);
-        $this->assertEqualsWithDelta($appointed, Politics::platform([Diet::AXIS_COUNCIL => 0.0])['utilityRateGrant'], 1e-12);
-        $this->assertEqualsWithDelta(($appointed + $elected) / 2.0, Politics::platform([Diet::AXIS_COUNCIL => Diet::FIXED_POSITIONS[Diet::COMMON_LOT][Diet::AXIS_COUNCIL] / 2.0])['utilityRateGrant'], 1e-12);
+        $this->assertEqualsWithDelta($elected, Platforms::platform(Diet::position(Diet::COMMON_LOT, []))['utilityRateGrant'], 1e-12);
+        $this->assertEqualsWithDelta($appointed, Platforms::platform(Diet::position(Diet::CHARTISTS, []))['utilityRateGrant'], 1e-12);
+        $this->assertEqualsWithDelta($appointed, Platforms::platform([Diet::AXIS_COUNCIL => 0.0])['utilityRateGrant'], 1e-12);
+        $this->assertEqualsWithDelta(($appointed + $elected) / 2.0, Platforms::platform([Diet::AXIS_COUNCIL => Diet::FIXED_POSITIONS[Diet::COMMON_LOT][Diet::AXIS_COUNCIL] / 2.0])['utilityRateGrant'], 1e-12);
         $this->assertSame($appointed, (new PoliticsStateDTO())->utilityRateCaseGrantShare);
     }
 
@@ -924,13 +927,13 @@ class PoliticsEngineTest extends TestCase
     public function testTheDividendTaxPlatformsRunFromExemptionToTheFoundingRate(): void
     {
         $half = Diet::FIXED_POSITIONS[Diet::CIVIC][Diet::AXIS_STATE] / 2.0;
-        $this->assertEqualsWithDelta(0.15, Politics::platform(Diet::position(Diet::CIVIC, []))['dividendTax'], 1e-12);
-        $this->assertEqualsWithDelta(0.0, Politics::platform(Diet::position(Diet::VANGUARD, []))['dividendTax'], 1e-12);
-        $this->assertEqualsWithDelta(0.15, Politics::platform([Diet::AXIS_STATE => 0.0])['dividendTax'], 1e-12);
-        $this->assertEqualsWithDelta(0.15, Politics::platform([Diet::AXIS_STATE => $half])['dividendTax'], 1e-12, 'Left of the middle the rate stays where it was founded.');
-        $this->assertEqualsWithDelta(0.075, Politics::platform([Diet::AXIS_STATE => -$half])['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta(0.15, Platforms::platform(Diet::position(Diet::CIVIC, []))['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta(0.0, Platforms::platform(Diet::position(Diet::VANGUARD, []))['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta(0.15, Platforms::platform([Diet::AXIS_STATE => 0.0])['dividendTax'], 1e-12);
+        $this->assertEqualsWithDelta(0.15, Platforms::platform([Diet::AXIS_STATE => $half])['dividendTax'], 1e-12, 'Left of the middle the rate stays where it was founded.');
+        $this->assertEqualsWithDelta(0.075, Platforms::platform([Diet::AXIS_STATE => -$half])['dividendTax'], 1e-12);
         $this->assertSame(Valuation::FOUNDING_DIVIDEND_TAX_RATE, (new PoliticsStateDTO())->dividendTaxRate);
-        $this->assertSame(Diet::AXIS_STATE, Politics::LEVER_AXES['dividendTax']);
+        $this->assertSame(Diet::AXIS_STATE, Platforms::LEVER_AXES['dividendTax']);
     }
 
     /**
@@ -939,11 +942,11 @@ class PoliticsEngineTest extends TestCase
      */
     public function testTheReserveHomeSharePlatformsRunFromNorwayToGpif(): void
     {
-        $this->assertEqualsWithDelta(0.5, Politics::platform(Diet::position(Diet::IRON_HARBOR, []))['reserveHomeShare'], 1e-12);
-        $this->assertEqualsWithDelta(0.0, Politics::platform(Diet::position(Diet::EXCHANGE, []))['reserveHomeShare'], 1e-12);
-        $this->assertEqualsWithDelta(0.25, Politics::platform([Diet::AXIS_OPENNESS => 0.0])['reserveHomeShare'], 1e-12);
+        $this->assertEqualsWithDelta(0.5, Platforms::platform(Diet::position(Diet::IRON_HARBOR, []))['reserveHomeShare'], 1e-12);
+        $this->assertEqualsWithDelta(0.0, Platforms::platform(Diet::position(Diet::EXCHANGE, []))['reserveHomeShare'], 1e-12);
+        $this->assertEqualsWithDelta(0.25, Platforms::platform([Diet::AXIS_OPENNESS => 0.0])['reserveHomeShare'], 1e-12);
         $this->assertEqualsWithDelta(SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE, (new PoliticsStateDTO())->reserveHomeEquityShare, 1e-12);
-        $this->assertSame(Diet::AXIS_OPENNESS, Politics::LEVER_AXES['reserveHomeShare']);
+        $this->assertSame(Diet::AXIS_OPENNESS, Platforms::LEVER_AXES['reserveHomeShare']);
     }
 
     /**
@@ -952,12 +955,12 @@ class PoliticsEngineTest extends TestCase
      */
     public function testThePublicSpendingPlatformsSpanTheManifestoGap(): void
     {
-        $civic = Politics::platform(Diet::position(Diet::CIVIC, []))['publicSpending'];
-        $vanguard = Politics::platform(Diet::position(Diet::VANGUARD, []))['publicSpending'];
+        $civic = Platforms::platform(Diet::position(Diet::CIVIC, []))['publicSpending'];
+        $vanguard = Platforms::platform(Diet::position(Diet::VANGUARD, []))['publicSpending'];
 
-        $this->assertEqualsWithDelta(Politics::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP, log($civic / $vanguard), 1e-12);
+        $this->assertEqualsWithDelta(Platforms::POLICY_MANIFESTO_PUBLIC_SPENDING_LOG_GAP, log($civic / $vanguard), 1e-12);
         $this->assertEqualsWithDelta(0.007, $civic - $vanguard, 3e-5, 'The ends part by 0.7% of GDP.');
-        $this->assertEqualsWithDelta(MacroConstants::PUBLIC_PURCHASES_TO_GDP, Politics::platform([Diet::AXIS_STATE => 0.0])['publicSpending'], 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::PUBLIC_PURCHASES_TO_GDP, Platforms::platform([Diet::AXIS_STATE => 0.0])['publicSpending'], 1e-15);
     }
 
     /**
@@ -970,10 +973,10 @@ class PoliticsEngineTest extends TestCase
     {
         $seats = Diet::SEED_SEATS;
         $positions = Diet::HOME_POSITIONS;
-        $standing = static fn(float $tax): array => ['corporateTax' => $tax] + Politics::standingLevers(new PoliticsStateDTO());
-        $programme = static fn(string $party): array => Politics::partyProgramme($party, $positions);
+        $standing = static fn(float $tax): array => ['corporateTax' => $tax] + BudgetRound::standingLevers(new PoliticsStateDTO());
+        $programme = static fn(string $party): array => Platforms::partyProgramme($party, $positions);
 
-        $civicHeld = Politics::budget([Diet::VANGUARD], [Diet::CIVIC], $seats, $positions, $standing(0.0));
+        $civicHeld = BudgetRound::budget([Diet::VANGUARD], [Diet::CIVIC], $seats, $positions, $standing(0.0));
         $this->assertGreaterThan(
             BudgetBargain::separation($standing(0.0), $programme(Diet::CIVIC)),
             BudgetBargain::separation($civicHeld['platform'], $programme(Diet::CIVIC)),
@@ -987,8 +990,8 @@ class PoliticsEngineTest extends TestCase
         );
         $this->assertTrue($civicHeld['supportHeld']['corporateTax']);
 
-        $inForce = Politics::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 7.0;
-        $both = Politics::budget([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CIVIC], $seats, $positions, $standing($inForce));
+        $inForce = Platforms::POLICY_MANIFESTO_CORPORATE_TAX_GAP / 7.0;
+        $both = BudgetRound::budget([Diet::VANGUARD], [Diet::EXCHANGE, Diet::CIVIC], $seats, $positions, $standing($inForce));
         foreach ([Diet::EXCHANGE, Diet::CIVIC] as $supporter) {
             $this->assertLessThanOrEqual(
                 BudgetBargain::separation($standing($inForce), $programme($supporter)) + 1e-9,
@@ -1000,8 +1003,8 @@ class PoliticsEngineTest extends TestCase
             $this->assertSame($value !== $both['platform'][$lever], $both['supportHeld'][$lever], "{$lever} is held exactly where it falls short of the programme.");
         }
 
-        $majority = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], [], $seats, $positions, $standing(0.0));
-        $this->assertSame(array_fill_keys(array_keys(Politics::LEVER_FIELDS), false), $majority['supportHeld'], 'A majority cabinet answers to no supporter.');
+        $majority = BudgetRound::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], [], $seats, $positions, $standing(0.0));
+        $this->assertSame(array_fill_keys(array_keys(Platforms::LEVER_FIELDS), false), $majority['supportHeld'], 'A majority cabinet answers to no supporter.');
     }
 
     public function testTheVoteReadsGrowthPerHead(): void
@@ -1024,8 +1027,8 @@ class PoliticsEngineTest extends TestCase
         $economy = $this->economy(self::ELECTION_AT);
 
         $trendGrowth = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT;
-        $state->campaignStartedAt = self::ELECTION_AT - Politics::ELECTION_CAMPAIGN_WINDOW_YEARS;
-        $state->campaignStartRealGdp = Politics::realGdp($economy) * exp(-($trendGrowth + $growthGap) * Politics::ELECTION_CAMPAIGN_WINDOW_YEARS);
+        $state->campaignStartedAt = self::ELECTION_AT - Election::CAMPAIGN_WINDOW_YEARS;
+        $state->campaignStartRealGdp = Election::realGdp($economy) * exp(-($trendGrowth + $growthGap) * Election::CAMPAIGN_WINDOW_YEARS);
         $state->termStartedAt = 0.0;
         $state->termStartDeflator = $economy->consumerPriceLevel * exp(-(MacroConstants::TARGET_INFLATION + $inflationGap) * self::ELECTION_AT);
 
@@ -1114,8 +1117,8 @@ class PoliticsEngineTest extends TestCase
         $state->lastElectionAt = self::ELECTION_AT;
         $state->termStartedAt = self::ELECTION_AT;
         $state->termStartDeflator = $economy->consumerPriceLevel;
-        $state->campaignStartedAt = self::ELECTION_AT - Politics::ELECTION_CAMPAIGN_WINDOW_YEARS;
-        $state->campaignStartRealGdp = Politics::realGdp($economy);
+        $state->campaignStartedAt = self::ELECTION_AT - Election::CAMPAIGN_WINDOW_YEARS;
+        $state->campaignStartRealGdp = Election::realGdp($economy);
         $state->pendingCoalition = Diet::membership([Diet::VANGUARD]);
         $state->pendingSupport = Diet::membership([Diet::EXCHANGE, Diet::CHARTISTS]);
         $state->coalitionTakesOfficeAt = $takesOfficeAt;
@@ -1180,7 +1183,7 @@ class PoliticsEngineTest extends TestCase
      */
     public function testTheEnvironmentLeversRiseFromNoneToTheTidelineAccords(): void
     {
-        $at = static fn(float $environment): array => Politics::platform([Diet::AXIS_ENVIRONMENT => $environment]);
+        $at = static fn(float $environment): array => Platforms::platform([Diet::AXIS_ENVIRONMENT => $environment]);
 
         foreach ([-1.0, -0.5, 0.0] as $growth) {
             $this->assertSame(0.0, $at($growth)['greenBeltStringency']);
@@ -1188,13 +1191,13 @@ class PoliticsEngineTest extends TestCase
             $this->assertSame(0.0, $at($growth)['extractionStringency']);
         }
         $this->assertEqualsWithDelta(0.5, $at(0.4)['greenBeltStringency'], 1e-12);
-        $this->assertEqualsWithDelta(Politics::POLICY_GREEN_CARBON_PRICE / 2.0, $at(0.4)['carbonPrice'], 1e-12);
-        $tideline = Politics::platform(Diet::position(Diet::TIDELINE, Diet::HOME_POSITIONS));
+        $this->assertEqualsWithDelta(Platforms::POLICY_GREEN_CARBON_PRICE / 2.0, $at(0.4)['carbonPrice'], 1e-12);
+        $tideline = Platforms::platform(Diet::position(Diet::TIDELINE, Diet::HOME_POSITIONS));
         $this->assertSame(1.0, $tideline['greenBeltStringency']);
-        $this->assertSame(Politics::POLICY_GREEN_CARBON_PRICE, $tideline['carbonPrice']);
+        $this->assertSame(Platforms::POLICY_GREEN_CARBON_PRICE, $tideline['carbonPrice']);
         $this->assertSame(1.0, $at(1.0)['extractionStringency'], 'Nothing on record is stricter.');
 
-        $founding = Politics::platform(Politics::coalitionPosition(Diet::SEED_COALITION, Diet::SEED_SEATS, Diet::HOME_POSITIONS));
+        $founding = Platforms::platform(Platforms::coalitionPosition(Diet::SEED_COALITION, Diet::SEED_SEATS, Diet::HOME_POSITIONS));
         $this->assertSame(0.0, $founding['greenBeltStringency'], 'The founding economy is the calibrated one.');
         $this->assertSame(0.0, $founding['carbonPrice']);
         $this->assertSame(0.0, $founding['extractionStringency']);
@@ -1206,12 +1209,12 @@ class PoliticsEngineTest extends TestCase
      */
     public function testEveryLeverListIsInPlatformOrder(): void
     {
-        $order = array_keys(Politics::partyProgramme(Diet::CIVIC, Diet::HOME_POSITIONS));
+        $order = array_keys(Platforms::partyProgramme(Diet::CIVIC, Diet::HOME_POSITIONS));
 
-        $this->assertSame($order, array_keys(Politics::LEVER_FIELDS));
-        $this->assertSame($order, array_keys(Politics::LEVER_AXES));
-        $this->assertSame($order, array_keys(Politics::standingLevers(new PoliticsStateDTO())));
-        foreach (Politics::LEVER_FIELDS as $field) {
+        $this->assertSame($order, array_keys(Platforms::LEVER_FIELDS));
+        $this->assertSame($order, array_keys(Platforms::LEVER_AXES));
+        $this->assertSame($order, array_keys(BudgetRound::standingLevers(new PoliticsStateDTO())));
+        foreach (Platforms::LEVER_FIELDS as $field) {
             $this->assertTrue(property_exists(PoliticsStateDTO::class, $field), "{$field} is kept on the state.");
             $this->assertTrue(property_exists(GovernmentPolicyDTO::class, $field), "{$field} is handed to the economy.");
         }
@@ -1222,8 +1225,8 @@ class PoliticsEngineTest extends TestCase
     {
         $centre = array_fill_keys(Diet::AXES, 0.0);
         foreach (Diet::AXES as $axis) {
-            $towards = [Politics::platform([$axis => -0.4] + $centre), Politics::platform([$axis => 0.4] + $centre)];
-            foreach (array_intersect_key(Politics::LEVER_AXES, $towards[0]) as $lever => $own) {
+            $towards = [Platforms::platform([$axis => -0.4] + $centre), Platforms::platform([$axis => 0.4] + $centre)];
+            foreach (array_intersect_key(Platforms::LEVER_AXES, $towards[0]) as $lever => $own) {
                 $moved = $towards[0][$lever] !== $towards[1][$lever];
                 $this->assertSame($own === $axis, $moved, "{$lever} " . ($moved ? 'moves' : 'does not move') . " with {$axis}.");
             }
@@ -1238,15 +1241,15 @@ class PoliticsEngineTest extends TestCase
     {
         $seats = Diet::SEED_SEATS;
         $positions = Diet::HOME_POSITIONS;
-        $standing = ['carbonPrice' => 50.0, 'greenBeltStringency' => 0.9] + Politics::standingLevers(new PoliticsStateDTO());
-        $civicCarbon = Politics::platform(Diet::position(Diet::CIVIC, $positions))['carbonPrice'];
+        $standing = ['carbonPrice' => 50.0, 'greenBeltStringency' => 0.9] + BudgetRound::standingLevers(new PoliticsStateDTO());
+        $civicCarbon = Platforms::platform(Diet::position(Diet::CIVIC, $positions))['carbonPrice'];
         $this->assertLessThan(50.0, $civicCarbon);
 
-        $propped = Politics::budget([Diet::CIVIC], [Diet::TIDELINE], $seats, $positions, $standing);
+        $propped = BudgetRound::budget([Diet::CIVIC], [Diet::TIDELINE], $seats, $positions, $standing);
         $this->assertSame(50.0, $propped['levers']['carbonPrice'], 'The Accord accepts nothing further from its own price.');
         $this->assertTrue($propped['supportHeld']['carbonPrice']);
 
-        $braked = Politics::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON], [], $seats, $positions, $standing);
+        $braked = BudgetRound::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON], [], $seats, $positions, $standing);
         $this->assertSame($braked['platform']['carbonPrice'], $braked['levers']['carbonPrice'], 'A majority cabinet enacts its own price.');
         $this->assertLessThan(50.0, $braked['levers']['carbonPrice']);
         $this->assertSame(0.0, $braked['levers']['greenBeltStringency'], 'A growth-first majority lifts the green belt whatever the debt.');
@@ -1261,9 +1264,9 @@ class PoliticsEngineTest extends TestCase
     {
         $positions = Diet::HOME_POSITIONS;
 
-        $this->assertEqualsWithDelta(FinancialConstants::STAMP_DUTY_RATE, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['stampDutyRate'], 1e-15, 'The founding cabinet keeps the founding duty.');
-        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_STAMP_DUTY, Politics::platform(Diet::position(Diet::CIVIC, $positions))['stampDutyRate'], 1e-15);
-        $this->assertEqualsWithDelta((FinancialConstants::STAMP_DUTY_RATE + Politics::POLICY_BIG_STATE_STAMP_DUTY) / 2.0, Politics::platform([Diet::AXIS_STATE => 0.0])['stampDutyRate'], 1e-15);
+        $this->assertEqualsWithDelta(FinancialConstants::STAMP_DUTY_RATE, Platforms::platform(Diet::position(Diet::VANGUARD, $positions))['stampDutyRate'], 1e-15, 'The founding cabinet keeps the founding duty.');
+        $this->assertEqualsWithDelta(Platforms::POLICY_BIG_STATE_STAMP_DUTY, Platforms::platform(Diet::position(Diet::CIVIC, $positions))['stampDutyRate'], 1e-15);
+        $this->assertEqualsWithDelta((FinancialConstants::STAMP_DUTY_RATE + Platforms::POLICY_BIG_STATE_STAMP_DUTY) / 2.0, Platforms::platform([Diet::AXIS_STATE => 0.0])['stampDutyRate'], 1e-15);
     }
 
     /**
@@ -1274,8 +1277,8 @@ class PoliticsEngineTest extends TestCase
     {
         $positions = Diet::HOME_POSITIONS;
 
-        $this->assertEqualsWithDelta(0.0, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['bankLevyRate'], 1e-15, 'The founding cabinet levies none.');
-        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_BANK_LEVY, Politics::platform(Diet::position(Diet::CIVIC, $positions))['bankLevyRate'], 1e-15);
+        $this->assertEqualsWithDelta(0.0, Platforms::platform(Diet::position(Diet::VANGUARD, $positions))['bankLevyRate'], 1e-15, 'The founding cabinet levies none.');
+        $this->assertEqualsWithDelta(Platforms::POLICY_BIG_STATE_BANK_LEVY, Platforms::platform(Diet::position(Diet::CIVIC, $positions))['bankLevyRate'], 1e-15);
     }
 
     /**
@@ -1286,27 +1289,27 @@ class PoliticsEngineTest extends TestCase
     public function testTheFundHoldsTheSecondKeyOnTheDrawAboveHalf(): void
     {
         $positions = Diet::HOME_POSITIONS;
-        $this->assertEqualsWithDelta(MacroConstants::RESERVE_DRAW_CEILING, Politics::platform(Diet::position(Diet::VANGUARD, $positions))['reserveDrawShare'], 1e-15);
-        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, Politics::platform(Diet::position(Diet::CIVIC, $positions))['reserveDrawShare'], 1e-15);
+        $this->assertEqualsWithDelta(MacroConstants::RESERVE_DRAW_CEILING, Platforms::platform(Diet::position(Diet::VANGUARD, $positions))['reserveDrawShare'], 1e-15);
+        $this->assertEqualsWithDelta(Platforms::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, Platforms::platform(Diet::position(Diet::CIVIC, $positions))['reserveDrawShare'], 1e-15);
 
-        $founding = Politics::standingLevers(new PoliticsStateDTO());
-        $refused = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding);
+        $founding = BudgetRound::standingLevers(new PoliticsStateDTO());
+        $refused = BudgetRound::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding);
         $this->assertSame(MacroConstants::RESERVE_DRAW_CEILING, $refused['levers']['reserveDrawShare'], 'Out of a recession the fund refuses a draw above half.');
         $this->assertTrue($refused['fundHeld']);
-        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, $refused['platform']['reserveDrawShare'], 1e-15);
+        $this->assertEqualsWithDelta(Platforms::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, $refused['platform']['reserveDrawShare'], 1e-15);
 
-        $consented = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding, recession: true);
-        $this->assertEqualsWithDelta(Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, $consented['levers']['reserveDrawShare'], 1e-15, 'In a declared recession it consents.');
+        $consented = BudgetRound::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $founding, recession: true);
+        $this->assertEqualsWithDelta(Platforms::POLICY_BIG_STATE_RESERVE_DRAW_SHARE, $consented['levers']['reserveDrawShare'], 1e-15, 'In a declared recession it consents.');
         $this->assertFalse($consented['fundHeld']);
 
         // The slump over, a big-state cabinet's draw lapses back to half on the fund's refusal.
-        $drawn = Politics::standingLevers(new PoliticsStateDTO(reserveDrawShare: Politics::POLICY_BIG_STATE_RESERVE_DRAW_SHARE));
-        $lapsed = Politics::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $drawn);
+        $drawn = BudgetRound::standingLevers(new PoliticsStateDTO(reserveDrawShare: Platforms::POLICY_BIG_STATE_RESERVE_DRAW_SHARE));
+        $lapsed = BudgetRound::budget([Diet::CIVIC], [], Diet::SEED_SEATS, $positions, $drawn);
         $this->assertSame(MacroConstants::RESERVE_DRAW_CEILING, $lapsed['levers']['reserveDrawShare']);
         $this->assertTrue($lapsed['fundHeld']);
 
         // Spending less than half needs no consent.
-        $kept = Politics::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, $positions, $founding);
+        $kept = BudgetRound::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, $positions, $founding);
         $this->assertSame(MacroConstants::RESERVE_DRAW_CEILING, $kept['levers']['reserveDrawShare']);
         $this->assertFalse($kept['fundHeld']);
     }
@@ -1319,21 +1322,21 @@ class PoliticsEngineTest extends TestCase
     public function testTheDebtPlanIsTheCabinetsPlanksWeightedBySeats(): void
     {
         $seats = [Diet::VANGUARD => 60, Diet::EXCHANGE => 40];
-        $plan = Politics::debtPlanks([Diet::VANGUARD, Diet::EXCHANGE], $seats);
+        $plan = Platforms::debtPlanks([Diet::VANGUARD, Diet::EXCHANGE], $seats);
         $this->assertEqualsWithDelta(0.6 * 0.35 + 0.4 * 0.45, $plan['debtTarget'], 1e-12);
         $this->assertEqualsWithDelta(0.6 * 0.010 + 0.4 * 0.005, $plan['debtPace'], 1e-12);
 
-        $standing = Politics::standingLevers(new PoliticsStateDTO());
-        $alone = Politics::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, Diet::HOME_POSITIONS, $standing);
+        $standing = BudgetRound::standingLevers(new PoliticsStateDTO());
+        $alone = BudgetRound::budget([Diet::VANGUARD], [], Diet::SEED_SEATS, Diet::HOME_POSITIONS, $standing);
         $this->assertSame(Diet::DEBT_PLANKS[Diet::VANGUARD]['target'], $alone['levers']['debtTarget']);
         $this->assertSame(Diet::DEBT_PLANKS[Diet::VANGUARD]['pace'], $alone['levers']['debtPace']);
 
-        $traded = Politics::budget([Diet::VANGUARD], [Diet::COMMON_LOT], Diet::SEED_SEATS, Diet::HOME_POSITIONS, $standing);
+        $traded = BudgetRound::budget([Diet::VANGUARD], [Diet::COMMON_LOT], Diet::SEED_SEATS, Diet::HOME_POSITIONS, $standing);
         $this->assertLessThan($standing['debtTarget'], $traded['levers']['debtTarget'], 'The Common Lot trades debt for the rest of the package');
         $this->assertGreaterThan(Diet::DEBT_PLANKS[Diet::VANGUARD]['target'], $traded['levers']['debtTarget'], 'but not all of it.');
         $this->assertTrue($traded['supportHeld']['debtTarget']);
 
-        $guarded = Politics::budget([Diet::VANGUARD], [Diet::CIVIC], Diet::SEED_SEATS, Diet::HOME_POSITIONS, $standing);
+        $guarded = BudgetRound::budget([Diet::VANGUARD], [Diet::CIVIC], Diet::SEED_SEATS, Diet::HOME_POSITIONS, $standing);
         $this->assertSame($standing['debtTarget'], $guarded['levers']['debtTarget'], 'The Civic Front owns the size of the state and will not vote debt down.');
     }
 }

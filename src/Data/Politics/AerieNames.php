@@ -13,7 +13,7 @@ namespace App\Data\Politics;
  * Voicu 2018).
  *
  * Every draw is a uniform the caller hashes from the game and the vacancy
- * (App\Service\Politics\CouncilAppointments::uniform()), so every candidate for the Council, the Authority, the
+ * (MathUtility::hashedUniform()), so every candidate for the Council, the Authority, the
  * Regulator and the Fund, and every party leader, is someone.
  */
 final class AerieNames

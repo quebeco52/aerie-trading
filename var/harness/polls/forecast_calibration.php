@@ -9,7 +9,7 @@ use App\Data\Politics\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
-use App\Service\Politics\CoalitionFormation;
+use App\Service\Politics\Diet\CoalitionFormation;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 

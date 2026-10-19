@@ -523,7 +523,8 @@ readonly class MacroStateDTO
          */
         public float $debtPace = CreditFiscalSubsystem::FOUNDING_DEBT_PACE,
         /**
-         * The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither (App\Service\Politics\MonetaryAuthority).
+         * The rate committee's supermajority, 1 hawkish, -1 dovish, 0 neither
+         * (App\Service\Politics\Department\MonetaryAuthority).
          */
         public float $authorityMajority = 0.0,
         /**
@@ -569,7 +570,7 @@ readonly class MacroStateDTO
         public float $governmentSpendingShiftEmbodied = 0.0,
         /**
          * @var array<string, float> The levers the sitting government will pass at its next budget round, keyed as
-         *                           App\Service\Politics\PoliticsEngine::LEVER_FIELDS; empty before they have been
+         *                           \App\Service\Politics\Policy\Platforms::LEVER_FIELDS; empty before they have been
          *                           read.
          */
         public array $sittingLevers = [],
@@ -577,7 +578,7 @@ readonly class MacroStateDTO
         public float $sittingPolicyFrom = -1.0,
         /**
          * @var array<string, float> The levers the market expects from the next government's first budget, keyed the
-         *                           same way (App\Service\Politics\ElectionForecast); empty before a forecast.
+         *                           same way (App\Service\Politics\Diet\ElectionForecast); empty before a forecast.
          */
         public array $expectedLevers = [],
         /** When that budget falls (-1: no forecast yet). */
@@ -601,7 +602,7 @@ readonly class MacroStateDTO
         public float $inflationEndpointGap = 0.0,
         /**
          * The CET1 requirement on the District's banks in force, as a share of risk-weighted assets, countercyclical
-         * buffer aside (App\Service\Politics\FinancialRegulator).
+         * buffer aside (App\Service\Politics\Department\FinancialRegulator).
          */
         public float $bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         /**
@@ -616,12 +617,12 @@ readonly class MacroStateDTO
         public float $bankCapitalRequiredLast = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT,
         /**
          * The mortgage loan-to-value cap on the District's lenders in force, as a share of the property's value; null
-         * for none (App\Service\Politics\FinancialRegulator).
+         * for none (App\Service\Politics\Department\FinancialRegulator).
          */
         public ?float $mortgageLtvCap = null,
         /**
          * The initial margin an investor must put up to buy or short on credit
-         * (App\Service\Politics\SecuritiesCommission); maintenance keeps its founding ratio to it.
+         * (App\Service\Politics\Department\SecuritiesCommission); maintenance keeps its founding ratio to it.
          */
         public float $initialMarginRequirement = FinancialConstants::INITIAL_MARGIN_REQUIREMENT,
         /**
@@ -658,7 +659,8 @@ readonly class MacroStateDTO
         public float $sovereignFundTargetWeight = 0.0,
         /**
          * The fund's policy equity share: the board's policy weight plus the foreign sleeves' equity at their policy
-         * split, as the fund opened or as its head has since set it (App\Service\Politics\SovereignReserveFund).
+         * split, as the fund opened or as its head has since set it
+         * (App\Service\Politics\Department\SovereignReserveFund).
          */
         public float $sovereignFundPolicyEquityShare = 0.0,
         /**

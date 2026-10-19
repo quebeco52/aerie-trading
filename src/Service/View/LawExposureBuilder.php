@@ -41,7 +41,7 @@ final class LawExposureBuilder
 
     /**
      * @param iterable<Stock>      $stocks   The listed board.
-     * @param array<string, float> $standing The laws in force, keyed as PoliticsEngine::LEVER_FIELDS.
+     * @param array<string, float> $standing The laws in force, keyed as Platforms::LEVER_FIELDS.
      * @param array<string, float> $expected The laws the market expects from the next budget it forecasts; empty
      *                                       without a forecast.
      * @return array{laws: list<array<string, mixed>>, corporateTax: array{inForce: float, expected: float, earnings: float, moves: bool}|null}

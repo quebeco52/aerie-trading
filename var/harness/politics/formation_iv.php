@@ -6,7 +6,7 @@
 // php formation_iv.php <in.jsonl...> > out.jsonl
 require '/home/quebeco/Projects/Code/Private/aerie-trading/tests/bootstrap.php';
 use App\Data\Politics\AerieDiet as D;
-use App\Service\Politics\CoalitionFormation as F;
+use App\Service\Politics\Diet\CoalitionFormation as F;
 foreach (array_slice($argv, 1) as $file) {
     foreach (file($file) as $line) {
         $d = json_decode($line, true);

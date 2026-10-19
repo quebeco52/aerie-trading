@@ -18,17 +18,17 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Math\MacroConstants;
-use App\Service\Politics\CoalitionFormation;
-use App\Service\Politics\CoastGuard;
-use App\Service\Politics\Exchequer;
-use App\Service\Politics\FairTradingBoard;
-use App\Service\Politics\FinancialRegulator;
-use App\Service\Politics\MonetaryAuthority;
-use App\Service\Politics\PartyLeaders;
-use App\Service\Politics\SecuritiesCommission;
-use App\Service\Politics\SecurityBureau;
-use App\Service\Politics\SovereignReserveFund;
-use App\Service\Politics\StateGuard;
+use App\Service\Politics\Department\CoastGuard;
+use App\Service\Politics\Department\Exchequer;
+use App\Service\Politics\Department\FairTradingBoard;
+use App\Service\Politics\Department\FinancialRegulator;
+use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\SecuritiesCommission;
+use App\Service\Politics\Department\SecurityBureau;
+use App\Service\Politics\Department\SovereignReserveFund;
+use App\Service\Politics\Department\StateGuard;
+use App\Service\Politics\Diet\CoalitionFormation;
+use App\Service\Politics\Diet\PartyLeaders;
 
 /**
  * Publishes the tick's district-wide events as stories on their own desks: the economy's, and the government's (a vote,

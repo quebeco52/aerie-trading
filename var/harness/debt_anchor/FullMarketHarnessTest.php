@@ -239,7 +239,7 @@ final class FullMarketHarnessTest extends KernelTestCase
                         'anchor' => property_exists($m, 'debtTarget') ? min($m->debtTarget, $m->councilDebtLine) : null,
                         'tp10' => $m->termPremium10y, 'y2' => $m->yield2y, 'ig' => $m->macroCreditSpread, 'hy' => $m->highYieldCreditSpread,
                         'house' => $m->residentialPropertyIndexEma, 'house_dev' => $m->housePriceDeviation(),
-                        'coal_state' => isset($pstate) ? \App\Service\Politics\PoliticsEngine::coalitionPosition($pstate->governingCoalition, $pstate->dietSeats, $pstate->partyPositions)[\App\Data\Politics\AerieDiet::AXIS_STATE] : null] : [])) . "\n", FILE_APPEND);
+                        'coal_state' => isset($pstate) ? \App\Service\Politics\Policy\Platforms::coalitionPosition($pstate->governingCoalition, $pstate->dietSeats, $pstate->partyPositions)[\App\Data\Politics\AerieDiet::AXIS_STATE] : null] : [])) . "\n", FILE_APPEND);
                 $fq = [];
             }
         }

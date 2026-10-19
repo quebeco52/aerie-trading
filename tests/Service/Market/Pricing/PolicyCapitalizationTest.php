@@ -14,7 +14,7 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
-use App\Service\Politics\PoliticsEngine;
+use App\Service\Politics\Diet\Election;
 use PHPUnit\Framework\TestCase;
 
 class PolicyCapitalizationTest extends TestCase
@@ -332,7 +332,7 @@ class PolicyCapitalizationTest extends TestCase
      */
     private function path(float $change, float $alreadyAway, float $untilNext, float $persistence, float $speed = INF): float
     {
-        $term = PoliticsEngine::ELECTION_TERM_YEARS;
+        $term = Election::TERM_YEARS;
         $departure = $change + $alreadyAway;
         $gap = $change * Valuation::perpetuityShareAfter(self::CAP_RATE, $untilNext, $speed);
         for ($k = 1; $k < 400; ++$k) {

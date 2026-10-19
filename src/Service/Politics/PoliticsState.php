@@ -7,10 +7,9 @@ namespace App\Service\Politics;
 use App\DTO\PoliticsStateDTO;
 
 /**
- * The politics engine's mutable working copy of its state, advanced in place every tick.
- *
- * Its fields and their openings are declared once, on App\DTO\PoliticsStateDTO's constructor: this class mirrors the
- * names (App\Tests\Service\Politics\PoliticsStateTest fails on a mismatch) and takes its opening values from there.
+ * The politics engine's mutable working copy of its state, advanced in place every tick. Its fields and openings are
+ * declared on App\DTO\PoliticsStateDTO's constructor: this class mirrors the names (PoliticsStateTest fails on a
+ * mismatch) and takes its openings from there. Times and birth dates are on the simulation clock, in years.
  */
 class PoliticsState
 {
@@ -18,33 +17,29 @@ class PoliticsState
     public ?string $eventType;
     public float $lastElectionAt;
 
-    // The Diet, each map keyed by party: seats, vote shares and their change at the last vote, each party's position by
-    // axis, the cabinet, the parties supporting it from outside, and the leader of the bloc each party campaigned in.
+    // The Diet, each map keyed by party.
     /** @var array<string, float> */
     public array $dietSeats;
-    /** @var array<string, float> */
+    /** @var array<string, float> Vote shares at the last vote. */
     public array $dietVoteShares;
-    /** @var array<string, float> */
+    /** @var array<string, float> Change in vote share at the last vote. */
     public array $dietVoteSwings;
-    /** @var array<string, array<string, float>> */
+    /** @var array<string, array<string, float>> Position by axis. */
     public array $partyPositions;
-    /** @var array<string, float> */
+    /** @var array<string, float> 1.0 for a party in the cabinet. */
     public array $governingCoalition;
-    /** @var array<string, float> */
+    /** @var array<string, float> 1.0 for a party supporting the cabinet from outside. */
     public array $supportParties;
-    /** @var array<string, string> */
+    /** @var array<string, string> Leader of the bloc the party campaigned in. */
     public array $dietBlocs;
-    // Each party's short-term swing at the last vote, in log share: candidates and campaigns that do not outlast the
-    // vote.
-    /** @var array<string, float> */
+    /** @var array<string, float> Short-term swing at the last vote, in log share; it does not outlast the vote. */
     public array $partyShortTermShocks;
     public float $coalitionFormedAt;
-    // The talks after a vote or a fall (CoalitionFormation): the cabinet and supporters they produced, the day they
-    // take office (-1: no talks pending, the government sits), when a cabinet last took office, and the talks attempt
-    // by attempt.
-    /** @var array<string, float> */
+    // The talks after a vote or a fall (CoalitionFormation): the day their cabinet takes office (-1: none pending, the
+    // government sits), when a cabinet last took office, and the talks attempt by attempt.
+    /** @var array<string, float> 1.0 for a party in the cabinet the talks produced. */
     public array $pendingCoalition;
-    /** @var array<string, float> */
+    /** @var array<string, float> 1.0 for a party that will support it. */
     public array $pendingSupport;
     public float $coalitionTakesOfficeAt;
     public float $lastGovernmentFormedAt;
@@ -55,22 +50,21 @@ class PoliticsState
     public float $talksStartedAt;
     public float $cabinetFallsAt;
     public float $lastCabinetFellAt;
-    // The cabinet that went into the last vote, the talks' status quo.
-    /** @var array<string, float> */
+    /** @var array<string, float> The cabinet that went into the last vote, the talks' status quo. */
     public array $electionOutgoingCabinet;
-    // What the vote reads: the deflator where the term began and real GDP where the campaign began (-1: not yet
-    // marked).
+    // What the vote reads: the term's start and the deflator then, the campaign's start and real GDP then (-1: unset).
     public float $termStartedAt;
     public float $termStartDeflator;
     public float $campaignStartedAt;
     public float $campaignStartRealGdp;
-    // The last vote's economy against trend and target, and the governing parties' change in share.
+    // The last vote's growth against trend, inflation against target, and the governing parties' change in share.
     public float $electionGrowthGap;
     public float $electionInflationGap;
     public float $electionIncumbentSwing;
 
-    // The levers the last budget set, which the economy reads (App\DTO\GovernmentPolicyDTO), and when a budget last
-    // changed one and when the Council's debt brake last held one back (-1: never).
+    // The levers the last budget set, which the economy reads (App\DTO\GovernmentPolicyDTO): rates and shares as
+    // fractions, the carbon price in dollars a tonne, stringencies 0 (founding) to 1 (strictest), the debt target a
+    // share of GDP and its pace in points a year; and when a budget last changed one (-1: never).
     public float $publicSpendingShare;
     public float $corporateTaxPolicyShift;
     public float $importTariffRate;
@@ -90,38 +84,33 @@ class PoliticsState
     public float $debtPace;
     public float $lastBudgetEnactedAt;
 
-    // The Council and its departments (CouncilAppointments, MonetaryAuthority, FinancialRegulator): the salt their
-    // draws are hashed from; each councillor's, the governor's and each committee member's name, birth, seat date and
-    // stance on money, and each councillor's on the banks; when each councillor took their seat and when they will
-    // leave it early, if they will; the candidates passed over at the last Council vacancy and for the governorship;
-    // the committee's balance and supermajority; the last rate meeting; when a governor or councillor was last seated,
-    // a councillor last left early and the majority last shifted; the Financial Regulator's head, the requirement in
-    // force and the head's mortgage cap; and the Sovereign Reserve Fund's head.
+    // The Council and its departments (CouncilAppointments, the Department classes): the salt the Council's draws are
+    // hashed from (-1: not yet formed), then each office's holders and the candidates passed over; stances run -1 to 1.
     public float $authoritySalt;
-    /** @var array<int, string> */
+    /** @var array<int, string> Each Council seat's holder. */
     public array $councilNames;
-    /** @var array<int, float> */
+    /** @var array<int, float> Each holder's birth date. */
     public array $councilBirths;
-    /** @var array<int, float> */
+    /** @var array<int, float> When each seat's term in progress began. */
     public array $councilSince;
-    /** @var array<int, float> */
+    /** @var array<int, float> When each holder took the seat. */
     public array $councilSeatedAt;
-    /** @var array<int, float> */
+    /** @var array<int, float> When each holder leaves before the term ends (-1: serves it out). */
     public array $councilLeavesAt;
     public float $councilTermYears;
-    /** @var array<int, float> */
+    /** @var array<int, float> Stance on money: 1 a hawk, -1 a dove. */
     public array $councilStances;
-    /** @var array<int, float> */
+    /** @var array<int, float> 1 for a swing vote, 0 otherwise. */
     public array $councilSwingers;
-    /** @var array<int, float> */
+    /** @var array<int, float> Stance on the banks, lightest regime to strictest. */
     public array $councilRegulationStances;
-    /** @var array<int, float> */
+    /** @var array<int, float> Stance on the reserves, most cautious to boldest. */
     public array $councilFundStances;
-    /** @var array<int, float> */
+    /** @var array<int, float> Stance on the debt, shortest maturity to longest. */
     public array $councilDebtStances;
-    /** @var array<int, float> */
+    /** @var array<int, float> Stance on competition, lightest merger rules to strictest. */
     public array $councilCompetitionStances;
-    /** @var array<int, float> */
+    /** @var array<int, float> Stance on the markets, lightest rules to strictest. */
     public array $councilMarketsStances;
     /**
      * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
@@ -131,7 +120,7 @@ class PoliticsState
      * @var array<int, array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
      */
     public array $boardMembers;
-    /** @var array<int, float> */
+    /** @var array<int, float> When each board member's term began. */
     public array $boardSince;
     public string $governorName;
     public float $governorBirth;
@@ -142,22 +131,23 @@ class PoliticsState
      * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
      */
     public array $governorPassedOver;
-    /** @var array<int, string> */
+    /** @var array<int, string> The rate committee's members beside the governor, by seat. */
     public array $memberNames;
-    /** @var array<int, float> */
+    /** @var array<int, float> Each member's birth date. */
     public array $memberBirths;
-    /** @var array<int, float> */
+    /** @var array<int, float> When each member took their seat. */
     public array $memberSince;
-    /** @var array<int, float> */
+    /** @var array<int, float> Each member's stance on money: 1 a hawk, -1 a dove. */
     public array $memberStances;
-    /** @var array<int, float> */
+    /** @var array<int, float> 1 for a swing vote, 0 otherwise. */
     public array $memberSwingers;
+    // The committee's balance and supermajority (1 hawkish, -1 dovish), and the last rate meeting (-1: none yet).
     public float $committeeBalance;
     public float $committeeMajority;
     public float $lastMeetingAt;
     public float $lastMeetingRate;
     public float $lastMeetingChange;
-    /** @var list<float> */
+    /** @var list<float> Each vote, governor first: 1 for a higher rate, -1 for a lower, 0 with the decision. */
     public array $lastMeetingVotes;
     public float $lastGovernorAppointedAt;
     public float $lastCouncillorSeatedAt;
@@ -173,6 +163,8 @@ class PoliticsState
      * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
      */
     public array $regulatorPassedOver;
+    // The CET1 requirement in force and the level its last rise phases in from (shares of risk-weighted assets) and
+    // when; the head's mortgage loan-to-value cap (null: none) and neutral countercyclical buffer.
     public float $bankCapitalRequirement;
     public float $requirementPhaseFrom;
     public float $requirementPhaseStart;
@@ -241,52 +233,56 @@ class PoliticsState
      */
     public array $stateGuardCommanderPassedOver;
     public float $lastStateGuardCommanderAppointedAt;
-    /** @var list<string> */
+    /** @var list<string> Everyone who has left a Council seat or a post, whose names no later appointee takes. */
     public array $formerNames;
-    /** @var array<string, string> */
+    // The parties' leaders, each map keyed by party.
+    /** @var array<string, string> The leader; the prime minister leads the cabinet's largest party. */
     public array $leaderNames;
-    /** @var array<string, float> */
+    /** @var array<string, float> The leader's birth date. */
     public array $leaderBirths;
-    /** @var array<string, float> */
+    /** @var array<string, float> When the leader took the lead. */
     public array $leaderSince;
-    /** @var array<string, float> */
+    /** @var array<string, float> The yearly hazard the leader has run through since. */
     public array $leaderHazardUsed;
-    /** @var array<string, float> */
+    /** @var array<string, float> When a leader the last vote doomed steps down (-1: none). */
     public array $leaderExitAt;
-    /** @var array<string, list<array{name: string, birth: float, since: float, until: float}>> */
+    /** @var array<string, list<array{name: string, birth: float, since: float, until: float}>> Oldest first. */
     public array $leaderHistory;
     public float $leadersReviewedElection;
     public float $lastLeaderChangeAt;
     public string $lastLeaderChangeParty;
-    /** @var array<string, float> */
+    // Support between votes (OpinionPolls), each map keyed by party.
+    /** @var array<string, float> Lasting share, the short-term swing set aside (empty: read off the last vote). */
     public array $supportLasting;
-    /** @var array<string, float> */
+    /** @var array<string, float> Normal vote, drifting over the decades. */
     public array $normalVoteShares;
-    /** @var array<string, float> */
+    /** @var array<string, float> Log swing this term for or against the governments the party served in. */
     public array $supportIncumbency;
-    /** @var array<string, float> */
+    /** @var array<string, float> Years of lasting drift so far this term; empty at a vote. */
     public array $supportDriftYears;
-    /** @var array<string, float> */
+    /** @var array<string, float> Unsettled opinion the polls misread, in standard deviations. */
     public array $pollUnsettled;
+    // When support was last brought up to date (-1: never), and the growth and inflation counted by then this term.
     public float $supportUpdatedAt;
     public float $supportGrowthCounted;
     public float $supportInflationCounted;
-    /** @var list<array{t: float, shares: array<string, float>}> */
+    /** @var list<array{t: float, shares: array<string, float>}> Polls since the last vote, oldest first. */
     public array $polls;
-    /** @var array<string, float> */
+    /** @var array<string, float> The market's average of the polls (empty: none yet). */
     public array $pollAverage;
-    /** @var array<string, float> */
+    /** @var array<string, float> Its variance, in shares squared. */
     public array $pollAverageVariance;
     public float $pollAveragedAt;
-    /** @var list<array{cabinet: list<string>, support: list<string>, chance: float}> */
+    // The market's forecast of the next government (ElectionForecast).
+    /** @var list<array{cabinet: list<string>, support: list<string>, chance: float}> Likeliest first. */
     public array $forecastCabinets;
-    /** @var array<string, float> */
+    /** @var array<string, float> Each party's chance of leading the next government. */
     public array $forecastLeaders;
-    /** @var array<string, float> */
+    /** @var array<string, float> Seats each party is expected to win. */
     public array $forecastSeats;
-    /** @var array<string, float> */
+    /** @var array<string, float> Levers expected after the vote, each government's budget weighted by its chance. */
     public array $forecastLevers;
-    /** @var array<string, float> */
+    /** @var array<string, float> Levers the sitting government will pass at its next budget round. */
     public array $sittingLevers;
     public float $forecastFor;
     public float $forecastAt;
@@ -372,8 +368,7 @@ class PoliticsState
     }
 
     /**
-     * Candidates off the wire: each one's name, birth date, stance on money and, once candidates held them, on the
-     * banks and on the reserves.
+     * Candidates off the wire: name, birth date and stances, 0 for a stance the payload lacks; a swing only if held.
      *
      * @param array<mixed> $candidates Candidates as decoded.
      * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>

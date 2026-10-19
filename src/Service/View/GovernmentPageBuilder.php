@@ -29,17 +29,20 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
-use App\Service\Politics\CoalitionFormation;
-use App\Service\Politics\CoastGuard;
-use App\Service\Politics\CouncilAppointments;
-use App\Service\Politics\ElectionForecast;
-use App\Service\Politics\FinancialRegulator;
-use App\Service\Politics\MonetaryAuthority;
-use App\Service\Politics\PartyLeaders;
+use App\Service\Politics\Council\CouncilAppointments;
+use App\Service\Politics\Department\CoastGuard;
+use App\Service\Politics\Department\FinancialRegulator;
+use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\SecurityBureau;
+use App\Service\Politics\Department\SovereignReserveFund;
+use App\Service\Politics\Department\StateGuard;
+use App\Service\Politics\Diet\CoalitionFormation;
+use App\Service\Politics\Diet\Election;
+use App\Service\Politics\Diet\ElectionForecast;
+use App\Service\Politics\Diet\PartyLeaders;
+use App\Service\Politics\Policy\BudgetRound;
+use App\Service\Politics\Policy\Platforms;
 use App\Service\Politics\PoliticsEngine;
-use App\Service\Politics\SecurityBureau;
-use App\Service\Politics\SovereignReserveFund;
-use App\Service\Politics\StateGuard;
 use App\Twig\Extension\NumberFormatExtension;
 
 /**
@@ -303,13 +306,13 @@ class GovernmentPageBuilder
         $support = AerieDiet::governingParties($politics->supportParties);
         $sumSeats = static fn(array $members): int => array_sum(array_map(static fn(string $party): int => $seats[$party], $members));
         $coalitionSeats = $sumSeats($coalition);
-        $coalitionPosition = PoliticsEngine::coalitionPosition($politics->governingCoalition, $politics->dietSeats, $politics->partyPositions);
+        $coalitionPosition = Platforms::coalitionPosition($politics->governingCoalition, $politics->dietSeats, $politics->partyPositions);
         $talking = $politics->coalitionTakesOfficeAt > $macro->totalTime;
 
         $blocs = $politics->dietBlocs;
         $leaders = array_values(array_unique($blocs));
 
-        $term = PoliticsEngine::ELECTION_TERM_YEARS;
+        $term = Election::TERM_YEARS;
         $nextElection = (floor($macro->totalTime / $term) + 1.0) * $term;
         $member = static fn(string $party): array => [
             'key' => $party,
@@ -334,7 +337,7 @@ class GovernmentPageBuilder
             'election' => [
                 'next' => DistrictCalendar::quarter($nextElection),
                 'yearsLeft' => $nextElection - $macro->totalTime,
-                'campaign' => $nextElection - $macro->totalTime <= PoliticsEngine::ELECTION_CAMPAIGN_WINDOW_YEARS,
+                'campaign' => $nextElection - $macro->totalTime <= Election::CAMPAIGN_WINDOW_YEARS,
                 'policyUncertainty' => $macro->policyUncertaintyIndexEma,
             ],
             'rules' => [
@@ -405,7 +408,7 @@ class GovernmentPageBuilder
         }
         $expected = $politics->forecastAt < 0.0 ? [] : $politics->forecastLevers;
 
-        return LawExposureBuilder::build($this->stocks->findAll(), $macro, PoliticsEngine::standingLevers($politics), $expected);
+        return LawExposureBuilder::build($this->stocks->findAll(), $macro, BudgetRound::standingLevers($politics), $expected);
     }
 
     /**
@@ -429,7 +432,7 @@ class GovernmentPageBuilder
         usort($leaders, static fn(array $a, array $b): int => $b['chance'] <=> $a['chance']);
 
         $names = static fn(array $parties): array => array_map(static fn(string $party): string => AerieDiet::PARTY_NAMES[$party], $parties);
-        $standing = PoliticsEngine::standingLevers($politics);
+        $standing = BudgetRound::standingLevers($politics);
         $levers = [];
         foreach (self::LEVER_DISPLAY as $lever => [$name, $unit]) {
             $enacted = self::leverDisplay($lever, $standing[$lever]);
@@ -469,7 +472,7 @@ class GovernmentPageBuilder
         }
 
         $now = $politics->totalTime;
-        $rows[] = ['t' => $now, 'levers' => PoliticsEngine::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement, 'mergerReviewLeniency' => $politics->policy()->mergerReviewLeniency];
+        $rows[] = ['t' => $now, 'levers' => BudgetRound::standingLevers($politics), 'capitalRequirement' => $politics->bankCapitalRequirement, 'mergerReviewLeniency' => $politics->policy()->mergerReviewLeniency];
         $from = $rows[0]['t'];
         [$left, $right, $top, $bottom] = self::LAW_CHART_PLOT;
         $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $from) / max(1e-9, $now - $from)), 1);
@@ -654,7 +657,7 @@ class GovernmentPageBuilder
         $rows = array_column($this->partyRows($politics, $history), null, 'key');
         $row = $rows[$party];
         $position = AerieDiet::position($party, $politics->partyPositions);
-        $platform = PoliticsEngine::partyProgramme($party, $politics->partyPositions);
+        $platform = Platforms::partyProgramme($party, $politics->partyPositions);
         $neutral = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $talking = $politics->coalitionTakesOfficeAt > $macro->totalTime;
 
@@ -740,7 +743,7 @@ class GovernmentPageBuilder
                 'slug' => $other['slug'],
                 'color' => $other['color'],
             ], $rows)),
-            'rules' => ['seats' => AerieDiet::SEATS, 'majority' => AerieDiet::MAJORITY_SEATS, 'termYears' => PoliticsEngine::ELECTION_TERM_YEARS],
+            'rules' => ['seats' => AerieDiet::SEATS, 'majority' => AerieDiet::MAJORITY_SEATS, 'termYears' => Election::TERM_YEARS],
         ];
     }
 
@@ -841,8 +844,8 @@ class GovernmentPageBuilder
      */
     private function budget(MacroStateDTO $macro, PoliticsStateDTO $politics, array $coalition, array $support, bool $talking): array
     {
-        $standing = PoliticsEngine::standingLevers($politics);
-        $budget = PoliticsEngine::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, MacroEngine::recessionDeclared($macro));
+        $standing = BudgetRound::standingLevers($politics);
+        $budget = BudgetRound::budget($coalition, $support, $politics->dietSeats, $politics->partyPositions, $standing, MacroEngine::recessionDeclared($macro));
         $round = MacroConstants::BUDGET_ROUND_PERIOD_YEARS;
         $nextRound = DistrictCalendar::quarter((floor($macro->totalTime / $round) + 1.0) * $round);
 

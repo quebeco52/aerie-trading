@@ -14,7 +14,7 @@ use App\Repository\StockRepository;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Index\IndexCommittee;
 use App\Service\Math\MacroConstants;
-use App\Service\Politics\SovereignReserveFund;
+use App\Service\Politics\Department\SovereignReserveFund;
 
 /**
  * Builds the Sovereign Reserve page: what the fund is worth, where it sits against its policy weights and bands, what
