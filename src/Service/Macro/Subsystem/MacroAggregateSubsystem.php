@@ -395,8 +395,8 @@ class MacroAggregateSubsystem
     // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
     /**
      * Disaster arrivals per year in either direction: the one-sided cause a slump needs, since the Gaussian innovation
-     * above is symmetric. One in 25 years: most busts now reach the district from the mainland's cycle, so the local
-     * ones are rare.
+     * above is symmetric. One in 25 years: most busts now reach the district from the mainland's cycle and its
+     * crashes, so the local ones are rare.
      */
     public const DEMAND_DISASTER_INTENSITY = 0.04;
     /**
@@ -779,8 +779,9 @@ class MacroAggregateSubsystem
      *                                      (MonetaryPolicySubsystem::calculateExpectedInflation).
      * @param float      $dt                Time increment in years.
      * @param float      $stressMultiplier  Non-linear crisis volatility multiplier.
-     * @param float      $mainlandSurprise  The mainland's gap surprises this tick, standard normals summed over the
-     *                                      quarters that turned (AssetMarketSubsystem::calculateForeignEconomy()).
+     * @param float      $mainlandSurprise  The mainland's unit-variance gap surprises this tick, crashes included,
+     *                                      summed over the quarters that turned
+     *                                      (AssetMarketSubsystem::calculateForeignEconomy()).
      * @return float Updated cyclical output gap bounded between -12% and +10%.
      */
     public function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $expectedInflation, float $dt, float $stressMultiplier, float $mainlandSurprise = 0.0): float
@@ -1168,7 +1169,8 @@ class MacroAggregateSubsystem
      * innovation a quarter of the disturbance's OU accumulates, at DEMAND_SHOCK_MAINLAND_LOADING, so the shared and own
      * parts together keep the disturbance's stationary variance at any tick length.
      *
-     * @param float $mainlandSurprise Standard normals summed over the quarters that turned this tick.
+     * @param float $mainlandSurprise Unit-variance surprises, crashes included, summed over the quarters that turned
+     *                                this tick.
      */
     public static function mainlandDemandImpulse(float $mainlandSurprise): float
     {

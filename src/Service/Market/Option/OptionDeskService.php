@@ -141,8 +141,9 @@ final class OptionDeskService
 
         // Settlement is the only part of a pass that touches managed entities, and only when somebody held
         // what expired. Every other sweep skips the flush rather than paying for a walk of the identity map
-        // to discover there is nothing to write.
-        if ($settlements !== []) {
+        // to discover there is nothing to write; a front month nobody held is stamped as data and is one of
+        // them.
+        if (array_filter($settlements, static fn(array $settled): bool => $settled['positions'] > 0) !== []) {
             $this->em->flush();
             $lap('flush');
         }

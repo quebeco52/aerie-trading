@@ -732,6 +732,8 @@ class PoliticsEngineTest extends TestCase
     /** Each tick names its headline, and the next tick clears it. */
     public function testTheHeadlineIsAPulse(): void
     {
+        // Talks take a drawn time; seeded, the cabinet takes office ticks after the vote, not inside its tick.
+        mt_srand(1);
         $engine = $this->engine($this->quietMath());
         $state = $this->electionTick();
 

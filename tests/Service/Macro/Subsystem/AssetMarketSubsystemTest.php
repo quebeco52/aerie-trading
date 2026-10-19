@@ -27,6 +27,11 @@ class AssetMarketSubsystemTest extends TestCase
             {
                 return 0.0;
             }
+
+            public function generateUniform(): float
+            {
+                return 1.0; // no jump strikes
+            }
         };
         $this->subsystem = new AssetMarketSubsystem($this->mathUtility);
     }
@@ -760,6 +765,17 @@ class AssetMarketSubsystemTest extends TestCase
         }
     }
 
+    /**
+     * Where a mainland without shocks settles above its mean: a quarter no crash strikes keeps the crash's expected
+     * loss, which the AR(2) carries at its long-run multiplier (~0.22pp).
+     */
+    private static function quietMainlandLift(): float
+    {
+        $crashCover = AssetMarketSubsystem::MAINLAND_CRASH_INTENSITY / AssetMarketSubsystem::MAINLAND_QUARTERS_PER_YEAR * AssetMarketSubsystem::MAINLAND_CRASH_MEAN;
+
+        return $crashCover / (1.0 - AssetMarketSubsystem::MAINLAND_GAP_AR1 - AssetMarketSubsystem::MAINLAND_GAP_AR2);
+    }
+
     /** The mainland gap is the fitted US cycle: the AR(2)'s stationary spread and its persistence a year out. */
     public function testTheMainlandGapHasTheFittedUsSpreadAndPersistence(): void
     {
@@ -787,7 +803,7 @@ class AssetMarketSubsystemTest extends TestCase
         $a1 = AssetMarketSubsystem::MAINLAND_GAP_AR1;
         $a2 = AssetMarketSubsystem::MAINLAND_GAP_AR2;
         // Yule-Walker: gamma_0 = sigma^2 / (1 - a1 rho_1 - a2 rho_2).
-        $expectedSd = AssetMarketSubsystem::MAINLAND_GAP_SIGMA
+        $expectedSd = AssetMarketSubsystem::mainlandGapInnovationSd()
             / sqrt(1.0 - ($a1 * TimeSeries::calculateAr2Autocorrelation($a1, $a2, 1)) - ($a2 * TimeSeries::calculateAr2Autocorrelation($a1, $a2, 2)));
         $this->assertEqualsWithDelta(0.0162, $expectedSd, 0.001, 'The fitted process keeps the spread of the CBO gap it was fitted on, 1.62% (1985-2019).');
         $this->assertEqualsWithDelta(0.0, $mean, 0.002, 'With the district at trend the mainland cycle averages nothing.');
@@ -796,8 +812,8 @@ class AssetMarketSubsystemTest extends TestCase
     }
 
     /**
-     * The quarter's gap surprise is handed back as the standard normal drawn for it, the region's common demand shock;
-     * between turns there is none.
+     * The quarter's gap innovation is handed back over its sd, the region's common demand shock; between turns there is
+     * none.
      */
     public function testTheMainlandHandsBackItsGapSurpriseAtTheTurn(): void
     {
@@ -805,8 +821,14 @@ class AssetMarketSubsystemTest extends TestCase
             public int $calls = 0;
             public function generateStandardNormal(): float
             {
-                // The gap's draw leads each quarter; core inflation, the rate and the rest of the world follow.
-                return $this->calls++ % 4 === 0 ? 1.5 : 0.0;
+                // The gap's draw leads each quarter; core inflation, the rate, a crash's size and the rest of the world
+                // follow.
+                return $this->calls++ % 5 === 0 ? 1.5 : 0.0;
+            }
+
+            public function generateUniform(): float
+            {
+                return 1.0; // no crash strikes
             }
         };
         $subsystem = new AssetMarketSubsystem($draws);
@@ -816,11 +838,51 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertSame(0.0, $subsystem->calculateForeignEconomy($state, 0.01), 'Inside a quarter there is no surprise.');
 
         $state->totalTime = 0.25;
-        $this->assertSame(1.5, $subsystem->calculateForeignEconomy($state, 0.01), 'The turn hands back the gap\'s draw.');
-        $this->assertEqualsWithDelta(AssetMarketSubsystem::MAINLAND_GAP_SIGMA * 1.5, $state->foreignOutputGap, 1e-12, 'the same draw the mainland gap took.');
+        $crashCover = AssetMarketSubsystem::MAINLAND_CRASH_INTENSITY / AssetMarketSubsystem::MAINLAND_QUARTERS_PER_YEAR * AssetMarketSubsystem::MAINLAND_CRASH_MEAN;
+        $shock = (AssetMarketSubsystem::MAINLAND_GAP_SIGMA * 1.5) + $crashCover;
+        $surprise = $shock / AssetMarketSubsystem::mainlandGapInnovationSd();
+        $this->assertEqualsWithDelta($surprise, $subsystem->calculateForeignEconomy($state, 0.01), 1e-12, 'The turn hands back the gap\'s innovation over its sd,');
+        $this->assertEqualsWithDelta($shock, $state->foreignOutputGap, 1e-12, 'the innovation the mainland gap took: its draw, and the crash cover a quiet quarter earns.');
 
         $state->totalTime = 1.25;
-        $this->assertSame(6.0, $subsystem->calculateForeignEconomy($state, 1.0), 'A year-long step sums its four quarters\' surprises.');
+        $this->assertEqualsWithDelta(4.0 * $surprise, $subsystem->calculateForeignEconomy($state, 1.0), 1e-12, 'A year-long step sums its four quarters\' surprises.');
+    }
+
+    /**
+     * A crash strikes the mainland whole in its quarter, about 2008Q4's 2.3pp, and the district takes it as a surprise
+     * of over four sd; the Fed starts cutting at once.
+     */
+    public function testAMainlandCrashLandsWholeAndReachesTheDistrictAsItsSurprise(): void
+    {
+        $draws = new class extends MathUtility {
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+
+            public function generateUniform(): float
+            {
+                return 0.0; // a crash strikes
+            }
+        };
+        $subsystem = new AssetMarketSubsystem($draws);
+        $state = new MacroState();
+        $state->totalTime = 0.25;
+        $surprise = $subsystem->calculateForeignEconomy($state, 0.01);
+
+        $median = AssetMarketSubsystem::MAINLAND_CRASH_MEAN * exp(-(AssetMarketSubsystem::MAINLAND_CRASH_LOG_SD ** 2) / 2.0);
+        $crashCover = AssetMarketSubsystem::MAINLAND_CRASH_INTENSITY / AssetMarketSubsystem::MAINLAND_QUARTERS_PER_YEAR * AssetMarketSubsystem::MAINLAND_CRASH_MEAN;
+        $this->assertEqualsWithDelta($crashCover - $median, $state->foreignOutputGap, 1e-12, 'The median crash takes 2.2pp off the gap in one quarter.');
+        $this->assertEqualsWithDelta($state->foreignOutputGap / AssetMarketSubsystem::mainlandGapInnovationSd(), $surprise, 1e-12, 'The district takes the same innovation over its sd,');
+        $this->assertLessThan(-4.0, $surprise, 'a quarter no Gaussian of the fitted sd produces in a thousand years.');
+        $this->assertLessThan(MacroConstants::MAINLAND_NEUTRAL_RATE, $state->foreignPolicyRate, 'The Fed cuts in the same quarter.');
+    }
+
+    /** Crashes and the Gaussian part together are the regression's whole residual, 0.490pp. */
+    public function testTheMainlandsCrashesKeepTheFittedInnovationSd(): void
+    {
+        $this->assertEqualsWithDelta(0.00490, AssetMarketSubsystem::mainlandGapInnovationSd(), 0.00002);
+        $this->assertGreaterThan(5.0, AssetMarketSubsystem::MAINLAND_CRASH_MEAN / AssetMarketSubsystem::MAINLAND_GAP_SIGMA, 'A crash is a quarter the Gaussian part does not produce.');
     }
 
     /** The mainland's statistics and its rate decision arrive at the quarter's turn, not between. */
@@ -832,6 +894,11 @@ class AssetMarketSubsystemTest extends TestCase
             {
                 $this->calls++;
                 return 0.0;
+            }
+
+            public function generateUniform(): float
+            {
+                return 1.0; // no crash strikes
             }
         };
         $subsystem = new AssetMarketSubsystem($draws);
@@ -845,12 +912,12 @@ class AssetMarketSubsystemTest extends TestCase
 
         $state->totalTime = 0.25;
         $subsystem->calculateForeignEconomy($state, 0.01);
-        $this->assertSame(4, $draws->calls, 'The turn releases the gap, core inflation, the rate decision and the rest of the world once.');
+        $this->assertSame(5, $draws->calls, 'The turn releases the gap, core inflation, the rate decision, a crash\'s size and the rest of the world once.');
         $this->assertGreaterThan(0.0, $state->foreignOutputGap, 'and the district\'s boom shows in the mainland gap.');
 
         $state->totalTime = 1.25;
         $subsystem->calculateForeignEconomy($state, 1.0);
-        $this->assertSame(20, $draws->calls, 'A year-long step releases four quarters.');
+        $this->assertSame(25, $draws->calls, 'A year-long step releases four quarters.');
     }
 
     public function testTheDistrictsBoomSpillsIntoTheMainlandOnlyInPart(): void
@@ -859,7 +926,7 @@ class AssetMarketSubsystemTest extends TestCase
         $state->outputGapEma = 0.04;
         $this->runMainlandQuarters($this->subsystem, $state, 400);
 
-        $this->assertEqualsWithDelta(0.04 * AssetMarketSubsystem::FOREIGN_IMPORT_SPILLOVER, $state->foreignOutputGap, 1e-6, 'The mainland feels the district\'s imports, not its whole cycle.');
+        $this->assertEqualsWithDelta((0.04 * AssetMarketSubsystem::FOREIGN_IMPORT_SPILLOVER) + self::quietMainlandLift(), $state->foreignOutputGap, 1e-6, 'The mainland feels the district\'s imports, not its whole cycle.');
         $this->assertGreaterThan(MacroConstants::MAINLAND_NEUTRAL_RATE, $state->foreignPolicyRate, 'and the Fed leans against the demand it does feel.');
         $this->assertEqualsWithDelta(AssetMarketSubsystem::WORLD_MAINLAND_LOADING * $state->foreignOutputGap, $state->worldActivityGap, 1e-9, 'With no shocks of its own the rest of the world carries the mainland cycle at its loading.');
         $restOfWorld = 1.0 - AssetMarketSubsystem::DOMESTIC_DEMAND_WEIGHT - AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT;
@@ -873,7 +940,7 @@ class AssetMarketSubsystemTest extends TestCase
     {
         $a1 = AssetMarketSubsystem::MAINLAND_GAP_AR1;
         $a2 = AssetMarketSubsystem::MAINLAND_GAP_AR2;
-        $implied = AssetMarketSubsystem::MAINLAND_GAP_SIGMA * sqrt((1.0 - $a2) / ((1.0 + $a2) * (((1.0 - $a2) ** 2) - ($a1 ** 2))));
+        $implied = AssetMarketSubsystem::mainlandGapInnovationSd() * sqrt((1.0 - $a2) / ((1.0 + $a2) * (((1.0 - $a2) ** 2) - ($a1 ** 2))));
         $this->assertEqualsWithDelta($implied, AssetMarketSubsystem::MAINLAND_GAP_STATIONARY_SD, 0.00002);
 
         $ownSd = AssetMarketSubsystem::WORLD_GAP_SD * sqrt(1.0 - (AssetMarketSubsystem::WORLD_MAINLAND_CORRELATION ** 2));
@@ -937,7 +1004,10 @@ class AssetMarketSubsystemTest extends TestCase
         [$atTarget, $neutral] = $settle(MacroConstants::TARGET_INFLATION);
         [$above, $tight] = $settle(MacroConstants::TARGET_INFLATION + 0.01);
 
-        $this->assertEqualsWithDelta(MacroConstants::MAINLAND_NEUTRAL_RATE, $neutral, 1e-9, 'At target with the gap closed the Fed rests at neutral.');
+        // A quiet mainland sits a little above its mean (quietMainlandLift()), and its inflation by the slope on that.
+        $quietAnswer = (AssetMarketSubsystem::FED_RULE_GAP_RESPONSE * self::quietMainlandLift())
+            + (AssetMarketSubsystem::FED_RULE_INFLATION_RESPONSE * ($atTarget - MacroConstants::TARGET_INFLATION));
+        $this->assertEqualsWithDelta(MacroConstants::MAINLAND_NEUTRAL_RATE + $quietAnswer, $neutral, 1e-9, 'At target the Fed rests at neutral, but for its answer to the quiet mainland.');
         $response = ($tight - $neutral) / ($above - $atTarget);
         $this->assertEqualsWithDelta(AssetMarketSubsystem::FED_RULE_INFLATION_RESPONSE, $response, 1e-6);
         $this->assertGreaterThan(1.0, $response, 'Real rates rise when inflation does.');

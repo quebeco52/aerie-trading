@@ -7,6 +7,8 @@ namespace App\Tests\Service\Market\Option;
 use App\DTO\MacroStateDTO;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
+use App\Entity\User;
+use App\Entity\UserOption;
 use App\Repository\OptionContractRepository;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
@@ -25,6 +27,7 @@ use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\StockBuilder;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Query;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -39,14 +42,20 @@ class OptionDeskSweepTest extends TestCase
     /** @var list<array{0: string, 1: array<int, mixed>}> */
     private array $sent = [];
 
-    private function desk(array $rows, array $heldTickers): OptionDeskService
+    private int $flushes = 0;
+
+    /**
+     * @param list<array<string, mixed>> $expiring  What the settlement's expiry scan finds; empty unless a test is
+     *                                              about an expiry.
+     * @param list<UserOption>           $positions The open positions across the expiring contracts.
+     */
+    private function desk(array $rows, array $heldTickers, array $expiring = [], array $positions = []): OptionDeskService
     {
         $connection = $this->createStub(Connection::class);
         $connection->method('fetchFirstColumn')->willReturn($heldTickers);
-        // The settlement's expiry scan and the sweep's chain read share one connection. Only the chain read
-        // is being described here, so the expiry scan is answered empty.
+        // The settlement's expiry scan and the sweep's chain read share one connection.
         $connection->method('fetchAllAssociative')->willReturnCallback(
-            static fn(string $sql): array => str_contains($sql, 'expires_at_time <=') ? [] : $rows,
+            static fn(string $sql): array => str_contains($sql, 'expires_at_time <=') ? $expiring : $rows,
         );
         $connection->method('executeStatement')->willReturnCallback(
             function (string $sql, array $params = []): int {
@@ -56,9 +65,17 @@ class OptionDeskSweepTest extends TestCase
             },
         );
 
+        $query = $this->createStub(Query::class);
+        $query->method('setParameter')->willReturnSelf();
+        $query->method('getResult')->willReturn($positions);
+
         $em = $this->createStub(EntityManagerInterface::class);
         $em->method('getConnection')->willReturn($connection);
         $em->method('getRepository')->willReturn($this->createStub(OptionContractRepository::class));
+        $em->method('createQuery')->willReturn($query);
+        $em->method('flush')->willReturnCallback(function (): void {
+            $this->flushes++;
+        });
 
         $math = new MathUtility();
         $liquidity = new LiquidityEngine($math);
@@ -172,5 +189,53 @@ class OptionDeskSweepTest extends TestCase
 
         $this->assertSame(0, $result['marked']);
         $this->assertSame([], $this->sent);
+    }
+
+    /** A front month nobody held is stamped as data; walking the identity map for it would find nothing to write. */
+    public function testAnExpiryNobodyHeldIsStampedWithoutAFlush(): void
+    {
+        $macro = MacroStateDTO::fromMacroState(MacroStateBuilder::create()->build());
+        $stock = $this->underlying(5, FinancialConstants::OPTION_LISTING_MIN_PRICE * 0.5);
+
+        $result = $this->desk([], [], [$this->expiringRow(101, 'TST-1C')])
+            ->sweep([$stock], $macro, 1.0 / OptionDeskService::SWEEPS_PER_YEAR, 0);
+
+        $this->assertSame(1, $result['settled']);
+        $this->assertCount(1, array_filter($this->sent, static fn(array $s): bool => str_contains($s[0], 'SET status = ?')));
+        $this->assertSame(0, $this->flushes);
+    }
+
+    /** A holder's position is closed through the unit of work, so an expiry somebody held is flushed. */
+    public function testAnExpirySomebodyHeldIsFlushed(): void
+    {
+        $macro = MacroStateDTO::fromMacroState(MacroStateBuilder::create()->build());
+        $stock = $this->underlying(5, FinancialConstants::OPTION_LISTING_MIN_PRICE * 0.5);
+
+        $contract = (new OptionContract())->setTicker('TST-1C')->setStock($stock);
+        (new \ReflectionProperty(OptionContract::class, 'id'))->setValue($contract, 101);
+        $position = (new UserOption())->setUser(new User())->setContract($contract)->setQuantity(1);
+
+        $result = $this->desk([], [], [$this->expiringRow(101, 'TST-1C')], [$position])
+            ->sweep([$stock], $macro, 1.0 / OptionDeskService::SWEEPS_PER_YEAR, 0);
+
+        $this->assertSame(1, $result['settled']);
+        $this->assertSame(1, $this->flushes);
+    }
+
+    /**
+     * A call struck far above its underlying's last print, so it expires worthless and settles without a delivery.
+     *
+     * @return array<string, mixed>
+     */
+    private function expiringRow(int $id, string $ticker): array
+    {
+        return [
+            'id' => $id,
+            'ticker' => $ticker,
+            'option_type' => OptionContract::TYPE_CALL,
+            'strike' => '1000.00000000',
+            'underlying' => 'TST',
+            'settlement' => '1.00000000',
+        ];
     }
 }

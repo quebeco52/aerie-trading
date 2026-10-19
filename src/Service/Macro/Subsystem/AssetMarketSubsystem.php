@@ -183,10 +183,20 @@ class AssetMarketSubsystem
     /** Second autoregressive coefficient of the mainland gap (-0.300, se 0.140). */
     public const MAINLAND_GAP_AR2 = -0.300;
     /**
-     * Quarterly innovation of the mainland gap, the regression's residual sd (0.490pp); the stationary sd it gives is
-     * 1.65% against the CBO gap's 1.62%.
+     * Quarterly Gaussian innovation of the mainland gap, the regression's residual sd without 2008Q4 (0.452pp). With
+     * the crashes below, the whole innovation is the regression's 0.490pp, and the stationary sd stays 1.65% against
+     * the CBO gap's 1.62%.
      */
-    public const MAINLAND_GAP_SIGMA = 0.00490;
+    public const MAINLAND_GAP_SIGMA = 0.00452;
+    /**
+     * Shared crashes a year, one in 40 years. 2008Q4 is the one in the 35-year sample; at the size below, crashes add
+     * the variance the residuals lose without it (0.036pp^2 a quarter).
+     */
+    public const MAINLAND_CRASH_INTENSITY = 0.025;
+    /** Mean gap lost in a crash quarter: 2008Q4's residual, 2.3pp, five sd of the Gaussian part. */
+    public const MAINLAND_CRASH_MEAN = 0.023;
+    /** Log sd of a crash's size: one crash in six is milder than 1.6pp, one in six deeper than 3.0pp. */
+    public const MAINLAND_CRASH_LOG_SD = 0.30;
     /**
      * Annualized quarterly core PCE inflation on its own four lags (sum 0.885), the Rudebusch-Svensson Phillips curve;
      * its fitted mean is 1.96%, so it is anchored at the 2% target.
@@ -214,7 +224,8 @@ class AssetMarketSubsystem
     /** Guard on the mainland gap, beyond the deepest postwar CBO gap; the fitted process does not reach it. */
     public const MAX_FOREIGN_GAP = 0.10;
     /**
-     * Stationary sd of the mainland gap its AR(2) implies: sigma * sqrt((1 - a2) / ((1 + a2) * ((1 - a2)^2 - a1^2))).
+     * Stationary sd of the mainland gap its AR(2) implies on its whole innovation (mainlandGapInnovationSd()):
+     * sigma * sqrt((1 - a2) / ((1 + a2) * ((1 - a2)^2 - a1^2))).
      */
     public const MAINLAND_GAP_STATIONARY_SD = 0.01645;
 
@@ -1081,13 +1092,14 @@ class AssetMarketSubsystem
      * turn, which is also how the district sees them: a statistical release and a rate decision. The district's own
      * cycle moves the mainland gap's mean a little (two-country Mundell-Fleming, Obstfeld & Rogoff 1996), and
      * everything else -- the currency through the rate differential, the trade balance and exports through the
-     * mainland gap -- reads these series.
+     * mainland gap -- reads these series. The gap's shocks are Gaussian but for a rare crash, the region's shared
+     * slump, which reaches the district through the same surprise.
      *
      * @param MacroState $state Current macroeconomic state; its clock has already been advanced by dt.
      * @param float      $dt    Time increment in years.
-     * @return float The mainland's gap surprises this tick, standard normals summed over the quarters turned (zero
-     *               between turns): the region's common demand shock, which the district's demand disturbance loads on
-     *               (MacroAggregateSubsystem::calculateOutputGap()).
+     * @return float The mainland's gap surprises this tick, each quarter's innovation over its sd (crashes included)
+     *               summed over the quarters turned (zero between turns): the region's common demand shock, which the
+     *               district's demand disturbance loads on (MacroAggregateSubsystem::calculateOutputGap()).
      */
     public function calculateForeignEconomy(MacroState $state, float $dt): float
     {
@@ -1158,14 +1170,14 @@ class AssetMarketSubsystem
      * on its four lags and last quarter's gap, then the Fed's partial adjustment toward its rule on four-quarter core
      * inflation and the new gap, floored at the effective lower bound. The rest of the world's quarter follows.
      *
-     * @return float The quarter's gap surprise, as the standard normal drawn.
+     * @return float The quarter's gap innovation over its sd, crash included: a unit-variance surprise.
      */
     private function stepMainlandQuarter(MacroState $state): float
     {
-        $surprise = $this->mathUtility->generateStandardNormal();
-        $gapShock = self::MAINLAND_GAP_SIGMA * $surprise;
+        $gapDraw = $this->mathUtility->generateStandardNormal();
         $inflationShock = self::MAINLAND_INFLATION_SIGMA * $this->mathUtility->generateStandardNormal();
         $rateShock = self::FED_RULE_SIGMA * $this->mathUtility->generateStandardNormal();
+        $gapShock = (self::MAINLAND_GAP_SIGMA * $gapDraw) + $this->mainlandCrash();
         $next = self::mainlandNextQuarter($state, $gapShock, $inflationShock, $rateShock);
 
         $state->foreignOutputGapLag = $state->foreignOutputGap;
@@ -1183,7 +1195,43 @@ class AssetMarketSubsystem
             + (self::WORLD_GAP_SIGMA * $this->mathUtility->generateStandardNormal());
         $state->worldActivityGap = max(-self::MAX_WORLD_GAP, min(self::MAX_WORLD_GAP, (self::WORLD_MAINLAND_LOADING * $state->foreignOutputGap) + $state->worldActivityIdiosyncratic));
 
-        return $surprise;
+        return $gapShock / self::mainlandGapInnovationSd();
+    }
+
+    /**
+     * The quarter's crash: the region's rare shared slump (Barro 2006), a Merton (1976) jump down in the gap with a
+     * lognormal size around 2008Q4's, less its expected loss so the gap's mean is unmoved. The arrival and the size are
+     * drawn every quarter, so no later draw depends on whether one struck.
+     */
+    private function mainlandCrash(): float
+    {
+        $probability = self::mainlandCrashProbability();
+        $strikes = $this->mathUtility->checkProbability($probability);
+        $size = $this->mathUtility->calculateLogNormalSynergy(log(self::MAINLAND_CRASH_MEAN) - ((self::MAINLAND_CRASH_LOG_SD ** 2) / 2.0), self::MAINLAND_CRASH_LOG_SD);
+        if ($strikes) {
+            $this->diagnostics?->recordEvent('mainlandCrash', -$size);
+        }
+
+        return ($strikes ? -$size : 0.0) + ($probability * self::MAINLAND_CRASH_MEAN);
+    }
+
+    /** Chance a crash strikes the mainland in a given quarter. */
+    private static function mainlandCrashProbability(): float
+    {
+        return self::MAINLAND_CRASH_INTENSITY / self::MAINLAND_QUARTERS_PER_YEAR;
+    }
+
+    /**
+     * Sd of the mainland gap's whole quarterly innovation: the Gaussian part and the compensated crash, an arrival
+     * times a lognormal size (variance p E[X^2] - p^2 E[X]^2). It is the regression's residual sd, 0.490pp.
+     */
+    public static function mainlandGapInnovationSd(): float
+    {
+        $probability = self::mainlandCrashProbability();
+        $crashVariance = ($probability * (self::MAINLAND_CRASH_MEAN ** 2) * exp(self::MAINLAND_CRASH_LOG_SD ** 2))
+            - (($probability * self::MAINLAND_CRASH_MEAN) ** 2);
+
+        return sqrt((self::MAINLAND_GAP_SIGMA ** 2) + $crashVariance);
     }
 
     /**
