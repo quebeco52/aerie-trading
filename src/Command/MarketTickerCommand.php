@@ -388,7 +388,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $macroState = $this->macroEngine->updateMacroState($run->dt, $run->board, $run->policy);
         // The Diet votes on the calendar's election tick, on this tick's economy; the economy reads what it decides
         // next tick.
-        $politics = $this->politicsEngine->updatePolitics($macroState, $run->dt);
+        // The election forecast goes to the forecaster rather than holding up the tick a poll lands on.
+        $politics = $this->politicsEngine->updatePolitics($macroState, $run->dt, forecastOffTick: true);
         $run->policy = $politics->policy();
         // Flows are consumed once; a tick that prices no board must not replay the last one's return.
         $run->board = $run->board->spent();

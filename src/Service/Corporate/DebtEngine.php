@@ -109,6 +109,9 @@ class DebtEngine
      */
     public const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
 
+    /** @var array<string, float> Each issuer's multiple of its rating class, keyed by its seeded spread and its LGD. */
+    private array $issuerMultiples = [];
+
     public function __construct(
         private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
@@ -338,8 +341,10 @@ class DebtEngine
         }
 
         $lossGivenDefault = \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
-        $issuerMultiple = CreditRisk::calculateIssuerSpreadMultiple(
-            (float) $stock->getCreditSpread(),
+        // Read off inputs fixed at seeding, so it is worked out once per issuer rather than on every tick.
+        $seededSpread = (float) $stock->getCreditSpread();
+        $issuerMultiple = $this->issuerMultiples["{$seededSpread}:{$lossGivenDefault}"] ??= CreditRisk::calculateIssuerSpreadMultiple(
+            $seededSpread,
             MacroConstants::BASE_CREDIT_SPREAD,
             MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
             $lossGivenDefault,

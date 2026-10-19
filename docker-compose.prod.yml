@@ -52,6 +52,20 @@ services:
     env_file:
       - .env.local
 
+  # Works out the election forecast the ticker asks for on a poll's tick, so the tick does not wait for it.
+  aerie-forecaster:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: prod
+    depends_on:
+      - aerie-redis
+    command: php bin/console messenger:consume politics --sleep=0.05 --memory-limit=128M --time-limit=3600
+    restart: unless-stopped
+    environment: *sim-pace
+    env_file:
+      - .env.local
+
   aerie-scheduler:
     build:
       context: .

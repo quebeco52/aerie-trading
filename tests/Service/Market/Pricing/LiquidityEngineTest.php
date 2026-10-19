@@ -497,6 +497,20 @@ class LiquidityEngineTest extends TestCase
         $this->assertGreaterThan($withoutPlayers, $withPlayers);
     }
 
+    /** A caller that has read the name's daily volume gets the spread and the prints it would have got without it. */
+    public function testADailyVolumeHandedInPricesAsTheOneReadInside(): void
+    {
+        $stock = $this->stock(shares: 2.0e7, float: 0.40, turnover: 0.60, volatility: 0.35, currentVolatility: 0.55);
+        $read = new LiquidityEngine(MathUtility::ownStream(7));
+        $handed = new LiquidityEngine(MathUtility::ownStream(7));
+        $adv = $handed->averageDailyVolume($stock);
+
+        $this->assertSame($read->halfSpreadFraction($stock), $handed->halfSpreadFraction($stock, $adv));
+        for ($i = 0; $i < 5; $i++) {
+            $this->assertSame($read->simulateTickVolume($stock, 1.0 / 3600.0, 1.0e3), $handed->simulateTickVolume($stock, 1.0 / 3600.0, 1.0e3, $adv));
+        }
+    }
+
     public function testVolumeIsNeverNegative(): void
     {
         $stock = $this->stock();

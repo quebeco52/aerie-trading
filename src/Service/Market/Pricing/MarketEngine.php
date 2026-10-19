@@ -944,7 +944,10 @@ class MarketEngine
             };
 
             $legs = $underExpectedLaws(false);
-            $policyRepricing = ($legs['fair_value'] + $excessCashPerShare) / ($underExpectedLaws(true)['fair_value'] + $excessCashPerShare);
+            // Laws unrevised would strike the same legs again, a ratio of exactly one.
+            $policyRepricing = $macroState->lawsAheadRevised()
+                ? ($legs['fair_value'] + $excessCashPerShare) / ($underExpectedLaws(true)['fair_value'] + $excessCashPerShare)
+                : 1.0;
         }
 
         $perceivedFairValue = max(0.01, $legs['fair_value'] + $excessCashPerShare);

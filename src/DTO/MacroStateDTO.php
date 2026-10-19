@@ -865,6 +865,18 @@ readonly class MacroStateDTO
     }
 
     /**
+     * Whether the laws the market expects moved since the tick before: the sitting government's coming budget, the
+     * next government's first, or when either takes effect.
+     */
+    public function lawsAheadRevised(): bool
+    {
+        return $this->sittingLevers !== $this->previousSittingLevers
+            || $this->sittingPolicyFrom !== $this->previousSittingPolicyFrom
+            || $this->expectedLevers !== $this->previousExpectedLevers
+            || $this->expectedPolicyFrom !== $this->previousExpectedPolicyFrom;
+    }
+
+    /**
      * Realised inflation over what the market expected, both ways: what a CPI escalator or a cost-plus contract passes
      * through beyond the expected inflation a firm's pricing already carries. Read one-sided against the target, an
      * escalator was paid in every quarter inflation ran hot, charged in none that ran cold, and counted the expected

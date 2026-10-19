@@ -44,6 +44,23 @@ services:
     env_file:
       - .env.dev
 
+  # Works out the election forecast the ticker asks for on a poll's tick, so the tick does not wait for it. JIT on
+  # like the ticker: the forecast is a few hundred budget searches. A short sleep, as the ticker waits on the answer.
+  aerie-forecaster:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.frankenphp
+    volumes:
+      - ./:/app
+    depends_on:
+      - aerie-redis
+    command: sh -c "php bin/console messenger:setup-transports politics --env=prod --no-debug && exec php -d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=64M bin/console messenger:consume politics --sleep=0.05 --memory-limit=128M --time-limit=3600 --env=prod --no-debug"
+    restart: unless-stopped
+    environment:
+      XDEBUG_MODE: "off"
+    env_file:
+      - .env.dev
+
   aerie-scheduler:
     build:
       context: .

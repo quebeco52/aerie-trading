@@ -637,17 +637,17 @@ class StockTracker
         // What it costs to get in and out of this name. Published per ticker as well as on the wire,
         // because a fund's arbitrage band is the weighted average of its constituents' — an expensive
         // basket is what lets a fund drift from it.
-        $halfSpread = $this->liquidityEngine->halfSpreadFraction($stock);
+        $averageDailyVolume = $this->liquidityEngine->averageDailyVolume($stock);
+        $halfSpread = $this->liquidityEngine->halfSpreadFraction($stock, $averageDailyVolume);
         $board->halfSpreads[$stock->getTicker()] = $halfSpread;
 
-        $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tick->flowShares + $tick->fundShares));
+        $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tick->flowShares + $tick->fundShares), $averageDailyVolume);
         $board->tradedValue += $tickVolume * $finalPrice;
 
         // What the name prints on an ordinary tick, which is what makes the realized figure abnormal
         // or not. The level alone is a size statistic: a mega-cap always prints more than a micro-cap
         // and neither fact is news.
-        $expectedTickVolume = $this->liquidityEngine->averageDailyVolume($stock)
-            * $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
+        $expectedTickVolume = $averageDailyVolume * $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
 
         // Determine if a fundamental corporate event occurred this tick
         $isFundamentalTick = !empty($tick->reportEvents) || $tick->struckDeal;
@@ -678,7 +678,7 @@ class StockTracker
             'analyst_rating' => $stock->getAnalystRating(),
             'perceived_fair_value' => round($tick->perceivedFairValue, 2),
             'volume' => round($tickVolume),
-            'adv_shares' => round($this->liquidityEngine->averageDailyVolume($stock)),
+            'adv_shares' => round($averageDailyVolume),
             'spread_bps' => round($halfSpread * 20000.0, 2),
             'is_bankrupt' => false,
         ];

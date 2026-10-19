@@ -282,10 +282,12 @@ final class LiquidityEngine implements ResetInterface
      *
      * The trade count is derived from daily volume rather than configured separately: a name that trades
      * more prints more often, and the spread relation is stated per trade.
+     *
+     * @param float|null $averageDailyVolume The name's averageDailyVolume(), when the caller has already read it.
      */
-    public function halfSpreadFraction(Stock $stock): float
+    public function halfSpreadFraction(Stock $stock, ?float $averageDailyVolume = null): float
     {
-        $trades = max(1.0, $this->averageDailyVolume($stock) / self::TYPICAL_TRADE_SIZE_SHARES);
+        $trades = max(1.0, ($averageDailyVolume ?? $this->averageDailyVolume($stock)) / self::TYPICAL_TRADE_SIZE_SHARES);
 
         $spread = (self::SPREAD_VOLATILITY_COEFFICIENT * $this->dailyVolatility($stock)) / sqrt($trades);
 
@@ -478,17 +480,18 @@ final class LiquidityEngine implements ResetInterface
      * The tick's net order flow is part of that volume, not on top of it: the prints are at least the
      * imbalance the tick cleared, which a large order can take past the ordinary flow.
      *
-     * @param Stock $stock       The name.
-     * @param float $dt          Elapsed simulated time in years.
-     * @param float $clearedFlow Net shares the tick's orders cleared, unsigned.
+     * @param Stock      $stock              The name.
+     * @param float      $dt                 Elapsed simulated time in years.
+     * @param float      $clearedFlow        Net shares the tick's orders cleared, unsigned.
+     * @param float|null $averageDailyVolume The name's averageDailyVolume(), when the caller has already read it.
      */
-    public function simulateTickVolume(Stock $stock, float $dt, float $clearedFlow = 0.0): float
+    public function simulateTickVolume(Stock $stock, float $dt, float $clearedFlow = 0.0, ?float $averageDailyVolume = null): float
     {
         if ($dt <= 0.0) {
             return max(0.0, $clearedFlow);
         }
 
-        $expected = $this->averageDailyVolume($stock) * $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
+        $expected = ($averageDailyVolume ?? $this->averageDailyVolume($stock)) * $dt * FinancialConstants::TRADING_DAYS_PER_YEAR;
 
         $sigma = self::VOLUME_LOGNORMAL_SIGMA;
         $decay = exp(-$dt * FinancialConstants::TRADING_DAYS_PER_YEAR / self::VOLUME_SHOCK_PERSISTENCE_DAYS);

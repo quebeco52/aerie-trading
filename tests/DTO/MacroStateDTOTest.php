@@ -228,4 +228,27 @@ class MacroStateDTOTest extends TestCase
         $this->assertEqualsWithDelta(-0.06, $slump->sentimentResidual(), 1e-12);
         $this->assertEqualsWithDelta((70.0 - MacroConstants::SENTIMENT_TREND_LEVEL) / 100.0, $slump->sentimentDeviation(), 1e-12);
     }
+
+    /** Any of the four readings of the laws ahead moving since the tick before is a revision; none moving is not. */
+    public function testTheLawsAheadAreRevisedWhenAnyReadingMoves(): void
+    {
+        $levers = ['corporateTax' => 0.02, 'bankLevyRate' => 0.001];
+        $standing = static fn(array $changes = []): MacroStateDTO => new MacroStateDTO(...array_merge([
+            'sittingLevers' => $levers,
+            'sittingPolicyFrom' => 7.0,
+            'expectedLevers' => $levers,
+            'expectedPolicyFrom' => 8.5,
+            'previousSittingLevers' => $levers,
+            'previousSittingPolicyFrom' => 7.0,
+            'previousExpectedLevers' => $levers,
+            'previousExpectedPolicyFrom' => 8.5,
+        ], $changes));
+
+        $this->assertFalse($standing()->lawsAheadRevised());
+        $this->assertFalse((new MacroStateDTO())->lawsAheadRevised(), 'no budget read and no forecast');
+        $this->assertTrue($standing(['sittingLevers' => ['corporateTax' => 0.03] + $levers])->lawsAheadRevised(), 'the coming budget');
+        $this->assertTrue($standing(['sittingPolicyFrom' => 7.5])->lawsAheadRevised(), 'when it falls');
+        $this->assertTrue($standing(['expectedLevers' => ['bankLevyRate' => 0.002] + $levers])->lawsAheadRevised(), 'the forecast');
+        $this->assertTrue($standing(['expectedPolicyFrom' => 9.0])->lawsAheadRevised(), 'when it takes effect');
+    }
 }

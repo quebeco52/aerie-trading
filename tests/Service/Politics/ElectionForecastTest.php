@@ -131,6 +131,64 @@ class ElectionForecastTest extends TestCase
     }
 
     /**
+     * The talks' budget is weighed once for its inputs and afresh whenever one of them moves, the laws in force and the
+     * fund's consent in a recession among them.
+     */
+    public function testTheTalksBudgetIsWeighedAfreshWhenItsInputsMove(): void
+    {
+        $state = new PoliticsState();
+        $state->dietSeats = Politics::dHondt(Diet::SEED_VOTE_SHARES, Diet::SEATS);
+        $state->totalTime = 6.2;
+        $state->lastElectionAt = 4.0;
+        $state->talksStartedAt = 6.2;
+        $state->coalitionTakesOfficeAt = 6.3;
+        $fresh = static function (PoliticsState $state, bool $recession): array {
+            (new \ReflectionProperty(ElectionForecast::class, 'talksBudget'))->setValue(null, null);
+
+            return ElectionForecast::sittingBudget($state, $recession);
+        };
+
+        $before = ElectionForecast::sittingBudget($state);
+        $state->corporateTaxPolicyShift += 0.01;
+        $moved = ElectionForecast::sittingBudget($state);
+        $this->assertNotSame($before, $moved, 'The laws in force moved.');
+        $this->assertSame($fresh($state, false), $moved);
+
+        $state->reserveDrawShare = MacroConstants::RESERVE_DRAW_CEILING * 2.0;
+        ElectionForecast::sittingBudget($state);
+        $slump = ElectionForecast::sittingBudget($state, true);
+        $this->assertSame($fresh($state, true), $slump, 'The fund consents in a recession.');
+    }
+
+    /**
+     * A forecast worked out off the tick is published only while it answers the request still pending: one a later poll
+     * or the vote has overtaken, or one already published, is dropped.
+     */
+    public function testAForecastSentBackIsPublishedOnlyForTheRequestStillPending(): void
+    {
+        $state = new PoliticsState();
+        $state->authoritySalt = 5.0;
+        $state->totalTime = 2.05;
+        $state->forecastRequestedAt = 2.04;
+        $forecast = ['cabinets' => [], 'leaders' => [Diet::VANGUARD => 1.0], 'seats' => [], 'levers' => ['corporateTax' => 0.01] + Politics::standingLevers($state)];
+
+        $this->assertFalse(ElectionForecast::receive($state, $forecast, 2.0), 'Overtaken by a later poll.');
+        $this->assertSame(-1.0, $state->forecastAt);
+        $this->assertTrue(ElectionForecast::receive($state, $forecast, 2.04));
+        $this->assertSame(2.05, $state->forecastAt);
+        $this->assertSame(ElectionForecast::nextVote(2.04), $state->forecastFor);
+        $this->assertSame($forecast['levers'], $state->forecastLevers);
+        $this->assertFalse(ElectionForecast::receive($state, $forecast, 2.04), 'Already published.');
+
+        $state->forecastRequestedAt = 3.99;
+        $state->totalTime = 4.0;
+        $state->lastElectionAt = 4.0;
+        ElectionForecast::advance($state, false, true);
+        $this->assertFalse(ElectionForecast::receive($state, $forecast, 3.99), 'Overtaken by the vote.');
+        $this->assertSame(4.0, $state->forecastFor, 'The talks stand.');
+    }
+
+    /**
      * The laws forecast take effect at the first budget after their government takes office: half a year after a vote,
      * its talks being shorter than a round.
      */

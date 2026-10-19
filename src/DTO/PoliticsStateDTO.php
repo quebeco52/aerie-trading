@@ -433,6 +433,11 @@ readonly class PoliticsStateDTO
         /** The vote the forecast is for, and when it was made (-1: none). */
         public float $forecastFor = -1.0,
         public float $forecastAt = -1.0,
+        /**
+         * When the forecast being worked out off the tick was asked for (-1: none pending;
+         * ElectionForecast::receive()).
+         */
+        public float $forecastRequestedAt = -1.0,
     ) {}
 
     /** Snapshots the engine's working state. */

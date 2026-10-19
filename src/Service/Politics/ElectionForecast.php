@@ -39,13 +39,24 @@ final class ElectionForecast
     public const LISTED_CHANCE = 0.02;
     /** Chance under which a cabinet's laws are not worked out; its weight goes to the rest in proportion. */
     private const NEGLIGIBLE_CHANCE = 1e-4;
+    /**
+     * Days a forecast asked for off the tick is awaited before the tick works it out itself, so a forecaster that is
+     * down holds the market's expectations back by a week at most, a quarter of the month between polls.
+     */
+    public const OFF_TICK_PATIENCE_DAYS = 7.0;
+
+    /** @var array{inputs: string, levers: array<string, float>}|null The talks' budget as last weighed, and on what. */
+    private static ?array $talksBudget = null;
 
     /**
      * One tick: reads the sitting government's coming budget, pools a poll published on it and forecasts afresh; on the
      * day of the vote the average becomes the result and the talks are weighed on the seats; on the day a cabinet takes
      * office the next vote is forecast from the result.
+     *
+     * @param bool $offTick Whether the forecast is asked of the forecaster rather than worked out on the tick: it is
+     *                      published when it comes back (receive()), or worked out here once overdue.
      */
-    public static function advance(PoliticsState $state, bool $recession = false): void
+    public static function advance(PoliticsState $state, bool $recession = false, bool $offTick = false): void
     {
         $state->sittingLevers = self::sittingBudget($state, $recession);
         if ($state->authoritySalt < 0.0) {
@@ -79,10 +90,45 @@ final class ElectionForecast
         if ($state->coalitionTakesOfficeAt >= 0.0 && $state->talksStartedAt === $state->lastElectionAt) {
             return;
         }
-        if ($polled || ($state->lastGovernmentFormedAt === $time && $state->forecastFor === $state->lastElectionAt)) {
-            $draws = MathUtility::ownStream(crc32(sprintf('%d:forecast:%.6f', (int) $state->authoritySalt, $time)));
-            self::publish($state, self::forecast($state, $draws), self::nextVote($time));
+        $due = $polled || ($state->lastGovernmentFormedAt === $time && $state->forecastFor === $state->lastElectionAt);
+        if ($due && $offTick) {
+            $state->forecastRequestedAt = $time;
+        } elseif ($due || self::overdue($state)) {
+            self::publish($state, self::forecast($state, self::draws($state)), self::nextVote($time));
         }
+    }
+
+    /**
+     * Publishes a forecast worked out off the tick when it answers the request still pending; one that a later poll or
+     * the vote has overtaken is dropped.
+     *
+     * @param array{cabinets: array<string, array{cabinet: list<string>, support: list<string>, chance: float}>, leaders: array<string, float>, seats: array<string, float>, levers: array<string, float>} $forecast
+     * @param float $requestedAt When the forecast was asked for: the state it was worked out on stood then.
+     * @return bool Whether it was published.
+     */
+    public static function receive(PoliticsState $state, array $forecast, float $requestedAt): bool
+    {
+        if ($state->forecastRequestedAt < 0.0 || $requestedAt !== $state->forecastRequestedAt) {
+            return false;
+        }
+        self::publish($state, $forecast, self::nextVote($requestedAt));
+
+        return true;
+    }
+
+    /**
+     * The forecast's draws: a stream of its own, seeded from the game and the day, so forecasting changes nothing else.
+     */
+    public static function draws(PoliticsState $state): MathUtility
+    {
+        return MathUtility::ownStream(crc32(sprintf('%d:forecast:%.6f', (int) $state->authoritySalt, $state->totalTime)));
+    }
+
+    /** Whether a forecast asked for off the tick has been awaited past the patience. */
+    private static function overdue(PoliticsState $state): bool
+    {
+        return $state->forecastRequestedAt >= 0.0
+            && $state->totalTime - $state->forecastRequestedAt >= self::OFF_TICK_PATIENCE_DAYS / FinancialConstants::DAYS_PER_YEAR;
     }
 
     /**
@@ -208,10 +254,18 @@ final class ElectionForecast
             if ($state->talksStartedAt === $state->lastElectionAt) {
                 return $standing;
             }
+            // Weighed once for the inputs it reads, which hold still while the talks run, rather than on every tick.
             $seats = array_map('intval', $state->dietSeats);
-            $odds = self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs);
+            $inputs = serialize([$seats, $state->dietVoteShares, $state->partyPositions, $state->dietBlocs, $standing, $recession]);
+            if (self::$talksBudget === null || self::$talksBudget['inputs'] !== $inputs) {
+                $odds = self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs);
+                self::$talksBudget = [
+                    'inputs' => $inputs,
+                    'levers' => self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, $standing, $recession)['levers'],
+                ];
+            }
 
-            return self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, $standing, $recession)['levers'];
+            return self::$talksBudget['levers'];
         }
 
         return PoliticsEngine::budget(
@@ -374,6 +428,7 @@ final class ElectionForecast
         $state->forecastLevers = $forecast['levers'];
         $state->forecastFor = $for;
         $state->forecastAt = $state->totalTime;
+        $state->forecastRequestedAt = -1.0;
     }
 
     /**

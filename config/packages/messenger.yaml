@@ -11,6 +11,14 @@ framework:
                 retry_strategy:
                     max_retries: 3
                     multiplier: 2
+            # The election forecast, worked out off the tick by the forecaster. A stream of its own (the Redis transport
+            # names the stream from the DSN's path), so a forecast never queues behind or ahead of the limit orders.
+            politics:
+                dsn: '%env(MESSENGER_POLITICS_TRANSPORT_DSN)%'
+                options:
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 1
             failed: 'doctrine://default?queue_name=failed'
             # sync: 'sync://'
 
@@ -32,3 +40,5 @@ framework:
             # Retention runs off the simulation clock, triggered by the ticker. Routed so the DELETEs run on
             # the worker; unrouted, Messenger would handle it in-process and put them in the tick loop.
             App\Message\PruneHistoryMessage: async
+            # The ticker asks for the election forecast on a poll's tick and reads it back when it is done.
+            App\Message\ForecastElectionMessage: politics

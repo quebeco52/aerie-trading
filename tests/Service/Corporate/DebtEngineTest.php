@@ -2014,6 +2014,24 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * The issuer's multiple of its class is worked out once per seeded spread and recovery: a firm reseeded at another
+     * spread, or moved to a sector with another recovery, prices as an engine that never saw it before.
+     */
+    public function testTheIssuerMultipleFollowsAReseededSpreadAndRecovery(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $stock = $this->leveredFirm('MEMO', '1.00', '0.0035');
+        $stock->setCreditRating('BB');
+        $engine->resolveCreditSpread($stock, $macro);
+
+        $stock->setCreditSpread('0.0420');
+        $this->assertSame($this->costOfCapitalEngine()->resolveCreditSpread($stock, $macro), $engine->resolveCreditSpread($stock, $macro), 'a reseeded spread');
+        $stock->setIndustry('Hedge Fund');
+        $this->assertSame($this->costOfCapitalEngine()->resolveCreditSpread($stock, $macro), $engine->resolveCreditSpread($stock, $macro), 'another recovery');
+    }
+
+    /**
      * Each firm type is anchored on the table S&P rates it with: a REIT on the real estate debt/EBITDA bands, a
      * reinsurer on its capital (the capital-rated ceiling, not the corporate matrix), private equity and a hedge fund
      * on debt to adjusted total equity. Read through the pro-forma rating, which takes the worse of the rating, the

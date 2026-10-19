@@ -7,6 +7,7 @@ namespace App\Service\Politics;
 use App\Data\Politics\AerieDiet;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
+use App\Message\ForecastElectionMessage;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
@@ -17,6 +18,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 /**
  * The Aerie Diet: eight parties, a vote on the fixed election calendar, seats, the talks that follow, and the
@@ -67,6 +69,8 @@ class PoliticsEngine
     // --- Persistence ---
     /** Redis key the politics state is kept under, beside the macro state. */
     public const REDIS_POLITICS_STATE = 'politics_state';
+    /** Redis key the forecaster leaves a forecast worked out off the tick under, with when it was asked for. */
+    public const REDIS_POLITICS_FORECAST = 'politics_forecast';
 
     // --- The Diet's Election (ParlGov x World Bank, var/harness/politics/vote_europe_fit.py; Powell & Whitten 1993;
     // Nannestad & Paldam 2002) ---
@@ -347,21 +351,85 @@ class PoliticsEngine
         private readonly MathUtility $mathUtility,
         private readonly \Redis $redis,
         private readonly ?LoggerInterface $logger = null,
+        private readonly ?MessageBusInterface $messageBus = null,
     ) {}
 
     /**
      * Advances the politics by one tick on the economy's snapshot of the same tick, and keeps the result.
      *
-     * @param MacroStateDTO $macro The economy as this tick left it.
-     * @param float         $dt    Time increment in years.
+     * @param MacroStateDTO $macro           The economy as this tick left it.
+     * @param float         $dt              Time increment in years.
+     * @param bool          $forecastOffTick Whether the election forecast is worked out by the forecaster rather than
+     *                                       on the tick: the ticker's, whose tick time it would hold up.
      */
-    public function updatePolitics(MacroStateDTO $macro, float $dt): PoliticsStateDTO
+    public function updatePolitics(MacroStateDTO $macro, float $dt, bool $forecastOffTick = false): PoliticsStateDTO
     {
         $state = $this->loadState();
-        $this->advance($state, $macro, $dt);
+        $offTick = $forecastOffTick && $this->messageBus !== null;
+        $this->advance($state, $macro, $dt, $offTick);
+        if ($offTick) {
+            $this->exchangeForecast($state);
+        }
         $this->saveState($state);
 
         return PoliticsStateDTO::fromState($state);
+    }
+
+    /**
+     * Sends the forecaster the politics as they stand on the tick a forecast is asked for, or publishes the forecast it
+     * has sent back for the request still pending. A message that cannot be sent leaves the request to come due.
+     */
+    private function exchangeForecast(PoliticsState $state): void
+    {
+        if ($state->forecastRequestedAt < 0.0) {
+            return;
+        }
+
+        if ($state->forecastRequestedAt === $state->totalTime) {
+            try {
+                $this->messageBus?->dispatch(new ForecastElectionMessage($state->toArray()));
+            } catch (\Throwable $e) {
+                $this->logger?->warning('Failed to send the election forecast to the forecaster: ' . $e->getMessage());
+            }
+
+            return;
+        }
+
+        try {
+            $raw = $this->redis->get(self::REDIS_POLITICS_FORECAST);
+            $sent = is_string($raw) ? json_decode($raw, true, 512, JSON_THROW_ON_ERROR) : null;
+        } catch (\Throwable $e) {
+            $this->logger?->warning('Failed to read the election forecast back: ' . $e->getMessage());
+
+            return;
+        }
+        if (is_array($sent) && is_numeric($sent['requestedAt'] ?? null) && is_array($sent['forecast'] ?? null)) {
+            ElectionForecast::receive($state, self::hydrateForecast($sent['forecast']), (float) $sent['requestedAt']);
+        }
+    }
+
+    /**
+     * A forecast off the wire, typed as ElectionForecast::forecast() returns it.
+     *
+     * @param array<mixed> $forecast
+     * @return array{cabinets: array<string, array{cabinet: list<string>, support: list<string>, chance: float}>, leaders: array<string, float>, seats: array<string, float>, levers: array<string, float>}
+     */
+    private static function hydrateForecast(array $forecast): array
+    {
+        $map = static fn(mixed $values): array => is_array($values) ? array_map('floatval', $values) : [];
+        $parties = static fn(mixed $names): array => is_array($names) ? array_values(array_map('strval', $names)) : [];
+        $cabinets = [];
+        foreach (is_array($forecast['cabinets'] ?? null) ? $forecast['cabinets'] : [] as $key => $option) {
+            if (is_array($option)) {
+                $cabinets[(string) $key] = [
+                    'cabinet' => $parties($option['cabinet'] ?? null),
+                    'support' => $parties($option['support'] ?? null),
+                    'chance' => (float) ($option['chance'] ?? 0.0),
+                ];
+            }
+        }
+
+        return ['cabinets' => $cabinets, 'leaders' => $map($forecast['leaders'] ?? null), 'seats' => $map($forecast['seats'] ?? null), 'levers' => $map($forecast['levers'] ?? null)];
     }
 
     /** The politics as last kept, or the founding Diet when nothing has been. */
@@ -401,11 +469,13 @@ class PoliticsEngine
      * Keeps the campaign and term marks, holds the vote on the tick a term ends, seats the government the talks produce
      * when its day comes, passes the budget at each round a government sits through, and names the tick's headline.
      *
-     * @param PoliticsState $state The politics, advanced in place.
-     * @param MacroStateDTO $macro The economy as this tick left it: the vote reads its real GDP and deflator.
-     * @param float         $dt    Time increment in years.
+     * @param PoliticsState $state           The politics, advanced in place.
+     * @param MacroStateDTO $macro           The economy as this tick left it: the vote reads its real GDP and deflator.
+     * @param float         $dt              Time increment in years.
+     * @param bool          $forecastOffTick Whether the election forecast is asked of the forecaster
+     *                                       (ElectionForecast::advance()).
      */
-    public function advance(PoliticsState $state, MacroStateDTO $macro, float $dt): void
+    public function advance(PoliticsState $state, MacroStateDTO $macro, float $dt, bool $forecastOffTick = false): void
     {
         $state->totalTime = $macro->totalTime;
         $realGdp = self::realGdp($macro);
@@ -474,7 +544,7 @@ class PoliticsEngine
         CoastGuard::advance($state, $this->mathUtility);
         StateGuard::advance($state, $this->mathUtility);
         PartyLeaders::advance($state, $dt, $this->mathUtility);
-        ElectionForecast::advance($state, MacroEngine::recessionDeclared($macro));
+        ElectionForecast::advance($state, MacroEngine::recessionDeclared($macro), $forecastOffTick);
 
         $state->eventType = self::headline($state);
     }

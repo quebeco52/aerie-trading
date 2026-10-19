@@ -290,6 +290,7 @@ class PoliticsState
     public array $sittingLevers;
     public float $forecastFor;
     public float $forecastAt;
+    public float $forecastRequestedAt;
 
     /** @var array<string, mixed>|null */
     private static ?array $openings = null;

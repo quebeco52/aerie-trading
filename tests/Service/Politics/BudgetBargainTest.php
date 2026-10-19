@@ -117,6 +117,37 @@ class BudgetBargainTest extends TestCase
     }
 
     /**
+     * A programme that asks a supporter for ground only on the question it owns, held to the red line, is the levers in
+     * force, which the supporter accepts: every lever stays exactly where it is, with nothing left to work out.
+     */
+    public function testAProgrammeHeldToTheRedLinesAndAcceptedIsTheBudgetExactly(): void
+    {
+        $standing = Politics::standingLevers(new PoliticsStateDTO());
+        $proposal = ['corporateTax' => $standing['corporateTax'] - 0.004] + $standing;
+        $guard = ['corporateTax' => $standing['corporateTax'] + 0.002, 'carbonPrice' => $standing['carbonPrice'] + 80.0] + $standing;
+
+        $this->assertSame(array_replace($proposal, $standing), BudgetBargain::winSetPoint($proposal, $standing, [['programme' => $guard, 'redLines' => ['corporateTax']]]));
+    }
+
+    /**
+     * The levers in force stand, exactly, where the cabinet asks for the opposite of what its supporter wants, and
+     * where two supporters pull opposite ways on what it asks: the only budget both accept is the one in force, which
+     * no weighing of the supporters' terms reaches.
+     */
+    public function testAStandstillLeavesEveryLeverExactlyInForce(): void
+    {
+        $standing = Politics::standingLevers(new PoliticsStateDTO());
+        $moved = static fn(float $carbon, float $tax): array => ['carbonPrice' => $standing['carbonPrice'] + $carbon, 'corporateTax' => $standing['corporateTax'] + $tax] + $standing;
+        $supporter = static fn(float $carbon, float $tax): array => ['programme' => $moved($carbon, $tax), 'redLines' => []];
+
+        $away = $moved(-40.0, 0.003);
+        $this->assertSame(array_replace($away, $standing), BudgetBargain::winSetPoint($away, $standing, [$supporter(80.0, -0.006)]), 'The cabinet asks for the opposite.');
+
+        $asked = $moved(40.0, -0.004);
+        $this->assertSame(array_replace($asked, $standing), BudgetBargain::winSetPoint($asked, $standing, [$supporter(80.0, 0.0), $supporter(-30.0, 0.0)]), 'Its supporters pull opposite ways.');
+    }
+
+    /**
      * Over cabinets and supporters from all over the Diet, no supporter likes the budget less than the levers in force,
      * and the cabinet always gets at least as close to its programme as holding every lever inside every supporter's
      * range would leave it, a budget every supporter also accepts.

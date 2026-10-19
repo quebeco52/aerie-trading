@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Politics;
 
 use App\Data\Politics\AerieDiet;
+use App\Service\Math\LinearAlgebra;
 
 /**
  * A minority cabinet's budget as a package deal: the budget closest to its programme that every support party likes at
@@ -27,6 +28,12 @@ final class BudgetBargain
     private const TOLERANCE = 1e-13;
     /** Overshoot of a supporter's indifference, as a share of it, left to the sweeps' rounding. */
     private const INDIFFERENCE_SLACK = 1e-12;
+    /**
+     * How far the parties' pulls, each of unit length and weighed to sum to one, may stop short of a standstill at the
+     * levers in force and still be one: a standstill rounds to about 1e-14, and a budget that moves misses it by 1e-4
+     * or more.
+     */
+    private const STANDSTILL_TOLERANCE = 1e-10;
 
     /** @var array<string, float>|null The weight each lever carries, memoized from the platforms. */
     private static ?array $scales = null;
@@ -93,17 +100,92 @@ final class BudgetBargain
                 return $inForce;
             }
         }
-        $acceptable = true;
+
+        // The programme held to the red lines and the caps is the budget nearest it within them, so when every
+        // supporter likes it no less than the levers in force it is the budget, and no supporter's term binds.
+        $x = $p;
         foreach ($bounds as $i => [$floor, $ceiling]) {
-            $acceptable = $acceptable && $p[$i] >= $floor && $p[$i] <= $ceiling;
+            $x[$i] = max($floor, min($ceiling, $p[$i]));
         }
-        foreach ($centres as $s => $centre) {
-            $acceptable = $acceptable && self::distance($p, $centre) <= $radii[$s];
-        }
-        if ($acceptable) {
-            return $proposal;
+        if (self::overshoots($x, $centres, $radii)) {
+            $x = self::standsStill($p, $q, $centres, $bounds) ? $q : self::project($p, $q, $centres, $radii, $bounds);
         }
 
+        // A lever the bargain left at the programme, at the levers in force or on a bound is handed back unrounded.
+        $budget = [];
+        foreach ($levers as $i => $lever) {
+            $budget[$lever] = match ($x[$i]) {
+                $p[$i] => $proposal[$lever],
+                $q[$i] => $inForce[$lever],
+                $bounds[$i][0] ?? NAN => $low[$lever],
+                $bounds[$i][1] ?? NAN => $high[$lever],
+                default => $x[$i] / $scales[$lever],
+            };
+        }
+
+        return $budget;
+    }
+
+    /**
+     * Whether the levers in force are the budget: when the cabinet's pull away from them and each supporter's toward
+     * its own programme can be weighed so that together they cancel on every lever free to move and press only against
+     * the floor or ceiling holding each of the rest (the Fritz John conditions at the levers in force). That covers a
+     * win set of the levers in force alone, where the sweeps' terms would grow without end.
+     *
+     * @param list<float>                           $p       The cabinet's programme.
+     * @param list<float>                           $q       The levers in force.
+     * @param list<list<float>>                     $centres Each supporter's programme.
+     * @param array<int, array{0: float, 1: float}> $bounds  Floor and ceiling of each bounded lever.
+     */
+    private static function standsStill(array $p, array $q, array $centres, array $bounds): bool
+    {
+        // A lever held at its floor can only be pressed down, one at its ceiling only up, one held at both either way.
+        $held = [];
+        foreach ($q as $i => $value) {
+            $atFloor = isset($bounds[$i]) && $value <= $bounds[$i][0];
+            $atCeiling = isset($bounds[$i]) && $value >= $bounds[$i][1];
+            if (!($atFloor && $atCeiling)) {
+                $held[$i] = $atFloor ? -1.0 : ($atCeiling ? 1.0 : 0.0);
+            }
+        }
+
+        // Each pull is the gradient of a party's distance at the levers in force, scaled to unit length, with a last
+        // entry that weighs the pulls to one; each bound pressed takes up its lever's part.
+        $columns = [];
+        foreach ([$p, ...$centres] as $towards) {
+            $gradient = [];
+            foreach (array_keys($held) as $i) {
+                $gradient[] = $q[$i] - $towards[$i];
+            }
+            $length = sqrt(self::dot($gradient, $gradient));
+            $columns[] = [...array_map(static fn(float $value): float => $length > 0.0 ? $value / $length : 0.0, $gradient), 1.0];
+        }
+        $row = 0;
+        foreach ($held as $side) {
+            if ($side !== 0.0) {
+                $pressed = array_fill(0, count($held) + 1, 0.0);
+                $pressed[$row] = $side;
+                $columns[] = $pressed;
+            }
+            $row++;
+        }
+        [, $shortfall] = LinearAlgebra::nonNegativeLeastSquares($columns, [...array_fill(0, count($held), 0.0), 1.0]);
+
+        return $shortfall <= self::STANDSTILL_TOLERANCE;
+    }
+
+    /**
+     * The programme projected onto every supporter's ball and every bound at once, in the parties' weighing.
+     *
+     * @param list<float>                           $p       The cabinet's programme.
+     * @param list<float>                           $q       The levers in force.
+     * @param list<list<float>>                     $centres Each supporter's programme.
+     * @param list<float>                           $radii   Each supporter's distance from the levers in force.
+     * @param array<int, array{0: float, 1: float}> $bounds  Floor and ceiling of each bounded lever.
+     * @return array<int, float>
+     */
+    private static function project(array $p, array $q, array $centres, array $radii, array $bounds): array
+    {
         // The projection is (p + sum lambda_s o_s - sum beta_i e_i) / (1 + sum lambda_s): each supporter's term pulls
         // the budget toward its own programme until the budget sits on its ball, each bounded lever's term holds it at
         // its bound, and either is zero where it does not bind.
@@ -149,11 +231,7 @@ final class BudgetBargain
         // inside all of them.
         $move = array_map(static fn(float $a, float $b): float => $a - $b, $x, $q);
         $length = self::dot($move, $move);
-        $overshoot = false;
-        foreach ($centres as $s => $centre) {
-            $overshoot = $overshoot || self::distance($x, $centre) > $radii[$s] * (1.0 + self::INDIFFERENCE_SLACK);
-        }
-        if ($overshoot && $length > 0.0) {
+        if (self::overshoots($x, $centres, $radii) && $length > 0.0) {
             $reach = 1.0;
             foreach ($centres as $centre) {
                 $reach = min($reach, 2.0 * self::dot($move, array_map(static fn(float $a, float $b): float => $a - $b, $centre, $q)) / $length);
@@ -162,19 +240,25 @@ final class BudgetBargain
             $x = array_map(static fn(float $a, float $b): float => $b + ($reach * $a), $move, $q);
         }
 
-        // A lever the bargain left at the programme, at the levers in force or on a bound is handed back unrounded.
-        $budget = [];
-        foreach ($levers as $i => $lever) {
-            $budget[$lever] = match ($x[$i]) {
-                $p[$i] => $proposal[$lever],
-                $q[$i] => $inForce[$lever],
-                $bounds[$i][0] ?? NAN => $low[$lever],
-                $bounds[$i][1] ?? NAN => $high[$lever],
-                default => $x[$i] / $scales[$lever],
-            };
+        return $x;
+    }
+
+    /**
+     * Whether a budget lies past any supporter's indifference, beyond the rounding left to the sweeps.
+     *
+     * @param array<int, float> $x
+     * @param list<list<float>> $centres
+     * @param list<float>       $radii
+     */
+    private static function overshoots(array $x, array $centres, array $radii): bool
+    {
+        foreach ($centres as $s => $centre) {
+            if (self::distance($x, $centre) > $radii[$s] * (1.0 + self::INDIFFERENCE_SLACK)) {
+                return true;
+            }
         }
 
-        return $budget;
+        return false;
     }
 
     /**

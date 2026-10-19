@@ -403,6 +403,8 @@ class MarketEngineTest extends TestCase
 
         $settled = $priced($macro($inForce + 0.04, $levy, $inForce + 0.04, $levy), 'tech', []);
         $this->assertEqualsWithDelta($revised['perceived_fair_value'], $settled['perceived_fair_value'], 1e-9);
+        $this->assertLessThan(1.0, $revised['policy_repricing']);
+        $this->assertSame(1.0, $settled['policy_repricing'], 'A forecast already in the price is no news.');
         $this->assertLessThan(0.1 * abs($revised['price'] - $steady['price']), abs($settled['price'] - $steady['price']), 'Once the revision is in the price, the next tick only drifts toward the target, as every tick does.');
 
         $bank = $priced($macro($inForce, $levy + 0.002, $inForce, $levy + 0.002), 'commercial_bank', ['bankLevyRate' => 400.0]);
