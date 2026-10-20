@@ -101,7 +101,7 @@ class MonetaryAuthorityTest extends TestCase
         }
         $this->assertSame(AerieCouncil::OPENING_GOVERNOR, $state->head(Office::Governor)['name']);
         $this->assertEqualsWithDelta(Office::Governor->openingTermEnd() - Office::Governor->termYears(), $state->head(Office::Governor)['termStart'], 1e-9);
-        $this->assertCount(Appointments::SHORTLIST - 1, $state->head(Office::Governor)['passedOver']);
+        $this->assertSame([], $state->head(Office::Governor)['passedOver'], 'Like every head sitting at Year 1, with no shortlist on record.');
         $people[] = [$state->head(Office::Governor)['termStart'], $state->head(Office::Governor)['birth'], $state->head(Office::Governor)['stance']];
         $this->assertCount(Authority::COMMITTEE_MEMBERS, $state->memberNames);
         foreach ($state->memberSince as $member => $since) {

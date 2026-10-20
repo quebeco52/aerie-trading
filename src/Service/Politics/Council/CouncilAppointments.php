@@ -136,7 +136,9 @@ final class CouncilAppointments
 
     /**
      * The Council at Year 1, or when a state that predates it is first read: the salt drawn and the sitting councillors
-     * drawn as candidates, those seated before Year 1 under their own names.
+     * drawn as candidates. Those seated before Year 1 sit under their own names, each the applicant of a board's field
+     * nearest the policies the departments opened on (Office::openingPolicy()), as the Council that appointed the
+     * opening heads stood.
      */
     private static function open(PoliticsState $state, float $time, MathUtility $math): void
     {
@@ -152,10 +154,14 @@ final class CouncilAppointments
         $state->boardMembers = $state->boardSince = [];
         self::seatBoard($state, $salt, $time);
 
+        $openingPolicy = Office::openingPolicy();
         foreach (AerieCouncil::roster($time) as $seat => $holder) {
-            $drawn = self::candidate($salt, self::vacancyKey("council:{$seat}", $holder['since']), 0, $holder['since'], self::reservedNames($state));
+            $vacancy = self::vacancyKey("council:{$seat}", $holder['since']);
             if ($holder['beforeYearOne']) {
+                [$drawn] = self::choose(self::field($salt, $vacancy, self::BOARD_FIELD, $holder['since'], self::reservedNames($state)), $openingPolicy);
                 $drawn['name'] = AerieCouncil::OPENING_MEMBERS[$seat];
+            } else {
+                $drawn = self::candidate($salt, $vacancy, 0, $holder['since'], self::reservedNames($state));
             }
             self::seatCouncillor($state, $salt, $seat, $drawn, $holder['since'], $holder['since'], $holder['termEnds'], $time);
         }

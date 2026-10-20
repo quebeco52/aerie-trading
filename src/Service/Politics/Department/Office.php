@@ -175,6 +175,20 @@ enum Office: string
         return $this->termStart($time) + $this->termYears();
     }
 
+    /** The question the post is filled on (a CouncilAppointments axis); null for a post that sets no rule. */
+    public function question(): ?string
+    {
+        return match ($this) {
+            self::Governor => CouncilAppointments::AXIS_MONEY,
+            self::Regulator => CouncilAppointments::AXIS_REGULATION,
+            self::FundHead => CouncilAppointments::AXIS_FUND,
+            self::ExchequerHead => CouncilAppointments::AXIS_DEBT,
+            self::FairTradingHead => CouncilAppointments::AXIS_COMPETITION,
+            self::SecuritiesHead => CouncilAppointments::AXIS_MARKETS,
+            self::SecurityDirector, self::CoastGuardCommandant, self::StateGuardCommander => null,
+        };
+    }
+
     /**
      * The appointer's target: the sitting Council's median stance on the post's question, or on its own three
      * (CouncilAppointments::councilMedians()) for a post that sets no rule.
@@ -192,6 +206,25 @@ enum Office: string
             self::SecuritiesHead => [CouncilAppointments::AXIS_MARKETS => CouncilAppointments::median($state->councilMarketsStances)],
             self::SecurityDirector, self::CoastGuardCommandant, self::StateGuardCommander => CouncilAppointments::councilMedians($state),
         };
+    }
+
+    /**
+     * The policies the departments opened on, as stances by question: what the Council sitting at Year 1 appointed
+     * the opening heads to run.
+     *
+     * @return array<string, float>
+     */
+    public static function openingPolicy(): array
+    {
+        $policy = [];
+        foreach (self::cases() as $office) {
+            $stance = $office->openingStance();
+            if ($stance !== null && $office->question() !== null) {
+                $policy[$office->question()] = $stance;
+            }
+        }
+
+        return $policy;
     }
 
     /**
@@ -215,8 +248,7 @@ enum Office: string
         if ($term < 0.0) {
             $chosen['name'] = $this->openingHolder();
             $stance = $this->openingStance() ?? $stance;
-            // The governor sitting at Year 1 keeps the candidates drawn beside them as passed over; the others none.
-            $passedOver = $this === self::Governor ? $passedOver : [];
+            $passedOver = [];
         }
 
         CouncilAppointments::retire($state, $outgoing['name']);

@@ -560,7 +560,7 @@ class GovernmentPageBuilderTest extends TestCase
 
         $this->assertSame(\App\Data\Politics\AerieCouncil::OPENING_GOVERNOR, $authority['governor']['name']);
         $this->assertSame('Before Year 1', $authority['governor']['sinceLabel']);
-        $this->assertCount(\App\Service\Politics\Council\CouncilAppointments::SHORTLIST - 1, $authority['governor']['passedOver']);
+        $this->assertSame([], $authority['governor']['passedOver'], 'No shortlist is on record for the governor sitting at Year 1.');
         $this->assertCount(MonetaryAuthority::COMMITTEE_MEMBERS, $authority['members']);
         $this->assertSame($politics->memberNames, array_column($authority['members'], 'name'));
         $this->assertSame(MonetaryAuthority::COMMITTEE_MEMBERS + 1, $authority['committee']['hawk'] + $authority['committee']['swing'] + $authority['committee']['dove']);
