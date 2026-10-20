@@ -156,9 +156,8 @@ class CoalitionFormationTest extends TestCase
 
     /**
      * The last vote's blocs carry over: in a Diet where a split on the size of the state and one on openness both hold
-     * (the Harbor and the Exchange at 35 seats each), whichever the parties declared last stands. The founding seats,
-     * with the Harbor at 40, are such a Diet: the District opens split on the size of the state, and a split on
-     * openness, once declared, would hold as well.
+     * (the Harbor and the Exchange at 35 seats each), whichever the parties declared last stands. The founding Diet
+     * holds only its split on the size of the state.
      */
     public function testTheLastVotesBlocsCarryOver(): void
     {
@@ -178,7 +177,7 @@ class CoalitionFormationTest extends TestCase
         $this->assertSame(Diet::SEED_BLOCS, Formation::declareBlocs($seats, Diet::HOME_POSITIONS, Diet::SEED_BLOCS));
         $this->assertNotSame($openAgainstClosed, Diet::SEED_BLOCS);
         $this->assertSame(Diet::SEED_BLOCS, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, Diet::SEED_BLOCS));
-        $this->assertSame($openAgainstClosed, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, $openAgainstClosed));
+        $this->assertSame(Diet::SEED_BLOCS, Formation::declareBlocs(Diet::SEED_SEATS, Diet::HOME_POSITIONS, $openAgainstClosed));
     }
 
     /**
@@ -246,9 +245,9 @@ class CoalitionFormationTest extends TestCase
         $positions = Diet::HOME_POSITIONS;
 
         $this->assertEqualsWithDelta(
-            // Vanguard and the Chartists: 0.25 apart on the state, 0.5 on openness, 0.5 on the Council, 0.28 on the
+            // Vanguard and the Chartists: 0.25 apart on the state, 0.3 on openness, 0.5 on the Council, 0.25 on the
             // environment.
-            sqrt((0.25 ** 2) + (0.5 ** 2) + (0.5 ** 2) + (0.28 ** 2)),
+            sqrt((0.25 ** 2) + (0.3 ** 2) + (0.5 ** 2) + (0.25 ** 2)),
             Formation::ideologicalRange([Diet::VANGUARD, Diet::CHARTISTS], $positions),
             1e-12,
         );
@@ -306,7 +305,7 @@ class CoalitionFormationTest extends TestCase
     /** A minority cabinet's supporters are the narrowest set of outsiders that carries it, its rival left out. */
     public function testMinorityCabinetsComeWithTheNarrowestSupportThatCarriesThem(): void
     {
-        // The Vanguard alone (85 seats): its bloc, the Exchange Party, the Chartists and New Horizon, carry it at 160.
+        // The Vanguard alone (90 seats): its bloc, the Exchange Party, the Chartists and New Horizon, carry it at 165.
         $this->assertSame([Diet::EXCHANGE, Diet::CHARTISTS, Diet::NEW_HORIZON], Formation::supportFor([Diet::VANGUARD], Diet::SEED_SEATS, Diet::HOME_POSITIONS, Diet::SEED_BLOCS));
 
         // With the Civic Front the only party big enough, the Vanguard cannot be carried at all.
@@ -322,7 +321,7 @@ class CoalitionFormationTest extends TestCase
     {
         $order = Formation::bySize(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES);
 
-        $this->assertSame([Diet::VANGUARD, Diet::CIVIC], array_slice($order, 0, 2));
+        $this->assertSame([Diet::CIVIC, Diet::VANGUARD], array_slice($order, 0, 2));
         $this->assertSame(Diet::VANGUARD, Formation::leader([Diet::EXCHANGE, Diet::VANGUARD], $order));
         $this->assertSame(Diet::CIVIC, Formation::leader([Diet::IRON_HARBOR, Diet::CIVIC, Diet::COMMON_LOT], $order));
         $this->assertSame(Diet::CHARTISTS, Formation::leader([Diet::COMMON_LOT, Diet::CHARTISTS], $order));

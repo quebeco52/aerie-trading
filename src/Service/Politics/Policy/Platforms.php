@@ -122,9 +122,10 @@ final class Platforms
     public const POLICY_MANIFESTO_CONSOLIDATION_TAX_SHARE_GAP = (24.0 - 14.0) / 71.0;
 
     // --- Platforms: The Tax on Dividends ---
-    /** Tax on dividends the big-state end enacts: the founding 15%, as no financial centre's left proposes more. */
-    public const POLICY_BIG_STATE_DIVIDEND_TAX = Valuation::FOUNDING_DIVIDEND_TAX_RATE;
-    /** Tax on dividends the small-state end enacts: none, as in Singapore's one-tier system (IRAS). */
+    /**
+     * Tax on dividends the small-state end enacts: none, as in Singapore's one-tier system (IRAS). The big-state half
+     * keeps the founding 15%, as no financial centre's left proposes more.
+     */
     public const POLICY_SMALL_STATE_DIVIDEND_TAX = 0.0;
 
     // --- Platforms: The Reserve Fund's Home Share ---
@@ -197,9 +198,9 @@ final class Platforms
             // The technocratic half keeps the appointed commission; toward the populist end it grants as elected.
             'utilityRateGrant' => FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE
                 * (1.0 - ((1.0 - FirmEconomics::ELECTED_COMMISSION_GRANT_RATIO) * max(0.0, $council / $populist))),
-            // The neutral position keeps the founding rate; each end enacts its own side's plan.
+            // The neutral position and the big-state half keep the founding rate; the small-state half cuts toward
+            // none.
             'dividendTax' => Valuation::FOUNDING_DIVIDEND_TAX_RATE
-                + ((self::POLICY_BIG_STATE_DIVIDEND_TAX - Valuation::FOUNDING_DIVIDEND_TAX_RATE) * max(0.0, $state / $bigState))
                 + ((self::POLICY_SMALL_STATE_DIVIDEND_TAX - Valuation::FOUNDING_DIVIDEND_TAX_RATE) * max(0.0, $state / $smallState)),
         ];
     }

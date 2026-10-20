@@ -141,7 +141,7 @@ class FinancialRegulatorTest extends TestCase
     {
         $state = self::opened();
 
-        $this->assertNull(Regulator::ltvCap($state));
+        $this->assertNull($state->regulatorLtvCap);
         $this->assertNull(PoliticsStateDTO::fromState($state)->policy()->mortgageLtvCap);
     }
 
@@ -167,8 +167,8 @@ class FinancialRegulatorTest extends TestCase
             $this->assertGreaterThan(Regulator::OPENING_HEAD_TERM_END - self::DT, $appointedAt);
             $this->assertEqualsWithDelta(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $state->requirementPhaseFrom, 1e-12);
 
-            $this->assertSame(Regulator::ltvCapForStance($state->regulatorStance), Regulator::ltvCap($state), 'The head runs their regime\'s cap.');
-            $this->assertSame(Regulator::ltvCap($state), PoliticsStateDTO::fromState($state)->policy()->mortgageLtvCap, 'In force from the seating, with no phase-in.');
+            $this->assertSame(Regulator::ltvCapForStance($state->regulatorStance), $state->regulatorLtvCap, 'The head runs their regime\'s cap.');
+            $this->assertSame($state->regulatorLtvCap, PoliticsStateDTO::fromState($state)->policy()->mortgageLtvCap, 'In force from the seating, with no phase-in.');
             $this->assertSame(Regulator::neutralBufferForStance($state->regulatorStance), PoliticsStateDTO::fromState($state)->policy()->neutralCountercyclicalBuffer, 'And their regime\'s neutral buffer.');
 
             $target = Regulator::requirement($state->regulatorStance);

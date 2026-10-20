@@ -117,12 +117,6 @@ final class FinancialRegulator
         return (2.0 * ($requirement - self::lightest()) / (self::strictest() - self::lightest())) - 1.0;
     }
 
-    /** The mortgage loan-to-value cap the head in office runs, as a share of the property's value; null for none. */
-    public static function ltvCap(PoliticsState $state): ?float
-    {
-        return $state->regulatorLtvCap;
-    }
-
     /** The cap a stance runs: none to the opening stance, then linear from one no buyer reaches to the strictest. */
     public static function ltvCapForStance(float $stance): ?float
     {

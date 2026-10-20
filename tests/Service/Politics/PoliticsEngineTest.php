@@ -92,9 +92,9 @@ class PoliticsEngineTest extends TestCase
         $seats = array_merge(Diet::SEED_SEATS, [Diet::VANGUARD => 95.0, Diet::EXCHANGE => 25.0, Diet::CHARTISTS => 20.0]);
         $position = Platforms::coalitionPosition(Diet::membership([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS]), $seats, Diet::HOME_POSITIONS);
 
-        // Vanguard 95 at (-0.65, +0.1, +0.3), Exchange 25 at (-0.2, +0.8, +0.4), Chartists 20 at (-0.4, +0.6, +0.8).
-        $this->assertEqualsWithDelta((95.0 * -0.65 + 25.0 * -0.2 + 20.0 * -0.4) / 140.0, $position[Diet::AXIS_STATE], 1e-12);
-        $this->assertEqualsWithDelta((95.0 * 0.1 + 25.0 * 0.8 + 20.0 * 0.6) / 140.0, $position[Diet::AXIS_OPENNESS], 1e-12);
+        // Vanguard 95 at (-0.65, +0.3, +0.3), Exchange 25 at (-0.3, +0.8, +0.4), Chartists 20 at (-0.4, +0.6, +0.8).
+        $this->assertEqualsWithDelta((95.0 * -0.65 + 25.0 * -0.3 + 20.0 * -0.4) / 140.0, $position[Diet::AXIS_STATE], 1e-12);
+        $this->assertEqualsWithDelta((95.0 * 0.3 + 25.0 * 0.8 + 20.0 * 0.6) / 140.0, $position[Diet::AXIS_OPENNESS], 1e-12);
         $this->assertEqualsWithDelta((95.0 * 0.3 + 25.0 * 0.4 + 20.0 * 0.8) / 140.0, $position[Diet::AXIS_COUNCIL], 1e-12);
     }
 
@@ -124,8 +124,8 @@ class PoliticsEngineTest extends TestCase
      * (var/harness/politics/formation_report.py); at a trend economy they come easier, 27% and 32 days. They seat the
      * governments Scandinavia's bloc parliaments have since 1945 (ParlGov, 68 cabinets): minority cabinets 76% (84%),
      * one party alone 46% (47%), and the parties at the Council axis's ends supporting far more often than they govern.
-     * A bloc puts its leader in office, so the largest party sits in 77% of cabinets, above Scandinavia's 63%, where
-     * the largest party leads the losing bloc more often; the two largest govern together in 4% (1.5%), as the core
+     * A bloc puts its leader in office, so the largest party sits in 67% of cabinets (63%), the rest going to the
+     * Vanguard's bloc while the Civic Front is the larger; the two largest govern together in 4% (1.5%), as the core
      * votes walk.
      */
     public function testTheDietStaysBalancedAtItsCalibratedVolatility(): void
@@ -183,7 +183,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.74, $minority / count($talkDays), 0.06);
         $this->assertEqualsWithDelta(0.48, $single / count($talkDays), 0.04);
         $this->assertLessThan(0.05, $twoLargest / count($talkDays));
-        $this->assertEqualsWithDelta(0.76, $largestIn / count($talkDays), 0.04);
+        $this->assertEqualsWithDelta(0.67, $largestIn / count($talkDays), 0.04);
         $this->assertLessThan(0.08, $radicalIn / (2 * count($talkDays)), 'The Council axis\'s ends sit in cabinet too often.');
         $this->assertGreaterThan(3 * $radicalIn, $radicalSupports, 'The Council axis\'s ends govern rather than support.');
 

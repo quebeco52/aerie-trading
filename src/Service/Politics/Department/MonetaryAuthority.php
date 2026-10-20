@@ -45,13 +45,12 @@ final class MonetaryAuthority
     public const MEETINGS_PER_YEAR = MonetaryPolicySubsystem::MEETINGS_PER_YEAR;
 
     // --- The Committee's Balance ---
-    /**
-     * Average stance at or above which the committee holds a hawkish supermajority: the FOMC's 75th percentile of
-     * meetings (Hack, Istrefi & Meier 2023).
-     */
-    public const HAWKISH_MAJORITY_STANCE = 0.33;
-    /** Average stance at or below which it holds a dovish supermajority: the FOMC's 25th percentile. */
-    public const DOVISH_MAJORITY_STANCE = -0.13;
+    /** Seats of the seven one camp must hold to lean the rule its way: six, so a 5-2 committee follows the rule. */
+    public const SUPERMAJORITY_SEATS = 6;
+    /** Average stance at or above which the committee holds a hawkish supermajority: six hawks of seven, 5/7. */
+    public const HAWKISH_MAJORITY_STANCE = ((2 * self::SUPERMAJORITY_SEATS) - (self::COMMITTEE_MEMBERS + 1)) / (self::COMMITTEE_MEMBERS + 1);
+    /** Average stance at or below which it holds a dovish supermajority: six doves of seven, -5/7. */
+    public const DOVISH_MAJORITY_STANCE = -self::HAWKISH_MAJORITY_STANCE;
 
     // --- Dissent ---
     /**
@@ -242,13 +241,16 @@ final class MonetaryAuthority
             && (abs($state->lastMeetingChange) >= self::NEWSWORTHY_RATE_MOVE || array_filter($state->lastMeetingVotes, static fn(float $vote): bool => $vote !== 0.0) !== []);
     }
 
-    /** A meeting: the rate it leaves, and the votes on it. */
+    /**
+     * A meeting: the rate it leaves, and the votes on it, cast against the supermajority the economy set that rate
+     * with, not one this tick's appointments have since made.
+     */
     private static function meet(PoliticsState $state, MacroStateDTO $macro): void
     {
         $state->lastMeetingChange = $state->lastMeetingAt < 0.0 ? 0.0 : $macro->policyRate - $state->lastMeetingRate;
         $state->lastMeetingVotes = self::votes(
             array_merge([$state->governorStance], array_values($state->memberStances)),
-            $state->committeeMajority,
+            $macro->authorityCommitteeSeated > 0.0 ? $macro->authorityMajority : 0.0,
             $macro->ruleInflationGap,
             $macro->ruleOutputGap,
         );

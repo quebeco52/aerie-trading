@@ -156,16 +156,38 @@ class MonetaryAuthorityTest extends TestCase
     }
 
     /**
-     * The balance is the committee's stances averaged, the governor's counting as one; it makes a hawkish supermajority
-     * at the FOMC's top quarter, a dovish one at its bottom quarter.
+     * The balance is the committee's stances averaged, the governor's counting as one; six of the seven in one camp
+     * make its supermajority, and a 5-2 or 4-3 committee follows the rule.
      */
     public function testTheBalanceAndItsSupermajorities(): void
     {
         $this->assertEqualsWithDelta(1.0 / 7.0, Authority::balance(1.0, [1.0, 1.0, 0.0, 0.0, -1.0, -1.0]), 1e-12);
-        $this->assertSame(1.0, Authority::majority(3.0 / 7.0));
-        $this->assertSame(0.0, Authority::majority(2.0 / 7.0));
-        $this->assertSame(0.0, Authority::majority(0.0));
-        $this->assertSame(-1.0, Authority::majority(-1.0 / 7.0));
+        $this->assertSame(1.0, Authority::majority(Authority::balance(1.0, [1.0, 1.0, 1.0, 1.0, 1.0, -1.0])));
+        $this->assertSame(1.0, Authority::majority(1.0));
+        $this->assertSame(0.0, Authority::majority(Authority::balance(1.0, [1.0, 1.0, 1.0, 1.0, -1.0, -1.0])));
+        $this->assertSame(0.0, Authority::majority(1.0 / 7.0));
+        $this->assertSame(0.0, Authority::majority(-1.0 / 7.0));
+        $this->assertSame(0.0, Authority::majority(Authority::balance(-1.0, [-1.0, -1.0, -1.0, -1.0, 1.0, 1.0])));
+        $this->assertSame(-1.0, Authority::majority(Authority::balance(-1.0, [-1.0, -1.0, -1.0, -1.0, -1.0, 1.0])));
+    }
+
+    /**
+     * A meeting's votes are cast against the supermajority the economy set the rate with, which this tick's
+     * appointments cannot yet have moved.
+     */
+    public function testAMeetingVotesAgainstTheMajorityTheRateWasSetWith(): void
+    {
+        $state = self::opened();
+        $state->committeeMajority = 1.0;
+        $state->totalTime = 1.0 / Authority::MEETINGS_PER_YEAR;
+        $macro = new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03, ruleInflationGap: 0.02, authorityMajority: -1.0, authorityCommitteeSeated: 1.0);
+
+        Authority::advance($state, $macro, self::DT, new MathUtility());
+
+        $this->assertSame($state->totalTime, $state->lastMeetingAt);
+        $stances = [$state->governorStance, ...array_values($state->memberStances)];
+        $this->assertSame(Authority::votes($stances, -1.0, 0.02, 0.0), $state->lastMeetingVotes);
+        $this->assertNotSame(Authority::votes($stances, 1.0, 0.02, 0.0), $state->lastMeetingVotes);
     }
 
     /**

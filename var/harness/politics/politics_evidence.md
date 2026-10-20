@@ -101,3 +101,12 @@ the outgoing cabinet's prime-minister party (ParlGov `prime_minister` flag). CR1
   it takes growth's place (growth -0.01); coalitions +1.84 (1.40), wrong-signed noise on 65 votes. By Okun the
   unemployment and growth terms carry one signal (-1.9 x du ~ +0.8 x g), so adding it beside growth double counts.
 - Kept the Diet's form pending the user's call: a PM-party growth slope would be a design choice inside the CI.
+
+## 2026-10-20 Committee supermajority 5/7 (tree) vs HEAD 34f74b09
+
+Question: do HAWKISH/DOVISH_MAJORITY_STANCE = +-5/7 (from 0.33/-0.13) keep macro rate moments in range?
+Harness: gate.php arm on via spend.sh (head_tree worktree, cp -a vendor), STAGE=committee_4 YEARS=60 TPY=180,
+`bin/harness-batch var/harness/politics/spend.sh 1-4 newon headon`; `python3 committee_an.py runs/committee_4 5`.
+Seeds 1-4, 60 y, burn 5 y, quarterly rows. Table in committee_4.out (diff and se in bp; maj rows are quarter shares).
+Result: rate/gap/inflation moments move <= 1 bp (mean rate -1.1 bp, se 0.3); majority mix hawk 64->47%, dove 23->8%,
+none 13->45% of quarters. ELB share 1.25% both arms. Caveat: n=4, no equity cap (equity-wealth loop off), no fund.
