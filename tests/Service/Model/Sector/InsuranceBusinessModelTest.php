@@ -11,6 +11,7 @@ use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Model\Sector\InsuranceBusinessModel;
+use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -64,6 +65,26 @@ class InsuranceBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.10 * $stock->getStatutorySurplus(), $model->getDistributionCeiling($stock, 1_000_000_000.0), 1.0, 'A thin year leaves a tenth of surplus.');
         $this->assertSame(25_000_000_000.0, $model->getDistributionCeiling($stock, 25_000_000_000.0), 'A strong year may pay out its income.');
         $this->assertEqualsWithDelta(0.10 * $stock->getStatutorySurplus(), $model->getDistributionCeiling($stock, -5_000_000_000.0), 1.0, 'A loss year still allows the tenth.');
+    }
+
+    /**
+     * An insurer's distributions answer to its solvency, not to a bank's leverage: a composite owing its policyholders
+     * ten times its capital in reserves buys back while its surplus covers the Kenney target its premium needs, and is
+     * barred once it does not.
+     */
+    public function testBuybacksAnswerToSurplusNotToTheFloatOwedToPolicyholders(): void
+    {
+        $model = new RetailInsuranceBusinessModel();
+        $macro = new MacroStateDTO();
+        $stock = (new Stock())->setTicker('LIFE')->setIndustry('Insurance - Diversified')->setTotalEquity('85000000000')
+            ->setCustomerDeposits('850000000000')->setCorporateTreasury('850000000000')->setTotalRevenue('120000000000');
+
+        $this->assertNull($model->getRegulatoryDividendCap($stock, 850_000_000_000.0, $macro));
+        $this->assertFalse($model->checkBuybackRegulatoryLockout($stock, 850_000_000_000.0, $macro), 'Surplus 85 against a target of 80.');
+
+        $stock->setTotalRevenue('140000000000');
+        $this->assertTrue($model->checkBuybackRegulatoryLockout($stock, 850_000_000_000.0, $macro), 'Surplus 85 against a target of 93.');
+        $this->assertNull($model->getRegulatoryDividendCap($stock, 850_000_000_000.0, $macro), 'The dividend halts only below half the target.');
     }
 
     public function testGetInterestCoverage(): void
@@ -210,8 +231,12 @@ class InsuranceBusinessModelTest extends TestCase
         $expectedLayer = InsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR
             * Distributions::calculateNormalLowerPartialMoment(InsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD);
         // The catastrophe cover's premium is a reinsurance cost of the quarter, filed with the losses.
-        $coverPremium = InsuranceBusinessModel::CATASTROPHE_COVER_EXPECTED_RECOVERY * (1.0 + InsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING);
-        $claimsRatio = 0.5004 - (InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * (1.0 - $quietBurden)) - $expectedLayer + $coverPremium;
+        $coverPremium = InsuranceBusinessModel::catastropheLayer(InsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD, InsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR, InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD)['expected_recovery']
+            * (1.0 + InsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING);
+        // The catastrophe terms are per unit of premium at the base rate, so they land on the book's volume: premium
+        // over the rate level it was written at (a little under par here, the float yield above neutral).
+        $volume = 1.0 / $model->getMacroPhysics($stock, $macroState)['pricing_power_multiplier'];
+        $claimsRatio = 0.5004 + ((-(InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * (1.0 - $quietBurden)) - $expectedLayer + $coverPremium) * $volume);
         $this->assertEqualsWithDelta($claimsRatio + 0.0996, $result->clampedMargin, 1e-9);
         $this->assertEqualsWithDelta(($claimsRatio + 0.0996) * $expectedRevenue, $result->actualVariableCosts, 1_000.0);
 
@@ -228,7 +253,7 @@ class InsuranceBusinessModelTest extends TestCase
     public function testEveryUnderwriterFilesALossAndExpenseRatioThatAddToItsCostBase(): void
     {
         $fixedCosts = 800_000_000.0;
-        foreach ([new InsuranceBusinessModel(), new \App\Service\Model\Sector\RetailInsuranceBusinessModel(), new \App\Service\Model\Sector\ReinsuranceBusinessModel()] as $model) {
+        foreach ([new InsuranceBusinessModel(), new RetailInsuranceBusinessModel(), new \App\Service\Model\Sector\ReinsuranceBusinessModel()] as $model) {
             $result = $model->computeActualFinancials($this->underwriter(26_666_666_667.0), 10_000_000_000.0, 0.60, $fixedCosts, 0.10, new MacroStateDTO(), $this->scriptedMath());
 
             $label = $model::class;
@@ -250,18 +275,21 @@ class InsuranceBusinessModelTest extends TestCase
     public function testDistrictCatastropheClaimsAreCentredOnTheAverageYear(): void
     {
         $model = new InsuranceBusinessModel();
-        $run = function (float $burden) use ($model): float {
+        $rateLevel = 1.0;
+        $run = function (float $burden) use ($model, &$rateLevel): float {
             $stock = new Stock();
             $stock->setTicker('CENT');
             $stock->setBeta('1.0');
             $stock->setTotalEquity('200000000000');
             $macro = new MacroStateDTO(...['inflationEma' => 0.02, 'policyRateEma' => 0.03, 'yield10yEma' => 0.04, ...DistrictCatastropheWindow::prime($stock, $burden)]);
+            $rateLevel = $model->getMacroPhysics($stock, $macro)['pricing_power_multiplier'];
 
             return $model->computeActualFinancials($stock, 10_000_000_000.0, 0.60, 1.0e9, 0.10, $macro, $this->scriptedMath())->clampedMargin;
         };
 
         $this->assertEqualsWithDelta(2.0 * $run(1.0), $run(1.6) + $run(0.4), 1e-12);
-        $this->assertEqualsWithDelta(InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * 0.6, $run(1.6) - $run(1.0), 1e-12);
+        // Per unit of premium at the base rate: on revenue at the rate it was written at, the volume share of it.
+        $this->assertEqualsWithDelta(InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * 0.6 / $rateLevel, $run(1.6) - $run(1.0), 1e-12);
     }
 
     /**
@@ -293,26 +321,85 @@ class InsuranceBusinessModelTest extends TestCase
 
         [$calmFirst, $calmSecond] = $twoQuarters(1.0);
         [$stormFirst, $stormSecond] = $twoQuarters(3.0);
+        // Per unit of premium at the base rate, so on revenue at the rate the book was written at.
+        $rateLevel = $model->getMacroPhysics($this->underwriter(200_000_000_000.0), new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04))['pricing_power_multiplier'];
 
-        $this->assertEqualsWithDelta(InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * 2.0, $stormFirst - $calmFirst, 1e-9, 'The storm is booked in full the quarter it lands.');
+        $this->assertEqualsWithDelta(InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * 2.0 / $rateLevel, $stormFirst - $calmFirst, 1e-9, 'The storm is booked in full the quarter it lands.');
         $this->assertEqualsWithDelta($calmSecond, $stormSecond, 1e-9, 'The quarter after books none of it.');
+    }
+
+    /**
+     * A storm costs the same dollars whatever rate the book was renewed at: on a book written 25% harder the same
+     * draws charge the same claims. Struck on revenue, the hard market's uplift raised them by the whole uplift.
+     */
+    public function testHardMarketDoesNotRaiseClaimDollars(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $costs = function (float $rateLevel) use ($model): float {
+            $stock = $this->underwriter(200_000_000_000.0);
+            $window = DistrictCatastropheWindow::prime($stock, 3.0);
+            $stock->setEarningsMomentumZ([
+                ...($stock->getEarningsMomentumZ() ?? []),
+                StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET => $rateLevel > 1.0 ? 1.0 : 0.0,
+                InsuranceBusinessModel::STATE_EARNED_RATE_LEVEL => $rateLevel,
+                InsuranceBusinessModel::STATE_OBSERVED_CAPACITY => 1.0,
+            ]);
+            $macro = new MacroStateDTO(...['inflationEma' => 0.02, 'policyRateEma' => MacroStateDTO::fromArray([])->perceivedNeutralRate, 'yield10yEma' => 0.04, ...$window]);
+            $this->assertEqualsWithDelta($rateLevel, $model->getMacroPhysics($stock, $macro)['pricing_power_multiplier'], 1e-9);
+
+            // As the engine hands it the quarter: revenue at the rate, the structural cost ratio deflated by it.
+            return $model->computeActualFinancials($stock, 10_000_000_000.0 * $rateLevel, 0.60 / $rateLevel, 1.0e9, 0.10, $macro, $this->scriptedMath())->actualVariableCosts;
+        };
+
+        $this->assertEqualsWithDelta($costs(1.0), $costs(1.0 + InsuranceBusinessModel::HARD_MARKET_PRICING_UPLIFT), 1.0);
+    }
+
+    /** Each book's cover attaches at its own one-in-five-year quarter, on the district's own loss distribution. */
+    public function testRetentionAttachesAtItsReturnPeriod(): void
+    {
+        $distribution = \App\Service\Macro\Subsystem\CommodityLogisticsSubsystem::catastropheQuarterDistribution();
+        foreach ([[-1.50, 0.15, 0.13], [-1.80, 0.08, 0.13], [-1.55, 0.20, 0.08]] as [$threshold, $scale, $load]) {
+            $layer = InsuranceBusinessModel::catastropheLayer($threshold, $scale, $load);
+            $attaches = 0.0;
+            foreach ($distribution['ratios'] as $index => $ratio) {
+                $attaches += $distribution['weights'][$index] * Distributions::normalHingeLayerExceedance($scale, $threshold, ($load * ($ratio - 1.0)) - $layer['retention']);
+            }
+
+            // To the lattice's resolution: each lattice point's mass steps in as the retention passes it.
+            $this->assertEqualsWithDelta(1.0 / (4.0 * InsuranceBusinessModel::CATASTROPHE_RETENTION_RETURN_YEARS), $attaches, 5e-4);
+            $this->assertGreaterThan(0.0, $layer['limit']);
+        }
+    }
+
+    /**
+     * A reinsurer's cover is priced on its own layer: lighter district load and a heavier own tail than a primary
+     * book's, so it attaches lower and pays less. Struck on the primary's layer, it paid 3.3 times what it recovered.
+     */
+    public function testCededPremiumIsLoadedOnOwnRecovery(): void
+    {
+        $primary = InsuranceBusinessModel::catastropheLayer(-1.50, 0.15, 0.13);
+        $reinsurer = InsuranceBusinessModel::catastropheLayer(-1.55, 0.20, 0.08);
+
+        $this->assertLessThan($primary['retention'], $reinsurer['retention']);
+        $this->assertLessThan($primary['expected_recovery'], $reinsurer['expected_recovery']);
+        $this->assertEqualsWithDelta(0.0225, $primary['expected_recovery'], 0.0225 * 0.05, 'the engine measured 2.25% a quarter on the primary layer');
     }
 
     /** The cover pays the claims above its retention up to its limit, and the carrier keeps what lies beyond. */
     public function testTheCatastropheCoverStopsAtItsLimit(): void
     {
         $cover = new class extends InsuranceBusinessModel {
-            public function recovery(float $gross, float $book): float
+            /** @param array{retention: float, limit: float, expected_recovery: float} $layer */
+            public function recovery(float $gross, array $layer): float
             {
-                return $this->resolveCatastropheRecovery($gross, $book);
+                return $this->resolveCatastropheRecovery($gross, $layer);
             }
         };
-        $retention = InsuranceBusinessModel::MAX_REINSURED_LOSS_SHOCK;
-        $limit = InsuranceBusinessModel::CATASTROPHE_COVER_LIMIT;
+        $layer = InsuranceBusinessModel::catastropheLayer(InsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD, InsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR, InsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD);
 
-        $this->assertSame(0.0, $cover->recovery($retention * 0.5, 0.5), 'Inside the retention the carrier pays it all.');
-        $this->assertEqualsWithDelta(0.5, $cover->recovery(($retention + 1.0) * 0.5, 0.5), 1e-12, 'Above it the cover pays.');
-        $this->assertEqualsWithDelta($limit * 0.5, $cover->recovery(($retention + $limit + 5.0) * 0.5, 0.5), 1e-12, 'Past its limit it pays no more.');
+        $this->assertSame(0.0, $cover->recovery($layer['retention'] * 0.5, $layer), 'Inside the retention the carrier pays it all.');
+        $this->assertEqualsWithDelta(0.5, $cover->recovery($layer['retention'] + 0.5, $layer), 1e-12, 'Above it the cover pays.');
+        $this->assertEqualsWithDelta($layer['limit'], $cover->recovery($layer['retention'] + $layer['limit'] + 5.0, $layer), 1e-12, 'Past its limit it pays no more.');
     }
 
     public function testExpenseRatioScalesWithRevenueFluctuations(): void
@@ -971,7 +1058,7 @@ class InsuranceBusinessModelTest extends TestCase
         $carriers = [
             new InsuranceBusinessModel(),
             new \App\Service\Model\Sector\ReinsuranceBusinessModel(),
-            new \App\Service\Model\Sector\RetailInsuranceBusinessModel(),
+            new RetailInsuranceBusinessModel(),
         ];
 
         foreach ($carriers as $carrier) {

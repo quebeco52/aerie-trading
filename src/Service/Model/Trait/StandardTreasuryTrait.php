@@ -36,6 +36,12 @@ trait StandardTreasuryTrait
         ];
     }
 
+    /** @return array{value: float, expected_return: float} */
+    public function resolveEquitySleeve(Stock $stock, MacroStateDTO $macroState): array
+    {
+        return ['value' => 0.0, 'expected_return' => 0.0];
+    }
+
     public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         $cash = (float) $stock->getCorporateTreasury();

@@ -250,9 +250,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             'high_yield_credit_spread_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
-            'market_volatility_ema',
             'output_gap_ema',
-            'policy_rate_ema',
             'yield_10y_ema',
         ];
     }

@@ -81,7 +81,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         // Independent stream Z-scores; claims fall on the property and casualty book alone.
         $pcZ    = $streams->generateZ('property_casualty_premiums', 0.25);
         $lifeZ  = $streams->generateZ('life_insurance_premiums', 0.50);
-        $claims = $this->resolveExcessClaims($streams, $macroState, $pcWeight, $catThreshold, $catScalar);
+        $claims = $this->resolveExcessClaims($streams, $macroState, 1.0, $catThreshold, $catScalar);
 
         $pcRevenue   = max(0.0, $expectedRevenue * $pcWeight * (1.0 + ($pcZ * ($baselineVol * self::PC_VARIANCE_SCALAR))));
         $lifeRevenue = max(0.0, $expectedRevenue * $lifeWeight * (1.0 + ($lifeZ * ($baselineVol * self::LIFE_VARIANCE_SCALAR))));
@@ -95,9 +95,12 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // The tail is ceded upward: the cover takes the P&C claims above the retention up to its limit, for a premium
-        // every quarter and a reinstatement premium for the limit it used.
-        $recovery = $this->resolveCatastropheRecovery($claims['gross'], $pcWeight);
-        $reinstatementPremium = $this->resolveCededPremium($pcWeight) + ($recovery > 0.0 ? self::REINSTATEMENT_PREMIUM_RATE * $pcWeight : 0.0);
+        // every quarter and a reinstatement premium for the limit it used. The catastrophe terms are struck per unit
+        // of the P&C book's premium at the base rate and land on its volume.
+        $volume = $this->resolveBookVolumeShare($stock, $macroState, $pcRevenue, $actualRevenue);
+        $layer = $this->resolveCatastropheLayer($catThreshold, $catScalar);
+        $recovery = $this->resolveCatastropheRecovery($claims['gross'], $layer);
+        $reinstatementPremium = ($this->resolveCededPremium($layer) + $this->resolveReinstatementPremium($layer, $recovery)) * $volume;
 
         // A primary carrier renews its book annually and holds the harder rate well past the loss; the rate
         // reaches the P&L through the pricing-power multiplier, so a capital shortfall is not discounted here.
@@ -107,15 +110,13 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         // Claims inflation the filed rates have not caught up with lands on the P&C losses; life benefits are fixed in
         // the policy.
         $unrecoveredClaims = $realizedVariableMargin * (1.0 - self::BASE_EXPENSE_RATIO_SHARE) * $pcWeight * $this->resolveUnrecoveredClaimsCost($streams, $macroState);
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $unrecoveredClaims + $claims['excess'] - $recovery + $reinstatementPremium);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $unrecoveredClaims + (($claims['excess'] - $recovery) * $volume) + $reinstatementPremium);
         // The baseline cost ratio splits as the parent's does; the claims above it are losses. Life policies carry a
         // policy reserve, not unearned premium, and the catastrophe draw falls on the P&C book alone.
         $lifeBenefits = $lifeRevenue * $this->resolveBaselineLossRatio($realizedVariableMargin, $fixedCosts, $actualRevenue);
         $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, $reinstatementPremium, $fixedCosts, $pcRevenue, $lifeBenefits);
 
-        $eventType = $this->resolveClaimEvent($claims['gross'], $pcWeight, $recovery > 0.0);
-
-        $structuralClaimShock = $claims['claimZ'] < $catThreshold ? $claims['claimZ'] : 0.0;
+        $eventType = $this->resolveClaimEvent($claims['gross'], 1.0, $recovery > 0.0);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -172,7 +173,6 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
             'catastrophe_loss_index_ema',
             'core_goods_inflation_ema',
             'gdp_deflator',
-            'market_volatility_ema',
             'output_gap_ema',
             'output_gap_lag_6m',
             'perceived_neutral_rate',

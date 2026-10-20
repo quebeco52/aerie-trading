@@ -296,21 +296,30 @@ class InitialMarket
             'beta_tilt' => -0.25, // losses follow catastrophes, not the business cycle
             'jump_intensity' => 0.15,
             'jump_vol' => 0.06,
-            'baseline_roe' => 0.14,
+            // What its earnings return at the opening: 1.5% on its premium, its fees, and above all its float, less its
+            // bond's coupon; its equity holdings' price gains go to book value, not earnings
+            // (var/harness/insurers/steady_float.php).
+            'baseline_roe' => 0.175,
             'capex_ratio' => 0.02,
             'target_payout_ratio' => 0.30,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'fixed_cost_ratio' => 0.20,
-            'operating_margin' => 0.045,
+            // A 98.5% combined ratio through the cycle: large reinsurers' have averaged near 98-100% over the last
+            // decade (86-95% in benign years, 105-120% in heavy catastrophe years), pricing their cover near break-even
+            // and earning mainly on the float they invest.
+            'operating_margin' => 0.015,
             'public_float' => 0.70,
             'sam_ratio' => 0.966,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.025,
             'credit_spread' => 0.0030,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 1_380_000_000_000.00,
+            // The float its book holds once its reserves have settled, 2.97 times the premium it opens writing
+            // (unearned premium and Swiss Re's claim reserves on an almost all-treaty book), fully backed by liquid
+            // assets.
+            'corporate_treasury' => 1_736_000_000_000.00,
             'total_equity' => 415_970_640_000.00,
-            'customer_deposits' => 1_380_000_000_000.00,
+            'customer_deposits' => 1_736_000_000_000.00,
             'wholesale_debt' => 226_320_000_000.00,
             'retained_earnings' => 82_800_000_000.00,
         ],
@@ -326,14 +335,17 @@ class InitialMarket
             'beta_tilt' => 0.00,
             'jump_intensity' => 0.50,
             'jump_vol' => 0.08,
-            'baseline_roe' => 0.15,
+            // What its earnings return at the opening: 4.5% on premium less its cover's cost, the spread its float
+            // keeps after the life reserves are credited, and its equity holdings' dividends, their price gains going
+            // to book value (var/harness/insurers/steady_float.php).
+            'baseline_roe' => 0.14,
             'capex_ratio' => 0.05,
             'target_payout_ratio' => 0.30,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'dividend_aristocrat' => true,
             'fixed_cost_ratio' => 0.35,
-            // 95.5% combined ratio, the same correction SAFE needed: 0.09 was a 91% ratio held through
-            // every cycle, which is top-decile for a carrier writing both P&C and life.
+            // 95.5% combined ratio: 0.09 was a 91% ratio held through every cycle, which is top-decile for a carrier
+            // writing both P&C and life; European composites' P&C books run about 93-95%.
             'operating_margin' => 0.045,
             'public_float' => 0.90,
             'sam_ratio' => 0.25,
@@ -342,16 +354,15 @@ class InitialMarket
             'credit_spread' => 0.0080,
             'depreciation_rate' => 0.02,
             // Float fully backed by liquid assets, as SAFE is. A retail carrier that sheds its tail risk
-            // upward has no excuse to run its policyholder float short of cash.
-            //
-            // 3.2x equity, down from 5.0x. Float in this model is FREE — it earns the portfolio yield and
-            // pays nothing for the privilege — which is a fair reading of P&C reserves and a poor one of
-            // life reserves, where the crediting rate is most of the cost of the business. At 5x, the
-            // float alone earned this carrier an 18.6% ROE before it underwrote anything, against the
-            // 15% tuned below; nothing it could do to its combined ratio would reconcile the two.
-            'corporate_treasury' => 275_000_000_000.00,
+            // upward has no excuse to run its policyholder float short of cash. The float its book holds once its
+            // reserves have settled, 5.3 times premium: unearned and claim reserves on the P&C book, and ACLI's 9.9
+            // times premium of policy reserve on the life book, which credits its holders the book yield less the
+            // spread. Reserves 7.6 times equity, a composite's leverage.
+            'corporate_treasury' => 643_000_000_000.00,
             'total_equity'      => 85_000_000_000.00,
-            'customer_deposits' => 275_000_000_000.00,
+            'customer_deposits' => 643_000_000_000.00,
+            // Its liabilities are not marked to the curve, so it elects to keep the bond mark out of its capital ratio.
+            'aoci_filtered'     => true,
             'wholesale_debt'    => 11_000_000_000.00,
             'retained_earnings' => 33_750_000_000.00,
         ],

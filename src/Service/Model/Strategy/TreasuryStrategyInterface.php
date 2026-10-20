@@ -34,6 +34,15 @@ interface TreasuryStrategyInterface
     public function calculateCashYield(MacroStateDTO $macroState): float;
 
     /**
+     * The equity the firm's treasury holds and the return calculateInterestIncome() expects of it a year: the
+     * board's realised return replaces that expectation in the books (EarningsEngine::markEquitySleeve()). None for a
+     * treasury of cash and bonds.
+     *
+     * @return array{value: float, expected_return: float}
+     */
+    public function resolveEquitySleeve(Stock $stock, MacroStateDTO $macroState): array;
+
+    /**
      * Amortized cost of the duration-bearing investment securities this firm holds, which is what the curve
      * remarks each quarter (ASC 320). Zero for a business whose treasury is cash and money-market paper —
      * which is most of them, and the honest answer for a fund holding dry powder.

@@ -158,10 +158,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const PORTFOLIO_BOND_ALLOCATION = 0.80;
     /** Allocation percentage of hedge fund excess cash deployed into fund co-investments and alpha pools. */
     public const PORTFOLIO_EQUITY_ALLOCATION = 0.20;
-    /** VIX threshold above which market chaos begins to impact co-investment treasury returns. */
-    public const SEED_VIX_THRESHOLD = 0.30;
-    /** Sensitivity of hedge fund treasury co-investments to extreme VIX spikes above threshold. */
-    public const SEED_VIX_SENSITIVITY = 0.15;
 
     // --- Debt Expansion Probabilities ---
     /** Base probability that the hedge fund taps prime brokerage debt markets when spreads are neutral. */
@@ -458,24 +454,17 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $bondReturn = $macroState->yield10yEma;
         $equityReturn = $this->resolveEquitySleeveReturn($macroState, self::EQUITY_RETURN_GAP_MULT * self::LEVERAGED_SLEEVE_GAP_SCALE);
 
-        return max(0.0, (self::PORTFOLIO_BOND_ALLOCATION * $bondReturn) + (self::PORTFOLIO_EQUITY_ALLOCATION * $equityReturn));
+        return (self::PORTFOLIO_BOND_ALLOCATION * $bondReturn) + (self::PORTFOLIO_EQUITY_ALLOCATION * $equityReturn);
     }
 
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    protected function resolveTreasuryEquityWeight(): float
     {
-        $operatingBase = $this->getOperatingBase($stock);
-        $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
-        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
+        return self::PORTFOLIO_EQUITY_ALLOCATION;
+    }
 
-        $baseYield = $this->calculateCashYield($macroState);
-
-        // Hedge funds hedge risk: VIX drag applies only at extreme volatility levels
-        $vixEma = $macroState->marketVolatilityEma;
-        $vixDrag = max(0.0, ($vixEma - self::SEED_VIX_THRESHOLD) * self::SEED_VIX_SENSITIVITY);
-
-        $effectiveYield = $baseYield - (self::PORTFOLIO_EQUITY_ALLOCATION * $vixDrag);
-
-        return $excessCash * max(0.0, $effectiveYield);
+    protected function resolveTreasuryEquityGapMultiplier(): float
+    {
+        return self::EQUITY_RETURN_GAP_MULT * self::LEVERAGED_SLEEVE_GAP_SCALE;
     }
 
     /**

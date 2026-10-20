@@ -204,6 +204,8 @@ class MacroEngine
         $state->boardPriceReturn = $board->priceReturn;
         $state->boardDividendCash = $board->dividendCash;
         $state->boardNetIssuance = $board->netIssuance;
+        $state->boardPriceIndex *= 1.0 + $board->priceReturn;
+        $state->boardTotalReturnIndex *= 1.0 + $board->priceReturn + ($state->boardFloatCap > 0.0 ? $board->dividendCash / $state->boardFloatCap : 0.0);
         $state->boardStampDuty = $board->stampDuty;
         $state->strategicStakeCash = $board->strategicStakeCash;
         if ($board->bankLevy !== null) {

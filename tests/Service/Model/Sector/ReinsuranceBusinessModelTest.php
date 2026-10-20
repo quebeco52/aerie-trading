@@ -107,10 +107,9 @@ class ReinsuranceBusinessModelTest extends TestCase
         $this->assertSame(1.0, $result->streamZ[$regimeKey] ?? 0.0, 'The shortfall must start the regime that carries the rate.');
 
         // A quiet quarter: only the unused large-loss layer allowance is credited back, and the collateral's share of
-        // the layer is paid for.
-        $expectedLayer = ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR
-            * Distributions::calculateNormalLowerPartialMoment(ReinsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD);
-        $this->assertEqualsWithDelta($realizedVariableMargin - $expectedLayer + self::shieldPremium(), $result->clampedMargin, 1e-9);
+        // the layer is paid for, per unit of the treaty book's premium at the base rate.
+        $expectedLayer = ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * Distributions::calculateNormalLowerPartialMoment(ReinsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD);
+        $this->assertEqualsWithDelta(self::baseCostRatio($realizedVariableMargin, $result) + ((self::shieldPremium() - $expectedLayer) * $this->treatyVolume($stock, $macro)), $result->clampedMargin, 1e-9);
     }
 
     public function testCatBondAttachmentBreachAbsorbsUncappedTailRisk(): void
@@ -123,6 +122,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         // treatyZ = 0.0, catBondZ = 0.0, claimZ = -3.0: a large loss of the reinsurer's own in a heavy district season.
         $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -3.0);
+        $volumeStock = clone $stock;
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
 
         // Six times the quarter's average district losses.
@@ -149,21 +149,21 @@ class ReinsuranceBusinessModelTest extends TestCase
 
         $this->assertEquals(ShockEvent::REINSURANCE_ATTACHMENT_BREACH, $result->eventType);
 
-        // Cat bond revenue should suffer default haircut (50%)
-        $expectedCatBondRevenue = $expectedRevenue * ReinsuranceBusinessModel::CAT_BOND_WEIGHT * (1.0 - ReinsuranceBusinessModel::CAT_BOND_DEFAULT_HAIRCUT);
-        $this->assertEqualsWithDelta($expectedCatBondRevenue, $result->streamRevenue['catastrophe_bonds'], 1.0);
-
-        // Claims on the treaty book: the large-loss layer below the threshold plus the reinsurer's share of the
-        // district season; cat bond collateral absorbs its share of everything above the retention.
-        $treaty = ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT;
+        // Claims on the treaty book, per unit of its premium: the large-loss layer below the threshold plus the
+        // reinsurer's share of the district season; the bond's collateral takes its share above the retention.
         $threshold = ReinsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD;
-        $layer = $treaty * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * ($threshold - (-3.0));
-        $expectedLayer = $treaty * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * Distributions::calculateNormalLowerPartialMoment($threshold);
-        $district = $treaty * ReinsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * ($burden - 1.0);
-        $gross = $layer + $district;
-        $shield = ($gross - (ReinsuranceBusinessModel::MAX_REINSURED_LOSS_SHOCK * $treaty)) * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE;
-        $this->assertGreaterThan(0.0, $shield, 'The scenario must breach the retention.');
-        $this->assertEqualsWithDelta($realizedVariableMargin + $gross - $expectedLayer - $shield + self::shieldPremium(), $result->clampedMargin, 1e-9);
+        $cover = self::layer();
+        $largeLoss = ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * ($threshold - (-3.0));
+        $expectedLayer = ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * Distributions::calculateNormalLowerPartialMoment($threshold);
+        $gross = $largeLoss + (ReinsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD * ($burden - 1.0));
+        $tail = min($cover['limit'], $gross - $cover['retention']);
+        $this->assertGreaterThan(0.0, $tail, 'The scenario must breach the retention.');
+
+        // The investors' principal is written down by the share of the layer the storm used, and the fees with it.
+        $this->assertEqualsWithDelta($expectedRevenue * ReinsuranceBusinessModel::CAT_BOND_WEIGHT * (1.0 - ($tail / $cover['limit'])), $result->streamRevenue['catastrophe_bonds'], 1.0);
+        $shield = $tail * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE;
+        $treatyVolume = $result->streamRevenue['treaty_reinsurance'] / ($this->model->getMacroPhysics($volumeStock, $macro)['pricing_power_multiplier'] * $result->actualRevenue);
+        $this->assertEqualsWithDelta(self::baseCostRatio($realizedVariableMargin, $result) + (($gross - $expectedLayer - $shield + self::shieldPremium()) * $treatyVolume), $result->clampedMargin, 1e-9);
     }
 
     /**
@@ -258,10 +258,80 @@ class ReinsuranceBusinessModelTest extends TestCase
         $this->assertSame(0.0, $regCap, 'Regulatory dividend cap must be 0.0 when capital ratio is in regulatory distress.');
     }
 
-    /** The collateral's share of the cover, bought at the cover's price on the treaty book. */
+    /**
+     * One quarter of the default reinsurer on scripted treaty, fee and claim draws in a district quarter at a burden.
+     */
+    private function quarter(float $catBondZ, float $claimZ, float $burden): \App\DTO\ActualFinancialsDTO
+    {
+        $stock = new Stock();
+        $stock->setTicker('REIN');
+        $stock->setBeta('0.9');
+        $stock->setTotalEquity('30000000000');
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, $catBondZ, $claimZ);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $macro = new MacroStateDTO(...['outputGapEma' => 0.0, 'yield10yEma' => 0.04, 'policyRateEma' => 0.02, ...DistrictCatastropheWindow::prime($stock, $burden)]);
+
+        return $this->model->computeActualFinancials($stock, 10_000_000_000.0, 0.60, 1_000_000_000.0, 0.10, $macro, $mathMock);
+    }
+
+    /** The ILS fees carry none of the treaty book's claims: more fee revenue, the same claim dollars. */
+    public function testIlsFeesCarryNoClaims(): void
+    {
+        $claims = static fn(\App\DTO\ActualFinancialsDTO $quarter): float => $quarter->actualVariableCosts - (self::baseCostRatio(0.60, $quarter) * $quarter->actualRevenue);
+        $quiet = $this->quarter(0.0, -3.0, 6.0);
+        $busy = $this->quarter(2.0, -3.0, 6.0);
+
+        $this->assertGreaterThan($quiet->streamRevenue['catastrophe_bonds'], $busy->streamRevenue['catastrophe_bonds']);
+        $this->assertEqualsWithDelta($claims($quiet), $claims($busy), 1.0);
+    }
+
+    /**
+     * A storm that uses half the bond's layer writes half the investors' principal down, and the fees charged on it
+     * with it; new issuance rebuilds it over about a year. A flat half was taken whatever the storm used.
+     */
+    public function testIlsFeeBaseFallsByPrincipalWrittenDownAndRebuilds(): void
+    {
+        $cover = self::layer();
+        $feeBase = function (float $layerUsed) use ($cover): array {
+            $burden = 1.0 + (($cover['retention'] + ($layerUsed * $cover['limit'])) / ReinsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD);
+            // A claim draw at the threshold leaves the reinsurer's own large-loss layer out of it.
+            $quarter = $this->quarter(0.0, ReinsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD, $burden);
+
+            return [$quarter->streamRevenue['catastrophe_bonds'] / (10_000_000_000.0 * ReinsuranceBusinessModel::CAT_BOND_WEIGHT), $quarter->streamZ[ReinsuranceBusinessModel::STATE_ILS_PRINCIPAL_INDEX]];
+        };
+
+        [$half, $halfNext] = $feeBase(0.5);
+        [$little] = $feeBase(0.01);
+
+        $this->assertEqualsWithDelta(0.5, $half, 1e-6);
+        $this->assertEqualsWithDelta(0.99, $little, 1e-6);
+        $this->assertEqualsWithDelta(1.0 - (0.5 * exp(-0.25 / ReinsuranceBusinessModel::ILS_REISSUANCE_YEARS)), $halfNext, 1e-9);
+    }
+
+    /** The cost line before the catastrophe terms: in full on the treaty book, its expense share on the ILS fees. */
+    private static function baseCostRatio(float $structural, \App\DTO\ActualFinancialsDTO $quarter): float
+    {
+        return $structural * ($quarter->streamRevenue['treaty_reinsurance'] + ($quarter->streamRevenue['catastrophe_bonds'] * ReinsuranceBusinessModel::BASE_EXPENSE_RATIO_SHARE)) / $quarter->actualRevenue;
+    }
+
+    /** @return array{retention: float, limit: float, expected_recovery: float} The default reinsurer's own layer. */
+    private static function layer(): array
+    {
+        return ReinsuranceBusinessModel::catastropheLayer(ReinsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD, ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR, ReinsuranceBusinessModel::DISTRICT_CATASTROPHE_LOAD);
+    }
+
+    /**
+     * The collateral's share of the cover, bought at the cover's price on its own layer, per unit of treaty premium.
+     */
     private static function shieldPremium(): float
     {
-        return ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE
-            * ReinsuranceBusinessModel::CATASTROPHE_COVER_EXPECTED_RECOVERY * (1.0 + ReinsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING);
+        return ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE * self::layer()['expected_recovery'] * (1.0 + ReinsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING);
+    }
+
+    /** The treaty book's premium at the base rate per unit of revenue, for a quarter whose streams draw nothing. */
+    private function treatyVolume(Stock $stock, MacroStateDTO $macro): float
+    {
+        return ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT / $this->model->getMacroPhysics($stock, $macro)['pricing_power_multiplier'];
     }
 }

@@ -604,6 +604,10 @@ class MacroState
     public float $boardPriceReturn;
     public float $boardDividendCash;
     public float $boardNetIssuance;
+    // The board's price and total-return indices, compounded from those returns tick by tick: what an equity book
+    // holding the board earns between two readings.
+    public float $boardPriceIndex;
+    public float $boardTotalReturnIndex;
     public float $boardStampDuty;
     // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced
     // again.

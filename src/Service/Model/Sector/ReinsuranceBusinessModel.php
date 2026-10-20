@@ -6,7 +6,9 @@ namespace App\Service\Model\Sector;
 
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use App\Service\Model\ModelParam;
 
 /**
@@ -15,10 +17,11 @@ use App\Service\Model\ModelParam;
  * Financial Physics:
  * - Absorbs extreme, low-frequency high-severity tail risks (hurricanes, earthquakes, industrial disasters).
  * - Revenue is split between Treaty Reinsurance Premiums (proportional quota-share / excess-of-loss)
- *   and Catastrophe Bonds / Insurance-Linked Securities (ILS) management fees and coupon spreads.
+ *   and Insurance-Linked Securities (ILS) fees on the catastrophe-bond principal it arranges for investors.
  * - Treaty premiums benefit from global hard-market pricing power following severe industry catastrophe losses.
- * - Catastrophe Bonds earn high risk coupon spreads during benign periods, but suffer principal write-downs
- *   when catastrophic claim attachment points are breached.
+ * - As sponsor of its own bond, it pays the coupon for the share of its tail the bond's investors take; when a
+ *   storm reaches the bond, the investors' principal is written down and the fee base with it, rebuilt as new bonds
+ *   are issued.
  * - Inherits all standard insurance physics (float, Kenney Rule) from InsuranceBusinessModel.
  */
 class ReinsuranceBusinessModel extends InsuranceBusinessModel
@@ -49,20 +52,32 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     public const BASE_COVERAGE_ERROR = 0.10;
 
     // --- Stream Weights ---
-    /** Baseline fraction of revenue from core proportional and excess-of-loss treaty reinsurance. */
-    public const TREATY_REINSURANCE_WEIGHT = 0.65;
-    /** Baseline fraction of revenue from catastrophe bond structuring fees and ILS risk spreads. */
-    public const CAT_BOND_WEIGHT = 0.35;
+    /** Baseline fraction of revenue from core proportional and excess-of-loss treaty reinsurance: nearly all of it. */
+    public const TREATY_REINSURANCE_WEIGHT = 0.97;
+    /**
+     * Baseline fraction of revenue from ILS structuring and management fees on the catastrophe-bond principal it
+     * arranges: about 3%, what the reinsurers with the largest third-party capital vehicles earn in fees against their
+     * premiums (RenaissanceRe's capital-partner fees). At 35-40% a reinsurer would need many times its own premium in
+     * outstanding bonds.
+     */
+    public const CAT_BOND_WEIGHT = 0.03;
 
     // --- Physics & Variances ---
     /** Volatility multiplier for treaty reinsurance volume. */
     public const TREATY_VARIANCE_SCALAR = 0.20;
     /** Volatility multiplier for catastrophe bond and ILS alternative capital spreads. */
     public const CAT_BOND_VARIANCE_SCALAR = 0.10;
-    /** Haircut applied to cat bond collateral spread revenues when major attachment points breach. */
-    public const CAT_BOND_DEFAULT_HAIRCUT = 0.50;
     /** Fraction of tail severity above attachment absorbed by Cat Bond ILS alternative capital collateral. */
     public const CAT_BOND_ATTACHMENT_SHIELD_SHARE = 0.40;
+
+    // --- ILS Principal ---
+    /**
+     * Years over which written-down catastrophe-bond principal is replaced by new issuance: about one, as the market
+     * recapitalised within a year of 2022's losses (record issuance in 2023).
+     */
+    public const ILS_REISSUANCE_YEARS = 1.0;
+    /** Persisted catastrophe-bond principal outstanding, as a share of the full programme: the ILS fee base. */
+    public const STATE_ILS_PRINCIPAL_INDEX = 'state:ils:principal_index';
 
     // --- Margin Clamps ---
     /**
@@ -106,16 +121,17 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $treatyZ  = $streams->generateZ('treaty_reinsurance', 0.30);
         $catBondZ = $streams->generateZ('catastrophe_bonds', 0.15);
         // Claims fall on the treaty book: the reinsurer's share of the district season plus its own large losses.
-        $claims   = $this->resolveExcessClaims($streams, $macroState, $treatyWeight, $catThreshold, $catScalar);
+        $claims   = $this->resolveExcessClaims($streams, $macroState, 1.0, $catThreshold, $catScalar);
 
-        // Above the retention, cat bond collateral absorbs part of the tail and the ILS fee and coupon revenue
-        // takes the default haircut.
-        $tailAboveRetention = $this->resolveCatastropheRecovery($claims['gross'], $treatyWeight);
+        // Above the retention, the bond's collateral takes its share of the tail, and the investors' principal is
+        // written down by the share of the layer the storm used.
+        $layer = $this->resolveCatastropheLayer($catThreshold, $catScalar);
+        $tailAboveRetention = $this->resolveCatastropheRecovery($claims['gross'], $layer);
         $coverAttached = $tailAboveRetention > 0.0;
         $catBondShield = $tailAboveRetention * self::CAT_BOND_ATTACHMENT_SHIELD_SHARE;
-        // The collateral's share of the layer is bought from the bond's investors at the cover's price.
-        $shieldPremium = self::CAT_BOND_ATTACHMENT_SHIELD_SHARE * $this->resolveCededPremium($treatyWeight);
-        $catBondMultiplier = $coverAttached ? (1.0 - self::CAT_BOND_DEFAULT_HAIRCUT) : 1.0;
+        // As sponsor it pays the bond's investors the coupon for that share, at the cover's price on its own layer.
+        $shieldPremium = self::CAT_BOND_ATTACHMENT_SHIELD_SHARE * $this->resolveCededPremium($layer);
+        $principalIndex = $this->advanceIlsPrincipal($streams, $tailAboveRetention, $layer);
 
         // Rates on a renewed treaty stay hard for years after the capital that withdrew has come back. The
         // harder rate reaches treaty revenue through the pricing-power multiplier, which the cost base does
@@ -124,7 +140,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $this->advanceUnderwritingCycle($streams, $stock, $macroState, $mathUtility, $surplusDeficitRatio, $coverAttached);
 
         $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR))));
-        $catBondRevenue = max(0.0, $expectedRevenue * $catBondWeight * (1.0 + ($catBondZ * ($baselineVol * self::CAT_BOND_VARIANCE_SCALAR))) * $catBondMultiplier);
+        $catBondRevenue = max(0.0, $expectedRevenue * $catBondWeight * (1.0 + ($catBondZ * ($baselineVol * self::CAT_BOND_VARIANCE_SCALAR))) * $principalIndex);
 
         $streamRevenues = [
             'treaty_reinsurance' => $treatyRevenue,
@@ -137,13 +153,19 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         // Treaty losses are the cedants' claims, inflating with theirs while the treaty rate was set at the last
         // renewal.
         $unrecoveredClaims = $realizedVariableMargin * (1.0 - self::BASE_EXPENSE_RATIO_SHARE) * $treatyWeight * $this->resolveUnrecoveredClaimsCost($streams, $macroState);
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $unrecoveredClaims + $claims['excess'] - $catBondShield + $shieldPremium);
+        // The treaty book carries the whole cost line; the ILS fees carry only its expense share, as a fee earns no
+        // claims.
+        $baseCostRatio = $actualRevenue > 0.0
+            ? $realizedVariableMargin * ($treatyRevenue + ($catBondRevenue * self::BASE_EXPENSE_RATIO_SHARE)) / $actualRevenue
+            : $realizedVariableMargin;
+        // The catastrophe terms are struck per unit of treaty premium at the base rate and land on the treaty book's
+        // volume: a hard market's rate is not more storms.
+        $volume = $this->resolveBookVolumeShare($stock, $macroState, $treatyRevenue, $actualRevenue);
+        $clampedMargin = $this->clampMargin($baseCostRatio + $unrecoveredClaims + (($claims['excess'] - $catBondShield + $shieldPremium) * $volume));
         // The baseline cost ratio splits as the parent's does; the claims above it are losses.
-        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, $shieldPremium, $fixedCosts, $treatyRevenue);
+        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, $shieldPremium * $volume, $fixedCosts, $treatyRevenue);
 
-        $eventType = $this->resolveClaimEvent($claims['gross'], $treatyWeight, $coverAttached);
-
-        $structuralClaimShock = $claims['claimZ'] < $catThreshold ? $claims['claimZ'] : 0.0;
+        $eventType = $this->resolveClaimEvent($claims['gross'], 1.0, $coverAttached);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -157,6 +179,40 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     }
 
     /**
+     * The catastrophe-bond principal outstanding, as a share of the full programme: written down by the share of the
+     * layer this quarter's storm used, and rebuilt toward the programme as new bonds are issued. The fees are charged
+     * on it, so a storm that takes a tenth of the layer takes a tenth of the fee base, not the flat half it took.
+     *
+     * @param array{retention: float, limit: float, expected_recovery: float} $layer
+     */
+    private function advanceIlsPrincipal(\App\Service\Model\StreamContext $streams, float $tailAboveRetention, array $layer): float
+    {
+        $writtenDown = $streams->getPersistedState(self::STATE_ILS_PRINCIPAL_INDEX, 1.0)
+            * (1.0 - ($layer['limit'] > 0.0 ? min(1.0, $tailAboveRetention / $layer['limit']) : 0.0));
+        $principal = TimeSeries::calculateDistributedLag($writtenDown, 1.0, FinancialConstants::QUARTER_YEARS, self::ILS_REISSUANCE_YEARS);
+        $streams->registerState(self::STATE_ILS_PRINCIPAL_INDEX, $principal);
+
+        return $writtenDown;
+    }
+
+    /** Losses incurred per unit of revenue: the treaty book's, as the ILS fees incur none. */
+    public function resolveStructuralLossRatio(Stock $stock): float
+    {
+        return parent::resolveStructuralLossRatio($stock) * $this->resolveTreatyShare($stock);
+    }
+
+    /** The treaty book's share of revenue at the stream weights. */
+    private function resolveTreatyShare(Stock $stock): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::TreatyReinsuranceWeight->value => self::TREATY_REINSURANCE_WEIGHT,
+            ModelParam::CatBondSpreadWeight->value     => self::CAT_BOND_WEIGHT,
+        ]);
+
+        return $params[ModelParam::TreatyReinsuranceWeight] / max(0.01, $params[ModelParam::TreatyReinsuranceWeight] + $params[ModelParam::CatBondSpreadWeight]);
+    }
+
+    /**
      * Only the treaty book carries reserves, unearned premium on annual treaties and the claims it has incurred: ILS
      * structuring and management fees are earned as they are billed.
      *
@@ -164,12 +220,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
      */
     public function resolveReserveRatios(Stock $stock): array
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::TreatyReinsuranceWeight->value => self::TREATY_REINSURANCE_WEIGHT,
-            ModelParam::CatBondSpreadWeight->value     => self::CAT_BOND_WEIGHT,
-        ]);
-        $treatyWeight = $params[ModelParam::TreatyReinsuranceWeight];
-        $treatyShare = $treatyWeight / max(0.01, $treatyWeight + $params[ModelParam::CatBondSpreadWeight]);
+        $treatyShare = $this->resolveTreatyShare($stock);
 
         return [
             'unearned' => $treatyShare * self::POLICY_TERM_YEARS / 2.0,
@@ -193,7 +244,6 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
             'catastrophe_loss_index_ema',
             'core_goods_inflation_ema',
             'gdp_deflator',
-            'market_volatility_ema',
             'output_gap_ema',
             'output_gap_lag_6m',
             'perceived_neutral_rate',

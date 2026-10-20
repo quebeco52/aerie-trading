@@ -164,12 +164,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      */
     public const MMF_AUM_INFLOW_SENSITIVITY = 1.5;
 
-    // --- Seed Capital & Co-Investment Volatility ---
-    /** VIX threshold above which market panic drags seed capital co-investment returns. */
-    public const SEED_VIX_THRESHOLD        = 0.25;
-    /** Sensitivity of seed equity co-investment drag to elevated VIX above threshold. */
-    public const SEED_VIX_SENSITIVITY      = 0.25;
-
     // --- Event Lore Thresholds ---
     /** Z-score threshold triggering performance fee surge event lore. */
     public const LORE_PERFORMANCE_SURGE_Z  = 1.80;
@@ -440,30 +434,42 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Asset Managers invest excess corporate treasury in seed capital co-investment portfolios (60/40).
-     * The 40% equity seed tranche experiences quarterly stochastic mark-to-market volatility and VIX tail risk.
+     * Asset Managers invest excess corporate treasury in seed capital co-investment portfolios, bonds and equity: the
+     * expected return of the mix (calculateCashYield()). The equity sleeve's realised return replaces its expectation
+     * in the books (resolveEquitySleeve()).
      */
     public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
-        $operatingBase = $this->getOperatingBase($stock);
-        $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
-        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
+        return $this->resolveInvestedTreasury($stock) * $this->calculateCashYield($macroState);
+    }
 
-        $policyRate = $macroState->policyRateEma;
+    /** @return array{value: float, expected_return: float} */
+    public function resolveEquitySleeve(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        return [
+            'value' => $this->resolveInvestedTreasury($stock) * $this->resolveTreasuryEquityWeight(),
+            'expected_return' => $this->resolveEquitySleeveReturn($macroState, $this->resolveTreasuryEquityGapMultiplier()),
+        ];
+    }
 
-        // Base deterministic yield (60% bonds + 40% deterministic CAPM equity return)
-        $baseYield = $this->calculateCashYield($macroState);
+    /** The treasury invested in the co-investment portfolio: all of it above the operating minimum. */
+    protected function resolveInvestedTreasury(Stock $stock): float
+    {
+        $minCash = $this->calculateMinOperatingCash($this->getOperatingBase($stock), 0.0, (float) $stock->getWholesaleDebt());
 
-        // Expected seed capital return: VIX market panic drag.
-        // We use the deterministic expected return ($seedZ = 0.0) during continuous tick valuation to prevent
-        // high-frequency distress penalty whipsaws in analyzeDebtHealth().
-        $vixEma = $macroState->marketVolatilityEma;
-        $vixDrag = max(0.0, ($vixEma - self::SEED_VIX_THRESHOLD) * self::SEED_VIX_SENSITIVITY);
+        return max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
+    }
 
-        $stochasticEquityAdjustment = -$vixDrag;
-        $effectiveYield = $baseYield + (self::TREASURY_EQUITY_WEIGHT * $stochasticEquityAdjustment);
+    /** The equity share of the invested treasury. */
+    protected function resolveTreasuryEquityWeight(): float
+    {
+        return self::TREASURY_EQUITY_WEIGHT;
+    }
 
-        return $excessCash * $effectiveYield;
+    /** How strongly the equity sleeve's expected return reads the cycle. */
+    protected function resolveTreasuryEquityGapMultiplier(): float
+    {
+        return self::EQUITY_RETURN_GAP_MULT;
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
@@ -493,7 +499,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 
         // Asset Managers invest heavily in their own funds ("eating their own cooking").
         // We use a classic 60/40 portfolio (60% Bonds / 40% Equities) which gives them higher market correlation.
-        return max(0.0, (self::TREASURY_BOND_WEIGHT * $bondReturn) + (self::TREASURY_EQUITY_WEIGHT * $equityReturn));
+        return (self::TREASURY_BOND_WEIGHT * $bondReturn) + (self::TREASURY_EQUITY_WEIGHT * $equityReturn);
     }
 
     /**
@@ -540,13 +546,11 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return [
             'equity_wealth_ratio',
             'equity_wealth_trend',
-            'market_volatility_ema',
             'money_market_fund_share',
             'money_market_fund_share_ema',
             'money_supply_growth_ema',
             'money_supply_growth_trend',
             'output_gap_ema',
-            'policy_rate_ema',
             'yield_10y_ema',
         ];
     }

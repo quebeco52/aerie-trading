@@ -7,6 +7,7 @@ namespace App\Service\Macro\Subsystem;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Math\Distributions;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
@@ -96,6 +97,20 @@ class CommodityLogisticsSubsystem
 
     /** The severity scale catastropheSeverityScale() solves for once: a function of the constants alone. */
     private static ?float $severityScale = null;
+    /** Lattice step of the quarterly incurred-loss distribution: a fiftieth of an average year's losses. */
+    public const CATASTROPHE_DISTRIBUTION_STEP = 0.02;
+    /**
+     * Incurred losses, in average years, the quarterly distribution is carried to: three capped storms in a quarter.
+     */
+    public const CATASTROPHE_DISTRIBUTION_SUPPORT = 60.0;
+    /** Arrival times across a quarter at which an event's settlement to the quarter's end is averaged. */
+    public const CATASTROPHE_DISTRIBUTION_TIME_NODES = 16;
+    /**
+     * The distribution catastropheQuarterDistribution() builds once: a function of the constants alone.
+     *
+     * @var array{ratios: list<float>, weights: list<float>}|null
+     */
+    private static ?array $quarterDistribution = null;
     /**
      * Single-event insured loss (in average-year units) that makes district news: ~1.5 years of average losses in one
      * storm, roughly a one-in-six-years event on the Pareto tail.
@@ -519,6 +534,53 @@ class CommodityLogisticsSubsystem
             self::CATASTROPHE_SEVERITY_ALPHA,
             self::CATASTROPHE_SEVERITY_CAP,
         );
+    }
+
+    /**
+     * The losses a quarter incurs against what it averages, incurredSince over expectedIncurred, as a distribution
+     * over a year's four calendar quarters pooled: each a compound Poisson count of storms at the season's rate, each
+     * storm a capped Pareto severity settled to the quarter's end from a uniform arrival time (Panjer recursion on a
+     * lattice). What an insurer's catastrophe layer is struck on, so its retention, limit and price come from the
+     * process its claims are drawn from.
+     *
+     * @return array{ratios: list<float>, weights: list<float>}
+     */
+    public static function catastropheQuarterDistribution(): array
+    {
+        return self::$quarterDistribution ??= self::buildCatastropheQuarterDistribution();
+    }
+
+    /** @return array{ratios: list<float>, weights: list<float>} */
+    private static function buildCatastropheQuarterDistribution(): array
+    {
+        $step = self::CATASTROPHE_DISTRIBUTION_STEP;
+        $quarter = FinancialConstants::QUARTER_YEARS;
+        $scale = self::catastropheSeverityScale();
+        // The censored severity's distribution function: the cap's atom is the jump to one at the cap.
+        $cdf = static fn(float $severity): float => $severity < $scale ? 0.0 : ($severity >= self::CATASTROPHE_SEVERITY_CAP ? 1.0 : 1.0 - (($scale / $severity) ** self::CATASTROPHE_SEVERITY_ALPHA));
+
+        $bins = (int) ceil(self::CATASTROPHE_SEVERITY_CAP / $step) + 1;
+        $severity = array_fill(0, $bins, 0.0);
+        for ($node = 0; $node < self::CATASTROPHE_DISTRIBUTION_TIME_NODES; ++$node) {
+            $settled = exp(-self::CATASTROPHE_LOSS_DECAY * $quarter * ($node + 0.5) / self::CATASTROPHE_DISTRIBUTION_TIME_NODES);
+            for ($bin = 0; $bin < $bins; ++$bin) {
+                $severity[$bin] += ($cdf((($bin + 0.5) * $step) / $settled) - $cdf((($bin - 0.5) * $step) / $settled)) / self::CATASTROPHE_DISTRIBUTION_TIME_NODES;
+            }
+        }
+
+        $ratios = [];
+        $weights = [];
+        $size = (int) ceil(self::CATASTROPHE_DISTRIBUTION_SUPPORT / $step) + 1;
+        foreach (self::CATASTROPHE_SEASONALITY as $index => $seasonality) {
+            $expected = self::expectedCatastropheIncurred(($index + 1) * $quarter, $quarter);
+            $pmf = Distributions::compoundPoissonPmf(self::CATASTROPHE_ARRIVAL_PER_YEAR * $seasonality * $quarter, array_values($severity), $size);
+            foreach ($pmf as $n => $mass) {
+                $ratios[] = $n * $step / $expected;
+                $weights[] = $mass / count(self::CATASTROPHE_SEASONALITY);
+            }
+        }
+
+        return ['ratios' => $ratios, 'weights' => $weights];
     }
 
     /**

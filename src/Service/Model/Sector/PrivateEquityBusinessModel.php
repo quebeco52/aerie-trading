@@ -123,10 +123,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const PORTFOLIO_MARKDOWN_PENALTY = 0.15;
 
     // --- Corporate Treasury & Cash Yield ---
-    /** Baseline VIX threshold above which illiquid PE co-investments suffer valuation drags. */
-    public const SEED_VIX_THRESHOLD = 0.20;
-    /** Sensitivity of PE cash yields to severe VIX market panics. */
-    public const SEED_VIX_SENSITIVITY = 0.50;
     /** Allocation percentage of PE excess cash deployed into internal sponsor equity co-investments. */
     public const PORTFOLIO_EQUITY_ALLOCATION = 0.20;
     /** Allocation percentage of PE excess cash deployed into safe debt and fixed income reserves. */
@@ -524,24 +520,17 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
         // PE firms deploy excess cash into safe short-term sovereign debt and sponsor commitments (80% Bonds / 20%
         // Equities)
-        return max(0.0, (self::PORTFOLIO_BOND_ALLOCATION * $bondReturn) + (self::PORTFOLIO_EQUITY_ALLOCATION * $equityReturn));
+        return (self::PORTFOLIO_BOND_ALLOCATION * $bondReturn) + (self::PORTFOLIO_EQUITY_ALLOCATION * $equityReturn);
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    protected function resolveTreasuryEquityWeight(): float
     {
-        $operatingBase = $this->getOperatingBase($stock);
-        $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
-        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
+        return self::PORTFOLIO_EQUITY_ALLOCATION;
+    }
 
-        $baseYield = $this->calculateCashYield($macroState);
-
-        // Severe VIX market panic drag on illiquid PE investments
-        $vixEma = $macroState->marketVolatilityEma;
-        $vixDrag = max(0.0, ($vixEma - self::SEED_VIX_THRESHOLD) * self::SEED_VIX_SENSITIVITY);
-
-        $effectiveYield = $baseYield - (self::PORTFOLIO_EQUITY_ALLOCATION * $vixDrag);
-
-        return $excessCash * $effectiveYield;
+    protected function resolveTreasuryEquityGapMultiplier(): float
+    {
+        return self::EQUITY_RETURN_GAP_MULT * self::LEVERAGED_SLEEVE_GAP_SCALE;
     }
 
     public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, \App\DTO\DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float
@@ -590,7 +579,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return [
             'deal_activity_index_ema',
             'high_yield_credit_spread_ema',
-            'market_volatility_ema',
             'output_gap_ema',
             'policy_rate_ema',
             'sloos_tightening_index_ema',

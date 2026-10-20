@@ -279,7 +279,10 @@ class CapitalAllocationEngine
         // A regulator's ceiling on what may leave in twelve months, dividends and repurchases together: each quarter
         // takes a quarter of it, so no twelve-month window exceeds it, and it binds a payer holding its dividend as
         // the cash and legal caps do. What the dividend leaves is the repurchase's room.
-        $ceiling = $ctx->strategy->getDistributionCeiling($stock, $ctx->trailingQuarterlyEps * 4.0 * $ctx->sharesOutstanding);
+        // The ceiling reads statutory net income, which carries the gains the equity sleeve's rebalancing realised;
+        // reported earnings book them to book value instead (EarningsEngine::markEquitySleeve()).
+        $realisedGains = (float) (($stock->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_SLEEVE_TRAILING_GAINS] ?? 0.0);
+        $ceiling = $ctx->strategy->getDistributionCeiling($stock, ($ctx->trailingQuarterlyEps * 4.0 * $ctx->sharesOutstanding) + $realisedGains);
         if ($ceiling !== null) {
             $quarterCeiling = max(0.0, $ceiling) / 4.0;
             $ctx->newDividend = min($ctx->newDividend, $ctx->sharesOutstanding > 0 ? $quarterCeiling / $ctx->sharesOutstanding : 0.0);

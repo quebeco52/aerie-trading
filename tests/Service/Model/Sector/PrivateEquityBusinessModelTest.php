@@ -167,7 +167,8 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.40, $result->clampedMargin);
     }
 
-    public function testTreasuryYieldAndVixSensitivity(): void
+    /** The treasury's expected yield is the mix's; a crash reaches the co-investments at the mark, not here. */
+    public function testTreasuryYieldIsNotDraggedByVolatility(): void
     {
         $calmMacro = MacroStateDTO::fromArray([
             'yield_10y_ema' => 0.04,
@@ -197,7 +198,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         $panicIncome = $this->model->calculateInterestIncome($stock, $panicMacro, $this->mathUtility);
 
         $this->assertGreaterThan(0.0, $calmIncome);
-        $this->assertLessThan($calmIncome, $panicIncome);
+        $this->assertEqualsWithDelta($calmIncome, $panicIncome, 1e-6);
     }
 
     public function testDealFlowAsymmetryExpansionVsContraction(): void

@@ -120,23 +120,36 @@ final class InsuranceLossReserveTest extends TestCase
         $this->assertEqualsWithDelta(0.5 * self::ANNUAL_PREMIUM, (new InsuranceBusinessModel())->resolveUnearnedPremiumReserve($quarterlyPremium), 1.0);
     }
 
-    /** A steady book holds each stock at its own ratio: half a term unearned, the NAIC loss and LAE reserve. */
-    public function testASteadyBookHoldsEachStockAtItsRatio(): void
+    /**
+     * A book growing with the economy at trend holds each stock at its own ratio, as the books the ratios were measured
+     * on do: half a term unearned, the NAIC loss and LAE reserve.
+     */
+    public function testABookGrowingAtTrendHoldsEachStockAtItsRatio(): void
     {
         $model = new InsuranceBusinessModel();
-        $quarterlyPremium = self::ANNUAL_PREMIUM * FinancialConstants::QUARTER_YEARS;
-        $settled = $model->resolveReserveToPremiumRatio($this->carrier(0.0, 0.0)) * self::ANNUAL_PREMIUM;
-        $stock = $this->carrier($settled, $this->structuralIncurred(self::ANNUAL_PREMIUM), [InsuranceBusinessModel::STATE_UNEARNED_PREMIUM_BASE => $quarterlyPremium]);
+        $ratio = $model->resolveReserveToPremiumRatio($this->carrier(0.0, 0.0));
+        $stock = $this->carrier($ratio * self::ANNUAL_PREMIUM, $this->structuralIncurred(self::ANNUAL_PREMIUM), [InsuranceBusinessModel::STATE_UNEARNED_PREMIUM_BASE => self::ANNUAL_PREMIUM * FinancialConstants::QUARTER_YEARS]);
 
-        for ($quarter = 0; $quarter < 40; $quarter++) {
+        $premium = self::ANNUAL_PREMIUM;
+        for ($quarter = 0; $quarter < 80; $quarter++) {
+            $premium *= exp(InsuranceBusinessModel::TREND_BOOK_GROWTH * FinancialConstants::QUARTER_YEARS);
+            $momentum = $stock->getEarningsMomentumZ() ?? [];
+            $momentum[InsuranceBusinessModel::STATE_INCURRED_CLAIMS] = $this->structuralIncurred($premium);
+            $momentum[InsuranceBusinessModel::STATE_UNEARNED_PREMIUM_BASE] = $premium * FinancialConstants::QUARTER_YEARS;
+            $stock->setEarningsMomentumZ($momentum);
             $this->runQuarter($model, $stock);
         }
 
-        $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $this->assertEqualsWithDelta(1.58, $settled / self::ANNUAL_PREMIUM, 1e-9, 'NAIC 2024: 1.08 loss and LAE reserves plus half a year unearned.');
-        $this->assertEqualsWithDelta($settled, (float) $stock->getCustomerDeposits(), $settled * 1e-9);
-        $this->assertEqualsWithDelta(0.5 * self::ANNUAL_PREMIUM, $momentum[InsuranceBusinessModel::STATE_UNEARNED_PREMIUM], 1.0);
-        $this->assertEqualsWithDelta(1.55, $model->resolveReserveRunoffYears($stock), 0.01, 'A personal-lines loss reserve pays out over about a year and a half.');
+        $this->assertEqualsWithDelta(1.58, $ratio, 1e-9, 'NAIC 2024: 1.08 loss and LAE reserves plus half a year unearned.');
+        // To the quarter's discretisation of a continuous runoff.
+        $this->assertEqualsWithDelta($ratio, (float) $stock->getCustomerDeposits() / $premium, 0.01 * $ratio);
+        $this->assertEqualsWithDelta(0.5 * $premium, ($stock->getEarningsMomentumZ() ?? [])[InsuranceBusinessModel::STATE_UNEARNED_PREMIUM], 1.0);
+    }
+
+    /** What a claim reserve fed at a steady rate settles at: a year's incurred losses times the runoff. */
+    private static function staticReserve(float $quarterlyIncurred, float $runoffYears): float
+    {
+        return $quarterlyIncurred / FinancialConstants::QUARTER_YEARS * $runoffYears;
     }
 
     /** A growing book collects premium ahead of earning it: the unearned reserve and the cash rise together. */
@@ -147,7 +160,9 @@ final class InsuranceLossReserveTest extends TestCase
         $settled = $model->resolveReserveToPremiumRatio($this->carrier(0.0, 0.0)) * self::ANNUAL_PREMIUM;
         $stock = $this->carrier($settled, $this->structuralIncurred(self::ANNUAL_PREMIUM), [InsuranceBusinessModel::STATE_UNEARNED_PREMIUM_BASE => $quarterlyPremium]);
         $this->runQuarter($model, $stock);
-        $before = (float) $stock->getCustomerDeposits();
+        // The same quarter written at the same premium, for the comparison.
+        $level = clone $stock;
+        $flat = $this->runQuarter($model, $level);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $momentum[InsuranceBusinessModel::STATE_UNEARNED_PREMIUM_BASE] = 1.10 * $quarterlyPremium;
@@ -155,8 +170,8 @@ final class InsuranceLossReserveTest extends TestCase
         $state = $this->runQuarter($model, $stock);
 
         $unearnedRise = 0.5 * 0.10 * self::ANNUAL_PREMIUM;
-        $this->assertEqualsWithDelta($before + $unearnedRise, $state['customerDeposits'], 1.0);
-        $this->assertEqualsWithDelta($before + $unearnedRise, $state['treasury'], 1.0);
+        $this->assertEqualsWithDelta($flat['customerDeposits'] + $unearnedRise, $state['customerDeposits'], 1.0);
+        $this->assertEqualsWithDelta($flat['treasury'] + $unearnedRise, $state['treasury'], 1.0);
     }
 
     /** A firm writing half its book loses half its loss reserves, over the runoff lag rather than overnight. */
@@ -176,8 +191,9 @@ final class InsuranceLossReserveTest extends TestCase
             $previous = $float;
         }
 
-        // After one runoff lag, 1/e of the gap to the smaller book's float remains.
-        $gapRemaining = ($previous - $settled / 2.0) / ($settled / 2.0);
+        // After one runoff lag, 1/e of the gap to the smaller book's reserve remains.
+        $halfBook = self::staticReserve($this->structuralIncurred(self::ANNUAL_PREMIUM / 2.0), $runoffYears);
+        $gapRemaining = ($previous - $halfBook) / ($settled - $halfBook);
         $elapsed = $quarters * FinancialConstants::QUARTER_YEARS;
         $this->assertEqualsWithDelta(exp(-$elapsed / $runoffYears), $gapRemaining, 0.001);
     }
@@ -198,15 +214,18 @@ final class InsuranceLossReserveTest extends TestCase
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $momentum[InsuranceBusinessModel::STATE_INCURRED_CLAIMS] = $this->structuralIncurred(self::ANNUAL_PREMIUM);
         $stock->setEarningsMomentumZ($momentum);
+        // Without the storm the reserve would have moved toward the book's own level; the storm's part runs off above
+        // it.
+        $book = self::staticReserve($this->structuralIncurred(self::ANNUAL_PREMIUM), $model->resolveReserveRunoffYears($stock));
         $previous = $afterLoss;
         for ($quarter = 0; $quarter < 40; $quarter++) {
             $this->runQuarter($model, $stock);
             $float = (float) $stock->getCustomerDeposits();
             $this->assertLessThan($previous, $float);
-            $this->assertGreaterThan($settled, $float);
+            $this->assertGreaterThan($book, $float);
             $previous = $float;
         }
-        $this->assertLessThan(0.01, ($previous - $settled) / $catastrophe, 'Ten years on, the loss is all but paid.');
+        $this->assertLessThan(0.01, ($previous - $book) / $catastrophe, 'Ten years on, the loss is all but paid.');
     }
 
     /** A carrier without the cash to pay what falls due borrows it, and says so. */
@@ -264,17 +283,20 @@ final class InsuranceLossReserveTest extends TestCase
         $stock = $this->carrier($settled, $incurred, $steady);
 
         $this->runQuarter($model, $stock);
-        $this->assertEqualsWithDelta($settled, (float) $stock->getCustomerDeposits(), $settled * 1e-9, 'A legacy float opens on its steady split.');
-        $this->assertEqualsWithDelta($ratios['life'] * self::ANNUAL_PREMIUM, ($stock->getEarningsMomentumZ() ?? [])[InsuranceBusinessModel::STATE_LIFE_RESERVES], 1.0);
         $this->assertGreaterThan(2.0 * $model->resolveReserveRunoffYears($probe), $model->resolveLifeReserveRunoffYears($probe));
 
+        // The same quarter with and without a P&C catastrophe: the loss reserve takes it, the policy reserve does not.
+        $calm = clone $stock;
+        $this->runQuarter($model, $calm);
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $momentum[InsuranceBusinessModel::STATE_INCURRED_CLAIMS] = $incurred + 0.20 * self::ANNUAL_PREMIUM;
         $stock->setEarningsMomentumZ($momentum);
         $this->runQuarter($model, $stock);
 
-        $this->assertEqualsWithDelta($ratios['life'] * self::ANNUAL_PREMIUM, ($stock->getEarningsMomentumZ() ?? [])[InsuranceBusinessModel::STATE_LIFE_RESERVES], 1.0);
-        $this->assertGreaterThan($settled + 0.15 * self::ANNUAL_PREMIUM, (float) $stock->getCustomerDeposits());
+        $life = static fn(Stock $carrier): float => (float) (($carrier->getEarningsMomentumZ() ?? [])[InsuranceBusinessModel::STATE_LIFE_RESERVES] ?? 0.0);
+        $this->assertGreaterThan(0.0, $life($calm));
+        $this->assertEqualsWithDelta($life($calm), $life($stock), 1.0);
+        $this->assertGreaterThan((float) $calm->getCustomerDeposits() + 0.15 * self::ANNUAL_PREMIUM, (float) $stock->getCustomerDeposits());
     }
 
     /**
@@ -288,7 +310,31 @@ final class InsuranceLossReserveTest extends TestCase
         $fixedCosts = 1.0e9;
         $carried = [InsuranceBusinessModel::STATE_UNEARNED_PREMIUM => 2.0e10, InsuranceBusinessModel::STATE_LIFE_RESERVES => 3.0e10];
 
-        foreach ([new InsuranceBusinessModel(), new ReinsuranceBusinessModel(), new RetailInsuranceBusinessModel()] as $model) {
+        // Each carrier with a probe on the recovery its reinstatement is charged on.
+        $probes = [
+            new class extends InsuranceBusinessModel {
+                public float $recovery = 0.0;
+
+                protected function resolveReinstatementPremium(array $layer, float $recovery): float
+                {
+                    $this->recovery = $recovery;
+
+                    return parent::resolveReinstatementPremium($layer, $recovery);
+                }
+            },
+            new ReinsuranceBusinessModel(),
+            new class extends RetailInsuranceBusinessModel {
+                public float $recovery = 0.0;
+
+                protected function resolveReinstatementPremium(array $layer, float $recovery): float
+                {
+                    $this->recovery = $recovery;
+
+                    return parent::resolveReinstatementPremium($layer, $recovery);
+                }
+            },
+        ];
+        foreach ($probes as $model) {
             $math = MathUtility::ownStream(20261006);
             $momentum = $carried;
             $breaches = 0;
@@ -301,35 +347,34 @@ final class InsuranceLossReserveTest extends TestCase
                 // A district held at four average years of open claims: each quarter's losses run well above average.
                 $macro = new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndex: 4.0, catastropheLossIndexEma: 4.0, totalTime: 10.0 + (0.25 * $quarter));
 
+                $rateLevel = $model->getMacroPhysics($stock, $macro)['pricing_power_multiplier'];
                 $result = $model->computeActualFinancials($stock, 10_000_000_000.0, 0.60, $fixedCosts, 0.2, $macro, $math);
                 $momentum = $result->streamZ;
                 $premium = $result->actualRevenue;
                 $label = $model::class . " quarter {$quarter}";
 
                 // Reinsurance premium is not a loss: the cover's premium every quarter (the reinsurer buys its
-                // collateral's share of the layer), and a reinstatement in a quarter the cover paid out.
-                $coverRate = InsuranceBusinessModel::CATASTROPHE_COVER_EXPECTED_RECOVERY * (1.0 + InsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING);
-                $bookWeight = match (true) {
-                    $model instanceof RetailInsuranceBusinessModel => $result->streamRevenue['property_casualty_premiums'] / max(1.0, $premium),
-                    $model instanceof ReinsuranceBusinessModel => $result->streamRevenue['treaty_reinsurance'] / max(1.0, $premium),
-                    default => 1.0,
+                // collateral's share of the layer), and a reinstatement in a quarter the cover paid out, pro rata to
+                // the recovery, all on the covered book's volume.
+                $layer = $model::catastropheLayer($model::CATASTROPHE_Z_THRESHOLD, $model::CATASTROPHE_LOSS_SCALAR, $model::DISTRICT_CATASTROPHE_LOAD);
+                $coverRate = $layer['expected_recovery'] * (1.0 + InsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING);
+                $bookRevenue = match (true) {
+                    $model instanceof RetailInsuranceBusinessModel => $result->streamRevenue['property_casualty_premiums'],
+                    $model instanceof ReinsuranceBusinessModel => $result->streamRevenue['treaty_reinsurance'],
+                    default => $premium,
                 };
+                $volume = $bookRevenue / $rateLevel;
                 $reinstatement = $model instanceof ReinsuranceBusinessModel
-                    ? $premium * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE * $coverRate * $bookWeight
-                    : $premium * $coverRate * $bookWeight;
+                    ? $volume * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE * $coverRate
+                    : $volume * ($coverRate + ($coverRate * $model->recovery / $layer['limit']));
                 if ($result->eventType === ShockEvent::REINSURANCE_ATTACHMENT_BREACH) {
                     $breaches++;
-                    if (!$model instanceof ReinsuranceBusinessModel) {
-                        $reinstatement += $premium * InsuranceBusinessModel::REINSTATEMENT_PREMIUM_RATE * $bookWeight;
-                    }
                 }
 
                 $adjusting = $fixedCosts * InsuranceBusinessModel::FIXED_COST_LAE_SHARE;
                 $variableExpenses = $result->kpis['expense_ratio'] * $premium - ($fixedCosts - $adjusting);
                 $incurred = $momentum[InsuranceBusinessModel::STATE_INCURRED_CLAIMS];
-                // A part-book cover is sized on the covered book's target weight, which the realized stream share only
-                // approximates.
-                $tolerance = $bookWeight < 1.0 ? $premium * 3e-3 : $premium * 1e-9;
+                $tolerance = $premium * 1e-9;
 
                 $this->assertEqualsWithDelta($result->kpis['loss_ratio'] * $premium - $reinstatement, $incurred, $tolerance, $label);
                 $this->assertEqualsWithDelta($result->actualVariableCosts - $variableExpenses - $reinstatement + $adjusting, $incurred, $tolerance, $label);
@@ -358,8 +403,9 @@ final class InsuranceLossReserveTest extends TestCase
         $stock = $this->carrier(0.0, 0.0);
         $structuralLossRatio = $this->structuralIncurred(1.0) / FinancialConstants::QUARTER_YEARS;
 
+        // Held at its ratio while the book grows at trend: 1/τ = incurred / R − g.
         $this->assertEqualsWithDelta(
-            InsuranceBusinessModel::LOSS_RESERVE_TO_PREMIUM_RATIO / $structuralLossRatio,
+            InsuranceBusinessModel::LOSS_RESERVE_TO_PREMIUM_RATIO / ($structuralLossRatio - (InsuranceBusinessModel::TREND_BOOK_GROWTH * InsuranceBusinessModel::LOSS_RESERVE_TO_PREMIUM_RATIO)),
             $model->resolveReserveRunoffYears($stock),
             1e-12,
         );

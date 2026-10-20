@@ -6,7 +6,6 @@ namespace App\Tests\Financial;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
@@ -53,6 +52,7 @@ final class InsuranceClaimPricingInvariantTest extends TestCase
         $sum = 0.0;
         $sumSq = 0.0;
         $coverCost = 0.0;
+        $structuralCost = 0.0;
 
         for ($i = 0; $i < self::QUARTERS; $i++) {
             for ($tick = 0; $tick < self::TICKS_PER_QUARTER; ++$tick) {
@@ -68,6 +68,8 @@ final class InsuranceClaimPricingInvariantTest extends TestCase
             $stock->setTotalEquity('200000000000');
             $stock->setEarningsMomentumZ($momentum);
 
+            // The catastrophe terms are per unit of premium at the rate the book was written at.
+            $rateLevel = $model->getMacroPhysics($stock, $macro)['pricing_power_multiplier'];
             // Revenue volatility off, so the expense ratio stays on its baseline and only claims vary.
             $result = $model->computeActualFinancials($stock, 10_000_000_000.0, self::STRUCTURAL_COST_RATIO, 1.0e9, 0.0, $macro, $math);
             $momentum = $result->streamZ;
@@ -80,20 +82,26 @@ final class InsuranceClaimPricingInvariantTest extends TestCase
                 $model instanceof ReinsuranceBusinessModel => $result->streamRevenue['treaty_reinsurance'] / $result->actualRevenue,
                 default => 1.0,
             };
-            $attached = $result->eventType === ShockEvent::REINSURANCE_ATTACHMENT_BREACH;
-            $coverCost += $book * (($coveredShare * InsuranceBusinessModel::CATASTROPHE_COVER_EXPECTED_RECOVERY * InsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING)
-                + ($paysReinstatements && $attached ? InsuranceBusinessModel::REINSTATEMENT_PREMIUM_RATE : 0.0));
+            // What the cover costs over what it pays back on average: the loading, and the reinstatements its
+            // recoveries buy, pro rata as to amount.
+            // The structural cost line, in full on the book that writes risk; a reinsurer's ILS fees carry its expense
+            // share only.
+            $structuralCost += self::STRUCTURAL_COST_RATIO * ($model instanceof ReinsuranceBusinessModel ? $book + ((1.0 - $book) * InsuranceBusinessModel::BASE_EXPENSE_RATIO_SHARE) : 1.0);
+            $layer = $model::catastropheLayer($model::CATASTROPHE_Z_THRESHOLD, $model::CATASTROPHE_LOSS_SCALAR, $model::DISTRICT_CATASTROPHE_LOAD);
+            $price = $layer['expected_recovery'] * (1.0 + InsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING);
+            $coverCost += $book / $rateLevel * (($coveredShare * $layer['expected_recovery'] * InsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING)
+                + ($paysReinstatements ? $price * $layer['expected_recovery'] / $layer['limit'] : 0.0));
         }
 
         $mean = $sum / self::QUARTERS;
         $standardError = sqrt(max(0.0, ($sumSq / self::QUARTERS) - ($mean ** 2)) / self::QUARTERS);
-        $expected = self::STRUCTURAL_COST_RATIO + ($coverCost / self::QUARTERS);
+        $expected = ($structuralCost + $coverCost) / self::QUARTERS;
 
         $this->assertEqualsWithDelta(
             $expected,
             $mean,
             4.0 * $standardError,
-            sprintf('%s: mean cost ratio %.4f (se %.5f) must sit on the structural %.2f plus the cover\'s margin, %.4f.', $model::class, $mean, $standardError, self::STRUCTURAL_COST_RATIO, $expected),
+            sprintf('%s: mean cost ratio %.4f (se %.5f) must sit on the structural cost line plus the cover\'s margin, %.4f.', $model::class, $mean, $standardError, $expected),
         );
     }
 }

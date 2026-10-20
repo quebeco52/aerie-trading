@@ -139,6 +139,8 @@ class MacroFieldRegistryTest extends TestCase
         'sovereignFundTrade' => 'Traded every tick, so a quarterly sample is one arbitrary tick.',
         'boardFloatCap' => 'Currency amount fed back by the ticker; the ownership share records the fund against it.',
         'boardPriceReturn' => 'One tick of the board, so a quarterly sample is one arbitrary tick of noise.',
+        'boardPriceIndex' => 'Index that compounds forever from board_price_return; only its ratio between two readings means anything.',
+        'boardTotalReturnIndex' => 'Index that compounds forever from the board\'s price return and dividends; only its ratio between two readings means anything.',
         'boardDividendCash' => 'One tick of dividend cash; same objection.',
         'foreignEquityValuation' => 'A function of foreign_equity_risk_premium, which is recorded.',
         'foreignEquityValuationChange' => 'One tick of re-rating; foreign_equity_index records its effect.',

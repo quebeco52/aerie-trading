@@ -189,4 +189,37 @@ class DistributionsTest extends TestCase
         $this->assertEqualsWithDelta(2.0 / 3.0, Distributions::censoredParetoMean($scale, 1.7, 20.0), 1e-12);
         $this->assertGreaterThan((2.0 / 3.0) * 0.7 / 1.7, $scale, 'a capped draw needs a larger scale than the untruncated mean implies');
     }
+
+    /** Panjer's recursion carries all the mass, and the sum's mean is the count's times the size's. */
+    public function testPanjerPmfMassAndMean(): void
+    {
+        $severity = [0.0, 0.5, 0.3, 0.2];
+        $pmf = Distributions::compoundPoissonPmf(1.4, $severity, 80);
+
+        $this->assertEqualsWithDelta(1.0, array_sum($pmf), 1e-12);
+        $mean = 0.0;
+        foreach ($pmf as $steps => $mass) {
+            $mean += $steps * $mass;
+        }
+        $this->assertEqualsWithDelta(1.4 * ((1 * 0.5) + (2 * 0.3) + (3 * 0.2)), $mean, 1e-9);
+        $this->assertEqualsWithDelta(exp(-1.4), $pmf[0], 1e-15, 'no event, no loss');
+    }
+
+    /** The layer's closed forms against quadrature over the normal, a fixed part either side of the attachment. */
+    public function testCensoredNormalLayerClosedForm(): void
+    {
+        foreach ([0.30, -0.10, -0.40] as $shift) {
+            $expectation = 0.0;
+            $exceedance = 0.0;
+            for ($z = -9.0; $z <= 9.0; $z += 1e-4) {
+                $loss = (0.15 * max(0.0, -1.5 - $z)) + $shift;
+                $density = Distributions::standardNormalPdf($z) * 1e-4;
+                $expectation += max(0.0, $loss) * $density;
+                $exceedance += ($loss > 0.0 ? 1.0 : 0.0) * $density;
+            }
+
+            $this->assertEqualsWithDelta($expectation, Distributions::normalHingeLayerExpectation(0.15, -1.5, $shift), 1e-6, "shift {$shift}");
+            $this->assertEqualsWithDelta($exceedance, Distributions::normalHingeLayerExceedance(0.15, -1.5, $shift), 1e-4, "shift {$shift}");
+        }
+    }
 }

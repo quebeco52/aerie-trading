@@ -106,7 +106,7 @@ class CompanyResearchTest extends TestCase
         yield 'SWAN fees' => ['SWAN', 'about 60% of revenue', $tuning('SWAN', ModelParam::HfManagementFeeWeight), 0.60];
         yield 'SWAN float' => ['SWAN', 'founding partners still hold about half the shares', 1.0 - self::seed('SWAN')['public_float'], 0.50];
         yield 'SAFE mutual' => ['SAFE', 'the mutual kept about 30% of the shares', 1.0 - self::seed('SAFE')['public_float'], 0.30];
-        yield 'SAFE treaties' => ['SAFE', 'About 60% of revenue comes from these reinsurance treaties', $tuning('SAFE', ModelParam::TreatyReinsuranceWeight), 0.60];
+        yield 'SAFE treaties' => ['SAFE', 'About 97% of revenue comes from these reinsurance treaties', $tuning('SAFE', ModelParam::TreatyReinsuranceWeight), 0.97];
         yield 'SAFE payout' => ['SAFE', 'pays out about 30% of earnings', self::seed('SAFE')['target_payout_ratio'], 0.30];
         yield 'SAFE beta' => ['SAFE', 'beta of about 0.2', self::beta('SAFE'), 0.20, self::BETA_ROUNDING];
         yield 'BRKW foundation' => ['BRKW', 'holds about a quarter of the shares', 1.0 - self::seed('BRKW')['public_float'], 0.25];

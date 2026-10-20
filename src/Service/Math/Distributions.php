@@ -318,4 +318,68 @@ final class Distributions
 
         return 0.5 * ($low + $high);
     }
+
+    // --- Compound Poisson Losses ---
+    /**
+     * Distribution of a compound Poisson sum on a lattice (Panjer 1981): a Poisson(lambda) count of events, each of a
+     * size drawn from $severityPmf (its mass at k lattice steps), and the total's mass at each of $size steps. Exact on
+     * the lattice: g_0 = exp(-lambda (1 - f_0)), g_n = (lambda / n) sum_j j f_j g_(n-j).
+     *
+     * @param list<float> $severityPmf
+     * @return list<float>
+     */
+    public static function compoundPoissonPmf(float $lambda, array $severityPmf, int $size): array
+    {
+        $weighted = [];
+        foreach ($severityPmf as $steps => $mass) {
+            if ($steps > 0 && $mass > 0.0) {
+                $weighted[$steps] = $lambda * $steps * $mass;
+            }
+        }
+
+        $total = [exp(-$lambda * (1.0 - ($severityPmf[0] ?? 0.0)))];
+        for ($n = 1; $n < $size; ++$n) {
+            $sum = 0.0;
+            foreach ($weighted as $steps => $weight) {
+                if ($steps > $n) {
+                    break;
+                }
+                $sum += $weight * $total[$n - $steps];
+            }
+            $total[] = $sum / $n;
+        }
+
+        return $total;
+    }
+
+    // --- Censored Normal Layer ---
+    /**
+     * E[max(0, scale max(0, threshold - Z) + shift)] for a standard normal Z: what a layer attaching at zero pays on a
+     * loss made of a fixed part (shift) and a normal shortfall below a threshold. Above zero the fixed part is paid in
+     * full and the shortfall adds its lower partial moment; below it the shortfall has to make it up first.
+     */
+    public static function normalHingeLayerExpectation(float $scale, float $threshold, float $shift): float
+    {
+        if ($shift >= 0.0) {
+            return $shift + (max(0.0, $scale) * self::calculateNormalLowerPartialMoment($threshold));
+        }
+        if ($scale <= 0.0) {
+            return 0.0;
+        }
+
+        return $scale * self::calculateNormalLowerPartialMoment($threshold + ($shift / $scale));
+    }
+
+    /** P(scale max(0, threshold - Z) + shift > 0) for a standard normal Z: how often that layer pays anything. */
+    public static function normalHingeLayerExceedance(float $scale, float $threshold, float $shift): float
+    {
+        if ($shift > 0.0) {
+            return 1.0;
+        }
+        if ($scale <= 0.0) {
+            return 0.0;
+        }
+
+        return self::calculateNormalCDF($threshold + ($shift / $scale));
+    }
 }

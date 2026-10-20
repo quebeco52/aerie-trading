@@ -134,6 +134,14 @@ class EarningsEngine
      * from what the physics registers, and carries a key under this prefix until its owner removes it.
      */
     public const CARRIED_STATE_PREFIX = 'carry:';
+    /** Carried reading of the board's price index at the last report, for the treasury's equity sleeve. */
+    public const STATE_SLEEVE_PRICE_INDEX = self::CARRIED_STATE_PREFIX . 'equity_sleeve:price_index';
+    /** Carried reading of the board's total-return index at the last report, for the treasury's equity sleeve. */
+    public const STATE_SLEEVE_TOTAL_RETURN_INDEX = self::CARRIED_STATE_PREFIX . 'equity_sleeve:total_return_index';
+    /** Carried annual rate of the after-tax gains the equity sleeve's rebalancing realised over the trailing year. */
+    public const STATE_SLEEVE_TRAILING_GAINS = self::CARRIED_STATE_PREFIX . 'equity_sleeve:trailing_gains';
+    /** Mean age of a trailing year's flows, half a year: the lag the sleeve's realised gains are carried at. */
+    public const SLEEVE_GAINS_TRAILING_LAG_YEARS = 0.5;
 
     // --- Capital-Goods Prices (BEA Fixed Assets, App\Data\Macro\CapitalGoodsPrices) ---
     /**
@@ -404,6 +412,8 @@ class EarningsEngine
         // mark is a balance-sheet fact every downstream valuation reads, not an earnings one. It reaches
         // equity through other comprehensive income and never touches EBIT, EPS or the surprise.
         $this->rollForwardSecuritiesBook($ctx);
+        // The equity the treasury holds is marked for the same reason, to the board's realised return.
+        $this->markEquitySleeve($ctx);
 
         $this->initializeContext($ctx);
         // Assets finished this quarter leave construction in progress; the ledger roll-forward below moves
@@ -1451,7 +1461,16 @@ class EarningsEngine
         // earning assets reprice off their own funding cost book income consistent with the expense side
         // computed just above, rather than a stale calm-market benchmark.
         $annualInterestIncome = $ctx->strategy->calculateInterestIncome($stock, $ctx->macroState, $this->mathUtility, $ctx->debtMetrics->wholesaleRate);
+        // The equity sleeve's expected return gives way to the dividends the board actually paid it; its price move
+        // went to book value at the mark.
+        if ($ctx->equitySleeveDividendReturn !== null) {
+            $sleeve = $ctx->strategy->resolveEquitySleeve($stock, $ctx->macroState);
+            $annualInterestIncome += $sleeve['value'] * ($ctx->equitySleeveDividendReturn - $sleeve['expected_return']);
+        }
         $ctx->quarterlyInterestIncome = $annualInterestIncome / 4.0;
+        if ($ctx->equitySleeveMark !== 0.0) {
+            $stock->setCorporateTreasury((string) max(0.0, (float) $stock->getCorporateTreasury() + $ctx->equitySleeveMark));
+        }
     }
 
     private function reconcileTaxesAndNetIncome(EarningsSimulationContext $ctx): void
@@ -2182,6 +2201,53 @@ class EarningsEngine
         $ctx->ebitda -= $charge;
         $ctx->ebit -= $charge;
         $ctx->impairmentCharges += $charge;
+    }
+
+    /**
+     * Marks the equity the treasury holds to the board's realised return since the last report (FVOCI, IFRS 9 5.7.5):
+     * the price move goes to book value and the treasury the sleeve sits in, net of the tax its quarterly rebalance
+     * realises, and never through earnings; the dividends it was paid are booked as income instead of the expected
+     * return (calculateInterestAndRunRates()). Booked at a formula return instead, the sleeve earned the cost of
+     * equity through every crash. A first report has no earlier reading, so it marks nothing.
+     */
+    private function markEquitySleeve(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $priceThen = $momentum[self::STATE_SLEEVE_PRICE_INDEX] ?? null;
+        $totalReturnThen = $momentum[self::STATE_SLEEVE_TOTAL_RETURN_INDEX] ?? null;
+        $priceNow = $ctx->macroState->boardPriceIndex;
+        $totalReturnNow = $ctx->macroState->boardTotalReturnIndex;
+
+        $sleeve = $ctx->strategy->resolveEquitySleeve($stock, $ctx->macroState);
+        if ($sleeve['value'] <= 0.0 && $priceThen === null) {
+            return;
+        }
+
+        $years = max(FinancialConstants::QUARTER_YEARS, $ctx->dt);
+        $mark = 0.0;
+        if ($sleeve['value'] > 0.0 && $priceThen !== null && $totalReturnThen !== null && (float) $priceThen > 0.0 && (float) $totalReturnThen > 0.0) {
+            $priceReturn = ($priceNow / (float) $priceThen) - 1.0;
+            $ctx->equitySleeveDividendReturn = (($totalReturnNow / (float) $totalReturnThen) - ($priceNow / (float) $priceThen)) / $years;
+            $mark = $sleeve['value'] * $priceReturn * (1.0 - $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
+        }
+
+        $momentum[self::STATE_SLEEVE_PRICE_INDEX] = $priceNow;
+        $momentum[self::STATE_SLEEVE_TOTAL_RETURN_INDEX] = $totalReturnNow;
+        $momentum[self::STATE_SLEEVE_TRAILING_GAINS] = TimeSeries::calculateDistributedLag(
+            currentLaggedValue: (float) ($momentum[self::STATE_SLEEVE_TRAILING_GAINS] ?? 0.0),
+            targetValue: $mark / $years,
+            dt: $years,
+            lagTimeConstant: self::SLEEVE_GAINS_TRAILING_LAG_YEARS,
+        );
+        $stock->setEarningsMomentumZ($momentum);
+        if ($mark === 0.0) {
+            return;
+        }
+        // Book value takes the mark now, as every downstream valuation reads it; the cash leg lands once the quarter's
+        // interest is booked, which accrued on the treasury the quarter opened with (calculateInterestAndRunRates()).
+        $stock->setTotalEquity(\bcadd($stock->getTotalEquity(), Decimal::format($mark, 4), 4));
+        $ctx->equitySleeveMark = $mark;
     }
 
     /**

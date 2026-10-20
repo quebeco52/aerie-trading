@@ -343,8 +343,8 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(3.0, StockModelTuning::get('BOWR', ModelParam::LandBankYears, 0.0));
 
         // Safe Harbor Reinsurance (SAFE)
-        $this->assertSame(0.60, StockModelTuning::get('SAFE', ModelParam::TreatyReinsuranceWeight, 0.0));
-        $this->assertSame(0.40, StockModelTuning::get('SAFE', ModelParam::CatBondSpreadWeight, 0.0));
+        $this->assertSame(0.97, StockModelTuning::get('SAFE', ModelParam::TreatyReinsuranceWeight, 0.0));
+        $this->assertSame(0.03, StockModelTuning::get('SAFE', ModelParam::CatBondSpreadWeight, 0.0));
 
         // White Dove Insurance (DOVE)
         $this->assertSame(0.55, StockModelTuning::get('DOVE', ModelParam::PropertyCasualtyWeight, 0.0));

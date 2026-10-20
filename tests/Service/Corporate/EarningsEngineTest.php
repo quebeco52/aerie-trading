@@ -29,6 +29,7 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
+use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HomebuilderBusinessModel;
 use App\Service\News\NarrativeEngine;
@@ -3012,6 +3013,121 @@ class EarningsEngineTest extends TestCase
         $lifetimeRate = $strategy->getThroughTheCycleCreditLossRate() * $strategy->getCreditLossHorizonYears();
         $stressedTarget = $lifetimeRate * $strategy->getForwardCreditLossMultiplier($stock, $stressed);
         $this->assertGreaterThan($lifetimeRate * 1.2, $stressedTarget, 'a 65% recession probability materially raises the lifetime loss estimate');
+    }
+
+    /** An asset manager holding most of its treasury above its operating minimum, its seed sleeve 40% equity. */
+    private function buildAssetManager(string $ticker): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setIndustry('Asset Management');
+        $stock->setEarningsPerShare('2.00');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setPrice('40.00');
+        $stock->setVolatility('0.20');
+        $stock->setCurrentVolatility('0.20');
+        $stock->setBeta('1.1');
+        $stock->setTotalEquity('30000000000');
+        $stock->setWholesaleDebt('5000000000');
+        $stock->setCorporateTreasury('20000000000');
+        $stock->setTotalRevenue('12000000000');
+        $stock->setRetainedEarnings('15000000000');
+        $stock->setBaselineRoe('0.18');
+        $stock->setRoeTtm('0.18');
+        $stock->setOperatingMargin('0.30');
+        $stock->setTargetPayoutRatio('0.40');
+        $stock->setDividendSpeed('0.20');
+        $stock->setDepreciationRate('0.05');
+
+        return $stock;
+    }
+
+    /**
+     * Two reports of the same manager, the second at the given board indices against the first's 1.0: the context the
+     * second files and the equity it leaves.
+     *
+     * @return array{EarningsSimulationContext, float, float}
+     */
+    private function sleeveQuarter(float $priceIndex, float $totalReturnIndex, bool $firstReading = false): array
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+        $stock = $this->buildAssetManager('SEED');
+        $macro = static fn(float $price, float $totalReturn): MacroStateDTO => new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield10yEma: 0.045, boardPriceIndex: $price, boardTotalReturnIndex: $totalReturn);
+        $tick = EarningsEngine::resolveReportingTick('SEED', 252);
+
+        mt_srand(20261020);
+        if (!$firstReading) {
+            $engine->calculate($stock, $macro(1.0, 1.0), $tick);
+        }
+        $stock->setTotalEquity('30000000000');
+        $stock->setCorporateTreasury('20000000000');
+        $engine->calculate($stock, $macro($priceIndex, $totalReturnIndex), $tick + 63);
+        $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+
+        return [$captured, (float) $stock->getTotalEquity(), (float) (($stock->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_SLEEVE_TRAILING_GAINS] ?? 0.0)];
+    }
+
+    /**
+     * The treasury's equity earns the board's realised return: a 10% rise between reports marks the sleeve up 10%,
+     * net of the tax its rebalance realises, in book value and the treasury it sits in, and never in earnings.
+     */
+    public function testTheEquitySleeveIsMarkedToTheBoardInBookValueNotEarnings(): void
+    {
+        [$flat, $flatEquity] = $this->sleeveQuarter(1.0, 1.0);
+        [$up, $upEquity] = $this->sleeveQuarter(1.10, 1.10);
+        $sleeve = (new AssetManagementBusinessModel())->resolveEquitySleeve($this->buildAssetManager('SEED'), new MacroStateDTO(policyRateEma: 0.04, yield10yEma: 0.045));
+
+        $this->assertEqualsWithDelta($sleeve['value'] * 0.10 * (1.0 - 0.21), $up->equitySleeveMark, 1.0);
+        $this->assertSame(0.0, $flat->equitySleeveMark);
+        $this->assertGreaterThan(0.0, $flat->quarterlyInterestIncome);
+        // The larger book holds a little more cash back at its operating minimum; the mark itself is no part of income.
+        $this->assertEqualsWithDelta($flat->quarterlyInterestIncome, $up->quarterlyInterestIncome, 0.01 * $up->equitySleeveMark, 'the mark is not income');
+        $this->assertLessThan(0.1 * $up->equitySleeveMark, abs($up->actualQuarterlyNetIncome - $flat->actualQuarterlyNetIncome), 'nor, beyond what a larger book of equity earns, earnings');
+        $this->assertGreaterThan($flatEquity, $upEquity);
+    }
+
+    /** What the board paid the sleeve in dividends is income, in place of the return it was expected to earn. */
+    public function testTheBoardsDividendsOnTheSleeveReachEarnings(): void
+    {
+        [$none] = $this->sleeveQuarter(1.0, 1.0);
+        [$paid] = $this->sleeveQuarter(1.0, 1.01);
+        $sleeve = (new AssetManagementBusinessModel())->resolveEquitySleeve($this->buildAssetManager('SEED'), new MacroStateDTO(policyRateEma: 0.04, yield10yEma: 0.045));
+
+        $this->assertEqualsWithDelta(0.04, (float) $paid->equitySleeveDividendReturn, 1e-9, 'a quarter\'s 1% is 4% a year');
+        $this->assertEqualsWithDelta($sleeve['value'] * 0.01, $paid->quarterlyInterestIncome - $none->quarterlyInterestIncome, 1.0);
+    }
+
+    /**
+     * The gains the sleeve's rebalancing realises are carried as a trailing year's rate, for the statutory income the
+     * NAIC dividend limit reads: one quarter's mark enters at the weight a half-year lag gives it.
+     */
+    public function testTheSleevesRealisedGainsAreCarriedForTheTrailingYear(): void
+    {
+        [$up, , $gains] = $this->sleeveQuarter(1.10, 1.10);
+        [, , $none] = $this->sleeveQuarter(1.0, 1.0);
+
+        $quarter = FinancialConstants::QUARTER_YEARS;
+        $this->assertGreaterThan(0.0, $up->equitySleeveMark);
+        $this->assertEqualsWithDelta(
+            ($up->equitySleeveMark / $quarter) * (1.0 - exp(-$quarter / EarningsEngine::SLEEVE_GAINS_TRAILING_LAG_YEARS)),
+            $gains,
+            1.0,
+        );
+        $this->assertSame(0.0, $none);
+    }
+
+    /** A first report has no earlier reading of the board, so it marks nothing and books the expected return. */
+    public function testAFirstReportMarksNothing(): void
+    {
+        [$first] = $this->sleeveQuarter(1.10, 1.10, firstReading: true);
+
+        $this->assertSame(0.0, $first->equitySleeveMark);
+        $this->assertNull($first->equitySleeveDividendReturn);
     }
 
     private function buildCardLender(string $ticker): Stock

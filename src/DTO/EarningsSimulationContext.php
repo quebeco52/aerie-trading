@@ -233,6 +233,13 @@ class EarningsSimulationContext
      * Mark carried on the investment securities book after this quarter's roll (ASC 320); negative is a loss. Not
      * income.
      */
+    /**
+     * The board's dividend return a year since the last report on the treasury's equity sleeve, booked in place of its
+     * expected return; null on a first report, which has no earlier reading.
+     */
+    public ?float $equitySleeveDividendReturn = null;
+    /** The price mark the equity sleeve took to book value at this report, net of tax. */
+    public float $equitySleeveMark = 0.0;
     public float $unrealizedSecuritiesMark = 0.0;
     /** Quarterly net cash from operations (net income + D&A - working capital build). */
     public float $operatingCashFlow = 0.0;

@@ -704,6 +704,10 @@ readonly class MacroStateDTO
         public float $boardPriceReturn = 0.0,
         public float $boardDividendCash = 0.0,
         public float $boardNetIssuance = 0.0,
+        /** The board's float-weighted price index, compounded tick by tick from its price return; 1.0 at the start. */
+        public float $boardPriceIndex = 1.0,
+        /** The board's total-return index, price return plus the dividends the float was paid; 1.0 at the start. */
+        public float $boardTotalReturnIndex = 1.0,
         public float $boardStampDuty = 0.0,
         public float $boardBankLevy = 0.0,
         public float $strategicStakeCash = 0.0,

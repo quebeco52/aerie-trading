@@ -166,11 +166,12 @@ class StockModelTuning
         // =====================================================================
 
         // --- Safe Harbor Reinsurance (SAFE) ---
-        // Institutional reinsurance titan that absorbs extreme systemic and catastrophe tail risk.
-        // Blends quota-share/excess-of-loss treaties with catastrophe risk bond ("True 10-Year Yield") issuances.
+        // Institutional reinsurance titan that absorbs extreme systemic and catastrophe tail risk. Writes
+        // quota-share/excess-of-loss treaties, and passes part of its tail to investors through the catastrophe bonds
+        // it sponsors ("True 10-Year Yield"); the fees it earns arranging them are the reinsurer's few percent.
         'SAFE' => [
-            ModelParam::TreatyReinsuranceWeight->value   => 0.60,
-            ModelParam::CatBondSpreadWeight->value       => 0.40,
+            ModelParam::TreatyReinsuranceWeight->value   => 0.97,
+            ModelParam::CatBondSpreadWeight->value       => 0.03,
             ModelParam::CatastropheZThreshold->value     => -1.55,
             ModelParam::CatastropheLossScalar->value     => 0.20,
             ModelParam::FloatEquityWeight->value         => 0.05,
@@ -184,9 +185,6 @@ class StockModelTuning
             ModelParam::CatastropheZThreshold->value     => -1.80,
             ModelParam::CatastropheLossScalar->value     => 0.08,
             ModelParam::FloatEquityWeight->value         => 0.10,
-            // Held at the seeded float (275B on 127.5B of premium) rather than ACLI's 9.9x: life reserves here earn
-            // the portfolio yield and pay no crediting rate, so the cited ratio would more than double a free float.
-            ModelParam::LifeReserveToPremiumRatio->value => 2.84,
         ],
 
         // =====================================================================

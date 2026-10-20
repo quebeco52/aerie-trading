@@ -176,6 +176,31 @@ class MacroEngineTest extends TestCase
         $this->assertSame(0.0, $next->strategicStakeCash, 'A flow the ticker did not report is zero, not the last one again.');
     }
 
+    /**
+     * The board's price and total-return indices compound its tick returns, so their ratio between two readings is what
+     * an equity book holding the board earned between them: price alone, and price plus the dividends paid.
+     */
+    public function testTheBoardIndicesCompoundItsTickReturns(): void
+    {
+        $saved = false;
+        $this->redisMock->method('get')->willReturnCallback(static function () use (&$saved) {
+            return $saved;
+        });
+        $this->redisMock->method('set')->willReturnCallback(static function (string $key, string $value) use (&$saved): bool {
+            $saved = $value;
+
+            return true;
+        });
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $first = $this->engine->updateMacroState(1.0 / 360.0, new BoardReadingDTO(floatCap: 1.0e12, priceReturn: 0.01, dividendCash: 1.0e9));
+        $second = $this->engine->updateMacroState(1.0 / 360.0, new BoardReadingDTO(floatCap: 1.0e12, priceReturn: -0.02));
+
+        $this->assertEqualsWithDelta(1.01, $first->boardPriceIndex / (new \App\DTO\MacroStateDTO())->boardPriceIndex, 1e-12);
+        $this->assertEqualsWithDelta(1.01 * 0.98, $second->boardPriceIndex / (new \App\DTO\MacroStateDTO())->boardPriceIndex, 1e-12);
+        $this->assertEqualsWithDelta(1.011 * 0.98, $second->boardTotalReturnIndex / (new \App\DTO\MacroStateDTO())->boardTotalReturnIndex, 1e-12);
+    }
+
     public function testUpdateMacroStateWithExistingStateAndRecessionShock(): void
     {
         $existingState = [

@@ -75,3 +75,14 @@ Evidence: `joint_evidence.md`.
   `nco`, `prov`, `allow`, `ii` (interest income) and `ttc` (strategy TTC loss rate, annual). `lender_an.py <seeds> <armA> <armB>`:
   per lender wholesale debt y0/5/10/20, trailing ROE mean/sd, equity CAGR, EPS beat, NCO/(TTC x gross book at quarter
   open), ROE-policy correlation, interest-income share. `lender_open.py`: year-1 ROE, revenue, interest income.
+
+- Batch D2 arms: `baseD2` = tree-baseD2 (git archive 8e4c1454), `fixD2` = same + batchD2.patch. Report rows carry `hm`
+  (hard-market regime quarters), `erl`, `ilsp`, `catb`, `lr`/`xr` (loss/expense ratio KPIs), `evt` (sector event from
+  stream details), `cdep`, sleeve `sl_v`/`sl_er`/`sl_pi`, `tax`, `bpi`/`btri`. `ins_an.py <seeds> <armA> <armB>`: DOVE/SAFE
+  CR, onsets, attachments, ROE, float, ILS recovery; CROW/SWAN/TIER/VULT ROE, interest-income sd, sleeve mark.
+- `fixD2b` = tree-fixD2b (8e4c1454 + revised batchD2.patch). `ins_an.py` takes any number of arms; `ins_path.py <seeds> <arms...>`:
+  DOVE/SAFE ROE at y2/5/10/20, float/revenue at y0/5/10/20, and a per-seed TIER ROE/icr/ND-E/rating path with default flags.
+- `fixD2c` = tree-fixD2c (8e4c1454 + third batchD2.patch: life reserves in bonds, insurer solvency lockout, NAIC ceiling
+  with realised sleeve gains). Rows now carry `tgain` (carry:equity_sleeve:trailing_gains). `ins_bridge.py <seeds> <arms...>`:
+  DOVE/SAFE equity vs premium (rev - ii) growth, payout by 5y block, erl and sleeve/eq at y0/5/10/20, and the equity
+  bridge by block (residual split into sleeve mark, issuance, rest; corr(rest, d y10)).

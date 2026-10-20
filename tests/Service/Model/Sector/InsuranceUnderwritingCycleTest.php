@@ -11,6 +11,7 @@ use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
+use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -104,6 +105,91 @@ final class InsuranceUnderwritingCycleTest extends TestCase
         $this->assertGreaterThan($mature, $onset, 'The steepest rate increases come right after the loss.');
         $this->assertGreaterThan(1.0, $mature, 'Rates stay above par for years — that lag is the cycle.');
         $this->assertEqualsWithDelta(1.0, $exhausted, 1e-9, 'Once capital is fully back the uplift is gone.');
+    }
+
+    /** A book in a hard market's first quarter, earning from par. */
+    private function hardMarketFromPar(float $quarters, float $earned = 1.0, string $ticker = 'ZZZZ'): Stock
+    {
+        return $this->makeStock($quarters)->setTicker($ticker)->setEarningsMomentumZ([
+            self::REGIME_KEY => $quarters,
+            InsuranceBusinessModel::STATE_EARNED_RATE_LEVEL => $earned,
+        ]);
+    }
+
+    /**
+     * The book earns a rate change over half a policy term: in the first hard quarter it earns that share of the
+     * uplift, not all of it. Struck at once, the uplift took a carrier's combined ratio from 95 to 78 in the quarter.
+     */
+    public function testHardMarketIsEarnedOverHalfATerm(): void
+    {
+        $earned = (new InsuranceBusinessModel())->getMacroPhysics($this->hardMarketFromPar(1.0), $this->makeMacro())['pricing_power_multiplier'];
+
+        $this->assertEqualsWithDelta(
+            InsuranceBusinessModel::HARD_MARKET_PRICING_UPLIFT * (1.0 - exp(-0.25 / InsuranceBusinessModel::EARNED_RATE_LAG_YEARS)),
+            $earned - 1.0,
+            1e-9,
+        );
+    }
+
+    /** Earning spreads a hard market's extra premium out; it does not take any away. */
+    public function testEarnedUpliftPreservesTheEpisodeArea(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $earned = 1.0;
+        $earnedArea = 0.0;
+        $writtenArea = 0.0;
+        for ($quarter = 1; $quarter <= 60; ++$quarter) {
+            $regime = $quarter <= 9 ? (float) $quarter : 0.0;
+            $written = $model->getMacroPhysics($this->makeStock($regime), $this->makeMacro())['pricing_power_multiplier'];
+            $earned = $model->getMacroPhysics($this->hardMarketFromPar($regime, $earned), $this->makeMacro())['pricing_power_multiplier'];
+            $writtenArea += $written - 1.0;
+            $earnedArea += $earned - 1.0;
+        }
+
+        $this->assertGreaterThan(1.0, $writtenArea);
+        $this->assertEqualsWithDelta($writtenArea, $earnedArea, 1e-6);
+    }
+
+    /** The decision to write is made at the rate on offer, whatever the in-force book is still earning. */
+    public function testUnderwritingDecisionReadsTheWrittenRate(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $share = fn(float $earned): float => $model->resolveTargetWrittenShare(
+            $this->hardMarketFromPar(1.0, $earned)->setTotalEquity('600000000000'),
+            $this->makeMacro(),
+            new MathUtility(),
+            600_000_000_000.0,
+        );
+
+        $this->assertEqualsWithDelta($share(1.0), $share(1.2), 1e-12);
+    }
+
+    /** Reading the rate does not age it; the physics carries the level the quarter priced at. */
+    #[AllowMockObjectsWithoutExpectations]
+    public function testGetMacroPhysicsDoesNotAgeTheEarnedRate(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $stock = $this->hardMarketFromPar(1.0)->setTotalEquity('600000000000');
+        $first = $model->getMacroPhysics($stock, $this->makeMacro())['pricing_power_multiplier'];
+        $this->assertSame($first, $model->getMacroPhysics($stock, $this->makeMacro())['pricing_power_multiplier']);
+
+        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
+        $math->method('generateStandardNormal')->willReturn(0.0);
+        $result = $model->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $this->makeMacro(), $math);
+
+        $this->assertEqualsWithDelta($first, $result->streamZ[InsuranceBusinessModel::STATE_EARNED_RATE_LEVEL], 1e-12);
+    }
+
+    /** The capacity cycle hardens property-casualty rates; a composite's life book is priced apart from it. */
+    public function testLifeBookDoesNotHarden(): void
+    {
+        $composite = new RetailInsuranceBusinessModel();
+        $lifeShare = $composite->resolveLifePremiumShare($this->makeStock()->setTicker('DOVE'));
+        $mono = (new InsuranceBusinessModel())->getMacroPhysics($this->hardMarketFromPar(1.0), $this->makeMacro())['pricing_power_multiplier'];
+        $mixed = $composite->getMacroPhysics($this->hardMarketFromPar(1.0, 1.0, 'DOVE'), $this->makeMacro())['pricing_power_multiplier'];
+
+        $this->assertGreaterThan(0.0, $lifeShare);
+        $this->assertEqualsWithDelta((1.0 - $lifeShare) * ($mono - 1.0), $mixed - 1.0, 1e-9);
     }
 
     /**

@@ -362,7 +362,11 @@ class HedgeFundBusinessModelTest extends TestCase
         $this->assertGreaterThan(20.0, $result->streamRevenue['management_fees']);
     }
 
-    public function testTreasuryYieldAndVixResilience(): void
+    /**
+     * The treasury's expected yield is the mix's, and volatility is no drag on it: a crash reaches the co-investments
+     * through the board's own fall, at the mark (EarningsEngine::markEquitySleeve()), not a second time here.
+     */
+    public function testTreasuryYieldAndItsEquitySleeve(): void
     {
         $calmMacro = MacroStateDTO::fromArray([
             'yield_10y_ema'         => 0.04,
@@ -393,10 +397,10 @@ class HedgeFundBusinessModelTest extends TestCase
         $calmIncome = $this->model->calculateInterestIncome($stock, $calmMacro, $this->mathUtility);
         $panicIncome = $this->model->calculateInterestIncome($stock, $panicMacro, $this->mathUtility);
 
-        $this->assertGreaterThan(0.0, $panicIncome);
-        // Due to active risk hedging, income should only see modest reduction
-        $this->assertLessThan($calmIncome, $panicIncome);
-        $this->assertGreaterThan($calmIncome * 0.90, $panicIncome);
+        $this->assertEqualsWithDelta($calmIncome, $panicIncome, 1e-6);
+        $sleeve = $this->model->resolveEquitySleeve($stock, $calmMacro);
+        $this->assertEqualsWithDelta(HedgeFundBusinessModel::PORTFOLIO_EQUITY_ALLOCATION * $calmIncome / $calmYield, $sleeve['value'], 1e-6, 'the sleeve is the equity share of the invested treasury');
+        $this->assertEqualsWithDelta(0.085, $sleeve['expected_return'], 1e-9, 'expected at the market cost of equity');
     }
 
     public function testDebtExpansionCapacityGatedDuringCreditFreeze(): void

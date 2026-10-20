@@ -14,9 +14,9 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Under the real claim draws, a carrier's float settles around its pinned reserve-to-premium ratio and never
- * drains: the claim shock is a pure risk around the structural cost ratio, and the reserve stock is its
- * running sum, paid out over the runoff lag.
+ * Under the real claim draws, a carrier whose book grows with the economy at trend holds its float around its pinned
+ * reserve-to-premium ratio and never drains it: the claim shock is a pure risk around the structural cost ratio, and
+ * the reserve stock is its running sum, paid out over a runoff struck for that growth.
  */
 final class InsuranceFloatReserveInvariantTest extends TestCase
 {
@@ -52,12 +52,14 @@ final class InsuranceFloatReserveInvariantTest extends TestCase
         $sum = 0.0;
         $lowest = INF;
         for ($i = 0; $i < self::QUARTERS; $i++) {
-            $result = $model->computeActualFinancials($stock, self::QUARTERLY_PREMIUM, self::STRUCTURAL_COST_RATIO, self::FIXED_COSTS, 0.0, $macro, $math);
+            // The book grows with the economy at trend, as the books the reserve ratios were measured on did.
+            $premium = self::QUARTERLY_PREMIUM * exp(InsuranceBusinessModel::TREND_BOOK_GROWTH * $i / 4.0);
+            $result = $model->computeActualFinancials($stock, $premium, self::STRUCTURAL_COST_RATIO, self::FIXED_COSTS * $premium / self::QUARTERLY_PREMIUM, 0.0, $macro, $math);
             $stock->setEarningsMomentumZ($result->streamZ);
 
             $state = ['treasury' => 0.0, 'customerDeposits' => (float) $stock->getCustomerDeposits(), 'wholesaleDebt' => 0.0, 'events' => []];
             $model->processPassiveLiabilityGrowth($stock, $macro, $state, $math);
-            $floatToPremium = $state['customerDeposits'] / (self::QUARTERLY_PREMIUM * 4.0);
+            $floatToPremium = $state['customerDeposits'] / ($premium * 4.0);
             $sum += $floatToPremium;
             $lowest = min($lowest, $floatToPremium);
         }

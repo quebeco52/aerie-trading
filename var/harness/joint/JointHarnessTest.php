@@ -278,6 +278,7 @@ class JointHarnessTest extends KernelTestCase
             'final' => $final,
             'events' => $this->events,
             'event_ticks' => $this->eventTicks,
+            'event_types' => $this->eventTypes,
         ];
         if ($out !== null) {
             file_put_contents($out, json_encode($record) . "\n", FILE_APPEND);
@@ -316,6 +317,8 @@ class JointHarnessTest extends KernelTestCase
 
     /** @var array<string, list<int>> */
     private array $eventTicks = [];
+    /** @var array<string, list<array{t: float, e: string}>> insurer claim and cover event types (batch D2) */
+    private array $eventTypes = [];
 
     private int $tpyRun = 360;
 
@@ -382,6 +385,16 @@ class JointHarnessTest extends KernelTestCase
         return ['board_tni' => $sum, 'board_n' => $n];
     }
 
+    /** @return array{sl_v: float, sl_er: float, tax: float} */
+    private function sleeveRow(Stock $stock): array
+    {
+        $strategy = App\Data\Company\Sectors::strategyFor($stock->getIndustry());
+        $m = $this->currentMacro ?? new MacroStateDTO();
+        $sl = method_exists($strategy, 'resolveEquitySleeve') ? $strategy->resolveEquitySleeve($stock, $m) : ['value' => 0.0, 'expected_return' => 0.0];
+
+        return ['sl_v' => (float) $sl['value'], 'sl_er' => (float) $sl['expected_return'], 'tax' => $strategy->getEffectiveTaxRate($m->corporateTaxRate)];
+    }
+
     private function captureReport(CorporateReport $report): void
     {
         if (getenv('DRIVERS_OUT')) {
@@ -420,6 +433,22 @@ class JointHarnessTest extends KernelTestCase
             'prov' => (float) ($report->getCreditLossProvision() ?? 0.0),
             'allow' => (float) ($report->getCreditLossAllowance() ?? 0.0),
             'ii' => (float) ($report->getInterestIncome() ?? 0.0),
+            // Batch D2: insurer regime and earned rate, ILS principal, float, equity sleeve (value, expected return, the
+            // board price index the sleeve was last marked at), the macro board index and the effective tax rate.
+            'hm' => (float) (($report->getStock()->getEarningsMomentumZ() ?? [])['state:regime:hard_market'] ?? 0.0),
+            'erl' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:capacity:earned_rate_level'] ?? null,
+            'tgain' => ($report->getStock()->getEarningsMomentumZ() ?? [])['carry:equity_sleeve:trailing_gains'] ?? null,
+            'ilsp' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:ils:principal_index'] ?? null,
+            'catb' => (float) (($report->getRevenueStreams() ?? [])['catastrophe_bonds'] ?? 0.0),
+            'lr' => isset($kpis['loss_ratio']) ? (float) $kpis['loss_ratio'] : null,
+            'xr' => isset($kpis['expense_ratio']) ? (float) $kpis['expense_ratio'] : null,
+            // The sector event (a claim headline, a cover attachment) rides on every stream detail entry.
+            'evt' => array_values(array_filter(array_map(static fn ($e) => is_array($e) ? ($e['event'] ?? null) : null, $report->getStreamDetails() ?? [])))[0] ?? null,
+            'cdep' => (float) ($report->getStock()->getCustomerDeposits() ?? 0.0),
+            'sl_pi' => ($report->getStock()->getEarningsMomentumZ() ?? [])['carry:equity_sleeve:price_index'] ?? null,
+            'bpi' => $m?->boardPriceIndex ?? null,
+            'btri' => $m?->boardTotalReturnIndex ?? null,
+        ] + $this->sleeveRow($report->getStock()) + [
             'ttc' => App\Data\Company\Sectors::strategyFor($report->getStock()->getIndustry())->getThroughTheCycleCreditLossRate($report->getStock()),
             'fin' => $report->getStock()->getCustomerDeposits() !== null && (float) $report->getStock()->getCustomerDeposits() > 0.0,
             'rating' => $report->getStock()->getCreditRating(),
@@ -549,6 +578,9 @@ class JointHarnessTest extends KernelTestCase
             if ($e instanceof App\Entity\StockEvent && !$this->capturing) {
                 // Every event's tick, so a price jump can be told from a reported one.
                 $this->eventTicks[$e->getStock()->getTicker()][] = (int) round($this->currentTime * $this->tpyRun);
+                if (preg_match('/reinsur|claim|hard|catastroph/i', $e->getEventType())) {
+                    $this->eventTypes[$e->getStock()->getTicker()][] = ['t' => round($this->currentTime, 3), 'e' => $e->getEventType()];
+                }
                 // Treasury distress lines ride inside the earnings description as bullets: keep only those.
                 foreach (preg_split('/\n/', (string) $e->getDescription()) ?: [] as $line) {
                     if (preg_match('/borrow|revolv|bond market|stave off|repay|default|record of dividend|Chapter|liquidat|rescue|covenant|restructur|in bonds for|Deployed/i', $line)) {

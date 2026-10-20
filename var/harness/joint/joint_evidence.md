@@ -270,3 +270,94 @@ Outputs: lenders-batchD1-8s.out, lenders-open-batchD1-8s.out, analyse-batchD1-{b
   equity CAGR 7.9 -> 3.0%.
 - Both arms: ROE fades from year 1 to the run mean for TALN/STRK (0.26 -> 0.20), POOL (0.29 -> 0.21), PLVR (0.14 -> 0.12).
 Caveat: unpaired arms (macro paths diverge), se over 8 seeds.
+
+## 2026-10-20 Batch D2 (insurers and equity sleeves)
+Question: effect of batchD2.patch (earned-rate lag, cat terms on volume, own-layer cover, ILS principal index, life
+crediting, DOVE/SAFE reseeds, equity sleeves at the board's realised return). Arms: baseD2 = tree-baseD2 (git archive
+8e4c1454), fixD2 = same + batchD2.patch. JointHarnessTest (rows now carry hm, erl, ilsp, catb, lr, xr, evt, cdep,
+sl_pi, sl_v, sl_er, tax, bpi, btri), seeds 1-8 x 20 y, TPY 360, unpaired (mean (se) over seeds).
+`bin/harness-batch var/harness/joint/run.sh 1-8 baseD2 fixD2`, then analyse.py, c_an.py, lender_an.py, ins_an.py.
+Outputs: analyse-batchD2-{base,fix}-8s.out, c-batchD2-8s.out, lenders-batchD2-8s.out, ins-batchD2-8s.out.
+
+Board: CW return 7.2 (1.0) | 6.7 (0.7) %/y, vol 15.5 | 15.9, EPS beat 76.2 | 75.9%, failures 0 | 0, Ch11 1/8 | 1/8
+(DIPR | CASC), payment default 1 | 4 name-runs, wall 131 | 139 s/run. Fix seed 8: TIER defaults (D/E 10.8, price ~0).
+
+| quantity | base | fix |
+|---|---|---|
+| DOVE CR mean / sd | 0.934 / 0.106 | 0.955 / 0.086 |
+| DOVE CR onset q1..q4 | 1.22 0.82 0.78 0.80 | 1.18 0.91 0.89 0.89 |
+| DOVE hard onsets, attachments /dec | 1.27, 1.71 | 1.20, 1.52 |
+| DOVE ROE (target) | 0.153 (0.15) | 0.101 (0.165) |
+| DOVE float y0/5/10/20 bn | 274/292/352/575 | 650/665/701/993 |
+| DOVE float / annual rev y0 -> y20 | 2.25 -> 1.89 | 5.28 -> 3.60 |
+| SAFE CR onset q1..q4 | 1.40 0.77 0.78 0.78 | 1.20 0.87 0.83 0.83 |
+| SAFE hard onsets, attachments /dec | 0.63, 0.70 | 1.27, 1.52 |
+| SAFE ROE (target) | 0.126 (0.14) | 0.113 (0.125) |
+| SAFE float y0/5/10/20 bn | 1344/1201/1449/2288 | 1002/1131/1402/2241 |
+| SAFE ILS rev q+0,1,2,6 / pre-breach | 0.51 1.19 1.24 1.25 | 0.82 0.93 1.01 1.10 |
+| TIER ROE, equity CAGR | 0.090, 0.075 | 0.059, 0.039 |
+
+Caveats: CR = loss_ratio + expense_ratio KPIs; onset q1 is the shock quarter. Base sleeve value is 0 for the funds
+(resolveEquitySleeve not on their HEAD classes). LAKE wholesale y20 heavy-tailed in both arms (192..3189 bn).
+
+## 2026-10-20 Batch D2b (insurers re-run: growing-book reserve runoff, DOVE/SAFE re-anchored)
+Question: does the revised batchD2.patch (runoff 1/tau = incurred/R - g, DOVE ROE 13.5%, SAFE ILS 3% of revenue,
+ROE 17.5%, float 2.97x) fix DOVE's ROE and float decay and TIER's default? Arm fixD2b = tree-fixD2b (git archive
+8e4c1454 + /tmp/claude-1000/c/batchD2.patch), seeds 1-8 x 20 y, TPY 360; baseD2/fixD2 runs reused. Unpaired.
+`bin/harness-batch var/harness/joint/run.sh 1-8 fixD2b`, then analyse.py, ins_an.py (now N arms), ins_path.py,
+lender_an.py, c_an.py. Outputs: analyse-batchD2b-fix-8s.out, ins-batchD2b-8s.out, inspath-batchD2b-8s.out,
+lenders-batchD2b-8s.out, c-batchD2b-8s.out.
+
+| quantity | base | old fix | new fix |
+|---|---|---|---|
+| board EPS beat, CW ret/vol | 76.2, 7.2/15.5 | 75.9, 6.7/15.9 | 75.8, 6.6/15.9 |
+| Ch11 / liquidations / rescue raises per run | 0.13/0/4.9 | 0.13/0/4.1 | 0.25/0.13/7.9 |
+| DOVE ROE (target) | 0.153 (0.15) | 0.101 (0.165) | 0.085 (0.135) |
+| DOVE ROE y2/5/10/20 | .212/.131/.151/.106 | .135/.108/.068/.075 | .132/.093/.061/.091 |
+| DOVE float/rev y0/5/10/20 | 2.21/1.97/1.88/1.89 | 5.26/5.07/4.61/3.60 | 5.26/5.93/6.87/5.86 |
+| DOVE CR mean, onset q1..q4 | .934, 1.22 .82 .78 .80 | .955, 1.18 .91 .89 .89 | .974, 1.24 .92 .95 .89 |
+| DOVE underwriting rev CAGR vs nGDP | 4.8 vs 4.9 | 4.3 vs 4.8 | 3.3 vs 4.6 %/y |
+| SAFE ROE (target), y2/5/10/20 | 0.126 (0.14) | 0.113 (0.125) | 0.135 (0.175), .168/.142/.115/.121 |
+| SAFE float/rev y0/5/10/20 | 2.30/1.76/1.70/1.71 | 1.83/1.88/1.76/1.65 | 3.01/3.14/3.28/2.99 |
+| SAFE margin sd, loss q share | .094, .061 | .097, .080 | .133, .105 |
+| SAFE ILS share, q+0/1/4/6 after breach | .391, .51/1.19/1.27/1.25 | .380, .82/.93/1.06/1.10 | .029, .85/.94/1.21/1.22 |
+| TIER ROE, eq CAGR, defaults | .090, .075, 0/8 | .059, .039, 1/8 (s8) | .059, .033, 1/8 (s4, liquidated y18.3) |
+
+TIER s4 (fixD2b): hurdle misses from y12.8 halve revenue, sleeve sold (2.3 bn -> 0), revolver drawn 0 -> 36 bn, full
+goodwill write-off 14.8 bn at y14.1, icr < 1 from y13, D at y15.6 doubles interest, equity to 0.4 bn. Debt 36 -> 145 bn
+on 24 -> 60 bn equity; base s4 reached 252 bn debt on 88 bn. TIER is fragile in every arm (icr ~1, ND/E 8-15 by y15).
+Caveats: DOVE float/rev overshoot follows its premium stalling y5-y10 (rev ex-ii flat), not the runoff formula, which
+checks out (R/P = (I/P)/(1/tau + g)). Seeds do not pair across trees.
+
+## 2026-10-20 Batch D2c (insurers: life reserves in bonds, solvency-based lockout, NAIC ceiling with sleeve gains)
+Question: does the third batchD2.patch fix DOVE/SAFE overcapitalisation (fixD2b: DOVE equity +35% in 2y on flat
+premium, ROE .085 vs .135; SAFE +22%, ROE fading .17 -> .12)? Arm fixD2c = tree-fixD2c (git archive 8e4c1454 +
+/tmp/claude-1000/c/batchD2.patch), seeds 1-8 x 20 y, TPY 360; baseD2/fixD2b reused. Unpaired (trees do not pair).
+`bin/harness-batch var/harness/joint/run.sh 1-8 fixD2c`, then analyse.py, ins_an.py, ins_path.py, ins_bridge.py (new),
+lender_an.py, c_an.py. Outputs: analyse-batchD2c-fix-8s.out, ins-/inspath-/insbridge-/lenders-/c-batchD2c-8s.out.
+
+| quantity | base | fixD2b | fixD2c |
+|---|---|---|---|
+| board EPS beat, CW ret/vol | 76.2, 7.2/15.5 | 75.8, 6.6/15.9 | 75.8, 6.5/16.1 |
+| Ch11 / liquidations / rescue raises per run | 0.13/0/4.9 | 0.25/0.13/7.9 | 0.50/0.38/6.3 (CASC x3, SHOR, WADE, DIPR, FALC) |
+| DOVE ROE (target) | .153 (.15) | .085 (.135) | .149 (.14) |
+| DOVE ROE y2/5/10/20 | .212/.131/.151/.106 | .132/.093/.061/.091 | .171/.156/.135/.153 |
+| DOVE eq vs prem growth y0-1->y2-3 | .19 vs .20 | .35 vs .06 | .11 vs .07 |
+| DOVE eq vs prem CAGR y0-20 | 5.3 vs 4.9 | 5.4 vs 3.2 | 4.8 vs 4.4 %/y |
+| DOVE payout/NI by 5y block | .77/.89/.80/.83 | .69/1.17/1.18/1.18 | .83/.95/.89/.92 |
+| DOVE erl y5/10/20 | n/a | .997/.898/.952 | 1.018/1.004/1.008 |
+| DOVE float/rev y0/5/10/20 | 2.21/1.97/1.88/1.89 | 5.26/5.93/6.87/5.86 | 5.28/5.60/5.49/5.39 |
+| DOVE sleeve/eq mean | 0 | .56 | .26 |
+| DOVE CR mean, onset q1..q4 | .934, 1.22 .82 .78 .80 | .974, 1.24 .92 .95 .89 | .944, 1.18 .92 .89 .88 |
+| DOVE margin sd, loss q share | .106, .084 | .099, .138 | .084, .077 |
+| SAFE ROE (target), y2/5/10/20 | .126, .136/.131/.129/.098 | .135 (.175), .168/.142/.115/.121 | .148 (.175), .206/.161/.139/.143 |
+| SAFE eq vs prem growth y0-1->y2-3 | .09 vs .07 | .22 vs .02 | .13 vs .07 |
+| SAFE payout by block | .81/.85/.79/.84 | .89/.95/1.03/.90 | .86/1.03/.98/.92 |
+| SAFE onsets, attachments /decade | .63, .70 | 1.39, 1.96 | 1.20, 1.58 |
+| TIER defaults | 0/8 | 1/8 (s4 liquidated) | 0/8 |
+
+Bridge: per 5y block the residual (dEq - (NI - payouts)) is .14-.38 of opening equity for DOVE, larger than retained
+NI (.07-.14). Sleeve mark .05-.12; issuance ~.02; the rest +.04-.25 per block (se .09-.17) with corr(rest_q, d y10)
+-0.57, so a bond AOCI mark quarter to quarter, but y10 is flat over the runs (4.8% -> 4.7%) and base shows the same
++.08-.11 rest per block with no sleeve: a persistent positive drift outside NI that predates the patch.
+Caveats: unpaired; the extra failures are non-insurers (refiner CASC x3), not touched by the patch beyond shared draws.

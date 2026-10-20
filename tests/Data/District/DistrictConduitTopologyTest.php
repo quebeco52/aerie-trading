@@ -271,14 +271,14 @@ class DistrictConduitTopologyTest extends TestCase
             'investment_bank' => ['investment_bank', ['rate-council', 'credit-registry', 'exchange-floor']],
             'brokerage' => ['brokerage', ['rate-council', 'credit-registry', 'exchange-floor']],
             'clearing_house' => ['clearing_house', ['rate-council', 'credit-registry', 'exchange-floor', 'statistical-office']],
-            'asset_manager' => ['asset_manager', ['rate-council', 'exchange-floor']],
+            'asset_manager' => ['asset_manager', ['rate-council']],
             'private_equity' => ['private_equity', ['rate-council', 'credit-registry', 'exchange-floor']],
             'hedge_fund' => ['hedge_fund', ['rate-council', 'credit-registry', 'exchange-floor']],
-            'distressed_debt' => ['distressed_debt', ['rate-council', 'credit-registry', 'exchange-floor']],
-            'insurance' => ['insurance', ['rate-council', 'exchange-floor', 'land-registry']],
+            'distressed_debt' => ['distressed_debt', ['rate-council', 'credit-registry']],
+            'insurance' => ['insurance', ['rate-council', 'land-registry']],
             // Every carrier now reads the district catastrophe burden the Land Registry publishes.
-            'reinsurance' => ['reinsurance', ['rate-council', 'exchange-floor', 'land-registry']],
-            'retail_insurance' => ['retail_insurance', ['rate-council', 'exchange-floor', 'land-registry']],
+            'reinsurance' => ['reinsurance', ['rate-council', 'land-registry']],
+            'retail_insurance' => ['retail_insurance', ['rate-council', 'land-registry']],
             'financial_data' => ['financial_data', ['credit-registry', 'exchange-floor']],
         ];
     }

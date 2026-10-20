@@ -16,7 +16,9 @@ use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\Distributions;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Model\ModelParam;
@@ -79,6 +81,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const BANKRUPT_EQUITY_THRESHOLD = 0.0;
     /** Statutory capital ratio threshold below which insurer enters regulatory capital distress. */
     public const DISTRESS_EQUITY_THRESHOLD = 2.0;
+    /** Share of the Kenney target surplus below which the regulator halts every distribution: half. */
+    public const DISTRESS_TARGET_SURPLUS_SHARE = 0.50;
     /** Statutory capital ratio threshold for regulatory grey/early warning watch. */
     public const WARNING_EQUITY_THRESHOLD  = 4.0;
 
@@ -235,27 +239,22 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
     // --- Catastrophe Excess-of-Loss Cover ---
     /**
-     * Excess claims, as a share of the covered book's quarterly premium, the carrier retains before its catastrophe
-     * cover attaches: about 14% of surplus, which the district's lumpy seasons breach one year in five.
+     * Return period, in years, of the quarterly loss a book's catastrophe cover attaches at: one quarter in twenty, the
+     * working layer a carrier's own lumpy seasons breach one year in five.
      */
-    public const MAX_REINSURED_LOSS_SHOCK = 0.375;
-    /**
-     * Cover above the retention, as a share of the covered book's quarterly premium: it exhausts near the
-     * one-in-two-hundred-year quarter of the district's loss process (measured on the engine).
-     */
-    public const CATASTROPHE_COVER_LIMIT = 2.9;
-    /**
-     * What the cover pays on average per quarter, as a share of the covered book's premium, measured on the engine's
-     * catastrophe process and large-loss layer at this retention and limit (2.25%, 96k quarters).
-     */
-    public const CATASTROPHE_COVER_EXPECTED_RECOVERY = 0.0225;
+    public const CATASTROPHE_RETENTION_RETURN_YEARS = 5.0;
+    /** Return period of the quarterly loss the cover exhausts at: the one-in-two-hundred-year quarter. */
+    public const CATASTROPHE_LIMIT_RETURN_YEARS = 200.0;
     /** Reinsurer's rate over the expected recovery (rate on line ~1.5x expected loss on a working cat layer). */
     public const CATASTROPHE_COVER_RATE_LOADING = 0.50;
+    /** Bisection steps solving a layer's attachment and exhaustion points. */
+    private const CATASTROPHE_LAYER_BISECTION_STEPS = 60;
     /**
-     * Reinstatement premium, as a share of the covered book's premium, paid in the quarter the cover pays out to
-     * restore the exhausted limit.
+     * Each loss layer's cover, struck once: a function of its threshold, scale and load and the district's process.
+     *
+     * @var array<string, array{retention: float, limit: float, expected_recovery: float}>
      */
-    public const REINSTATEMENT_PREMIUM_RATE = 0.04;
+    private static array $catastropheLayers = [];
 
     // --- Loss Reserve & Investment Portfolio Physics ---
     /** Target operating cash reserve ratio applied to corporate operating base. */
@@ -296,6 +295,18 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Multiplier scaling debt issuance aggressiveness with spread attractiveness. */
     public const DEBT_EXPANSION_AGGR_MULT = 0.08;
 
+    // --- Life Reserve Crediting ---
+    /**
+     * What a life book earns on its reserves over what it credits its policyholders: 1.5pp, between the 1-2pp net
+     * investment spreads life and annuity writers report (Athene ~1.6% in 2023). The rest of the yield is theirs.
+     */
+    public const LIFE_INVESTMENT_SPREAD = 0.015;
+    /**
+     * Floor on the rate credited on life reserves: 1%, the minimum nonforfeiture interest rate (NAIC Standard
+     * Nonforfeiture Law for Individual Deferred Annuities, Model #805).
+     */
+    public const NONFORFEITURE_MIN_CREDITING_RATE = 0.01;
+
     // --- Float Portfolio Yield (15/75/10 Allocation) ---
     /** Default policy rate fallback when macroeconomic state data is missing. */
     public const DEFAULT_POLICY_RATE_FALLBACK = 0.02;
@@ -305,14 +316,14 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const FLOAT_LIQUIDITY_WEIGHT   = 0.15;
     /** Weight allocated to core long-duration fixed income bonds in float portfolios. */
     public const FLOAT_BOND_WEIGHT        = 0.75;
-    /** Weight allocated to public growth equities in float portfolios. */
+    /** Weight allocated to public growth equities in property-casualty float portfolios. */
     public const FLOAT_EQUITY_WEIGHT      = 0.10;
     /**
-     * VIX threshold above which catastrophe-correlated equity portfolio losses begin. Market panic = equity crashes.
+     * Equity weight of the assets behind life reserves, whose long fixed obligations are matched with bonds: NAIC
+     * year-end 2023, common stock is 4.0% of life insurers' cash and invested assets with subsidiaries included,
+     * against 34% for P/C insurers.
      */
-    public const CATASTROPHE_VIX_THRESHOLD = 0.25;
-    /** Sensitivity of equity portfolio drag to VIX above threshold. A VIX of 0.85 (COVID) causes ~18% tranche drag. */
-    public const CATASTROPHE_EQUITY_CORRELATION = 0.30;
+    public const LIFE_RESERVE_EQUITY_WEIGHT = 0.025;
 
     // --- Valuation & Fair Value Weights ---
     /** Weight given to book value in profitable quarters (50% Book / 35% Earnings / 15% DDM). */
@@ -328,6 +339,20 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * half a term of premium (SSAP 65, ASC 944-605; NAIC 2024 UPR ~0.52 of NPE).
      */
     public const POLICY_TERM_YEARS = 1.0;
+    /**
+     * Mean years from writing a rate to earning it: half a term, as annual policies renewed through the year earn their
+     * premium pro rata over it.
+     */
+    public const EARNED_RATE_LAG_YEARS = self::POLICY_TERM_YEARS / 2.0;
+    /** Annual nominal growth of a book that keeps pace with the economy at trend: real trend growth plus inflation. */
+    public const TREND_BOOK_GROWTH = MacroConstants::TREND_REAL_GROWTH + MacroConstants::TARGET_INFLATION;
+    /**
+     * Ceiling on a reserve's runoff: a century, past which a reserve fed so slowly it cannot keep pace with trend
+     * growth would never pay out at all.
+     */
+    public const MAX_RESERVE_RUNOFF_YEARS = 100.0;
+    /** Persisted premium rate level the in-force book earns, as a multiple of the rate its margin was struck at. */
+    public const STATE_EARNED_RATE_LEVEL = 'state:capacity:earned_rate_level';
     /**
      * Years of renewals an underwriter weighs the float a new book brings against its underwriting result: the annual
      * policy term.
@@ -421,7 +446,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         return [
             'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR, // Highly immune to macro demand
-            'pricing_power_multiplier' => $this->resolvePremiumRateLevel($stock, $macroState),
+            'pricing_power_multiplier' => $this->resolveBookRateLevel($stock, $macroState),
             // Neutral input cost multiplier: claims inflation reaches the loss ratio through the rate-filing lag.
             'input_cost_multiplier' => 1.0,
         ];
@@ -447,6 +472,41 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // rates reset at renewal, after the loss that withdrew the capacity.
         return 1.0 + $this->resolveHardMarketUplift($stock) - min(0.50, $softMarketRateDiscount)
             - $this->resolveSoftMarketCapacityDiscount($stock, $macroState);
+    }
+
+    /**
+     * The premium rate level the in-force book earns: the rate on offer (resolvePremiumRateLevel()) earned through over
+     * half a policy term, as the book renews through the year and earns its premium pro rata. A rate change reaches the
+     * whole book only once it has been written and earned; struck at once, a hard market's uplift took a carrier's
+     * combined ratio from 95 to 78 in the quarter it began. A read, like resolvePremiumRateLevel(): the physics
+     * persists the same level (advanceUnderwritingCycle()).
+     */
+    protected function resolveEarnedRateLevel(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $written = $this->resolvePremiumRateLevel($stock, $macroState);
+        $earned = (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_EARNED_RATE_LEVEL] ?? $written);
+
+        return TimeSeries::calculateDistributedLag($earned, $written, FinancialConstants::QUARTER_YEARS, self::EARNED_RATE_LAG_YEARS);
+    }
+
+    /**
+     * The rate level on the firm's whole book: the capacity cycle reaches its property-casualty premium, and life
+     * rates, priced on mortality and the long rate, do not follow it.
+     */
+    protected function resolveBookRateLevel(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return 1.0 + ((1.0 - $this->resolveLifePremiumShare($stock)) * ($this->resolveEarnedRateLevel($stock, $macroState) - 1.0));
+    }
+
+    /**
+     * What a book's catastrophe terms, struck per unit of its premium at the base rate, come to per unit of revenue:
+     * its premium at the base rate over revenue. A storm costs the same dollars whatever rate the book was renewed at,
+     * so a hard market's uplift is price on the loss side, not exposure; struck on revenue, it raised the claims a
+     * quarter's storms cost by the whole uplift.
+     */
+    protected function resolveBookVolumeShare(Stock $stock, MacroStateDTO $macroState, float $bookRevenue, float $actualRevenue): float
+    {
+        return $actualRevenue > 0.0 ? $bookRevenue / ($this->resolveBookRateLevel($stock, $macroState) * $actualRevenue) : 0.0;
     }
 
     /**
@@ -578,7 +638,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $floatYield = $this->resolveFloatYield($stock, $macroState);
         $heldAfterHorizon = $this->resolveHeldFloatSurvival($stock, self::FLOAT_DECISION_HORIZON_YEARS);
-        $bookFloatReturn = $floatYield * $afterTax * $this->resolveBookFloatRatio($stock, self::FLOAT_DECISION_HORIZON_YEARS) * self::KENNEY_CAPACITY_RATIO;
+        // The float a new book brings earns the portfolio yield, less what its life reserves credit their holders.
+        $bookFloatReturn = (($floatYield * $this->resolveBookFloatRatio($stock, self::FLOAT_DECISION_HORIZON_YEARS))
+            - ($this->resolveLifeCreditingRate($stock, $macroState) * $this->resolveBookLifeFloatRatio($stock, self::FLOAT_DECISION_HORIZON_YEARS)))
+            * $afterTax * self::KENNEY_CAPACITY_RATIO;
 
         $floatIncome = min((float) $stock->getCorporateTreasury(), (float) $stock->getCustomerDeposits()) * $floatYield;
         $heldIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility) - ($floatIncome * (1.0 - $heldAfterHorizon));
@@ -631,11 +694,11 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     {
         $claimsInflation = (self::CLAIMS_COST_GOODS_SHARE * $macroState->coreGoodsInflationEma)
             + ((1.0 - self::CLAIMS_COST_GOODS_SHARE) * $macroState->supercoreInflationEma);
-        $excess = $claimsInflation - \App\Service\Math\MacroConstants::TARGET_INFLATION;
+        $excess = $claimsInflation - MacroConstants::TARGET_INFLATION;
         $gap = TimeSeries::calculateDistributedLag(
             $streams->getPersistedState(self::STATE_UNRECOVERED_CLAIMS_COST, 0.0),
             $excess * self::PREMIUM_CATCH_UP_YEARS,
-            \App\Service\Math\FinancialConstants::QUARTER_YEARS,
+            FinancialConstants::QUARTER_YEARS,
             self::PREMIUM_CATCH_UP_YEARS,
         );
         $streams->registerState(self::STATE_UNRECOVERED_CLAIMS_COST, $gap);
@@ -697,19 +760,109 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $expected > 0.0 ? ($incurred / $expected) - 1.0 : 0.0;
     }
 
-    /** What the catastrophe excess-of-loss cover on a book pays: the claims above the retention, up to its limit. */
-    protected function resolveCatastropheRecovery(float $grossExcessClaims, float $bookWeight): float
+    /**
+     * The catastrophe cover a book buys, struck on its own loss: the district's quarterly losses at the book's load
+     * (CommodityLogisticsSubsystem::catastropheQuarterDistribution()) plus its own large-loss layer at its threshold
+     * and scale, all per unit of the book's quarterly premium. It attaches at the book's one-in-five-year quarter,
+     * exhausts at its one-in-two-hundred-year quarter, and pays on average what the layer between them expects. Struck
+     * on the primary book's layer for every carrier, a reinsurer paid 3.3 times its own expected recovery for a cover
+     * that attached one year in ten.
+     *
+     * @return array{retention: float, limit: float, expected_recovery: float}
+     */
+    public static function catastropheLayer(float $threshold, float $scale, float $load): array
     {
-        return min(self::CATASTROPHE_COVER_LIMIT * $bookWeight, max(0.0, $grossExcessClaims - (self::MAX_REINSURED_LOSS_SHOCK * $bookWeight)));
+        return self::$catastropheLayers[sprintf('%.9F|%.9F|%.9F', $threshold, $scale, $load)] ??= self::strikeCatastropheLayer($threshold, $scale, $load);
+    }
+
+    /** @return array{retention: float, limit: float, expected_recovery: float} */
+    private static function strikeCatastropheLayer(float $threshold, float $scale, float $load): array
+    {
+        $distribution = CommodityLogisticsSubsystem::catastropheQuarterDistribution();
+        $shifts = [];
+        $weights = [];
+        foreach ($distribution['ratios'] as $index => $ratio) {
+            if ($distribution['weights'][$index] > 0.0) {
+                $shifts[] = $load * ($ratio - 1.0);
+                $weights[] = $distribution['weights'][$index];
+            }
+        }
+        // The large-loss layer given the district's quarter is a normal shortfall below the threshold, so each lattice
+        // point's exceedance and expected layer payout are closed forms.
+        $exceedance = static function (float $level) use ($shifts, $weights, $scale, $threshold): float {
+            $probability = 0.0;
+            foreach ($shifts as $index => $shift) {
+                $probability += $weights[$index] * Distributions::normalHingeLayerExceedance($scale, $threshold, $shift - $level);
+            }
+
+            return $probability;
+        };
+        $quantile = static function (float $probability) use ($exceedance, $shifts, $scale, $threshold, $load): float {
+            $low = -$load;
+            $high = max([0.0, ...$shifts]) + ($scale * max(0.0, $threshold - Distributions::standardNormalQuantile($probability / 2.0)));
+            for ($step = 0; $step < self::CATASTROPHE_LAYER_BISECTION_STEPS; ++$step) {
+                $mid = 0.5 * ($low + $high);
+                if ($exceedance($mid) > $probability) {
+                    $low = $mid;
+                } else {
+                    $high = $mid;
+                }
+            }
+
+            return 0.5 * ($low + $high);
+        };
+        $retention = $quantile(1.0 / (FinancialConstants::QUARTERS_PER_YEAR * self::CATASTROPHE_RETENTION_RETURN_YEARS));
+        $exhaustion = $quantile(1.0 / (FinancialConstants::QUARTERS_PER_YEAR * self::CATASTROPHE_LIMIT_RETURN_YEARS));
+
+        $expectedRecovery = 0.0;
+        foreach ($shifts as $index => $shift) {
+            $expectedRecovery += $weights[$index] * (Distributions::normalHingeLayerExpectation($scale, $threshold, $shift - $retention)
+                - Distributions::normalHingeLayerExpectation($scale, $threshold, $shift - $exhaustion));
+        }
+
+        return ['retention' => $retention, 'limit' => max(0.0, $exhaustion - $retention), 'expected_recovery' => $expectedRecovery];
+    }
+
+    /**
+     * The catastrophe cover this book buys: struck on its tuned large-loss layer and this model's district load.
+     *
+     * @return array{retention: float, limit: float, expected_recovery: float}
+     */
+    protected function resolveCatastropheLayer(float $catThreshold, float $catScalar): array
+    {
+        return self::catastropheLayer($catThreshold, $catScalar, static::DISTRICT_CATASTROPHE_LOAD);
+    }
+
+    /**
+     * What the catastrophe excess-of-loss cover on a book pays: the claims above the retention, up to its limit.
+     *
+     * @param array{retention: float, limit: float, expected_recovery: float} $layer
+     */
+    protected function resolveCatastropheRecovery(float $grossExcessClaims, array $layer): float
+    {
+        return min($layer['limit'], max(0.0, $grossExcessClaims - $layer['retention']));
     }
 
     /**
      * The quarter's premium for the catastrophe cover, as a share of the book's premium: what it pays on average plus
      * the reinsurer's loading. Unpriced, the cover took a sixth of the catastrophe load off the book for nothing.
+     *
+     * @param array{retention: float, limit: float, expected_recovery: float} $layer
      */
-    protected function resolveCededPremium(float $bookWeight): float
+    protected function resolveCededPremium(array $layer): float
     {
-        return $bookWeight * self::CATASTROPHE_COVER_EXPECTED_RECOVERY * (1.0 + self::CATASTROPHE_COVER_RATE_LOADING);
+        return $layer['expected_recovery'] * (1.0 + self::CATASTROPHE_COVER_RATE_LOADING);
+    }
+
+    /**
+     * The premium that restores the limit a recovery used: one reinstatement at 100%, pro rata as to amount, at the
+     * cover's own rate.
+     *
+     * @param array{retention: float, limit: float, expected_recovery: float} $layer
+     */
+    protected function resolveReinstatementPremium(array $layer, float $recovery): float
+    {
+        return $layer['limit'] > 0.0 ? $this->resolveCededPremium($layer) * $recovery / $layer['limit'] : 0.0;
     }
 
     /** The claim headline a quarter's losses make, sized against the book's own average catastrophe year. */
@@ -771,16 +924,19 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_OBSERVED_CAPACITY, TimeSeries::calculateDistributedLag(
             currentLaggedValue: $streams->getPersistedState(self::STATE_OBSERVED_CAPACITY, $currentRatio),
             targetValue: $currentRatio,
-            dt: \App\Service\Math\FinancialConstants::QUARTER_YEARS,
+            dt: FinancialConstants::QUARTER_YEARS,
             lagTimeConstant: self::CAPACITY_OBSERVATION_LAG_YEARS,
         ));
+
+        // The rate the in-force book earns this quarter, carried so the next quarter's earns on from it.
+        $streams->registerState(self::STATE_EARNED_RATE_LEVEL, $this->resolveEarnedRateLevel($stock, $macroState));
 
         // The quarter's renewals are written at the share the rate on offer now justifies.
         $targetShare = $this->resolveTargetWrittenShare($stock, $macroState, $mathUtility, $this->resolveOperatingEquity($stock));
         $streams->registerState(self::STATE_WRITTEN_SHARE, self::adjustWrittenShare(
             $streams->getPersistedState(self::STATE_WRITTEN_SHARE, $targetShare),
             $targetShare,
-            \App\Service\Math\FinancialConstants::QUARTER_YEARS,
+            FinancialConstants::QUARTER_YEARS,
         ));
     }
 
@@ -869,10 +1025,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $realizedExpenseRatio = $baselineExpenseRatio * $expenseScale;
 
         // B. Loss Ratio: the catastrophe cover takes the claims above the retention up to its limit, for a premium
-        // every quarter and a reinstatement premium to restore the limit it used.
-        $recovery = $this->resolveCatastropheRecovery($claims['gross'], 1.0);
-        $reinstatementPremium = $this->resolveCededPremium(1.0) + ($recovery > 0.0 ? self::REINSTATEMENT_PREMIUM_RATE : 0.0);
-        $realizedLossRatio = max(0.0, ($baselineLossRatio * (1.0 + $this->resolveUnrecoveredClaimsCost($streams, $macroState))) + $claims['excess'] - $recovery);
+        // every quarter and a reinstatement premium to restore the limit it used, all on the book's volume.
+        $volume = $this->resolveBookVolumeShare($stock, $macroState, $actualRevenue, $actualRevenue);
+        $layer = $this->resolveCatastropheLayer($catThreshold, $catScalar);
+        $recovery = $this->resolveCatastropheRecovery($claims['gross'], $layer);
+        $reinstatementPremium = ($this->resolveCededPremium($layer) + $this->resolveReinstatementPremium($layer, $recovery)) * $volume;
+        $realizedLossRatio = max(0.0, ($baselineLossRatio * (1.0 + $this->resolveUnrecoveredClaimsCost($streams, $macroState))) + (($claims['excess'] - $recovery) * $volume));
 
         // A capital shortfall hardens rates through the regime this advances, which reaches revenue and the cost
         // ratio through the pricing-power multiplier; it is not discounted from the combined ratio again here.
@@ -904,9 +1062,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Insurance companies invest their massive Float in long-duration bonds.
-     * The 10% equity tranche introduces stochastic quarterly returns and correlates with
-     * catastrophe events via VIX: major disasters cause concurrent market crashes (9\/11, COVID).
+     * Insurance companies invest their massive Float in long-duration bonds, bills and an equity tranche, at the mix's
+     * expected yield, less the interest the life reserves credit their holders. The equity tranche's realised return
+     * replaces its expectation in the books (resolveEquitySleeve()), so a crash that hits claims and equities together
+     * reaches the insurer through the market's own fall.
      *
      * @param Stock       $stock       The insurance stock entity.
      * @param MacroStateDTO $macroState  The current macroeconomic state.
@@ -925,18 +1084,57 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $moneyMarketYield = FixedIncome::moneyMarketYield($policyRate);
 
-        return ($investableFloat * $floatYield) + ($excessCash * $moneyMarketYield);
+        // Net investment income: what the float earns, less the interest its life reserves credit their holders.
+        return ($investableFloat * $floatYield) + ($excessCash * $moneyMarketYield) - $this->resolveCreditedLifeInterest($stock, $macroState);
+    }
+
+    /**
+     * The rate the life reserves credit their policyholders: the bond book's yield less the life investment spread,
+     * never below the statutory floor. Uncredited, a life reserve was float that cost nothing, and a composite's life
+     * reserve ratio had to be cut from ACLI's 9.9 times premium to 2.84 to keep its return in range.
+     */
+    protected function resolveLifeCreditingRate(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $bookYield = $stock->getSecuritiesCarryingYield() ?? $macroState->yield10yEma;
+
+        return max(self::NONFORFEITURE_MIN_CREDITING_RATE, $bookYield - self::LIFE_INVESTMENT_SPREAD);
+    }
+
+    /** Annual interest credited on the life reserves the firm holds. */
+    protected function resolveCreditedLifeInterest(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return $this->resolveHeldLifeReserves($stock) * $this->resolveLifeCreditingRate($stock, $macroState);
+    }
+
+    /** The life reserves the firm holds; a book that has not rolled them yet opens on its steady composition. */
+    private function resolveHeldLifeReserves(Stock $stock): float
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        return max(0.0, (float) ($momentum[self::STATE_LIFE_RESERVES]
+            ?? $this->resolveOpeningReserves($stock, max(0.0, (float) $stock->getCustomerDeposits()), $momentum)['life']));
+    }
+
+    /**
+     * The equity share of the investable float: the property-casualty float at the firm's equity weight, the life
+     * reserves at LIFE_RESERVE_EQUITY_WEIGHT. At one weight across the float, a composite whose life reserves were ten
+     * times premium held equities worth three quarters of its capital.
+     */
+    protected function resolveFloatEquityWeight(Stock $stock): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::FloatEquityWeight->value => self::FLOAT_EQUITY_WEIGHT,
+        ]);
+        $float = (float) $stock->getCustomerDeposits();
+        $lifeShare = $float > 0.0 ? min(1.0, $this->resolveHeldLifeReserves($stock) / $float) : 0.0;
+
+        return ((1.0 - $lifeShare) * $params[ModelParam::FloatEquityWeight]) + ($lifeShare * self::LIFE_RESERVE_EQUITY_WEIGHT);
     }
 
     /** The annual yield on a unit of investable float across the liquidity, bond and equity tranches. */
     protected function resolveFloatYield(Stock $stock, MacroStateDTO $macroState): float
     {
-        // Resolve company-specific tuned float allocation parameters
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::FloatEquityWeight->value => self::FLOAT_EQUITY_WEIGHT,
-        ]);
-
-        $floatEquityWeight = $params[ModelParam::FloatEquityWeight];
+        $floatEquityWeight = $this->resolveFloatEquityWeight($stock);
         $policyRate        = $macroState->policyRateEma;
         $yield10y          = $macroState->yield10yEma;
 
@@ -952,22 +1150,28 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $bondReturn        = $stock->getSecuritiesCarryingYield() ?? $yield10y;
         $baseYield         = $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
 
-        $outputGap = $macroState->outputGapEma;
-        $erp = $macroState->equityRiskPremium;
+        return $baseYield + ($floatEquityWeight * $this->resolveFloatEquityReturn($macroState));
+    }
 
-        // Expected equity tranche return during continuous tick valuation ($equityPortfolioZ = 0.0).
-        // This prevents high-frequency distress penalty whipsaws when analyzeDebtHealth() evaluates float income.
-        $stochasticEquityReturn = ($policyRate + $erp) + ($outputGap * self::EQUITY_RETURN_GAP_MULT);
+    /**
+     * The equity tranche's expected return a year, what the float's yield and the decisions it informs carry; the
+     * board's realised return replaces it in the books, where a crash that hits claims and equities together arrives
+     * as the market's own fall.
+     */
+    protected function resolveFloatEquityReturn(MacroStateDTO $macroState): float
+    {
+        return $macroState->policyRateEma + $macroState->equityRiskPremium + ($macroState->outputGapEma * self::EQUITY_RETURN_GAP_MULT);
+    }
 
-        // Catastrophe-Equity Correlation:
-        // Major disasters (9/11, COVID, GFC) simultaneously cause high claims AND equity market crashes.
-        // VIX is a reliable real-time proxy: panic-level VIX (>25%) reliably accompanies both catastrophes
-        // and broad equity drawdowns. This correlation is the channel the model exploits.
-        $vixEma = $macroState->marketVolatilityEma;
-        $catastropheEquityPenalty = max(0.0, ($vixEma - self::CATASTROPHE_VIX_THRESHOLD) * self::CATASTROPHE_EQUITY_CORRELATION);
-        $stochasticEquityReturn -= $catastropheEquityPenalty;
+    /** @return array{value: float, expected_return: float} */
+    public function resolveEquitySleeve(Stock $stock, MacroStateDTO $macroState): array
+    {
+        $investableFloat = min((float) $stock->getCorporateTreasury(), (float) $stock->getCustomerDeposits());
 
-        return $baseYield + ($floatEquityWeight * $stochasticEquityReturn);
+        return [
+            'value' => max(0.0, $investableFloat) * $this->resolveFloatEquityWeight($stock),
+            'expected_return' => $this->resolveFloatEquityReturn($macroState),
+        ];
     }
 
     /**
@@ -1105,7 +1309,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * Returns the base float yield for the 15% liquidity + 75% long-duration bond tranches only.
-     * The 10% equity tranche is handled stochastically in calculateInterestIncome().
+     * The 10% equity tranche is the equity sleeve (resolveEquitySleeve()), marked to the board.
      *
      * @param MacroStateDTO $macroState Current macroeconomic state.
      * @param float $policyRate Current policy interest rate.
@@ -1135,15 +1339,11 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * The long-duration bond tranche of investable float.
      *
      * Struck on the same allocation calculateInterestIncome() earns the coupon on, so the book that is
-     * marked and the book that pays are one book. The liquidity tranche is bills and the equity tranche is
-     * already stochastic in the income function; neither belongs to the curve, so neither is marked here.
+     * marked and the book that pays are one book. The liquidity tranche is bills and the equity tranche is marked to
+     * the board (resolveEquitySleeve()); neither belongs to the curve, so neither is marked here.
      */
     public function resolveSecuritiesBook(Stock $stock, ?float $currentTreasury = null): float
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::FloatEquityWeight->value => self::FLOAT_EQUITY_WEIGHT,
-        ]);
-
         $cash = $currentTreasury ?? (float) $stock->getCorporateTreasury();
         $investableFloat = min($cash, (float) $stock->getCustomerDeposits());
 
@@ -1151,7 +1351,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             return 0.0;
         }
 
-        $fixedIncomeWeight = max(0.0, 1.0 - $params[ModelParam::FloatEquityWeight]);
+        $fixedIncomeWeight = max(0.0, 1.0 - $this->resolveFloatEquityWeight($stock));
         $totalFixedWeight  = max(0.01, self::FLOAT_LIQUIDITY_WEIGHT + self::FLOAT_BOND_WEIGHT);
 
         return $investableFloat * $fixedIncomeWeight * (self::FLOAT_BOND_WEIGHT / $totalFixedWeight);
@@ -1307,7 +1507,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Unearned premium on a book written evenly and earned pro rata over its term: half a term of annual premium. */
     public function resolveUnearnedPremiumReserve(float $quarterlyPremium): float
     {
-        return max(0.0, $quarterlyPremium / \App\Service\Math\FinancialConstants::QUARTER_YEARS) * self::POLICY_TERM_YEARS / 2.0;
+        return max(0.0, $quarterlyPremium / FinancialConstants::QUARTER_YEARS) * self::POLICY_TERM_YEARS / 2.0;
     }
 
     /**
@@ -1318,7 +1518,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     public function rollLossReserves(float $reserves, float $incurred, float $runoffYears): array
     {
-        $dt = \App\Service\Math\FinancialConstants::QUARTER_YEARS;
+        $dt = FinancialConstants::QUARTER_YEARS;
         $settled = max(0.0, TimeSeries::calculateDistributedLag(
             currentLaggedValue: $reserves,
             targetValue: ($incurred / $dt) * $runoffYears,
@@ -1367,21 +1567,37 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Mean years from incurred to paid on the non-life book, set so a steady book holds its pinned loss reserve ratio.
+     * Mean years from incurred to paid on the non-life book, set so a book growing with the economy at trend holds its
+     * pinned loss reserve ratio (resolveRunoffYearsAtTrend()).
      */
     public function resolveReserveRunoffYears(Stock $stock): float
     {
-        $incurred = $this->resolveStructuralLossRatio($stock) * (1.0 - $this->resolveLifePremiumShare($stock));
-
-        return max(0.01, $this->resolveReserveRatios($stock)['loss']) / max(0.01, $incurred);
+        return self::resolveRunoffYearsAtTrend(
+            $this->resolveReserveRatios($stock)['loss'],
+            $this->resolveStructuralLossRatio($stock) * (1.0 - $this->resolveLifePremiumShare($stock)),
+        );
     }
 
-    /** Mean years a life book's policy reserve is held, set so a steady book holds its pinned policy reserve ratio. */
+    /** Mean years a life book's policy reserve is held, set so a book growing at trend holds its pinned ratio. */
     public function resolveLifeReserveRunoffYears(Stock $stock): float
     {
-        $incurred = $this->resolveStructuralLossRatio($stock) * $this->resolveLifePremiumShare($stock);
+        return self::resolveRunoffYearsAtTrend(
+            $this->resolveReserveRatios($stock)['life'],
+            $this->resolveStructuralLossRatio($stock) * $this->resolveLifePremiumShare($stock),
+        );
+    }
 
-        return max(0.01, $this->resolveReserveRatios($stock)['life']) / max(0.01, $incurred);
+    /**
+     * The runoff at which a reserve fed by incurred losses holds its ratio to a premium growing at the economy's
+     * nominal trend: R/P = incurred / (1/τ + g), so 1/τ = incurred/R − g. The pinned ratios are measured on books
+     * that grow (NAIC, ACLI, Swiss Re); struck for a book that never does, every reserve fell behind its ratio as the
+     * economy grew, a life book's to two thirds of it in twenty years.
+     */
+    private static function resolveRunoffYearsAtTrend(float $reserveRatio, float $incurred): float
+    {
+        $ratio = max(0.01, $reserveRatio);
+
+        return min(self::MAX_RESERVE_RUNOFF_YEARS, $ratio / max(1e-9, max(0.01, $incurred) - (self::TREND_BOOK_GROWTH * $ratio)));
     }
 
     /**
@@ -1394,7 +1610,13 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         return $ratios['unearned']
             + ($ratios['loss'] * (1.0 - exp(-$horizonYears / $this->resolveReserveRunoffYears($stock))))
-            + ($ratios['life'] * (1.0 - exp(-$horizonYears / $this->resolveLifeReserveRunoffYears($stock))));
+            + $this->resolveBookLifeFloatRatio($stock, $horizonYears);
+    }
+
+    /** The life reserves' part of that float: a share 1 − e^(−H/τ) of the policy reserve's settled level. */
+    public function resolveBookLifeFloatRatio(Stock $stock, float $horizonYears): float
+    {
+        return $this->resolveReserveRatios($stock)['life'] * (1.0 - exp(-$horizonYears / $this->resolveLifeReserveRunoffYears($stock)));
     }
 
     /**
@@ -1491,14 +1713,21 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * NAIC Model Act #440, section 5: without the commissioner's prior approval an insurer may pay out in any twelve
-     * months the greater of 10% of its policyholder surplus or its net income for the year. A carrier whose earnings
-     * have gone holds its distributions to a tenth of its surplus, however long its board would hold the dividend.
+     * months the greater of 10% of its policyholder surplus or its net income for the year, statutory, so with the
+     * gains its securities sales realised. A carrier whose earnings have gone holds its distributions to a tenth of
+     * its surplus, however long its board would hold the dividend.
      */
     public function getDistributionCeiling(Stock $stock, float $trailingNetIncome): ?float
     {
         return max(self::NAIC_ORDINARY_DIVIDEND_SURPLUS_SHARE * max(0.0, $stock->getStatutorySurplus()), max(0.0, $trailingNetIncome));
     }
 
+    /**
+     * An insurer's regulator halts its distributions on solvency (NAIC RBC, Solvency II): a capital ratio in
+     * distress, or surplus below half the Kenney target its premium needs. Its float is owed to policyholders, not
+     * lenders, so the bank tiers that count it as debt do not apply; struck on them, a composite carrying ACLI's life
+     * reserves was barred from buybacks at any capital.
+     */
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float
     {
         // Solvency is measured on capital that can pay a claim: goodwill is valued at nil.
@@ -1507,15 +1736,28 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $totalAssets = max(1.0, $equity + $totalDebt);
         $capitalRatio = ($equity / $totalAssets) * 100.0;
 
-        // Statutory NAIC / Solvency II capital distress lockout:
-        // When capital ratio falls into regulatory distress (< 2.0%) or surplus is below 50% of Kenney target,
-        // regulators mandate an immediate halt on all dividend distributions.
-        $targetSurplus = (float) $stock->getTotalRevenue() / self::KENNEY_CAPACITY_RATIO;
-        if ($capitalRatio < self::DISTRESS_EQUITY_THRESHOLD || $equity < ($targetSurplus * 0.50)) {
+        if ($capitalRatio < self::DISTRESS_EQUITY_THRESHOLD || $equity < ($this->resolveKenneyTargetSurplus($stock) * self::DISTRESS_TARGET_SURPLUS_SHARE)) {
             return 0.0;
         }
 
-        return parent::getRegulatoryDividendCap($stock, $currentTreasury, $macroState);
+        return null;
+    }
+
+    /**
+     * Repurchases stop while statutory surplus is short of the Kenney target: capital an insurer lacks is not handed
+     * back.
+     */
+    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?bool
+    {
+        $cap = $this->getRegulatoryDividendCap($stock, $currentTreasury, $macroState);
+
+        return ($cap !== null && $cap <= 0.0) || $stock->getStatutorySurplus() < $this->resolveKenneyTargetSurplus($stock);
+    }
+
+    /** The surplus the firm's premium needs at the Kenney ratio. */
+    private function resolveKenneyTargetSurplus(Stock $stock): float
+    {
+        return (float) $stock->getTotalRevenue() / self::KENNEY_CAPACITY_RATIO;
     }
 
     /**
@@ -1531,7 +1773,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             'catastrophe_loss_index_ema',
             'core_goods_inflation_ema',
             'gdp_deflator',
-            'market_volatility_ema',
             'output_gap_ema',
             'output_gap_lag_6m',
             'perceived_neutral_rate',
