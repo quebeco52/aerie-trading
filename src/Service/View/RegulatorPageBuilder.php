@@ -7,6 +7,7 @@ namespace App\Service\View;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Politics\Department\FinancialRegulator;
+use App\Service\Politics\Department\Office;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -34,7 +35,7 @@ final class RegulatorPageBuilder
             // already carries.
             $panel['head']['ltvCap'] = $politics->regulatorLtvCap;
             $panel['head']['neutralBuffer'] = $politics->regulatorNeutralBuffer;
-            foreach ($politics->regulatorPassedOver as $i => $candidate) {
+            foreach ($politics->head(Office::Regulator)['passedOver'] as $i => $candidate) {
                 if (isset($panel['head']['passedOver'][$i])) {
                     $panel['head']['passedOver'][$i]['ltvCap'] = FinancialRegulator::ltvCapForStance((float) $candidate['regulation']);
                 }

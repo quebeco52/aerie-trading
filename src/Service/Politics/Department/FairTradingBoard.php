@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Politics\Department;
 
-use App\Data\Politics\AerieCouncil;
-use App\Service\Math\MathUtility;
-use App\Service\Politics\Council\CouncilAppointments;
 use App\Service\Politics\PoliticsState;
 
 /**
@@ -25,48 +22,18 @@ final class FairTradingBoard
      */
     public const FOUNDING_LENIENCY = 0.6875;
 
-    // --- The Head ---
-    /** Length of the head's single term, in years: the five most Council department heads serve. */
-    public const HEAD_TERM_YEARS = 5.0;
-    /** When the term of the head sitting at Year 1 ends, in years after Year 1 began. */
-    public const OPENING_HEAD_TERM_END = 1.0;
-
     /**
-     * One tick, after the Council's own: seats a head when the state has none and at each term's end.
+     * One tick, after the Council's own: seats a head when the post is vacant and at each term's end (Office::fill()),
+     * and keeps the stance of the head before them, whose screens theirs replaced (at the opening, their own).
      *
      * @param PoliticsState $state Advanced in place; its totalTime already this tick's.
      */
-    public static function advance(PoliticsState $state, MathUtility $math): void
+    public static function advance(PoliticsState $state): void
     {
-        $time = $state->totalTime;
-        $term = CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS);
-        if ($state->fairTradingHeadName !== '' && abs($state->fairTradingHeadTermStart - $term) < 1e-9) {
-            return;
-        }
-
-        $opening = $state->fairTradingHeadName === '';
-        [$chosen, $state->fairTradingHeadPassedOver] = CouncilAppointments::appoint(
-            (int) $state->authoritySalt,
-            'fair-trading',
-            $term,
-            [CouncilAppointments::AXIS_COMPETITION => CouncilAppointments::median($state->councilCompetitionStances)],
-            CouncilAppointments::reservedNames($state),
-            $math,
-        );
-        if ($term < 0.0) {
-            $chosen['name'] = AerieCouncil::OPENING_FAIR_TRADING_HEAD;
-            $chosen['competition'] = self::stance(self::FOUNDING_LENIENCY);
-            $state->fairTradingHeadPassedOver = [];
-        }
-
-        $state->fairTradingPriorStance = $opening ? $chosen['competition'] : $state->fairTradingHeadStance;
-        CouncilAppointments::retire($state, $state->fairTradingHeadName);
-        $state->fairTradingHeadName = $chosen['name'];
-        $state->fairTradingHeadBirth = $chosen['birth'];
-        $state->fairTradingHeadTermStart = $term;
-        $state->fairTradingHeadStance = $chosen['competition'];
-        if (!$opening) {
-            $state->lastFairTradingHeadAppointedAt = $time;
+        $seated = Office::FairTradingHead->fill($state);
+        if ($seated !== null) {
+            [, $outgoing] = $seated;
+            $state->fairTradingPriorStance = $outgoing['name'] === '' ? $state->head(Office::FairTradingHead)['stance'] : $outgoing['stance'];
         }
     }
 
@@ -92,11 +59,5 @@ final class FairTradingBoard
     public static function stanceName(float $stance): string
     {
         return $stance < -1.0 / 3.0 ? 'light' : ($stance > 1.0 / 3.0 ? 'strict' : 'balanced');
-    }
-
-    /** When the head in office at a moment leaves. */
-    public static function headTermEnd(float $time): float
-    {
-        return CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS) + self::HEAD_TERM_YEARS;
     }
 }

@@ -11,11 +11,10 @@ use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\Council\CouncilAppointments as Appointments;
-use App\Service\Politics\Department\Exchequer;
 use App\Service\Politics\Department\FairTradingBoard;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
-use App\Service\Politics\Department\SovereignReserveFund;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Policy\Platforms;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
@@ -29,11 +28,11 @@ class FairTradingBoardTest extends TestCase
     private static function tick(PoliticsState $state, MathUtility $math): void
     {
         Appointments::advance($state, $math);
-        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT, $math);
-        FinancialRegulator::advance($state, $math);
-        SovereignReserveFund::advance($state, $math);
-        Exchequer::advance($state, $math);
-        FairTradingBoard::advance($state, $math);
+        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT);
+        FinancialRegulator::advance($state);
+        Office::FundHead->fill($state);
+        Office::ExchequerHead->fill($state);
+        FairTradingBoard::advance($state);
     }
 
     private static function opened(int $seed = 7): PoliticsState
@@ -85,8 +84,8 @@ class FairTradingBoardTest extends TestCase
     {
         $state = self::opened();
 
-        $this->assertSame(AerieCouncil::OPENING_FAIR_TRADING_HEAD, $state->fairTradingHeadName);
-        $this->assertEqualsWithDelta(FairTradingBoard::OPENING_HEAD_TERM_END - FairTradingBoard::HEAD_TERM_YEARS, $state->fairTradingHeadTermStart, 1e-9);
+        $this->assertSame(AerieCouncil::OPENING_FAIR_TRADING_HEAD, $state->head(Office::FairTradingHead)['name']);
+        $this->assertEqualsWithDelta(Office::FairTradingHead->openingTermEnd() - Office::FairTradingHead->termYears(), $state->head(Office::FairTradingHead)['termStart'], 1e-9);
         $this->assertCount(AerieCouncil::SEATS, $state->councilCompetitionStances);
         $names = Appointments::sittingNames($state);
         $this->assertContains(AerieCouncil::OPENING_FAIR_TRADING_HEAD, $names);
@@ -103,29 +102,29 @@ class FairTradingBoardTest extends TestCase
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedian(): void
     {
         foreach ([3, 7, 11, 19] as $seed) {
-            $state = self::runTo(self::opened($seed), FairTradingBoard::OPENING_HEAD_TERM_END - self::DT);
+            $state = self::runTo(self::opened($seed), Office::FairTradingHead->openingTermEnd() - self::DT);
             $median = Appointments::median($state->councilCompetitionStances);
             $sitting = Appointments::sittingNames($state);
-            $opening = $state->fairTradingHeadStance;
-            $this->assertSame(AerieCouncil::OPENING_FAIR_TRADING_HEAD, $state->fairTradingHeadName);
+            $opening = $state->head(Office::FairTradingHead)['stance'];
+            $this->assertSame(AerieCouncil::OPENING_FAIR_TRADING_HEAD, $state->head(Office::FairTradingHead)['name']);
 
-            self::runTo($state, FairTradingBoard::OPENING_HEAD_TERM_END + self::DT);
-            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'fair-trading', FairTradingBoard::OPENING_HEAD_TERM_END, [Appointments::AXIS_COMPETITION => $median], $sitting, new MathUtility());
-            $this->assertSame($expected['name'], $state->fairTradingHeadName, "seed {$seed}");
-            $this->assertSame($expected['competition'], $state->fairTradingHeadStance);
-            $this->assertSame($passedOver, $state->fairTradingHeadPassedOver);
+            self::runTo($state, Office::FairTradingHead->openingTermEnd() + self::DT);
+            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'fair-trading', Office::FairTradingHead->openingTermEnd(), [Appointments::AXIS_COMPETITION => $median], $sitting);
+            $this->assertSame($expected['name'], $state->head(Office::FairTradingHead)['name'], "seed {$seed}");
+            $this->assertSame($expected['competition'], $state->head(Office::FairTradingHead)['stance']);
+            $this->assertSame($passedOver, $state->head(Office::FairTradingHead)['passedOver']);
             $this->assertSame($opening, $state->fairTradingPriorStance);
-            $appointedAt = $state->lastFairTradingHeadAppointedAt;
-            $this->assertEqualsWithDelta(FairTradingBoard::leniency($state->fairTradingHeadStance), PoliticsStateDTO::fromState($state)->policy()->mergerReviewLeniency, 1e-12);
+            $appointedAt = $state->head(Office::FairTradingHead)['appointedAt'];
+            $this->assertEqualsWithDelta(FairTradingBoard::leniency($state->head(Office::FairTradingHead)['stance']), PoliticsStateDTO::fromState($state)->policy()->mergerReviewLeniency, 1e-12);
 
-            self::runTo($state, FairTradingBoard::OPENING_HEAD_TERM_END + FairTradingBoard::HEAD_TERM_YEARS - self::DT);
-            $this->assertSame($expected['name'], $state->fairTradingHeadName, 'One term, unchanged until it ends.');
-            $this->assertSame($appointedAt, $state->lastFairTradingHeadAppointedAt);
+            self::runTo($state, Office::FairTradingHead->openingTermEnd() + Office::FairTradingHead->termYears() - self::DT);
+            $this->assertSame($expected['name'], $state->head(Office::FairTradingHead)['name'], 'One term, unchanged until it ends.');
+            $this->assertSame($appointedAt, $state->head(Office::FairTradingHead)['appointedAt']);
         }
 
         $headline = new PoliticsState();
         $headline->totalTime = 3.0;
-        $headline->lastFairTradingHeadAppointedAt = 3.0;
+        $headline->heads[Office::FairTradingHead->value] = ['appointedAt' => 3.0] + Office::VACANT;
         $this->assertSame(ShockEvent::FAIR_TRADING_HEAD_APPOINTED, PoliticsEngine::headline($headline));
     }
 

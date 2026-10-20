@@ -18,15 +18,13 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Math\MacroConstants;
-use App\Service\Politics\Department\CoastGuard;
 use App\Service\Politics\Department\Exchequer;
 use App\Service\Politics\Department\FairTradingBoard;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Department\SecuritiesCommission;
-use App\Service\Politics\Department\SecurityBureau;
 use App\Service\Politics\Department\SovereignReserveFund;
-use App\Service\Politics\Department\StateGuard;
 use App\Service\Politics\Diet\CoalitionFormation;
 use App\Service\Politics\Diet\PartyLeaders;
 
@@ -274,12 +272,13 @@ class SystemicEventReporter
             static fn(array $candidate): string => "{$candidate['name']}, {$stance($candidate['stance'], $candidate['swing'] ?? 0.0)}",
             $candidates,
         ));
+        $governor = $politics->head(Office::Governor);
         $context = [
-            'governor' => $politics->governorName,
-            'governor_age' => (string) (int) floor($time - $politics->governorBirth),
-            'governor_stance' => $stance($politics->governorStance, max(0.0, $politics->governorSwinger)),
-            'governor_term_ends' => DistrictCalendar::quarter(MonetaryAuthority::governorTermEnd($time)),
-            'governor_passed_over' => $passedOver($politics->governorPassedOver),
+            'governor' => $governor['name'],
+            'governor_age' => (string) (int) floor($time - $governor['birth']),
+            'governor_stance' => $stance($governor['stance'], max(0.0, $politics->governorSwinger)),
+            'governor_term_ends' => DistrictCalendar::quarter(Office::Governor->termEnd($time)),
+            'governor_passed_over' => $passedOver($governor['passedOver']),
         ];
 
         // The councillor seated last, at a term's start or mid-term in a vacant seat.
@@ -297,7 +296,7 @@ class SystemicEventReporter
             }
         }
 
-        $stances = array_merge([$politics->governorStance], array_values($politics->memberStances));
+        $stances = array_merge([$governor['stance']], array_values($politics->memberStances));
         $swingers = array_merge([max(0.0, $politics->governorSwinger)], array_values($politics->memberSwingers));
         $counts = array_count_values(array_map(static fn(float $stance, int $key): string => MonetaryAuthority::typeName($stance, $swingers[$key] ?? 0.0), $stances, array_keys($stances)));
         $context['committee_counts'] = self::listNames(array_values(array_filter(array_map(
@@ -367,23 +366,24 @@ class SystemicEventReporter
      */
     private static function exchequerHeadContext(MacroStateDTO $macro, PoliticsStateDTO $politics): array
     {
-        if ($politics->exchequerHeadName === '') {
+        $head = $politics->head(Office::ExchequerHead);
+        if ($head['name'] === '') {
             return [];
         }
 
         $years = static fn(float $maturity): string => number_format($maturity, 1) . ' years';
-        $target = Exchequer::averageMaturity($politics->exchequerHeadStance);
+        $target = Exchequer::averageMaturity($head['stance']);
         $current = $macro->sovereignDebtAverageMaturity;
         $basisPoints = (int) round(10000.0 * (CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $target) - CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $current)));
 
         return [
-            'exchequer_head' => $politics->exchequerHeadName,
-            'exchequer_head_age' => (string) (int) floor($politics->totalTime - $politics->exchequerHeadBirth),
+            'exchequer_head' => $head['name'],
+            'exchequer_head_age' => (string) (int) floor($politics->totalTime - $head['birth']),
             'exchequer_head_stance' => self::DEBT_PHRASES[Exchequer::stanceName($target)],
-            'exchequer_head_term_ends' => DistrictCalendar::quarter(Exchequer::headTermEnd($politics->totalTime)),
+            'exchequer_head_term_ends' => DistrictCalendar::quarter(Office::ExchequerHead->termEnd($politics->totalTime)),
             'exchequer_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have borrowed at {$years(Exchequer::averageMaturity($candidate['debt']))} on average",
-                $politics->exchequerHeadPassedOver,
+                $head['passedOver'],
             )),
             'debt_maturity_change' => match (true) {
                 abs($target - $current) < 0.05 => "keeps the debt's average maturity near {$years($current)}",
@@ -402,21 +402,22 @@ class SystemicEventReporter
      */
     private static function fundHeadContext(MacroStateDTO $macro, PoliticsStateDTO $politics): array
     {
-        if ($politics->fundHeadName === '') {
+        $head = $politics->head(Office::FundHead);
+        if ($head['name'] === '') {
             return [];
         }
 
         $pct = static fn(float $share): string => number_format($share * 100.0, 0) . '%';
-        $target = SovereignReserveFund::equityShare($politics->fundHeadStance);
+        $target = SovereignReserveFund::equityShare($head['stance']);
         $current = $macro->sovereignFundPolicyEquityShare;
         $context = [
-            'fund_head' => $politics->fundHeadName,
-            'fund_head_age' => (string) (int) floor($politics->totalTime - $politics->fundHeadBirth),
+            'fund_head' => $head['name'],
+            'fund_head_age' => (string) (int) floor($politics->totalTime - $head['birth']),
             'fund_head_stance' => self::FUND_PHRASES[SovereignReserveFund::stanceName($target)],
-            'fund_head_term_ends' => DistrictCalendar::quarter(SovereignReserveFund::headTermEnd($politics->totalTime)),
+            'fund_head_term_ends' => DistrictCalendar::quarter(Office::FundHead->termEnd($politics->totalTime)),
             'fund_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have held {$pct(SovereignReserveFund::equityShare($candidate['fund']))} in shares",
-                $politics->fundHeadPassedOver,
+                $head['passedOver'],
             )),
             'fund_equity_target' => $pct($target),
         ];
@@ -444,27 +445,28 @@ class SystemicEventReporter
      */
     private static function fairTradingHeadContext(PoliticsStateDTO $politics): array
     {
-        if ($politics->fairTradingHeadName === '') {
+        $head = $politics->head(Office::FairTradingHead);
+        if ($head['name'] === '') {
             return [];
         }
 
         $line = static fn(float $stance): string => number_format(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($stance))['concentrated'], 0);
-        $ceiling = MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($politics->fairTradingHeadStance))['shareCeiling'];
-        $screens = "a concentration line at {$line($politics->fairTradingHeadStance)} on the HHI"
+        $ceiling = MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($head['stance']))['shareCeiling'];
+        $screens = "a concentration line at {$line($head['stance'])} on the HHI"
             . ($ceiling < 1.0 ? ' and a merged firm presumed too big above ' . number_format($ceiling * 100.0, 0) . '% of its market' : ' and no cap on a merged firm\'s share');
 
         return [
-            'fair_trading_head' => $politics->fairTradingHeadName,
-            'fair_trading_head_age' => (string) (int) floor($politics->totalTime - $politics->fairTradingHeadBirth),
-            'fair_trading_head_stance' => self::COMPETITION_PHRASES[FairTradingBoard::stanceName($politics->fairTradingHeadStance)],
-            'fair_trading_head_term_ends' => DistrictCalendar::quarter(FairTradingBoard::headTermEnd($politics->totalTime)),
+            'fair_trading_head' => $head['name'],
+            'fair_trading_head_age' => (string) (int) floor($politics->totalTime - $head['birth']),
+            'fair_trading_head_stance' => self::COMPETITION_PHRASES[FairTradingBoard::stanceName($head['stance'])],
+            'fair_trading_head_term_ends' => DistrictCalendar::quarter(Office::FairTradingHead->termEnd($politics->totalTime)),
             'fair_trading_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have drawn the line at {$line($candidate['competition'])}",
-                $politics->fairTradingHeadPassedOver,
+                $head['passedOver'],
             )),
             'merger_review_change' => match (true) {
-                abs($politics->fairTradingHeadStance - $politics->fairTradingPriorStance) < 0.05 => "keeps merger review where it stood, with {$screens}",
-                $politics->fairTradingHeadStance > $politics->fairTradingPriorStance => "tightens merger review to {$screens}, from a line at {$line($politics->fairTradingPriorStance)}",
+                abs($head['stance'] - $politics->fairTradingPriorStance) < 0.05 => "keeps merger review where it stood, with {$screens}",
+                $head['stance'] > $politics->fairTradingPriorStance => "tightens merger review to {$screens}, from a line at {$line($politics->fairTradingPriorStance)}",
                 default => "loosens merger review to {$screens}, from a line at {$line($politics->fairTradingPriorStance)}",
             },
         ];
@@ -479,12 +481,13 @@ class SystemicEventReporter
      */
     private static function securitiesHeadContext(PoliticsStateDTO $politics): array
     {
-        if ($politics->securitiesHeadName === '') {
+        $head = $politics->head(Office::SecuritiesHead);
+        if ($head['name'] === '') {
             return [];
         }
 
         $pct = static fn(float $share): string => number_format($share * 100.0, 0) . '%';
-        $stance = $politics->securitiesHeadStance;
+        $stance = $head['stance'];
         $prior = $politics->securitiesPriorStance;
         $margin = SecuritiesCommission::initialMargin($stance);
         $scale = SecuritiesCommission::earningsManagementScale($stance);
@@ -492,14 +495,14 @@ class SystemicEventReporter
         $scaleBefore = SecuritiesCommission::earningsManagementScale($prior);
 
         return [
-            'securities_head' => $politics->securitiesHeadName,
-            'securities_head_age' => (string) (int) floor($politics->totalTime - $politics->securitiesHeadBirth),
+            'securities_head' => $head['name'],
+            'securities_head_age' => (string) (int) floor($politics->totalTime - $head['birth']),
             'securities_head_stance' => self::MARKETS_PHRASES[SecuritiesCommission::stanceName($stance)],
-            'securities_head_term_ends' => DistrictCalendar::quarter(SecuritiesCommission::headTermEnd($politics->totalTime)),
-            'securities_rules_from' => DistrictCalendar::quarter($politics->securitiesHeadTermStart + SecuritiesCommission::RULE_NOTICE_YEARS),
+            'securities_head_term_ends' => DistrictCalendar::quarter(Office::SecuritiesHead->termEnd($politics->totalTime)),
+            'securities_rules_from' => DistrictCalendar::quarter($head['termStart'] + SecuritiesCommission::RULE_NOTICE_YEARS),
             'securities_head_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have set margin at {$pct(SecuritiesCommission::initialMargin($candidate['markets']))}",
-                $politics->securitiesHeadPassedOver,
+                $head['passedOver'],
             )),
             'securities_rules_change' => sprintf(
                 '%s and %s',
@@ -521,15 +524,16 @@ class SystemicEventReporter
      */
     private static function securityDirectorContext(PoliticsStateDTO $politics): array
     {
-        if ($politics->securityDirectorName === '') {
+        $head = $politics->head(Office::SecurityDirector);
+        if ($head['name'] === '') {
             return [];
         }
 
         return [
-            'security_director' => $politics->securityDirectorName,
-            'security_director_age' => (string) (int) floor($politics->totalTime - $politics->securityDirectorBirth),
-            'security_director_term_ends' => DistrictCalendar::quarter(SecurityBureau::directorTermEnd($politics->totalTime)),
-            'security_director_passed_over' => self::listNames(array_map(static fn(array $candidate): string => $candidate['name'], $politics->securityDirectorPassedOver)),
+            'security_director' => $head['name'],
+            'security_director_age' => (string) (int) floor($politics->totalTime - $head['birth']),
+            'security_director_term_ends' => DistrictCalendar::quarter(Office::SecurityDirector->termEnd($politics->totalTime)),
+            'security_director_passed_over' => self::listNames(array_map(static fn(array $candidate): string => $candidate['name'], $head['passedOver'])),
         ];
     }
 
@@ -542,17 +546,19 @@ class SystemicEventReporter
     private static function guardCommandersContext(PoliticsStateDTO $politics): array
     {
         $names = static fn(array $passedOver): string => self::listNames(array_map(static fn(array $candidate): string => $candidate['name'], $passedOver));
+        $commandant = $politics->head(Office::CoastGuardCommandant);
+        $commander = $politics->head(Office::StateGuardCommander);
 
-        return ($politics->coastGuardCommandantName === '' ? [] : [
-            'coast_guard_commandant' => $politics->coastGuardCommandantName,
-            'coast_guard_commandant_age' => (string) (int) floor($politics->totalTime - $politics->coastGuardCommandantBirth),
-            'coast_guard_commandant_term_ends' => DistrictCalendar::quarter(CoastGuard::commandantTermEnd($politics->totalTime)),
-            'coast_guard_commandant_passed_over' => $names($politics->coastGuardCommandantPassedOver),
-        ]) + ($politics->stateGuardCommanderName === '' ? [] : [
-            'state_guard_commander' => $politics->stateGuardCommanderName,
-            'state_guard_commander_age' => (string) (int) floor($politics->totalTime - $politics->stateGuardCommanderBirth),
-            'state_guard_commander_term_ends' => DistrictCalendar::quarter(StateGuard::commanderTermEnd($politics->totalTime)),
-            'state_guard_commander_passed_over' => $names($politics->stateGuardCommanderPassedOver),
+        return ($commandant['name'] === '' ? [] : [
+            'coast_guard_commandant' => $commandant['name'],
+            'coast_guard_commandant_age' => (string) (int) floor($politics->totalTime - $commandant['birth']),
+            'coast_guard_commandant_term_ends' => DistrictCalendar::quarter(Office::CoastGuardCommandant->termEnd($politics->totalTime)),
+            'coast_guard_commandant_passed_over' => $names($commandant['passedOver']),
+        ]) + ($commander['name'] === '' ? [] : [
+            'state_guard_commander' => $commander['name'],
+            'state_guard_commander_age' => (string) (int) floor($politics->totalTime - $commander['birth']),
+            'state_guard_commander_term_ends' => DistrictCalendar::quarter(Office::StateGuardCommander->termEnd($politics->totalTime)),
+            'state_guard_commander_passed_over' => $names($commander['passedOver']),
         ]);
     }
 
@@ -565,22 +571,23 @@ class SystemicEventReporter
      */
     private static function regulatorContext(PoliticsStateDTO $politics): array
     {
-        if ($politics->regulatorName === '') {
+        $head = $politics->head(Office::Regulator);
+        if ($head['name'] === '') {
             return [];
         }
 
         $pct = static fn(float $share): string => number_format($share * 100.0, 1) . '%';
-        $target = FinancialRegulator::requirement($politics->regulatorStance);
+        $target = FinancialRegulator::requirement($head['stance']);
         $before = $politics->requirementPhaseFrom;
 
         return [
-            'regulator' => $politics->regulatorName,
-            'regulator_age' => (string) (int) floor($politics->totalTime - $politics->regulatorBirth),
+            'regulator' => $head['name'],
+            'regulator_age' => (string) (int) floor($politics->totalTime - $head['birth']),
             'regulator_stance' => self::REGULATION_PHRASES[FinancialRegulator::stanceName($target)],
-            'regulator_term_ends' => DistrictCalendar::quarter(FinancialRegulator::headTermEnd($politics->totalTime)),
+            'regulator_term_ends' => DistrictCalendar::quarter(Office::Regulator->termEnd($politics->totalTime)),
             'regulator_passed_over' => self::listNames(array_map(
                 static fn(array $candidate): string => "{$candidate['name']}, who would have set {$pct(FinancialRegulator::requirement($candidate['regulation']))}",
-                $politics->regulatorPassedOver,
+                $head['passedOver'],
             )),
             'requirement_change' => match (true) {
                 abs($target - $before) < 0.0005 => "holds the banks' core capital requirement at {$pct($target)} of risk-weighted assets",

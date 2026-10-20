@@ -14,7 +14,7 @@ use App\Service\Politics\Council\CouncilAppointments as Appointments;
 use App\Service\Politics\Department\Exchequer;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
-use App\Service\Politics\Department\SovereignReserveFund;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
@@ -27,10 +27,10 @@ class ExchequerTest extends TestCase
     private static function tick(PoliticsState $state, MathUtility $math): void
     {
         Appointments::advance($state, $math);
-        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT, $math);
-        FinancialRegulator::advance($state, $math);
-        SovereignReserveFund::advance($state, $math);
-        Exchequer::advance($state, $math);
+        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT);
+        FinancialRegulator::advance($state);
+        Office::FundHead->fill($state);
+        Office::ExchequerHead->fill($state);
     }
 
     private static function opened(int $seed = 7): PoliticsState
@@ -79,9 +79,9 @@ class ExchequerTest extends TestCase
     {
         $state = self::opened();
 
-        $this->assertSame(AerieCouncil::OPENING_EXCHEQUER_HEAD, $state->exchequerHeadName);
-        $this->assertEqualsWithDelta(Exchequer::OPENING_HEAD_TERM_END - Exchequer::HEAD_TERM_YEARS, $state->exchequerHeadTermStart, 1e-9);
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY, Exchequer::averageMaturity($state->exchequerHeadStance), 1e-12);
+        $this->assertSame(AerieCouncil::OPENING_EXCHEQUER_HEAD, $state->head(Office::ExchequerHead)['name']);
+        $this->assertEqualsWithDelta(Office::ExchequerHead->openingTermEnd() - Office::ExchequerHead->termYears(), $state->head(Office::ExchequerHead)['termStart'], 1e-9);
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY, Exchequer::averageMaturity($state->head(Office::ExchequerHead)['stance']), 1e-12);
         $this->assertCount(AerieCouncil::SEATS, $state->councilDebtStances);
         $names = Appointments::sittingNames($state);
         $this->assertContains(AerieCouncil::OPENING_EXCHEQUER_HEAD, $names);
@@ -98,27 +98,27 @@ class ExchequerTest extends TestCase
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedian(): void
     {
         foreach ([3, 7, 11, 19] as $seed) {
-            $state = self::runTo(self::opened($seed), Exchequer::OPENING_HEAD_TERM_END - self::DT);
+            $state = self::runTo(self::opened($seed), Office::ExchequerHead->openingTermEnd() - self::DT);
             $median = Appointments::median($state->councilDebtStances);
             $sitting = Appointments::sittingNames($state);
-            $this->assertSame(AerieCouncil::OPENING_EXCHEQUER_HEAD, $state->exchequerHeadName);
+            $this->assertSame(AerieCouncil::OPENING_EXCHEQUER_HEAD, $state->head(Office::ExchequerHead)['name']);
 
-            self::runTo($state, Exchequer::OPENING_HEAD_TERM_END + self::DT);
-            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'exchequer', Exchequer::OPENING_HEAD_TERM_END, [Appointments::AXIS_DEBT => $median], $sitting, new MathUtility());
-            $this->assertSame($expected['name'], $state->exchequerHeadName, "seed {$seed}");
-            $this->assertSame($expected['debt'], $state->exchequerHeadStance);
-            $this->assertSame($passedOver, $state->exchequerHeadPassedOver);
-            $appointedAt = $state->lastExchequerHeadAppointedAt;
-            $this->assertEqualsWithDelta(Exchequer::averageMaturity($state->exchequerHeadStance), PoliticsStateDTO::fromState($state)->policy()->debtAverageMaturity, 1e-12);
+            self::runTo($state, Office::ExchequerHead->openingTermEnd() + self::DT);
+            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'exchequer', Office::ExchequerHead->openingTermEnd(), [Appointments::AXIS_DEBT => $median], $sitting);
+            $this->assertSame($expected['name'], $state->head(Office::ExchequerHead)['name'], "seed {$seed}");
+            $this->assertSame($expected['debt'], $state->head(Office::ExchequerHead)['stance']);
+            $this->assertSame($passedOver, $state->head(Office::ExchequerHead)['passedOver']);
+            $appointedAt = $state->head(Office::ExchequerHead)['appointedAt'];
+            $this->assertEqualsWithDelta(Exchequer::averageMaturity($state->head(Office::ExchequerHead)['stance']), PoliticsStateDTO::fromState($state)->policy()->debtAverageMaturity, 1e-12);
 
-            self::runTo($state, Exchequer::OPENING_HEAD_TERM_END + Exchequer::HEAD_TERM_YEARS - self::DT);
-            $this->assertSame($expected['name'], $state->exchequerHeadName, 'One term, unchanged until it ends.');
-            $this->assertSame($appointedAt, $state->lastExchequerHeadAppointedAt);
+            self::runTo($state, Office::ExchequerHead->openingTermEnd() + Office::ExchequerHead->termYears() - self::DT);
+            $this->assertSame($expected['name'], $state->head(Office::ExchequerHead)['name'], 'One term, unchanged until it ends.');
+            $this->assertSame($appointedAt, $state->head(Office::ExchequerHead)['appointedAt']);
         }
 
         $headline = new PoliticsState();
         $headline->totalTime = 3.0;
-        $headline->lastExchequerHeadAppointedAt = 3.0;
+        $headline->heads[Office::ExchequerHead->value] = ['appointedAt' => 3.0] + Office::VACANT;
         $this->assertSame(ShockEvent::EXCHEQUER_HEAD_APPOINTED, PoliticsEngine::headline($headline));
     }
 

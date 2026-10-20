@@ -12,6 +12,7 @@ use App\Service\Politics\Department\Exchequer;
 use App\Service\Politics\Department\FairTradingBoard;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Department\SecuritiesCommission;
 use App\Service\Politics\Department\SovereignReserveFund;
 use App\Service\Politics\PoliticsState;
@@ -116,7 +117,7 @@ final class CouncilAppointments
 
         foreach ($due as ['kind' => $kind, 'seat' => $seat, 'at' => $at]) {
             if ($kind === 'board') {
-                self::seatBoardMember($state, $salt, $seat, $at, $math);
+                self::seatBoardMember($state, $salt, $seat, $at);
                 continue;
             }
             $holder = $roster[$seat];
@@ -126,7 +127,7 @@ final class CouncilAppointments
                 $state->lastVacancyCause = self::departureCause($salt, $seat, $state->councilSeatedAt[$seat] ?? $holder['since'], $at - $state->councilBirths[$seat]);
                 $state->lastCouncilVacancyAt = $time;
             }
-            $shortlist = self::boardShortlist($salt, "council:{$seat}", $at, self::boardMedians($state), self::reservedNames($state), $math);
+            $shortlist = self::boardShortlist($salt, "council:{$seat}", $at, self::boardMedians($state), self::reservedNames($state));
             [$chosen, $state->councillorPassedOver] = self::choose($shortlist, self::councilMedians($state, $seat));
             self::seatCouncillor($state, $salt, $seat, $chosen, $holder['since'], $at, $holder['termEnds'], $at);
             $state->lastCouncillorSeatedAt = $time;
@@ -144,21 +145,15 @@ final class CouncilAppointments
         $salt = (int) $state->authoritySalt;
         $state->councilNames = $state->councilBirths = $state->councilSince = $state->councilSeatedAt = $state->councilLeavesAt = $state->councilSwingers = $state->councilStances = $state->councilRegulationStances = $state->councilFundStances = $state->councilDebtStances = $state->councilCompetitionStances = $state->councilMarketsStances = [];
         $state->memberNames = $state->memberBirths = $state->memberSince = $state->memberStances = [];
-        $state->governorName = '';
-        $state->regulatorName = '';
-        $state->fundHeadName = '';
-        $state->exchequerHeadName = '';
-        $state->fairTradingHeadName = '';
-        $state->securitiesHeadName = '';
-        $state->securityDirectorName = '';
-        $state->coastGuardCommandantName = '';
-        $state->stateGuardCommanderName = '';
+        foreach (array_keys($state->heads) as $office) {
+            $state->heads[$office]['name'] = '';
+        }
         $state->formerNames = [];
         $state->boardMembers = $state->boardSince = [];
-        self::seatBoard($state, $salt, $time, $math);
+        self::seatBoard($state, $salt, $time);
 
         foreach (AerieCouncil::roster($time) as $seat => $holder) {
-            $drawn = self::candidate($salt, self::vacancyKey("council:{$seat}", $holder['since']), 0, $holder['since'], self::reservedNames($state), $math);
+            $drawn = self::candidate($salt, self::vacancyKey("council:{$seat}", $holder['since']), 0, $holder['since'], self::reservedNames($state));
             if ($holder['beforeYearOne']) {
                 $drawn['name'] = AerieCouncil::OPENING_MEMBERS[$seat];
             }
@@ -176,9 +171,9 @@ final class CouncilAppointments
      * @param list<string>         $taken  Names no candidate may share.
      * @return array{0: array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}, 1: list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>} The one named, and the ones passed over.
      */
-    public static function appoint(int $salt, string $seat, float $since, array $target, array $taken, MathUtility $math): array
+    public static function appoint(int $salt, string $seat, float $since, array $target, array $taken): array
     {
-        return self::choose(self::field($salt, self::vacancyKey($seat, $since), self::SHORTLIST, $since, $taken, $math), $target);
+        return self::choose(self::field($salt, self::vacancyKey($seat, $since), self::SHORTLIST, $since, $taken), $target);
     }
 
     /**
@@ -210,9 +205,9 @@ final class CouncilAppointments
      * @param list<string>         $taken
      * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing: float}>
      */
-    public static function boardShortlist(int $salt, string $seat, float $since, array $boardMedians, array $taken, MathUtility $math): array
+    public static function boardShortlist(int $salt, string $seat, float $since, array $boardMedians, array $taken): array
     {
-        $field = self::field($salt, self::vacancyKey($seat, $since), self::BOARD_FIELD, $since, $taken, $math);
+        $field = self::field($salt, self::vacancyKey($seat, $since), self::BOARD_FIELD, $since, $taken);
         $order = array_keys($field);
         usort($order, static fn(int $a, int $b): int => [round(self::distance($field[$a], $boardMedians), 12), $a] <=> [round(self::distance($field[$b], $boardMedians), 12), $b]);
         $kept = array_slice($order, 0, self::SHORTLIST);
@@ -241,11 +236,11 @@ final class CouncilAppointments
      * @param list<string> $taken
      * @return list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing: float}>
      */
-    private static function field(int $salt, string $vacancy, int $count, float $since, array $taken, MathUtility $math): array
+    private static function field(int $salt, string $vacancy, int $count, float $since, array $taken): array
     {
         $field = [];
         for ($slot = 0; $slot < $count; ++$slot) {
-            $field[] = $candidate = self::candidate($salt, $vacancy, $slot, $since, $taken, $math);
+            $field[] = $candidate = self::candidate($salt, $vacancy, $slot, $since, $taken);
             $taken[] = $candidate['name'];
         }
 
@@ -284,18 +279,18 @@ final class CouncilAppointments
     }
 
     /** Every board seat filled for the term in progress, as when the Council is first read. */
-    private static function seatBoard(PoliticsState $state, int $salt, float $time, MathUtility $math): void
+    private static function seatBoard(PoliticsState $state, int $salt, float $time): void
     {
         foreach (self::boardTermStarts($time) as $seat => $since) {
-            self::seatBoardMember($state, $salt, $seat, $since, $math);
+            self::seatBoardMember($state, $salt, $seat, $since);
         }
     }
 
     /** A board seat filled for a term: its outside body names one person, drawn as any candidate is. */
-    private static function seatBoardMember(PoliticsState $state, int $salt, int $seat, float $since, MathUtility $math): void
+    private static function seatBoardMember(PoliticsState $state, int $salt, int $seat, float $since): void
     {
         self::retire($state, $state->boardMembers[$seat]['name'] ?? '');
-        $state->boardMembers[$seat] = self::candidate($salt, self::vacancyKey("board:{$seat}", $since), 0, $since, self::reservedNames($state), $math);
+        $state->boardMembers[$seat] = self::candidate($salt, self::vacancyKey("board:{$seat}", $since), 0, $since, self::reservedNames($state));
         $state->boardSince[$seat] = $since;
         ksort($state->boardMembers);
         ksort($state->boardSince);
@@ -309,7 +304,7 @@ final class CouncilAppointments
      * @param list<string> $taken
      * @return array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing: float}
      */
-    public static function candidate(int $salt, string $vacancy, int $slot, float $since, array $taken, MathUtility $math): array
+    public static function candidate(int $salt, string $vacancy, int $slot, float $since, array $taken): array
     {
         $age = Distributions::truncatedNormalInverse(MathUtility::hashedUniform($salt, "{$vacancy}:{$slot}:age"), self::APPOINTMENT_AGE_MEAN, self::APPOINTMENT_AGE_SD, self::APPOINTMENT_AGE_MIN, self::APPOINTMENT_AGE_MAX);
         $birth = $since - $age;
@@ -366,14 +361,15 @@ final class CouncilAppointments
     }
 
     /**
-     * Everyone sitting: councillors, the governor and committee, every department head, and the Appointment Board.
+     * Everyone sitting: councillors, every department's head (the governor among them), the rate committee, and the
+     * Appointment Board.
      *
      * @return list<string>
      */
     public static function sittingNames(PoliticsState $state): array
     {
         return array_values(array_filter(
-            array_merge($state->councilNames, [$state->governorName], $state->memberNames, [$state->regulatorName, $state->fundHeadName, $state->exchequerHeadName, $state->fairTradingHeadName, $state->securitiesHeadName, $state->securityDirectorName, $state->coastGuardCommandantName, $state->stateGuardCommanderName], array_column($state->boardMembers, 'name')),
+            array_merge($state->councilNames, array_map(static fn(Office $office): string => $state->head($office)['name'], Office::cases()), $state->memberNames, array_column($state->boardMembers, 'name')),
             static fn(string $name): bool => $name !== '',
         ));
     }
@@ -391,7 +387,7 @@ final class CouncilAppointments
             array_values($state->leaderNames),
             $state->formerNames,
             AerieCouncil::OPENING_MEMBERS,
-            [AerieCouncil::OPENING_GOVERNOR, AerieCouncil::OPENING_REGULATOR, AerieCouncil::OPENING_FUND_HEAD, AerieCouncil::OPENING_EXCHEQUER_HEAD, AerieCouncil::OPENING_FAIR_TRADING_HEAD, AerieCouncil::OPENING_SECURITIES_HEAD, AerieCouncil::OPENING_SECURITY_DIRECTOR, AerieCouncil::OPENING_COAST_GUARD_COMMANDANT, AerieCouncil::OPENING_STATE_GUARD_COMMANDER],
+            array_map(static fn(Office $office): string => $office->openingHolder(), Office::cases()),
         );
         foreach ($state->leaderHistory as $leaders) {
             foreach ($leaders as $leader) {

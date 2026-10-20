@@ -13,6 +13,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Politics\Council\CouncilAppointments as Appointments;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Department\SovereignReserveFund as Fund;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
@@ -26,9 +27,9 @@ class SovereignReserveFundTest extends TestCase
     private static function tick(PoliticsState $state, MathUtility $math): void
     {
         Appointments::advance($state, $math);
-        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT, $math);
-        FinancialRegulator::advance($state, $math);
-        Fund::advance($state, $math);
+        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT);
+        FinancialRegulator::advance($state);
+        Office::FundHead->fill($state);
     }
 
     private static function opened(int $seed = 7): PoliticsState
@@ -89,10 +90,10 @@ class SovereignReserveFundTest extends TestCase
     {
         $state = self::opened();
 
-        $this->assertSame(AerieCouncil::OPENING_FUND_HEAD, $state->fundHeadName);
-        $this->assertEqualsWithDelta(Fund::OPENING_HEAD_TERM_END - Fund::HEAD_TERM_YEARS, $state->fundHeadTermStart, 1e-9);
-        $this->assertEqualsWithDelta(SovereignFundSubsystem::OPENING_POLICY_EQUITY_SHARE, Fund::equityShare($state->fundHeadStance), 1e-12);
-        $this->assertSame([], $state->fundHeadPassedOver);
+        $this->assertSame(AerieCouncil::OPENING_FUND_HEAD, $state->head(Office::FundHead)['name']);
+        $this->assertEqualsWithDelta(Office::FundHead->openingTermEnd() - Office::FundHead->termYears(), $state->head(Office::FundHead)['termStart'], 1e-9);
+        $this->assertEqualsWithDelta(SovereignFundSubsystem::OPENING_POLICY_EQUITY_SHARE, Fund::equityShare($state->head(Office::FundHead)['stance']), 1e-12);
+        $this->assertSame([], $state->head(Office::FundHead)['passedOver']);
         $this->assertCount(AerieCouncil::SEATS, $state->councilFundStances);
         $names = Appointments::sittingNames($state);
         $this->assertSame($names, array_values(array_unique($names)), 'No two people sitting share a name.');
@@ -108,30 +109,30 @@ class SovereignReserveFundTest extends TestCase
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedian(): void
     {
         foreach ([3, 7, 11, 19] as $seed) {
-            $state = self::runTo(self::opened($seed), Fund::OPENING_HEAD_TERM_END - self::DT);
+            $state = self::runTo(self::opened($seed), Office::FundHead->openingTermEnd() - self::DT);
             $median = Appointments::median($state->councilFundStances);
             $sitting = Appointments::sittingNames($state);
-            $this->assertSame(AerieCouncil::OPENING_FUND_HEAD, $state->fundHeadName);
+            $this->assertSame(AerieCouncil::OPENING_FUND_HEAD, $state->head(Office::FundHead)['name']);
 
-            self::runTo($state, Fund::OPENING_HEAD_TERM_END + self::DT);
-            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'fund', Fund::OPENING_HEAD_TERM_END, [Appointments::AXIS_FUND => $median], $sitting, new MathUtility());
-            $this->assertSame($expected['name'], $state->fundHeadName, "seed {$seed}");
-            $this->assertSame($expected['fund'], $state->fundHeadStance);
-            $this->assertSame($passedOver, $state->fundHeadPassedOver);
-            $appointedAt = $state->lastFundHeadAppointedAt;
-            $this->assertGreaterThan(Fund::OPENING_HEAD_TERM_END - self::DT, $appointedAt);
-            $this->assertEqualsWithDelta(Fund::equityShare($state->fundHeadStance), PoliticsStateDTO::fromState($state)->policy()->reserveFundEquityShare, 1e-12);
+            self::runTo($state, Office::FundHead->openingTermEnd() + self::DT);
+            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'fund', Office::FundHead->openingTermEnd(), [Appointments::AXIS_FUND => $median], $sitting);
+            $this->assertSame($expected['name'], $state->head(Office::FundHead)['name'], "seed {$seed}");
+            $this->assertSame($expected['fund'], $state->head(Office::FundHead)['stance']);
+            $this->assertSame($passedOver, $state->head(Office::FundHead)['passedOver']);
+            $appointedAt = $state->head(Office::FundHead)['appointedAt'];
+            $this->assertGreaterThan(Office::FundHead->openingTermEnd() - self::DT, $appointedAt);
+            $this->assertEqualsWithDelta(Fund::equityShare($state->head(Office::FundHead)['stance']), PoliticsStateDTO::fromState($state)->policy()->reserveFundEquityShare, 1e-12);
 
-            self::runTo($state, Fund::OPENING_HEAD_TERM_END + Fund::HEAD_TERM_YEARS - self::DT);
-            $this->assertSame($expected['name'], $state->fundHeadName, 'One term, unchanged until it ends.');
-            $this->assertSame($appointedAt, $state->lastFundHeadAppointedAt);
+            self::runTo($state, Office::FundHead->openingTermEnd() + Office::FundHead->termYears() - self::DT);
+            $this->assertSame($expected['name'], $state->head(Office::FundHead)['name'], 'One term, unchanged until it ends.');
+            $this->assertSame($appointedAt, $state->head(Office::FundHead)['appointedAt']);
         }
 
         $headline = new PoliticsState();
         $headline->totalTime = 4.0;
-        $headline->lastFundHeadAppointedAt = 4.0;
+        $headline->heads[Office::FundHead->value] = ['appointedAt' => 4.0] + Office::VACANT;
         $this->assertSame(ShockEvent::FUND_HEAD_APPOINTED, PoliticsEngine::headline($headline));
-        $headline->lastRegulatorAppointedAt = 4.0;
+        $headline->heads[Office::Regulator->value] = ['appointedAt' => 4.0] + Office::VACANT;
         $this->assertSame(ShockEvent::REGULATOR_APPOINTED, PoliticsEngine::headline($headline));
     }
 
@@ -143,19 +144,18 @@ class SovereignReserveFundTest extends TestCase
     {
         $state = self::runTo(self::opened(5), 11.0);
         $council = $state->councilNames;
-        $regulator = $state->regulatorName;
-        $state->fundHeadName = '';
+        $regulator = $state->head(Office::Regulator)['name'];
+        unset($state->heads[Office::FundHead->value]);
         $state->councilFundStances = [];
-        $state->lastFundHeadAppointedAt = -1.0;
 
         self::runTo($state, 11.0 + self::DT);
 
         $this->assertSame($council, $state->councilNames);
-        $this->assertSame($regulator, $state->regulatorName);
+        $this->assertSame($regulator, $state->head(Office::Regulator)['name']);
         $this->assertCount(AerieCouncil::SEATS, $state->councilFundStances);
-        $this->assertNotSame('', $state->fundHeadName);
-        $this->assertNotSame(AerieCouncil::OPENING_FUND_HEAD, $state->fundHeadName);
-        $this->assertEqualsWithDelta(Fund::OPENING_HEAD_TERM_END + Fund::HEAD_TERM_YEARS, $state->fundHeadTermStart, 1e-9);
-        $this->assertSame(-1.0, $state->lastFundHeadAppointedAt);
+        $this->assertNotSame('', $state->head(Office::FundHead)['name']);
+        $this->assertNotSame(AerieCouncil::OPENING_FUND_HEAD, $state->head(Office::FundHead)['name']);
+        $this->assertEqualsWithDelta(Office::FundHead->openingTermEnd() + Office::FundHead->termYears(), $state->head(Office::FundHead)['termStart'], 1e-9);
+        $this->assertSame(-1.0, $state->head(Office::FundHead)['appointedAt']);
     }
 }

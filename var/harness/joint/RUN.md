@@ -50,4 +50,10 @@ Question family: does the whole simulation behave sensibly after several merges,
   standing beat) and revenue growth, A against B with the seed-paired SE. Map tickers first:
   `php -r 'require "vendor/autoload.php"; $o=[]; foreach (App\Data\Company\InitialMarket::STOCKS as $k=>$r) $o[$r["ticker"]??$k]=(new ReflectionClass(App\Data\Company\Sectors::strategyFor($r["industry"])))->getShortName(); file_put_contents("var/harness/joint/runs/ticker_models.json", json_encode($o));'`
 
+- `model_moments.py <seeds> [arm]`: per business model, revenue growth vs nominal GDP, revenue beta to y/y real GDP,
+  EBIT margin mean/sd/loss share, ROIC or ROE (first/last 2y), EPS beat share, revenue surprise, ND/EBITDA, capex/dep,
+  payout, distress, seasonality, plus flags against guide ranges. Also needs `runs/ticker_fin.json`: the same one-liner
+  with `...->isFinancial()` in place of the short name.
+- Batches: `bin/harness-batch var/harness/joint/run.sh 1-4 live` (one call, run_in_background), not `&` loops.
+
 Evidence: `joint_evidence.md`.

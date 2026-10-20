@@ -12,6 +12,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Politics\Department\FairTradingBoard;
+use App\Service\Politics\Department\Office;
 use App\Service\View\DepartmentPageBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -28,10 +29,7 @@ final class DepartmentPageBuilderTest extends TestCase
 
         $politics = new PoliticsStateDTO(
             totalTime: 13.0,
-            exchequerHeadName: 'Rosalind Tate',
-            exchequerHeadBirth: -38.0,
-            exchequerHeadTermStart: 13.0,
-            exchequerHeadStance: \App\Service\Politics\Department\Exchequer::stance(4.3),
+            heads: [Office::ExchequerHead->value => ['name' => 'Rosalind Tate', 'birth' => -38.0, 'termStart' => 13.0, 'stance' => \App\Service\Politics\Department\Exchequer::stance(4.3)] + Office::VACANT],
             councilDebtStances: [-0.5, 0.0, 0.5],
         );
         $macro = new MacroStateDTO(
@@ -71,11 +69,13 @@ final class DepartmentPageBuilderTest extends TestCase
 
         $politics = new PoliticsStateDTO(
             totalTime: 7.0,
-            fairTradingHeadName: 'Odile Farrant',
-            fairTradingHeadBirth: -48.0,
-            fairTradingHeadTermStart: 6.0,
-            fairTradingHeadStance: 0.8,
-            fairTradingHeadPassedOver: [['name' => 'Hal Brennan', 'birth' => -41.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => -1.0, 'markets' => 0.0]],
+            heads: [Office::FairTradingHead->value => [
+                'name' => 'Odile Farrant',
+                'birth' => -48.0,
+                'termStart' => 6.0,
+                'stance' => 0.8,
+                'passedOver' => [['name' => 'Hal Brennan', 'birth' => -41.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => -1.0, 'markets' => 0.0]],
+            ] + Office::VACANT],
             councilCompetitionStances: [-0.2, 0.0, 0.4],
         );
         $panel = (new DepartmentPageBuilder())->fairTrading($politics);
@@ -102,10 +102,7 @@ final class DepartmentPageBuilderTest extends TestCase
 
         $politics = new PoliticsStateDTO(
             totalTime: 9.6,
-            securitiesHeadName: 'Thea Lindqvist',
-            securitiesHeadBirth: -45.0,
-            securitiesHeadTermStart: 9.5,
-            securitiesHeadStance: 1.0,
+            heads: [Office::SecuritiesHead->value => ['name' => 'Thea Lindqvist', 'birth' => -45.0, 'termStart' => 9.5, 'stance' => 1.0] + Office::VACANT],
             councilMarketsStances: [-0.5, 0.0, 0.5],
         );
         $panel = (new DepartmentPageBuilder())->securities($politics, new MacroStateDTO(initialMarginRequirement: 0.5));
@@ -120,7 +117,7 @@ final class DepartmentPageBuilderTest extends TestCase
         $this->assertSame(FinancialConstants::INITIAL_MARGIN_REQUIREMENT, $panel['councilMargin']);
         $this->assertSame(3, $panel['rules']['noticeMonths']);
 
-        $later = new PoliticsStateDTO(totalTime: 10.0, securitiesHeadName: 'Thea Lindqvist', securitiesHeadTermStart: 9.5, securitiesHeadStance: 1.0);
+        $later = new PoliticsStateDTO(totalTime: 10.0, heads: [Office::SecuritiesHead->value => ['name' => 'Thea Lindqvist', 'termStart' => 9.5, 'stance' => 1.0] + Office::VACANT]);
         $this->assertNull((new DepartmentPageBuilder())->securities($later, new MacroStateDTO())['coming'] ?? null, 'Once the notice has run the rules are in force.');
     }
 
@@ -137,10 +134,12 @@ final class DepartmentPageBuilderTest extends TestCase
 
         $page = (new DepartmentPageBuilder())->coastGuard(new PoliticsStateDTO(
             totalTime: 4.0,
-            coastGuardCommandantName: 'Imogen Hale',
-            coastGuardCommandantBirth: -48.0,
-            coastGuardCommandantTermStart: 2.5,
-            coastGuardCommandantPassedOver: [['name' => 'Dorian Shaw', 'birth' => -45.5, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
+            heads: [Office::CoastGuardCommandant->value => [
+                'name' => 'Imogen Hale',
+                'birth' => -48.0,
+                'termStart' => 2.5,
+                'passedOver' => [['name' => 'Dorian Shaw', 'birth' => -45.5, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
+            ] + Office::VACANT],
         ));
         $this->assertSame('commandant', $page['headTitle']);
         $this->assertNotNull($page['head']);
@@ -156,7 +155,7 @@ final class DepartmentPageBuilderTest extends TestCase
     {
         $this->assertNull((new DepartmentPageBuilder())->securityBureau(new PoliticsStateDTO()));
 
-        $page = (new DepartmentPageBuilder())->securityBureau(new PoliticsStateDTO(totalTime: 2.0, securityDirectorName: 'Raymond Okafor', securityDirectorBirth: -50.0, securityDirectorTermStart: -4.0));
+        $page = (new DepartmentPageBuilder())->securityBureau(new PoliticsStateDTO(totalTime: 2.0, heads: [Office::SecurityDirector->value => ['name' => 'Raymond Okafor', 'birth' => -50.0, 'termStart' => -4.0] + Office::VACANT]));
         $this->assertNotNull($page);
         $this->assertSame('Before Year 1', $page['director']['sinceLabel']);
         $this->assertTrue($page['director']['opening']);

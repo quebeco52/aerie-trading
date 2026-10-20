@@ -11,6 +11,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Politics\Council\CouncilAppointments as Appointments;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority as Authority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
 
@@ -22,8 +23,8 @@ class MonetaryAuthorityTest extends TestCase
     private static function tick(PoliticsState $state, float $dt, MathUtility $math): void
     {
         Appointments::advance($state, $math);
-        Authority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), $dt, $math);
-        FinancialRegulator::advance($state, $math);
+        Authority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), $dt);
+        FinancialRegulator::advance($state);
     }
 
     /** Advances the Authority tick by tick to a moment. */
@@ -54,10 +55,9 @@ class MonetaryAuthorityTest extends TestCase
      */
     private static function shortlist(int $salt, string $seat, float $since): array
     {
-        $math = new MathUtility();
         $shortlist = [];
         for ($slot = 0; $slot < Appointments::SHORTLIST; ++$slot) {
-            $shortlist[] = Appointments::candidate($salt, Appointments::vacancyKey($seat, $since), $slot, $since, [], $math);
+            $shortlist[] = Appointments::candidate($salt, Appointments::vacancyKey($seat, $since), $slot, $since, []);
         }
 
         return $shortlist;
@@ -99,10 +99,10 @@ class MonetaryAuthorityTest extends TestCase
             $this->assertEqualsWithDelta($holder['since'], $state->councilSince[$seat], 1e-12);
             $people[] = [$state->councilSince[$seat], $state->councilBirths[$seat], $state->councilStances[$seat]];
         }
-        $this->assertSame(AerieCouncil::OPENING_GOVERNOR, $state->governorName);
-        $this->assertEqualsWithDelta(Authority::OPENING_GOVERNOR_TERM_END - Authority::GOVERNOR_TERM_YEARS, $state->governorTermStart, 1e-9);
-        $this->assertCount(Appointments::SHORTLIST - 1, $state->governorPassedOver);
-        $people[] = [$state->governorTermStart, $state->governorBirth, $state->governorStance];
+        $this->assertSame(AerieCouncil::OPENING_GOVERNOR, $state->head(Office::Governor)['name']);
+        $this->assertEqualsWithDelta(Office::Governor->openingTermEnd() - Office::Governor->termYears(), $state->head(Office::Governor)['termStart'], 1e-9);
+        $this->assertCount(Appointments::SHORTLIST - 1, $state->head(Office::Governor)['passedOver']);
+        $people[] = [$state->head(Office::Governor)['termStart'], $state->head(Office::Governor)['birth'], $state->head(Office::Governor)['stance']];
         $this->assertCount(Authority::COMMITTEE_MEMBERS, $state->memberNames);
         foreach ($state->memberSince as $member => $since) {
             $this->assertLessThan(0.0, $since);
@@ -113,12 +113,12 @@ class MonetaryAuthorityTest extends TestCase
             $this->assertGreaterThanOrEqual(Appointments::APPOINTMENT_AGE_MIN - 1e-9, $since - $birth);
             $this->assertLessThanOrEqual(Appointments::APPOINTMENT_AGE_MAX + 1e-9, $since - $birth);
         }
-        $names = array_merge($state->councilNames, [$state->governorName], $state->memberNames);
+        $names = array_merge($state->councilNames, [$state->head(Office::Governor)['name']], $state->memberNames);
         $this->assertSame($names, array_values(array_unique($names)), 'No two people sitting share a name.');
 
-        $this->assertEqualsWithDelta(Authority::balance($state->governorStance, array_values($state->memberStances)), $state->committeeBalance, 1e-12);
+        $this->assertEqualsWithDelta(Authority::balance($state->head(Office::Governor)['stance'], array_values($state->memberStances)), $state->committeeBalance, 1e-12);
         $this->assertSame(Authority::majority($state->committeeBalance), $state->committeeMajority);
-        $this->assertSame(-1.0, $state->lastGovernorAppointedAt);
+        $this->assertSame(-1.0, $state->head(Office::Governor)['appointedAt']);
         $this->assertSame(-1.0, $state->lastMajorityShiftAt);
         $this->assertSame($state->committeeMajority, PoliticsStateDTO::fromState($state)->policy()->authorityMajority);
         $this->assertNull((new PoliticsStateDTO())->policy()->authorityMajority, 'No committee is handed over before the Authority has formed.');
@@ -130,17 +130,17 @@ class MonetaryAuthorityTest extends TestCase
      */
     public function testTheGovernorChangesOnlyWhenTheTermEnds(): void
     {
-        $state = self::runTo(self::opened(), Authority::OPENING_GOVERNOR_TERM_END - 0.1);
-        $this->assertSame(-1.0, $state->lastGovernorAppointedAt);
-        $this->assertSame(AerieCouncil::OPENING_GOVERNOR, $state->governorName);
+        $state = self::runTo(self::opened(), Office::Governor->openingTermEnd() - 0.1);
+        $this->assertSame(-1.0, $state->head(Office::Governor)['appointedAt']);
+        $this->assertSame(AerieCouncil::OPENING_GOVERNOR, $state->head(Office::Governor)['name']);
         $median = Appointments::median($state->councilStances);
 
-        self::runTo($state, Authority::OPENING_GOVERNOR_TERM_END + 0.1);
+        self::runTo($state, Office::Governor->openingTermEnd() + 0.1);
 
-        $this->assertEqualsWithDelta(Authority::OPENING_GOVERNOR_TERM_END, $state->governorTermStart, 1e-9);
-        $this->assertNotSame(AerieCouncil::OPENING_GOVERNOR, $state->governorName);
-        $this->assertEqualsWithDelta(Authority::OPENING_GOVERNOR_TERM_END + Authority::GOVERNOR_TERM_YEARS, Authority::governorTermEnd($state->totalTime), 1e-9);
-        $this->assertNearestFirstDrawn(self::shortlist((int) $state->authoritySalt, 'governor', Authority::OPENING_GOVERNOR_TERM_END), $state->governorStance, $state->governorBirth, $median);
+        $this->assertEqualsWithDelta(Office::Governor->openingTermEnd(), $state->head(Office::Governor)['termStart'], 1e-9);
+        $this->assertNotSame(AerieCouncil::OPENING_GOVERNOR, $state->head(Office::Governor)['name']);
+        $this->assertEqualsWithDelta(Office::Governor->openingTermEnd() + Office::Governor->termYears(), Office::Governor->termEnd($state->totalTime), 1e-9);
+        $this->assertNearestFirstDrawn(self::shortlist((int) $state->authoritySalt, 'governor', Office::Governor->openingTermEnd()), $state->head(Office::Governor)['stance'], $state->head(Office::Governor)['birth'], $median);
     }
 
     /**
@@ -152,7 +152,7 @@ class MonetaryAuthorityTest extends TestCase
         $since = Authority::memberOpeningTermEnd(0);
 
         $this->assertEqualsWithDelta($since, $state->memberSince[0], 1e-12);
-        $this->assertNearestFirstDrawn(self::shortlist((int) $state->authoritySalt, 'member:0', $since), $state->memberStances[0], $state->memberBirths[0], $state->governorStance);
+        $this->assertNearestFirstDrawn(self::shortlist((int) $state->authoritySalt, 'member:0', $since), $state->memberStances[0], $state->memberBirths[0], $state->head(Office::Governor)['stance']);
     }
 
     /**
@@ -182,10 +182,10 @@ class MonetaryAuthorityTest extends TestCase
         $state->totalTime = 1.0 / Authority::MEETINGS_PER_YEAR;
         $macro = new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03, ruleInflationGap: 0.02, authorityMajority: -1.0, authorityCommitteeSeated: 1.0);
 
-        Authority::advance($state, $macro, self::DT, new MathUtility());
+        Authority::advance($state, $macro, self::DT);
 
         $this->assertSame($state->totalTime, $state->lastMeetingAt);
-        $stances = [$state->governorStance, ...array_values($state->memberStances)];
+        $stances = [$state->head(Office::Governor)['stance'], ...array_values($state->memberStances)];
         $this->assertSame(Authority::votes($stances, -1.0, 0.02, 0.0), $state->lastMeetingVotes);
         $this->assertNotSame(Authority::votes($stances, 1.0, 0.02, 0.0), $state->lastMeetingVotes);
     }
@@ -203,15 +203,15 @@ class MonetaryAuthorityTest extends TestCase
         for ($t = $dt; $t < 60.0; $t += $dt) {
             $majority = $state->committeeMajority;
             $members = $state->memberSince;
-            $governor = $state->governorTermStart;
-            $stances = [$state->governorStance, ...$state->memberStances];
+            $governor = $state->head(Office::Governor)['termStart'];
+            $stances = [$state->head(Office::Governor)['stance'], ...$state->memberStances];
             $state->totalTime = $t;
             self::tick($state, $dt, $math);
             if ($state->committeeMajority !== $majority) {
                 ++$shifts;
                 $this->assertSame($t, $state->lastMajorityShiftAt);
                 $this->assertTrue(
-                    $state->memberSince !== $members || $state->governorTermStart !== $governor || $stances !== [$state->governorStance, ...$state->memberStances],
+                    $state->memberSince !== $members || $state->head(Office::Governor)['termStart'] !== $governor || $stances !== [$state->head(Office::Governor)['stance'], ...$state->memberStances],
                     'Only an appointment or a change of camp moves the majority.',
                 );
             }

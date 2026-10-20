@@ -7,6 +7,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Politics\Council\CouncilAppointments as A;
 use App\Service\Politics\Department\FinancialRegulator as R;
 use App\Service\Politics\Department\MonetaryAuthority as M;
+use App\Service\Politics\Department\Office as O;
 use App\Service\Politics\Department\SovereignReserveFund as F;
 use App\Service\Politics\PoliticsState;
 [$script, $seeds, $years] = $argv;
@@ -20,19 +21,20 @@ for ($seed = 1; $seed <= (int) $seeds; ++$seed) {
     for ($t = 0.0; $t < (float) $years; $t += $dt) {
         $s->totalTime = $t;
         A::advance($s, $math);
-        M::advance($s, new MacroStateDTO(totalTime: $t, policyRate: 0.03), $dt, $math);
-        R::advance($s, $math);
-        F::advance($s, $math);
+        M::advance($s, new MacroStateDTO(totalTime: $t, policyRate: 0.03), $dt);
+        R::advance($s);
+        O::FundHead->fill($s);
         if (fmod($t, 0.25) < $dt) {
-            $share = $s->fundHeadTermStart < 0.0 ? \App\Service\Macro\Subsystem\SovereignFundSubsystem::OPENING_POLICY_EQUITY_SHARE : F::equityShare($s->fundHeadStance);
+            $fund = $s->head(O::FundHead);
+            $share = $fund['termStart'] < 0.0 ? \App\Service\Macro\Subsystem\SovereignFundSubsystem::OPENING_POLICY_EQUITY_SHARE : F::equityShare($fund['stance']);
             $shares[] = $share; ++$labels[F::stanceName($share)]; ++$maj[(int) $s->committeeMajority]; ++$n;
             $cmed = A::median($s->councilStances);
             if ($lastCmed !== null && $cmed !== $lastCmed) { ++$cmedChanges; }
             $lastCmed = $cmed;
-            if ($first === null && $s->fundHeadTermStart >= 0.0) { $first = $share; $firstMoves[] = $share - \App\Service\Macro\Subsystem\SovereignFundSubsystem::OPENING_POLICY_EQUITY_SHARE; }
+            if ($first === null && $fund['termStart'] >= 0.0) { $first = $share; $firstMoves[] = $share - \App\Service\Macro\Subsystem\SovereignFundSubsystem::OPENING_POLICY_EQUITY_SHARE; }
         }
     }
-    $heads += 1 + (int) floor(((float) $years - F::OPENING_HEAD_TERM_END) / F::HEAD_TERM_YEARS) + 1;
+    $heads += 1 + (int) floor(((float) $years - O::FundHead->openingTermEnd()) / O::FundHead->termYears()) + 1;
 }
 sort($shares); sort($firstMoves);
 $q = static fn(array $x, float $p): float => $x[(int) floor($p * (count($x) - 1))];

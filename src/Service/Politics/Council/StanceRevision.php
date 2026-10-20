@@ -6,6 +6,7 @@ namespace App\Service\Politics\Council;
 
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\PoliticsState;
 
 /**
@@ -42,7 +43,7 @@ final class StanceRevision
 
         $committee = false;
         if ($state->governorSwinger > 0.0 && $switches('governor')) {
-            $state->governorStance = -$state->governorStance;
+            $state->heads[Office::Governor->value]['stance'] = -$state->head(Office::Governor)['stance'];
             $committee = true;
         }
         foreach ($state->memberSwingers as $member => $swing) {

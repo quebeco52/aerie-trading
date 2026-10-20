@@ -11,6 +11,7 @@ use App\Entity\ElectionOdds;
 use App\Entity\RateDecision;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\Recorder\PoliticsHistoryRecorder;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,7 +32,7 @@ class PoliticsHistoryRecorderTest extends TestCase
     {
         $rows = $this->recorder()->record(new PoliticsStateDTO(
             totalTime: 5.125,
-            governorName: 'Ada Marsh',
+            heads: [Office::Governor->value => ['name' => 'Ada Marsh'] + Office::VACANT],
             committeeMajority: 1.0,
             lastMeetingAt: 5.125,
             lastMeetingRate: 0.0425,
@@ -103,7 +104,7 @@ class PoliticsHistoryRecorderTest extends TestCase
             $this->assertSame($meetings[$i]->totalTime, $decision->getSimTime());
             $this->assertSame($meetings[$i]->lastMeetingVotes, $decision->getVotes());
             $this->assertSame($meetings[$i]->lastMeetingRate, $decision->getRate());
-            $this->assertSame($meetings[$i]->governorName, $decision->getGovernor());
+            $this->assertSame($meetings[$i]->head(Office::Governor)['name'], $decision->getGovernor());
         }
         $this->assertGreaterThanOrEqual(12, count($odds), 'A forecast follows every monthly poll.');
         $this->assertCount(count($forecasts), $odds);

@@ -14,6 +14,7 @@ use App\Service\Event\ShockEvent;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\News\NarrativeEngine;
 use App\Service\News\SystemicEventReporter;
+use App\Service\Politics\Department\Office;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -257,13 +258,13 @@ class SystemicEventReporterTest extends TestCase
      */
     public function testTheAuthoritysHeadlinesNameThePeopleAndTheVote(): void
     {
+        $governor = ['name' => 'Theodora Vance', 'birth' => -50.0, 'stance' => 1.0, 'passedOver' => [['name' => 'Clio Wren', 'birth' => -45.0, 'stance' => -1.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0], ['name' => 'Ivo Sato', 'birth' => -55.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]]] + Office::VACANT;
         $authority = [
-            'totalTime' => 3.1, 'authoritySalt' => 5.0, 'councilStances' => array_fill(0, 13, 1.0), 'governorName' => 'Theodora Vance', 'governorBirth' => -50.0,
-            'governorStance' => 1.0, 'governorPassedOver' => [['name' => 'Clio Wren', 'birth' => -45.0, 'stance' => -1.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0], ['name' => 'Ivo Sato', 'birth' => -55.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
+            'totalTime' => 3.1, 'authoritySalt' => 5.0, 'councilStances' => array_fill(0, 13, 1.0), 'heads' => [Office::Governor->value => $governor],
             'memberStances' => [1.0, 1.0, 1.0, 0.0, 0.0, -1.0], 'committeeMajority' => 1.0,
             'lastMeetingAt' => 3.1, 'lastMeetingRate' => 0.0425, 'lastMeetingChange' => 0.005, 'lastMeetingVotes' => [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, -1.0],
         ];
-        $appointed = new PoliticsStateDTO(...($authority + ['eventType' => ShockEvent::GOVERNOR_APPOINTED, 'lastGovernorAppointedAt' => 3.1]));
+        $appointed = new PoliticsStateDTO(...(['eventType' => ShockEvent::GOVERNOR_APPOINTED, 'heads' => [Office::Governor->value => ['appointedAt' => 3.1] + $governor]] + $authority));
         $tipped = new PoliticsStateDTO(...($authority + ['eventType' => ShockEvent::AUTHORITY_MAJORITY_SHIFT, 'lastMajorityShiftAt' => 3.1]));
         $decided = new PoliticsStateDTO(...($authority + ['eventType' => ShockEvent::MONETARY_DECISION]));
 
@@ -296,13 +297,15 @@ class SystemicEventReporterTest extends TestCase
     public function testTheRegulatorsHeadlineNamesTheHeadAndTheRequirement(): void
     {
         $head = [
-            'totalTime' => 7.0, 'authoritySalt' => 5.0, 'eventType' => ShockEvent::REGULATOR_APPOINTED, 'lastRegulatorAppointedAt' => 7.0,
-            'regulatorName' => 'Odile Marsh', 'regulatorBirth' => -48.0, 'regulatorTermStart' => 7.0,
-            'regulatorPassedOver' => [['name' => 'Bram Ellery', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
+            'totalTime' => 7.0, 'authoritySalt' => 5.0, 'eventType' => ShockEvent::REGULATOR_APPOINTED,
             'requirementPhaseFrom' => 0.094, 'requirementPhaseStart' => 7.0, 'bankCapitalRequirement' => 0.094,
         ];
-        $raising = new PoliticsStateDTO(...($head + ['regulatorStance' => \App\Service\Politics\Department\FinancialRegulator::stance(0.1230)]));
-        $cutting = new PoliticsStateDTO(...($head + ['regulatorStance' => \App\Service\Politics\Department\FinancialRegulator::stance(0.0850)]));
+        $regulator = static fn(float $requirement): array => [Office::Regulator->value => [
+            'name' => 'Odile Marsh', 'birth' => -48.0, 'termStart' => 7.0, 'stance' => \App\Service\Politics\Department\FinancialRegulator::stance($requirement),
+            'passedOver' => [['name' => 'Bram Ellery', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]], 'appointedAt' => 7.0,
+        ]];
+        $raising = new PoliticsStateDTO(...($head + ['heads' => $regulator(0.1230)]));
+        $cutting = new PoliticsStateDTO(...($head + ['heads' => $regulator(0.0850)]));
 
         for ($i = 0; $i < 20; ++$i) {
             $headline = $this->reporter(bufferedPrice: null)->report(new MacroStateDTO(totalTime: 7.0), $raising, $this->benchmarkAt('100'))[0] ?? null;
@@ -331,14 +334,14 @@ class SystemicEventReporterTest extends TestCase
      */
     public function testTheFundHeadsHeadlineNamesTheHeadAndTheTrade(): void
     {
-        $head = [
-            'totalTime' => 4.0, 'authoritySalt' => 5.0, 'eventType' => ShockEvent::FUND_HEAD_APPOINTED, 'lastFundHeadAppointedAt' => 4.0,
-            'fundHeadName' => 'Ines Varga', 'fundHeadBirth' => -50.0, 'fundHeadTermStart' => 4.0,
-            'fundHeadPassedOver' => [['name' => 'Oren Pike', 'birth' => -48.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 1.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
-        ];
+        $head = ['totalTime' => 4.0, 'authoritySalt' => 5.0, 'eventType' => ShockEvent::FUND_HEAD_APPOINTED];
+        $fundHead = static fn(float $equityShare): array => [Office::FundHead->value => [
+            'name' => 'Ines Varga', 'birth' => -50.0, 'termStart' => 4.0, 'stance' => \App\Service\Politics\Department\SovereignReserveFund::stance($equityShare),
+            'passedOver' => [['name' => 'Oren Pike', 'birth' => -48.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 1.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]], 'appointedAt' => 4.0,
+        ]];
         // A $5T fund 70% in equities, 16% of it in a $15T board float: the board is 0.16 / 0.70 of its equities.
         $macro = new MacroStateDTO(totalTime: 4.0, sovereignFundPolicyEquityShare: 0.70, sovereignFundTargetWeight: 0.16, sovereignFundToGdp: 0.5, sovereignFundDollarsPerGdp: 1.0e11, nominalGdpIndex: 100.0, boardFloatCap: 15.0e12);
-        $cautious = new PoliticsStateDTO(...($head + ['fundHeadStance' => \App\Service\Politics\Department\SovereignReserveFund::stance(0.50)]));
+        $cautious = new PoliticsStateDTO(...($head + ['heads' => $fundHead(0.50)]));
         $sold = (0.16 / 0.70) * 0.20 * 5.0e12 / 15.0e12;
 
         for ($i = 0; $i < 20; ++$i) {
@@ -361,12 +364,14 @@ class SystemicEventReporterTest extends TestCase
             totalTime: 3.0,
             authoritySalt: 5.0,
             eventType: ShockEvent::EXCHEQUER_HEAD_APPOINTED,
-            lastExchequerHeadAppointedAt: 3.0,
-            exchequerHeadName: 'Rosalind Tate',
-            exchequerHeadBirth: -51.0,
-            exchequerHeadTermStart: 3.0,
-            exchequerHeadStance: \App\Service\Politics\Department\Exchequer::stance(4.0),
-            exchequerHeadPassedOver: [['name' => 'Hal Brennan', 'birth' => -47.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 1.0, 'competition' => 0.0, 'markets' => 0.0]],
+            heads: [Office::ExchequerHead->value => [
+                'name' => 'Rosalind Tate',
+                'birth' => -51.0,
+                'termStart' => 3.0,
+                'stance' => \App\Service\Politics\Department\Exchequer::stance(4.0),
+                'passedOver' => [['name' => 'Hal Brennan', 'birth' => -47.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 1.0, 'competition' => 0.0, 'markets' => 0.0]],
+                'appointedAt' => 3.0,
+            ]],
         );
         $macro = new MacroStateDTO(totalTime: 3.0, sovereignDebtToGdpEma: 0.9, sovereignDebtAverageMaturity: 5.0);
         $basisPoints = (int) round(10000.0 * 0.0029 * 0.9 * 1.0);
@@ -448,7 +453,7 @@ class SystemicEventReporterTest extends TestCase
     public function testARateDecisionIsFiledBesideTheBudgetRoundItFallsOn(): void
     {
         $meeting = [
-            'totalTime' => 3.5, 'authoritySalt' => 5.0, 'councilStances' => array_fill(0, 13, 1.0), 'governorName' => 'Theodora Vance', 'governorBirth' => -50.0,
+            'totalTime' => 3.5, 'authoritySalt' => 5.0, 'councilStances' => array_fill(0, 13, 1.0), 'heads' => [Office::Governor->value => ['name' => 'Theodora Vance', 'birth' => -50.0] + Office::VACANT],
             'memberStances' => [1.0, 1.0, 1.0, 0.0, 0.0, -1.0], 'committeeMajority' => 1.0,
             'lastMeetingAt' => 3.5, 'lastMeetingRate' => 0.0425, 'lastMeetingChange' => 0.0025, 'lastMeetingVotes' => array_fill(0, 7, 0.0),
         ];

@@ -52,3 +52,14 @@ Evidence: `politics_evidence.md`.
 gate.php writes an extra `"ev":"crisis"` row on each crisis tick (drag jump, built/req/ccyb going in, both drag scales).
 `STAGE=crisis_4 YEARS=60 TPY=180 bin/harness-batch var/harness/politics/spend.sh 1-4 newon headon` (head_tree as above,
 copy the tree gate.php into it), then `python3 var/harness/politics/crisis_an.py var/harness/politics/runs/crisis_4 5`.
+
+## State identity across a refactor (state_identity.php, 2026-10-20)
+`state_identity.php run <seedFrom> <seedTo> <years> <tpy> <states.jsonl> <pages.jsonl>` drives the macro engine and the
+Diet as gate.php's `on` arm does and writes each seed-year's raw `PoliticsState::toArray()`, plus the government,
+department, regulator and reserve page arrays and the headline contexts at the first tick, mid-run and the last year.
+1. Run it on the baseline in a detached worktree (`git worktree add --detach <dir> <commit>`, `cp -a vendor <dir>/`,
+   copy the script in; it requires its own tree's bootstrap) and on the working tree, one seed per process.
+2. `state_identity.php compare head_states.jsonl tree_states.jsonl head_pages.jsonl tree_pages.jsonl` under the working
+   tree: maps the per-head fields saved before `heads` into it, then demands every line and every page match exactly,
+   and checks that `PoliticsState::fromArray()` reads each baseline line into the tree's byte for byte.
+   3 seeds x 40 years at tpy 52: about 40 s a seed.

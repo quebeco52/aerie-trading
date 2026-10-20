@@ -45,14 +45,13 @@ class CouncilAppointmentsTest extends TestCase
      */
     public function testCandidatesAreDrawnFromTheRecord(): void
     {
-        $math = new MathUtility();
         $types = ['hawk' => 0, 'swing' => 0, 'dove' => 0];
         $swingHawks = 0;
         $regimes = array_fill(0, 10, 0);
         $ages = [];
         $draws = 20000;
         for ($i = 0; $i < $draws; ++$i) {
-            $candidate = Appointments::candidate(99, "test:{$i}", 0, 10.0, [], $math);
+            $candidate = Appointments::candidate(99, "test:{$i}", 0, 10.0, []);
             ++$types[MonetaryAuthority::typeName($candidate['stance'], $candidate['swing'])];
             $this->assertContains($candidate['stance'], [1.0, -1.0], 'Everyone sits in a camp, a swing vote in the one they lean to.');
             $swingHawks += $candidate['swing'] > 0.0 && $candidate['stance'] > 0.0 ? 1 : 0;
@@ -83,9 +82,9 @@ class CouncilAppointmentsTest extends TestCase
         $this->assertLessThanOrEqual(Appointments::APPOINTMENT_AGE_MAX, $ages[$draws - 1]);
         $this->assertLessThan(0.005, count(array_filter($ages, static fn(float $age): bool => $age < Appointments::APPOINTMENT_AGE_MIN + 0.1)) / $draws, 'The cut does not pile people at the edge.');
 
-        $this->assertSame(Appointments::candidate(5, 'seat', 1, 3.0, [], $math), Appointments::candidate(5, 'seat', 1, 3.0, [], $math));
-        $first = Appointments::candidate(5, 'seat', 1, 3.0, [], $math);
-        $this->assertNotSame($first['name'], Appointments::candidate(5, 'seat', 1, 3.0, [$first['name']], $math)['name'], 'A name already sitting is drawn again.');
+        $this->assertSame(Appointments::candidate(5, 'seat', 1, 3.0, []), Appointments::candidate(5, 'seat', 1, 3.0, []));
+        $first = Appointments::candidate(5, 'seat', 1, 3.0, []);
+        $this->assertNotSame($first['name'], Appointments::candidate(5, 'seat', 1, 3.0, [$first['name']])['name'], 'A name already sitting is drawn again.');
     }
 
     /**
@@ -96,7 +95,6 @@ class CouncilAppointmentsTest extends TestCase
      */
     public function testTheAppointerNamesTheNearestCandidate(): void
     {
-        $math = new MathUtility();
         $doves = 0;
         $vacancies = 4000;
         for ($i = 0; $i < $vacancies; ++$i) {
@@ -106,7 +104,7 @@ class CouncilAppointmentsTest extends TestCase
                 2 => [Appointments::AXIS_MONEY => 0.0, Appointments::AXIS_REGULATION => -0.5],
                 default => [Appointments::AXIS_MONEY => -1.0],
             };
-            [$named, $passedOver] = Appointments::appoint(11, "test:{$i}", 2.0, $target, [], $math);
+            [$named, $passedOver] = Appointments::appoint(11, "test:{$i}", 2.0, $target, []);
             $this->assertCount(Appointments::SHORTLIST - 1, $passedOver);
 
             $distance = static fn(array $candidate): float => sqrt(array_sum(array_map(
@@ -116,7 +114,7 @@ class CouncilAppointmentsTest extends TestCase
             )));
             $shortlist = [];
             for ($slot = 0; $slot < Appointments::SHORTLIST; ++$slot) {
-                $shortlist[] = Appointments::candidate(11, Appointments::vacancyKey("test:{$i}", 2.0), $slot, 2.0, array_column($shortlist, 'name'), $math);
+                $shortlist[] = Appointments::candidate(11, Appointments::vacancyKey("test:{$i}", 2.0), $slot, 2.0, array_column($shortlist, 'name'));
             }
             $chosen = array_search($named, $shortlist, true);
             $this->assertIsInt($chosen, 'The one named was on the shortlist.');
@@ -162,7 +160,7 @@ class CouncilAppointmentsTest extends TestCase
         $this->assertEqualsWithDelta($since, $state->councilSince[0], 1e-12);
         $this->assertNotSame(AerieCouncil::OPENING_MEMBERS[0], $state->councilNames[0]);
         $this->assertCount(Appointments::SHORTLIST - 1, $state->councillorPassedOver);
-        $shortlist = Appointments::boardShortlist((int) $state->authoritySalt, 'council:0', $since, $board, $reserved, new MathUtility());
+        $shortlist = Appointments::boardShortlist((int) $state->authoritySalt, 'council:0', $since, $board, $reserved);
         [$expected, $passedOver] = Appointments::choose($shortlist, $medians);
         $this->assertSame($expected['name'], $state->councilNames[0]);
         $this->assertSame($expected['regulation'], $state->councilRegulationStances[0]);
@@ -359,7 +357,6 @@ class CouncilAppointmentsTest extends TestCase
      */
     public function testTheBoardPutsForwardTheApplicantsNearestItsMedian(): void
     {
-        $math = new MathUtility();
         $distance = static fn(array $candidate, array $target): float => sqrt(
             (($candidate['stance'] - $target[Appointments::AXIS_MONEY]) ** 2)
             + (($candidate['regulation'] - $target[Appointments::AXIS_REGULATION]) ** 2)
@@ -367,12 +364,12 @@ class CouncilAppointmentsTest extends TestCase
         );
         for ($i = 0; $i < 200; ++$i) {
             $target = [Appointments::AXIS_MONEY => $i % 2 === 0 ? 1.0 : -1.0, Appointments::AXIS_REGULATION => 0.2, Appointments::AXIS_FUND => -0.3];
-            $shortlist = Appointments::boardShortlist(21, "council:{$i}", 7.0, $target, [], $math);
+            $shortlist = Appointments::boardShortlist(21, "council:{$i}", 7.0, $target, []);
             $this->assertCount(Appointments::SHORTLIST, $shortlist);
 
             $field = [];
             for ($slot = 0; $slot < Appointments::BOARD_FIELD; ++$slot) {
-                $field[] = Appointments::candidate(21, Appointments::vacancyKey("council:{$i}", 7.0), $slot, 7.0, array_column($field, 'name'), $math);
+                $field[] = Appointments::candidate(21, Appointments::vacancyKey("council:{$i}", 7.0), $slot, 7.0, array_column($field, 'name'));
             }
             $slots = array_map(static fn(array $kept): int => (int) array_search($kept, $field, true), $shortlist);
             $this->assertSame($slots, array_values(array_unique($slots)));
@@ -387,7 +384,7 @@ class CouncilAppointmentsTest extends TestCase
                 }
             }
         }
-        $this->assertSame(Appointments::boardShortlist(3, 'council:1', 2.0, [Appointments::AXIS_MONEY => 1.0], [], $math), Appointments::boardShortlist(3, 'council:1', 2.0, [Appointments::AXIS_MONEY => 1.0], [], $math));
+        $this->assertSame(Appointments::boardShortlist(3, 'council:1', 2.0, [Appointments::AXIS_MONEY => 1.0], []), Appointments::boardShortlist(3, 'council:1', 2.0, [Appointments::AXIS_MONEY => 1.0], []));
     }
 
     /**

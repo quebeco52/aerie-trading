@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Politics\Department;
 
-use App\Data\Politics\AerieCouncil;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
-use App\Service\Politics\Council\CouncilAppointments;
 use App\Service\Politics\PoliticsState;
 
 /**
@@ -35,74 +32,36 @@ final class FinancialRegulator
     /** Requirement above which a head reads as strict: the strictest third of the range. */
     public const STRICT_ABOVE = self::STRICTEST_REQUIREMENT - ((self::STRICTEST_REQUIREMENT - self::LIGHTEST_REQUIREMENT) / 3.0);
 
-    // --- The Head ---
-    /** Length of the head's single term, in years: five, non-renewable (the ECB Supervisory Board chair's). */
-    public const HEAD_TERM_YEARS = 5.0;
-    /** When the term of the head sitting at Year 1 ends, in years after Year 1 began. */
-    public const OPENING_HEAD_TERM_END = 2.0;
-
     // --- Phase-In ---
     /** Years over which a rise in the requirement phases in; a cut applies at once (BCBS 2010 buffer guidance). */
     public const PHASE_IN_YEARS = 1.0;
 
     /**
-     * One tick, after the Council's own: seats a head when the state has none and at each term's end, then moves the
-     * requirement in force toward the head's.
+     * One tick, after the Council's own: seats a head when the post is vacant and at each term's end (Office::fill()),
+     * with the cap and buffer their stance runs, then moves the requirement in force toward the head's. A rise phases
+     * in from the seating; the head seated on a state's first read has theirs in force already.
      *
      * @param PoliticsState $state Advanced in place; its totalTime already this tick's.
      */
-    public static function advance(PoliticsState $state, MathUtility $math): void
+    public static function advance(PoliticsState $state): void
     {
         $time = $state->totalTime;
-        $term = CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS);
-
-        if ($state->regulatorName === '') {
-            self::open($state, $term, $math);
-        } elseif (abs($state->regulatorTermStart - $term) > 1e-9) {
-            [$chosen, $state->regulatorPassedOver] = CouncilAppointments::appoint(
-                (int) $state->authoritySalt,
-                'regulator',
-                $term,
-                [CouncilAppointments::AXIS_REGULATION => CouncilAppointments::median($state->councilRegulationStances)],
-                CouncilAppointments::reservedNames($state),
-                $math,
-            );
-            self::seatHead($state, $chosen, $term);
-            $state->requirementPhaseFrom = $state->bankCapitalRequirement;
-            $state->requirementPhaseStart = $time;
-            $state->lastRegulatorAppointedAt = $time;
+        $seated = Office::Regulator->fill($state);
+        $head = $state->head(Office::Regulator);
+        if ($seated !== null) {
+            $state->regulatorLtvCap = self::ltvCapForStance($head['stance']);
+            $state->regulatorNeutralBuffer = self::neutralBufferForStance($head['stance']);
+            [, $outgoing] = $seated;
+            $opening = $outgoing['name'] === '';
+            $state->requirementPhaseFrom = $opening ? self::requirement($head['stance']) : $state->bankCapitalRequirement;
+            $state->requirementPhaseStart = $opening ? $head['termStart'] : $time;
         }
 
         $state->bankCapitalRequirement = self::requirementInForce(
-            self::requirement($state->regulatorStance),
+            self::requirement($head['stance']),
             $state->requirementPhaseFrom,
             $time - $state->requirementPhaseStart,
         );
-    }
-
-    /**
-     * Seats the head on the first read of a state. The head sitting at Year 1 runs, under their own name, the
-     * requirement the banks opened under; a later head's, for a state that predates the Regulator, is already in force.
-     */
-    private static function open(PoliticsState $state, float $term, MathUtility $math): void
-    {
-        [$chosen, $state->regulatorPassedOver] = CouncilAppointments::appoint(
-            (int) $state->authoritySalt,
-            'regulator',
-            $term,
-            [CouncilAppointments::AXIS_REGULATION => CouncilAppointments::median($state->councilRegulationStances)],
-            CouncilAppointments::reservedNames($state),
-            $math,
-        );
-        if ($term < 0.0) {
-            $chosen['name'] = AerieCouncil::OPENING_REGULATOR;
-            $chosen['regulation'] = self::stance(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT);
-            $state->regulatorPassedOver = [];
-        }
-        self::seatHead($state, $chosen, $term);
-
-        $state->requirementPhaseFrom = self::requirement($state->regulatorStance);
-        $state->requirementPhaseStart = $term;
     }
 
     /** A stance on the banks drawn from a uniform, every stance between light-touch and strict as likely. */
@@ -165,12 +124,6 @@ final class FinancialRegulator
         return $requirement < self::LIGHT_TOUCH_BELOW ? 'light' : ($requirement > self::STRICT_ABOVE ? 'strict' : 'middle');
     }
 
-    /** When the head in office at a moment leaves. */
-    public static function headTermEnd(float $time): float
-    {
-        return CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS) + self::HEAD_TERM_YEARS;
-    }
-
     /** The lightest requirement a head may set. */
     public static function lightest(): float
     {
@@ -181,19 +134,5 @@ final class FinancialRegulator
     public static function strictest(): float
     {
         return self::STRICTEST_REQUIREMENT;
-    }
-
-    /**
-     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float} $person
-     */
-    private static function seatHead(PoliticsState $state, array $person, float $termStart): void
-    {
-        CouncilAppointments::retire($state, $state->regulatorName);
-        $state->regulatorName = $person['name'];
-        $state->regulatorBirth = $person['birth'];
-        $state->regulatorTermStart = $termStart;
-        $state->regulatorStance = $person['regulation'];
-        $state->regulatorLtvCap = self::ltvCapForStance($person['regulation']);
-        $state->regulatorNeutralBuffer = self::neutralBufferForStance($person['regulation']);
     }
 }

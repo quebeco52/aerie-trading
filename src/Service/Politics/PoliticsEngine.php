@@ -15,15 +15,11 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Politics\Council\CouncilAppointments;
-use App\Service\Politics\Department\CoastGuard;
-use App\Service\Politics\Department\Exchequer;
 use App\Service\Politics\Department\FairTradingBoard;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Department\SecuritiesCommission;
-use App\Service\Politics\Department\SecurityBureau;
-use App\Service\Politics\Department\SovereignReserveFund;
-use App\Service\Politics\Department\StateGuard;
 use App\Service\Politics\Diet\CoalitionFormation;
 use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Diet\ElectionForecast;
@@ -235,15 +231,17 @@ class PoliticsEngine
         }
 
         CouncilAppointments::advance($state, $this->mathUtility);
-        MonetaryAuthority::advance($state, $macro, $dt, $this->mathUtility);
-        FinancialRegulator::advance($state, $this->mathUtility);
-        SovereignReserveFund::advance($state, $this->mathUtility);
-        Exchequer::advance($state, $this->mathUtility);
-        FairTradingBoard::advance($state, $this->mathUtility);
-        SecuritiesCommission::advance($state, $this->mathUtility);
-        SecurityBureau::advance($state, $this->mathUtility);
-        CoastGuard::advance($state, $this->mathUtility);
-        StateGuard::advance($state, $this->mathUtility);
+        // The departments, in the Office order: each seats its head when due (Office::fill()), and those that keep
+        // more than the head bring that up to date too.
+        MonetaryAuthority::advance($state, $macro, $dt);
+        FinancialRegulator::advance($state);
+        Office::FundHead->fill($state);
+        Office::ExchequerHead->fill($state);
+        FairTradingBoard::advance($state);
+        SecuritiesCommission::advance($state);
+        Office::SecurityDirector->fill($state);
+        Office::CoastGuardCommandant->fill($state);
+        Office::StateGuardCommander->fill($state);
         PartyLeaders::advance($state, $dt, $this->mathUtility);
         ElectionForecast::advance($state, MacroEngine::recessionDeclared($macro), $forecastOffTick);
 
@@ -252,26 +250,20 @@ class PoliticsEngine
 
     /**
      * The tick's political headline, the first that applies in the order below: the vote, a fall, a new government or
-     * prime minister, a budget that changed a lever, an appointment, and last a rate meeting that moved the rate a full
-     * step or split its committee. A single-tick pulse, gone on the next tick.
+     * prime minister, a budget that changed a lever, an appointment (the first in the Office order), and last a rate
+     * meeting that moved the rate a full step or split its committee. A single-tick pulse, gone on the next tick.
      */
     public static function headline(PoliticsState $state): ?string
     {
+        $appointed = array_values(array_filter(Office::cases(), static fn(Office $office): bool => $state->head($office)['appointedAt'] === $state->totalTime));
+
         return match (true) {
             $state->lastElectionAt === $state->totalTime => ShockEvent::ELECTION_HELD,
             $state->lastCabinetFellAt === $state->totalTime => ShockEvent::GOVERNMENT_FELL,
             $state->lastGovernmentFormedAt === $state->totalTime => ShockEvent::GOVERNMENT_FORMED,
             $state->lastLeaderChangeAt === $state->totalTime && $state->lastLeaderChangeParty === PartyLeaders::primeMinisterParty($state) => ShockEvent::PRIME_MINISTER_CHANGED,
             $state->lastBudgetEnactedAt === $state->totalTime => ShockEvent::BUDGET_ENACTED,
-            $state->lastGovernorAppointedAt === $state->totalTime => ShockEvent::GOVERNOR_APPOINTED,
-            $state->lastRegulatorAppointedAt === $state->totalTime => ShockEvent::REGULATOR_APPOINTED,
-            $state->lastFundHeadAppointedAt === $state->totalTime => ShockEvent::FUND_HEAD_APPOINTED,
-            $state->lastExchequerHeadAppointedAt === $state->totalTime => ShockEvent::EXCHEQUER_HEAD_APPOINTED,
-            $state->lastFairTradingHeadAppointedAt === $state->totalTime => ShockEvent::FAIR_TRADING_HEAD_APPOINTED,
-            $state->lastSecuritiesHeadAppointedAt === $state->totalTime => ShockEvent::SECURITIES_HEAD_APPOINTED,
-            $state->lastSecurityDirectorAppointedAt === $state->totalTime => ShockEvent::SECURITY_DIRECTOR_APPOINTED,
-            $state->lastCoastGuardCommandantAppointedAt === $state->totalTime => ShockEvent::COAST_GUARD_COMMANDANT_APPOINTED,
-            $state->lastStateGuardCommanderAppointedAt === $state->totalTime => ShockEvent::STATE_GUARD_COMMANDER_APPOINTED,
+            $appointed !== [] => $appointed[0]->appointmentEvent(),
             $state->lastMajorityShiftAt === $state->totalTime => ShockEvent::AUTHORITY_MAJORITY_SHIFT,
             $state->lastCouncillorSeatedAt === $state->totalTime => ShockEvent::COUNCILLOR_SEATED,
             $state->lastLeaderChangeAt === $state->totalTime => ShockEvent::PARTY_LEADER_CHANGED,

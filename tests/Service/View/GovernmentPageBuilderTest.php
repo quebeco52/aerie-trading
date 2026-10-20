@@ -28,6 +28,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Politics\Department\FairTradingBoard;
 use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\Diet\PartyLeaders;
@@ -83,7 +84,7 @@ class GovernmentPageBuilderTest extends TestCase
      */
     public function testTheCouncilPageNamesTheSecurityBureausDirector(): void
     {
-        $politics = new PoliticsStateDTO(totalTime: 7.0, securityDirectorName: 'Augustin Pell', securityDirectorBirth: -45.0, securityDirectorTermStart: 6.0);
+        $politics = new PoliticsStateDTO(totalTime: 7.0, heads: [Office::SecurityDirector->value => ['name' => 'Augustin Pell', 'birth' => -45.0, 'termStart' => 6.0] + Office::VACANT]);
         $departments = array_column($this->builder()->buildCouncil(new MacroStateDTO(totalTime: 7.0), $politics)['council']['departments'], null, 'name');
 
         $bureau = $departments[\App\Data\District\Institutions::SECURITY_BUREAU];
@@ -98,7 +99,7 @@ class GovernmentPageBuilderTest extends TestCase
      */
     public function testTheCouncilPageNamesTheGuardsCommanders(): void
     {
-        $politics = new PoliticsStateDTO(totalTime: 3.0, coastGuardCommandantName: 'Imogen Hale', coastGuardCommandantBirth: -48.0, coastGuardCommandantTermStart: 2.5);
+        $politics = new PoliticsStateDTO(totalTime: 3.0, heads: [Office::CoastGuardCommandant->value => ['name' => 'Imogen Hale', 'birth' => -48.0, 'termStart' => 2.5] + Office::VACANT]);
         $departments = array_column($this->builder()->buildCouncil(new MacroStateDTO(totalTime: 3.0), $politics)['council']['departments'], null, 'name');
 
         $coast = $departments[\App\Data\District\Institutions::COAST_GUARD];
@@ -547,9 +548,9 @@ class GovernmentPageBuilderTest extends TestCase
         for ($tick = 0; $tick <= 52; ++$tick) {
             $state->totalTime = $tick / 52.0;
             \App\Service\Politics\Council\CouncilAppointments::advance($state, $math);
-            MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.04), 1.0 / 52.0, $math);
-            \App\Service\Politics\Department\FinancialRegulator::advance($state, $math);
-            \App\Service\Politics\Department\SovereignReserveFund::advance($state, $math);
+            MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.04), 1.0 / 52.0);
+            \App\Service\Politics\Department\FinancialRegulator::advance($state);
+            Office::FundHead->fill($state);
         }
         $politics = PoliticsStateDTO::fromState($state);
         $page = $this->builder()->buildHub(new MacroStateDTO(totalTime: $state->totalTime, countercyclicalBufferRate: 0.005), $politics);
@@ -606,11 +607,13 @@ class GovernmentPageBuilderTest extends TestCase
         $politics = new PoliticsStateDTO(
             totalTime: 7.25,
             authoritySalt: 5.0,
-            regulatorName: 'Test Head',
-            regulatorBirth: -45.0,
-            regulatorTermStart: 7.0,
-            regulatorStance: $regime,
-            regulatorPassedOver: [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
+            heads: [Office::Regulator->value => [
+                'name' => 'Test Head',
+                'birth' => -45.0,
+                'termStart' => 7.0,
+                'stance' => $regime,
+                'passedOver' => [['name' => 'Other One', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => -1.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.0]],
+            ] + Office::VACANT],
             bankCapitalRequirement: 0.1012,
             requirementPhaseFrom: 0.094,
             requirementPhaseStart: 7.0,

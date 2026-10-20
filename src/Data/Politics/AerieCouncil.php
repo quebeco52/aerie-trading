@@ -31,10 +31,9 @@ use App\Data\District\Institutions;
  * Board's head, who sets the screens merger review applies (App\Service\Politics\Department\FairTradingBoard), and the
  * Securities Commission's head, who sets the margin investors put up and what listed firms must disclose
  * (App\Service\Politics\Department\SecuritiesCommission). It also names the Security Bureau's director, who sets no
- * rule (App\Service\Politics\Department\SecurityBureau), and the commanders of the Coast Guard and the State Guard, the
- * District's armed services in all but law, which the Council alone commands
- * (App\Service\Politics\Department\CoastGuard, App\Service\Politics\Department\StateGuard). The budget is the Diet's
- * alone. No party sits on the Council.
+ * rule, and the commanders of the Coast Guard and the State Guard, the District's armed services in all but law, which
+ * the Council alone commands (App\Service\Politics\Department\Office). The budget is the Diet's alone. No party sits
+ * on the Council.
  */
 final class AerieCouncil
 {

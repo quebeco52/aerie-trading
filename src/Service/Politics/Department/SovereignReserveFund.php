@@ -4,12 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Politics\Department;
 
-use App\Data\Politics\AerieCouncil;
-use App\Service\Macro\Subsystem\SovereignFundSubsystem;
-use App\Service\Math\MathUtility;
-use App\Service\Politics\Council\CouncilAppointments;
-use App\Service\Politics\PoliticsState;
-
 /**
  * The Sovereign Reserve Fund: a head the Council appoints for one fixed term, who sets the policy equity share the fund
  * (App\Service\Macro\Subsystem\SovereignFundSubsystem) invests at. Each candidate holds a stance on the reserves, from
@@ -29,50 +23,6 @@ final class SovereignReserveFund
     public const CAUTIOUS_BELOW = 0.595;
     /** Equity share above which a mix reads as bold: 67.5%, the edge of the highest third of the mixes on record. */
     public const BOLD_ABOVE = 0.675;
-
-    // --- The Head ---
-    /** Length of the head's single term, in years: five, fixed (NBIM's chief executive, GPIF's board). */
-    public const HEAD_TERM_YEARS = 5.0;
-    /** When the term of the head sitting at Year 1 ends, in years after Year 1 began. */
-    public const OPENING_HEAD_TERM_END = 4.0;
-
-    /**
-     * One tick, after the Council's own: seats a head when the state has none and at each term's end.
-     *
-     * @param PoliticsState $state Advanced in place; its totalTime already this tick's.
-     */
-    public static function advance(PoliticsState $state, MathUtility $math): void
-    {
-        $time = $state->totalTime;
-        $term = CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS);
-        if ($state->fundHeadName !== '' && abs($state->fundHeadTermStart - $term) < 1e-9) {
-            return;
-        }
-
-        $opening = $state->fundHeadName === '';
-        [$chosen, $state->fundHeadPassedOver] = CouncilAppointments::appoint(
-            (int) $state->authoritySalt,
-            'fund',
-            $term,
-            [CouncilAppointments::AXIS_FUND => CouncilAppointments::median($state->councilFundStances)],
-            CouncilAppointments::reservedNames($state),
-            $math,
-        );
-        if ($term < 0.0) {
-            $chosen['name'] = AerieCouncil::OPENING_FUND_HEAD;
-            $chosen['fund'] = self::stance(SovereignFundSubsystem::OPENING_POLICY_EQUITY_SHARE);
-            $state->fundHeadPassedOver = [];
-        }
-
-        CouncilAppointments::retire($state, $state->fundHeadName);
-        $state->fundHeadName = $chosen['name'];
-        $state->fundHeadBirth = $chosen['birth'];
-        $state->fundHeadTermStart = $term;
-        $state->fundHeadStance = $chosen['fund'];
-        if (!$opening) {
-            $state->lastFundHeadAppointedAt = $time;
-        }
-    }
 
     /** A stance on the reserves drawn from a uniform: one of the policy mixes on record, each as likely. */
     public static function drawStance(float $uniform): float
@@ -98,12 +48,6 @@ final class SovereignReserveFund
     public static function stanceName(float $equityShare): string
     {
         return $equityShare < self::CAUTIOUS_BELOW ? 'cautious' : ($equityShare > self::BOLD_ABOVE ? 'bold' : 'balanced');
-    }
-
-    /** When the head in office at a moment leaves. */
-    public static function headTermEnd(float $time): float
-    {
-        return CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS) + self::HEAD_TERM_YEARS;
     }
 
     /** The most cautious mix on record. */

@@ -6,7 +6,9 @@ require __DIR__ . '/../../../vendor/autoload.php';
 
 use App\DTO\MacroStateDTO;
 use App\Service\Math\MathUtility;
+use App\Service\Politics\Council\CouncilAppointments;
 use App\Service\Politics\Department\MonetaryAuthority as A;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\PoliticsState;
 
 $seeds = (int) ($argv[1] ?? 64);
@@ -23,16 +25,16 @@ foreach (range(1, $seeds) as $seed) {
     $math = new MathUtility();
     $state = new PoliticsState();
     $state->totalTime = 0.0;
-    A::advance($state, new MacroStateDTO(totalTime: 0.0, policyRate: 0.03), $dt, $math);
-    $median = A::median($state->councilStances);
+    A::advance($state, new MacroStateDTO(totalTime: 0.0, policyRate: 0.03), $dt);
+    $median = CouncilAppointments::median($state->councilStances);
     $f = 0;
     $seen = [];
     for ($t = $dt; $t <= $years + 1e-9; $t += $dt) {
         $state->totalTime = $t;
         $before = $state->councilNames;
         $memBefore = $state->memberNames;
-        $govBefore = $state->governorName;
-        A::advance($state, new MacroStateDTO(totalTime: $t, policyRate: 0.03), $dt, $math);
+        $govBefore = $state->head(Office::Governor)['name'];
+        A::advance($state, new MacroStateDTO(totalTime: $t, policyRate: 0.03), $dt);
         foreach ($state->councilNames as $s => $n) {
             if ($n !== ($before[$s] ?? null)) { $ages[] = $state->councilSince[$s] - $state->councilBirths[$s]; ++$types[A::stanceName($state->councilStances[$s])]; }
         }
@@ -40,12 +42,13 @@ foreach (range(1, $seeds) as $seed) {
             if ($n !== ($memBefore[$s] ?? null)) {
                 $ages[] = $state->memberSince[$s] - $state->memberBirths[$s];
                 ++$types[A::stanceName($state->memberStances[$s])];
-                if ($state->governorStance === -1.0) { ++$govMatch[1]; $govMatch[0] += $state->memberStances[$s] === -1.0 ? 1 : 0; }
+                if ($state->head(Office::Governor)['stance'] === -1.0) { ++$govMatch[1]; $govMatch[0] += $state->memberStances[$s] === -1.0 ? 1 : 0; }
             }
         }
-        if ($state->governorName !== $govBefore) { $ages[] = $state->governorTermStart - $state->governorBirth; ++$types[A::stanceName($state->governorStance)]; }
+        $governor = $state->head(Office::Governor);
+        if ($governor['name'] !== $govBefore) { $ages[] = $governor['termStart'] - $governor['birth']; ++$types[A::stanceName($governor['stance'])]; }
         if ($t >= $burn) { $balances[] = $state->committeeBalance; }
-        $m = A::median($state->councilStances);
+        $m = CouncilAppointments::median($state->councilStances);
         if ($m !== $median) { ++$f; $median = $m; }
     }
     $flips[] = $f * 100.0 / $years;

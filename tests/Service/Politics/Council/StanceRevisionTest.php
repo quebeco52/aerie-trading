@@ -9,6 +9,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Politics\Council\CouncilAppointments as Appointments;
 use App\Service\Politics\Council\StanceRevision;
 use App\Service\Politics\Department\MonetaryAuthority as Authority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
 
@@ -22,7 +23,7 @@ class StanceRevisionTest extends TestCase
         $state->totalTime = 0.0;
         $math = new MathUtility();
         Appointments::advance($state, $math);
-        Authority::advance($state, new MacroStateDTO(totalTime: 0.0, policyRate: 0.03), 1.0 / 52.0, $math);
+        Authority::advance($state, new MacroStateDTO(totalTime: 0.0, policyRate: 0.03), 1.0 / 52.0);
 
         return $state;
     }
@@ -30,7 +31,7 @@ class StanceRevisionTest extends TestCase
     /** Everyone's camp on money with their type, so a revision with nobody reseated can be compared. */
     private static function camps(PoliticsState $state): array
     {
-        return [$state->councilStances, $state->councilSwingers, $state->governorStance, $state->governorSwinger, $state->memberStances, $state->memberSwingers];
+        return [$state->councilStances, $state->councilSwingers, $state->head(Office::Governor)['stance'], $state->governorSwinger, $state->memberStances, $state->memberSwingers];
     }
 
     /**
@@ -110,7 +111,7 @@ class StanceRevisionTest extends TestCase
             }
         }
         $state->councilSwingers = [];
-        $state->governorStance = $state->governorSwinger > 0.0 ? 0.0 : $state->governorStance;
+        $state->heads[Office::Governor->value]['stance'] = $state->governorSwinger > 0.0 ? 0.0 : $state->head(Office::Governor)['stance'];
         $state->governorSwinger = -1.0;
         foreach ($state->memberSwingers as $member => $swing) {
             if ($swing > 0.0) {
@@ -118,22 +119,22 @@ class StanceRevisionTest extends TestCase
             }
         }
         $state->memberSwingers = [];
-        $names = [$state->councilNames, $state->governorName, $state->memberNames];
+        $names = [$state->councilNames, $state->head(Office::Governor)['name'], $state->memberNames];
 
         $math = new MathUtility();
         $state->totalTime = 1.0 / 52.0;
         Appointments::advance($state, $math);
-        Authority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), 1.0 / 52.0, $math);
+        Authority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), 1.0 / 52.0);
 
-        $this->assertSame($names, [$state->councilNames, $state->governorName, $state->memberNames]);
+        $this->assertSame($names, [$state->councilNames, $state->head(Office::Governor)['name'], $state->memberNames]);
         foreach ($state->councilStances as $seat => $stance) {
             $this->assertContains($stance, [1.0, -1.0]);
             $this->assertSame($types[$seat], Authority::typeName($stance, $state->councilSwingers[$seat]));
         }
-        foreach ([$state->governorStance, ...$state->memberStances] as $stance) {
+        foreach ([$state->head(Office::Governor)['stance'], ...$state->memberStances] as $stance) {
             $this->assertContains($stance, [1.0, -1.0]);
         }
         $this->assertGreaterThanOrEqual(0.0, $state->governorSwinger);
-        $this->assertEqualsWithDelta(Authority::balance($state->governorStance, array_values($state->memberStances)), $state->committeeBalance, 1e-12, 'The balance is refreshed with the new camps.');
+        $this->assertEqualsWithDelta(Authority::balance($state->head(Office::Governor)['stance'], array_values($state->memberStances)), $state->committeeBalance, 1e-12, 'The balance is refreshed with the new camps.');
     }
 }

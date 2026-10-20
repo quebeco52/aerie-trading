@@ -14,6 +14,7 @@ use App\Repository\StockRepository;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Index\IndexCommittee;
 use App\Service\Math\MacroConstants;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Department\SovereignReserveFund;
 
 /**
@@ -68,17 +69,18 @@ class SovereignReservePageBuilder
         $weight = $macro->sovereignFundDomesticWeight;
         $equityShare = $macro->sovereignFundEquityShare;
         $board = $incepted ? $this->stocks->findAll() : [];
+        $head = $politics?->head(Office::FundHead) ?? Office::VACANT;
 
         return [
             'incepted' => $incepted,
-            'head' => $politics === null || $politics->fundHeadName === '' ? null : [
-                'name' => $politics->fundHeadName,
-                'age' => (int) floor($politics->totalTime - $politics->fundHeadBirth),
-                'sinceLabel' => $politics->fundHeadTermStart < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($politics->fundHeadTermStart),
-                'termEndsLabel' => DistrictCalendar::quarter(SovereignReserveFund::headTermEnd($politics->totalTime)),
-                'stance' => SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->fundHeadStance)),
-                'equityShare' => SovereignReserveFund::equityShare($politics->fundHeadStance),
-                'opening' => $politics->fundHeadTermStart < 0.0,
+            'head' => $politics === null || $head['name'] === '' ? null : [
+                'name' => $head['name'],
+                'age' => (int) floor($politics->totalTime - $head['birth']),
+                'sinceLabel' => $head['termStart'] < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($head['termStart']),
+                'termEndsLabel' => DistrictCalendar::quarter(Office::FundHead->termEnd($politics->totalTime)),
+                'stance' => SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($head['stance'])),
+                'equityShare' => SovereignReserveFund::equityShare($head['stance']),
+                'opening' => $head['termStart'] < 0.0,
             ],
             'summary' => [
                 'value' => $value,

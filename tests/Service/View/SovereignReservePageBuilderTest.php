@@ -12,6 +12,7 @@ use App\Repository\StockRepository;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Politics\Department\Office;
 use App\Service\View\SovereignReservePageBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -136,7 +137,7 @@ class SovereignReservePageBuilderTest extends TestCase
     public function testAHeadsMixSetsThePolicyAndThePageNamesThem(): void
     {
         $macro = new MacroStateDTO(...array_merge(get_object_vars($this->incepted(0.0268, 0.66)), ['sovereignFundPolicyEquityShare' => 0.50]));
-        $politics = new \App\DTO\PoliticsStateDTO(totalTime: 10.5, fundHeadName: 'Ines Varga', fundHeadBirth: -45.0, fundHeadTermStart: 9.0, fundHeadStance: \App\Service\Politics\Department\SovereignReserveFund::stance(0.50));
+        $politics = new \App\DTO\PoliticsStateDTO(totalTime: 10.5, heads: [Office::FundHead->value => ['name' => 'Ines Varga', 'birth' => -45.0, 'termStart' => 9.0, 'stance' => \App\Service\Politics\Department\SovereignReserveFund::stance(0.50)] + Office::VACANT]);
         $page = $this->builder()->build($macro, $politics);
         $sleeves = array_column($page['sleeves'], null, 'key');
 

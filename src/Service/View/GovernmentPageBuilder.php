@@ -30,12 +30,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
 use App\Service\Politics\Council\CouncilAppointments;
-use App\Service\Politics\Department\CoastGuard;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
-use App\Service\Politics\Department\SecurityBureau;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Department\SovereignReserveFund;
-use App\Service\Politics\Department\StateGuard;
 use App\Service\Politics\Diet\CoalitionFormation;
 use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Diet\ElectionForecast;
@@ -262,15 +260,16 @@ class GovernmentPageBuilder
     private static function standingHeads(PoliticsStateDTO $politics, float $time): array
     {
         $posts = [
-            Institutions::SECURITY_BUREAU => ['Director', $politics->securityDirectorName, $politics->securityDirectorBirth, SecurityBureau::directorTermEnd($time)],
-            Institutions::COAST_GUARD => ['Commandant', $politics->coastGuardCommandantName, $politics->coastGuardCommandantBirth, CoastGuard::commandantTermEnd($time)],
-            Institutions::STATE_GUARD => ['Commander', $politics->stateGuardCommanderName, $politics->stateGuardCommanderBirth, StateGuard::commanderTermEnd($time)],
+            Institutions::SECURITY_BUREAU => ['Director', Office::SecurityDirector],
+            Institutions::COAST_GUARD => ['Commandant', Office::CoastGuardCommandant],
+            Institutions::STATE_GUARD => ['Commander', Office::StateGuardCommander],
         ];
 
         $heads = [];
-        foreach ($posts as $department => [$title, $name, $birth, $termEnd]) {
-            if ($name !== '') {
-                $heads[$department] = ['title' => $title, 'name' => $name, 'age' => (int) floor($time - $birth), 'termEndsLabel' => DistrictCalendar::quarter($termEnd)];
+        foreach ($posts as $department => [$title, $office]) {
+            $head = $politics->head($office);
+            if ($head['name'] !== '') {
+                $heads[$department] = ['title' => $title, 'name' => $head['name'], 'age' => (int) floor($time - $head['birth']), 'termEndsLabel' => DistrictCalendar::quarter($office->termEnd($time))];
             }
         }
 
@@ -1152,17 +1151,18 @@ class GovernmentPageBuilder
                 'termEndsLabel' => DistrictCalendar::quarter($since + MonetaryAuthority::MEMBER_TERM_YEARS),
             ];
         }
+        $governor = $politics->head(Office::Governor);
         $higher = count(array_filter($votes, static fn(float $vote): bool => $vote > 0.0));
         $lower = count(array_filter($votes, static fn(float $vote): bool => $vote < 0.0));
 
         return [
-            'governor' => $person($politics->governorName, $politics->governorBirth, $politics->governorStance, max(0.0, $politics->governorSwinger), $votes[0] ?? null) + [
-                'sinceLabel' => $seated($politics->governorTermStart),
-                'termEndsLabel' => DistrictCalendar::quarter(MonetaryAuthority::governorTermEnd($time)),
-                'passedOver' => array_map(static fn(array $candidate): array => $person($candidate['name'], $candidate['birth'], $candidate['stance'], $candidate['swing'] ?? 0.0, null), $politics->governorPassedOver),
+            'governor' => $person($governor['name'], $governor['birth'], $governor['stance'], max(0.0, $politics->governorSwinger), $votes[0] ?? null) + [
+                'sinceLabel' => $seated($governor['termStart']),
+                'termEndsLabel' => DistrictCalendar::quarter(Office::Governor->termEnd($time)),
+                'passedOver' => array_map(static fn(array $candidate): array => $person($candidate['name'], $candidate['birth'], $candidate['stance'], $candidate['swing'] ?? 0.0, null), $governor['passedOver']),
             ],
             'members' => $members,
-            'committee' => self::stanceCounts(array_merge([$politics->governorStance], $politics->memberStances), array_merge([max(0.0, $politics->governorSwinger)], array_values($politics->memberSwingers))) + [
+            'committee' => self::stanceCounts(array_merge([$governor['stance']], $politics->memberStances), array_merge([max(0.0, $politics->governorSwinger)], array_values($politics->memberSwingers))) + [
                 'majority' => $politics->committeeMajority > 0.0 ? 'hawkish' : ($politics->committeeMajority < 0.0 ? 'dovish' : null),
             ],
             'meeting' => $politics->lastMeetingAt < 0.0 ? null : [
@@ -1183,7 +1183,7 @@ class GovernmentPageBuilder
                 $this->reports?->inflation((int) ceil(FinancialConstants::QUARTERS_PER_YEAR * GovernmentCharts::RATE_CHART_YEARS) + 1) ?? [],
             ),
             'rules' => [
-                'governorTermYears' => MonetaryAuthority::GOVERNOR_TERM_YEARS,
+                'governorTermYears' => Office::Governor->termYears(),
                 'memberTermYears' => MonetaryAuthority::MEMBER_TERM_YEARS,
                 'members' => MonetaryAuthority::COMMITTEE_MEMBERS + 1,
                 'meetingsPerYear' => MonetaryAuthority::MEETINGS_PER_YEAR,

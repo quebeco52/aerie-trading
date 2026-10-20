@@ -4,10 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Politics\Department;
 
-use App\Data\Politics\AerieCouncil;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
-use App\Service\Politics\Council\CouncilAppointments;
 use App\Service\Politics\PoliticsState;
 
 /**
@@ -32,51 +29,23 @@ final class SecuritiesCommission
     /** The same at the strictest: 0.5x, the post-2002 fall in accrual management (Cohen, Dey & Lys 2008). */
     public const STRICTEST_EARNINGS_MANAGEMENT_SCALE = 0.5;
 
-    // --- The Head ---
-    /** Length of the head's single term, in years: the five most Council department heads serve. */
-    public const HEAD_TERM_YEARS = 5.0;
-    /** When the term of the head sitting at Year 1 ends, in years after Year 1 began. */
-    public const OPENING_HEAD_TERM_END = 4.5;
+    // --- Notice ---
     /** Notice, in years, before a new head's rules take effect: a quarter, so no account is called on arrival. */
     public const RULE_NOTICE_YEARS = 0.25;
 
     /**
-     * One tick, after the Council's own: seats a head when the state has none and at each term's end.
+     * One tick, after the Council's own: seats a head when the post is vacant and at each term's end (Office::fill()),
+     * and keeps the stance of the head before them, whose rules hold through the new head's notice (none for the
+     * founding rules).
      *
      * @param PoliticsState $state Advanced in place; its totalTime already this tick's.
      */
-    public static function advance(PoliticsState $state, MathUtility $math): void
+    public static function advance(PoliticsState $state): void
     {
-        $time = $state->totalTime;
-        $term = CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS);
-        if ($state->securitiesHeadName !== '' && abs($state->securitiesHeadTermStart - $term) < 1e-9) {
-            return;
-        }
-
-        $opening = $state->securitiesHeadName === '';
-        [$chosen, $state->securitiesHeadPassedOver] = CouncilAppointments::appoint(
-            (int) $state->authoritySalt,
-            'securities',
-            $term,
-            [CouncilAppointments::AXIS_MARKETS => CouncilAppointments::median($state->councilMarketsStances)],
-            CouncilAppointments::reservedNames($state),
-            $math,
-        );
-        if ($term < 0.0) {
-            $chosen['name'] = AerieCouncil::OPENING_SECURITIES_HEAD;
-            $chosen['markets'] = 0.0;
-            $state->securitiesHeadPassedOver = [];
-        }
-
-        // The rules the outgoing head ran, which hold through the new head's notice; none for the founding ones.
-        $state->securitiesPriorStance = $opening || $state->securitiesHeadTermStart < 0.0 ? null : $state->securitiesHeadStance;
-        CouncilAppointments::retire($state, $state->securitiesHeadName);
-        $state->securitiesHeadName = $chosen['name'];
-        $state->securitiesHeadBirth = $chosen['birth'];
-        $state->securitiesHeadTermStart = $term;
-        $state->securitiesHeadStance = $chosen['markets'];
-        if (!$opening) {
-            $state->lastSecuritiesHeadAppointedAt = $time;
+        $seated = Office::SecuritiesHead->fill($state);
+        if ($seated !== null) {
+            [, $outgoing] = $seated;
+            $state->securitiesPriorStance = $outgoing['name'] === '' || $outgoing['termStart'] < 0.0 ? null : $outgoing['stance'];
         }
     }
 
@@ -123,12 +92,6 @@ final class SecuritiesCommission
     public static function stanceName(float $stance): string
     {
         return $stance < -1.0 / 3.0 ? 'light' : ($stance > 1.0 / 3.0 ? 'strict' : 'balanced');
-    }
-
-    /** When the head in office at a moment leaves. */
-    public static function headTermEnd(float $time): float
-    {
-        return CouncilAppointments::termStart($time, self::OPENING_HEAD_TERM_END, self::HEAD_TERM_YEARS) + self::HEAD_TERM_YEARS;
     }
 
     /** A rule at a stance: its founding value at 0 or for none, linear out to its light (-1) and strict (+1) ends. */

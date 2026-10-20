@@ -7,6 +7,7 @@ namespace App\Tests\Service\Politics;
 use App\Data\Politics\AerieDiet as Diet;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Event\ShockEvent;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
 
@@ -58,38 +59,23 @@ class PoliticsStateTest extends TestCase
         $state->councilNames = ['Adelaide Voss', 'Clio Wren'];
         $state->councilStances = [1.0, -1.0];
         $state->councilRegulationStances = [-0.5, 0.75];
-        $state->governorName = 'Ilse Marchand';
-        $state->governorPassedOver = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0, 'regulation' => 0.25, 'fund' => 0.5, 'debt' => 0.3, 'competition' => 0.0, 'markets' => 0.0], ['name' => 'Odile Fenwright', 'birth' => -51.0, 'stance' => -1.0, 'regulation' => -1.0, 'fund' => -0.2, 'debt' => 0.3, 'competition' => 0.0, 'markets' => 0.0]];
-        $state->regulatorName = 'Leontine Ashby';
-        $state->regulatorStance = -0.6;
-        $state->regulatorPassedOver = [['name' => 'Bram Ellery', 'birth' => 2.0 - 55.0, 'stance' => 1.0, 'regulation' => 0.4, 'fund' => 0.1, 'debt' => 0.3, 'competition' => 0.0, 'markets' => 0.0]];
         $state->councilFundStances = [0.3, -0.7];
-        $state->fundHeadName = 'Matthias Okonkwo-Hale';
-        $state->fundHeadStance = 0.5;
-        $state->fundHeadPassedOver = [['name' => 'Ines Varga', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => -0.4, 'debt' => 0.3, 'competition' => 0.0, 'markets' => 0.0]];
         $state->councilDebtStances = [-0.25, 0.6];
-        $state->exchequerHeadName = 'Rosalind Tate';
-        $state->exchequerHeadStance = -0.4;
-        $state->exchequerHeadPassedOver = [['name' => 'Hal Brennan', 'birth' => -47.0, 'stance' => 0.0, 'regulation' => 0.1, 'fund' => 0.2, 'debt' => 0.9, 'competition' => 0.0, 'markets' => 0.0]];
         $state->councilCompetitionStances = [0.2, -0.9];
         $state->councilMarketsStances = [0.5, -0.1];
-        $state->securitiesHeadName = 'Thea Lindqvist';
-        $state->securityDirectorName = 'Augustin Pell';
-        $state->securityDirectorBirth = -52.0;
-        $state->securityDirectorPassedOver = [['name' => 'Nell Rourke', 'birth' => -49.0, 'stance' => 0.5, 'regulation' => -0.2, 'fund' => 0.1, 'debt' => 0.0, 'competition' => 0.3, 'markets' => -0.4]];
-        $state->coastGuardCommandantName = 'Imogen Hale';
-        $state->coastGuardCommandantTermStart = 2.5;
-        $state->coastGuardCommandantPassedOver = [['name' => 'Dorian Shaw', 'birth' => -47.0, 'stance' => -0.2, 'regulation' => 0.1, 'fund' => 0.0, 'debt' => 0.4, 'competition' => 0.0, 'markets' => 0.2]];
-        $state->stateGuardCommanderName = 'Gideon Rusk';
-        $state->stateGuardCommanderBirth = -51.0;
-        $state->stateGuardCommanderPassedOver = [['name' => 'Petra Lowell', 'birth' => -45.0, 'stance' => 0.3, 'regulation' => 0.0, 'fund' => -0.3, 'debt' => 0.0, 'competition' => 0.1, 'markets' => 0.0]];
-        $state->securitiesHeadStance = -0.3;
+        $state->heads = [
+            Office::Governor->value => ['name' => 'Ilse Marchand', 'passedOver' => [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0, 'regulation' => 0.25, 'fund' => 0.5, 'debt' => 0.3, 'competition' => 0.0, 'markets' => 0.0], ['name' => 'Odile Fenwright', 'birth' => -51.0, 'stance' => -1.0, 'regulation' => -1.0, 'fund' => -0.2, 'debt' => 0.3, 'competition' => 0.0, 'markets' => 0.0]]] + Office::VACANT,
+            Office::Regulator->value => ['name' => 'Leontine Ashby', 'stance' => -0.6, 'passedOver' => [['name' => 'Bram Ellery', 'birth' => 2.0 - 55.0, 'stance' => 1.0, 'regulation' => 0.4, 'fund' => 0.1, 'debt' => 0.3, 'competition' => 0.0, 'markets' => 0.0]], 'appointedAt' => 7.0] + Office::VACANT,
+            Office::FundHead->value => ['name' => 'Matthias Okonkwo-Hale', 'stance' => 0.5, 'passedOver' => [['name' => 'Ines Varga', 'birth' => -50.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => -0.4, 'debt' => 0.3, 'competition' => 0.0, 'markets' => 0.0]]] + Office::VACANT,
+            Office::ExchequerHead->value => ['name' => 'Rosalind Tate', 'stance' => -0.4, 'passedOver' => [['name' => 'Hal Brennan', 'birth' => -47.0, 'stance' => 0.0, 'regulation' => 0.1, 'fund' => 0.2, 'debt' => 0.9, 'competition' => 0.0, 'markets' => 0.0]]] + Office::VACANT,
+            Office::FairTradingHead->value => ['name' => 'Odile Farrant', 'stance' => 0.7, 'passedOver' => [['name' => 'Wendell Price', 'birth' => -44.0, 'stance' => 0.0, 'regulation' => 0.3, 'fund' => -0.1, 'debt' => 0.2, 'competition' => -0.6, 'markets' => 0.0]]] + Office::VACANT,
+            Office::SecuritiesHead->value => ['name' => 'Thea Lindqvist', 'stance' => -0.3, 'passedOver' => [['name' => 'Arlo Mercer', 'birth' => -46.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.8]]] + Office::VACANT,
+            Office::SecurityDirector->value => ['name' => 'Augustin Pell', 'birth' => -52.0, 'passedOver' => [['name' => 'Nell Rourke', 'birth' => -49.0, 'stance' => 0.5, 'regulation' => -0.2, 'fund' => 0.1, 'debt' => 0.0, 'competition' => 0.3, 'markets' => -0.4]]] + Office::VACANT,
+            Office::CoastGuardCommandant->value => ['name' => 'Imogen Hale', 'termStart' => 2.5, 'passedOver' => [['name' => 'Dorian Shaw', 'birth' => -47.0, 'stance' => -0.2, 'regulation' => 0.1, 'fund' => 0.0, 'debt' => 0.4, 'competition' => 0.0, 'markets' => 0.2]]] + Office::VACANT,
+            Office::StateGuardCommander->value => ['name' => 'Gideon Rusk', 'birth' => -51.0, 'passedOver' => [['name' => 'Petra Lowell', 'birth' => -45.0, 'stance' => 0.3, 'regulation' => 0.0, 'fund' => -0.3, 'debt' => 0.0, 'competition' => 0.1, 'markets' => 0.0]]] + Office::VACANT,
+        ];
         $state->securitiesPriorStance = 0.6;
-        $state->securitiesHeadPassedOver = [['name' => 'Arlo Mercer', 'birth' => -46.0, 'stance' => 0.0, 'regulation' => 0.0, 'fund' => 0.0, 'debt' => 0.0, 'competition' => 0.0, 'markets' => 0.8]];
-        $state->fairTradingHeadName = 'Odile Farrant';
-        $state->fairTradingHeadStance = 0.7;
         $state->fairTradingPriorStance = -0.375;
-        $state->fairTradingHeadPassedOver = [['name' => 'Wendell Price', 'birth' => -44.0, 'stance' => 0.0, 'regulation' => 0.3, 'fund' => -0.1, 'debt' => 0.2, 'competition' => -0.6, 'markets' => 0.0]];
         $state->formerNames = ['Corvin Ashby', 'Bram Ellery'];
         $state->bankCapitalRequirement = 0.1012;
         $state->requirementPhaseFrom = 0.094;
@@ -102,9 +88,60 @@ class PoliticsStateTest extends TestCase
         $this->assertEquals(PoliticsStateDTO::fromState($state), PoliticsStateDTO::fromArray($decoded));
 
         $legacy = $decoded;
-        $legacy['governorPassedOver'] = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0]];
-        $this->assertSame(0.0, PoliticsState::fromArray($legacy)->governorPassedOver[0]['regulation'], 'A candidate saved before the banks question reads as neutral on it.');
-        $this->assertSame(0.0, PoliticsState::fromArray($legacy)->governorPassedOver[0]['fund'], 'And on the reserves.');
+        $legacy['heads'][Office::Governor->value]['passedOver'] = [['name' => 'Corvin Ashby', 'birth' => -48.5, 'stance' => 0.0]];
+        $this->assertSame(0.0, PoliticsState::fromArray($legacy)->head(Office::Governor)['passedOver'][0]['regulation'], 'A candidate saved before the banks question reads as neutral on it.');
+        $this->assertSame(0.0, PoliticsState::fromArray($legacy)->head(Office::Governor)['passedOver'][0]['fund'], 'And on the reserves.');
+    }
+
+    /**
+     * A state saved before the posts were kept by office, each in its own fields, reads into the same holders, and is
+     * written back in the new shape alone; a post the payload never had stays vacant.
+     */
+    public function testAStateSavedWithAFieldPerHeadReadsIntoTheSameHeads(): void
+    {
+        $candidate = static fn(string $name, float $birth): array => ['name' => $name, 'birth' => $birth, 'stance' => -1.0, 'regulation' => 0.25, 'fund' => 0.5, 'debt' => -0.5, 'competition' => 0.75, 'markets' => -0.25];
+        $legacy = ['totalTime' => 41.0, 'governorSwinger' => 1.0, 'fairTradingPriorStance' => 0.125, 'securitiesPriorStance' => -0.5];
+        $expected = [];
+        $fields = [
+            Office::Governor->value => ['governor', 'Governor'],
+            Office::Regulator->value => ['regulator', 'Regulator'],
+            Office::FundHead->value => ['fundHead', 'FundHead'],
+            Office::ExchequerHead->value => ['exchequerHead', 'ExchequerHead'],
+            Office::FairTradingHead->value => ['fairTradingHead', 'FairTradingHead'],
+            Office::SecuritiesHead->value => ['securitiesHead', 'SecuritiesHead'],
+            Office::SecurityDirector->value => ['securityDirector', 'SecurityDirector'],
+            Office::CoastGuardCommandant->value => ['coastGuardCommandant', 'CoastGuardCommandant'],
+            Office::StateGuardCommander->value => ['stateGuardCommander', 'StateGuardCommander'],
+        ];
+        $i = 0;
+        foreach ($fields as $office => [$prefix, $capitalised]) {
+            ++$i;
+            $head = ['name' => "Holder {$i}", 'birth' => -40.0 - $i, 'termStart' => 30.0 + $i / 8, 'stance' => $i < 7 ? $i / 10 - 0.35 : 0.0, 'passedOver' => [$candidate("Rival {$i}", -45.0 - $i)], 'appointedAt' => 30.5 + $i];
+            $legacy += ["{$prefix}Name" => $head['name'], "{$prefix}Birth" => $head['birth'], "{$prefix}TermStart" => $head['termStart'], "{$prefix}PassedOver" => $head['passedOver'], "last{$capitalised}AppointedAt" => $head['appointedAt']];
+            if ($i < 7) {
+                $legacy["{$prefix}Stance"] = $head['stance'];
+            }
+            $expected[$office] = $head;
+        }
+        $legacy = json_decode(json_encode($legacy, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), true, 512, JSON_THROW_ON_ERROR);
+
+        $state = PoliticsState::fromArray($legacy);
+
+        $this->assertSame($expected, $state->heads);
+        foreach ($expected as $office => $head) {
+            $this->assertSame($head, $state->head(Office::from($office)));
+            $this->assertSame($head, PoliticsStateDTO::fromArray($legacy)->head(Office::from($office)));
+        }
+        $this->assertSame([1.0, 0.125, -0.5], [$state->governorSwinger, $state->fairTradingPriorStance, $state->securitiesPriorStance]);
+        $saved = $state->toArray();
+        $this->assertSame($expected, $saved['heads']);
+        $perHead = array_diff(array_keys($legacy), ['totalTime', 'governorSwinger', 'fairTradingPriorStance', 'securitiesPriorStance']);
+        $this->assertSame([], array_values(array_intersect($perHead, array_keys($saved))), 'Only the new shape is written.');
+        $this->assertSame($expected, PoliticsState::fromArray($saved)->heads);
+
+        unset($legacy['stateGuardCommanderName'], $legacy['stateGuardCommanderBirth'], $legacy['stateGuardCommanderTermStart'], $legacy['stateGuardCommanderPassedOver'], $legacy['lastStateGuardCommanderAppointedAt']);
+        $this->assertArrayNotHasKey(Office::StateGuardCommander->value, PoliticsState::fromArray($legacy)->heads);
+        $this->assertSame(Office::VACANT, PoliticsState::fromArray($legacy)->head(Office::StateGuardCommander));
     }
 
     /** A payload that omits a field, or carries one it cannot read, leaves that field at its opening. */

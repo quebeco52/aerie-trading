@@ -11,12 +11,11 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\Council\CouncilAppointments as Appointments;
-use App\Service\Politics\Department\Exchequer;
 use App\Service\Politics\Department\FairTradingBoard;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Department\SecuritiesCommission as Commission;
-use App\Service\Politics\Department\SovereignReserveFund;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
@@ -29,12 +28,12 @@ class SecuritiesCommissionTest extends TestCase
     private static function tick(PoliticsState $state, MathUtility $math): void
     {
         Appointments::advance($state, $math);
-        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT, $math);
-        FinancialRegulator::advance($state, $math);
-        SovereignReserveFund::advance($state, $math);
-        Exchequer::advance($state, $math);
-        FairTradingBoard::advance($state, $math);
-        Commission::advance($state, $math);
+        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT);
+        FinancialRegulator::advance($state);
+        Office::FundHead->fill($state);
+        Office::ExchequerHead->fill($state);
+        FairTradingBoard::advance($state);
+        Commission::advance($state);
     }
 
     private static function opened(int $seed = 7): PoliticsState
@@ -92,8 +91,8 @@ class SecuritiesCommissionTest extends TestCase
     {
         $state = self::opened();
 
-        $this->assertSame(AerieCouncil::OPENING_SECURITIES_HEAD, $state->securitiesHeadName);
-        $this->assertEqualsWithDelta(Commission::OPENING_HEAD_TERM_END - Commission::HEAD_TERM_YEARS, $state->securitiesHeadTermStart, 1e-9);
+        $this->assertSame(AerieCouncil::OPENING_SECURITIES_HEAD, $state->head(Office::SecuritiesHead)['name']);
+        $this->assertEqualsWithDelta(Office::SecuritiesHead->openingTermEnd() - Office::SecuritiesHead->termYears(), $state->head(Office::SecuritiesHead)['termStart'], 1e-9);
         $this->assertCount(AerieCouncil::SEATS, $state->councilMarketsStances);
         $names = Appointments::sittingNames($state);
         $this->assertContains(AerieCouncil::OPENING_SECURITIES_HEAD, $names);
@@ -112,37 +111,37 @@ class SecuritiesCommissionTest extends TestCase
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedianWhoseRulesFollowTheirNotice(): void
     {
         foreach ([3, 7, 11, 19] as $seed) {
-            $state = self::runTo(self::opened($seed), Commission::OPENING_HEAD_TERM_END - self::DT);
+            $state = self::runTo(self::opened($seed), Office::SecuritiesHead->openingTermEnd() - self::DT);
             $median = Appointments::median($state->councilMarketsStances);
             $sitting = Appointments::sittingNames($state);
 
-            self::runTo($state, Commission::OPENING_HEAD_TERM_END + self::DT);
-            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'securities', Commission::OPENING_HEAD_TERM_END, [Appointments::AXIS_MARKETS => $median], $sitting, new MathUtility());
-            $this->assertSame($expected['name'], $state->securitiesHeadName, "seed {$seed}");
-            $this->assertSame($expected['markets'], $state->securitiesHeadStance);
-            $this->assertSame($passedOver, $state->securitiesHeadPassedOver);
+            self::runTo($state, Office::SecuritiesHead->openingTermEnd() + self::DT);
+            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'securities', Office::SecuritiesHead->openingTermEnd(), [Appointments::AXIS_MARKETS => $median], $sitting);
+            $this->assertSame($expected['name'], $state->head(Office::SecuritiesHead)['name'], "seed {$seed}");
+            $this->assertSame($expected['markets'], $state->head(Office::SecuritiesHead)['stance']);
+            $this->assertSame($passedOver, $state->head(Office::SecuritiesHead)['passedOver']);
             $this->assertNull($state->securitiesPriorStance, 'The head before ran the founding rules.');
             $this->assertNull(PoliticsStateDTO::fromState($state)->policy()->initialMarginRequirement, 'Inside the notice the founding rules hold.');
 
-            self::runTo($state, Commission::OPENING_HEAD_TERM_END + Commission::RULE_NOTICE_YEARS + self::DT);
+            self::runTo($state, Office::SecuritiesHead->openingTermEnd() + Commission::RULE_NOTICE_YEARS + self::DT);
             $policy = PoliticsStateDTO::fromState($state)->policy();
-            $this->assertEqualsWithDelta(Commission::initialMargin($state->securitiesHeadStance), $policy->initialMarginRequirement, 1e-12);
-            $this->assertEqualsWithDelta(Commission::earningsManagementScale($state->securitiesHeadStance), $policy->earningsManagementScale, 1e-12);
-            $appointedAt = $state->lastSecuritiesHeadAppointedAt;
-            $first = $state->securitiesHeadStance;
+            $this->assertEqualsWithDelta(Commission::initialMargin($state->head(Office::SecuritiesHead)['stance']), $policy->initialMarginRequirement, 1e-12);
+            $this->assertEqualsWithDelta(Commission::earningsManagementScale($state->head(Office::SecuritiesHead)['stance']), $policy->earningsManagementScale, 1e-12);
+            $appointedAt = $state->head(Office::SecuritiesHead)['appointedAt'];
+            $first = $state->head(Office::SecuritiesHead)['stance'];
 
-            self::runTo($state, Commission::OPENING_HEAD_TERM_END + Commission::HEAD_TERM_YEARS - self::DT);
-            $this->assertSame($expected['name'], $state->securitiesHeadName, 'One term, unchanged until it ends.');
-            $this->assertSame($appointedAt, $state->lastSecuritiesHeadAppointedAt);
+            self::runTo($state, Office::SecuritiesHead->openingTermEnd() + Office::SecuritiesHead->termYears() - self::DT);
+            $this->assertSame($expected['name'], $state->head(Office::SecuritiesHead)['name'], 'One term, unchanged until it ends.');
+            $this->assertSame($appointedAt, $state->head(Office::SecuritiesHead)['appointedAt']);
 
-            self::runTo($state, Commission::OPENING_HEAD_TERM_END + Commission::HEAD_TERM_YEARS + self::DT);
+            self::runTo($state, Office::SecuritiesHead->openingTermEnd() + Office::SecuritiesHead->termYears() + self::DT);
             $this->assertSame($first, $state->securitiesPriorStance, 'The next head\'s notice runs on their predecessor\'s rules.');
             $this->assertEqualsWithDelta(Commission::initialMargin($first), PoliticsStateDTO::fromState($state)->policy()->initialMarginRequirement, 1e-12);
         }
 
         $headline = new PoliticsState();
         $headline->totalTime = 3.0;
-        $headline->lastSecuritiesHeadAppointedAt = 3.0;
+        $headline->heads[Office::SecuritiesHead->value] = ['appointedAt' => 3.0] + Office::VACANT;
         $this->assertSame(ShockEvent::SECURITIES_HEAD_APPOINTED, PoliticsEngine::headline($headline));
     }
 

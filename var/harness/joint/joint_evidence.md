@@ -165,3 +165,23 @@ items15-{base,live}-8s.out, beat-{base,live}-8s.out (`beat_an.py`), wc_an.py for
   ND/EBITDA 1.51 -> 1.63, end rating +0.75 notch (SE 0.75).
 - Board: nothing |t| >= 2. Gap -0.86 -> -0.63, recession share 13.6 -> 8.4% (t -1.3), rescue equity raises 11.4 ->
   4.9 a seed (t -1.9; the same quantity read 7.5 -> 11.4 one batch earlier), payment defaults 1.6 -> 0.9 (t -1.3).
+
+## Per-model fundamentals moments on HEAD f76d4750 (2026-10-20)
+Question: how does each business model's quarterly earnings behave on the live board (feeds the earnings-engine and
+sector-model review). Sanity level, one arm.
+- Run: `base` arm = `git archive HEAD` in `tree-base` + vendor symlink (the checkout had an uncommitted
+  FinancialRegulator/Office edit, so `live` would not have been HEAD); deleted after. Seeds 1-4 x 20 y, 360 tpy,
+  POLITICS=1 HEALTH=1. `bin/harness-batch var/harness/joint/run.sh 1-4 base` (146 s wall), then
+  `python3 var/harness/joint/model_moments.py 1-4 base > var/harness/joint/models-head-4s.out`. Needs
+  `runs/ticker_models.json` and `runs/ticker_fin.json` (RUN.md).
+- Table: `models-head-4s.out` (89 names, 56 models, 80 quarters a firm-seed). Nominal GDP 4.79%/y; real GDP y/y mean
+  2.7%, sd 1.5-2.1% by seed, worst -0.5 to -2.0%: mild cycles, so revenue betas rest on little GDP variance.
+- Flags: Steel beta 7.3 (se 0.5), Semis 5.6 (0.3) above ~2-4; SpecialtyIndustrialMachinery 0.84 (0.10) below;
+  HealthInsurer 0.82 (0.38) above the defensive band; Utility margin sd 4.4pp (> 2pp). EPS beat share above 80%:
+  ClearingHouse 96, CommunicationEquipment 89, DistressedDebt 83, Reit 83, ConsumerStaples 81, HealthInsurer 82,
+  ShadowBank 82, PrivateEquity 81, Tech 80; below 55%: DefenseContractor 49 (rev surprise median -4.9%), Telecom 50
+  (-2.7%). No ROIC/ROE, ND/EBITDA, growth or NaN flags. Board EPS beat 74.1%, revenue beat 48.2%.
+- Distress: 0 liquidations, 0 Ch11, 1 payment default (SINK, OilGasProducer, seed 1), 17 rescue raises (OilGas 13,
+  Mining 3, Shipping 1). Seasonal amplitude large in InternetRetail 88%, Luxury 72%, Restaurant 59% (range of mean
+  q/q log change by calendar quarter). TIER (PrivateEquity) price x0.01 in seed 2 while equity rose ~5x.
+- Caveats: 4 seeds; most models 1 ticker (nF 4); macro path differs by seed; beta SE clustered by firm-seed.

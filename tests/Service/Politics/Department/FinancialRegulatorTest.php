@@ -13,6 +13,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Politics\Council\CouncilAppointments as Appointments;
 use App\Service\Politics\Department\FinancialRegulator as Regulator;
 use App\Service\Politics\Department\MonetaryAuthority;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
@@ -25,8 +26,8 @@ class FinancialRegulatorTest extends TestCase
     private static function tick(PoliticsState $state, MathUtility $math): void
     {
         Appointments::advance($state, $math);
-        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT, $math);
-        Regulator::advance($state, $math);
+        MonetaryAuthority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), self::DT);
+        Regulator::advance($state);
     }
 
     private static function opened(int $seed = 7): PoliticsState
@@ -88,11 +89,11 @@ class FinancialRegulatorTest extends TestCase
     {
         $state = self::opened();
 
-        $this->assertSame(AerieCouncil::OPENING_REGULATOR, $state->regulatorName);
-        $this->assertEqualsWithDelta(Regulator::OPENING_HEAD_TERM_END - Regulator::HEAD_TERM_YEARS, $state->regulatorTermStart, 1e-9);
-        $this->assertSame([], $state->regulatorPassedOver);
+        $this->assertSame(AerieCouncil::OPENING_REGULATOR, $state->head(Office::Regulator)['name']);
+        $this->assertEqualsWithDelta(Office::Regulator->openingTermEnd() - Office::Regulator->termYears(), $state->head(Office::Regulator)['termStart'], 1e-9);
+        $this->assertSame([], $state->head(Office::Regulator)['passedOver']);
         $this->assertEqualsWithDelta(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $state->bankCapitalRequirement, 1e-12);
-        $age = $state->regulatorTermStart - $state->regulatorBirth;
+        $age = $state->head(Office::Regulator)['termStart'] - $state->head(Office::Regulator)['birth'];
         $this->assertGreaterThanOrEqual(Appointments::APPOINTMENT_AGE_MIN, $age);
         $this->assertLessThanOrEqual(Appointments::APPOINTMENT_AGE_MAX, $age);
         $names = Appointments::sittingNames($state);
@@ -153,30 +154,30 @@ class FinancialRegulatorTest extends TestCase
     public function testAtTermEndTheCouncilNamesTheCandidateNearestItsMedian(): void
     {
         foreach ([3, 7, 11, 19, 23] as $seed) {
-            $state = self::runTo(self::opened($seed), Regulator::OPENING_HEAD_TERM_END - self::DT);
+            $state = self::runTo(self::opened($seed), Office::Regulator->openingTermEnd() - self::DT);
             $median = Appointments::median($state->councilRegulationStances);
             $sitting = Appointments::sittingNames($state);
-            $this->assertSame(AerieCouncil::OPENING_REGULATOR, $state->regulatorName);
+            $this->assertSame(AerieCouncil::OPENING_REGULATOR, $state->head(Office::Regulator)['name']);
 
-            self::runTo($state, Regulator::OPENING_HEAD_TERM_END + self::DT);
-            $appointedAt = $state->lastRegulatorAppointedAt;
-            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'regulator', Regulator::OPENING_HEAD_TERM_END, [Appointments::AXIS_REGULATION => $median], $sitting, new MathUtility());
-            $this->assertSame($expected['name'], $state->regulatorName, "seed {$seed}");
-            $this->assertSame($expected['regulation'], $state->regulatorStance);
-            $this->assertSame($passedOver, $state->regulatorPassedOver);
-            $this->assertGreaterThan(Regulator::OPENING_HEAD_TERM_END - self::DT, $appointedAt);
+            self::runTo($state, Office::Regulator->openingTermEnd() + self::DT);
+            $appointedAt = $state->head(Office::Regulator)['appointedAt'];
+            [$expected, $passedOver] = Appointments::appoint((int) $state->authoritySalt, 'regulator', Office::Regulator->openingTermEnd(), [Appointments::AXIS_REGULATION => $median], $sitting);
+            $this->assertSame($expected['name'], $state->head(Office::Regulator)['name'], "seed {$seed}");
+            $this->assertSame($expected['regulation'], $state->head(Office::Regulator)['stance']);
+            $this->assertSame($passedOver, $state->head(Office::Regulator)['passedOver']);
+            $this->assertGreaterThan(Office::Regulator->openingTermEnd() - self::DT, $appointedAt);
             $this->assertEqualsWithDelta(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $state->requirementPhaseFrom, 1e-12);
 
-            $this->assertSame(Regulator::ltvCapForStance($state->regulatorStance), $state->regulatorLtvCap, 'The head runs their regime\'s cap.');
+            $this->assertSame(Regulator::ltvCapForStance($state->head(Office::Regulator)['stance']), $state->regulatorLtvCap, 'The head runs their regime\'s cap.');
             $this->assertSame($state->regulatorLtvCap, PoliticsStateDTO::fromState($state)->policy()->mortgageLtvCap, 'In force from the seating, with no phase-in.');
-            $this->assertSame(Regulator::neutralBufferForStance($state->regulatorStance), PoliticsStateDTO::fromState($state)->policy()->neutralCountercyclicalBuffer, 'And their regime\'s neutral buffer.');
+            $this->assertSame(Regulator::neutralBufferForStance($state->head(Office::Regulator)['stance']), PoliticsStateDTO::fromState($state)->policy()->neutralCountercyclicalBuffer, 'And their regime\'s neutral buffer.');
 
-            $target = Regulator::requirement($state->regulatorStance);
+            $target = Regulator::requirement($state->head(Office::Regulator)['stance']);
             $this->assertEqualsWithDelta(Regulator::requirementInForce($target, FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $state->totalTime - $appointedAt), $state->bankCapitalRequirement, 1e-12);
 
-            self::runTo($state, Regulator::OPENING_HEAD_TERM_END + Regulator::HEAD_TERM_YEARS - self::DT);
-            $this->assertSame($expected['name'], $state->regulatorName, 'One term, unchanged until it ends.');
-            $this->assertSame($appointedAt, $state->lastRegulatorAppointedAt);
+            self::runTo($state, Office::Regulator->openingTermEnd() + Office::Regulator->termYears() - self::DT);
+            $this->assertSame($expected['name'], $state->head(Office::Regulator)['name'], 'One term, unchanged until it ends.');
+            $this->assertSame($appointedAt, $state->head(Office::Regulator)['appointedAt']);
             $this->assertEqualsWithDelta($target, $state->bankCapitalRequirement, 1e-12, 'Phased in by the term\'s end.');
         }
     }
@@ -186,10 +187,10 @@ class FinancialRegulatorTest extends TestCase
     {
         $state = new PoliticsState();
         $state->totalTime = 7.0;
-        $state->lastRegulatorAppointedAt = 7.0;
+        $state->heads[Office::Regulator->value] = ['appointedAt' => 7.0] + Office::VACANT;
         $this->assertSame(ShockEvent::REGULATOR_APPOINTED, PoliticsEngine::headline($state));
 
-        $state->lastGovernorAppointedAt = 7.0;
+        $state->heads[Office::Governor->value] = ['appointedAt' => 7.0] + Office::VACANT;
         $this->assertSame(ShockEvent::GOVERNOR_APPOINTED, PoliticsEngine::headline($state));
     }
 
@@ -202,22 +203,21 @@ class FinancialRegulatorTest extends TestCase
     {
         $state = self::runTo(self::opened(5), 9.0);
         $council = $state->councilNames;
-        $governor = $state->governorName;
+        $governor = $state->head(Office::Governor)['name'];
         $members = $state->memberNames;
-        $state->regulatorName = '';
-        $state->lastRegulatorAppointedAt = -1.0;
+        unset($state->heads[Office::Regulator->value]);
         $state->councilRegulationStances = [];
         $state->bankCapitalRequirement = FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT;
 
         self::runTo($state, 9.0 + self::DT);
 
         $this->assertSame($council, $state->councilNames);
-        $this->assertSame($governor, $state->governorName);
+        $this->assertSame($governor, $state->head(Office::Governor)['name']);
         $this->assertSame($members, $state->memberNames);
-        $this->assertNotSame('', $state->regulatorName);
-        $this->assertNotSame(AerieCouncil::OPENING_REGULATOR, $state->regulatorName);
-        $this->assertEqualsWithDelta(Regulator::OPENING_HEAD_TERM_END + Regulator::HEAD_TERM_YEARS, $state->regulatorTermStart, 1e-9);
-        $this->assertEqualsWithDelta(Regulator::requirement($state->regulatorStance), $state->bankCapitalRequirement, 1e-12);
-        $this->assertSame(-1.0, $state->lastRegulatorAppointedAt, 'Catching up is not news.');
+        $this->assertNotSame('', $state->head(Office::Regulator)['name']);
+        $this->assertNotSame(AerieCouncil::OPENING_REGULATOR, $state->head(Office::Regulator)['name']);
+        $this->assertEqualsWithDelta(Office::Regulator->openingTermEnd() + Office::Regulator->termYears(), $state->head(Office::Regulator)['termStart'], 1e-9);
+        $this->assertEqualsWithDelta(Regulator::requirement($state->head(Office::Regulator)['stance']), $state->bankCapitalRequirement, 1e-12);
+        $this->assertSame(-1.0, $state->head(Office::Regulator)['appointedAt'], 'Catching up is not news.');
     }
 }

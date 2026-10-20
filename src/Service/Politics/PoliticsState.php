@@ -5,14 +5,33 @@ declare(strict_types=1);
 namespace App\Service\Politics;
 
 use App\DTO\PoliticsStateDTO;
+use App\Service\Politics\Department\Office;
 
 /**
  * The politics engine's mutable working copy of its state, advanced in place every tick. Its fields and openings are
  * declared on App\DTO\PoliticsStateDTO's constructor: this class mirrors the names (PoliticsStateTest fails on a
  * mismatch) and takes its openings from there. Times and birth dates are on the simulation clock, in years.
+ *
+ * @phpstan-import-type Head from Office
  */
 class PoliticsState
 {
+    /**
+     * Each post's fields in a payload saved before the posts were kept in $heads: the prefix of its name, birth, term
+     * start, stance, passed over and appointment fields, by Office value.
+     */
+    private const LEGACY_HEAD_PREFIXES = [
+        'governor' => 'governor',
+        'regulator' => 'regulator',
+        'fund' => 'fundHead',
+        'exchequer' => 'exchequerHead',
+        'fair-trading' => 'fairTradingHead',
+        'securities' => 'securitiesHead',
+        'security' => 'securityDirector',
+        'coast-guard' => 'coastGuardCommandant',
+        'state-guard' => 'stateGuardCommander',
+    ];
+
     public float $totalTime;
     public ?string $eventType;
     public float $lastElectionAt;
@@ -122,15 +141,9 @@ class PoliticsState
     public array $boardMembers;
     /** @var array<int, float> When each board member's term began. */
     public array $boardSince;
-    public string $governorName;
-    public float $governorBirth;
-    public float $governorTermStart;
-    public float $governorStance;
+    /** @var array<string, Head> Each department post's holder by Office value; a post not yet filled is absent. */
+    public array $heads;
     public float $governorSwinger;
-    /**
-     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
-     */
-    public array $governorPassedOver;
     /** @var array<int, string> The rate committee's members beside the governor, by seat. */
     public array $memberNames;
     /** @var array<int, float> Each member's birth date. */
@@ -149,90 +162,21 @@ class PoliticsState
     public float $lastMeetingChange;
     /** @var list<float> Each vote, governor first: 1 for a higher rate, -1 for a lower, 0 with the decision. */
     public array $lastMeetingVotes;
-    public float $lastGovernorAppointedAt;
     public float $lastCouncillorSeatedAt;
     public float $lastCouncilVacancyAt;
     public string $lastVacancyName;
     public string $lastVacancyCause;
     public float $lastMajorityShiftAt;
-    public string $regulatorName;
-    public float $regulatorBirth;
-    public float $regulatorTermStart;
-    public float $regulatorStance;
-    /**
-     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
-     */
-    public array $regulatorPassedOver;
     // The CET1 requirement in force and the level its last rise phases in from (shares of risk-weighted assets) and
-    // when; the head's mortgage loan-to-value cap (null: none) and neutral countercyclical buffer.
+    // when; the Regulator's head's mortgage loan-to-value cap (null: none) and neutral countercyclical buffer.
     public float $bankCapitalRequirement;
     public float $requirementPhaseFrom;
     public float $requirementPhaseStart;
-    public float $lastRegulatorAppointedAt;
     public ?float $regulatorLtvCap;
     public float $regulatorNeutralBuffer;
-    public string $fundHeadName;
-    public float $fundHeadBirth;
-    public float $fundHeadTermStart;
-    public float $fundHeadStance;
-    /**
-     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
-     */
-    public array $fundHeadPassedOver;
-    public float $lastFundHeadAppointedAt;
-    public string $exchequerHeadName;
-    public float $exchequerHeadBirth;
-    public float $exchequerHeadTermStart;
-    public float $exchequerHeadStance;
-    /**
-     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
-     */
-    public array $exchequerHeadPassedOver;
-    public float $lastExchequerHeadAppointedAt;
-    public string $fairTradingHeadName;
-    public float $fairTradingHeadBirth;
-    public float $fairTradingHeadTermStart;
-    public float $fairTradingHeadStance;
+    // The stance of the Fair Trading Board's and the Securities Commission's heads before the sitting ones.
     public float $fairTradingPriorStance;
-    /**
-     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
-     */
-    public array $fairTradingHeadPassedOver;
-    public float $lastFairTradingHeadAppointedAt;
-    public string $securitiesHeadName;
-    public float $securitiesHeadBirth;
-    public float $securitiesHeadTermStart;
-    public float $securitiesHeadStance;
     public ?float $securitiesPriorStance;
-    /**
-     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
-     */
-    public array $securitiesHeadPassedOver;
-    public float $lastSecuritiesHeadAppointedAt;
-    public string $securityDirectorName;
-    public float $securityDirectorBirth;
-    public float $securityDirectorTermStart;
-    /**
-     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
-     */
-    public array $securityDirectorPassedOver;
-    public float $lastSecurityDirectorAppointedAt;
-    public string $coastGuardCommandantName;
-    public float $coastGuardCommandantBirth;
-    public float $coastGuardCommandantTermStart;
-    /**
-     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
-     */
-    public array $coastGuardCommandantPassedOver;
-    public float $lastCoastGuardCommandantAppointedAt;
-    public string $stateGuardCommanderName;
-    public float $stateGuardCommanderBirth;
-    public float $stateGuardCommanderTermStart;
-    /**
-     * @var list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}>
-     */
-    public array $stateGuardCommanderPassedOver;
-    public float $lastStateGuardCommanderAppointedAt;
     /** @var list<string> Everyone who has left a Council seat or a post, whose names no later appointee takes. */
     public array $formerNames;
     // The parties' leaders, each map keyed by party.
@@ -318,7 +262,18 @@ class PoliticsState
     }
 
     /**
-     * The state off its persisted payload; a field the payload omits keeps its opening.
+     * The office's holder, or a vacant post (no name) before the first is seated.
+     *
+     * @return Head
+     */
+    public function head(Office $office): array
+    {
+        return $this->heads[$office->value] ?? Office::VACANT;
+    }
+
+    /**
+     * The state off its persisted payload; a field the payload omits keeps its opening, and a payload saved before
+     * $heads has its posts read from their own fields.
      *
      * @param array<string, mixed> $data Decoded payload keyed by field name.
      */
@@ -342,11 +297,15 @@ class PoliticsState
                 $field === 'leaderHistory' => self::hydrateLeaderHistory($value),
                 $field === 'polls' => self::hydratePolls($value),
                 $field === 'forecastCabinets' => self::hydrateCabinets($value),
-                in_array($field, ['councillorPassedOver', 'governorPassedOver', 'regulatorPassedOver', 'fundHeadPassedOver', 'exchequerHeadPassedOver', 'fairTradingHeadPassedOver', 'securitiesHeadPassedOver', 'securityDirectorPassedOver', 'coastGuardCommandantPassedOver', 'stateGuardCommanderPassedOver', 'boardMembers'], true) => self::hydrateCandidates($value),
+                $field === 'councillorPassedOver' || $field === 'boardMembers' => self::hydrateCandidates($value),
+                $field === 'heads' => self::hydrateHeads($value),
                 is_string($opening) => is_scalar($value) ? (string) $value : $opening,
                 is_array($opening) => array_map('floatval', $value),
                 default => is_numeric($value) ? (float) $value : $opening,
             };
+        }
+        if (!array_key_exists('heads', $data)) {
+            $state->heads = self::legacyHeads($data);
         }
 
         return $state;
@@ -392,6 +351,70 @@ class PoliticsState
         }
 
         return $hydrated;
+    }
+
+    /**
+     * Posts' holders off the wire, by Office value in the offices' order; an unknown office is dropped.
+     *
+     * @param array<mixed> $heads Holders as decoded.
+     * @return array<string, Head>
+     */
+    private static function hydrateHeads(array $heads): array
+    {
+        $hydrated = [];
+        foreach (Office::cases() as $office) {
+            if (is_array($heads[$office->value] ?? null)) {
+                $hydrated[$office->value] = self::hydrateHead($heads[$office->value]);
+            }
+        }
+
+        return $hydrated;
+    }
+
+    /**
+     * The posts of a payload saved before $heads, off each one's own fields; a post with none of them stays vacant.
+     *
+     * @param array<string, mixed> $data Decoded payload keyed by field name.
+     * @return array<string, Head>
+     */
+    private static function legacyHeads(array $data): array
+    {
+        $heads = [];
+        foreach (Office::cases() as $office) {
+            $prefix = self::LEGACY_HEAD_PREFIXES[$office->value];
+            $fields = ['name' => "{$prefix}Name", 'birth' => "{$prefix}Birth", 'termStart' => "{$prefix}TermStart", 'stance' => "{$prefix}Stance", 'passedOver' => "{$prefix}PassedOver", 'appointedAt' => 'last' . ucfirst($prefix) . 'AppointedAt'];
+            $head = [];
+            foreach ($fields as $key => $field) {
+                if (array_key_exists($field, $data)) {
+                    $head[$key] = $data[$field];
+                }
+            }
+            if ($head !== []) {
+                $heads[$office->value] = self::hydrateHead($head);
+            }
+        }
+
+        return $heads;
+    }
+
+    /**
+     * A holder off the wire; a field the payload lacks or garbles keeps its vacant value (Office::VACANT).
+     *
+     * @param array<mixed> $head Holder as decoded.
+     * @return Head
+     */
+    private static function hydrateHead(array $head): array
+    {
+        $number = static fn(mixed $value, float $vacant): float => is_numeric($value) ? (float) $value : $vacant;
+
+        return [
+            'name' => is_scalar($head['name'] ?? null) ? (string) $head['name'] : Office::VACANT['name'],
+            'birth' => $number($head['birth'] ?? null, Office::VACANT['birth']),
+            'termStart' => $number($head['termStart'] ?? null, Office::VACANT['termStart']),
+            'stance' => $number($head['stance'] ?? null, Office::VACANT['stance']),
+            'passedOver' => is_array($head['passedOver'] ?? null) ? self::hydrateCandidates($head['passedOver']) : Office::VACANT['passedOver'],
+            'appointedAt' => $number($head['appointedAt'] ?? null, Office::VACANT['appointedAt']),
+        ];
     }
 
     /**

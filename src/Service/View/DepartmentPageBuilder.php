@@ -16,14 +16,12 @@ use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Politics\Council\CouncilAppointments;
-use App\Service\Politics\Department\CoastGuard;
 use App\Service\Politics\Department\Exchequer;
 use App\Service\Politics\Department\FairTradingBoard;
 use App\Service\Politics\Department\FinancialRegulator;
+use App\Service\Politics\Department\Office;
 use App\Service\Politics\Department\SecuritiesCommission;
-use App\Service\Politics\Department\SecurityBureau;
 use App\Service\Politics\Department\SovereignReserveFund;
-use App\Service\Politics\Department\StateGuard;
 use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\Policy\Platforms;
 
@@ -43,29 +41,30 @@ final class DepartmentPageBuilder
      */
     public function fundHead(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
     {
-        if ($politics->fundHeadName === '') {
+        $head = $politics->head(Office::FundHead);
+        if ($head['name'] === '') {
             return null;
         }
 
         $time = $politics->totalTime;
-        $share = SovereignReserveFund::equityShare($politics->fundHeadStance);
+        $share = SovereignReserveFund::equityShare($head['stance']);
 
         return [
-            'name' => $politics->fundHeadName,
-            'age' => (int) floor($time - $politics->fundHeadBirth),
-            'sinceLabel' => $politics->fundHeadTermStart < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($politics->fundHeadTermStart),
-            'termEndsLabel' => DistrictCalendar::quarter(SovereignReserveFund::headTermEnd($time)),
-            'opening' => $politics->fundHeadTermStart < 0.0,
+            'name' => $head['name'],
+            'age' => (int) floor($time - $head['birth']),
+            'sinceLabel' => $head['termStart'] < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($head['termStart']),
+            'termEndsLabel' => DistrictCalendar::quarter(Office::FundHead->termEnd($time)),
+            'opening' => $head['termStart'] < 0.0,
             'stance' => SovereignReserveFund::stanceName($share),
             'equityShare' => $share,
             'inForce' => $macro->sovereignFundPolicyEquityShare > 0.0 ? $macro->sovereignFundPolicyEquityShare : null,
             'passedOver' => array_map(static fn(array $candidate): array => [
                 'name' => $candidate['name'],
-                'age' => (int) floor($politics->fundHeadTermStart - $candidate['birth']),
+                'age' => (int) floor($head['termStart'] - $candidate['birth']),
                 'equityShare' => SovereignReserveFund::equityShare($candidate['fund']),
-            ], $politics->fundHeadPassedOver),
+            ], $head['passedOver']),
             'rules' => [
-                'termYears' => SovereignReserveFund::HEAD_TERM_YEARS,
+                'termYears' => Office::FundHead->termYears(),
                 'shortlist' => CouncilAppointments::SHORTLIST,
                 'mostCautious' => SovereignReserveFund::mostCautious(),
                 'boldest' => SovereignReserveFund::boldest(),
@@ -118,30 +117,31 @@ final class DepartmentPageBuilder
 
     public function exchequer(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
     {
-        if ($politics->exchequerHeadName === '') {
+        $head = $politics->head(Office::ExchequerHead);
+        if ($head['name'] === '') {
             return null;
         }
 
         $time = $politics->totalTime;
-        $target = Exchequer::averageMaturity($politics->exchequerHeadStance);
+        $target = Exchequer::averageMaturity($head['stance']);
         $maturity = $macro->sovereignDebtAverageMaturity;
         $billShare = CreditFiscalSubsystem::billShare($maturity);
         $rate = ($billShare * $macro->policyRate) + ((1.0 - $billShare) * $macro->sovereignCouponRate);
 
         return [
             'head' => [
-                'name' => $politics->exchequerHeadName,
-                'age' => (int) floor($time - $politics->exchequerHeadBirth),
-                'sinceLabel' => $politics->exchequerHeadTermStart < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($politics->exchequerHeadTermStart),
-                'termEndsLabel' => DistrictCalendar::quarter(Exchequer::headTermEnd($time)),
-                'opening' => $politics->exchequerHeadTermStart < 0.0,
+                'name' => $head['name'],
+                'age' => (int) floor($time - $head['birth']),
+                'sinceLabel' => $head['termStart'] < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($head['termStart']),
+                'termEndsLabel' => DistrictCalendar::quarter(Office::ExchequerHead->termEnd($time)),
+                'opening' => $head['termStart'] < 0.0,
                 'stance' => Exchequer::stanceName($target),
                 'maturity' => $target,
                 'passedOver' => array_map(static fn(array $candidate): array => [
                     'name' => $candidate['name'],
-                    'age' => (int) floor($politics->exchequerHeadTermStart - $candidate['birth']),
+                    'age' => (int) floor($head['termStart'] - $candidate['birth']),
                     'maturity' => Exchequer::averageMaturity($candidate['debt']),
-                ], $politics->exchequerHeadPassedOver),
+                ], $head['passedOver']),
             ],
             'debt' => $macro->sovereignDebtToGdp,
             'netDebt' => $macro->sovereignNetDebtToGdp,
@@ -161,7 +161,7 @@ final class DepartmentPageBuilder
             'riskSpreadBp' => (int) round(10000.0 * $macro->sovereignRiskSpread),
             'councilMaturity' => $politics->councilDebtStances === [] ? null : Exchequer::averageMaturity(CouncilAppointments::median($politics->councilDebtStances)),
             'rules' => [
-                'termYears' => Exchequer::HEAD_TERM_YEARS,
+                'termYears' => Office::ExchequerHead->termYears(),
                 'shortlist' => CouncilAppointments::SHORTLIST,
                 'shortest' => Exchequer::SHORTEST_AVERAGE_MATURITY,
                 'longest' => Exchequer::LONGEST_AVERAGE_MATURITY,
@@ -178,7 +178,8 @@ final class DepartmentPageBuilder
      */
     public function fairTrading(PoliticsStateDTO $politics): ?array
     {
-        if ($politics->fairTradingHeadName === '') {
+        $head = $politics->head(Office::FairTradingHead);
+        if ($head['name'] === '') {
             return null;
         }
 
@@ -187,22 +188,22 @@ final class DepartmentPageBuilder
 
         return [
             'head' => [
-                'name' => $politics->fairTradingHeadName,
-                'age' => (int) floor($time - $politics->fairTradingHeadBirth),
-                'sinceLabel' => $politics->fairTradingHeadTermStart < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($politics->fairTradingHeadTermStart),
-                'termEndsLabel' => DistrictCalendar::quarter(FairTradingBoard::headTermEnd($time)),
-                'opening' => $politics->fairTradingHeadTermStart < 0.0,
-                'stance' => FairTradingBoard::stanceName($politics->fairTradingHeadStance),
+                'name' => $head['name'],
+                'age' => (int) floor($time - $head['birth']),
+                'sinceLabel' => $head['termStart'] < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($head['termStart']),
+                'termEndsLabel' => DistrictCalendar::quarter(Office::FairTradingHead->termEnd($time)),
+                'opening' => $head['termStart'] < 0.0,
+                'stance' => FairTradingBoard::stanceName($head['stance']),
                 'passedOver' => array_map(static fn(array $candidate): array => [
                     'name' => $candidate['name'],
-                    'age' => (int) floor($politics->fairTradingHeadTermStart - $candidate['birth']),
+                    'age' => (int) floor($head['termStart'] - $candidate['birth']),
                     'line' => $screens($candidate['competition'])['concentrated'],
-                ], $politics->fairTradingHeadPassedOver),
+                ], $head['passedOver']),
             ],
-            'screens' => $screens($politics->fairTradingHeadStance),
+            'screens' => $screens($head['stance']),
             'councilLine' => $politics->councilCompetitionStances === [] ? null : $screens(CouncilAppointments::median($politics->councilCompetitionStances))['concentrated'],
             'rules' => [
-                'termYears' => FairTradingBoard::HEAD_TERM_YEARS,
+                'termYears' => Office::FairTradingHead->termYears(),
                 'shortlist' => CouncilAppointments::SHORTLIST,
                 'lightest' => $screens(-1.0),
                 'strictest' => $screens(1.0),
@@ -219,28 +220,29 @@ final class DepartmentPageBuilder
      */
     public function securities(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
     {
-        if ($politics->securitiesHeadName === '') {
+        $head = $politics->head(Office::SecuritiesHead);
+        if ($head['name'] === '') {
             return null;
         }
 
         $time = $politics->totalTime;
-        $stance = $politics->securitiesHeadStance;
-        $opening = $politics->securitiesHeadTermStart < 0.0;
-        $effective = $politics->securitiesHeadTermStart + SecuritiesCommission::RULE_NOTICE_YEARS;
+        $stance = $head['stance'];
+        $opening = $head['termStart'] < 0.0;
+        $effective = $head['termStart'] + SecuritiesCommission::RULE_NOTICE_YEARS;
 
         return [
             'head' => [
-                'name' => $politics->securitiesHeadName,
-                'age' => (int) floor($time - $politics->securitiesHeadBirth),
-                'sinceLabel' => $opening ? 'Before Year 1' : DistrictCalendar::quarter($politics->securitiesHeadTermStart),
-                'termEndsLabel' => DistrictCalendar::quarter(SecuritiesCommission::headTermEnd($time)),
+                'name' => $head['name'],
+                'age' => (int) floor($time - $head['birth']),
+                'sinceLabel' => $opening ? 'Before Year 1' : DistrictCalendar::quarter($head['termStart']),
+                'termEndsLabel' => DistrictCalendar::quarter(Office::SecuritiesHead->termEnd($time)),
                 'opening' => $opening,
                 'stance' => SecuritiesCommission::stanceName($stance),
                 'passedOver' => array_map(static fn(array $candidate): array => [
                     'name' => $candidate['name'],
-                    'age' => (int) floor($politics->securitiesHeadTermStart - $candidate['birth']),
+                    'age' => (int) floor($head['termStart'] - $candidate['birth']),
                     'margin' => SecuritiesCommission::initialMargin($candidate['markets']),
-                ], $politics->securitiesHeadPassedOver),
+                ], $head['passedOver']),
             ],
             'inForce' => SecuritiesCommission::margins($macro->initialMarginRequirement) + [
                 'enforcement' => $macro->earningsManagementScale,
@@ -253,7 +255,7 @@ final class DepartmentPageBuilder
             ],
             'councilMargin' => $politics->councilMarketsStances === [] ? null : SecuritiesCommission::initialMargin(CouncilAppointments::median($politics->councilMarketsStances)),
             'rules' => [
-                'termYears' => SecuritiesCommission::HEAD_TERM_YEARS,
+                'termYears' => Office::SecuritiesHead->termYears(),
                 'shortlist' => CouncilAppointments::SHORTLIST,
                 'noticeMonths' => (int) round(SecuritiesCommission::RULE_NOTICE_YEARS * 12.0),
                 'lightestMargin' => SecuritiesCommission::LIGHTEST_INITIAL_MARGIN,
@@ -272,16 +274,14 @@ final class DepartmentPageBuilder
      */
     public function securityBureau(PoliticsStateDTO $politics): ?array
     {
-        if ($politics->securityDirectorName === '') {
+        if ($politics->head(Office::SecurityDirector)['name'] === '') {
             return null;
         }
 
-        $time = $politics->totalTime;
-
         return [
             'mandate' => self::mandate(Institutions::SECURITY_BUREAU),
-            'director' => self::standingPost($politics->securityDirectorName, $politics->securityDirectorBirth, $politics->securityDirectorTermStart, $politics->securityDirectorPassedOver, SecurityBureau::directorTermEnd($time), $time),
-            'rules' => ['termYears' => SecurityBureau::DIRECTOR_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
+            'director' => self::standingPost($politics, Office::SecurityDirector),
+            'rules' => ['termYears' => Office::SecurityDirector->termYears(), 'shortlist' => CouncilAppointments::SHORTLIST],
         ];
     }
 
@@ -293,14 +293,12 @@ final class DepartmentPageBuilder
      */
     public function coastGuard(PoliticsStateDTO $politics): array
     {
-        $time = $politics->totalTime;
-
         return [
             'name' => Institutions::COAST_GUARD,
             'mandate' => self::mandate(Institutions::COAST_GUARD),
             'headTitle' => 'commandant',
-            'head' => $politics->coastGuardCommandantName === '' ? null : self::standingPost($politics->coastGuardCommandantName, $politics->coastGuardCommandantBirth, $politics->coastGuardCommandantTermStart, $politics->coastGuardCommandantPassedOver, CoastGuard::commandantTermEnd($time), $time),
-            'rules' => ['termYears' => CoastGuard::COMMANDANT_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
+            'head' => $politics->head(Office::CoastGuardCommandant)['name'] === '' ? null : self::standingPost($politics, Office::CoastGuardCommandant),
+            'rules' => ['termYears' => Office::CoastGuardCommandant->termYears(), 'shortlist' => CouncilAppointments::SHORTLIST],
         ];
     }
 
@@ -312,14 +310,12 @@ final class DepartmentPageBuilder
      */
     public function stateGuard(PoliticsStateDTO $politics): array
     {
-        $time = $politics->totalTime;
-
         return [
             'name' => Institutions::STATE_GUARD,
             'mandate' => self::mandate(Institutions::STATE_GUARD),
             'headTitle' => 'commander',
-            'head' => $politics->stateGuardCommanderName === '' ? null : self::standingPost($politics->stateGuardCommanderName, $politics->stateGuardCommanderBirth, $politics->stateGuardCommanderTermStart, $politics->stateGuardCommanderPassedOver, StateGuard::commanderTermEnd($time), $time),
-            'rules' => ['termYears' => StateGuard::COMMANDER_TERM_YEARS, 'shortlist' => CouncilAppointments::SHORTLIST],
+            'head' => $politics->head(Office::StateGuardCommander)['name'] === '' ? null : self::standingPost($politics, Office::StateGuardCommander),
+            'rules' => ['termYears' => Office::StateGuardCommander->termYears(), 'shortlist' => CouncilAppointments::SHORTLIST],
         ];
     }
 
@@ -333,21 +329,23 @@ final class DepartmentPageBuilder
      * A head who sets no rule, for their department's page: their name and age, when they were seated and leave, and
      * whom the Council passed over for them, each at their age then.
      *
-     * @param list<array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float}> $passedOver
      * @return array{name: string, age: int, sinceLabel: string, termEndsLabel: string, opening: bool, passedOver: list<array{name: string, age: int}>}
      */
-    private static function standingPost(string $name, float $birth, float $termStart, array $passedOver, float $termEnd, float $time): array
+    private static function standingPost(PoliticsStateDTO $politics, Office $office): array
     {
+        $time = $politics->totalTime;
+        $head = $politics->head($office);
+
         return [
-            'name' => $name,
-            'age' => (int) floor($time - $birth),
-            'sinceLabel' => $termStart < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($termStart),
-            'termEndsLabel' => DistrictCalendar::quarter($termEnd),
-            'opening' => $termStart < 0.0,
+            'name' => $head['name'],
+            'age' => (int) floor($time - $head['birth']),
+            'sinceLabel' => $head['termStart'] < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($head['termStart']),
+            'termEndsLabel' => DistrictCalendar::quarter($office->termEnd($time)),
+            'opening' => $head['termStart'] < 0.0,
             'passedOver' => array_map(static fn(array $candidate): array => [
                 'name' => $candidate['name'],
-                'age' => (int) floor($termStart - $candidate['birth']),
-            ], $passedOver),
+                'age' => (int) floor($head['termStart'] - $candidate['birth']),
+            ], $head['passedOver']),
         ];
     }
 
@@ -360,26 +358,27 @@ final class DepartmentPageBuilder
      */
     public function regulator(PoliticsStateDTO $politics, MacroStateDTO $macro): ?array
     {
-        if ($politics->regulatorName === '') {
+        $head = $politics->head(Office::Regulator);
+        if ($head['name'] === '') {
             return null;
         }
 
         $time = $politics->totalTime;
-        $target = FinancialRegulator::requirement($politics->regulatorStance);
+        $target = FinancialRegulator::requirement($head['stance']);
 
         return [
             'head' => [
-                'name' => $politics->regulatorName,
-                'age' => (int) floor($time - $politics->regulatorBirth),
-                'sinceLabel' => $politics->regulatorTermStart < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($politics->regulatorTermStart),
-                'termEndsLabel' => DistrictCalendar::quarter(FinancialRegulator::headTermEnd($time)),
+                'name' => $head['name'],
+                'age' => (int) floor($time - $head['birth']),
+                'sinceLabel' => $head['termStart'] < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($head['termStart']),
+                'termEndsLabel' => DistrictCalendar::quarter(Office::Regulator->termEnd($time)),
                 'stance' => FinancialRegulator::stanceName($target),
                 'requirement' => $target,
                 'passedOver' => array_map(static fn(array $candidate): array => [
                     'name' => $candidate['name'],
-                    'age' => (int) floor($politics->regulatorTermStart - $candidate['birth']),
+                    'age' => (int) floor($head['termStart'] - $candidate['birth']),
                     'requirement' => FinancialRegulator::requirement($candidate['regulation']),
-                ], $politics->regulatorPassedOver),
+                ], $head['passedOver']),
             ],
             'inForce' => $politics->bankCapitalRequirement,
             'buffer' => $macro->countercyclicalBufferRate,
@@ -388,7 +387,7 @@ final class DepartmentPageBuilder
                 'completeLabel' => DistrictCalendar::quarter($politics->requirementPhaseStart + FinancialRegulator::PHASE_IN_YEARS),
             ] : null,
             'rules' => [
-                'termYears' => FinancialRegulator::HEAD_TERM_YEARS,
+                'termYears' => Office::Regulator->termYears(),
                 'shortlist' => CouncilAppointments::SHORTLIST,
                 'lightest' => FinancialRegulator::lightest(),
                 'strictest' => FinancialRegulator::strictest(),

@@ -7,6 +7,7 @@ namespace App\Service\Politics\Recorder;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\ElectionOdds;
 use App\Entity\RateDecision;
+use App\Service\Politics\Department\Office;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -36,7 +37,7 @@ class PoliticsHistoryRecorder
                 ->setRate($politics->lastMeetingRate)
                 ->setRateChange($politics->lastMeetingChange)
                 ->setVotes(array_values(array_map('floatval', $politics->lastMeetingVotes)))
-                ->setGovernor($politics->governorName)
+                ->setGovernor($politics->head(Office::Governor)['name'])
                 ->setCommitteeMajority((int) $politics->committeeMajority);
         }
         if ($politics->forecastAt === $politics->totalTime && $politics->forecastFor >= 0.0) {

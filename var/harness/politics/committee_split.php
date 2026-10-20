@@ -26,7 +26,7 @@ foreach (range(1, $seeds) as $seed) {
         $state->totalTime = $t;
         $before = $state->committeeMajority;
         CouncilAppointments::advance($state, $math);
-        A::advance($state, new MacroStateDTO(totalTime: $t, policyRate: 0.03), $dt, $math);
+        A::advance($state, new MacroStateDTO(totalTime: $t, policyRate: 0.03), $dt);
         ++$counts[(string) (int) $state->committeeMajority];
         $balances[] = round($state->committeeBalance * 7.0);
         $flips += $t > 0.0 && $state->committeeMajority !== $before ? 1 : 0;

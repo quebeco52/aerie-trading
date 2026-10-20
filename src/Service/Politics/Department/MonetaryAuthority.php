@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Politics\Department;
 
-use App\Data\Politics\AerieCouncil;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
@@ -29,12 +28,6 @@ final class MonetaryAuthority
     public const STANCES = ['hawk' => 1.0, 'swing' => 0.0, 'dove' => -1.0];
     /** FOMC members of each type the press placed, the mix candidates are drawn from (Bordo & Istrefi 2023). */
     public const TYPE_COUNTS = ['hawk' => 51, 'swing' => 31, 'dove' => 39];
-
-    // --- The Governor ---
-    /** Length of the governor's single non-renewable term, in years (as at the ECB). */
-    public const GOVERNOR_TERM_YEARS = 8.0;
-    /** When the term of the governor sitting at Year 1 ends, in years after Year 1 began. */
-    public const OPENING_GOVERNOR_TERM_END = 3.0;
 
     // --- The Rate Committee ---
     /** Members of the rate committee beside the governor. */
@@ -72,28 +65,22 @@ final class MonetaryAuthority
      * @param MacroStateDTO $macro The economy as this tick left it.
      * @param float         $dt    Time increment in years.
      */
-    public static function advance(PoliticsState $state, MacroStateDTO $macro, float $dt, MathUtility $math): void
+    public static function advance(PoliticsState $state, MacroStateDTO $macro, float $dt): void
     {
         $time = $state->totalTime;
-        if ($state->governorName === '') {
-            self::open($state, $time, $math);
+        if ($state->head(Office::Governor)['name'] === '') {
+            self::open($state, $time);
         }
         $salt = (int) $state->authoritySalt;
 
         $changed = self::backfillSwingers($state, $salt);
         $changed = StanceRevision::revise($state, $dt) || $changed;
-        $governorTerm = CouncilAppointments::termStart($time, self::OPENING_GOVERNOR_TERM_END, self::GOVERNOR_TERM_YEARS);
-        if (abs($state->governorTermStart - $governorTerm) > 1e-9) {
-            [$chosen, $state->governorPassedOver] = CouncilAppointments::appoint($salt, 'governor', $governorTerm, [CouncilAppointments::AXIS_MONEY => CouncilAppointments::median($state->councilStances)], CouncilAppointments::reservedNames($state), $math);
-            self::seatGovernor($state, $chosen, $governorTerm);
-            $state->lastGovernorAppointedAt = $time;
-            $changed = true;
-        }
+        $changed = self::seatGovernor($state) || $changed;
 
         for ($member = 0; $member < self::COMMITTEE_MEMBERS; ++$member) {
             $since = CouncilAppointments::termStart($time, self::memberOpeningTermEnd($member), self::MEMBER_TERM_YEARS);
             if (abs(($state->memberSince[$member] ?? -INF) - $since) > 1e-9) {
-                [$chosen] = CouncilAppointments::appoint($salt, "member:{$member}", $since, [CouncilAppointments::AXIS_MONEY => $state->governorStance], CouncilAppointments::reservedNames($state), $math);
+                [$chosen] = CouncilAppointments::appoint($salt, "member:{$member}", $since, [CouncilAppointments::AXIS_MONEY => $state->head(Office::Governor)['stance']], CouncilAppointments::reservedNames($state));
                 self::seatMember($state, $member, $chosen, $since);
                 $changed = true;
             }
@@ -116,21 +103,15 @@ final class MonetaryAuthority
      * The Authority at Year 1, or when a state that predates it is first read: the governor and committee chosen from
      * shortlists, the governor sitting at Year 1 under their own name.
      */
-    private static function open(PoliticsState $state, float $time, MathUtility $math): void
+    private static function open(PoliticsState $state, float $time): void
     {
         $salt = (int) $state->authoritySalt;
         $state->memberNames = $state->memberBirths = $state->memberSince = $state->memberStances = $state->memberSwingers = [];
-
-        $governorTerm = CouncilAppointments::termStart($time, self::OPENING_GOVERNOR_TERM_END, self::GOVERNOR_TERM_YEARS);
-        [$chosen, $state->governorPassedOver] = CouncilAppointments::appoint($salt, 'governor', $governorTerm, [CouncilAppointments::AXIS_MONEY => CouncilAppointments::median($state->councilStances)], CouncilAppointments::reservedNames($state), $math);
-        if ($governorTerm < 0.0) {
-            $chosen['name'] = AerieCouncil::OPENING_GOVERNOR;
-        }
-        self::seatGovernor($state, $chosen, $governorTerm);
+        self::seatGovernor($state);
 
         for ($member = 0; $member < self::COMMITTEE_MEMBERS; ++$member) {
             $since = CouncilAppointments::termStart($time, self::memberOpeningTermEnd($member), self::MEMBER_TERM_YEARS);
-            [$chosen] = CouncilAppointments::appoint($salt, "member:{$member}", $since, [CouncilAppointments::AXIS_MONEY => $state->governorStance], CouncilAppointments::reservedNames($state), $math);
+            [$chosen] = CouncilAppointments::appoint($salt, "member:{$member}", $since, [CouncilAppointments::AXIS_MONEY => $state->head(Office::Governor)['stance']], CouncilAppointments::reservedNames($state));
             self::seatMember($state, $member, $chosen, $since);
         }
         $state->committeeMajority = self::rebalance($state);
@@ -228,12 +209,6 @@ final class MonetaryAuthority
         return ($member + 0.5) * self::MEMBER_TERM_YEARS / self::COMMITTEE_MEMBERS;
     }
 
-    /** When the governor in office at a moment leaves. */
-    public static function governorTermEnd(float $time): float
-    {
-        return CouncilAppointments::termStart($time, self::OPENING_GOVERNOR_TERM_END, self::GOVERNOR_TERM_YEARS) + self::GOVERNOR_TERM_YEARS;
-    }
-
     /** Whether the last meeting, if it sat this tick, moved the rate a full step or split the committee. */
     public static function meetingMadeNews(PoliticsState|PoliticsStateDTO $state): bool
     {
@@ -249,7 +224,7 @@ final class MonetaryAuthority
     {
         $state->lastMeetingChange = $state->lastMeetingAt < 0.0 ? 0.0 : $macro->policyRate - $state->lastMeetingRate;
         $state->lastMeetingVotes = self::votes(
-            array_merge([$state->governorStance], array_values($state->memberStances)),
+            array_merge([$state->head(Office::Governor)['stance']], array_values($state->memberStances)),
             $macro->authorityCommitteeSeated > 0.0 ? $macro->authorityMajority : 0.0,
             $macro->ruleInflationGap,
             $macro->ruleOutputGap,
@@ -261,22 +236,21 @@ final class MonetaryAuthority
     /** The committee's balance refreshed, and the supermajority it now makes. */
     private static function rebalance(PoliticsState $state): float
     {
-        $state->committeeBalance = self::balance($state->governorStance, array_values($state->memberStances));
+        $state->committeeBalance = self::balance($state->head(Office::Governor)['stance'], array_values($state->memberStances));
 
         return self::majority($state->committeeBalance);
     }
 
-    /**
-     * @param array{name: string, birth: float, stance: float, regulation: float, fund: float, debt: float, competition: float, markets: float, swing?: float} $person
-     */
-    private static function seatGovernor(PoliticsState $state, array $person, float $termStart): void
+    /** Seats a governor when the post is vacant or the term has ended (Office::fill()); whether one was. */
+    private static function seatGovernor(PoliticsState $state): bool
     {
-        CouncilAppointments::retire($state, $state->governorName);
-        $state->governorName = $person['name'];
-        $state->governorBirth = $person['birth'];
-        $state->governorTermStart = $termStart;
-        $state->governorStance = $person['stance'];
-        $state->governorSwinger = $person['swing'] ?? 0.0;
+        $seated = Office::Governor->fill($state);
+        if ($seated === null) {
+            return false;
+        }
+        $state->governorSwinger = $seated[0]['swing'] ?? 0.0;
+
+        return true;
     }
 
     /**
@@ -301,10 +275,11 @@ final class MonetaryAuthority
     private static function backfillSwingers(PoliticsState $state, int $salt): bool
     {
         $converted = false;
+        $governor = $state->head(Office::Governor);
         if ($state->governorSwinger < 0.0) {
-            $state->governorSwinger = $state->governorStance === self::STANCES['swing'] ? 1.0 : 0.0;
+            $state->governorSwinger = $governor['stance'] === self::STANCES['swing'] ? 1.0 : 0.0;
             if ($state->governorSwinger > 0.0) {
-                $state->governorStance = self::swingLean(MathUtility::hashedUniform($salt, CouncilAppointments::vacancyKey('governor', $state->governorTermStart) . ":{$state->governorName}:lean"));
+                $state->heads[Office::Governor->value]['stance'] = self::swingLean(MathUtility::hashedUniform($salt, CouncilAppointments::vacancyKey(Office::Governor->value, $governor['termStart']) . ":{$governor['name']}:lean"));
                 $converted = true;
             }
         }
