@@ -190,3 +190,25 @@ Full game: polls/enp_16.out (16 seeds x 200y, new vs HEAD 7ba2d42b). Pooled 90th
 160-200 is 44% against 54%; votes giving one party a majority 2.5% against 6.2% (t about -2); every cabinet moment within
 1 SE. Talks average 29 days in both arms, so FORMATION_MEAN_DAYS was re-measured from 33.7 to 29.3. The 33.7 had held
 before the 34f74b09 seed edit.
+
+## 2026-10-20 Option E: anti-pact on any government with both leaders, or led from the losing bloc (tree vs HEAD 840121e7)
+Question: does E keep cabinet and vote moments in range, and does it cut cabinets led from the bloc that lost a majority?
+Harness: polls/form.sh new|head with formation_run.php (full MacroEngine), OUT=var/harness/polls/runs_optE; seeds 1-8,
+200 y, TPY 180; head = git worktree at 840121e7 (removed after). Analysis: politics/mandate_an.py (new: losing-bloc share,
+both leaders in govt, two largest in cabinet), polls/enp_an.py, polls/form_an2.py, formation_report.py pooled. Table:
+politics/optE_8.out. Paired NEW - HEAD, n = 8, se of the paired difference:
+| quantity | HEAD | NEW | diff (se) |
+| losing-bloc cabinet, given a bloc >= 151 | 0.028 | 0.010 | -0.017 (0.007); pooled 11 -> 4 of ~395 |
+| both bloc leaders in govt | 0.003 | 0.010 | +0.007 (0.004) |
+| minority cabinet | 0.703 | 0.686 | -0.018 (0.032) |
+| single-party | 0.480 | 0.468 | -0.012 (0.034) |
+| largest party in cabinet | 0.738 | 0.735 | -0.003 (0.036) |
+| two largest in cabinet | 0.072 | 0.043 | -0.030 (0.019) |
+| talks needing 2nd attempt | 0.246 | 0.250 | +0.004 (0.032) |
+| days to govt, mean | 30.1 | 30.7 | +0.6 (1.5) |
+| Pedersen volatility | 12.82 | 12.64 | -0.18 (0.40) |
+| cabinet loss at vote (pp) | 2.73 | 2.05 | -0.68 (0.51) |
+| terms ended early | 0.405 | 0.398 | -0.008 (0.021) |
+Caveats: stage 8 only (caller's spec); losing-bloc t = -2.5. A bloc holds 151+ at 99% of votes, so E binds almost every
+election. Grand coalitions rose 0.003 -> 0.010 (one vs four of 400): E's penalty is an OR, so a winner-led cabinet with
+the loser's leader now costs the same as a loser-led one. Days SD rose 28.3 -> 30.9 (t 2.6; >90 days 4.3% -> 5.2%).

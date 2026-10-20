@@ -22,6 +22,9 @@ Run script: `form.sh <arm> <seed>` (takes its own `bin/php-slot`; outputs in `ru
 `enp_an.py <dir>` adds ENP and the largest vote p90 by 40-year block, one-party majorities, days to government
    and second attempts (table `enp_16.out`).
 
+`../politics/mandate_an.py <dir>` adds the share of cabinets led from the bloc that lost a 151-seat majority,
+   both bloc leaders in government, and the two largest in cabinet (table `../politics/optE_8.out`).
+
 Evidence: `polls_evidence.md`.
 
 ## Long-run lever means (PolicyCapitalization LONG_RUN_* and *_TERM_PERSISTENCE)

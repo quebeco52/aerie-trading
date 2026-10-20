@@ -40,7 +40,10 @@ final class CoalitionFormation
      * the bloc's leader in the cabinet (Martin & Stevenson 2010: a pre-electoral pact).
      */
     public const FORMATION_PACT_UTILITY = 3.429;
-    /** Log-odds of a cabinet holding both bloc leaders, who ruled each other out (Martin & Stevenson's anti-pact). */
+    /**
+     * Log-odds of a government breaking the blocs' pledges (Martin & Stevenson's anti-pact): holding both bloc leaders,
+     * who ruled each other out, or led from the bloc that lost when the other won a majority of the seats.
+     */
     public const FORMATION_ANTIPACT_UTILITY = -2.877;
     /**
      * Log-odds per unit a cabinet party stands from the Diet's median on the Council axis, the constitutional question
@@ -272,7 +275,7 @@ final class CoalitionFormation
         $government = array_merge($cabinet, $support);
         $sides = array_values(array_unique(array_map(static fn(string $party): string => $blocs[$party], $government)));
         $pact = count($government) > 1 && count($sides) === 1 && in_array($sides[0], $cabinet, true);
-        $leaders = array_filter($cabinet, static fn(string $party): bool => $blocs[$party] === $party);
+        $leaders = array_filter($government, static fn(string $party): bool => $blocs[$party] === $party);
         $challenge = 0.0;
         foreach ($cabinet as $party) {
             $challenge += abs(AerieDiet::position($party, $positions)[AerieDiet::AXIS_COUNCIL] - $median);
@@ -285,7 +288,7 @@ final class CoalitionFormation
             + (self::FORMATION_RANGE_UTILITY * self::rangeOf($government, $distances))
             + ($sorted === $outgoing ? self::FORMATION_STATUS_QUO_UTILITY : 0.0)
             + ($pact ? self::FORMATION_PACT_UTILITY : 0.0)
-            + (count($leaders) > 1 ? self::FORMATION_ANTIPACT_UTILITY : 0.0)
+            + (count($leaders) > 1 || self::againstTheMandate($cabinet, $seats, $blocs) ? self::FORMATION_ANTIPACT_UTILITY : 0.0)
             + (self::FORMATION_ANTISYSTEM_UTILITY * $challenge);
     }
 
@@ -376,6 +379,26 @@ final class CoalitionFormation
         }
 
         return $nearest;
+    }
+
+    /**
+     * Whether a cabinet would be led against the vote's verdict: one bloc won a majority of the seats and the cabinet's
+     * largest party declared for the other. A bloc short of a majority binds no one, so the losers stay free to deal.
+     *
+     * @param list<string>             $cabinet The cabinet's parties.
+     * @param array<string, int|float> $seats   Seats by party.
+     * @param array<string, string>    $blocs   Each party's bloc leader (declareBlocs()).
+     */
+    public static function againstTheMandate(array $cabinet, array $seats, array $blocs): bool
+    {
+        $side = $blocs[self::leader($cabinet, self::bySize($seats, []))] ?? null;
+        foreach (array_unique($blocs) as $bloc) {
+            if ($bloc !== $side && self::coalitionSeats(array_keys($blocs, $bloc, true), $seats) >= AerieDiet::MAJORITY_SEATS) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -155,6 +155,36 @@ class CoalitionFormationTest extends TestCase
     }
 
     /**
+     * A bloc's pledge binds its winners: once one bloc holds a majority, a cabinet led from the other pays the
+     * anti-pact, however its supporters declared; a winning bloc's own cabinet pays nothing, and with no bloc in the
+     * majority the losers stay free to deal.
+     */
+    public function testAMajorityBlocsPledgeBindsWhoLeadsTheCabinet(): void
+    {
+        $seats = [Diet::CIVIC => 110.0, Diet::VANGUARD => 80.0, Diet::IRON_HARBOR => 35.0, Diet::EXCHANGE => 20.0, Diet::CHARTISTS => 15.0, Diet::COMMON_LOT => 10.0, Diet::TIDELINE => 10.0, Diet::NEW_HORIZON => 20.0];
+        $civicWon = [Diet::CIVIC => Diet::CIVIC, Diet::VANGUARD => Diet::VANGUARD, Diet::IRON_HARBOR => Diet::CIVIC, Diet::EXCHANGE => Diet::VANGUARD,
+            Diet::CHARTISTS => Diet::VANGUARD, Diet::COMMON_LOT => Diet::CIVIC, Diet::TIDELINE => Diet::CIVIC, Diet::NEW_HORIZON => Diet::VANGUARD];
+        $vanguardWon = array_merge($civicWon, [Diet::IRON_HARBOR => Diet::VANGUARD]);
+        $hungSeats = array_merge($seats, [Diet::CIVIC => 100.0, Diet::TIDELINE => 5.0, Diet::NEW_HORIZON => 35.0]);
+
+        $this->assertTrue(Formation::againstTheMandate([Diet::VANGUARD], $seats, $civicWon), 'The Civic bloc won 165 seats.');
+        $this->assertFalse(Formation::againstTheMandate([Diet::VANGUARD], $seats, $vanguardWon), 'The Vanguard\'s bloc won 170.');
+        $this->assertFalse(Formation::againstTheMandate([Diet::CIVIC, Diet::IRON_HARBOR], $seats, $civicWon));
+        $this->assertSame(150.0, Formation::coalitionSeats([Diet::CIVIC, Diet::IRON_HARBOR, Diet::COMMON_LOT, Diet::TIDELINE], $hungSeats));
+        $this->assertFalse(Formation::againstTheMandate([Diet::VANGUARD], $hungSeats, $civicWon), 'Each bloc won 150: the losers may deal.');
+
+        // The Vanguard governing alone, carried by two parties declared for the Civic bloc: only the verdict differs.
+        $cabinet = [Diet::VANGUARD];
+        $support = [Diet::IRON_HARBOR, Diet::COMMON_LOT];
+        $this->assertEqualsWithDelta(
+            Formation::FORMATION_ANTIPACT_UTILITY,
+            Formation::utility($cabinet, $support, $seats, Diet::HOME_POSITIONS, [], Diet::CIVIC, $civicWon)
+                - Formation::utility($cabinet, $support, $seats, Diet::HOME_POSITIONS, [], Diet::CIVIC, array_merge($civicWon, [Diet::IRON_HARBOR => Diet::VANGUARD])),
+            1e-12,
+        );
+    }
+
+    /**
      * The last vote's blocs carry over: in a Diet where a split on the size of the state and one on openness both hold
      * (the Harbor and the Exchange at 35 seats each), whichever the parties declared last stands. The founding Diet
      * holds only its split on the size of the state.
