@@ -179,3 +179,14 @@ Run: see RUN.md "Crisis severity". Table: `crisis_4.out`.
   built > req; +1.3% (s1 y3.6) where built lagged a raised requirement. Mean jump 0.0365 -> 0.0362; scales 1.02-1.12.
 - Gap SD 0.0169 both, gap mean -0.0022 both, 3y post-crisis gap -0.0065 both; paired differences <= 1e-4.
 Caveat: 4 seeds, descriptive; built often trails a rising requirement, so the change can harden a crisis too.
+
+## 2026-10-20 Normal vote pulled back toward founding shares (step 5)
+ParlGov semivariogram (long_vario.py) against the model's, with the lasting swing taken from the total a term holds
+(0.0118). Weighted RMSE over 10-55 years: walk 1.67 (sigma2 0.67e-3); with a pull back H 20/30/40/50/60 years gives
+1.35/1.38/1.43/1.46/1.49 (sigma2 1.97/1.35/1.12/1.01/0.94e-3). Chosen: H 40, sigma2 1.12e-3. It is within half a point of
+the walk from 5 to 40 years and follows the flattening at 45-50; the pairs past 50 years are few and survivor-biased.
+normal_pull.py (the walk alone, 600 paths): ENP over 200 years 4.39 -> 4.25 against the walk's 4.39 -> 3.77.
+Full game: polls/enp_16.out (16 seeds x 200y, new vs HEAD 7ba2d42b). Pooled 90th percentile of the largest vote in years
+160-200 is 44% against 54%; votes giving one party a majority 2.5% against 6.2% (t about -2); every cabinet moment within
+1 SE. Talks average 29 days in both arms, so FORMATION_MEAN_DAYS was re-measured from 33.7 to 29.3. The 33.7 had held
+before the 34f74b09 seed edit.

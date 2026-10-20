@@ -46,7 +46,7 @@ class ElectionForecastTest extends TestCase
         // The year's drift: the lasting share's and the normal vote's, each over the normal vote.
         $persistence = Election::NORMAL_VOTE_PERSISTENCE;
         $termPersistence = $persistence ** Election::TERM_YEARS;
-        $stepPrior = $prior + (($p ** 2) * ((Election::LASTING_SWING_VARIANCE / (1.0 - ($termPersistence ** 2)) * (1.0 - ($persistence ** 2))) + Election::NORMAL_VOTE_DRIFT_VARIANCE) / $p);
+        $stepPrior = $prior + (($p ** 2) * ((Election::LASTING_SWING_VARIANCE / (1.0 - ($termPersistence ** 2)) * (1.0 - ($persistence ** 2))) + Election::normalVoteDriftVariance(1.0)) / $p);
         $stepGain = $stepPrior / ($stepPrior + ($p * (1.0 - $p) / OpinionPolls::EFFECTIVE_SAMPLE_SIZE));
         $this->assertEqualsWithDelta((1.0 - $stepGain) * $stepPrior, $drifted[Diet::CIVIC], 1e-15, 'The normal vote\'s walk adds to what a year leaves uncertain.');
     }

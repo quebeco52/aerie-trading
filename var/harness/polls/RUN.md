@@ -19,6 +19,9 @@ Run script: `form.sh <arm> <seed>` (takes its own `bin/php-slot`; outputs in `ru
    PM party's vote change split by the campaign growth gap; `form_slope.py <dir>` gives its slope on the gap.
 4. `git worktree remove --force var/harness/politics/head_tree`.
 
+`enp_an.py <dir>` adds ENP and the largest vote p90 by 40-year block, one-party majorities, days to government
+   and second attempts (table `enp_16.out`).
+
 Evidence: `polls_evidence.md`.
 
 ## Long-run lever means (PolicyCapitalization LONG_RUN_* and *_TERM_PERSISTENCE)

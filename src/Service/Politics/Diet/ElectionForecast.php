@@ -141,7 +141,7 @@ final class ElectionForecast
             // The lasting drift's variance over the step (OpinionPolls::driftLasting()) and the normal vote's
             // (OpinionPolls::walkNormals()), in shares.
             $drift = ($predicted ** 2) * ((Election::LASTING_SWING_VARIANCE / (1.0 - ($termPersistence ** 2)) * (1.0 - ($persistence ** 2)))
-                + (Election::NORMAL_VOTE_DRIFT_VARIANCE * max(0.0, $years))) / $normal;
+                + Election::normalVoteDriftVariance($years)) / $normal;
             $prior = ($variance[$party] ?? 0.0) + $drift;
             $error = $predicted * (1.0 - $predicted) / OpinionPolls::EFFECTIVE_SAMPLE_SIZE;
             $gain = $prior / ($prior + $error);

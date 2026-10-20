@@ -204,3 +204,29 @@ Table: `dietvote_8.out`.
 
 Nothing moves past |t| 1. The growth channel is too small to see at this n: sd(growth gap) 0.02 x 0.253 = 0.5pp against
 ~3pp of term vote noise. Every moment stays where HEAD has it, between the Scandinavian and Western European references.
+
+## 2026-10-20 Normal-vote pull back (40y half-life, drift var 1.12e-3), tree vs HEAD 7ba2d42b: party concentration
+
+Question: does the pull of each party's normal vote toward its founding share stop the party system concentrating over
+long games, with vote and cabinet moments in range? formation_run.php (full MacroEngine, no fund, no equity cap) via
+`OUT=var/harness/polls/runs_enp bin/harness-batch var/harness/polls/form.sh 1-16 new head`, 16 seeds x 200 years,
+180 ticks/year (23 min wall); `python3 var/harness/polls/enp_an.py var/harness/polls/runs_enp`. Table: `enp_16.out`.
+
+| quantity | HEAD | tree | diff (se) |
+|---|---|---|---|
+| ENP (votes) y0-40 / 80-120 / 160-200 | 4.33 / 4.67 / 4.16 | 4.39 / 4.57 / 4.30 | +0.05 (0.05) / -0.09 (0.22) / +0.14 (0.21) |
+| largest vote p90 (per seed) y0-40 / 160-200 | 0.412 / 0.460 | 0.406 / 0.406 | -0.005 (0.008) / -0.054 (0.024) |
+| largest vote p90 pooled y0-40 / 160-200 | 0.427 / 0.537 | 0.425 / 0.436 | |
+| within-arm drift, top p90 last - first block | +0.048 (0.029) | +0.000 (0.016) | |
+| Pedersen volatility | 13.24 | 12.86 | -0.39 (0.29) |
+| cabinet loss at vote (pp) | 2.66 | 2.92 | +0.26 (0.35) |
+| minority / single-party / largest in cabinet | 0.659 / 0.481 / 0.741 | 0.709 / 0.480 / 0.738 | +0.049 (0.035) / -0.001 / -0.004 |
+| terms ended early | 0.396 | 0.399 | +0.002 (0.021) |
+| votes giving one party a majority | 0.062 | 0.025 | -0.038 (0.020) |
+| days vote -> government, mean / SD (majorities 0) | 29.1 / 29.2 | 29.4 / 29.9 | +0.3 (1.1) / +0.7 (1.4) |
+| talks needing a second attempt | 0.247 | 0.228 | -0.019 (0.024) |
+
+In the full engine HEAD concentrates less than the pure walk showed (ENP 4.33 -> 4.16, pooled top p90 0.43 -> 0.54);
+the tree holds the tail flat (pooled p90 0.44 at 160-200, one-party majorities 6.2% -> 2.5%), t ~ -2 at 16 seeds.
+ENP differences sit inside noise. Every cabinet moment unchanged. Mean days 29 in both arms against
+FORMATION_MEAN_DAYS 33.7 (pre-existing, not from this change). Pedersen ~13 in both, twice formation_report's 6.8.

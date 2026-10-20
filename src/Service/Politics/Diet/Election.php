@@ -98,10 +98,26 @@ final class Election
     public const LASTING_SWING_VARIANCE = 0.0118 - (self::TERM_YEARS * self::NORMAL_VOTE_DRIFT_VARIANCE / 2.0
         * (1.0 - (self::NORMAL_VOTE_PERSISTENCE ** (2.0 * self::TERM_YEARS))) / (1.0 - (self::NORMAL_VOTE_PERSISTENCE ** self::TERM_YEARS)));
     /**
-     * Yearly variance of a party's log normal vote times its normal vote, a random walk beyond its lasting swing: twice
-     * the 0.341e-3 a year West European parties' semivariogram rises by (ParlGov), so realignments build over decades.
+     * Yearly variance of a party's log normal vote times its normal vote, beyond its lasting swing: fitted with its
+     * half-life to West European parties' semivariogram over 10-55 years (ParlGov), so realignments build over decades.
      */
-    public const NORMAL_VOTE_DRIFT_VARIANCE = 2.0 * 0.000341;
+    public const NORMAL_VOTE_DRIFT_VARIANCE = 1.12e-3;
+    /**
+     * Half-life of a party's normal vote's distance from its founding share: realignments last decades, but the party
+     * system does not concentrate without end as it would under neutral drift.
+     */
+    public const NORMAL_VOTE_HALF_LIFE_YEARS = 40.0;
+
+    /**
+     * Variance of a normal vote's drift over some years, as a share of the normal vote: the yearly variance summed
+     * with the pull back toward the founding share undoing it as it builds (an Ornstein-Uhlenbeck spread).
+     */
+    public static function normalVoteDriftVariance(float $years): float
+    {
+        $pull = 2.0 * M_LN2 / self::NORMAL_VOTE_HALF_LIFE_YEARS;
+
+        return self::NORMAL_VOTE_DRIFT_VARIANCE * (1.0 - exp(-$pull * max(0.0, $years))) / $pull;
+    }
 
     /**
      * Votes, seats and positions: the vote is support on the day, seated by D'Hondt, and each party's position moves

@@ -11,9 +11,9 @@ use App\Service\Politics\Diet\OpinionPolls;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The normal votes' walk over decades: a share under neutral drift keeps its mean, and its variance grows with the
- * years as n (1 - n) times the drift variance, the Wright-Fisher form the walk takes once the shares are put back on a
- * whole.
+ * The normal votes' walk over decades: a share starting at its founding share keeps that mean, and its variance grows
+ * as n (1 - n) times the drift variance the pull back leaves (Election::normalVoteDriftVariance()), the Wright-Fisher
+ * form the walk takes once the shares are put back on a whole.
  */
 class NormalVoteDriftTest extends TestCase
 {
@@ -43,11 +43,11 @@ class NormalVoteDriftTest extends TestCase
             $shares = array_column($final, $party);
             $mean = array_sum($shares) / self::PATHS;
             $variance = array_sum(array_map(static fn(float $x): float => ($x - $mean) ** 2, $shares)) / (self::PATHS - 1);
-            $expected = Election::NORMAL_VOTE_DRIFT_VARIANCE * self::YEARS * $start * (1.0 - $start);
+            $expected = Election::normalVoteDriftVariance(self::YEARS) * $start * (1.0 - $start);
 
             $this->assertLessThan(4.0 * sqrt($variance / self::PATHS), abs($mean - $start), "{$party} drifts on average.");
-            // Over forty years the variance compounds a little beyond the linear term (the shares themselves move), so
-            // the band is the linear law within a fifth.
+            // Over forty years the variance compounds a little beyond the law (the shares themselves move), so the band
+            // is the law within a fifth.
             $this->assertEqualsWithDelta($expected, $variance, 0.2 * $expected, "{$party}'s spread after forty years.");
         }
     }

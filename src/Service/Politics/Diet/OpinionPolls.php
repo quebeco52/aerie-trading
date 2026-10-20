@@ -185,8 +185,10 @@ final class OpinionPolls
 
     /**
      * Each party's normal vote some years on, and its lasting share carried with it. The normal drifts as a share does
-     * under neutral drift (Kimura 1955), variance growing with the years and the share, then is renormalised; the
-     * lasting share moves with it, so its lead or deficit on the normal decays unchanged and the two add.
+     * under neutral drift (Kimura 1955), variance growing with the years and the share, is pulled back toward the
+     * party's founding share over Election::NORMAL_VOTE_HALF_LIFE_YEARS (Wright-Fisher with mutation), then is
+     * renormalised; the lasting share moves with it, so its lead or deficit on the normal decays unchanged and the two
+     * add.
      *
      * @param array<string, float> $normals Normal votes by party.
      * @param array<string, float> $lasting Lasting shares by party (empty: none to carry).
@@ -196,10 +198,13 @@ final class OpinionPolls
     public static function walkNormals(array $normals, array $lasting, float $years, array $draws): array
     {
         $walked = [];
+        $kept = exp(-M_LN2 * max(0.0, $years) / Election::NORMAL_VOTE_HALF_LIFE_YEARS);
+        $variance = Election::normalVoteDriftVariance($years);
         foreach (AerieDiet::PARTIES as $party) {
             $normal = $normals[$party] ?? AerieDiet::SEED_VOTE_SHARES[$party];
-            $step = sqrt(Election::NORMAL_VOTE_DRIFT_VARIANCE * max(0.0, $years) * $normal) * ($draws[$party] ?? 0.0);
-            $walked[$party] = max(Election::MIN_VOTE_SHARE, $normal + $step);
+            $founding = AerieDiet::SEED_VOTE_SHARES[$party];
+            $step = sqrt($variance * $normal) * ($draws[$party] ?? 0.0);
+            $walked[$party] = max(Election::MIN_VOTE_SHARE, $founding + (($normal - $founding) * $kept) + $step);
         }
         $total = array_sum($walked);
         $walked = array_map(static fn(float $share): float => $share / $total, $walked);

@@ -36,7 +36,7 @@ class OpinionPollsTest extends TestCase
         }
 
         $n = $normals[Diet::CIVIC];
-        $step = sqrt(Election::NORMAL_VOTE_DRIFT_VARIANCE * 2.0 * $n);
+        $step = sqrt(Election::normalVoteDriftVariance(2.0) * $n);
         [$walked, $carried] = OpinionPolls::walkNormals($normals, $lasting, 2.0, [Diet::CIVIC => 1.0]);
         $this->assertEqualsWithDelta(($n + $step) / (1.0 + $step), $walked[Diet::CIVIC], 1e-15, 'The step, then back on a whole.');
         $this->assertEqualsWithDelta($normals[Diet::VANGUARD] / (1.0 + $step), $walked[Diet::VANGUARD], 1e-15);
@@ -47,6 +47,25 @@ class OpinionPollsTest extends TestCase
 
         [$floored] = OpinionPolls::walkNormals($normals, [], 100.0, [Diet::COMMON_LOT => -50.0]);
         $this->assertGreaterThanOrEqual(Election::MIN_VOTE_SHARE * 0.99, $floored[Diet::COMMON_LOT], 'A collapsing party is kept a rump.');
+    }
+
+    /**
+     * A normal vote away from its founding share comes halfway back over a half-life with nothing drawn, and the
+     * shares stay a whole; one at its founding share stays there.
+     */
+    public function testANormalVoteIsPulledBackTowardItsFoundingShare(): void
+    {
+        $founding = Diet::SEED_VOTE_SHARES;
+        $moved = array_merge($founding, [Diet::CIVIC => $founding[Diet::CIVIC] + 0.10, Diet::VANGUARD => $founding[Diet::VANGUARD] - 0.10]);
+
+        [$back] = OpinionPolls::walkNormals($moved, [], Election::NORMAL_VOTE_HALF_LIFE_YEARS, []);
+
+        $this->assertEqualsWithDelta($founding[Diet::CIVIC] + 0.05, $back[Diet::CIVIC], 1e-12);
+        $this->assertEqualsWithDelta($founding[Diet::VANGUARD] - 0.05, $back[Diet::VANGUARD], 1e-12);
+        $this->assertEqualsWithDelta($founding[Diet::EXCHANGE], $back[Diet::EXCHANGE], 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($back), 1e-12);
+        $this->assertEqualsWithDelta(Election::NORMAL_VOTE_DRIFT_VARIANCE, Election::normalVoteDriftVariance(1e-6) / 1e-6, 1e-8, 'Over a moment the drift is the yearly variance\'s.');
+        $this->assertLessThan(Election::NORMAL_VOTE_DRIFT_VARIANCE * 100.0, Election::normalVoteDriftVariance(100.0), 'Over a century the pull back holds it in.');
     }
 
     /** Through a term the normal votes walk with the polls' clock, and the vote is cast against the walked normals. */

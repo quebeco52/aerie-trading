@@ -59,12 +59,15 @@ final class CoalitionFormation
      */
     public const FORMATION_RESERVATION_STEP = 0.715;
     /**
-     * Mean days one attempt lasts, drawn exponential (a constant hazard); fitted so formations average 33.7 days
-     * (Bäck et al. 2023).
+     * Mean days one attempt lasts, drawn exponential (a constant hazard); fitted so formations last about a month, as
+     * Bäck et al. (2023) record (33.7 days, sd 33.9).
      */
     public const FORMATION_ATTEMPT_DAYS = 22.6;
-    /** Mean days from a vote to its government, single-party majorities included: what the talks average. */
-    public const FORMATION_MEAN_DAYS = 33.7;
+    /**
+     * Mean days from a vote to its government, single-party majorities included, as the talks run in the full game
+     * (var/harness/polls/enp_an.py): what the election pulse is centred on.
+     */
+    public const FORMATION_MEAN_DAYS = 29.3;
 
     // --- Safeguards ---
     /** Attempts after which the cabinet tried takes office regardless; the falling bar ends talks long before. */

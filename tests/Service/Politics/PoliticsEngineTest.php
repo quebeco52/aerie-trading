@@ -124,12 +124,12 @@ class PoliticsEngineTest extends TestCase
      * lose about what the record's governments lose, the Diet is as volatile as the Nordic vote process makes a
      * parliament of eight parties (13; Scandinavia 11 with four or five effective parties, ParlGov), the two big
      * parties hold their seats across the 76 years the record covers, no party drifts into a majority of its own, and
-     * the talks run close to real ones. In the full loop about a third need a second attempt (Golder 2010) and they
-     * last about a month (Bäck, Hellström, Lindvall & Teorell 2023: 33.7 days, sd 33.9), 32% and 33.5 days
-     * (var/harness/politics/formation_report.py); at a trend economy they come easier, 27% and 32 days. They seat the
+     * the talks run close to real ones. About a third need a second attempt (Golder 2010) and they last about a month
+     * (Bäck, Hellström, Lindvall & Teorell 2023: 33.7 days, sd 33.9); in the full loop a quarter and 29 days, sd 30
+     * (var/harness/polls/enp_an.py), and at a trend economy much the same. They seat the
      * governments Scandinavia's bloc parliaments have since 1945 (ParlGov, 68 cabinets): minority cabinets 76% (84%),
      * one party alone 46% (47%), and the parties at the Council axis's ends supporting far more often than they govern.
-     * A bloc puts its leader in office, so the largest party sits in 67% of cabinets (63%), the rest going to the
+     * A bloc puts its leader in office, so the largest party sits in 73% of cabinets (63%), the rest going to the
      * Vanguard's bloc while the Civic Front is the larger; the two largest govern together in 4% (1.5%), as the core
      * votes walk.
      */
@@ -182,13 +182,13 @@ class PoliticsEngineTest extends TestCase
 
         $meanDays = array_sum($talkDays) / count($talkDays);
         $this->assertEqualsWithDelta(0.26, $retried / count($talkDays), 0.04);
-        $this->assertEqualsWithDelta(30.0, $meanDays, 3.0);
+        $this->assertEqualsWithDelta(29.0, $meanDays, 3.0);
         $this->assertEqualsWithDelta(CoalitionFormation::FORMATION_MEAN_DAYS, $meanDays, 4.0, 'The uncertainty index is compensated for talks of another length.');
         $this->assertEqualsWithDelta(29.0, sqrt(array_sum(array_map(static fn(float $d): float => ($d - $meanDays) ** 2, $talkDays)) / count($talkDays)), 5.0);
         $this->assertEqualsWithDelta(0.74, $minority / count($talkDays), 0.06);
         $this->assertEqualsWithDelta(0.48, $single / count($talkDays), 0.04);
         $this->assertLessThan(0.05, $twoLargest / count($talkDays));
-        $this->assertEqualsWithDelta(0.67, $largestIn / count($talkDays), 0.04);
+        $this->assertEqualsWithDelta(0.73, $largestIn / count($talkDays), 0.04);
         $this->assertLessThan(0.08, $radicalIn / (2 * count($talkDays)), 'The Council axis\'s ends sit in cabinet too often.');
         $this->assertGreaterThan(3 * $radicalIn, $radicalSupports, 'The Council axis\'s ends govern rather than support.');
 
