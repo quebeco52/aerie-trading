@@ -25,7 +25,7 @@ use App\Service\Model\ModelParam;
  *   non-linearly with capacity utilization.
  * - During technological super-cycles, running fabs at 100% capacity generates staggering ROIC (35%+).
  * - During industry inventory corrections, underutilized fabs create brutal earnings drag.
- * - Severe Technological Obsolescence: If R&D/CapEx drops below critical hurdle rates, fab yields collapse.
+ * - Technological Obsolescence: a fab that stops investing loses capacity and return as its plant ages.
  */
 class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 {
@@ -148,12 +148,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
      */
     public const GLUT_CAPACITY_UTILIZATION_THRESHOLD = -0.030;
 
-    // --- CapEx Hurdle & Wafer Yield Rails ---
-    /** Minimum CapEx-to-depreciation ratio required to maintain cleanroom purity and lithography calibration. */
-    public const CAPEX_HURDLE_RATIO        = 0.40;
-    /** Variable margin penalty applied when underinvestment degrades silicon wafer yields. */
-    public const WAFER_SCRAP_PENALTY       = 0.08;
-
     // --- Geopolitical & Export Ban Physics ---
     /** Negative z-score threshold triggering geopolitical export restrictions (`Z < -2.20`). */
     public const EXPORT_BAN_Z_THRESHOLD = -2.20;
@@ -262,20 +256,11 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // CapEx Hurdle Rate & Yield Penalties
-        // In semiconductor manufacturing, massive ongoing CapEx is mandatory table stakes to maintain cleanroom purity.
-        // Underinvestment scrap penalties compress margins proportionally on physical foundry operations.
-        $capexRatio = (float) $stock->getCapexRatio();
-        $yieldModifier = 0.0;
-        if ($capexRatio < self::CAPEX_HURDLE_RATIO) {
-            $yieldModifier = self::WAFER_SCRAP_PENALTY * $foundryWeight; // Scaled by foundry weight
-        }
-
         // Cleanroom electricity, specialty gases and chemicals, raw wafers and fab payroll reach the cost base at
         // spot; scarce leading-edge capacity recovers most of it in wafer pricing. Fabless IP carries no such cost.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier + $inputCostDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

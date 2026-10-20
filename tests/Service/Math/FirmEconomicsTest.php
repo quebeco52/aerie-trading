@@ -25,6 +25,23 @@ class FirmEconomicsTest extends TestCase
         $this->assertTrue(is_finite(FirmEconomics::calculatePerUnitCostRatio(0.20, 0.0)));
     }
 
+    /**
+     * Each stream's ratio is its intensity against the mix, scaled so the revenue-weighted blend is the firm's ratio:
+     * the streams keep their relative costs and none goes negative, at a thin firm ratio as at a thick one.
+     */
+    public function testStreamCostRatiosBlendToTheFirmsRatioAndStayPositive(): void
+    {
+        $weights = ['trade' => 0.9, 'seconds' => 0.1];
+        $intensities = ['trade' => 0.85, 'seconds' => 1.20];
+        foreach ([0.05, 0.20, 0.95] as $firmRatio) {
+            $ratios = FirmEconomics::streamCostRatios($firmRatio, $weights, $intensities);
+
+            $this->assertEqualsWithDelta($firmRatio, (0.9 * $ratios['trade']) + (0.1 * $ratios['seconds']), 1e-12);
+            $this->assertEqualsWithDelta(1.20 / 0.85, $ratios['seconds'] / $ratios['trade'], 1e-12);
+            $this->assertGreaterThan(0.0, $ratios['trade']);
+        }
+    }
+
     public function testCalculateCapacityUtilization(): void
     {
         // Neutral conditions (0 output gap, 0 overhang)

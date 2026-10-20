@@ -218,10 +218,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * modelled average annual loss of $117B against $895B of 2024 US P&C premiums earned (~13%).
      */
     public const DISTRICT_CATASTROPHE_LOAD = 0.13;
-    /** Persisted state key: the district loss burden at the last report, the base its incurred flow is read from. */
-    public const STATE_CATASTROPHE_BURDEN_AT_REPORT = 'state:claims:catastrophe_burden';
-    /** Persisted state key: the clock at the last report, so the flow covers the time since it. */
-    public const STATE_CATASTROPHE_BURDEN_READ_AT = 'state:claims:catastrophe_burden_at';
     /**
      * District loss burden (average-year units, smoothed) at which the market hardens for every carrier, capital shock
      * or not (the 1992, 2005 and 2017 seasons).
@@ -749,20 +745,9 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     private function resolveDistrictCatastropheSurprise(StreamContext $streams, MacroStateDTO $macroState): float
     {
-        $burden = $macroState->catastropheLossIndex;
-        $readAt = $streams->getPersistedState(self::STATE_CATASTROPHE_BURDEN_READ_AT, -1.0);
-        $streams->registerState(self::STATE_CATASTROPHE_BURDEN_AT_REPORT, $burden);
-        $streams->registerState(self::STATE_CATASTROPHE_BURDEN_READ_AT, $macroState->totalTime);
+        $read = $this->resolveDistrictCatastropheIncurred($streams, $macroState);
 
-        $window = $macroState->totalTime - $readAt;
-        if ($readAt < 0.0 || $window <= 0.0) {
-            return 0.0;
-        }
-
-        $expected = CommodityLogisticsSubsystem::expectedCatastropheIncurred($macroState->totalTime, $window);
-        $incurred = CommodityLogisticsSubsystem::catastropheIncurredSince($burden, $streams->getPersistedState(self::STATE_CATASTROPHE_BURDEN_AT_REPORT, $burden), $window);
-
-        return $expected > 0.0 ? ($incurred / $expected) - 1.0 : 0.0;
+        return $read !== null && $read['expected'] > 0.0 ? ($read['incurred'] / $read['expected']) - 1.0 : 0.0;
     }
 
     /**

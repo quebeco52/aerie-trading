@@ -457,6 +457,28 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertSame(1.00, $peer['dividend_paid'], 'A profitable year is not a cut.');
     }
 
+    /** @return iterable<string, array{string}> */
+    public static function commodityProducers(): iterable
+    {
+        yield 'miner' => ['Copper'];
+        yield 'oil producer' => ['Oil & Gas E&P'];
+    }
+
+    /**
+     * A miner pays a share of each year's earnings (BHP and Rio Tinto since 2016), and an oil producer a base already
+     * set on long-run earnings: on a profitable year of falling earnings each follows its target down at its own speed
+     * where another payer holds its dividend, and borrows nothing to pay it.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('commodityProducers')]
+    public function testACommodityProducerLetsItsDividendFallWithEarnings(string $industry): void
+    {
+        [$miner, $minerStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), industry: $industry);
+
+        $target = 1.00 * $minerStock->getPolicyPayoutRatio();
+        $this->assertLessThan(1.00, $target, 'Control: the target payout sits below the dividend.');
+        $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $miner['dividend_paid'], 1e-9);
+    }
+
     /**
      * Cuts follow losses (DeAngelo, DeAngelo & Skinner 1992): after a loss year a payer follows its target payout
      * down at its own adjustment speed. One known for an unbroken record of increases does not cut by choice even
@@ -656,11 +678,11 @@ class CapitalAllocationEngineTest extends TestCase
      *
      * @return array{0: array<string, mixed>, 1: Stock}
      */
-    private function payDividendOnFallingEarnings(bool $aristocrat, DebtHealthDTO $health, string $roic = '0.12', string $trailingNetIncome = '4000000.00'): array
+    private function payDividendOnFallingEarnings(bool $aristocrat, DebtHealthDTO $health, string $roic = '0.12', string $trailingNetIncome = '4000000.00', string $industry = 'Software - Infrastructure'): array
     {
         $stock = new Stock();
         $stock->setTicker($aristocrat ? 'ARIS' : 'PEER');
-        $stock->setIndustry('Software - Infrastructure');
+        $stock->setIndustry($industry);
         $stock->setSharesOutstanding('1000000');
         $stock->setPrice('100.00');
         $stock->setTotalEquity('100000000');
@@ -1047,6 +1069,27 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertGreaterThan(0.20, $rising['dividend_paid'], 'Control must want to raise the dividend, or the freeze is untestable.');
         $this->assertSame(0.20, $frozen['dividend_paid'], 'A breach holds the distribution where it stands.');
         $this->assertGreaterThan(0.0, $frozen['dividend_paid'], 'A freeze is not a cut: falling earnings and a liquidity crisis own that case.');
+    }
+
+    /**
+     * A boom quarter's run rate does not make the stock cheap: the board judges the price on the earnings its multiple
+     * is struck on, so a firm priced far above them buys nothing back however rich the quarter, and one priced below
+     * them does.
+     */
+    public function testABoomQuarterDoesNotMakeADearStockLookCheap(): void
+    {
+        $repurchased = function (float $price): float {
+            $stock = $this->buildDistributor('BOOM');
+            $stock->setCorporateTreasury('0');
+            $stock->setRoicTtm('0.30');
+            $engine = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(true)));
+            $result = $engine->allocateCapital($stock, 400.00, 1.00, $price, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), actualTotalNetIncome: 1000000.0);
+
+            return 1000000.0 - $result['new_shares'];
+        };
+
+        $this->assertGreaterThan(0.0, $repurchased(300.0), 'Below its multiple the firm buys, or the comparison proves nothing.');
+        $this->assertSame(0.0, $repurchased(3000.0), 'Far above its multiple a rich quarter is no reason to buy.');
     }
 
     private function debtEngineReturning(DebtHealthDTO $health): DebtEngine

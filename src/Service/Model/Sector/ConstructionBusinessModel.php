@@ -113,6 +113,14 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
 
     /** Commercial orders per unit of net tightening in bank lending standards, both ways: +0.2 cuts orders 6%. */
     public const SLOOS_CREDIT_TIGHTENING_SCALAR = 0.30;
+    /** Commercial orders per unit of lagged output gap at cyclicality 1: a -2% gap takes 3% off. */
+    public const COMMERCIAL_GAP_ORDER_SENSITIVITY = 1.50;
+    /**
+     * Commercial orders per unit of office and retail values off their settled level: developers build when it pays.
+     */
+    public const COMMERCIAL_PROPERTY_ORDER_SENSITIVITY = 0.30;
+    /** Commercial orders per unit of house prices off their settled level: mixed-use and retail follow housing. */
+    public const RESIDENTIAL_PRICE_ORDER_SENSITIVITY = 0.20;
     /**
      * Private EPC orders lost per unit of real policy rate above r*: 100bp of tight stance takes 2% off awards before
      * cyclicality, and an easy one adds back its share (FinancialConstants::RATE_EASING_SLOPE_SHARE).
@@ -293,7 +301,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         // Lending standards both ways: tighter than neutral holds orders back, looser lets them through.
         $sloosDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_CREDIT_TIGHTENING_SCALAR;
 
-        $commercialMacroBoost = ($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift + ($macroState->creditToGdpGapEma * self::CREDIT_GAP_ORDER_SENSITIVITY);
+        $commercialMacroBoost = ($outputGap * self::COMMERCIAL_GAP_ORDER_SENSITIVITY * $beta) + ($commercialPropertyShift * self::COMMERCIAL_PROPERTY_ORDER_SENSITIVITY) + ($residentialShift * self::RESIDENTIAL_PRICE_ORDER_SENSITIVITY) + $housingStartsShift + ($macroState->creditToGdpGapEma * self::CREDIT_GAP_ORDER_SENSITIVITY);
         // Policy stance is the real rate gap, nominal policy less expected inflation less r* (Laubach & Williams 2003).
         $realRateGap = $policyRate - $macroState->tipsBreakevenEma - $macroState->naturalRateEma;
         // Both ways, unevenly: tight money holds awards back at the full slope, easy money lets some more through.

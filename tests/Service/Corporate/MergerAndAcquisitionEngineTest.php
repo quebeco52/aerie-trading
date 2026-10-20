@@ -514,6 +514,25 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertBalanced($stock, 'a stock-for-stock acquisition');
     }
 
+    /**
+     * A loss year does not make a fairly priced acquirer's paper dear: it is judged on the earnings its multiple is
+     * struck on, so a deal goes out in stock only when the price runs far above them.
+     */
+    public function testALossYearDoesNotMakeAFairlyPricedAcquirerPayInStock(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('PAPR', treasury: 2_000_000_000.0, debt: 1_000_000_000.0, shares: 1_000_000_000.0);
+        $stock->setRoicTtm('0.20');
+        $stock->setEarningsPerShare('-1.00');
+        $stock->setPrice('40.00');
+        $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
+        $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
+
+        $sharesBefore = (float) $stock->getSharesOutstanding();
+        $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
+
+        $this->assertSame($sharesBefore, (float) $stock->getSharesOutstanding(), 'No deal is paid in paper the board does not think dear.');
+    }
+
     public function testLeveragedAcquisitionKeepsTheBalanceSheetBalanced(): void
     {
         // Cash sits at its operating target, so the deal is funded by borrowing against an under-levered book.

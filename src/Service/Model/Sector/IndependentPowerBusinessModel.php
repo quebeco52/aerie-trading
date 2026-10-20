@@ -15,7 +15,6 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
-use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for independent power producers: merchant generators with no rate base.
@@ -123,13 +122,6 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
      * quarters.
      */
     public const HEDGE_LADDER_TRANCHES = 4;
-    /** Persisted state key prefix: sum of the power strikes already locked for delivery 0-3 quarters ahead. */
-    public const STATE_POWER_STRIKE_SUM_PREFIX = 'state:power_hedge_strike_sum_';
-    /**
-     * Persisted state key prefix: sum of the gas strikes already locked for delivery 0-3 quarters ahead, bought with
-     * the gas-fired power sold.
-     */
-    public const STATE_GAS_STRIKE_SUM_PREFIX = 'state:gas_hedge_strike_sum_';
 
     // --- Revenue Shock Physics ---
     /**
@@ -211,6 +203,43 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
      *
      * @return array{wholesale: float, capacity: float, gas_fleet: float, hedge_ratio: float}
      */
+    /** @return array<int, float> */
+    public function getSeasonalityFactors(): array
+    {
+        return self::powerSeasonFactors(self::WHOLESALE_GENERATION_WEIGHT / (self::WHOLESALE_GENERATION_WEIGHT + self::CAPACITY_PAYMENT_WEIGHT));
+    }
+
+    /** @return array<int, float> */
+    public function resolveSeasonalityFactors(Stock $stock): array
+    {
+        return self::powerSeasonFactors($this->resolveRevenueMix($stock)['wholesale']);
+    }
+
+    /** The season is in the power price, not in the stations' activity: staff and maintenance run through the year. */
+    public function getSeasonalFixedCostShare(): float
+    {
+        return 0.0;
+    }
+
+    /**
+     * The firm-level season of a revenue mix whose wholesale share sells at the power price and whose capacity payments
+     * are flat: the power season as the smoothed index carries it in the quarter the report is filed, the one after the
+     * quarter it covers, since the physics reads the price at filing.
+     *
+     * @return array<int, float>
+     */
+    private static function powerSeasonFactors(float $wholesaleShare): array
+    {
+        $raw = [];
+        for ($quarter = 0; $quarter < (int) FinancialConstants::QUARTERS_PER_YEAR; ++$quarter) {
+            $filingMidpoint = ($quarter + 1.5) * FinancialConstants::QUARTER_YEARS;
+            $raw[] = (1.0 - $wholesaleShare) + ($wholesaleShare * CommodityLogisticsSubsystem::smoothedPowerSeason($filingMidpoint));
+        }
+        $mean = array_sum($raw) / count($raw);
+
+        return array_map(static fn(float $factor): float => $factor / $mean, $raw);
+    }
+
     public function resolveRevenueMix(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
@@ -260,8 +289,8 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         $output = $zeroFuelOutput + $gasOutput;
 
         // --- Prices: the forward ladders and spot ---
-        $powerStrike = $this->rollLadder($streams, self::STATE_POWER_STRIKE_SUM_PREFIX, fn(int $quarters): float => $this->powerForward($macroState, $quarters / 4.0));
-        $gasStrike = $this->rollLadder($streams, self::STATE_GAS_STRIKE_SUM_PREFIX, fn(int $quarters): float => $this->gasForward($macroState, $quarters / 4.0));
+        $powerStrike = $streams->rollHedgeLadder(FinancialConstants::STATE_POWER_STRIKE_SUM_PREFIX, self::HEDGE_LADDER_TRANCHES, static fn(int $quarters): float => CommodityLogisticsSubsystem::powerForwardRelative($macroState, $quarters * FinancialConstants::QUARTER_YEARS));
+        $gasStrike = $streams->rollHedgeLadder(FinancialConstants::STATE_GAS_STRIKE_SUM_PREFIX, self::HEDGE_LADDER_TRANCHES, static fn(int $quarters): float => CommodityLogisticsSubsystem::gasForwardRelative($macroState, $quarters * FinancialConstants::QUARTER_YEARS));
         $powerSpot = max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroConstants::WHOLESALE_POWER_BASELINE;
         $gasSpot = max(0.0, $macroState->naturalGasPriceIndexEma) / MacroConstants::NATURAL_GAS_BASELINE;
 
@@ -272,9 +301,13 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         $gasPaid = $gasOutput > 0.0 ? (($gasHedged * $gasStrike) + (($gasOutput - $gasHedged) * $gasSpot)) / $gasOutput : $gasSpot;
 
         // --- Revenue ---
-        // The engine priced the capacity share's escalator over the whole firm; it belongs to the contracts alone.
+        // The engine priced the capacity share's escalator over the whole firm; it belongs to the contracts alone. It
+        // also carried the declared season as volume, which is in the power price the stations sell at, so it is
+        // taken back out.
         $passThrough = (float) ($stock->getInflationPassThrough() ?? 0.0);
-        $baseRevenue = $expectedRevenue / (1.0 + ($capacityWeight * $passThrough));
+        $quarter = $this->reportedCalendarQuarter();
+        $firmSeason = $quarter !== null ? $this->resolveSeasonalityFactors($stock)[$quarter] : 1.0;
+        $baseRevenue = $expectedRevenue / (1.0 + ($capacityWeight * $passThrough)) / $firmSeason;
         $streamRevenues = [
             'wholesale_generation' => max(0.0, $baseRevenue * $wholesaleWeight * $wholesalePriced),
             'capacity_payments'    => max(0.0, $baseRevenue * $capacityWeight * (1.0 + $passThrough) * $availability
@@ -298,7 +331,7 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         // it.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $nonFuelCostRatio);
         $costRatioAtBase = $volumeRevenue > 0.0
-            ? (($nonFuelCostRatio * $volumeRevenue) + $fuelAtBase + $fuelChange) / $volumeRevenue + $inputCostDrag + $repairCost
+            ? (($nonFuelCostRatio * $volumeRevenue) + $fuelAtBase + $fuelChange) / $volumeRevenue + $inputCostDrag
             : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($costRatioAtBase, $priceRelative));
 
@@ -327,6 +360,9 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
                 'hedge_gain'          => $actualRevenue > 0.0 ? $hedgeGain / $actualRevenue : 0.0,
                 'availability'        => $availability,
             ],
+            // The repair is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
+            // ratio.
+            specialCharge: $repairCost * $baseRevenue,
         );
     }
 
@@ -337,63 +373,6 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
     private function resolveGasDispatchShift(Stock $stock, MacroStateDTO $macroState): float
     {
         return $macroState->outputGapEma * $this->getOperatingCyclicality($stock) / self::SYSTEM_GAS_GENERATION_SHARE;
-    }
-
-    /**
-     * Rolls one forward ladder a quarter and returns the strike delivered this quarter.
-     *
-     * @param callable(int): float $forward Forward price relative to baseline, for delivery that many quarters ahead.
-     */
-    private function rollLadder(StreamContext $streams, string $prefix, callable $forward): float
-    {
-        $sums = [];
-        for ($d = 0; $d < self::HEDGE_LADDER_TRANCHES; $d++) {
-            $sums[] = $streams->getPersistedState($prefix . $d, 0.0);
-        }
-        $ladder = FirmEconomics::rollHedgeLadder($sums, $forward);
-        foreach ($ladder['sums'] as $d => $sum) {
-            $streams->registerState($prefix . $d, $sum);
-        }
-
-        return $ladder['strike'];
-    }
-
-    /**
-     * Wholesale power's forward relative to its baseline for delivery `$years` ahead: deseasoned gas passed through at
-     * the market's elasticity, the implied heat rate at its mean (it reverts within weeks), the delivery date's season
-     * as the smoothed index will carry it, and the carbon adder at today's carbon price.
-     */
-    private function powerForward(MacroStateDTO $macroState, float $years): float
-    {
-        return (CommodityLogisticsSubsystem::gasPowerPassThrough($this->deseasonedGasForward($macroState, $years))
-                * CommodityLogisticsSubsystem::smoothedPowerSeason($macroState->totalTime + $years))
-            + CommodityLogisticsSubsystem::carbonPowerPriceUplift($macroState->carbonPrice);
-    }
-
-    /**
-     * Gas's forward relative to its baseline for delivery `$years` ahead, carrying the delivery date's season as the
-     * smoothed index will.
-     */
-    private function gasForward(MacroStateDTO $macroState, float $years): float
-    {
-        return $this->deseasonedGasForward($macroState, $years) * CommodityLogisticsSubsystem::smoothedGasSeason($macroState->totalTime + $years);
-    }
-
-    /**
-     * Gas's forward out of season: oil's Schwartz forward times the gas-to-oil ratio's, the ratio read before the
-     * season goes on.
-     */
-    private function deseasonedGasForward(MacroStateDTO $macroState, float $years): float
-    {
-        $oil = CommodityLogisticsSubsystem::energyForwardPrice(
-            $macroState->energyBasePrice,
-            $macroState->energyPriceIndexEma,
-            $macroState->globalDemandGapEma,
-            $macroState->energySupplyEma,
-            $years,
-        ) / MacroConstants::ENERGY_BASELINE;
-
-        return $oil * CommodityLogisticsSubsystem::gasOilRatioForward(exp($macroState->gasOilRatioLog), $years);
     }
 
     /**

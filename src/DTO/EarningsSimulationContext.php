@@ -54,6 +54,12 @@ class EarningsSimulationContext
     public float $capacityUtilization = 0.0;
     /** Capacity utilization without the firm's own demand shock and jump this quarter: the output analysts forecast. */
     public float $capacityUtilizationBeforeShocks = 0.0;
+    /**
+     * The volume a model moves inside its own sector physics, as a factor on capacity utilisation: 1 plus
+     * resolveSectorActivityShift() at the opening order book, so every reader of the plant's load sees the same
+     * activity.
+     */
+    public float $sectorActivityFactor = 1.0;
     public float $structuralRevenue = 0.0;
     public float $expectedRevenue = 0.0;
     /**
@@ -282,6 +288,8 @@ class EarningsSimulationContext
     public float $reportedActualNetIncome = 0.0;
     /** Dollars the published EPS estimate sits below the unbiased one (MarketConsensusEngine::epsWalkDown()). */
     public float $consensusWalkDown = 0.0;
+    /** The sd of the firm's quarterly earnings surprise in dollars, as its record measures it. */
+    public float $earningsSurpriseSd = 0.0;
     public float $truePostTaxReturn = 0.0;
 
     // EPS & Gap

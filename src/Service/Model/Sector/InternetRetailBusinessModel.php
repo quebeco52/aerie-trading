@@ -359,16 +359,17 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Structural Margin Blending ---
-        // Calculate organic costs for the high-margin divisions
-        $tpCosts = $tpRevenue * self::THIRD_PARTY_COST_RATIO;
-        $adsCosts = $adsRevenue * self::DIGITAL_ADS_COST_RATIO;
-
         // The 1P cost ratio is what the plan leaves after 3P and ads at their planned revenue: struck on realized
         // 3P/ads costs, a 3P surge would cut the 1P ratio by exactly its own cost and come out costless.
         $targetTotalCosts = $expectedRevenue * $realizedVariableMargin;
         $plannedTpAdsCosts = $expectedRevenue * (($tpWeight * self::THIRD_PARTY_COST_RATIO) + ($adsWeight * self::DIGITAL_ADS_COST_RATIO));
         $fpBaselineCosts = max(0.0, $targetTotalCosts - $plannedTpAdsCosts);
         $fpVariableMargin = $expectedRevenue * $fpWeight > 0 ? $fpBaselineCosts / ($expectedRevenue * $fpWeight) : $realizedVariableMargin;
+        // A marketplace with no first-party line has no line left to absorb the engine's cost ratio, so its own lines
+        // carry it: the quarter's margin noise, the cycle and the plant's overtime reach it as they reach any firm.
+        $tpAdsScale = ($expectedRevenue * $fpWeight > 0.0 || $plannedTpAdsCosts <= 0.0) ? 1.0 : $targetTotalCosts / $plannedTpAdsCosts;
+        $tpCosts = $tpRevenue * self::THIRD_PARTY_COST_RATIO * $tpAdsScale;
+        $adsCosts = $adsRevenue * self::DIGITAL_ADS_COST_RATIO * $tpAdsScale;
 
         $fxShift = $macroState->exchangeRateGap();
         $fpCostSavings = $fpRevenue * $fxShift * self::IMPORT_SOURCING_FX_SCALAR;

@@ -21,6 +21,28 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         $this->model = new ToolsAndAccessoriesBusinessModel();
     }
 
+    /**
+     * Seconds sold under discount brands cost more per unit of revenue than trade tools at list, at any firm ratio: a
+     * housing boom that lifts only the consumer line raises the blended cost ratio. A consumer ratio struck as what the
+     * commercial line left over ran negative at Crossbill's thin ratio, and the boom cut its costs.
+     */
+    public function testSecondsCostMoreThanTradeToolsAtAnyFirmRatio(): void
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $ratio = fn(float $housingStarts): float => $this->model->computeActualFinancials(
+            (new Stock())->setTicker('CBIL'),
+            100.0,
+            0.20,
+            0.0,
+            0.0,
+            new MacroStateDTO(housingStartsIndexEma: $housingStarts, exchangeRateIndexEma: 100.0),
+            $math,
+        )->clampedMargin;
+
+        $this->assertGreaterThan($ratio(100.0), $ratio(130.0));
+    }
+
     public function testDualStreamEmissionAndFxMetalsSensitivity(): void
     {
         $stock = new Stock();

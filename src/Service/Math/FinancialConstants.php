@@ -473,6 +473,17 @@ class FinancialConstants
      * above the founding level, as a fraction of it; the market prices a change in public spending against it.
      */
     public const STATE_PUBLIC_SPENDING_EARNINGS_SHARE = 'state:public_spending_earnings_share';
+    /** Stream-state key prefix: sum of the power strikes already locked for delivery 0..n-1 quarters ahead. */
+    public const STATE_POWER_STRIKE_SUM_PREFIX = 'state:power_hedge_strike_sum_';
+    /**
+     * Stream-state key prefix: sum of the gas strikes already locked for delivery 0..n-1 quarters ahead, bought with
+     * the gas-fired power sold.
+     */
+    public const STATE_GAS_STRIKE_SUM_PREFIX = 'state:gas_hedge_strike_sum_';
+    /** Stream-state key: the district catastrophe burden at the firm's last report, the start of its loss window. */
+    public const STATE_CATASTROPHE_BURDEN_AT_REPORT = 'state:claims:catastrophe_burden';
+    /** Stream-state key: when the burden was last read, so the window spans the time since that report. */
+    public const STATE_CATASTROPHE_BURDEN_READ_AT = 'state:claims:catastrophe_burden_at';
 
     // --- ETF Creation, Redemption and the Arbitrage Band (Petajisto 2017; Madhavan 2016) ---
     /** Shares a fund is seeded with, so a creation has a book to be measured against on the first tick. */

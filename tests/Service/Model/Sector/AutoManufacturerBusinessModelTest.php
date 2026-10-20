@@ -25,6 +25,22 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->mathUtility = new MathUtility();
     }
 
+    /**
+     * Vehicles are sold from stock, so the purchase swing lands on expected revenue and the engine's utilisation
+     * carries it: an automaker does not route its cycle through the machinery order book it inherits.
+     */
+    public function testThePurchaseSwingLandsOnExpectedRevenue(): void
+    {
+        $model = new AutoManufacturerBusinessModel();
+        $stock = (new Stock())->setTicker('AUTO');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, manufacturingPmiEma: 45.0, exchangeRateIndexEma: 100.0);
+
+        $swing = (new \ReflectionMethod($model, 'resolveCycleDemandShift'))->invoke($model, $stock, $recession);
+        $this->assertLessThan(0.0, $swing);
+        $this->assertSame($swing, $model->getMacroPhysics($stock, $recession)['macro_demand_shift']);
+        $this->assertSame(0.0, $model->resolveSectorActivityShift($stock, $recession));
+    }
+
     public function testTriStreamEmissionAndSumConsistency(): void
     {
         $stock = new Stock();
@@ -87,6 +103,31 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(25_000_000.0, $result->streamRevenue['apex_luxury'], 1.0);
         $this->assertEqualsWithDelta(8_000_000.0, $result->streamRevenue['software_telematics'], 1.0);
         $this->assertEqualsWithDelta(12_000_000.0, $result->streamRevenue['captive_finance'], 1.0);
+    }
+
+    /**
+     * The luxury line feels less of the purchase swing than the fleet: its order book absorbs an ordinary slowdown, so
+     * with equity wealth on its trend a recession takes the apex loading of the mass market's fall off it. The engine
+     * lands the swing on expected revenue; the physics hands each line its share of it on top.
+     */
+    public function testTheApexLineFeelsLessOfThePurchaseSwingThanTheFleet(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $stock = (new Stock())->setTicker('FALC');
+        $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, $macro, $mathMock);
+
+        $calmMacro = new MacroStateDTO(policyRateEma: self::NEUTRAL_POLICY_RATE);
+        $slumpMacro = new MacroStateDTO(policyRateEma: self::NEUTRAL_POLICY_RATE, outputGapEma: -0.03);
+        $cycle = new \ReflectionMethod($this->model, 'resolveCycleDemandShift');
+        $swing = $cycle->invoke($this->model, $stock, $slumpMacro) - $cycle->invoke($this->model, $stock, $calmMacro);
+        $calm = $run($calmMacro);
+        $slump = $run($slumpMacro);
+        $apexFall = $swing + ($slump->streamRevenue['apex_luxury'] / $calm->streamRevenue['apex_luxury']) - 1.0;
+        $fleetFall = $swing + ($slump->streamRevenue['mass_market_sales'] / $calm->streamRevenue['mass_market_sales']) - 1.0;
+
+        $this->assertLessThan(0.0, $apexFall);
+        $this->assertEqualsWithDelta(AutoManufacturerBusinessModel::APEX_CYCLE_LOADING, $apexFall / $fleetFall, 1e-6);
     }
 
     public function testApexLuxuryFollowsEquityWealthAgainstItsTrend(): void
@@ -453,8 +494,10 @@ class AutoManufacturerBusinessModelTest extends TestCase
     }
 
     /**
-     * Credit losses and the funding squeeze are the loan book's: a maker with no finance arm feels none of them, and
-     * one with an arm pays them on the book's interest income. They used to be charged to the telematics line.
+     * Credit losses are the loan book's: a maker with no finance arm feels none of them, and one with an arm pays them
+     * on the book's interest income, in proportion to the default rates. They used to be charged to the telematics
+     * line, and an inverted curve and wide spreads no longer reach a match-funded book whose defaults already carry
+     * them.
      */
     public function testCreditCostsLandOnTheLoanBookNotTheTelematicsLine(): void
     {
@@ -482,12 +525,9 @@ class AutoManufacturerBusinessModelTest extends TestCase
         // EIDR's fleets finance through their own banks.
         $this->assertEqualsWithDelta($run('EIDR', $calm)->actualVariableCosts, $run('EIDR', $stress)->actualVariableCosts, 1e-3);
 
-        // FALC's book: +0.05 retail and +0.02 corporate provisions, the curve from a 0.3pp gain to a 2.96pp squeeze,
-        // and +1pp of CECL reserve, all on its 12M of finance income.
-        $nimCalm = AutoManufacturerBusinessModel::NIM_SPREAD_BUFFER - 0.01;
-        $nimStress = (AutoManufacturerBusinessModel::NIM_SPREAD_BUFFER + 0.015)
-            + ((0.015 * AutoManufacturerBusinessModel::YIELD_CURVE_INVERSION_SENSITIVITY) ** 2) * AutoManufacturerBusinessModel::NIM_QUADRATIC_COEFF;
-        $creditCost = 0.05 + 0.02 + ($nimStress - $nimCalm) + 0.01;
+        // FALC's book at doubled default rates: +0.10 of retail losses and +0.02 of floor-plan provisions on its 12M of
+        // finance income.
+        $creditCost = AutoManufacturerBusinessModel::CAPTIVE_RETAIL_LOSS_SHARE + AutoManufacturerBusinessModel::CORPORATE_DEFAULT_PROVISION_SCALAR;
         $falcCalm = $run('FALC', $calm);
         $falcStress = $run('FALC', $stress);
         $this->assertEqualsWithDelta($falcCalm->streamRevenue['captive_finance'], $falcStress->streamRevenue['captive_finance'], 1e-3);

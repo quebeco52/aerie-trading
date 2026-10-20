@@ -892,11 +892,13 @@ class StockModelTuning
 
         // --- Heron Regional Water (WADE) --- Regulated municipal water & wastewater utility. Pure regulated rate base
         // monopoly (95%); the market-based 5% is contract operations for municipal and industrial systems, not power
-        // sales.
+        // sales. Its mains are buried: a storm reaches its treatment plants and pumping power, not the network, so it
+        // takes a quarter of an overhead grid's storm damage.
         'WADE' => [
             ModelParam::RegulatedBaseWeight->value       => 0.95,
             ModelParam::UnregulatedMerchantWeight->value => 0.05,
             ModelParam::MerchantPowerShare->value        => 0.00,
+            ModelParam::StormDamageExposure->value       => 0.25,
         ],
 
         // --- Dipper Generation (DIPR) ---

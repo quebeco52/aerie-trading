@@ -184,50 +184,47 @@ class TradingEconomicsIndicatorsTest extends TestCase
         );
     }
 
-    public function testHousingStartsTobinQAndUserCostResponse(): void
+    public function testHousingStartsTobinQAndCreditResponse(): void
     {
         $dt = 0.25;
 
-        // 1. Housing boom: high residential property values, low mortgage user costs, loose credit
+        // 1. Housing boom: high residential property values, loose credit. The regime is held, so its unemployment
+        // gap is not moving and forms no households of its own.
         $boomState = (new MacroStateBuilder())
             ->asExpansion()
             ->build();
+        $boomState->unemploymentRateEma = $boomState->unemploymentRate;
         $boomState->residentialPropertyIndex = 135.0; // High house prices relative to baseline
         $boomState->industrialMetalsIndex = 100.0;    // Normal replacement costs
         $boomState->wageGrowth = 0.030;
-        $boomState->yield10yEma = 0.035;              // Low 10y mortgage benchmark
-        $boomState->macroCreditSpread = 0.015;
-        $boomState->inflationEma = 0.025;             // Moderate appreciation expectation
         $boomState->sloosTighteningIndexEma = 0.0;
         $boomState->housingStartsIndex = 100.0;
 
-        $this->assetMarketSubsystem->calculateHousingStarts($boomState, MacroConstants::TARGET_INFLATION, $dt);
+        $this->assetMarketSubsystem->calculateHousingStarts($boomState, $dt);
 
         $this->assertGreaterThan(
             100.0,
             $boomState->housingStartsIndex,
-            'High Tobin Q and affordable mortgage credit must stimulate housing starts above baseline.',
+            'Homes selling well above what they cost to build must stimulate housing starts above baseline.',
         );
 
-        // 2. Housing freeze: depressed prices, high replacement cost, 8% mortgage rates, tight credit
+        // 2. Housing freeze: depressed prices, high replacement cost, tight credit
         $slumpState = (new MacroStateBuilder())
             ->asRecession()
             ->build();
+        $slumpState->unemploymentRateEma = $slumpState->unemploymentRate;
         $slumpState->residentialPropertyIndex = 80.0;
         $slumpState->industrialMetalsIndex = 140.0; // Costly building materials
         $slumpState->wageGrowth = 0.050;
-        $slumpState->yield10yEma = 0.075;           // ~9% mortgage rates
-        $slumpState->macroCreditSpread = 0.040;
-        $slumpState->inflationEma = 0.015;
         $slumpState->sloosTighteningIndexEma = 0.40; // 40% net banks tightening mortgages
         $slumpState->housingStartsIndex = 100.0;
 
-        $this->assetMarketSubsystem->calculateHousingStarts($slumpState, MacroConstants::TARGET_INFLATION, $dt);
+        $this->assetMarketSubsystem->calculateHousingStarts($slumpState, $dt);
 
         $this->assertLessThan(
             100.0,
             $slumpState->housingStartsIndex,
-            'High mortgage costs, elevated replacement costs, and bank credit rationing must depress housing starts.',
+            'Homes selling below what they cost to build, and bank credit rationing, must depress housing starts.',
         );
     }
 

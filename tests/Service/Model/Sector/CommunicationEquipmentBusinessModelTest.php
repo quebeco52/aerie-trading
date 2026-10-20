@@ -215,7 +215,7 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $base = $this->runQuarter($seed->streamZ);
         $shortage = $this->runQuarter([...$seed->streamZ, 'event' => -9.9], -2.5);
 
-        $this->assertSame(ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE, $shortage->eventType);
+        $this->assertSame(ShockEvent::COMPONENT_SHORTAGE, $shortage->eventType);
         $this->assertLessThan($base->streamRevenue['carrier_networks'], $shortage->streamRevenue['carrier_networks']);
         $this->assertGreaterThan($base->kpis['backlog_quarters'], $shortage->kpis['backlog_quarters'], 'Undelivered orders stay in the book rather than vanishing.');
         $this->assertGreaterThan(1.0, $shortage->kpis['book_to_bill']);
@@ -235,7 +235,7 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $crisis = $this->runQuarter([...$seed->streamZ, 'event' => -9.9], $draw, macro: new MacroStateDTO(supplyChainPressureIndexEma: 2.5));
 
         $this->assertNull($calm->eventType);
-        $this->assertSame(ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE, $crisis->eventType);
+        $this->assertSame(ShockEvent::COMPONENT_SHORTAGE, $crisis->eventType);
     }
 
     /**

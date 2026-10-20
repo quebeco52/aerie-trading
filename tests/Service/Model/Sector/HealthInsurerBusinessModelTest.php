@@ -131,8 +131,8 @@ final class HealthInsurerBusinessModelTest extends TestCase
     {
         $slump = new MacroStateDTO(unemploymentRateEma: 0.06, nairuEma: 0.04);
 
-        $this->assertEqualsWithDelta(-1.97 * 0.02, $this->model->resolveEnrollmentShift($slump), 1e-12);
-        $this->assertEqualsWithDelta(-1.97 * 0.02, $this->model->getMacroPhysics($this->plan(), $slump)['macro_demand_shift'], 1e-12);
+        $this->assertEqualsWithDelta(-0.95 * 0.02, $this->model->resolveEnrollmentShift($slump), 1e-12);
+        $this->assertEqualsWithDelta(-0.95 * 0.02, $this->model->getMacroPhysics($this->plan(), $slump)['macro_demand_shift'], 1e-12);
         $this->assertSame(0.0, $this->model->resolveEnrollmentShift(new MacroStateDTO()));
     }
 

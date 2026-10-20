@@ -255,13 +255,42 @@ final class IndependentPowerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(20.0 * $available, $trip->streamRevenue['capacity_payments'], 1e-9);
         $strike = ($trip->streamRevenue['wholesale_generation'] / 80.0 - (($available - 0.6) * $spot)) / 0.6;
         $this->assertEqualsWithDelta(self::powerSeason(), $strike, 0.02, 'the hedged volume is still delivered at its strike, the shortfall bought at spot');
+        // The repair is a one-off, kept out of the run rate: a special item, not a cost the next quarters carry.
+        $this->assertEqualsWithDelta(IndependentPowerBusinessModel::OUTAGE_REPAIR_COST * 100.0, $trip->specialCharge, 1e-9);
 
         $stillOut = $this->report($stock, $this->macro(gas: 1.5, time: 0.25), $this->draws([0.0, 0.0, 0.0], exits: false));
         $this->assertNull($stillOut->eventType);
+        $this->assertSame(0.0, $stillOut->specialCharge);
         $this->assertEqualsWithDelta($available, $stillOut->kpis['availability'], 1e-12);
 
         $back = $this->report($stock, $this->macro(gas: 1.5, time: 0.5), $this->draws([0.0, 0.0, 0.0], exits: true));
         $this->assertEqualsWithDelta(1.0, $back->kpis['availability'], 1e-12);
+    }
+
+    /**
+     * The declared season is the power price's in the quarter a report is filed, the one after the quarter it covers,
+     * on the wholesale share of the mix; the capacity payments are flat. The engine carries it as volume, so the
+     * physics takes it back out: the stations sell the same output whatever the quarter, at the season's price.
+     */
+    public function testTheDeclaredSeasonIsThePowerPriceAtFilingAndNotVolume(): void
+    {
+        $stock = $this->generator('DIPR');
+        $factors = $this->model->resolveSeasonalityFactors($stock);
+        $wholesale = $this->model->resolveRevenueMix($stock)['wholesale'];
+        $raw = array_map(static fn(int $q): float => (1.0 - $wholesale) + ($wholesale * CommodityLogisticsSubsystem::smoothedPowerSeason(($q + 1.5) / 4.0)), [0, 1, 2, 3]);
+        $this->assertEqualsWithDelta(4.0, array_sum($factors), 1e-12);
+        foreach ($raw as $q => $level) {
+            $this->assertEqualsWithDelta($level / (array_sum($raw) / 4.0), $factors[$q], 1e-12);
+        }
+        $peak = 0;
+        foreach ($factors as $q => $factor) {
+            $peak = $factor > $factors[$peak] ? $q : $peak;
+        }
+        $this->assertGreaterThan(1.02, $factors[$peak], 'The power price has a season.');
+
+        $report = $this->model->computeActualFinancials($stock, 100.0 * $factors[$peak], self::VARIABLE_MARGIN, 20.0, self::VOL, $this->macro(), $this->draws(), $peak);
+        $this->assertEqualsWithDelta(20.0, $report->streamRevenue['capacity_payments'], 1e-9, 'The contracts pay the same in every quarter.');
+        $this->assertSame(0.0, $this->model->getSeasonalFixedCostShare(), 'Staff and maintenance run through the year.');
     }
 
     /** The zero-fuel plant runs whatever the load, so the cycle's swing lands on the gas stations alone. */

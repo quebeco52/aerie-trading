@@ -61,8 +61,6 @@ class EarningsEngine
     // --- Capacity & Seasonality Limits ---
     /** Hard ceiling on capacity utilization to bound physical operations and depreciation. */
     public const MAX_CAPACITY_UTILIZATION = 1.50;
-    /** TAM headroom multiplier allowing seasonal/cyclical volume surges above structural capacity. */
-    public const EXPECTED_REVENUE_TAM_HEADROOM = 1.50;
 
     // --- Cost Convexity & Overtime ---
     /** Capacity utilization threshold above which convex overtime cost penalties begin. */
@@ -254,11 +252,12 @@ class EarningsEngine
 
     // --- Earnings Management (Burgstahler & Dichev 1997) ---
     /**
-     * Largest per-share shortfall against consensus management closes with accruals: two cents, the width of the
-     * discontinuity in forecast errors around zero (Degeorge, Patel & Zeckhauser 1999); the odds of closing fall
-     * linearly to nothing across it, as the cost of manipulation rises with the gap.
+     * Largest shortfall against consensus management closes with accruals, in sds of the firm's own measured surprise:
+     * half of one, so about one report in seven is a near miss and a fifth to a quarter of those are steered onto the
+     * line, 3-4% of reports (a fifth of firms manage in a period, by ~10% of EPS: Dichev, Graham, Harvey & Rajgopal
+     * 2013). The odds fall linearly to nothing across it, as the cost of manipulation rises with the gap.
      */
-    public const EARNINGS_MANAGEMENT_MAX_GAP_PER_SHARE = 0.02;
+    public const EARNINGS_MANAGEMENT_MAX_GAP_SURPRISE_SDS = 0.50;
     /**
      * Cap on the accumulated managed-accrual balance as a fraction of total assets: past this the reversal is too large
      * to keep hiding.
@@ -846,6 +845,10 @@ class EarningsEngine
         // from.
         $ctx->capacityUtilizationBeforeShocks = $this->capacityUtilizationAt($ctx, $macroDemandShift, false);
         [, $ctx->expectedRevenueBeforeShocks] = $this->capacityRevenueAt($ctx, $pricingPowerMultiplier, $ctx->capacityUtilizationBeforeShocks);
+        // A model that moves its cycle through an order book or a fleet keeps it out of the engine's utilisation, so
+        // the plant's load puts it back for everything that reads the load: the committed base, overtime, inventory
+        // marks, trade terms and units-of-production depreciation. Read before the physics rolls the book on.
+        $ctx->sectorActivityFactor = max(0.0, 1.0 + $strategy->resolveSectorActivityShift($stock, $ctx->macroState));
 
         // Industry capacity balance: total industry capacity relative to trend demand scales realized price level.
         $industryPriceLevel = $this->resolveIndustryPriceLevel($ctx);
@@ -883,7 +886,8 @@ class EarningsEngine
         $structuralFixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor * $strategy->getFixedCostFactor($macroState);
         // A firm staffs, rents and stocks up for its peak and lets the extra go after it: the seasonal share of the
         // base follows the season, the rest (rent, depreciation, head office) carries evenly through the year.
-        $ctx->seasonalFixedCostFactor = 1.0 - FinancialConstants::SEASONAL_FIXED_COST_SHARE + (FinancialConstants::SEASONAL_FIXED_COST_SHARE * $ctx->seasonalFactor);
+        $seasonalShare = $strategy->getSeasonalFixedCostShare();
+        $ctx->seasonalFixedCostFactor = 1.0 - $seasonalShare + ($seasonalShare * $ctx->seasonalFactor);
         $ctx->fixedCosts = $structuralFixedCosts * $this->resolveCommittedCostScale($ctx) * $ctx->seasonalFixedCostFactor;
 
         $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);
@@ -957,7 +961,9 @@ class EarningsEngine
 
         $cappedStructuralRevenue = min($maxCapacity, $structuralRevenue);
 
-        return [$cappedStructuralRevenue, min($maxCapacity * self::EXPECTED_REVENUE_TAM_HEADROOM, $cappedStructuralRevenue * $capacityUtilization)];
+        // Utilisation is held within the plant's bounds, so the market cap on structural revenue bounds the quarter
+        // too.
+        return [$cappedStructuralRevenue, $cappedStructuralRevenue * $capacityUtilization];
     }
 
     /**
@@ -984,8 +990,7 @@ class EarningsEngine
 
         // The activity the base has to carry, with the seasonal swing the firm staffs through taken out, and
         // the volume a model moves inside its own sector physics put back in.
-        $utilization = ($ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor))
-            * max(0.0, 1.0 + $ctx->strategy->resolveSectorActivityShift($ctx->stock, $ctx->macroState));
+        $utilization = ($ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor)) * $ctx->sectorActivityFactor;
         $activityGap = log(
             max(self::MIN_CAPACITY_UTILIZATION, $utilization) / max(self::MIN_CAPACITY_UTILIZATION, $prior),
         );
@@ -1080,8 +1085,8 @@ class EarningsEngine
         $ctx->quarterlyDepreciation = $ctx->structuralDepreciation;
         $ctx->expectedDepreciation = $ctx->structuralDepreciation;
         if ($ctx->strategy->depreciatesByUnitsOfProduction()) {
-            $ctx->quarterlyDepreciation *= $ctx->capacityUtilization;
-            $ctx->expectedDepreciation *= $ctx->capacityUtilizationBeforeShocks;
+            $ctx->quarterlyDepreciation *= $ctx->capacityUtilization * $ctx->sectorActivityFactor;
+            $ctx->expectedDepreciation *= $ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor;
         }
     }
 
@@ -1147,13 +1152,13 @@ class EarningsEngine
         // What the ratio was expected to run at: the same step without its draw, at the output the quarter was
         // expected to sell.
         $ctx->publicVariableMargin = min(0.99, max(0.01, StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, 0.0)
-            + self::overtimePremium($ctx->capacityUtilizationBeforeShocks, $ctx->seasonalFactor)));
+            + self::overtimePremium($ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor, $ctx->seasonalFactor)));
 
         $stock->setStructuralVariableMargin($realizedVariableMargin);
 
         // Variable cost is per unit: cost stickiness (Anderson, Banker & Janakiraman 2003) lives in the committed
         // base alone (resolveCommittedCostScale), so a fall in volume is not charged as sticky twice.
-        $ctx->realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin + self::overtimePremium($ctx->capacityUtilization, $ctx->seasonalFactor)));
+        $ctx->realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin + self::overtimePremium($ctx->capacityUtilization * $ctx->sectorActivityFactor, $ctx->seasonalFactor)));
     }
 
     /**
@@ -1558,10 +1563,9 @@ class EarningsEngine
         // Matsumoto 2002), by as much as the firm's own record says it can miss by. Struck on revenue, so the cushion
         // neither scales with operating leverage nor vanishes as earnings cross zero.
         $record = $stock->getEarningsMomentumZ() ?? [];
-        $ctx->consensusWalkDown = MarketConsensusEngine::epsWalkDown(
-            $ctx->analystExpectedRevenue,
-            MarketConsensusEngine::surpriseVariance((float) ($record[self::STATE_SURPRISE_SQUARES] ?? 0.0), (float) ($record[self::STATE_SURPRISE_WEIGHT] ?? 0.0)),
-        );
+        $surpriseVariance = MarketConsensusEngine::surpriseVariance((float) ($record[self::STATE_SURPRISE_SQUARES] ?? 0.0), (float) ($record[self::STATE_SURPRISE_WEIGHT] ?? 0.0));
+        $ctx->consensusWalkDown = MarketConsensusEngine::epsWalkDown($ctx->analystExpectedRevenue, $surpriseVariance);
+        $ctx->earningsSurpriseSd = sqrt(max(0.0, $surpriseVariance)) * max(0.0, $ctx->analystExpectedRevenue);
         $ctx->expectedQuarterlyNetIncome -= $ctx->consensusWalkDown;
 
         // A warning already moved the market and the estimate: analysts have taken the guided shortfall
@@ -1676,11 +1680,13 @@ class EarningsEngine
         $shortfall = $consensus - ($ctx->reportedActualNetIncome + $ctx->managedAccrual + $ctx->specialItems);
 
         $shares = max(1.0, $ctx->sharesOutstanding);
-        $gapPerShare = $shortfall / $shares;
-        if ($propensity > 0.0 && $shortfall > 0.0 && abs($consensus) > 0.0 && $gapPerShare < self::EARNINGS_MANAGEMENT_MAX_GAP_PER_SHARE) {
+        // A gap is near against the noise the firm is known for: a cent a share is nothing to a firm earning ten
+        // dollars and a quarter's profit to one earning ten cents.
+        $reachableGap = self::EARNINGS_MANAGEMENT_MAX_GAP_SURPRISE_SDS * $ctx->earningsSurpriseSd;
+        if ($propensity > 0.0 && $shortfall > 0.0 && abs($consensus) > 0.0 && $shortfall < $reachableGap) {
             // Only a near miss is worth closing, and the nearer the likelier: the accrual a gap needs costs more
             // to book and to unwind the wider it is, so the odds fall to nothing at the edge of the reachable gap.
-            $odds = $propensity * (1.0 - ($gapPerShare / self::EARNINGS_MANAGEMENT_MAX_GAP_PER_SHARE));
+            $odds = $propensity * (1.0 - ($shortfall / $reachableGap));
 
             if ($this->mathUtility->checkProbability($odds)) {
                 // Land on the line or a cent above it, where the reported distribution's excess mass sits.
@@ -2080,7 +2086,7 @@ class EarningsEngine
         $stock = $ctx->stock;
 
         $baseDays = $ctx->strategy->getWorkingCapitalDays($stock);
-        $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
+        $deseasonalizedUtilization = $ctx->capacityUtilization * $ctx->sectorActivityFactor / max(0.01, $ctx->seasonalFactor);
         $shifts = FirmEconomics::calculateWorkingCapitalDayShifts(
             creditSpread: $ctx->macroState->macroCreditSpreadEma,
             creditSpreadTrend: $ctx->macroState->macroCreditSpreadTrend,
@@ -2411,7 +2417,7 @@ class EarningsEngine
         }
 
         $trigger = self::INVENTORY_NRV_UTILIZATION_TRIGGER;
-        $utilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
+        $utilization = $ctx->capacityUtilization * $ctx->sectorActivityFactor / max(0.01, $ctx->seasonalFactor);
         if ($utilization >= $trigger) {
             return 0.0;
         }

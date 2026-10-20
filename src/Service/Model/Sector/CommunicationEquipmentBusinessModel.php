@@ -277,7 +277,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveConsumerVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock);
+        $macroSensitivityMultiplier = self::CYCLE_SENSITIVITY_BASE + $this->resolvePricingPower($stock);
         $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
 
         return ($macroState->sentimentDeviation() * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock))
@@ -364,7 +364,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         if ($eventZ < self::COMPONENT_SHORTAGE_Z_SCORE + (self::SUPPLY_CHAIN_STRESS_LOADING * $macroState->supplyChainPressureIndexEma)) {
             $burnRate *= self::COMPONENT_SHORTAGE_DELIVERY_SLIP;
             $consumerMultiplier = self::COMPONENT_SHORTAGE_CONSUMER_MULT;
-            $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
+            $eventType = ShockEvent::COMPONENT_SHORTAGE;
         }
 
         // --- Stream Revenues ---

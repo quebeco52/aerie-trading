@@ -313,8 +313,19 @@ class StreamContextTest extends TestCase
         $context = new StreamContext([StreamContext::BACKLOG_STATE_PREFIX . 'oem' => 50.0], $math);
         $book = $context->recognizeBacklog('oem', 1000.0, 1.0, 0.25);
 
-        $this->assertLessThanOrEqual(StreamContext::MAX_BACKLOG_QUARTERS, $book['backlog_quarters']);
+        $this->assertEqualsWithDelta(StreamContext::MAX_BACKLOG_STEADY_STATE_MULTIPLE * 3.0, $book['backlog_quarters'], 1e-12, 'Three times the three-quarter steady state.');
         $this->assertArrayHasKey(StreamContext::BACKLOG_STATE_PREFIX . 'oem', $context->getStreamZ());
+    }
+
+    /**
+     * A slow-burning book is deep by nature: a contractor booking a tenth of its work a quarter keeps its nine quarters
+     * and the orders on top of them, where a fixed eight-quarter ceiling deleted booked work every quarter.
+     */
+    public function testADeepBookIsNotCutAtAFixedDepth(): void
+    {
+        $context = new StreamContext([StreamContext::BACKLOG_STATE_PREFIX . 'cost_plus' => 12.0], new MathUtility());
+
+        $this->assertEqualsWithDelta(11.7, $context->recognizeBacklog('cost_plus', 1000.0, 1.0, 0.10)['backlog_quarters'], 1e-9);
     }
 
     /**

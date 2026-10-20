@@ -145,7 +145,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
         $crisis = $run(new MacroStateDTO(supplyChainPressureIndexEma: 2.5));
 
         $this->assertNull($calm->eventType);
-        $this->assertSame(ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE, $crisis->eventType);
+        $this->assertSame(ShockEvent::COMPONENT_SHORTAGE, $crisis->eventType);
         $this->assertGreaterThan($calm->clampedMargin, $crisis->clampedMargin, 'Expediting through a stretched chain costs margin.');
     }
 }

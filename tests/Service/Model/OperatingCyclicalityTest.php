@@ -34,11 +34,10 @@ class OperatingCyclicalityTest extends TestCase
         $macro = new MacroStateDTO(outputGapEma: 0.03);
 
         $this->assertSame(HeavyManufacturingBusinessModel::OPERATING_CYCLICALITY, $model->getOperatingCyclicality($lowBeta));
-        $this->assertEqualsWithDelta(
-            $model->getMacroPhysics($lowBeta, $macro)['macro_demand_shift'],
-            $model->getMacroPhysics($highBeta, $macro)['macro_demand_shift'],
-            1e-12,
-        );
+        // The machinery cycle runs through the order book, so the order swing is what the cyclicality scales.
+        $orderShift = new \ReflectionMethod($model, 'resolveEquipmentOrderShift');
+        $this->assertGreaterThan(0.0, $orderShift->invoke($model, $lowBeta, $macro));
+        $this->assertEqualsWithDelta($orderShift->invoke($model, $lowBeta, $macro), $orderShift->invoke($model, $highBeta, $macro), 1e-12);
     }
 
     public function testTickerOverrideReplacesTheSectorConstant(): void

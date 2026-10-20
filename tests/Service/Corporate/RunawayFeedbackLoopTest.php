@@ -235,11 +235,11 @@ class RunawayFeedbackLoopTest extends TestCase
         $tick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
         $report = $engine->calculate($stock, $macro, $tick, 252);
 
-        // Dynamic SAM for 0.5 SAM ratio = $1T * 1.0 * 0.50 = $500B
-        // Structural revenue is capped at $500B * 1.50 = $750B
-        // Annualized totalRevenue = actualRevenue * 4 bounded by EXPECTED_REVENUE_TAM_HEADROOM (1.50)
+        // Dynamic SAM for 0.5 SAM ratio = $1T * 1.0 * 0.50 = $500B Structural revenue is capped at $500B * 1.50 = $750B
+        // Annualized totalRevenue = actualRevenue * 4 bounded by MAX_CAPACITY_UTILIZATION (1.50) on the capped
+        // structural revenue
         $annualRevenue = (float) $stock->getTotalRevenue();
-        $this->assertLessThanOrEqual(750_000_000_000.0 * 4.0 * EarningsEngine::EXPECTED_REVENUE_TAM_HEADROOM, $annualRevenue);
+        $this->assertLessThanOrEqual(750_000_000_000.0 * 4.0 * EarningsEngine::MAX_CAPACITY_UTILIZATION, $annualRevenue);
     }
 
     public function testEarningsEngineDoesNotBoundFinancialsToSectorTam(): void

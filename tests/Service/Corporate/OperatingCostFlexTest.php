@@ -162,12 +162,33 @@ final class OperatingCostFlexTest extends TestCase
             );
             $ctx->capacityUtilization = 1.0;
             $ctx->seasonalFactor = 1.0;
+            // As the capacity step strikes it, before the physics runs.
+            $ctx->sectorActivityFactor = 1.0 + $ctx->strategy->resolveSectorActivityShift($stock, $ctx->macroState);
 
             return $this->resolveScale($ctx);
         };
 
         $this->assertEqualsWithDelta(1.0, $scaleAfterAQuarter(0.0, \App\Service\Math\MacroConstants::DEAL_ACTIVITY_BASELINE), 1e-6, 'Normal deal flow keeps the whole base.');
         $this->assertLessThan(0.995, $scaleAfterAQuarter(-0.045, 0.70 * \App\Service\Math\MacroConstants::DEAL_ACTIVITY_BASELINE), 'A deal drought starts trimming the base the quarter it arrives.');
+    }
+
+    /**
+     * The load a model moves inside its own physics reaches every reader of the plant's load, not only the committed
+     * base: a machinery maker whose order book has run down marks its inventory as a plant running short of work does,
+     * though the engine's own utilisation stands at normal.
+     */
+    public function testActivityAModelMovesInsideItsOwnPhysicsReachesTheInventoryMark(): void
+    {
+        $writeDown = function (float $sectorActivityFactor): float {
+            $ctx = $this->buildContext(1.0, 1.0);
+            $ctx->stock->setInventory('5000000000');
+            $ctx->sectorActivityFactor = $sectorActivityFactor;
+
+            return (new ReflectionMethod(EarningsEngine::class, 'resolveInventoryWriteDown'))->invoke($this->buildEngine(), $ctx);
+        };
+
+        $this->assertSame(0.0, $writeDown(1.0), 'At normal activity nothing is marked down.');
+        $this->assertGreaterThan(0.0, $writeDown(0.80), 'An order book four-fifths full marks down the goods on sale.');
     }
 
     /**

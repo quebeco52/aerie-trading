@@ -80,12 +80,16 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const CONSUMER_WEIGHT   = 0.40;
 
     // --- Pricing Power & Macro Physics ---
-    /** Hard floor on pricing power given consumer dependency. */
-    public const MIN_BETA_PRICING_POWER_FLOOR = 0.80;
+    /** Base of the demand's sensitivity to the lagged gap before pricing power: higher, for its consumer dependency. */
+    public const CYCLE_SENSITIVITY_BASE = 0.80;
 
     // --- Revenue & Shock Physics ---
     /** Inventory obsolescence increases variance. */
     public const REVENUE_VARIANCE_SCALAR = 0.35;
+    /** Enterprise revenue noise as a share of the stream scalar: B2B contracts are sticky. */
+    public const ENTERPRISE_VARIANCE_RATIO = 0.50;
+    /** Consumer revenue noise as a multiple of the stream scalar: upgrade cycles boom and bust. */
+    public const CONSUMER_VARIANCE_RATIO = 1.50;
     /**
      * Enterprise hardware's margin premium over consumer devices, as a share of revenue (Dell FY2024 segments: ISG
      * ~12.7% vs CSG ~6.4% operating margin).
@@ -203,7 +207,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveStreamVolumeShifts(Stock $stock, MacroStateDTO $macroState): array
     {
-        $cycleSensitivity = (self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock)) * $this->getOperatingCyclicality($stock);
+        $cycleSensitivity = (self::CYCLE_SENSITIVITY_BASE + $this->resolvePricingPower($stock)) * $this->getOperatingCyclicality($stock);
         $tradeShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         // Metzler inventory cycle: a channel overhang (positive gap) means distributors destock before reordering.
         $commonShift = ($tradeShift * self::TRADE_FLOW_STREAM_SHARE) - ($macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY);
@@ -254,18 +258,16 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $shortagePenalty = ($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE) * self::GSCPI_MARGIN_PENALTY_SCALAR;
 
         if ($eventZ < self::SEMICONDUCTOR_SHORTAGE_Z_SCORE + (CommunicationEquipmentBusinessModel::SUPPLY_CHAIN_STRESS_LOADING * $macroState->supplyChainPressureIndexEma)) {
-            $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
+            $eventType = ShockEvent::COMPONENT_SHORTAGE;
             $enterpriseMultiplier = self::SHORTAGE_ENTERPRISE_MULT;
             $consumerMultiplier = self::SHORTAGE_CONSUMER_MULT;
         } elseif ($eventZ > self::AI_SUPER_CYCLE_Z_SCORE) {
             $enterpriseMultiplier = self::AI_SUPER_CYCLE_MULT;
-            $eventType = ShockEvent::VIRAL_GROWTH; // Proxy for AI boom
+            $eventType = ShockEvent::DATA_CENTRE_ORDER_SURGE;
         }
 
-        // Consumer revenue gets a massive variance scalar (boom/bust upgrade cycles)
-        // Enterprise revenue gets a dampened variance scalar (sticky B2B contracts)
-        $enterpriseShock = $enterpriseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5);
-        $consumerShock   = $consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5);
+        $enterpriseShock = $enterpriseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::ENTERPRISE_VARIANCE_RATIO);
+        $consumerShock   = $consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CONSUMER_VARIANCE_RATIO);
         $enterpriseRevenue = max(0.0, $expectedRevenue * $enterpriseWeight * (1.0 + $enterpriseShock + $enterpriseMacroVolumeShock) * $enterpriseMultiplier);
         $consumerRevenue   = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + $consumerShock + $consumerMacroVolumeShock) * $consumerMultiplier);
 

@@ -95,3 +95,9 @@ Evidence: `joint_evidence.md`.
   eq/ta >= getTargetCapitalRatio). `raise_an.py <seeds> <arms...>`: per capital-target firm (banks, SAFE, DOVE) the
   quarters with shares +2-20%, split above/below target (prior eq/ta; insurers use their y0 eq/ta as proxy) and
   after a loss, plus NI/avg-equity ROE, 20y payout/NI and split-adjusted share change.
+- Batch E arms: `baseE` = tree-baseE (git archive 27fe1065; seed 1 byte-identical to capE2), `fixE` = same + batchE.patch.
+  Run with `CREDIT=1` for housing `starts`. `e_an.py <arm> [seeds]`: share raises (rescue/non-rescue, after loss), SINK/FNCH
+  dividend borrowing, SINK dividend and buyback by crude regime, IB/SAFE/DOVE TTM ROE, Heavy/Specialty per-firm revenue
+  beta, Heavy write-down share, BIRD/DIPR margin sd, WADE end state, corr(starts_t, gap_t+k), starts rel sd/AR1/troughs.
+  `fixE2` = HEAD + batchE2.patch (walk-down 0.60 sd, oil producers do not hold dividends). `fragile_an.py <seeds>
+  <tk,...> <arm>...`: per firm and arm the default seeds, worst rating, peak ND/E, share rises >2%, end rating.

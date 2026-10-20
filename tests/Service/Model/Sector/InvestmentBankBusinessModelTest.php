@@ -385,6 +385,43 @@ class InvestmentBankBusinessModelTest extends TestCase
      * The matched book carries a structural 0.70 * 150bps - 0.30 * 25bps = 97.5bps spread, so on any
      * balance sheet the asset legs must more than cover the funding they are struck on.
      */
+    /**
+     * The bank's operating target is the broker's, struck on the interest its own books earn (prime financing, repo
+     * inventory and cash): at the macro it is struck at, operating profit plus the interest it nets earns the
+     * structural return, and its first report persists the yield so the rate cycle moves profit through the interest,
+     * not through a target re-solved every quarter. Re-solved on its debt alone, PERE and CORV were struck 3pp high.
+     */
+    public function testTheOperatingTargetIsStruckOnceOnTheBanksOwnInterest(): void
+    {
+        $bank = $this->dealer();
+        $math = new MathUtility();
+        $opening = new \App\DTO\MacroStateDTO();
+        $fundingRate = (new \ReflectionMethod($this->model, 'calculateBlendedWholesaleRate'))->invoke($this->model, $bank, $opening);
+        $operatingYield = (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $bank, $math);
+        $operatingProfit = $operatingYield * $this->model->resolveEarningAssets($bank) * (float) $bank->getOperatingMargin();
+        $netInterest = $this->model->calculateInterestIncome($bank, $opening, $math, $fundingRate) - ((float) $bank->getTotalDebt() * $fundingRate);
+        $booked = ($operatingProfit + $netInterest) * (1.0 - $opening->corporateTaxRate) / $bank->getTangibleEquity();
+        $target = (new \ReflectionMethod($this->model, 'resolveStructuralTargetRoe'))->invoke($this->model, $bank, $opening);
+        $this->assertEqualsWithDelta($target, $booked, 1e-9);
+
+        $bank->setEarningsMomentumZ($this->model->computeActualFinancials($bank, 10_000_000_000.0, 0.50, 0.0, 0.0, $opening, $math)->streamZ);
+        $this->assertArrayHasKey(InvestmentBankBusinessModel::STATE_OPERATING_YIELD, $bank->getEarningsMomentumZ() ?? []);
+        $raised = new \App\DTO\MacroStateDTO(policyRateEma: $opening->policyRateEma + 0.01);
+        $this->assertEqualsWithDelta(
+            $this->model->getTargetMetrics($bank, $opening, $math)['baseline_roic'],
+            $this->model->getTargetMetrics($bank, $raised, $math)['baseline_roic'],
+            1e-12,
+            'Struck once, the operating target holds through the rate cycle.',
+        );
+    }
+
+    private function dealer(): Stock
+    {
+        return (new Stock())->setTicker('DEAL')->setIndustry('Investment Banking')
+            ->setTotalEquity('40000000000')->setWholesaleDebt('250000000000')->setCustomerDeposits('0')->setCorporateTreasury('30000000000')
+            ->setBaselineRoe('0.25')->setOperatingMargin('0.30')->setCreditSpread('0.015')->setFloatingDebtRatio('0.85');
+    }
+
     public function testFundedBookCoversItsOwnFundingCost(): void
     {
         $realizedWholesaleRate = 0.0683; // the rate CORV's reported interest expense implies on total debt

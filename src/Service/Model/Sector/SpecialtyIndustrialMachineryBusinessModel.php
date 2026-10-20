@@ -88,8 +88,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     public const SERVICES_VARIABLE_COST_RATIO = 0.15;
 
     // --- Macro & Backlog Physics ---
-    /** Macro sensitivity multiplier for equipment demand to the broader output gap. */
-    public const MACRO_GDP_SENSITIVITY = 1.50;
     /**
      * Fraction of the equipment order backlog (opening backlog plus new orders) executed and recognized each quarter
      * (~1.9 quarters of coverage).
@@ -102,11 +100,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     /** Low scalar sensitivity of machinery equipment orders to aggregate industrial capital capacity overhang. */
     public const CAPITAL_OVERHANG_SCALAR = 0.15;
 
-    // --- Capacity Utilization & Supply Chain Physics ---
-    /** Sensitivity of precision equipment sales expansion to industrial capacity utilization deviations. */
-    public const CU_EQUIPMENT_EXPANSION_SENSITIVITY = 0.50;
-    /** Sensitivity of precision equipment sales expansion to manufacturing PMI diffusion shifts. */
-    public const PMI_EQUIPMENT_SENSITIVITY          = 0.40;
+    // --- Supply Chain Physics ---
     /** Variable margin cost per standard deviation of supply-chain pressure about normal, both ways (0.71pp). */
     public const GSCPI_MARGIN_PENALTY_SCALAR        = 0.0071;
 
@@ -156,22 +150,10 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
-    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
-    {
-        $physics = parent::getMacroPhysics($stock, $macroState);
-
-        // Nullify global demand shift so macro cyclicality is isolated
-        // exclusively to equipment sales, keeping aftermarket services defensive.
-        $physics['macro_demand_shift'] = 0.0;
-
-        return $physics;
-    }
-
     /**
-     * The plant is staffed to the equipment it has in hand: the opening workload of the equipment backlog at
-     * its target weight, since orders reach revenue by percentage of completion, not through
-     * macro_demand_shift. Aftermarket services carry no cycle term in the sector physics, so their share of
-     * the base holds; the honest result is a cost base that follows the order book down with its lag.
+     * The plant is staffed to the equipment it has in hand and the fleet it services: the opening workload of the
+     * equipment backlog, since orders reach revenue by percentage of completion, not through macro_demand_shift, and
+     * the aftermarket's loading of the order swing, at their target weights.
      */
     public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
     {
@@ -186,7 +168,8 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
 
         $workload = StreamContext::openingWorkload($stock->getEarningsMomentumZ() ?? [], 'equipment_sales', self::EQUIPMENT_BACKLOG_BURN_RATE);
 
-        return ($params[ModelParam::EquipmentWeight] / $totalWeight) * ($workload - 1.0);
+        return (($params[ModelParam::EquipmentWeight] * ($workload - 1.0))
+            + ($params[ModelParam::ServicesWeight] * self::MRO_CYCLE_LOADING * $this->resolveEquipmentOrderShift($stock, $macroState))) / $totalWeight;
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -202,7 +185,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -219,13 +201,11 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $eventZ     = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---
-        // Equipment is highly exposed to GDP, but cushioned by the backlog
-        // High industrial capacity utilization triggers capex expansion for factory automation
-        // Macro demand hits ORDERS in full; the order backlog below is what cushions recognized revenue.
+        // A capital good's accelerator is the same whoever makes it: the cycle hits ORDERS in full and the order
+        // backlog below cushions recognised revenue, while the services the installed fleet buys take
+        // MRO_CYCLE_LOADING of the same swing at once. The services mix is what makes the firm less cyclical.
+        $orderShift = $this->resolveEquipmentOrderShift($stock, $macroState);
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
-        $cuEquipmentBoost = MacroTransmission::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroConstants::CU_BASELINE, self::CU_EQUIPMENT_EXPANSION_SENSITIVITY);
-        $pmiEquipmentBoost = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroConstants::PMI_BASELINE, self::PMI_EQUIPMENT_SENSITIVITY);
-        $macroEquipmentBoost = ($this->resolveLaggedOutputGap($macroState) * self::MACRO_GDP_SENSITIVITY * $beta) - $overhangDrag + $cuEquipmentBoost + $pmiEquipmentBoost;
 
         // --- Tail Risk Events ---
         $dealMultiplier = 1.0;
@@ -234,21 +214,21 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
 
         if ($eventZ < self::SUPPLY_CHAIN_DISRUPTION_Z_SCORE) {
             $supplyChainPenalty = self::SUPPLY_CHAIN_DISRUPTION_PENALTY;
-            $eventType = ShockEvent::AUTO_SUPPLY_CHAIN_DISRUPTION;
+            $eventType = ShockEvent::COMPONENT_SHORTAGE;
             $dealMultiplier = self::SUPPLY_CHAIN_REVENUE_DROP_MULT;
         } elseif ($eventZ > self::MEGA_INFRASTRUCTURE_DEAL_Z_SCORE) {
             $dealMultiplier = self::MEGA_INFRASTRUCTURE_DEAL_MULT;
-            $eventType = ShockEvent::INFRASTRUCTURE_BILL_WIN;
+            $eventType = ShockEvent::MAJOR_EQUIPMENT_ORDER;
         }
 
         // --- Clamped Stream Revenue Calculation --- Equipment orders enter a multi-quarter backlog and are recognized
         // at the burn rate (percentage of completion).
         $equipmentShock = $equipmentZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
         $servicesShock  = $servicesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::SERVICES_VARIANCE_RATIO);
-        $equipmentOrderMultiplier = max(0.0, (1.0 + $equipmentShock + $macroEquipmentBoost + $this->resolveFxDemandShift($macroState)) * $dealMultiplier);
+        $equipmentOrderMultiplier = max(0.0, (1.0 + $equipmentShock + $orderShift - $overhangDrag + $this->resolveFxDemandShift($macroState)) * $dealMultiplier);
         $equipmentBook = $streams->recognizeBacklog('equipment_sales', $expectedRevenue * $equipmentWeight, $equipmentOrderMultiplier, self::EQUIPMENT_BACKLOG_BURN_RATE);
         $equipmentRevenue = $equipmentBook['revenue'];
-        $servicesRevenue  = max(0.0, $expectedRevenue * $servicesWeight * (1.0 + $servicesShock));
+        $servicesRevenue  = max(0.0, $expectedRevenue * $servicesWeight * (1.0 + $servicesShock + (self::MRO_CYCLE_LOADING * $orderShift)));
 
         $streamRevenues = [
             'equipment_sales'      => $equipmentRevenue,
@@ -311,7 +291,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     public function getOperatingMacroFields(): array
     {
         return [
-            'capacity_utilization_rate_ema',
             'capital_stock_overhang_ema',
             'exchange_rate_index_ema',
             'import_price_level',

@@ -45,4 +45,23 @@ class InternetRetailStreamCostTest extends TestCase
         $expected = ($tpDelta * InternetRetailBusinessModel::THIRD_PARTY_COST_RATIO) + ($adsDelta * InternetRetailBusinessModel::DIGITAL_ADS_COST_RATIO);
         $this->assertEqualsWithDelta($expected, $costDelta, 1e-6);
     }
+
+    /**
+     * A marketplace with no first-party line has no residual line to absorb the engine's cost ratio, so its own lines
+     * carry it: the cost ratio moves one for one with the engine's, where its planned ratios used to hold it still.
+     */
+    public function testAMarketplaceWithNoFirstPartyLineCarriesTheEngineMargin(): void
+    {
+        $model = new InternetRetailBusinessModel();
+        $ratio = function (float $engineRatio) use ($model): float {
+            $math = $this->createStub(MathUtility::class);
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            $macro = new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL, exchangeRateIndexEma: 100.0);
+
+            return $model->computeActualFinancials((new Stock())->setTicker('JDAW'), 1000.0, $engineRatio, 0.0, 0.0, $macro, $math)->clampedMargin;
+        };
+
+        $this->assertEqualsWithDelta(0.30, $ratio(0.30), 1e-6);
+        $this->assertEqualsWithDelta(0.40, $ratio(0.40), 1e-6);
+    }
 }

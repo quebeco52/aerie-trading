@@ -74,10 +74,10 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
 
     // --- Pricing Power & Macro Physics ---
     /**
-     * Median pricing-power index (0.5) used as the default PricingPowerIndex by sector models that carry no
-     * pricing-power constant of their own.
+     * Base of the demand's sensitivity to the lagged gap before the firm's pricing power is added: (0.50 + pricing
+     * power) x cyclicality, so the median firm (pricing power 0.5) answers the gap one for one.
      */
-    public const MIN_BETA_PRICING_POWER_FLOOR = 0.50;
+    public const CYCLE_SENSITIVITY_BASE = 0.50;
 
     // --- Inflation Pass-Through (Gopinath & Itskhoki 2010) ---
     /**
@@ -141,7 +141,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
      */
     protected function resolveCycleDemandShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock);
+        $macroSensitivityMultiplier = self::CYCLE_SENSITIVITY_BASE + $this->resolvePricingPower($stock);
 
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);

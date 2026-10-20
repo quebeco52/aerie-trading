@@ -150,6 +150,21 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             $actual = array_values(array_unique($actual));
         }
 
+        // The district catastrophe flow is read in trait code, by the models whose books or networks take the storms.
+        if ($this->invokesHelper($modelClass, 'resolveDistrictCatastropheIncurred(')) {
+            $actual[] = 'catastrophe_loss_index';
+            $actual = array_values(array_unique($actual));
+        }
+
+        // A forward ladder strikes on the commodity curves the subsystem builds: oil's Schwartz forward and the
+        // gas-to-oil ratio's for gas, passed through to power with the carbon adder.
+        foreach (['CommodityLogisticsSubsystem::powerForwardRelative(' => ['carbon_price'], 'CommodityLogisticsSubsystem::gasForwardRelative(' => []] as $forward => $extra) {
+            if ($this->invokesHelper($modelClass, $forward)) {
+                array_push($actual, 'energy_base_price', 'energy_price_index_ema', 'energy_supply_ema', 'gas_oil_ratio_log', 'global_demand_gap_ema', ...$extra);
+                $actual = array_values(array_unique($actual));
+            }
+        }
+
         // Same for the demand transmission lag: the helper lives in a trait, but a model that reads the cycle
         // through it reads the gap at the delay it declares, which the macro publishes as a series of its own.
         if ($this->invokesHelper($modelClass, 'resolveLaggedOutputGap(')) {

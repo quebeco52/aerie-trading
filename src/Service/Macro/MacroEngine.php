@@ -302,7 +302,7 @@ class MacroEngine
         $this->commoditySubsystem->calculateSupplierDeliveryTimes($state, $dt);
         $this->commoditySubsystem->calculateSupplyChainPressureIndex($state);
         $this->assetSubsystem->calculateResidentialPropertyIndex($state, $expectedInflation, $dt);
-        $this->assetSubsystem->calculateHousingStarts($state, $expectedInflation, $dt);
+        $this->assetSubsystem->calculateHousingStarts($state, $dt);
 
         $this->aggregateSubsystem->calculateServicesRepricing($state, $dt);
         $state->inflation = $this->aggregateSubsystem->calculateInflation($state, MacroConstants::TARGET_INFLATION, $productivityGrowthRate, $dt);

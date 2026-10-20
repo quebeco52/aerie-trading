@@ -8,7 +8,9 @@ use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\OilGasProducerBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -197,6 +199,43 @@ final class OilGasProducerBusinessModelTest extends TestCase
         // A spike above the equilibrium backwardates the curve, so even a fully rolled ladder sells below spot.
         $this->assertLessThan(1.5, $strikes[5]);
         $this->assertGreaterThan(1.0, $strikes[5]);
+    }
+
+    /**
+     * A quarter at a boom price books what its barrels fetched above the long-run price, after tax, and its first
+     * report seeds the whole trailing year with it; at the long-run price there is no windfall.
+     */
+    public function testABoomQuarterBooksItsPriceWindfall(): void
+    {
+        $longRun = CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice((new MacroStateDTO())->energySupplyEma);
+        $gasAtLongRun = MacroConstants::NATURAL_GAS_BASELINE * $longRun / MacroConstants::ENERGY_BASELINE;
+
+        $boomMacro = $this->macro(crude: 1.6 * $longRun, gas: $gasAtLongRun);
+        $boom = $this->report($this->producer(), $boomMacro);
+        $afterTax = 1.0 - $this->model->getEffectiveTaxRate($boomMacro->corporateTaxRate);
+        $expected = (array_sum($boom->streamRevenue) - (100.0 * $longRun / MacroConstants::ENERGY_BASELINE)) * $afterTax;
+        $this->assertGreaterThan(0.0, $expected);
+        for ($q = 0; $q < 4; $q++) {
+            $this->assertEqualsWithDelta($expected, $boom->streamZ[OilGasProducerBusinessModel::STATE_PRICE_WINDFALL_PREFIX . $q], 1e-9);
+        }
+
+        $calm = $this->report($this->producer(), $this->macro(crude: $longRun, gas: $gasAtLongRun));
+        $this->assertEqualsWithDelta(0.0, $calm->streamZ[OilGasProducerBusinessModel::STATE_PRICE_WINDFALL_PREFIX . '0'], 1e-9);
+    }
+
+    /** The dividend is set on the trailing year's earnings less its average quarter's price windfall per share. */
+    public function testTheDividendBaseLeavesOutThePriceWindfall(): void
+    {
+        $stock = $this->producer();
+        $stock->setSharesOutstanding('10');
+        $stock->setEarningsMomentumZ([
+            OilGasProducerBusinessModel::STATE_PRICE_WINDFALL_PREFIX . '0' => 8.0,
+            OilGasProducerBusinessModel::STATE_PRICE_WINDFALL_PREFIX . '1' => 4.0,
+            OilGasProducerBusinessModel::STATE_PRICE_WINDFALL_PREFIX . '2' => 4.0,
+            OilGasProducerBusinessModel::STATE_PRICE_WINDFALL_PREFIX . '3' => 0.0,
+        ]);
+
+        $this->assertEqualsWithDelta(1.50 - 0.40, $this->model->getSustainableDividendBase($stock, 1.50, 0.0, 0.0), 1e-12);
     }
 
     public function testTailEventsCutVolumeButNeverSetTheFirmsOwnPrice(): void

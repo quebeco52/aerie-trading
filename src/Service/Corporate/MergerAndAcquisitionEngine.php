@@ -378,17 +378,18 @@ class MergerAndAcquisitionEngine
 
         $ctx->normalizedDebtUtilization = $ctx->debtRatio / max(0.1, $equityLimit);
 
-        $ctx->eps = (float) $stock->getEarningsPerShare();
-        $ctx->currentPE = $ctx->eps > 0 ? ($ctx->price / $ctx->eps) : 9999.0;
-
         $ctx->trueReturn = $ctx->strategy->getTrueReturn($stock);
         $ctx->hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $ctx->economicSpread = $ctx->trueReturn - $ctx->hurdleRate;
 
         $ctx->fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $ctx->trueReturn, $ctx->health, $ctx->macroState);
+        // Overvalued on the earnings the multiple is struck on: on trailing earnings, a loss year made any price rich
+        // enough to pay for a deal in stock.
+        $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $ctx->trueReturn, $ctx->health, $ctx->macroState);
+        $ctx->currentPE = $normalizedEps > 0.0 ? $ctx->price / $normalizedEps : 0.0;
         $ctx->bookValuePerShare = max(0.01, $ctx->equity / max(1.0, $ctx->shares));
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;
-        $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
+        $ctx->isOvervalued = $normalizedEps > 0.0 && $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
 
         $ctx->aggression = 1.0;
         $ctx->isEmpireBuilder = $style === \App\Data\Company\ManagementStyle::EmpireBuilder;
@@ -945,7 +946,6 @@ class MergerAndAcquisitionEngine
     {
         $stock = $ctx->seller;
 
-        $ctx->eps = (float) $stock->getEarningsPerShare();
         $ctx->price = (float) $stock->getPrice();
         $ctx->shares = max(1.0, (float) $stock->getSharesOutstanding());
         $ctx->netIncome = (float) $stock->getTotalNetIncome();

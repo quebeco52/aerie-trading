@@ -10,6 +10,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -72,8 +73,13 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     // --- Revenue & Shock Physics ---
     /** Very insulated from typical manufacturing boom/bust. */
     public const REVENUE_VARIANCE_SCALAR = 0.20;
-    /** Structural variable cost ratio of premium B2B tooling (high margin). */
-    public const COMMERCIAL_VARIABLE_COST_RATIO = 0.25;
+    /** Variable cost per unit of revenue of trade-brand tooling at list price, relative to the consumer line's. */
+    public const COMMERCIAL_COST_INTENSITY = 0.85;
+    /**
+     * Variable cost per unit of revenue of the consumer line: the same unit cost sold under discount brands about 30%
+     * below list (1/0.7 = 1.2/0.85), so the seconds earn the thinner margin.
+     */
+    public const CONSUMER_COST_INTENSITY = 1.20;
 
     // --- Tail Risk & Shock Events ---
     /** Negative z-score threshold indicating severe supply chain or shipping congestion. */
@@ -84,6 +90,12 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     public const MANUFACTURING_SUPER_CYCLE_Z_SCORE = 2.40;
     /** Top-line commercial revenue multiplier for an industrial super-cycle. */
     public const MANUFACTURING_SUPER_CYCLE_MULT = 1.15;
+    /** Commercial revenue a congestion quarter lets through: a tenth of shipments wait on the late parts. */
+    public const SUPPLY_CHAIN_CONGESTION_REVENUE_MULT = 0.90;
+    /** Commercial revenue noise as a share of the stream scalar: trade accounts on standing orders barely move. */
+    public const COMMERCIAL_VARIANCE_RATIO = 0.10;
+    /** Consumer revenue noise as a multiple of the stream scalar: promotional retail volume swings. */
+    public const CONSUMER_VARIANCE_RATIO = 2.50;
 
     // --- Manufacturing PMI, Housing & PPI Transmission ---
     /** Sensitivity of commercial B2B precision tooling demand to manufacturing PMI shifts. */
@@ -204,15 +216,15 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
 
         if ($eventZ < self::SUPPLY_CHAIN_CONGESTION_Z_SCORE) {
             $supplyChainPenalty = self::SUPPLY_CHAIN_CONGESTION_PENALTY;
-            $eventType = ShockEvent::SHIPPING_PORT_CONGESTION;
-            $cycleMultiplier = 0.90; // Add revenue drop
+            $eventType = ShockEvent::COMPONENT_SHORTAGE;
+            $cycleMultiplier = self::SUPPLY_CHAIN_CONGESTION_REVENUE_MULT;
         } elseif ($eventZ > self::MANUFACTURING_SUPER_CYCLE_Z_SCORE) {
             $cycleMultiplier = self::MANUFACTURING_SUPER_CYCLE_MULT;
-            $eventType = ShockEvent::DEFENSE_CONTRACT_WIN; // Proxy for mega industrial boom
+            $eventType = ShockEvent::INDUSTRIAL_ORDER_SURGE;
         }
 
-        $commercialShock = $commercialZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.1);
-        $consumerShock   = $consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5);
+        $commercialShock = $commercialZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::COMMERCIAL_VARIANCE_RATIO);
+        $consumerShock   = $consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CONSUMER_VARIANCE_RATIO);
         $commercialRevenue = max(0.0, $expectedRevenue * $commercialWeight * (1.0 + $commercialShock + $commercialMacroVolumeShock) * $cycleMultiplier);
         $consumerRevenue   = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + $consumerShock + $consumerMacroVolumeShock));
 
@@ -225,20 +237,15 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Structural Margin Blending ---
-        // Commercial B2B precision tooling operates at a structurally lower variable cost (higher margin).
-        // Consumer retail scrap is a lower margin business.
-        $expectedCommercialRevenue = $expectedRevenue * $commercialWeight;
-        $expectedConsumerRevenue = $expectedRevenue * $consumerWeight;
-
-        $commercialBaselineCosts = $expectedCommercialRevenue * self::COMMERCIAL_VARIABLE_COST_RATIO;
-
-        // Derive required consumer cost ratio to hit the engine's target margin at baseline
-        $targetTotalCosts = $expectedRevenue * $realizedVariableMargin;
-        $consumerBaselineCosts = $targetTotalCosts - $commercialBaselineCosts;
-        $consumerVariableMargin = $expectedConsumerRevenue > 0 ? $consumerBaselineCosts / $expectedConsumerRevenue : $realizedVariableMargin;
-
-        // Apply derived distinct margins to actual shocked revenues
-        $actualVariableCosts = ($commercialRevenue * self::COMMERCIAL_VARIABLE_COST_RATIO) + ($consumerRevenue * $consumerVariableMargin);
+        // Trade tooling at list price costs less per unit of revenue than the seconds sold under discount brands; each
+        // line's ratio is its intensity against the mix, so the expected mix runs at the engine's ratio and a shift
+        // toward the consumer line raises the blend.
+        $streamCostRatios = FirmEconomics::streamCostRatios(
+            $realizedVariableMargin,
+            ['commercial' => $commercialWeight, 'consumer' => $consumerWeight],
+            ['commercial' => self::COMMERCIAL_COST_INTENSITY, 'consumer' => self::CONSUMER_COST_INTENSITY],
+        );
+        $actualVariableCosts = ($commercialRevenue * $streamCostRatios['commercial']) + ($consumerRevenue * $streamCostRatios['consumer']);
 
         // Input cost basket: alloys and carbide, wholesale components, energy and shop-floor payroll,
         // recovered in list prices at the firm's pricing power.

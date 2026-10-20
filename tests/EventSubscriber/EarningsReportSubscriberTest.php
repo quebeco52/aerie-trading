@@ -787,6 +787,8 @@ class EarningsReportSubscriberTest extends TestCase
         $ctx->specialItems = 2_000_000.0;
         $ctx->reportedActualNetIncome = 24_000_000.0 - 5_040_000.0 - 2_000_000.0;
         $ctx->reportedExpectedNetIncome = 19_000_000.0;
+        // The typical firm's surprise, 2.5% of the quarter's revenue, against which the shortfall is a near miss.
+        $ctx->earningsSurpriseSd = 2_500_000.0;
         $ctx->debtMetrics = new DebtMetricsDTO(
             interestExpense: 4_000_000.0,
             blendedRate: 0.04,

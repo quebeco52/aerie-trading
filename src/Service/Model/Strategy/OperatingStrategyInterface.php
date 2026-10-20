@@ -275,6 +275,12 @@ interface OperatingStrategyInterface
      * @return array<int, float> Calendar-quarter revenue multipliers [Q1, Q2, Q3, Q4] summing to 4.0.
      */
     public function resolveSeasonalityFactors(Stock $stock): array;
+
+    /**
+     * Share of the fixed cost base that follows the declared season: the staff hired, capacity rented and stock carried
+     * for a peak in volume. A firm whose season is in its prices, not its activity, carries its base evenly.
+     */
+    public function getSeasonalFixedCostShare(): float;
     /**
      * Annual through-the-cycle expected credit loss on gross earning assets: the charge-off rate the
      * stable cost base already carries. Zero for any business whose assets are not credit.

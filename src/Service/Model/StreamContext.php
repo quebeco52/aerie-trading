@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Model;
 
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
 use App\Service\Math\TimeSeries;
@@ -30,8 +31,11 @@ class StreamContext
     /** Namespace prefix under which order backlogs (in quarters of expected stream revenue) are persisted. */
     public const BACKLOG_STATE_PREFIX = 'state:backlog:';
 
-    /** Ceiling on a persisted backlog, in quarters of expected stream revenue. */
-    public const MAX_BACKLOG_QUARTERS = 8.0;
+    /**
+     * Ceiling on a persisted backlog, a multiple of its steady-state depth: three times, which no order path reaches
+     * (the deepest mobilisation runs 1.7 times), so the cap guards the state without deleting booked work.
+     */
+    public const MAX_BACKLOG_STEADY_STATE_MULTIPLE = 3.0;
 
     // --- Dynamic Revenue Mix Drift & Mean Reversion ---
     /** Adaptation speed scalar (alpha) at which quarterly realized revenue mix shifts active baseline weights. */
@@ -158,6 +162,26 @@ class StreamContext
     }
 
     /**
+     * Rolls a forward-sale ladder persisted under $prefix one quarter (FirmEconomics::rollHedgeLadder()) and returns
+     * the strike delivered this quarter.
+     *
+     * @param callable(int): float $forward Forward price relative to baseline, for delivery that many quarters ahead.
+     */
+    public function rollHedgeLadder(string $prefix, int $tranches, callable $forward): float
+    {
+        $sums = [];
+        for ($d = 0; $d < $tranches; $d++) {
+            $sums[] = $this->getPersistedState($prefix . $d, 0.0);
+        }
+        $ladder = FirmEconomics::rollHedgeLadder($sums, $forward);
+        foreach ($ladder['sums'] as $d => $sum) {
+            $this->registerState($prefix . $d, $sum);
+        }
+
+        return $ladder['strike'];
+    }
+
+    /**
      * Reads a scalar state value carried forward from the previous quarter's stream map.
      *
      * @param string $key     Namespaced state key registered by a prior quarter.
@@ -196,7 +220,7 @@ class StreamContext
         $available = ($openingQuarters * $base) + $orders;
         $revenue = $burn * $available;
         $closingBacklog = max(0.0, $available - $revenue);
-        $closingQuarters = min(self::MAX_BACKLOG_QUARTERS, $closingBacklog / $base);
+        $closingQuarters = min(self::MAX_BACKLOG_STEADY_STATE_MULTIPLE * $steadyStateQuarters, $closingBacklog / $base);
 
         $this->registerState(self::BACKLOG_STATE_PREFIX . $key, $closingQuarters);
 

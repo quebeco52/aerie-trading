@@ -11,6 +11,7 @@ use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Corporate\Industry\IndustryRegimeView;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
@@ -97,6 +98,37 @@ trait StandardOperatingPhysicsTrait
     public function resolveSeasonalityFactors(Stock $stock): array
     {
         return $this->getSeasonalityFactors();
+    }
+
+    /**
+     * District catastrophe losses incurred since the firm's last report, and what that window averages, in burden
+     * units: the flow of the quarter's storms, not the stock of open claims the index carries. Null on a first report,
+     * which has no earlier reading; the reading is persisted for the next.
+     *
+     * @return array{incurred: float, expected: float}|null
+     */
+    protected function resolveDistrictCatastropheIncurred(StreamContext $streams, MacroStateDTO $macroState): ?array
+    {
+        $burden = $macroState->catastropheLossIndex;
+        $readAt = $streams->getPersistedState(FinancialConstants::STATE_CATASTROPHE_BURDEN_READ_AT, -1.0);
+        $burdenThen = $streams->getPersistedState(FinancialConstants::STATE_CATASTROPHE_BURDEN_AT_REPORT, $burden);
+        $streams->registerState(FinancialConstants::STATE_CATASTROPHE_BURDEN_AT_REPORT, $burden);
+        $streams->registerState(FinancialConstants::STATE_CATASTROPHE_BURDEN_READ_AT, $macroState->totalTime);
+
+        $window = $macroState->totalTime - $readAt;
+        if ($readAt < 0.0 || $window <= 0.0) {
+            return null;
+        }
+
+        return [
+            'incurred' => CommodityLogisticsSubsystem::catastropheIncurredSince($burden, $burdenThen, $window),
+            'expected' => CommodityLogisticsSubsystem::expectedCatastropheIncurred($macroState->totalTime, $window),
+        ];
+    }
+
+    public function getSeasonalFixedCostShare(): float
+    {
+        return FinancialConstants::SEASONAL_FIXED_COST_SHARE;
     }
 
     public function getEffectiveTaxRate(float $macroTaxRate): float

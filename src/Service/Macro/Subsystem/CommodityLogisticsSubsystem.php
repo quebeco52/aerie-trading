@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Macro\Subsystem;
 
+use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Math\Distributions;
@@ -463,6 +464,44 @@ class CommodityLogisticsSubsystem
         $theta = StochasticProcesses::schwartzThetaForMean(self::resolveEnergyEquilibriumPrice($energySupplyEma), self::ENERGY_MEAN_REVERSION, self::ENERGY_VOLATILITY);
 
         return StochasticProcesses::calculateSchwartzForwardPrice($spot, self::ENERGY_MEAN_REVERSION, $theta, self::ENERGY_VOLATILITY, $years);
+    }
+
+    /**
+     * Wholesale power's forward relative to its baseline for delivery `$years` ahead: deseasoned gas passed through at
+     * the market's elasticity, the implied heat rate at its mean (it reverts within weeks), the delivery date's season
+     * as the smoothed index will carry it, and the carbon adder at today's carbon price.
+     */
+    public static function powerForwardRelative(MacroStateDTO $macroState, float $years): float
+    {
+        return (self::gasPowerPassThrough(self::deseasonedGasForwardRelative($macroState, $years))
+                * self::smoothedPowerSeason($macroState->totalTime + $years))
+            + self::carbonPowerPriceUplift($macroState->carbonPrice);
+    }
+
+    /**
+     * Gas's forward relative to its baseline for delivery `$years` ahead, carrying the delivery date's season as the
+     * smoothed index will.
+     */
+    public static function gasForwardRelative(MacroStateDTO $macroState, float $years): float
+    {
+        return self::deseasonedGasForwardRelative($macroState, $years) * self::smoothedGasSeason($macroState->totalTime + $years);
+    }
+
+    /**
+     * Gas's forward out of season: oil's Schwartz forward times the gas-to-oil ratio's, the ratio read before the
+     * season goes on.
+     */
+    private static function deseasonedGasForwardRelative(MacroStateDTO $macroState, float $years): float
+    {
+        $oil = self::energyForwardPrice(
+            $macroState->energyBasePrice,
+            $macroState->energyPriceIndexEma,
+            $macroState->globalDemandGapEma,
+            $macroState->energySupplyEma,
+            $years,
+        ) / MacroConstants::ENERGY_BASELINE;
+
+        return $oil * self::gasOilRatioForward(exp($macroState->gasOilRatioLog), $years);
     }
 
     /**

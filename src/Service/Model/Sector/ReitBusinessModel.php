@@ -517,11 +517,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return ($pbFairValue * 0.60) + ($earningsValue * 0.40);
     }
 
-    public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
-    {
-        return $quarterlyEps;
-    }
-
     /**
      * Pass-through status is conditional on distributing taxable income; the trust pays no corporate tax on what it
      * distributes.

@@ -20,7 +20,6 @@ class DivestitureContext
     ) {}
 
     // State Variables
-    public float $eps = 0.0;
     public float $price = 0.0;
     public float $shares = 0.0;
     public float $netIncome = 0.0;

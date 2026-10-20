@@ -226,46 +226,39 @@ final class MacroTransmission
     /**
      * Poterba (1984) / Topel & Rosen (1988) Tobin's Q Housing Investment Dynamics.
      *
-     * Models residential construction volume (Housing Starts) driven by the ratio of asset market home prices
-     * to physical replacement costs, discounted by mortgage user costs and bank lending standards:
-     *   q = P_residential / Cost_replacement
+     * Residential construction volume (Housing Starts) closes on a target set by the households forming, the ratio
+     * of home prices to physical replacement cost, q = P_residential / Cost_replacement, and bank lending standards.
      *
-     * @param float $currentStarts        Current housing starts index.
-     * @param float $residentialPriceRatio Current home price relative to neutral baseline.
-     * @param float $replacementCostRatio Current construction replacement cost relative to baseline.
-     * @param float $userCost             User cost of residential capital (mortgage rate + taxes - inflation).
-     * @param float $neutralUserCost      Structural equilibrium user cost of housing.
-     * @param float $sloosTightening      SLOOS bank mortgage credit tightening percentage.
-     * @param float $dt                   Time step in years.
-     * @param float $dW                   Standard normal random shock.
-     * @param array{baseline: float, qSens: float, costSens: float, sloosSens: float, kappa: float, sigma: float, min: float, max: float, creditGapSens?: float} $params Calibration parameters.
-     * @param float $creditGap            Excess credit-to-GDP gap relative to trend.
+     * @param float $currentStarts         Current housing starts index.
+     * @param float $residentialPriceRatio Current home price relative to its trend.
+     * @param float $replacementCostRatio  Current construction replacement cost relative to its trend.
+     * @param float $sloosTightening       SLOOS bank mortgage credit tightening percentage.
+     * @param float $dt                    Time step in years.
+     * @param float $dW                    Standard normal random shock.
+     * @param array{baseline: float, qSens: float, sloosSens: float, kappa: float, sigma: float, min: float, max: float, creditGapSens?: float} $params Calibration parameters.
+     * @param float $creditGap             Excess credit-to-GDP gap relative to trend.
+     * @param float $householdFormation    Households forming beyond the steady rate, a share of baseline starts.
      * @return float Updated housing starts index.
      */
     public static function calculateTobinsQHousingStarts(
         float $currentStarts,
         float $residentialPriceRatio,
         float $replacementCostRatio,
-        float $userCost,
-        float $neutralUserCost,
         float $sloosTightening,
         float $dt,
         float $dW,
         array $params,
         float $creditGap = 0.0,
+        float $householdFormation = 0.0,
     ): float {
-        $effectiveCost = max(0.20, $replacementCostRatio);
-        $tobinsQ = $residentialPriceRatio / $effectiveCost;
-        $qExcess = $tobinsQ - 1.0;
+        $qExcess = ($residentialPriceRatio / $replacementCostRatio) - 1.0;
 
-        $userCostExcess = $userCost - $neutralUserCost;
         // Both ways: standards tighter than neutral hold starts back and looser ones let more through.
         $creditDrag = $sloosTightening;
         $creditGapSens = $params['creditGapSens'] ?? 0.0;
 
-        $targetStarts = $params['baseline']
+        $targetStarts = ($params['baseline'] * (1.0 + $householdFormation))
             + ($params['qSens'] * $qExcess)
-            - ($params['costSens'] * $userCostExcess)
             - ($params['sloosSens'] * $creditDrag)
             + ($creditGapSens * $creditGap);
 

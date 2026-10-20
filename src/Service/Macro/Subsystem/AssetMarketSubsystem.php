@@ -323,10 +323,7 @@ class AssetMarketSubsystem
     public const DOMESTIC_DEMAND_WEIGHT = MacroConstants::DISTRICT_GDP_USD / self::WORLD_GDP_USD;
 
     // --- Physical Catastrophes ---
-    /**
-     * Share of the housing stock's fundamental value destroyed per unit of excess catastrophe burden; rebuilt through
-     * the housing-starts channel.
-     */
+    /** Share of the housing stock's fundamental value destroyed per unit of excess catastrophe burden. */
     public const CATASTROPHE_PROPERTY_DAMAGE_SHARE = 0.01;
 
     // --- DIPASQUALE-WHEATON COMMERCIAL REAL ESTATE (2-QUADRANT) ---
@@ -500,14 +497,18 @@ class AssetMarketSubsystem
 
     // --- Tobin's Q Housing Investment Dynamics (Poterba 1984, Topel-Rosen 1988) ---
     /**
-     * Materials in the replacement cost of a new home, priced by the metals index as its proxy: intermediate inputs
-     * over inputs plus compensation in single-family construction (BEA 2017 detail Use table, 233411: 0.557).
+     * Materials in the replacement cost of a new home: intermediate inputs over inputs plus compensation in
+     * single-family construction (BEA 2017 detail Use table, 233411: 0.557).
      */
     public const REPLACEMENT_COST_MATERIALS_SHARE = 0.557;
+    /**
+     * Metals in it, the part the metals index prices: $19.2bn of primary and fabricated metals in 2019 US new
+     * residential construction (NAHB, from the BEA detail tables) over $333bn put in place (Census); other materials
+     * move with prices.
+     */
+    public const REPLACEMENT_COST_METALS_SHARE = 0.058;
     /** Sensitivity of housing starts to Tobin's q ratio (home price valuation vs replacement cost). */
     public const HOUSING_STARTS_Q_SENSITIVITY = 50.0;
-    /** Sensitivity of residential housing starts to user cost of housing capital and mortgage rates. */
-    public const HOUSING_STARTS_USER_COST_SENSITIVITY = 300.0;
     /** Sensitivity of housing construction orders to bank mortgage lending standards tightening (SLOOS). */
     public const HOUSING_STARTS_SLOOS_SENSITIVITY = 25.0;
     /** Sensitivity of housing starts to aggregate private sector credit-to-GDP gap availability. */
@@ -520,6 +521,15 @@ class AssetMarketSubsystem
     public const MIN_HOUSING_STARTS = 40.0;
     /** Structural upper ceiling for the housing starts index. */
     public const MAX_HOUSING_STARTS = 220.0;
+
+    // --- Household Formation (Paciorek 2013) ---
+    /**
+     * Households lost per unit of unemployment gap, in logs: headship -0.36 pts per point at 18-30, -0.08 above; a
+     * fifth of adults under 31 at 0.50 households each, so 1pp of gap is 0.28% of households.
+     */
+    public const HEADSHIP_UNEMPLOYMENT_SEMI_ELASTICITY = 0.28;
+    /** Homes started a year over the stock: ~1%, the US 2000-2019 average (UK ~0.7%, Australia ~2%). */
+    public const HOUSING_STARTS_TO_STOCK = 0.010;
 
     // --- Systemic Market Factor ---
     /** Decay time constant (years) of the common equity factor's regime leg, giving a ~20 day trend half-life. */
@@ -1401,36 +1411,48 @@ class AssetMarketSubsystem
     }
 
     /**
+     * New households a year as a share of the starts the stock needs, from the unemployment gap's change: young adults
+     * move out as jobs come and back in as they go (Paciorek 2013), so a gap that is rising cuts building and one that
+     * holds builds nothing extra. The change is read off the drift of the quarter's averages, which lag the rates by
+     * their horizon.
+     */
+    public static function householdFormationStarts(MacroState $state): float
+    {
+        $gapChange = (($state->unemploymentRate - $state->unemploymentRateEma) - ($state->nairu - $state->nairuEma))
+            / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS;
+
+        return -self::HEADSHIP_UNEMPLOYMENT_SEMI_ELASTICITY * $gapChange / self::HOUSING_STARTS_TO_STOCK;
+    }
+
+    /**
      * Poterba (1984) / Topel-Rosen (1988) Tobin's Q Housing Investment Dynamics.
      *
-     * Computes residential construction volume (Housing Starts) driven by the ratio of asset market home prices
-     * to physical replacement costs, discounted by mortgage user costs and bank lending standards. A green belt makes
-     * building answer the price less (greenBeltSupplyResponse()).
+     * Homes are started for the households that form and when they sell above what they cost to build, as lending
+     * standards and credit allow. Rates reach building through the house price, which prices the user cost, and
+     * through jobs. A green belt makes building answer both less (greenBeltSupplyResponse()).
      *
-     * @param MacroState $state             Current macroeconomic state.
-     * @param float      $expectedInflation Expected inflation, as for calculateResidentialPropertyIndex().
-     * @param float      $dt                Time increment in years.
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
      */
-    public function calculateHousingStarts(MacroState $state, float $expectedInflation, float $dt): void
+    public function calculateHousingStarts(MacroState $state, float $dt): void
     {
-        // Both legs of q read the level against the trend it has measurably settled at, not the baseline it is built
-        // on.
+        // Both legs of q read the level against the trend it has settled at, not the baseline it is built on.
         $residentialPriceRatio = $state->residentialPropertyIndex / $state->residentialWealthTrend;
         $metalsCostRatio = $state->industrialMetalsIndexTrend > 0.0 ? $state->industrialMetalsIndex / $state->industrialMetalsIndexTrend : 1.0;
         // Building labour priced as a LEVEL in the same real terms as the home price index: the real wage against its
         // trend-productivity path. Read as 1 + wage growth, it charged a standing 1.75% premium in a calm economy and
         // saw only the acceleration of pay, never a real wage that stayed high.
         $laborCostRatio = exp($state->realWageGap);
-        $replacementCostRatio = (self::REPLACEMENT_COST_MATERIALS_SHARE * $metalsCostRatio) + ((1.0 - self::REPLACEMENT_COST_MATERIALS_SHARE) * $laborCostRatio);
-
-        $userCost = $this->housingUserCost($state, $expectedInflation);
+        $replacementCostRatio = (self::REPLACEMENT_COST_METALS_SHARE * $metalsCostRatio)
+            + (self::REPLACEMENT_COST_MATERIALS_SHARE - self::REPLACEMENT_COST_METALS_SHARE)
+            + ((1.0 - self::REPLACEMENT_COST_MATERIALS_SHARE) * $laborCostRatio);
+        $supplyResponse = self::greenBeltSupplyResponse($state->greenBeltStringency);
 
         $dW = $this->mathUtility->generateStandardNormal();
 
         $params = [
             'baseline' => MacroConstants::HOUSING_STARTS_BASELINE,
-            'qSens' => self::HOUSING_STARTS_Q_SENSITIVITY * self::greenBeltSupplyResponse($state->greenBeltStringency),
-            'costSens' => self::HOUSING_STARTS_USER_COST_SENSITIVITY,
+            'qSens' => self::HOUSING_STARTS_Q_SENSITIVITY * $supplyResponse,
             'sloosSens' => self::HOUSING_STARTS_SLOOS_SENSITIVITY,
             'creditGapSens' => self::HOUSING_STARTS_CREDIT_GAP_SENSITIVITY,
             'kappa' => self::HOUSING_STARTS_KAPPA,
@@ -1443,13 +1465,12 @@ class AssetMarketSubsystem
             currentStarts: $state->housingStartsIndex,
             residentialPriceRatio: $residentialPriceRatio,
             replacementCostRatio: $replacementCostRatio,
-            userCost: $userCost,
-            neutralUserCost: self::RESIDENTIAL_NEUTRAL_USER_COST,
             sloosTightening: $state->sloosTighteningIndexEma,
             dt: $dt,
             dW: $dW,
             params: $params,
             creditGap: $state->creditToGdpGapEma,
+            householdFormation: $supplyResponse * self::householdFormationStarts($state),
         );
     }
 }

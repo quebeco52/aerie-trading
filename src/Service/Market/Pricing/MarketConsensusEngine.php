@@ -29,10 +29,11 @@ class MarketConsensusEngine
      */
     public const ANALYST_WALKDOWN_BIAS = 0.015;
     /**
-     * Walk-down of the published EPS consensus in standard deviations of the firm's own measured surprise: 0.674, so
-     * three reports in four beat (the S&P 500's 75% 10-year beat rate, FactSet Earnings Insight).
+     * Walk-down of the published EPS consensus in standard deviations of the firm's own measured surprise: 0.60, so
+     * with the ~3% of reports management steers onto the line three in four beat (the S&P 500's 75% 10-year beat rate,
+     * FactSet Earnings Insight).
      */
-    public const ANALYST_EPS_WALKDOWN_SURPRISE_SDS = 0.674;
+    public const ANALYST_EPS_WALKDOWN_SURPRISE_SDS = 0.60;
     /** Time constant of the surprise record the walk-down is sized from: 1.5 years, about six reports. */
     public const SURPRISE_RECORD_MEMORY_YEARS = 1.5;
     /** Weight of the typical firm's surprise before a firm has a record of its own, in reports: two. */

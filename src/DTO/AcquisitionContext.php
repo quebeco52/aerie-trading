@@ -52,7 +52,6 @@ class AcquisitionContext
 
     // Strategy evaluation
     public float $normalizedDebtUtilization = 0.0;
-    public float $eps = 0.0;
     public float $currentPE = 0.0;
     public float $trueReturn = 0.0;
     public float $hurdleRate = 0.0;

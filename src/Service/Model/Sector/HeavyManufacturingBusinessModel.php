@@ -13,6 +13,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Heavy Manufacturing and Heavy Industry (e.g. Autos, Heavy Machinery, Specialty Chemicals,
@@ -141,7 +142,8 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const MRO_VARIABLE_COST_RATIO = 0.20;
     /**
      * Aftermarket exposure to the cycle against new equipment's: parts follow the fleet's running hours, 0.40 of the
-     * order swing.
+     * order swing (2009: aftermarket parts and repair -12 to -20% against equipment orders -33 to -50%, Atlas Copco and
+     * Truck Parts & Service).
      */
     public const MRO_CYCLE_LOADING = 0.40;
 
@@ -171,14 +173,49 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
 
-    /** Heavy manufacturing is extremely sensitive to the output gap, amplified by the leading manufacturing PMI. */
-    protected function resolveCycleDemandShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    /**
+     * The cycle reaches revenue through the order book and the fleet's running hours (calculateSectorPhysics()), so
+     * none of it lands on expected revenue directly.
+     */
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        return [
+            'macro_demand_shift' => 0.0,
+            ...$this->resolvePricingMultipliers($stock, $macroState),
+        ];
+    }
+
+    /**
+     * The swing in new equipment orders: the fleet's level of use (the lagged output gap) and the leading
+     * manufacturing PMI, at the firm's cyclicality.
+     */
+    protected function resolveEquipmentOrderShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
         $outputGap = $this->resolveLaggedOutputGap($macroState);
-        $beta = $this->getOperatingCyclicality($stock);
         $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroConstants::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 
-        return ($outputGap * $beta * self::OUTPUT_GAP_DEMAND_SENSITIVITY) + ($pmiShift * $beta);
+        return (($outputGap * self::OUTPUT_GAP_DEMAND_SENSITIVITY) + $pmiShift) * $this->getOperatingCyclicality($stock);
+    }
+
+    /**
+     * The plant is staffed to the equipment it has in hand and the fleet it services: the opening workload of the
+     * equipment backlog, and the aftermarket's loading of the order swing, at their target weights.
+     */
+    public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::OemEquipmentWeight->value  => self::OEM_EQUIPMENT_WEIGHT,
+            ModelParam::AftermarketMroWeight->value => self::AFTERMARKET_MRO_WEIGHT,
+        ]);
+        $oemWeight = $params[ModelParam::OemEquipmentWeight];
+        $mroWeight = $params[ModelParam::AftermarketMroWeight];
+        if ($oemWeight + $mroWeight <= 0.0) {
+            return 0.0;
+        }
+
+        $workload = StreamContext::openingWorkload($stock->getEarningsMomentumZ() ?? [], 'oem_equipment', self::OEM_BACKLOG_BURN_RATE);
+
+        return (($oemWeight * ($workload - 1.0)) + ($mroWeight * self::MRO_CYCLE_LOADING * $this->resolveEquipmentOrderShift($stock, $macroState))) / ($oemWeight + $mroWeight);
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -209,13 +246,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $mroZ = $streams->generateZ('aftermarket_mro', 0.40);
 
         $mroShock = $mroZ * ($baselineVol * self::MRO_VARIANCE_SCALAR);
-        // The firm-wide cycle lands on all of expected revenue; equipment orders carry it, and the aftermarket,
-        // which follows the installed fleet's running hours, carries MRO_CYCLE_LOADING of it.
-        $cycleShares = MacroTransmission::allocateDemandShift(
-            ['oem_equipment' => $oemWeight, 'aftermarket_mro' => $mroWeight],
-            ['oem_equipment' => 1.0, 'aftermarket_mro' => self::MRO_CYCLE_LOADING],
-            $this->resolveCycleDemandShift($stock, $macroState),
-        );
+        // Equipment orders take the cycle and reach revenue through the order book; the aftermarket, which follows the
+        // installed fleet's running hours, takes MRO_CYCLE_LOADING of the same swing at once, so the mix sets how
+        // cyclical the firm is.
+        $orderShift = $this->resolveEquipmentOrderShift($stock, $macroState);
 
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
 
@@ -223,10 +257,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         // hits orders in full but reaches revenue only at the backlog burn rate, and the rest persists.
         // Metzler inventory cycle: dealer lots and fleet stocks are drawn down before new OEM orders are placed.
         $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
-        $oemOrderMultiplier = max(0.0, 1.0 + ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) + $cycleShares['oem_equipment'] + $this->resolveFxDemandShift($macroState) - $overhangDrag + $inventoryCycleShift);
+        $oemOrderMultiplier = max(0.0, 1.0 + ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) + $orderShift + $this->resolveFxDemandShift($macroState) - $overhangDrag + $inventoryCycleShift);
         $oemBook = $streams->recognizeBacklog('oem_equipment', $expectedRevenue * $oemWeight, $oemOrderMultiplier, self::OEM_BACKLOG_BURN_RATE);
         $oemRevenue = $oemBook['revenue'];
-        $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock + $cycleShares['aftermarket_mro']));
+        $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock + (self::MRO_CYCLE_LOADING * $orderShift)));
         $streamRevenues = [
             'oem_equipment'   => $oemRevenue,
             'aftermarket_mro' => $mroRevenue,

@@ -13,6 +13,8 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Model\ModelParam;
+use App\Service\Model\ModelParameters;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -141,7 +143,7 @@ class UtilityBusinessModelTest extends TestCase
     }
     public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void
     {
-        $model = new UtilityBusinessModel();
+        $model = $this->unhedgedModel();
         $regimeKey = StreamContext::REGIME_STATE_PREFIX . UtilityBusinessModel::REGIME_INFRASTRUCTURE_LIABILITY;
         $macro = new MacroStateDTO();
 
@@ -149,7 +151,8 @@ class UtilityBusinessModelTest extends TestCase
             $stock = new Stock();
             $stock->setTicker('UTIL');
             $stock->setBeta('1.0');
-            $stock->setEarningsMomentumZ($momentum);
+            // The rate case is held level, so the tariff lag does not move between the quarters compared.
+            $stock->setEarningsMomentumZ([...$momentum, UtilityBusinessModel::STATE_TARIFF_SHORTFALL => 0.0]);
             // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
@@ -239,6 +242,7 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(100_000_000.0 * 4.0 * UtilityBusinessModel::GRID_HARDENING_CAPEX_RATIO, $rebuilding->scheduledCapex, 1.0);
     }
 
+    /** A merchant quarter on an unhedged book, so the spot arithmetic is all that moves. */
     private function merchantQuarter(string $ticker, float $gasIndexEma, float $powerIndexEma): ActualFinancialsDTO
     {
         $stock = new Stock();
@@ -248,7 +252,65 @@ class UtilityBusinessModelTest extends TestCase
         $math->method('generateStandardNormal')->willReturn(0.0);
         $macro = new MacroStateDTO(inflationEma: 0.02, naturalGasPriceIndexEma: $gasIndexEma, wholesalePowerPriceIndexEma: $powerIndexEma);
 
-        return (new UtilityBusinessModel())->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
+        return $this->unhedgedModel()->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
+    }
+
+    /** The utility model with its merchant book sold at spot: no forward ladder. */
+    private function unhedgedModel(): UtilityBusinessModel
+    {
+        return new class extends UtilityBusinessModel {
+            protected function resolveModelParameters(Stock $stock, array $defaults = []): ModelParameters
+            {
+                return parent::resolveModelParameters($stock, [ModelParam::PowerHedgeRatio->value => 0.0] + $defaults);
+            }
+        };
+    }
+
+    /**
+     * The merchant book is sold forward on the ladder: a spot move reaches only the open share of the quarter's output
+     * at once, and the hedged share delivers the strike struck over the last three years, the same whatever spot does.
+     */
+    public function testTheMerchantBookIsSoldForwardOnTheLadder(): void
+    {
+        $quarter = function (float $powerIndexEma): ActualFinancialsDTO {
+            $stock = (new Stock())->setTicker('BIRD')->setBeta('0.5');
+            $math = $this->createStub(MathUtility::class);
+            $math->method('generateStandardNormal')->willReturn(0.0);
+            $macro = new MacroStateDTO(inflationEma: 0.02, wholesalePowerPriceIndexEma: $powerIndexEma);
+
+            return (new UtilityBusinessModel())->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
+        };
+
+        $base = $quarter(100.0);
+        $spike = $quarter(150.0);
+        $open = 1.0 - UtilityBusinessModel::POWER_HEDGE_RATIO;
+        $this->assertEqualsWithDelta(100_000_000.0 * 0.20 * $open * 0.50, $spike->actualRevenue - $base->actualRevenue, 1.0);
+        $this->assertEqualsWithDelta($open * 0.50, $spike->kpis['power_price_index'] - $base->kpis['power_price_index'], 1e-9);
+        $this->assertArrayHasKey(FinancialConstants::STATE_POWER_STRIKE_SUM_PREFIX . (UtilityBusinessModel::POWER_HEDGE_LADDER_TRANCHES - 1), $base->streamZ);
+    }
+
+    /**
+     * A water utility's market-based arm sells no power, so it rolls no ladder; the tariff lag lands on its tariffed
+     * book alone, and its market-based work sells at the market.
+     */
+    public function testTheTariffLagHaircutsTheRegulatedBookAlone(): void
+    {
+        $shortfall = 0.05;
+        $stock = (new Stock())->setTicker('BIRD')->setBeta('0.5');
+        $stock->setEarningsMomentumZ([UtilityBusinessModel::STATE_TARIFF_SHORTFALL => $shortfall]);
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generateStandardNormal')->willReturn(0.0);
+        $macro = new MacroStateDTO(inflationEma: 0.02, wholesalePowerPriceIndexEma: MacroConstants::WHOLESALE_POWER_BASELINE);
+        $model = $this->unhedgedModel();
+
+        // The engine passes expected revenue at the firm-wide level the lag leaves: 80% of the book lags by 5%.
+        $bookLevel = 1.0 - (0.80 * $shortfall);
+        $this->assertEqualsWithDelta($bookLevel, $model->getMacroPhysics($stock, $macro)['pricing_power_multiplier'] / $model->getMacroPhysics($stock, $macro)['input_cost_multiplier'], 1e-12);
+        $result = $model->computeActualFinancials($stock, 100_000_000.0 * $bookLevel, 0.40, 20_000_000.0, 0.10, $macro, $math);
+
+        $this->assertEqualsWithDelta(100_000_000.0 * 0.20, $result->streamRevenue['unregulated_merchant'], 1e-6, 'The merchant book sells at the market.');
+        $this->assertEqualsWithDelta(100_000_000.0 * 0.80 * (1.0 - $shortfall), $result->streamRevenue['regulated_weather_load'], 1e-6);
+        $this->assertEqualsWithDelta(0.80 * (float) $stock->getTotalRevenue(), $model->annualUtilityTariffBase($stock), 1e-9);
     }
 
     /**
@@ -346,29 +408,84 @@ class UtilityBusinessModelTest extends TestCase
         $stock->setTicker('BIRD');
         $macro = new MacroStateDTO(naturalGasPriceIndexEma: 150.0, wholesalePowerPriceIndexEma: 130.0);
 
-        // Zero-fuel renewables keep the whole 30% price rise; gas is no cost to them.
-        $this->assertEqualsWithDelta(0.30, (new UtilityBusinessModel())->describeMerchantPowerImpact($stock, $macro), 1e-12);
+        // Zero-fuel renewables keep the whole 30% price rise on what they sell at spot; gas is no cost to them.
+        $this->assertEqualsWithDelta(0.30, $this->unhedgedModel()->describeMerchantPowerImpact($stock, $macro), 1e-12);
+        // Hedged, the panel reads the strike the ladder delivers this quarter on its hedged share, as the books do.
+        $hedge = UtilityBusinessModel::POWER_HEDGE_RATIO;
+        $strike = CommodityLogisticsSubsystem::powerForwardRelative($macro, 0.0);
+        $this->assertEqualsWithDelta(($hedge * ($strike - 1.0)) + ((1.0 - $hedge) * 0.30), (new UtilityBusinessModel())->describeMerchantPowerImpact($stock, $macro), 1e-12);
     }
 
-    public function testADistrictStormOpensTheGridLiabilityRegimeWithoutAFailureOfItsOwn(): void
+    /**
+     * A district storm opens the liability regime once, in the report whose window its losses arrive in, with the
+     * utility's own event draw flat: not on a first report, which has no earlier reading, and not again when the regime
+     * ends early while the storm's claims are still open.
+     */
+    public function testADistrictStormOpensTheGridLiabilityRegimeOncePerStorm(): void
     {
-        $model = new UtilityBusinessModel();
+        $model = $this->unhedgedModel();
         $regimeKey = StreamContext::REGIME_STATE_PREFIX . UtilityBusinessModel::REGIME_INFRASTRUCTURE_LIABILITY;
-
-        $run = function (float $burden) use ($model): array {
-            $stock = new Stock();
-            $stock->setTicker('UTIL');
-            $stock->setBeta('0.5');
+        $quarter = function (array $momentum, float $burden, float $totalTime, bool $exits) use ($model): ActualFinancialsDTO {
+            $stock = (new Stock())->setTicker('UTIL')->setBeta('0.5');
+            $stock->setEarningsMomentumZ($momentum);
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
             $math->method('generatePersistentZ')->willReturn(0.0);
-            $math->method('checkProbability')->willReturn(false);
-            $macro = new MacroStateDTO(inflationEma: 0.02, catastropheLossIndexEma: $burden);
+            $math->method('checkProbability')->willReturn($exits);
+            // The smoothed stock of open claims sits high throughout: it is not what the trigger reads.
+            $macro = new MacroStateDTO(inflationEma: 0.02, catastropheLossIndex: $burden, catastropheLossIndexEma: 9.0, totalTime: $totalTime);
 
-            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->streamZ;
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
 
-        $this->assertArrayNotHasKey($regimeKey, array_filter($run(1.0)));
-        $this->assertGreaterThan(0.0, $run(UtilityBusinessModel::CATASTROPHE_GRID_DAMAGE_THRESHOLD)[$regimeKey] ?? 0.0, 'District storm damage opens the hardening regime with the utility\'s own event draw flat.');
+        $first = $quarter([], 1.0, 10.0, false);
+        $this->assertSame(0.0, $first->streamZ[$regimeKey] ?? 0.0, 'A first report has no window to read.');
+
+        $burden = exp(-CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY * 0.25) + 6.0;
+        $storm = $quarter($first->streamZ, $burden, 10.25, false);
+        $this->assertSame(1.0, $storm->streamZ[$regimeKey]);
+        $this->assertSame(ShockEvent::INFRASTRUCTURE_FAILURE, $storm->eventType);
+        $this->assertGreaterThan(0.0, $storm->specialCharge);
+
+        // The regime ends early; the storm's claims only decay, so nothing new arrives and it does not re-open.
+        $exited = $quarter($storm->streamZ, $burden * exp(-CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY * 0.25), 10.5, true);
+        $this->assertSame(0.0, $exited->streamZ[$regimeKey]);
+        $again = $quarter($exited->streamZ, $burden * exp(-CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY * 0.5), 10.75, false);
+        $this->assertSame(0.0, $again->streamZ[$regimeKey]);
+        $this->assertNull($again->eventType);
+    }
+
+    /**
+     * A water network takes a storm at its exposure, a quarter of an overhead grid's, through the onset charge, the
+     * ongoing charges and the hardening capex alike; a failure of its own is its own in full.
+     */
+    public function testAWaterNetworkTakesTheStormAtItsExposure(): void
+    {
+        $model = $this->unhedgedModel();
+        $onset = function (string $ticker, float $burden, float $eventZ) use ($model): ActualFinancialsDTO {
+            $stock = (new Stock())->setTicker($ticker)->setBeta('0.5');
+            $stock->setEarningsMomentumZ([
+                'event' => -9.9,
+                FinancialConstants::STATE_CATASTROPHE_BURDEN_AT_REPORT => 1.0,
+                FinancialConstants::STATE_CATASTROPHE_BURDEN_READ_AT => 10.0,
+            ]);
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            $math->method('generatePersistentZ')->willReturnCallback(static fn(float $prev): float => $prev === -9.9 ? $eventZ : 0.0);
+            $math->method('checkProbability')->willReturn(false);
+            $macro = new MacroStateDTO(inflationEma: 0.02, catastropheLossIndex: $burden, totalTime: 10.25);
+
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
+        };
+        $storm = exp(-CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY * 0.25) + 6.0;
+
+        $grid = $onset('BIRD', $storm, 0.0);
+        $water = $onset('WADE', $storm, 0.0);
+        $this->assertGreaterThan(0.0, $grid->specialCharge);
+        $this->assertEqualsWithDelta(0.25, ($water->specialCharge / $water->actualRevenue) / ($grid->specialCharge / $grid->actualRevenue), 0.02);
+        $this->assertEqualsWithDelta(0.25 * $grid->scheduledCapex, $water->scheduledCapex, 1.0);
+
+        $ownFailure = $onset('WADE', 1.0, -3.0);
+        $this->assertGreaterThan(0.0, $ownFailure->specialCharge);
+        $this->assertEqualsWithDelta($grid->specialCharge / $grid->actualRevenue, $ownFailure->specialCharge / $ownFailure->actualRevenue, 0.01, 'Its own failure is charged in full.');
     }
 
     /**
@@ -383,11 +500,11 @@ class UtilityBusinessModelTest extends TestCase
 
         $renewables = new Stock();
         $renewables->setTicker('BIRD');
-        $this->assertEqualsWithDelta($adderShare, (new UtilityBusinessModel())->describeMerchantPowerImpact($renewables, $macro), 1e-12);
+        $this->assertEqualsWithDelta($adderShare, $this->unhedgedModel()->describeMerchantPowerImpact($renewables, $macro), 1e-12);
 
         $mixed = new Stock();
         $mixed->setTicker('UTIL');
-        $this->assertEqualsWithDelta($adderShare - (UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE * $carbonShare), (new UtilityBusinessModel())->describeMerchantPowerImpact($mixed, $macro), 1e-12);
+        $this->assertEqualsWithDelta($adderShare - (UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE * $carbonShare), $this->unhedgedModel()->describeMerchantPowerImpact($mixed, $macro), 1e-12);
     }
 
     /**
@@ -397,7 +514,7 @@ class UtilityBusinessModelTest extends TestCase
      */
     public function testTheReportedCarbonShareIsWhatTheUpliftAddsToEarnings(): void
     {
-        $model = new UtilityBusinessModel();
+        $model = $this->unhedgedModel();
         $run = function (string $ticker, float $carbon) use ($model): ActualFinancialsDTO {
             $stock = new Stock();
             $stock->setTicker($ticker);

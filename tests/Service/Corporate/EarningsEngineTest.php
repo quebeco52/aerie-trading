@@ -507,6 +507,28 @@ class EarningsEngineTest extends TestCase
         $this->assertSame(0.0, (float) $introduction->getLastDividend(), 'an introduction-stage firm retains every dollar');
     }
 
+    /**
+     * The fixed base follows the declared season by the strategy's own share of it: a generator, whose season is in its
+     * prices, carries its base evenly through the year where a firm staffing for a volume peak does not.
+     */
+    public function testTheFixedBaseFollowsTheSeasonByTheStrategysShare(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+        $stock = $this->buildMatureIndustrial('DIPR');
+        $stock->setIndustry('Utilities - Independent Power Producers');
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('DIPR', 252), 252);
+
+        $this->assertNotNull($captured);
+        $this->assertNotEqualsWithDelta(1.0, $captured->seasonalFactor, 1e-6, 'control: the quarter carries a season');
+        $this->assertSame(1.0, $captured->seasonalFixedCostFactor);
+    }
+
     public function testStockCompensationIsAddedBackToCashFlowAndSettledInNewShares(): void
     {
         $captured = null;

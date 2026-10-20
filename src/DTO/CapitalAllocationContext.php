@@ -71,9 +71,6 @@ class CapitalAllocationContext
     public bool $recapActionTaken = false;
     public bool $failedEmergencyBorrow = false;
 
-    // Valuation
-    public float $currentPE = 0.0;
-
     // Dividends
     public float $newDividend = 0.0;
     public float $totalPaid = 0.0;

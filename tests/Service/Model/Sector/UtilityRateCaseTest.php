@@ -209,8 +209,9 @@ final class UtilityRateCaseTest extends TestCase
         $model = new UtilityBusinessModel();
         $physics = $model->getMacroPhysics($this->stockWithLag(99.0), new MacroStateDTO(inflationEma: 0.03));
 
+        // Capped where interim rates are granted, on the tariffed 85% of the book: the merchant book sells at market.
         $this->assertEqualsWithDelta(
-            $physics['input_cost_multiplier'] * (1.0 - FirmEconomics::MAX_TARIFF_SHORTFALL),
+            $physics['input_cost_multiplier'] * (1.0 - (UtilityBusinessModel::REGULATED_BASE_WEIGHT * FirmEconomics::MAX_TARIFF_SHORTFALL)),
             $physics['pricing_power_multiplier'],
             1e-9,
             'Attrition is capped at the point interim rates are granted.',

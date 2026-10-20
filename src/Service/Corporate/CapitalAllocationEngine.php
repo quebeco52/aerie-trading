@@ -183,9 +183,10 @@ class CapitalAllocationEngine
         $calculatedTarget = $sustainableBase > 0 ? ($sustainableBase * $effectiveTargetPayout) : 0.0;
         // Managers are reluctant to cut (Lintner 1956): a payer holds its dividend while earnings fall, and cuts by
         // choice only after a loss year (DeAngelo, DeAngelo & Skinner 1992). One known for an unbroken record of
-        // increases does not cut by choice even then; either one still cuts when the caps below force it to.
+        // increases does not cut by choice even then; either one still cuts when the caps below force it to. A board
+        // paying a share of each year's earnings holds nothing, and lets the dividend fall at its own speed.
         $isLossYear = $ctx->trailingQuarterlyEps <= 0.0;
-        $holdsDividend = $isAristocrat || !$isLossYear;
+        $holdsDividend = $isAristocrat || (!$isLossYear && $ctx->strategy->holdsDividendThroughDownturns());
         $targetDividend = $holdsDividend ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
 
         $isRegulatoryDividendHalt = false;
@@ -325,16 +326,6 @@ class CapitalAllocationEngine
         // this, so the fortress is not detected as defective for holding the reserves that define it.
         $ctx->targetOperatingCash = $ctx->stock->getManagementProfile()->managedTargetCash($ctx->strategy, $ctx->operatingBase, (float) $ctx->stock->getCustomerDeposits(), (float) $ctx->stock->getWholesaleDebt());
         $ctx->excessCash = max(0.0, $ctx->newTreasury - $ctx->targetOperatingCash);
-
-        if ($ctx->actualAnnualEps > 0) {
-            $ctx->currentPE = $ctx->currentPrice / $ctx->actualAnnualEps;
-        } else {
-            $actualRevenue = (float) $ctx->stock->getTotalRevenue();
-            $salesPerShare = $ctx->sharesOutstanding > 0 ? $actualRevenue / $ctx->sharesOutstanding : 1.0;
-            $priceToSales = $salesPerShare > 0 ? $ctx->currentPrice / $salesPerShare : 1.0;
-            $structuralAfterTaxMargin = max(0.01, (float) $ctx->stock->getOperatingMargin() * (1.0 - $ctx->macroState->corporateTaxRate));
-            $ctx->currentPE = $priceToSales * (1.0 / $structuralAfterTaxMargin);
-        }
     }
 
     /**
@@ -415,6 +406,11 @@ class CapitalAllocationEngine
         // The multiple values equity, so it is struck at the cost of equity on the return on equity, as the
         // market strikes it (MarketEngine); the spread above stays ROIC against the hurdle, an EVA test.
         $fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
+        // Cheap is judged on the earnings the multiple is struck on: on a quarter's run rate a commodity boom made the
+        // stock look cheapest at the top of the cycle, and a loss priced it as dear as it could be.
+        $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
+        $isPricedBelowItsMultiple = $normalizedEps > 0.0 && ($ctx->currentPrice / $normalizedEps) < ($fairValuePE + 3.0);
+        $multipleDiscount = $normalizedEps > 0.0 ? max(0.0, ($fairValuePE - ($ctx->currentPrice / $normalizedEps)) / max(1.0, $fairValuePE)) : 0.0;
 
         $ctx->newShares = $ctx->sharesOutstanding;
 
@@ -425,7 +421,7 @@ class CapitalAllocationEngine
         $repurchaseAccretion = $ctx->strategy->resolveRepurchaseAccretion($stock, $ctx->currentPrice);
         $isTradingBelowBook = $repurchaseAccretion >= self::MIN_ACCRETIVE_REPURCHASE_DISCOUNT;
 
-        if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder || $isUnderLeveraged || $capitalSurplusReturn > 0.0 || $saturationSeverity > 0.20 || $isTradingBelowBook) {
+        if (($economicSpread > 0.02 && $isPricedBelowItsMultiple) || $isHoarder || $isUnderLeveraged || $capitalSurplusReturn > 0.0 || $saturationSeverity > 0.20 || $isTradingBelowBook) {
             $maxWillingSpend = $ctx->strategy->calculateMaxBuybackSpend($excessCash, $ctx->retainedEarningsThisQuarter, $isMegaHoarder);
 
             // Saturation Buyback Unlock: Mature firms distribute non-reinvestable excess cash
@@ -485,10 +481,7 @@ class CapitalAllocationEngine
             $availableCashBuffer = max(0.0, $ctx->newTreasury - $minOperatingCash);
             $absoluteMaxSpend = min($absoluteMaxSpend, $availableCashBuffer);
 
-            $valuationDiscount = max(
-                $repurchaseAccretion,
-                max(0.0, ($fairValuePE - $ctx->currentPE) / max(1.0, $fairValuePE)),
-            );
+            $valuationDiscount = max($repurchaseAccretion, $multipleDiscount);
             $aggression = $isMegaHoarder ? 1.0 : min(1.0, 0.50 + $valuationDiscount);
 
             $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : $this->mathUtility->generateUniformBetween(self::BUYBACK_APPETITE_MIN_SHARE, 1.0));

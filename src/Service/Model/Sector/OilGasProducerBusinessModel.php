@@ -10,6 +10,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -91,6 +92,13 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     public const HEDGE_LADDER_TRANCHES = 4;
     /** Persisted state key prefix: sum of the strikes already locked for delivery 0-3 quarters ahead. */
     public const STATE_HEDGE_STRIKE_SUM_PREFIX = 'state:hedge_strike_sum_';
+
+    // --- Mid-Cycle Dividend ---
+    /**
+     * Persisted state key prefix: the after-tax revenue a quarter's barrels fetched above what they fetch at the
+     * long-run price, one key per quarter of the trailing year (0 = latest).
+     */
+    public const STATE_PRICE_WINDFALL_PREFIX = 'state:price_windfall_';
 
     // --- Revenue Shock Physics ---
     /** Volatility multiplier on the baseline volatility for field production (uptime, well performance) shocks. */
@@ -273,6 +281,10 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         // Revenue at the prices the cost base was sized for, so the ratio below is per barrel.
         $volumeRevenue = $expectedRevenue * (($liquidsShare * $oilVolume) + ((1.0 - $liquidsShare) * $gasVolume));
         $priceRelative = $volumeRevenue > 0.0 ? $actualRevenue / $volumeRevenue : 1.0;
+        // What the barrels fetched above the price the market reverts to, the same barrels costing the same to lift:
+        // the part of the year's earnings the dividend is not set on.
+        $longRunPrice = CommodityLogisticsSubsystem::resolveEnergyEquilibriumPrice($macroState->energySupplyEma) / MacroConstants::ENERGY_BASELINE;
+        $this->rollPriceWindfall($streams, ($actualRevenue - ($volumeRevenue * $longRunPrice)) * (1.0 - $this->getEffectiveTaxRate($macroState->corporateTaxRate)));
 
         // --- Per-Barrel Cost Base ---
         // Lifting and processing costs (diesel and power, consumables, field payroll) inflate with their input
@@ -322,16 +334,47 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
             $quartersAhead / 4.0,
         );
 
-        $sums = [];
-        for ($d = 0; $d < self::HEDGE_LADDER_TRANCHES; $d++) {
-            $sums[] = $streams->getPersistedState(self::STATE_HEDGE_STRIKE_SUM_PREFIX . $d, 0.0);
+        return $streams->rollHedgeLadder(self::STATE_HEDGE_STRIKE_SUM_PREFIX, self::HEDGE_LADDER_TRANCHES, $forward);
+    }
+
+    /**
+     * Rolls the trailing year of price windfalls one quarter. A firm with no record yet opens with the whole year at
+     * this quarter's, as the trailing net income is seeded.
+     */
+    private function rollPriceWindfall(StreamContext $streams, float $windfall): void
+    {
+        $quarters = (int) FinancialConstants::QUARTERS_PER_YEAR;
+        $hasRecord = !is_nan($streams->getPersistedState(self::STATE_PRICE_WINDFALL_PREFIX . '0', NAN));
+        for ($q = $quarters - 1; $q > 0; $q--) {
+            $streams->registerState(self::STATE_PRICE_WINDFALL_PREFIX . $q, $hasRecord ? $streams->getPersistedState(self::STATE_PRICE_WINDFALL_PREFIX . ($q - 1)) : $windfall);
         }
-        $ladder = FirmEconomics::rollHedgeLadder($sums, $forward);
-        foreach ($ladder['sums'] as $d => $sum) {
-            $streams->registerState(self::STATE_HEDGE_STRIKE_SUM_PREFIX . $d, $sum);
+        $streams->registerState(self::STATE_PRICE_WINDFALL_PREFIX . '0', $windfall);
+    }
+
+    /**
+     * A producer sets its dividend on what its barrels earn at the long-run price: the year's windfall above it is no
+     * dividend it could hold through the slump that follows, so it leaves through buybacks instead, the fixed-plus-
+     * variable payout E&Ps adopted after 2016 (Devon 2021 10-K).
+     */
+    public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $windfall = 0.0;
+        for ($q = 0; $q < (int) FinancialConstants::QUARTERS_PER_YEAR; $q++) {
+            $windfall += (float) ($momentum[self::STATE_PRICE_WINDFALL_PREFIX . $q] ?? 0.0);
         }
 
-        return $ladder['strike'];
+        return $quarterlyEps - ($windfall / FinancialConstants::QUARTERS_PER_YEAR / max(1.0, (float) $stock->getSharesOutstanding()));
+    }
+
+    /**
+     * The base is already set on long-run earnings, so there is nothing to hold it through: the producer pays it from
+     * what its barrels bring in, and a trough long enough to empty the treasury trims it rather than being borrowed for
+     * (in 2020 Occidental, Apache and Equinor cut).
+     */
+    public function holdsDividendThroughDownturns(): bool
+    {
+        return false;
     }
 
     /**

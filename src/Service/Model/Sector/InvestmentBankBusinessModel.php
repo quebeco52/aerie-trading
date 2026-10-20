@@ -263,64 +263,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         return $primeInterest + $inventoryInterest + $cashInterest;
     }
 
-    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
-    {
-        // Capital is tangible: goodwill absorbs no loss, so it neither sizes the book nor earns the return target.
-        $equity = $stock->getTangibleEquity();
-        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
-
-        $taxRate = $macroState->corporateTaxRate;
-
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $treasury = (float) $stock->getCorporateTreasury();
-
-        $blendedWholesaleRate = $this->calculateBlendedWholesaleRate($stock, $macroState);
-
-        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
-
-        $effectiveEquity = max(1.0, $equity);
-
-        $actualLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
-        $allowedLeverage = min($actualLeverage, max(0.0, $equityLimit));
-        $optimalDebt = $effectiveEquity * $allowedLeverage;
-
-        $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
-
-        // Investment banks deploy wholesale debt into institutional prime financing and trading inventories
-        $fundingBenchmark = max(0.0, $blendedWholesaleRate);
-        $primeFinancingRate = $fundingBenchmark + self::PRIME_FINANCING_SPREAD;
-        $inventoryFinancingYield = max(0.0, $fundingBenchmark - self::MATCHED_REPO_SPREAD_HAIRCUT);
-        $blendedAssetYield = (self::PRIME_BROKERAGE_ALLOCATION * $primeFinancingRate) + ((1.0 - self::PRIME_BROKERAGE_ALLOCATION) * $inventoryFinancingYield);
-        $optimalInterestIncome = $optimalDebt * $blendedAssetYield;
-
-        $optimalOperatingNetIncome = $effectiveEquity * $baselineRoe;
-        $optimalEbt = $optimalOperatingNetIncome / (1.0 - $taxRate);
-
-        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
-        $operatingBase = $this->getOperatingBase($stock);
-        $targetCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $optimalDebt);
-        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $targetCash;
-        $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
-
-        $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
-
-        $targetEbit = $earningAssets * $structuralAssetYield;
-        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
-
-        $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
-        $targetEbit = max($minOperatingEbit, $targetEbit);
-
-        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_GROSS_ASSET_YIELD);
-
-        $grossYield = $targetRevenue / max(1.0, $earningAssets);
-
-        return [
-            'invested_capital' => $earningAssets,
-            'baseline_roic' => ($grossYield * $stableMargin) * (1.0 - $taxRate),
-        ];
-    }
-
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveDeskParameters($stock);
@@ -426,6 +368,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
+        $streams->registerState(self::STATE_OPERATING_YIELD, $this->resolveOperatingYield($stock, $mathUtility));
 
         // --- Leveraged Finance (LevFin) Hung Bridge Debt Marks ---
         // Bridge commitments are marked to the spread they must now be syndicated at: written down as high-yield

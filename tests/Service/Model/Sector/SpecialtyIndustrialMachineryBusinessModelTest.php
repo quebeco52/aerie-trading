@@ -101,26 +101,24 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
         );
     }
 
-    public function testCapacityUtilizationExpandsEquipmentSalesOrders(): void
+    /**
+     * The services the installed fleet buys follow it at the aftermarket's loading of the order swing, at once, while
+     * equipment takes the swing through its order book: the services mix is what makes a specialty maker less cyclical.
+     */
+    public function testAftermarketServicesFollowTheFleetAtTheirLoading(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('SPEC_MACH');
-        $stock->setBeta('1.0');
+        $stock = (new Stock())->setTicker('SPEC_MACH');
+        $recession = new MacroStateDTO(outputGapEma: -0.03, manufacturingPmiEma: 45.0, exchangeRateIndexEma: 100.0);
+        $orders = (new \ReflectionMethod($this->model, 'resolveEquipmentOrderShift'))->invoke($this->model, $stock, $recession);
+        $this->assertLessThan(-0.05, $orders);
 
-        $lowCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.72);
-        $highCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.84);
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $result = $this->model->computeActualFinancials($stock, 100.0, 0.30, 0.0, 0.0, $recession, $math);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-
-        $lowCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $lowCuMacro, $mathMock);
-        $highCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $highCuMacro, $mathMock);
-
-        $this->assertGreaterThan(
-            $lowCuResult->streamRevenue['equipment_sales'],
-            $highCuResult->streamRevenue['equipment_sales'],
-            'Tight industrial capacity utilization triggers factory capex expansion, increasing specialty machinery sales.',
-        );
+        $burn = SpecialtyIndustrialMachineryBusinessModel::EQUIPMENT_BACKLOG_BURN_RATE;
+        $this->assertEqualsWithDelta(100.0 * SpecialtyIndustrialMachineryBusinessModel::SERVICES_WEIGHT * (1.0 + (SpecialtyIndustrialMachineryBusinessModel::MRO_CYCLE_LOADING * $orders)), $result->streamRevenue['aftermarket_services'], 1e-9);
+        $this->assertEqualsWithDelta(100.0 * SpecialtyIndustrialMachineryBusinessModel::EQUIPMENT_WEIGHT * (1.0 + ($burn * $orders)), $result->streamRevenue['equipment_sales'], 1e-9);
     }
 
     public function testGscpiDisruptionAddsVariableCostPenalty(): void
@@ -152,10 +150,14 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
         $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
-        $this->assertEqualsWithDelta(0.0, $this->model->resolveSectorActivityShift($stock, $recession), 1e-12, 'A book at steady state is normal activity.');
+        // The services the fleet buys fall at once, at their loading of the order swing and their 0.30 of the mix.
+        $services = SpecialtyIndustrialMachineryBusinessModel::SERVICES_WEIGHT * SpecialtyIndustrialMachineryBusinessModel::MRO_CYCLE_LOADING
+            * (new \ReflectionMethod($this->model, 'resolveEquipmentOrderShift'))->invoke($this->model, $stock, $recession);
+        $this->assertLessThan(0.0, $services);
+        $this->assertEqualsWithDelta($services, $this->model->resolveSectorActivityShift($stock, $recession), 1e-12, 'A book at steady state is normal equipment work.');
 
         // One quarter of equipment backlog in hand: 0.35 x (1 + 1) = 0.70 of normal work, at 0.70 of the mix = -0.21.
         $stock->setEarningsMomentumZ([StreamContext::BACKLOG_STATE_PREFIX . 'equipment_sales' => 1.0]);
-        $this->assertEqualsWithDelta(-0.21, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+        $this->assertEqualsWithDelta(-0.21 + $services, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
 }

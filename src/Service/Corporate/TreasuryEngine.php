@@ -662,16 +662,15 @@ class TreasuryEngine
             return;
         }
 
-        $currentPE = $ctx->quarterlyEps > 0 ? ($ctx->currentPrice / ($ctx->quarterlyEps * 4)) : 9999.0;
-        if ($ctx->actualAnnualEps > 0) {
-            $currentPE = $ctx->currentPrice / $ctx->actualAnnualEps;
-        }
-
         $trueReturn = $ctx->strategy->getTrueReturn($stock);
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
         $fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
+        // The price is judged on the earnings the multiple is struck on: on a quarter's run rate, a loss made any price
+        // look like a bubble and the firm sold stock into its own bad news.
+        $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
+        $currentPE = $normalizedEps > 0.0 ? $ctx->currentPrice / $normalizedEps : 0.0;
 
         // The shares outstanding now, after any buyback this quarter; the context's count is the opening one.
         $sharesNow = max(1.0, (float) $stock->getSharesOutstanding());
@@ -684,7 +683,7 @@ class TreasuryEngine
         $totalAssets = $stock->getTotalAssets();
         $holdsItsCapitalTarget = $capitalTarget !== null && $totalAssets > 0.0 && ((float) $stock->getTotalEquity() / $totalAssets) >= $capitalTarget;
 
-        $isBubble = !$holdsItsCapitalTarget && $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
+        $isBubble = !$holdsItsCapitalTarget && $normalizedEps > 0.0 && $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
         // Principal the firm cannot fund is the reason to go to the equity market, and it used to be the one
         // shortfall this path could not see: the raise was sized on operating cash alone, so a solvent firm
         // facing a maturity it could not roll never even tried to sell stock to cover it.

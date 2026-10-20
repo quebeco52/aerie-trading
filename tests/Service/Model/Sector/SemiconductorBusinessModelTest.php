@@ -28,65 +28,23 @@ class SemiconductorBusinessModelTest extends TestCase
             ->getMock();
     }
 
-    public function testUnderinvestingInCapexIncursYieldPenalty(): void
+    /**
+     * The wafer cost ratio does not read the seeded reinvestment rate: under-investment costs a fab its capacity and
+     * its return as the plant ages, and a mature-node fab spending below depreciation runs the best yields it has.
+     */
+    public function testTheWaferCostRatioDoesNotReadTheReinvestmentRate(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('SEMI');
-        $stock->setCapexRatio('0.20'); // Below 0.40 table stakes threshold
-
-        // Ensure normal distribution rolls return 0.0 for deterministic revenue/cycle checks
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $costs = function (string $capexRatio): float {
+            $stock = new Stock();
+            $stock->setTicker('SEMI');
+            $stock->setCapexRatio($capexRatio);
 
-        $expectedRevenue = 1000.0;
-        $realizedVariableMargin = 0.30; // 30% baseline variable cost
-        $fixedCosts = 200.0;
-        $baselineVol = 0.20;
-        $macroState = MacroStateDTO::fromArray(['output_gap_ema' => 0.0]);
+            return $this->model->computeActualFinancials($stock, 1000.0, 0.30, 200.0, 0.20, MacroStateDTO::fromArray(['output_gap_ema' => 0.0]), $this->mathUtilityMock)->actualVariableCosts;
+        };
 
-        $result = $this->model->computeActualFinancials(
-            $stock,
-            $expectedRevenue,
-            $realizedVariableMargin,
-            $fixedCosts,
-            $baselineVol,
-            $macroState,
-            $this->mathUtilityMock,
-        );
-
-        // With yieldModifier = 0.08 * 0.85 = 0.068, actualVariableCosts = 1000.0 * (0.30 + 0.068) = 368.0
-        $this->assertEquals(368.0, $result->actualVariableCosts);
-        // EBIT = 1000.0 - 200.0 - 368.0 = 432.0
-        $this->assertEquals(432.0, $result->ebit);
-    }
-
-    public function testMeetingCapexTableStakesResultsInNormalYields(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('SEMI');
-        $stock->setCapexRatio('0.80'); // Meets/exceeds 0.40 table stakes threshold
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $expectedRevenue = 1000.0;
-        $realizedVariableMargin = 0.30;
-        $fixedCosts = 200.0;
-        $baselineVol = 0.20;
-        $macroState = MacroStateDTO::fromArray(['output_gap_ema' => 0.0]);
-
-        $result = $this->model->computeActualFinancials(
-            $stock,
-            $expectedRevenue,
-            $realizedVariableMargin,
-            $fixedCosts,
-            $baselineVol,
-            $macroState,
-            $this->mathUtilityMock,
-        );
-
-        // With yieldModifier = 0.00, actualVariableCosts = 1000.0 * 0.30 = 300.0
-        $this->assertEquals(300.0, $result->actualVariableCosts);
-        // EBIT = 1000.0 - 200.0 - 300.0 = 500.0
-        $this->assertEquals(500.0, $result->ebit);
+        $this->assertEqualsWithDelta(300.0, $costs('0.80'), 1e-9);
+        $this->assertEqualsWithDelta($costs('0.80'), $costs('0.20'), 1e-9);
     }
 
     public function testMetalsAreTheMeasuredInputAndCleanroomPowerIsImmaterial(): void

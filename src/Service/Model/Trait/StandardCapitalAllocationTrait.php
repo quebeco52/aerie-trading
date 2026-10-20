@@ -36,6 +36,11 @@ trait StandardCapitalAllocationTrait
         return $quarterlyEps;
     }
 
+    public function holdsDividendThroughDownturns(): bool
+    {
+        return true;
+    }
+
     public function getMaxOrganicGrowthSpeed(bool $isHoarder, bool $isMegaHoarder): float
     {
         return $isHoarder

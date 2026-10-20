@@ -409,3 +409,44 @@ loss-quarter share and CR sd up together), so the DOVE and SAFE ROE moves are pa
 Banks unchanged (ROE and payout inside 1 se of capE); one bank raise (BNTH s4 y19, above target, no loss).
 Caveats: unpaired, seeds re-path; above/below target is from the prior quarter's report, the insurer target
 from y0 eq/ta (the real target lives in strategy state).
+
+## 2026-10-21 Batch E (normalised-EPS capital tests, oil/miner dividends, housing starts, industrials order book, utilities)
+Question: does batch E break the board, and do its targets move as designed? Harness JointHarnessTest.php, arms baseE
+(27fe1065) / fixE (+batchE.patch), CREDIT=1, seeds 1-8, 20 y, TPY 360, POLITICS=1. Unpaired (the fix changes draws).
+`bin/harness-batch var/harness/joint/run.sh 1-8 baseE fixE`; tables in batchE-8s.out (analyse, beat_an, e_an per arm)
+and mm-batchE-<arm>-8s.out (model_moments). baseE seed 1 reproduced capE2-1 byte for byte (ticks and report rows).
+| quantity | baseE | fixE |
+|---|---|---|
+| CW index %/y, vol | 7.24, 15.6 | 6.91, 15.4 |
+| failures / Ch11 / rescue raises per seed | 0.13 / 0.5 / 6.4 | 0.13 / 0.38 / 5.3 |
+| board EPS beat | 75.6% | 73.9% |
+| non-rescue share raises (after loss) | 100 (64) | 9 (1) |
+| SINK div-borrow events, $ | 47, $174B | 23, $50B |
+| FNCH div-borrow | 23, $15.6B | 0 |
+| IB ROE KING/PERE/CORV/PTRL | 25.7/24.4/24.4/17.6 | 25.8/22.6/22.0/17.3 |
+| Heavy / Specialty / Tools / Semis beta | 5.05/1.03/2.60/5.35 | 2.74/1.79/3.31/6.41 |
+| BIRD margin sd, R2(power) | 7.9pp, 0.76 | 4.3pp, 0.23 |
+| WADE defaulted seeds; end BB; ndE | 3; 3; 3.5 | 1; 7; 4.8 |
+| HealthInsurer beta | 0.44 | 0.33 |
+| corr(starts, gap) k=0; rel sd; AR1; min | 0.18; 4.0; 0.76; 88 | 0.74; 11.5; 0.90; 62 |
+Caveats: 8 seeds unpaired; SINK defaulted (cured) in fixE seed 1 at year 3.6 with ndE to the 15 cap; ALBT defaulted in 2
+fixE seeds (Ch11 once); starts peak at k=-1 (lag the gap by ~1q); Semis beta rose; PERE/CORV ROE fell below lore.
+
+## 2026-10-21 Batch E2 (fixE + EPS walk-down 0.60 sd, oil producers no longer hold dividends)
+Arm fixE2 (HEAD + batchE2.patch), CREDIT=1, seeds 1-8, 20 y, TPY 360, unpaired vs baseE/fixE. `CREDIT=1 bin/harness-batch
+var/harness/joint/run.sh 1-8 fixE2`; tables batchE2-8s.out (analyse, beat_an, e_an), mm-batchE2-fixE2-8s.out,
+fragile-batchE2-8s.out (fragile_an.py SINK,ALBT,TIER over the three arms).
+| quantity | baseE | fixE | fixE2 |
+|---|---|---|---|
+| CW index %/y, vol | 7.24, 15.6 | 6.91, 15.4 | 7.33, 15.5 |
+| failures / Ch11 / pay-default names / rescue raises per seed | 0.13/0.5/0.88/6.4 | 0.13/0.38/0.88/5.3 | 0/0.13/0.63/6.3 |
+| board EPS beat (model range) | 75.6% | 73.9% | 75.7% (67.9-82.4) |
+| SINK div-borrow events, $; div peak/median $B/q | 47, $174B; 7.0/3.4 | 23, $50B; 2.8/1.6 | 0; 3.2/1.3 |
+| SINK default seeds; rescue raises | 0; 2 | 1 (y3.9); 9 | 1 (s7 y8.4, crude 55-64 trough, div already 0); 6 |
+| ALBT default seeds; rescue | 0; 4 | 2; 6 | 0; 2 |
+| TIER default seeds; rescue | 0; 0 | 0; 4 | 1 (s2 y18.8, ND/E at 15 cap, equity wiped); 2 |
+| non-rescue raises (after loss) | 100 (64) | 9 (1) | 22 (2) |
+| WADE defaulted seeds | 3 | 1 | 0 |
+| corr(starts,gap) k=0; rel sd | 0.18; 4.0 | 0.74; 11.5 | 0.76; 9.6 |
+Caveats: 8 seeds unpaired; TIER at the ND/E cap in every arm (fragile by construction); fixE2 seed 7 had 4 payment
+defaults (IBHI, DIPR, SINK, FALC), all in one macro path.

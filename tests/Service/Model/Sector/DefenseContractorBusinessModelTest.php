@@ -66,16 +66,23 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
     }
 
-    private function createMathUtilityMock(array $persistentZCalls = []): MathUtility
+    /**
+     * Scripted stream draws; the overrun's onset dice are pinned, so a programme goes into overrun only where a test
+     * says so.
+     */
+    private function createMathUtilityMock(array $persistentZCalls = [], bool $overrunOnset = false): MathUtility
     {
         $mock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
+            ->onlyMethods(['generatePersistentZ', 'checkProbability'])
             ->getMock();
 
         if (!empty($persistentZCalls)) {
             $mock->method('generatePersistentZ')
                 ->willReturnOnConsecutiveCalls(...array_values($persistentZCalls));
         }
+        $mock->method('checkProbability')->willReturnCallback(
+            static fn(float $probability): bool => $overrunOnset && $probability === DefenseContractorBusinessModel::PROGRAM_OVERRUN_ONSET_HAZARD,
+        );
 
         return $mock;
     }
@@ -184,8 +191,8 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GRIP');
 
-        // fixedPriceZ = -2.0 (< -1.50 FORWARD_LOSS_Z_SCORE)
-        $mathUtilityMock = $this->createMathUtilityMock([0.0, -2.0, 0.0, 0.0]);
+        // The programme goes into overrun this quarter.
+        $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0], overrunOnset: true);
 
         // Engineering pay 2% above its productivity path: the fixed-price EMD share cannot recover it, cost-plus can.
         $macroState = $this->createMacroState(inflation: 0.04);
@@ -312,9 +319,12 @@ class DefenseContractorBusinessModelTest extends TestCase
         $withheld = DefenseContractorBusinessModel::BASE_NWC_INTENSITY
             + (DefenseContractorBusinessModel::WITHHOLDING_NWC_INTENSITY - DefenseContractorBusinessModel::BASE_NWC_INTENSITY) * 0.20;
 
-        // Fixed-price development distress
-        $stock->setEarningsMomentumZ(['fixed_price_development' => -1.8, 'event' => 0.0]);
+        // A programme in overrun, for as long as the overrun runs; a weak quarter of fixed-price orders is not one.
+        $overrun = StreamContext::REGIME_STATE_PREFIX . DefenseContractorBusinessModel::REGIME_PROGRAM_OVERRUN;
+        $stock->setEarningsMomentumZ(['fixed_price_development' => 0.0, 'event' => 0.0, $overrun => 4.0]);
         $this->assertEqualsWithDelta($withheld, $model->getWorkingCapitalIntensity($stock), 1e-12);
+        $stock->setEarningsMomentumZ(['fixed_price_development' => -1.8, 'event' => 0.0]);
+        $this->assertEqualsWithDelta(DefenseContractorBusinessModel::BASE_NWC_INTENSITY, $model->getWorkingCapitalIntensity($stock), 1e-12);
 
         // Flagship defect / fleet grounding
         $stock->setEarningsMomentumZ(['fixed_price_development' => 0.0, 'event' => -2.6]);
@@ -323,7 +333,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         // An export house with a smaller fixed-price sleeve has less of its book on progress payments (PTAR 15%).
         $exporter = new Stock();
         $exporter->setTicker('PTAR');
-        $exporter->setEarningsMomentumZ(['fixed_price_development' => -1.8, 'event' => 0.0]);
+        $exporter->setEarningsMomentumZ(['fixed_price_development' => 0.0, 'event' => 0.0, $overrun => 1.0]);
         $this->assertEqualsWithDelta(
             DefenseContractorBusinessModel::BASE_NWC_INTENSITY
                 + (DefenseContractorBusinessModel::WITHHOLDING_NWC_INTENSITY - DefenseContractorBusinessModel::BASE_NWC_INTENSITY) * 0.15,
@@ -490,30 +500,37 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($booked, $shift, 1e-9, 'The base staffs to the revenue the books recognize.');
     }
 
-    public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void
+    public function testAnOverrunArrivesAtItsHazardAndPersistsUntilItsRandomExit(): void
     {
         $model = new DefenseContractorBusinessModel();
         $regimeKey = StreamContext::REGIME_STATE_PREFIX . DefenseContractorBusinessModel::REGIME_PROGRAM_OVERRUN;
         $macro = new MacroStateDTO();
 
-        $run = function (array $momentum, bool $exits, float $onsetZ = 0.0) use ($model, $macro) {
+        $run = function (array $momentum, bool $exits, bool $onset = false, float $fixedPriceZ = 0.0) use ($model, $macro) {
             $stock = new Stock();
             $stock->setTicker('DEF');
             $stock->setBeta('1.0');
             $stock->setEarningsMomentumZ($momentum);
             // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
             $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-            // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
-            $math->method('checkProbability')->willReturn($exits);
+            // The fixed-price stream is recognised by its sentinel previous value; every other draw is flat.
+            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $fixedPriceZ : 0.0);
+            $math->method('checkProbability')->willReturnCallback(
+                static fn(float $p): bool => $p === DefenseContractorBusinessModel::PROGRAM_OVERRUN_ONSET_HAZARD ? $onset : $exits,
+            );
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
 
         $clean = $run([], false);
         $this->assertNull($clean->eventType);
 
-        // Quarter 1: the trigger fires and the regime starts.
-        $onset = $run(['fixed_price_development' => -9.9], false, -3.0);
+        // A programme fails on its engineering, not on its orders: the deepest order slump starts no overrun, and a
+        // programme with booming orders can still go into one.
+        $this->assertNull($run(['fixed_price_development' => -9.9], false, fixedPriceZ: -3.0)->eventType);
+        $this->assertSame(ShockEvent::PROJECT_DELAY, $run(['fixed_price_development' => -9.9], false, onset: true, fixedPriceZ: 2.0)->eventType);
+
+        // Quarter 1: the onset fires and the regime starts.
+        $onset = $run([], false, onset: true);
         $this->assertSame(ShockEvent::PROJECT_DELAY, $onset->eventType);
         $this->assertSame(1.0, $onset->streamZ[$regimeKey]);
 

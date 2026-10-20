@@ -84,10 +84,11 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
 
     // --- Enrollment ---
     /**
-     * Employer-sponsored enrollment lost per unit of unemployment above its natural rate: own-employer coverage falls
-     * 1.97% per point (Cawley, Moriya & Simon 2015, men; women and children showed no significant change).
+     * Covered lives lost per unit of unemployment above its natural rate: US employment-based coverage fell about 1%
+     * per point 2008-10 (Census CPS), net of drift; the within-state panel estimate for all non-elderly, own and
+     * dependent coverage, is lower at 0.57 (Cawley, Moriya & Simon 2015), its 1.97 for men alone.
      */
-    public const ENROLLMENT_UNEMPLOYMENT_ELASTICITY = 1.97;
+    public const ENROLLMENT_UNEMPLOYMENT_ELASTICITY = 0.95;
     /** Quarterly persistence of the plan's own membership shock (the standard corporate default). */
     public const MEMBERSHIP_SHOCK_PERSISTENCE = 0.25;
 

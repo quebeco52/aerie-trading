@@ -527,6 +527,32 @@ final class FirmEconomics
     }
 
     /**
+     * Each stream's variable cost ratio from its cost intensity relative to the others, scaled so the revenue-weighted
+     * blend is the firm's own ratio: the expected mix reproduces the engine's cost base, the streams keep their order,
+     * and none goes negative however the firm's ratio moves.
+     *
+     * @template K of array-key
+     *
+     * @param array<K, float> $weights     Each stream's revenue weight.
+     * @param array<K, float> $intensities Each stream's cost per unit of revenue relative to the others, same keys.
+     * @return array<K, float>
+     */
+    public static function streamCostRatios(float $firmCostRatio, array $weights, array $intensities): array
+    {
+        $ordered = [];
+        foreach (array_keys($weights) as $key) {
+            $ordered[] = $intensities[$key];
+        }
+        $blend = self::revenueWeightedRatio(array_values($weights), $ordered);
+        $ratios = [];
+        foreach ($weights as $key => $weight) {
+            $ratios[$key] = $blend > 0.0 ? $firmCostRatio * $intensities[$key] / $blend : $firmCostRatio;
+        }
+
+        return $ratios;
+    }
+
+    /**
      * The trade cycle of a firm made of streams, each balance blended by revenue weight. The balances stay apart
      * because their risks differ: a marketplace's sellers' float does not cancel the stock its own shop holds.
      *

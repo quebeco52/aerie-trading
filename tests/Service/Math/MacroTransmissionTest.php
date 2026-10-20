@@ -191,7 +191,6 @@ class MacroTransmissionTest extends TestCase
         $params = [
             'baseline' => 100.0,
             'qSens' => 45.0,
-            'costSens' => 550.0,
             'sloosSens' => 30.0,
             'kappa' => 1.20,
             'sigma' => 0.03,
@@ -199,33 +198,29 @@ class MacroTransmissionTest extends TestCase
             'max' => 180.0,
         ];
 
-        // Boom scenario: high house prices (Q > 1), low mortgage user cost
+        // Boom scenario: high house prices (Q > 1)
         $boomStarts = MacroTransmission::calculateTobinsQHousingStarts(
             currentStarts: 100.0,
             residentialPriceRatio: 1.20,
             replacementCostRatio: 1.00,
-            userCost: 0.035,
-            neutralUserCost: 0.050,
             sloosTightening: 0.0,
             dt: 0.25,
             dW: 0.0,
             params: $params,
         );
-        $this->assertGreaterThan(100.0, $boomStarts, 'High Tobin Q and cheap mortgage financing must stimulate housing starts.');
+        $this->assertGreaterThan(100.0, $boomStarts, 'High Tobin Q must stimulate housing starts.');
 
-        // Housing slump: high user cost, bank tightening, falling price/cost ratio
+        // Housing slump: bank tightening, falling price/cost ratio
         $slumpStarts = MacroTransmission::calculateTobinsQHousingStarts(
             currentStarts: 100.0,
             residentialPriceRatio: 0.85,
             replacementCostRatio: 1.10,
-            userCost: 0.075,
-            neutralUserCost: 0.050,
             sloosTightening: 0.35,
             dt: 0.25,
             dW: 0.0,
             params: $params,
         );
-        $this->assertLessThan(100.0, $slumpStarts, 'High mortgage rates and tight bank lending must depress housing starts.');
+        $this->assertLessThan(100.0, $slumpStarts, 'Homes below their building cost and tight bank lending must depress housing starts.');
         $this->assertGreaterThanOrEqual(40.0, $slumpStarts);
 
         // Credit gap availability: positive credit expansion stimulates housing starts at the sensitivity the caller
@@ -235,8 +230,6 @@ class MacroTransmissionTest extends TestCase
             currentStarts: 100.0,
             residentialPriceRatio: 1.00,
             replacementCostRatio: 1.00,
-            userCost: 0.050,
-            neutralUserCost: 0.050,
             sloosTightening: 0.0,
             dt: 0.25,
             dW: 0.0,
@@ -247,8 +240,6 @@ class MacroTransmissionTest extends TestCase
             currentStarts: 100.0,
             residentialPriceRatio: 1.00,
             replacementCostRatio: 1.00,
-            userCost: 0.050,
-            neutralUserCost: 0.050,
             sloosTightening: 0.0,
             dt: 0.25,
             dW: 0.0,
@@ -422,6 +413,23 @@ class MacroTransmissionTest extends TestCase
         self::assertSame(['orders' => 0.0, 'aftermarket' => 0.0], MacroTransmission::allocateDemandShift($weights, ['orders' => 0.0, 'aftermarket' => 0.0], -0.06));
     }
 
+    /** Households forming below the steady rate lower the starts target by their share of baseline starts. */
+    public function testHouseholdFormationMovesTheStartsTarget(): void
+    {
+        $starts = MacroTransmission::calculateTobinsQHousingStarts(
+            currentStarts: 100.0,
+            residentialPriceRatio: 1.0,
+            replacementCostRatio: 1.0,
+            sloosTightening: 0.0,
+            dt: 0.25,
+            dW: 0.0,
+            params: ['baseline' => 100.0, 'qSens' => 45.0, 'sloosSens' => 30.0, 'kappa' => 1.20, 'sigma' => 0.03, 'min' => 40.0, 'max' => 180.0],
+            householdFormation: -0.10,
+        );
+
+        $this->assertEqualsWithDelta(1.20 * 0.25 * (90.0 - 100.0), $starts - 100.0, 1e-12);
+    }
+
     /** Lending standards move starts both ways: loose standards let as many more through as tight ones hold back. */
     public function testLendingStandardsMoveHousingStartsBothWays(): void
     {
@@ -429,12 +437,10 @@ class MacroTransmissionTest extends TestCase
             currentStarts: 100.0,
             residentialPriceRatio: 1.0,
             replacementCostRatio: 1.0,
-            userCost: 0.05,
-            neutralUserCost: 0.05,
             sloosTightening: $sloos,
             dt: 0.25,
             dW: 0.0,
-            params: ['baseline' => 100.0, 'qSens' => 45.0, 'costSens' => 550.0, 'sloosSens' => 30.0, 'kappa' => 1.20, 'sigma' => 0.03, 'min' => 40.0, 'max' => 180.0],
+            params: ['baseline' => 100.0, 'qSens' => 45.0, 'sloosSens' => 30.0, 'kappa' => 1.20, 'sigma' => 0.03, 'min' => 40.0, 'max' => 180.0],
         );
 
         $held = 100.0 - $starts(0.20);

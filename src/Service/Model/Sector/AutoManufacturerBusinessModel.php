@@ -12,6 +12,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -114,6 +115,12 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     // --- Global Supply Chain Pressure (GSCPI) & Capacity Utilization ---
     /** Variable margin cost per standard deviation of supply-chain pressure about normal, both ways (1.9pp). */
     public const SUPPLY_CHAIN_PRESSURE_COST_SCALAR = 0.019;
+    /** Share of the expediting cost a maker recovers in its prices per unit of pricing power: half at full power. */
+    public const SUPPLY_CHAIN_COST_RECOVERY_SHARE = 0.50;
+    /**
+     * Smallest mass-market share the input-cost drag is spread over, so a luxury-only maker never divides by nothing.
+     */
+    public const MIN_INPUT_COST_ALLOCATION_WEIGHT = 0.05;
     /** Sensitivity of mass-market manufacturing throughput to aggregate industrial capacity utilization (Fed G.17). */
     public const CAPACITY_UTILIZATION_THROUGHPUT_SCALAR = 0.40;
 
@@ -138,37 +145,25 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const SOFTWARE_CYCLE_LOADING = 0.20;
     /** The loan book is about three years of originations, so it carries about a third of the purchase swing. */
     public const CAPTIVE_FINANCE_CYCLE_LOADING = 0.30;
+    /**
+     * The luxury line's share of the purchase swing: supply held below demand leaves an order book that absorbs an
+     * ordinary slowdown (Ferrari shipped -5% in 2009 while sports cars fell 35%); a financial crisis reaches it through
+     * the wealth term instead.
+     */
+    public const APEX_CYCLE_LOADING = 0.30;
 
     // --- Financing Arm & Credit Physics ---
-    /** Break-even Net Interest Margin floor for the captive finance arm (~70bps, the neutral 2s10s slope). */
-    public const NIM_SPREAD_BUFFER = 0.007;
-
-    /** Linear sensitivity to yield curve spread. */
-    public const NIM_LINEAR_SENSITIVITY = 1.00;
-
-    /** Quadratic penalty for yield curve inversion. */
-    public const NIM_QUADRATIC_COEFF = 0.15;
-
-    /** Auto loan provisions per unit of confidence below what the gap explains, both ways. */
-    public const MACRO_DEFAULT_SCALAR = 0.25;
-
-    /** Auto loan provisions per unit of the household default rate over its measured trend, relative, both ways. */
-    public const RETAIL_DEFAULT_PROVISION_SCALAR = 0.05;
+    /**
+     * Through-the-cycle retail and lease losses as a share of the book's interest income, which move in proportion to
+     * the household default rate: ~0.75% of receivables on a yield of about 7.5% (Ford Credit US retail and lease
+     * losses 0.78% to 1.52% from Q3 2007 to Q3 2008, about +10pp of interest income).
+     */
+    public const CAPTIVE_RETAIL_LOSS_SHARE = 0.10;
 
     /**
      * Dealer floor-plan provisions per unit of the corporate default rate over its measured trend, relative, both ways.
      */
     public const CORPORATE_DEFAULT_PROVISION_SCALAR = 0.02;
-
-    /**
-     * CECL reserve built per unit of the credit spread over its trend, both ways: the lifetime-loss estimate it moves.
-     */
-    public const CECL_SPREAD_SCALAR = 0.50;
-
-    /**
-     * Auto loan provisions per unit of household debt service over its trend, relative to the neutral ratio, both ways.
-     */
-    public const SHOCK_WEIGHT_DSR_DEFAULT = 0.08;
 
     // --- Demand Transmission Lag ---
     /**
@@ -232,10 +227,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Revenue throughput multiplier applied during factory assembly shutdowns from labor strikes. */
     public const UAW_STRIKE_MULT = 0.80;
 
-    // --- Institutional & Market Architecture ---
-    /** Duration sensitivity scalar converting yield curve inversion into NIM compression. */
-    public const YIELD_CURVE_INVERSION_SENSITIVITY = 15.0;
-
     public function getReversionSpeed(): float
     {
         return 0.08;
@@ -243,6 +234,24 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public function getMoatSpread(): float
     {
         return 0.015;
+    }
+
+    /**
+     * A vehicle is sold from stock, not built to an order book: the purchase swing lands on expected revenue, which the
+     * physics allocates across the streams.
+     */
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
+    {
+        return [
+            'macro_demand_shift' => $this->resolveCycleDemandShift($stock, $macroState),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
+        ];
+    }
+
+    /** The purchase swing is in macro_demand_shift, so the engine's utilisation already carries it. */
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return 0.0;
     }
 
     /** Vehicle purchases: the durable stock-adjustment response to the gap, the real rate stance and confidence. */
@@ -334,29 +343,14 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // Input cost basket drag on manufacturing recovered at pricing power, allocated to mass-market volume.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
         $gscpiShift = ($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE);
-        $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));
+        $inflationCostPenalty = ($inputCostDrag / max(self::MIN_INPUT_COST_ALLOCATION_WEIGHT, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * self::SUPPLY_CHAIN_COST_RECOVERY_SHARE)));
 
-        // Captive Finance NIM Squeeze & Subprime Provisioning, charged to the loan book that earns the interest: the
-        // provision over the through-the-cycle loss the cost base carries, both ways, so a calm credit year releases
-        // what a bad one builds. The default rates carry the cycle, so confidence enters as its residual over the gap.
-        $dsrShift = $macroState->householdDebtServiceGap / MacroConstants::HOUSEHOLD_DSR_NEUTRAL;
-        $macroDefaultDrag = (-$macroState->sentimentResidual() * self::MACRO_DEFAULT_SCALAR)
-            + ($macroState->retailDefaultDeviation() * self::RETAIL_DEFAULT_PROVISION_SCALAR)
-            + ($macroState->corporateDefaultDeviation() * self::CORPORATE_DEFAULT_PROVISION_SCALAR)
-            + ($dsrShift * self::SHOCK_WEIGHT_DSR_DEFAULT);
-
-        $ceclDrag = ($macroState->macroCreditSpread - $macroState->macroCreditSpreadTrend) * self::CECL_SPREAD_SCALAR;
-
-        $yield10y = $macroState->yield10yEma;
-        $yield2y  = $macroState->yield2yEma;
-        $bankSpread = $yield10y - $yield2y;
-
-        if ($bankSpread < 0) {
-            $nimSqueeze = (self::NIM_SPREAD_BUFFER - $bankSpread)
-                + pow(abs($bankSpread) * self::YIELD_CURVE_INVERSION_SENSITIVITY, 2) * self::NIM_QUADRATIC_COEFF;
-        } else {
-            $nimSqueeze = (self::NIM_SPREAD_BUFFER - $bankSpread) * self::NIM_LINEAR_SENSITIVITY;
-        }
+        // Captive credit losses, charged to the loan book that earns the interest: the losses over the
+        // through-the-cycle rate the cost base carries, both ways, so a calm credit year releases what a bad one
+        // builds. A book lent at the population's default risk loses in proportion to its default rate; a match-funded
+        // captive runs no curve gap, and the default rates already carry what spreads and debt service forecast.
+        $creditLossShift = ($macroState->retailDefaultDeviation() * self::CAPTIVE_RETAIL_LOSS_SHARE)
+            + ($macroState->corporateDefaultDeviation() * self::CORPORATE_DEFAULT_PROVISION_SCALAR);
 
         // --- Tri-Stream Revenue Calculation ---
         $salesShock    = $salesZ    * ($baselineVol * self::SALES_VARIANCE_SCALAR);
@@ -369,7 +363,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // subscriptions and the loan book, stocks built from years of sales, carry their loading of it.
         $cycleShares = MacroTransmission::allocateDemandShift(
             ['mass_market_sales' => $salesWeight, 'apex_luxury' => $apexWeight, 'software_telematics' => $softwareWeight, 'captive_finance' => $captiveWeight],
-            ['mass_market_sales' => 1.0, 'apex_luxury' => 1.0, 'software_telematics' => self::SOFTWARE_CYCLE_LOADING, 'captive_finance' => self::CAPTIVE_FINANCE_CYCLE_LOADING],
+            ['mass_market_sales' => 1.0, 'apex_luxury' => self::APEX_CYCLE_LOADING, 'software_telematics' => self::SOFTWARE_CYCLE_LOADING, 'captive_finance' => self::CAPTIVE_FINANCE_CYCLE_LOADING],
             $this->resolveCycleDemandShift($stock, $macroState),
         );
 
@@ -391,21 +385,26 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Cross-Subsidization Variable Cost Architecture ---
-        $blendedIntensity = ($salesWeight * self::MASS_MARKET_COST_INTENSITY)
-            + ($apexWeight * self::APEX_LUXURY_COST_INTENSITY)
-            + ($softwareWeight * self::SOFTWARE_SERVICES_COST_INTENSITY)
-            + ($captiveWeight * self::CAPTIVE_FINANCE_COST_INTENSITY);
-        $blendedIntensity = max(0.01, $blendedIntensity);
-
-        $salesBaseMargin    = $realizedVariableMargin * (self::MASS_MARKET_COST_INTENSITY / $blendedIntensity);
-        $apexBaseMargin     = $realizedVariableMargin * (self::APEX_LUXURY_COST_INTENSITY / $blendedIntensity);
-        $softwareBaseMargin = $realizedVariableMargin * (self::SOFTWARE_SERVICES_COST_INTENSITY / $blendedIntensity);
-        $captiveBaseMargin  = $realizedVariableMargin * (self::CAPTIVE_FINANCE_COST_INTENSITY / $blendedIntensity);
+        [
+            'mass_market_sales' => $salesBaseMargin,
+            'apex_luxury' => $apexBaseMargin,
+            'software_telematics' => $softwareBaseMargin,
+            'captive_finance' => $captiveBaseMargin,
+        ] = FirmEconomics::streamCostRatios(
+            $realizedVariableMargin,
+            ['mass_market_sales' => $salesWeight, 'apex_luxury' => $apexWeight, 'software_telematics' => $softwareWeight, 'captive_finance' => $captiveWeight],
+            [
+                'mass_market_sales' => self::MASS_MARKET_COST_INTENSITY,
+                'apex_luxury' => self::APEX_LUXURY_COST_INTENSITY,
+                'software_telematics' => self::SOFTWARE_SERVICES_COST_INTENSITY,
+                'captive_finance' => self::CAPTIVE_FINANCE_COST_INTENSITY,
+            ],
+        );
 
         $salesCosts    = $salesRevenue    * ($salesBaseMargin + $inflationCostPenalty);
         $apexCosts     = $apexRevenue * $apexBaseMargin;
         $softwareCosts = $softwareRevenue * $softwareBaseMargin;
-        $captiveCosts  = $captiveRevenue * ($captiveBaseMargin + $macroDefaultDrag + $nimSqueeze + $ceclDrag);
+        $captiveCosts  = $captiveRevenue * ($captiveBaseMargin + $creditLossShift);
 
         $totalVariableCosts = $salesCosts + $apexCosts + $softwareCosts + $captiveCosts;
         // The blended ratio is struck on volume revenue so the template method reproduces these dollar costs exactly.
@@ -443,11 +442,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'equity_wealth_ratio',
             'equity_wealth_trend',
             'exchange_rate_index_ema',
-            'household_debt_service_gap',
             'import_price_level',
             'industrial_metals_index_ema',
-            'macro_credit_spread',
-            'macro_credit_spread_ema',
             'natural_rate_ema',
             'output_gap_lag_3m',
             'policy_rate_ema',
@@ -455,8 +451,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'real_wage_gap',
-            'yield_10y_ema',
-            'yield_2y_ema',
         ];
     }
 }

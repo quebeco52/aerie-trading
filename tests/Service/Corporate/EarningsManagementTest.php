@@ -31,6 +31,8 @@ final class EarningsManagementTest extends TestCase
 
     /** Consensus of $100m over 100m shares: a dollar a share, so a cent is 1% of it. */
     private const SHARES = 100_000_000.0;
+    /** The firm's surprise sd, $4m: half of it is two cents a share at 100m shares. */
+    private const SURPRISE_SD = 4_000_000.0;
 
     protected function setUp(): void
     {
@@ -70,7 +72,7 @@ final class EarningsManagementTest extends TestCase
         };
     }
 
-    private function makeContext(float $consensus, float $actual, float $bank = 0.0, ?MacroStateDTO $macro = null): EarningsSimulationContext
+    private function makeContext(float $consensus, float $actual, float $bank = 0.0, ?MacroStateDTO $macro = null, float $shares = self::SHARES): EarningsSimulationContext
     {
         $stock = new Stock();
         $stock->setTicker('ZZZZ');
@@ -81,9 +83,28 @@ final class EarningsManagementTest extends TestCase
         $ctx = new EarningsSimulationContext($stock, $macro ?? new MacroStateDTO(), $this->certainManager(), 'none');
         $ctx->reportedExpectedNetIncome = $consensus;
         $ctx->reportedActualNetIncome = $actual;
-        $ctx->sharesOutstanding = self::SHARES;
+        $ctx->sharesOutstanding = $shares;
+        $ctx->earningsSurpriseSd = self::SURPRISE_SD;
 
         return $ctx;
+    }
+
+    /**
+     * A gap is near or far against the noise the firm is known for, whatever its share count: the same dollar gap is
+     * closed at a dollar of EPS and at ten dollars, where a fixed cents-a-share window let the second miss stand.
+     */
+    public function testTheReachableGapIsAShareOfTheFirmsOwnSurpriseNoise(): void
+    {
+        $consensus = 100_000_000.0;
+        foreach ([self::SHARES, self::SHARES / 10.0] as $shares) {
+            $near = $this->makeContext($consensus, $consensus - (0.2 * self::SURPRISE_SD), shares: $shares);
+            $this->manage->invoke($this->engine, $near);
+            $this->assertGreaterThan(0.0, $near->managedAccrual, 'A fifth of an sd short is a near miss.');
+
+            $far = $this->makeContext($consensus, $consensus - (0.6 * self::SURPRISE_SD), shares: $shares);
+            $this->manage->invoke($this->engine, $far);
+            $this->assertSame(0.0, $far->managedAccrual, 'Past half an sd the miss is reported.');
+        }
     }
 
     /**
@@ -113,7 +134,7 @@ final class EarningsManagementTest extends TestCase
     public function testSmallShortfallIsClosedAndPrintsAMeetOrACentBeat(): void
     {
         $consensus = 100_000_000.0;
-        // Half a cent short: well inside the two-cent reachable gap.
+        // Half a cent short: well inside the reachable gap, two cents here.
         $ctx = $this->makeContext($consensus, $consensus * 0.995);
 
         $this->manage->invoke($this->engine, $ctx);
@@ -150,7 +171,7 @@ final class EarningsManagementTest extends TestCase
             return $hits / 4000;
         };
 
-        $edge = EarningsEngine::EARNINGS_MANAGEMENT_MAX_GAP_PER_SHARE * 100.0;
+        $edge = EarningsEngine::EARNINGS_MANAGEMENT_MAX_GAP_SURPRISE_SDS * self::SURPRISE_SD / self::SHARES * 100.0;
         $this->assertEqualsWithDelta(1.0 - (0.5 / $edge), $closed(0.5), 0.03);
         $this->assertEqualsWithDelta(1.0 - (1.5 / $edge), $closed(1.5), 0.03);
         $this->assertSame(0.0, $closed($edge + 0.5), 'past the reachable gap the miss is reported');

@@ -93,7 +93,7 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
 
         $beta = $model->getOperatingCyclicality($stock);
         $expected = $outputGap
-            * (StandardCorporateBusinessModel::MIN_BETA_PRICING_POWER_FLOOR + TechBusinessModel::PRICING_POWER_INDEX)
+            * (StandardCorporateBusinessModel::CYCLE_SENSITIVITY_BASE + TechBusinessModel::PRICING_POWER_INDEX)
             * $beta;
 
         $this->assertEqualsWithDelta(

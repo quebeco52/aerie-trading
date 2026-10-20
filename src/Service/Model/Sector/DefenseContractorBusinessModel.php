@@ -102,8 +102,11 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     // --- Sovereign Procurement & Cost-Plus Physics ---
 
     // --- Fixed-Price ASC 606 & Production Physics ---
-    /** Negative Z-score threshold indicating development program overruns and reach-forward losses. */
-    public const FORWARD_LOSS_Z_SCORE = -1.50;
+    /**
+     * Quarterly chance a fixed-price development programme goes into overrun: 0.067, one every ~3.7 years, whatever
+     * the order book is doing, since a programme fails on its engineering, not on its orders.
+     */
+    public const PROGRAM_OVERRUN_ONSET_HAZARD = 0.067;
     /** Variable margin penalty for ASC 606 reach-forward losses on fixed-price contracts. */
     public const FORWARD_LOSS_PENALTY = 0.08;
 
@@ -211,13 +214,13 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $fixedPriceZ = (float) ($momentum['fixed_price_development'] ?? 0.0);
+        $inOverrun = (float) ($momentum[StreamContext::REGIME_STATE_PREFIX . self::REGIME_PROGRAM_OVERRUN] ?? 0.0) > 0.0;
         $eventZ = (float) ($momentum['event'] ?? 0.0);
 
-        // FAR 32.503-6 suspends or reduces PROGRESS payments on a programme failure, and progress payments
-        // finance fixed-price work only (cost-type contracts bill costs as incurred, FAR 52.216-7): the
-        // withheld cash is the fixed-price book's, not the whole company's.
-        if ($fixedPriceZ < self::FORWARD_LOSS_Z_SCORE || $eventZ < self::FLAGSHIP_FAILURE_Z_SCORE) {
+        // FAR 32.503-6 suspends or reduces PROGRESS payments on a programme failure, for as long as the overrun
+        // runs, and progress payments finance fixed-price work only (cost-type contracts bill costs as incurred,
+        // FAR 52.216-7): the withheld cash is the fixed-price book's, not the whole company's.
+        if ($inOverrun || $eventZ < self::FLAGSHIP_FAILURE_Z_SCORE) {
             $fixedPriceWeight = $this->resolveModelParameters($stock, [
                 ModelParam::FixedPriceDevWeight->value => self::FIXED_PRICE_DEV_WEIGHT,
             ])[ModelParam::FixedPriceDevWeight->value];
@@ -315,9 +318,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // A fixed-price development program in trouble books its reach-forward loss once, then keeps
         // taking charges every quarter until delivery or re-baselining (the tanker-program pattern).
-        $overrunElapsed = $streams->evolveRegime(self::REGIME_PROGRAM_OVERRUN, 0.0, self::PROGRAM_OVERRUN_EXIT_HAZARD);
-        if ($fixedPriceZ < self::FORWARD_LOSS_Z_SCORE && $overrunElapsed === 0) {
-            $overrunElapsed = $streams->startRegime(self::REGIME_PROGRAM_OVERRUN);
+        $overrunElapsed = $streams->evolveRegime(self::REGIME_PROGRAM_OVERRUN, self::PROGRAM_OVERRUN_ONSET_HAZARD, self::PROGRAM_OVERRUN_EXIT_HAZARD);
+        if ($overrunElapsed === 1) {
             $eventType = ShockEvent::PROJECT_DELAY;
         }
         $forwardLossProvision = $overrunElapsed === 1 ? self::FORWARD_LOSS_PENALTY : 0.0;

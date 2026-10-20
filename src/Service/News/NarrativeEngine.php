@@ -673,6 +673,26 @@ class NarrativeEngine
                 "Peak season carrier capacity constraints drove record contractual and spot freight yields.",
                 "High lane utilization and expedited freight premiums expanded logistics operating margins.",
             ]),
+            ShockEvent::COMPONENT_SHORTAGE => $this->getRandomPhrase([
+                "Shortages of chips and parts at suppliers held back shipments, leaving orders unfilled at the quarter's end.",
+                "Suppliers rationed scarce components, and finished goods waited on the last parts to arrive.",
+                "Parts shortages slowed assembly lines and pushed deliveries into the next quarter.",
+            ]),
+            ShockEvent::INDUSTRIAL_ORDER_SURGE => $this->getRandomPhrase([
+                "Factory customers stepped up tooling orders as plants added shifts.",
+                "Busy production lines wore through cutting tools and consumables faster, lifting replacement orders.",
+                "Manufacturers restocked tooling ahead of new production runs, filling the order book.",
+            ]),
+            ShockEvent::MAJOR_EQUIPMENT_ORDER => $this->getRandomPhrase([
+                "Won the equipment package for a major tunnelling and transit project.",
+                "Booked a multi-year order for the machinery behind a large power and water scheme.",
+                "Secured the main equipment contract for a new industrial plant, adding years of work to the order book.",
+            ]),
+            ShockEvent::DATA_CENTRE_ORDER_SURGE => $this->getRandomPhrase([
+                "Server and storage orders surged as large customers expanded their data centres.",
+                "Cloud and enterprise buyers placed record orders for computing and storage hardware.",
+                "A wave of data centre construction filled the order book for high-end servers.",
+            ]),
             ShockEvent::INFRASTRUCTURE_BILL_WIN => $this->getRandomPhrase([
                 "Secured landmark federal infrastructure grants and public-private partnership concessions.",
                 "Awarded multi-billion dollar municipal transportation and civil works construction contracts.",

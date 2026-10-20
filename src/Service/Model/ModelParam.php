@@ -267,6 +267,8 @@ enum ModelParam: string
     case CapacityPaymentWeight = 'capacity_payment_weight';
     /** Share of next year's wholesale output an independent generator sells forward. */
     case PowerHedgeRatio = 'power_hedge_ratio';
+    /** A utility network's exposure to district storm damage against an overhead power grid's (1.0). */
+    case StormDamageExposure = 'storm_damage_exposure';
     case ResidentialWeight = 'residential_weight';
     case RecyclingWeight = 'recycling_weight';
     case ServicesWeight = 'services_weight';

@@ -9,7 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
@@ -167,6 +167,16 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      */
     public const MERCHANT_GAS_HEAT_RATE = MacroConstants::GAS_FLEET_HEAT_RATE;
 
+    // --- Merchant Hedge Book ---
+    /**
+     * Share of the merchant fleet's expected output sold forward on the ladder: an equal-tranche three-year ladder at
+     * 0.9 holds about 79% of the coming year, 49% of the next and 19% of the third, near what integrated generators
+     * report (Fortum 80-90% / 60-70% / ~45%, CEZ 90% / 60% / 28%, PSEG nuclear 95-100% / 85-90%).
+     */
+    public const POWER_HEDGE_RATIO = 0.90;
+    /** Quarterly tranches in the merchant ladder: twelve, each quarter locking one for each of the next three years. */
+    public const POWER_HEDGE_LADDER_TRANCHES = 12;
+
     // --- Regulatory Lag & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to output gap (industrial power usage). */
     public const MACRO_DEMAND_SCALAR       = 0.15;
@@ -181,10 +191,15 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Z-score threshold indicating a catastrophic grid failure, pipeline explosion, or wildfire liability. */
     public const GRID_FAILURE_Z_SCORE       = -2.50;
     /**
-     * District catastrophe burden (average-year units, smoothed) at which the grid is damaged badly enough to open the
-     * liability and hardening regime without any failure of the utility's own.
+     * District storm losses incurred since the last report (burden units; an average year incurs two) at which the
+     * grid is damaged badly enough to open the liability and hardening regime without any failure of its own: the
+     * one-in-fifty-year quarter.
      */
-    public const CATASTROPHE_GRID_DAMAGE_THRESHOLD = 4.0;
+    public const CATASTROPHE_GRID_DAMAGE_INCURRED = 4.7;
+    /** A network's exposure to district storm damage by default: an overhead power grid's, in full. */
+    public const STORM_DAMAGE_EXPOSURE = 1.0;
+    /** Stream-state key: the share of the full liability regime this one carries, set at its onset. */
+    public const STATE_INFRASTRUCTURE_LIABILITY_SCALE = 'state:infrastructure_liability_scale';
     /** Variable cost penalty applied to fund massive environmental liabilities or emergency grid repairs. */
     public const GRID_FAILURE_PENALTY       = 0.15;
     /** Regime key for the multi-year liability, litigation and rebuild period after a grid failure or wildfire. */
@@ -255,8 +270,9 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $beta = $this->getOperatingCyclicality($stock);
         $physics['macro_demand_shift'] = $outputGap * $beta * self::MACRO_DEMAND_SCALAR;
 
-        // Regulatory lag: pricing power reflects authorized tariffs lagging cumulative input cost inflation.
-        $physics['pricing_power_multiplier'] = $physics['input_cost_multiplier'] * (1.0 - $this->resolveTariffShortfall($stock));
+        // Regulatory lag: authorised tariffs lag cumulative input cost inflation. Only the tariffed book lags; the
+        // merchant book sells at the market, so the firm-wide price carries the shortfall on its tariffed share.
+        $physics['pricing_power_multiplier'] = $physics['input_cost_multiplier'] * $this->resolveTariffBookLevel($stock);
 
         return $physics;
     }
@@ -289,10 +305,17 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // --- Clamped Revenue Streams --- Weather deviations drive regulated volume. High Z = Heatwaves/Freezes (high
         // load). Low Z = Mild weather (low load). Merchant generation is sold at the wholesale price the market clears,
         // gas at the margin in most hours.
-        $regulatedRevenue = max(0.0, $expectedRevenue * $regulatedWeight * (1.0 + ($weatherZ * ($baselineVol * self::WEATHER_VARIANCE_SCALAR))));
-        $merchantVolumeRevenue = max(0.0, $expectedRevenue * $unregulatedWeight * (1.0 + ($unregulatedZ * ($baselineVol * self::MERCHANT_VARIANCE_SCALAR))));
-        $merchantPriceRelative = $this->resolveMerchantPriceRelative($params[ModelParam::MerchantPowerShare], $macroState);
-        $unregulatedRevenue = $merchantVolumeRevenue * $merchantPriceRelative;
+        $regulatedVolumeRevenue = max(0.0, $expectedRevenue * $regulatedWeight * (1.0 + ($weatherZ * ($baselineVol * self::WEATHER_VARIANCE_SCALAR))));
+        $merchantVolume = max(0.0, 1.0 + ($unregulatedZ * ($baselineVol * self::MERCHANT_VARIANCE_SCALAR)));
+        $merchantVolumeRevenue = $expectedRevenue * $unregulatedWeight * $merchantVolume;
+        [$powerPrice, $gasPrice] = $this->resolveMerchantPrices($streams, $params, $unregulatedWeight, $merchantVolume, $macroState);
+        $merchantPriceRelative = FirmEconomics::merchantPowerPriceRelative($params[ModelParam::MerchantPowerShare], $powerPrice);
+        // The engine priced the tariff lag over the whole book; it belongs to the tariffed revenue alone, so each
+        // stream is handed back from the firm-wide level to its own.
+        $tariffShortfall = $this->resolveTariffShortfall($stock);
+        $bookLevel = max(0.01, $this->resolveTariffBookLevel($stock));
+        $regulatedRevenue = $regulatedVolumeRevenue * (1.0 - $tariffShortfall) / $bookLevel;
+        $unregulatedRevenue = $merchantVolumeRevenue * $merchantPriceRelative / $bookLevel;
 
         $streamRevenues = [
             'regulated_weather_load' => $regulatedRevenue,
@@ -310,23 +333,30 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $disasterPenalty = 0.0;
         $gridFailureCharge = 0.0;
 
-        $districtStormDamage = $macroState->catastropheLossIndexEma >= self::CATASTROPHE_GRID_DAMAGE_THRESHOLD;
+        // A storm damages the network once, in the window its losses arrive in, and as far as the network is exposed
+        // to it: overhead lines take the wind, buried mains mostly the flooding of their plant. A failure of the
+        // utility's own is its own in full.
+        $stormLosses = $this->resolveDistrictCatastropheIncurred($streams, $macroState);
+        $districtStormDamage = $stormLosses !== null && $stormLosses['incurred'] >= self::CATASTROPHE_GRID_DAMAGE_INCURRED;
+        $liabilityScale = $streams->getPersistedState(self::STATE_INFRASTRUCTURE_LIABILITY_SCALE, 1.0);
         if (($eventZ < self::GRID_FAILURE_Z_SCORE || $districtStormDamage) && $liabilityElapsed === 0) {
             $liabilityElapsed = $streams->startRegime(self::REGIME_INFRASTRUCTURE_LIABILITY);
+            $liabilityScale = $eventZ < self::GRID_FAILURE_Z_SCORE ? 1.0 : $this->resolveStormDamageExposure($stock);
             $eventType = ShockEvent::INFRASTRUCTURE_FAILURE;
-            $gridFailureCharge = self::GRID_FAILURE_PENALTY;
+            $gridFailureCharge = self::GRID_FAILURE_PENALTY * $liabilityScale;
         } elseif ($liabilityElapsed > 1) {
-            $disasterPenalty = self::INFRASTRUCTURE_LIABILITY_ONGOING_PENALTY;
+            $disasterPenalty = self::INFRASTRUCTURE_LIABILITY_ONGOING_PENALTY * $liabilityScale;
         }
+        $streams->registerState(self::STATE_INFRASTRUCTURE_LIABILITY_SCALE, $liabilityScale);
 
         // Rebuilding and hardening the damaged system is mandatory rate-base CapEx for as long as the
         // liability regime runs; it is queued as construction-in-progress and burns FCF now.
-        $scheduledCapex = $liabilityElapsed > 0 ? $expectedRevenue * 4.0 * self::GRID_HARDENING_CAPEX_RATIO : 0.0;
+        $scheduledCapex = $liabilityElapsed > 0 ? $expectedRevenue * FinancialConstants::QUARTERS_PER_YEAR * self::GRID_HARDENING_CAPEX_RATIO * $liabilityScale : 0.0;
 
         // Revenue at the prices the cost base was sized for, so the ratio below is per MWh.
-        $volumeRevenue = $regulatedRevenue + $merchantVolumeRevenue;
+        $volumeRevenue = $regulatedVolumeRevenue + $merchantVolumeRevenue;
         $priceRelative = $volumeRevenue > 0.0 ? $actualRevenue / $volumeRevenue : 1.0;
-        $regulatedCostShare = $volumeRevenue > 0.0 ? $regulatedRevenue / $volumeRevenue : 1.0;
+        $regulatedCostShare = $volumeRevenue > 0.0 ? $regulatedVolumeRevenue / $volumeRevenue : 1.0;
 
         // --- Regulatory Lag & Input Costs ---
         // Fuel, purchased power and crew payroll reach the regulated cost base at spot; fuel adjustment clauses
@@ -344,7 +374,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // The gas-fired share of the merchant fleet buys its fuel at spot and recovers it only through the power
         // price, so it earns the spark spread; the zero-fuel remainder keeps the whole price.
         $merchantFuelDrag = $volumeRevenue > 0.0
-            ? $merchantVolumeRevenue * $this->resolveMerchantFuelCostChange($params[ModelParam::MerchantPowerShare], $params[ModelParam::MerchantGasFleetShare], $macroState) / $volumeRevenue
+            ? $merchantVolumeRevenue * $this->resolveMerchantFuelCostChange($params[ModelParam::MerchantPowerShare], $params[ModelParam::MerchantGasFleetShare], $gasPrice, $macroState) / $volumeRevenue
             : 0.0;
         // What the carbon price's power uplift adds to earnings, per unit of it: the price on the share sold at the
         // wholesale price, less the carbon its gas-fired part pays, which the uplift carries at its pass-through.
@@ -394,7 +424,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         return $total > 0.0 ? ($merchant / $total) * max(0.0, min(1.0, $params[ModelParam::MerchantPowerShare])) : 0.0;
     }
 
-    /** Revenue mix and merchant fleet parameters, ticker override first. */
+    /** Revenue mix, merchant fleet and hedge parameters, ticker override first. */
     private function resolveRevenueMixParameters(Stock $stock): ModelParameters
     {
         return $this->resolveModelParameters($stock, [
@@ -402,43 +432,87 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             ModelParam::UnregulatedMerchantWeight->value => self::UNREGULATED_MERCHANT_WEIGHT,
             ModelParam::MerchantPowerShare->value        => self::MERCHANT_POWER_SHARE,
             ModelParam::MerchantGasFleetShare->value     => self::MERCHANT_GAS_FLEET_SHARE,
+            ModelParam::PowerHedgeRatio->value           => self::POWER_HEDGE_RATIO,
+            ModelParam::StormDamageExposure->value       => self::STORM_DAMAGE_EXPOSURE,
         ]);
     }
 
     /**
-     * Price of the unregulated stream relative to the one its cost base was sized at: the wholesale power index on
-     * the share sold into the market, flat on market-based contract work.
+     * The power and gas prices the merchant fleet realises, relative to baseline: what it sold forward on the ladder
+     * is delivered at its strike, and output above or below the hedge settles at spot, so a shortfall is power bought
+     * back at today's price. The gas for the gas-fired part was bought forward alongside it. A book that sells no
+     * power into the market rolls no ladder.
+     *
+     * @return array{0: float, 1: float} Realised power and gas prices, relative to baseline.
      */
-    private function resolveMerchantPriceRelative(float $powerShare, MacroStateDTO $macroState): float
+    private function resolveMerchantPrices(StreamContext $streams, ModelParameters $params, float $merchantWeight, float $merchantVolume, MacroStateDTO $macroState): array
     {
-        return FirmEconomics::merchantPowerPriceRelative($powerShare, max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroConstants::WHOLESALE_POWER_BASELINE);
+        $powerSpot = max(0.0, $macroState->wholesalePowerPriceIndexEma) / MacroConstants::WHOLESALE_POWER_BASELINE;
+        $gasSpot = max(0.0, $macroState->naturalGasPriceIndexEma) / MacroConstants::NATURAL_GAS_BASELINE;
+        $hedge = max(0.0, min(1.0, $params[ModelParam::PowerHedgeRatio]));
+        if ($merchantWeight * $params[ModelParam::MerchantPowerShare] <= 0.0 || $hedge <= 0.0 || $merchantVolume <= 0.0) {
+            return [$powerSpot, $gasSpot];
+        }
+
+        $powerStrike = $streams->rollHedgeLadder(FinancialConstants::STATE_POWER_STRIKE_SUM_PREFIX, self::POWER_HEDGE_LADDER_TRANCHES, static fn(int $quarters): float => CommodityLogisticsSubsystem::powerForwardRelative($macroState, $quarters * FinancialConstants::QUARTER_YEARS));
+        $power = (($hedge * $powerStrike) + (($merchantVolume - $hedge) * $powerSpot)) / $merchantVolume;
+        if ($params[ModelParam::MerchantGasFleetShare] <= 0.0) {
+            return [$power, $gasSpot];
+        }
+
+        $gasStrike = $streams->rollHedgeLadder(FinancialConstants::STATE_GAS_STRIKE_SUM_PREFIX, self::POWER_HEDGE_LADDER_TRANCHES, static fn(int $quarters): float => CommodityLogisticsSubsystem::gasForwardRelative($macroState, $quarters * FinancialConstants::QUARTER_YEARS));
+
+        return [$power, (($hedge * $gasStrike) + (($merchantVolume - $hedge) * $gasSpot)) / $merchantVolume];
     }
 
     /**
      * Change in merchant fuel cost per unit of merchant revenue at baseline prices: the gas-fired share burns the
      * fleet heat rate of gas per MWh, which at baseline prices is this share of what the MWh sells for, and pays the
      * carbon price on what it burns.
+     *
+     * @param float $gasPrice The gas price the fleet pays, relative to baseline.
      */
-    private function resolveMerchantFuelCostChange(float $powerShare, float $gasFleetShare, MacroStateDTO $macroState): float
+    private function resolveMerchantFuelCostChange(float $powerShare, float $gasFleetShare, float $gasPrice, MacroStateDTO $macroState): float
     {
-        return $powerShare * $gasFleetShare
-            * FirmEconomics::gasFiredFuelCostChange(max(0.0, $macroState->naturalGasPriceIndexEma) / MacroConstants::NATURAL_GAS_BASELINE, $macroState->carbonPrice);
+        return $powerShare * $gasFleetShare * FirmEconomics::gasFiredFuelCostChange($gasPrice, $macroState->carbonPrice);
     }
 
     /**
      * What the wholesale power market adds to or takes from the merchant stream's margin this quarter, per unit of
-     * merchant revenue at baseline prices: the price on the MWh less the gas the gas-fired share burns to make them.
+     * merchant revenue at baseline prices: the price on the MWh less the gas the gas-fired share burns to make them,
+     * each at the price the ladder delivers this quarter, as the physics books them.
      */
     public function describeMerchantPowerImpact(Stock $stock, MacroStateDTO $macroState): float
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::MerchantPowerShare->value    => self::MERCHANT_POWER_SHARE,
-            ModelParam::MerchantGasFleetShare->value => self::MERCHANT_GAS_FLEET_SHARE,
-        ]);
+        $params = $this->resolveRevenueMixParameters($stock);
+        $streams = $this->createStreamContext($stock->getEarningsMomentumZ() ?? [], new MathUtility(), $macroState, $stock);
+        [$powerPrice, $gasPrice] = $this->resolveMerchantPrices($streams, $params, $params[ModelParam::UnregulatedMerchantWeight], 1.0, $macroState);
         $powerShare = $params[ModelParam::MerchantPowerShare];
 
-        return ($this->resolveMerchantPriceRelative($powerShare, $macroState) - 1.0)
-            - $this->resolveMerchantFuelCostChange($powerShare, $params[ModelParam::MerchantGasFleetShare], $macroState);
+        return (FirmEconomics::merchantPowerPriceRelative($powerShare, $powerPrice) - 1.0)
+            - $this->resolveMerchantFuelCostChange($powerShare, $params[ModelParam::MerchantGasFleetShare], $gasPrice, $macroState);
+    }
+
+    /** The tariffed share of revenue at baseline prices: the regulated stream's target share of the mix. */
+    public function resolveRegulatedRevenueShare(Stock $stock): float
+    {
+        $params = $this->resolveRevenueMixParameters($stock);
+        $regulated = max(0.0, $params[ModelParam::RegulatedBaseWeight]);
+        $total = $regulated + max(0.0, $params[ModelParam::UnregulatedMerchantWeight]);
+
+        return $total > 0.0 ? $regulated / $total : 1.0;
+    }
+
+    /** The firm-wide price level the tariff lag leaves: the shortfall on the tariffed share of the book. */
+    private function resolveTariffBookLevel(Stock $stock): float
+    {
+        return 1.0 - ($this->resolveRegulatedRevenueShare($stock) * $this->resolveTariffShortfall($stock));
+    }
+
+    /** The network's exposure to district storm damage against an overhead power grid's, ticker override first. */
+    private function resolveStormDamageExposure(Stock $stock): float
+    {
+        return max(0.0, $this->resolveRevenueMixParameters($stock)[ModelParam::StormDamageExposure]);
     }
 
     public function getMarginReversionSpeed(): float
@@ -515,11 +589,12 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The utility's revenue a year: what a point of average tariff shortfall takes from earnings before tax, per point.
+     * The utility's tariffed revenue a year: what a point of average tariff shortfall takes from earnings before tax,
+     * per point. The merchant book sells at the market and loses nothing to the lag.
      */
     public function annualUtilityTariffBase(Stock $stock): float
     {
-        return max(0.0, (float) $stock->getTotalRevenue());
+        return max(0.0, (float) $stock->getTotalRevenue()) * $this->resolveRegulatedRevenueShare($stock);
     }
 
     /** How far the authorized tariff lags its cost base, read from the persisted state the physics advances. */
@@ -534,9 +609,14 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'carbon_price',
-            'catastrophe_loss_index_ema',
+            'catastrophe_loss_index',
+            'energy_base_price',
             'energy_cost_push_lag',
+            'energy_price_index_ema',
+            'energy_supply_ema',
             'exchange_rate_index_ema',
+            'gas_oil_ratio_log',
+            'global_demand_gap_ema',
             'import_price_level',
             'inflation_ema',
             'natural_gas_price_index_ema',

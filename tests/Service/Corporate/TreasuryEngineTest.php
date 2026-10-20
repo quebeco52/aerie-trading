@@ -727,6 +727,32 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
+     * A loss quarter does not make a fairly priced stock rich: the board judges the price on the earnings its multiple
+     * is struck on, which one quarter's loss barely moves, so it sells no stock into its own bad news.
+     */
+    public function testALossQuarterAtAFairPriceSellsNoStock(): void
+    {
+        $raise = function (float $price): float {
+            $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateUniform'])->getMock();
+            $mathUtility->method('generateUniform')->willReturn(0.0);
+            $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $mathUtility);
+
+            $stock = $this->createSolventCorporate();
+            $stock->setSharesOutstanding('100000000');
+            $stock->setRoicTtm('0.30');
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: $price, actualAnnualEps: -1.0);
+            $ctx->newShares = 100_000_000.0;
+
+            $engine->finalizeLiquidity($ctx);
+
+            return $ctx->equityRaised;
+        };
+
+        $this->assertSame(0.0, $raise(50.0), 'A loss quarter at a fair price is no bubble.');
+        $this->assertGreaterThan(0.0, $raise(300.0), 'A price far above the multiple still is, whatever the quarter.');
+    }
+
+    /**
      * An institution steering its capital to a target sells no stock into a premium valuation while it holds that
      * target, since the capital would leave again as the repurchase that returns the surplus; below its target it
      * may.
@@ -1485,7 +1511,7 @@ class TreasuryEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $deploy(0.0, true)->organicCapex, 1e-9, 'With demand met, borrowed cash builds nothing.');
     }
 
-    private function createAllocationContext(Stock $stock, float $stockCompensation, float $currentPrice = 50.0): CapitalAllocationContext
+    private function createAllocationContext(Stock $stock, float $stockCompensation, float $currentPrice = 50.0, float $actualAnnualEps = 4.0): CapitalAllocationContext
     {
         $macro = MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.04,
@@ -1495,7 +1521,7 @@ class TreasuryEngineTest extends TestCase
         $ctx = new CapitalAllocationContext(
             stock: $stock,
             macroState: $macro,
-            actualAnnualEps: 4.0,
+            actualAnnualEps: $actualAnnualEps,
             quarterlyFcfPerShare: 1.0,
             currentPrice: $currentPrice,
             sharesOutstanding: 100_000_000,

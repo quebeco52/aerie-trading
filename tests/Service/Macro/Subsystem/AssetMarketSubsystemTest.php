@@ -202,8 +202,8 @@ class AssetMarketSubsystemTest extends TestCase
         $stateBoom->sloosTighteningIndexEma = 0.0;
         $stateBoom->housingStartsIndex = 100.0;
 
-        $this->subsystem->calculateHousingStarts($stateBoom, MacroConstants::TARGET_INFLATION, $dt);
-        $this->assertGreaterThan(100.0, $stateBoom->housingStartsIndex, 'High Tobin Q and affordable mortgage finance must stimulate housing starts');
+        $this->subsystem->calculateHousingStarts($stateBoom, $dt);
+        $this->assertGreaterThan(100.0, $stateBoom->housingStartsIndex, 'Homes selling well above what they cost to build must stimulate housing starts');
     }
 
     /**
@@ -225,7 +225,7 @@ class AssetMarketSubsystemTest extends TestCase
         $state->industrialMetalsIndex = 130.0;
         $state->industrialMetalsIndexTrend = 130.0;
 
-        (new AssetMarketSubsystem($math))->calculateHousingStarts($state, MacroConstants::TARGET_INFLATION, 0.25);
+        (new AssetMarketSubsystem($math))->calculateHousingStarts($state, 0.25);
 
         $this->assertEqualsWithDelta(MacroConstants::HOUSING_STARTS_BASELINE, $state->housingStartsIndex, 1e-9, 'At rest q is one and starts hold their baseline.');
     }
@@ -281,7 +281,7 @@ class AssetMarketSubsystemTest extends TestCase
         $dearLabour->realWageGap = 0.04;
 
         foreach ([$calm, $hotNominalPay, $dearLabour] as $state) {
-            $this->subsystem->calculateHousingStarts($state, MacroConstants::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateHousingStarts($state, 0.25);
         }
 
         $this->assertEqualsWithDelta($calm->housingStartsIndex, $hotNominalPay->housingStartsIndex, 1e-9, 'Wage growth alone is not a building cost.');
@@ -553,7 +553,7 @@ class AssetMarketSubsystemTest extends TestCase
             $state = $this->neutralBuildingState();
             $state->residentialPropertyIndex = $price;
             $state->greenBeltStringency = $stringency;
-            $this->subsystem->calculateHousingStarts($state, MacroConstants::TARGET_INFLATION, 0.25);
+            $this->subsystem->calculateHousingStarts($state, 0.25);
 
             return $state->housingStartsIndex;
         };
@@ -562,6 +562,92 @@ class AssetMarketSubsystemTest extends TestCase
         $beltedResponse = $starts(130.0, 1.0) - $starts(100.0, 1.0);
         $this->assertGreaterThan(0.0, $beltedResponse);
         $this->assertEqualsWithDelta(AssetMarketSubsystem::greenBeltSupplyResponse(1.0), $beltedResponse / $openResponse, 1e-9);
+
+        $formation = function (float $stringency): float {
+            $state = $this->restingBuildingState();
+            $state->greenBeltStringency = $stringency;
+            $state->unemploymentRate += 0.0025;
+            $this->subsystem->calculateHousingStarts($state, 0.25);
+
+            return $state->housingStartsIndex - MacroConstants::HOUSING_STARTS_BASELINE;
+        };
+        $this->assertLessThan(0.0, $formation(1.0));
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::greenBeltSupplyResponse(1.0), $formation(1.0) / $formation(0.0), 1e-9, 'Planning limits building for new households as it does for a price boom.');
+    }
+
+    /** A gap that holds forms no households and loses none: starts stay where q and credit put them. */
+    public function testASteadyUnemploymentGapBuildsNothingExtra(): void
+    {
+        $state = $this->restingBuildingState();
+        $state->nairu = MacroConstants::NATURAL_UNEMPLOYMENT;
+        $state->nairuEma = $state->nairu;
+        $state->unemploymentRate = $state->nairu + 0.03;
+        $state->unemploymentRateEma = $state->unemploymentRate;
+
+        $this->subsystem->calculateHousingStarts($state, 0.25);
+
+        $this->assertEqualsWithDelta(MacroConstants::HOUSING_STARTS_BASELINE, $state->housingStartsIndex, 1e-9);
+    }
+
+    /**
+     * Unemployment rising a point a year sends young adults back home: 0.28% of households a year against starts of 1%
+     * of the stock cuts the starts target by 28%. The same rise in the NAIRU is no rise in the gap.
+     */
+    public function testRisingUnemploymentCutsStartsByTheHouseholdsItUnforms(): void
+    {
+        $rising = $this->restingBuildingState();
+        // The quarter's average lags a rate rising a point a year by a quarter of a point over its quarter horizon.
+        $rising->unemploymentRate += 0.0025;
+        $structural = clone $rising;
+        $structural->nairu += 0.0025;
+
+        $this->subsystem->calculateHousingStarts($rising, 0.25);
+        $this->subsystem->calculateHousingStarts($structural, 0.25);
+
+        $formation = -AssetMarketSubsystem::HEADSHIP_UNEMPLOYMENT_SEMI_ELASTICITY * 0.01 / AssetMarketSubsystem::HOUSING_STARTS_TO_STOCK;
+        $expected = AssetMarketSubsystem::HOUSING_STARTS_KAPPA * MacroConstants::HOUSING_STARTS_BASELINE * $formation * 0.25;
+        $this->assertEqualsWithDelta($expected, $rising->housingStartsIndex - MacroConstants::HOUSING_STARTS_BASELINE, 1e-9);
+        $this->assertEqualsWithDelta(MacroConstants::HOUSING_STARTS_BASELINE, $structural->housingStartsIndex, 1e-9);
+    }
+
+    /** The house price already prices the user cost (Poterba 1984): a dearer rate path moves starts through it only. */
+    public function testRatesReachStartsOnlyThroughTheHousePrice(): void
+    {
+        $cheap = $this->restingBuildingState();
+        $cheap->riskNeutral10yEma = 0.035;
+        $dear = $this->restingBuildingState();
+        $dear->riskNeutral10yEma = 0.065;
+
+        $this->subsystem->calculateHousingStarts($cheap, 0.25);
+        $this->subsystem->calculateHousingStarts($dear, 0.25);
+
+        $this->assertEqualsWithDelta($cheap->housingStartsIndex, $dear->housingStartsIndex, 1e-12);
+    }
+
+    /** The metals index prices the metals in a home, not all of its materials. */
+    public function testMetalsPriceOnlyTheirShareOfBuildingCost(): void
+    {
+        $state = $this->restingBuildingState();
+        $state->industrialMetalsIndex = 1.5 * $state->industrialMetalsIndexTrend;
+
+        $this->subsystem->calculateHousingStarts($state, 0.25);
+
+        $qShift = 1.0 / (1.0 + (AssetMarketSubsystem::REPLACEMENT_COST_METALS_SHARE * 0.5)) - 1.0;
+        $expected = AssetMarketSubsystem::HOUSING_STARTS_KAPPA * AssetMarketSubsystem::HOUSING_STARTS_Q_SENSITIVITY * $qShift * 0.25;
+        $this->assertEqualsWithDelta($expected, $state->housingStartsIndex - MacroConstants::HOUSING_STARTS_BASELINE, 1e-9);
+    }
+
+    /** Prices and costs on their trends, standards neutral, and the unemployment gap holding still. */
+    private function restingBuildingState(): MacroState
+    {
+        $state = $this->neutralBuildingState();
+        $state->residentialWealthTrend = $state->residentialPropertyIndex;
+        $state->industrialMetalsIndexTrend = $state->industrialMetalsIndex;
+        $state->unemploymentRate = $state->nairu;
+        $state->unemploymentRateEma = $state->nairu;
+        $state->nairuEma = $state->nairu;
+
+        return $state;
     }
 
     private function neutralHousingState(): MacroState

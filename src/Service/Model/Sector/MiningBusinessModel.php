@@ -317,6 +317,16 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
      * Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more
      * per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs).
      */
+    /**
+     * A miner pays a share of each year's underlying earnings rather than holding a dividend its prices cannot: BHP and
+     * Rio Tinto dropped their progressive dividends in February 2016 for minimum payout ratios (BHP's interim fell from
+     * 62c to 16c).
+     */
+    public function holdsDividendThroughDownturns(): bool
+    {
+        return false;
+    }
+
     public function getFixedCostFactor(MacroStateDTO $macroState): float
     {
         return FirmEconomics::calculateExtractionCostFactor($macroState->extractionStringency);

@@ -27,7 +27,7 @@ class EarningsBeatRateTest extends TestCase
     }
 
     #[DataProvider('surpriseDispersions')]
-    public function testEveryFirmBeatsAboutThreeQuartersInFour(float $surpriseSd): void
+    public function testEveryFirmBeatsAsOftenOnTheWalkDown(float $surpriseSd): void
     {
         $math = MathUtility::ownStream(20261017);
         $squares = 0.0;
@@ -41,9 +41,9 @@ class EarningsBeatRateTest extends TestCase
             [$squares, $weight] = MarketConsensusEngine::recordSurprise($squares, $weight, $surprise, 0.25);
         }
 
-        // Phi(0.674) = 0.75; a record of about a dozen reports measures the sd a little low, so the share sits just
-        // under.
-        $this->assertEqualsWithDelta(0.74, $beats / $reports, 0.03);
+        // Phi(0.60) = 0.73, before the near misses management steers onto the line; a record of about a dozen reports
+        // measures the sd a little low, so the share sits just under.
+        $this->assertEqualsWithDelta(0.72, $beats / $reports, 0.03);
     }
 
     /** With no record a firm is walked down as a typical one; a long record replaces the prior with its own measure. */

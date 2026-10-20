@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model\Sector;
 
 use App\Entity\Stock;
+
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Model\Sector\InsuranceBusinessModel;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Sets an insurer up for a quarter whose district catastrophe losses run at a given multiple of the window's average:
@@ -27,8 +28,8 @@ final class DistrictCatastropheWindow
         $then = 1.0;
         $stock->setEarningsMomentumZ([
             ...($stock->getEarningsMomentumZ() ?? []),
-            InsuranceBusinessModel::STATE_CATASTROPHE_BURDEN_AT_REPORT => $then,
-            InsuranceBusinessModel::STATE_CATASTROPHE_BURDEN_READ_AT => $totalTime - $window,
+            FinancialConstants::STATE_CATASTROPHE_BURDEN_AT_REPORT => $then,
+            FinancialConstants::STATE_CATASTROPHE_BURDEN_READ_AT => $totalTime - $window,
         ]);
         $expected = CommodityLogisticsSubsystem::expectedCatastropheIncurred($totalTime, $window);
 
