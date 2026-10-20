@@ -179,11 +179,9 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      */
     public const NEW_SUPPLY_RENT_DRAG           = 0.03;
 
-    /** Share of an inflation surprise contractual rent escalators pass through, both ways: 0.80. */
-    public const RENT_ESCALATOR_CAPTURE         = 0.80;
     /**
-     * Rent roll lost per unit of district catastrophe burden above an average year: damaged space earns nothing until
-     * repaired.
+     * Rent roll lost per unit of district catastrophe burden against an average year, both ways: damaged space earns
+     * nothing until repaired, and the average year's damage is already in the baseline.
      */
     public const CATASTROPHE_VACANCY_SENSITIVITY = 0.02;
     /** Tenant-default Z-score below which failing tenants hand back space. */
@@ -337,8 +335,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $securitizationShock = $securitizationZ * $baselineVol * self::SECURITIZATION_VARIANCE_SCALAR;
         $longevityShock      = $longevityZ * $baselineVol * self::LONGEVITY_VARIANCE_SCALAR;
 
-        // The inflation hedge: CPI rent escalators pass the inflation surprise, both ways.
-        $rentEscalator = $macroState->inflationSurprise() * self::RENT_ESCALATOR_CAPTURE;
         // Market rent is the space market (DiPasquale & Wheaton 1996), not the asset price: a lower cap rate lifts what
         // a building is worth, not what a tenant pays. Apartment rents follow jobs and income the same way.
         $marketRent = $macroState->commercialMarketRent - 1.0;
@@ -360,13 +356,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             + ($dsrShift * self::DSR_TENANT_DEFAULT_SCALAR);
         $vacancy = self::tenantVacancy($tenantDefaultZ) - self::expectedTenantVacancy() + $macroTenantVacancy;
         // Storm damage takes space off the rent roll until it is repaired.
-        $catastropheVacancy = max(0.0, $macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_VACANCY_SENSITIVITY;
+        $catastropheVacancy = ($macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_VACANCY_SENSITIVITY;
 
         // --- Clamped Revenue Streams ---
-        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $rolledInPlaceRent - $vacancy - $catastropheVacancy));
-        // Escalators, the roll's rent level and empty space reprice the same square footage: the building's
-        // operating cost runs whatever it bills.
-        $priceRevenue       = $expectedRevenue * $leaseWeight * ($rentEscalator + $rolledInPlaceRent - $vacancy);
+        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rolledInPlaceRent - $vacancy - $catastropheVacancy));
+        // The roll's rent level and empty space reprice the same square footage: the building's operating cost runs
+        // whatever it bills. CPI indexation needs no term here: the engine carries realised inflation on the
+        // property's capacity.
+        $priceRevenue       = $expectedRevenue * $leaseWeight * ($rolledInPlaceRent - $vacancy);
         $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($marketRent * self::HOSPITALITY_RATE_LEVERAGE)));
 
         $streamRevenues = [
@@ -402,7 +399,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // Aggregate observable revenue shock percentage across active streams (MarketConsensusEngine applies coverage
         // visibility). Default rates are published; which tenants fail is not. The rent roll is disclosed in full.
         $observableShockZ
-            = (($leaseShock + $rentEscalator - $macroTenantVacancy) * $leaseWeight)
+            = (($leaseShock - $macroTenantVacancy) * $leaseWeight)
             + ($hospitalityShock * $hospitalityWeight)
             + ($securitizationShock * $securitizationWeight)
             + ($longevityShock * $longevityWeight);
@@ -594,7 +591,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             'household_debt_service_gap',
             'housing_starts_index_ema',
             'import_price_level',
-            'inflation_ema',
             'output_gap_lag_18m',
             'retail_default_rate_ema',
             'tips_breakeven_ema',

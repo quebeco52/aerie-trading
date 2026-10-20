@@ -22,8 +22,8 @@ use App\Service\Model\ModelParam;
  * - Feedstock Cost Curve: base chemicals are priced off the marginal (naphtha, oil-linked) cracker while the firm pays
  *   its own gas/oil slate, so a gas-advantaged cracker gains when oil rises against gas.
  * - Tri-Stream Demand Architecture:
- *      1. Base Petrochemicals: Highly cyclical, volume price takers driven geometrically by output gap and industrial
- *         metals.
+ *      1. Base Petrochemicals: Highly cyclical, volume price takers driven by the output gap and the manufacturing
+ *         PMI.
  *      2. Specialty Chemicals: Defensive, high-margin, patent-protected electronic materials and catalysts with
  *         asymmetric cost pass-through.
  *      3. Agrochemicals: Uncorrelated to standard macro cycles; driven by agricultural commodity indices and weather
@@ -130,8 +130,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     // --- Macro Demand & Industrial Sensitivity ---
     /** Sensitivity of base petrochemical revenue to the macroeconomic output gap. */
     public const BASE_PETRO_OUTPUT_GAP_SCALAR = 1.60;
-    /** Sensitivity of base petrochemical revenue to industrial metals demand index. */
-    public const BASE_PETRO_METALS_SCALAR = 0.60;
     /** Weight of cyclical industrial demand in aggregate macroeconomic demand shift. */
     public const INDUSTRIAL_DEMAND_WEIGHT = 0.70;
     /** Weight of agricultural commodity shift in aggregate macroeconomic demand shift. */
@@ -254,14 +252,14 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $outputGap = $this->resolveLaggedOutputGap($macroState);
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
         $beta = $this->getOperatingCyclicality($stock);
 
-        // Macro demand shift: Driven by industrial demand (output gap + metals + manufacturing PMI) for base chemicals,
-        // and agricultural commodities for agrochemicals.
+        // Macro demand shift: industrial demand (output gap and manufacturing PMI) for base chemicals, and agricultural
+        // commodities for agrochemicals. The metals price is not a volume: a mine outage that lifts it orders no
+        // more resin.
         $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmi, sensitivity: self::PMI_DEMAND_SENSITIVITY);
-        $industrialDemand = ($outputGap * self::BASE_PETRO_OUTPUT_GAP_SCALAR) + ($metalsShift * self::BASE_PETRO_METALS_SCALAR) + $pmiShift;
+        $industrialDemand = ($outputGap * self::BASE_PETRO_OUTPUT_GAP_SCALAR) + $pmiShift;
         $blendedDemandShift = ($industrialDemand * $beta * self::INDUSTRIAL_DEMAND_WEIGHT) + ($agriShift * self::AGRI_DEMAND_WEIGHT)
             + $this->resolveFxDemandShift($macroState);
 
@@ -399,7 +397,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'import_price_level',
-            'industrial_metals_index_ema',
             'manufacturing_pmi',
             'natural_gas_price_index_ema',
             'output_gap_ema',

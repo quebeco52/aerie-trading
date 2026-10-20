@@ -24,6 +24,9 @@ class StreamContext
     /** Namespace prefix under which regime clocks are persisted in the stream state map. */
     public const REGIME_STATE_PREFIX = 'state:regime:';
 
+    /** The sector demand level at the firm's last report, so each stream can take its sector part back out. */
+    public const SECTOR_DEMAND_LEVEL_STATE = 'state:sector_demand_level';
+
     /** Namespace prefix under which order backlogs (in quarters of expected stream revenue) are persisted. */
     public const BACKLOG_STATE_PREFIX = 'state:backlog:';
 
@@ -54,10 +57,10 @@ class StreamContext
         private readonly MathUtility $mathUtility,
         private readonly float $firmFactorLoading = 0.0,
         /**
-         * This quarter's realized N(0,1) demand factor of the firm's macro sector; null when the macro state carries
-         * none.
+         * The firm's macro sector's demand level this quarter, a persistent factor with unit stationary variance;
+         * null when the macro state carries none.
          */
-        private readonly ?float $sectorInnovation = null,
+        private readonly ?float $sectorDemandLevel = null,
         /**
          * Loading rho_s of every revenue stream on the sector demand factor (rho_s^2 = variance shared with sector
          * peers).
@@ -82,18 +85,25 @@ class StreamContext
         $firmLoading = max(0.0, min(1.0, $commonLoading ?? $this->firmFactorLoading));
         $prevZ = $this->previousMomentum[$key] ?? 0.0;
 
-        // Two-factor model: e_t = rho_s S_t + rho_f F_t + sqrt(1 - rho_s^2 - rho_f^2) u_t. The sector factor
-        // only applies to streams that load on firm demand at all (exogenous draws pass a zero loading), and
-        // only when the macro state actually carries a realization for this firm's sector. The two common
-        // terms are folded into one unit-variance composite so the single-index helper keeps its contract.
-        $sectorLoading = ($firmLoading > 0.0 && $this->sectorInnovation !== null)
+        // The sector factor applies only to streams that load on firm demand at all (exogenous draws pass a zero
+        // loading), and only when the macro state carries a level for this firm's sector.
+        $sectorLoading = ($firmLoading > 0.0 && $this->sectorDemandLevel !== null)
             ? max(0.0, min(1.0, $this->sectorFactorLoading))
             : 0.0;
-        $compositeLoading = sqrt(min(1.0, ($firmLoading * $firmLoading) + ($sectorLoading * $sectorLoading)));
 
-        if ($compositeLoading > 0.0) {
-            $compositeInnovation = (($firmLoading * $this->getFirmInnovation()) + ($sectorLoading * (float) $this->sectorInnovation)) / $compositeLoading;
-            $newZ = $this->mathUtility->generatePersistentZ($prevZ, $phi, $compositeInnovation, $compositeLoading);
+        if ($sectorLoading > 0.0) {
+            // Z = rho_s S + sqrt(1 - rho_s^2) X: the sector level is already persistent, so it enters as a level, and
+            // only the firm's own part X runs the AR(1) (on the firm factor at the loading that keeps its share of
+            // Z's variance at rho_f^2). Fed in as an innovation, the level was compounded by phi a second time.
+            $ownScale = sqrt(1.0 - ($sectorLoading * $sectorLoading));
+            $previousSector = $this->getPersistedState(self::SECTOR_DEMAND_LEVEL_STATE, 0.0);
+            $previousOwn = ($prevZ - ($sectorLoading * $previousSector)) / $ownScale;
+            $ownLoading = min(1.0, $firmLoading / $ownScale);
+            $own = $this->mathUtility->generatePersistentZ($previousOwn, $phi, $this->getFirmInnovation(), $ownLoading);
+            $newZ = ($sectorLoading * (float) $this->sectorDemandLevel) + ($ownScale * $own);
+            $this->nextZ[self::SECTOR_DEMAND_LEVEL_STATE] = (float) $this->sectorDemandLevel;
+        } elseif ($firmLoading > 0.0) {
+            $newZ = $this->mathUtility->generatePersistentZ($prevZ, $phi, $this->getFirmInnovation(), $firmLoading);
         } else {
             $newZ = $this->mathUtility->generatePersistentZ($prevZ, $phi);
         }

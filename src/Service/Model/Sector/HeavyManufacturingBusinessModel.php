@@ -157,7 +157,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const REVENUE_VARIANCE_SCALAR = 0.35; // Volatile sales
 
     // --- Global Supply Chain Physics ---
-    /** Variable margin cost drag per standard deviation of supply-chain pressure above normal (0.95pp). */
+    /**
+     * Variable margin cost per standard deviation of supply-chain pressure about normal, both ways (0.95pp): a slack
+     * chain takes the expediting and air freight back out.
+     */
     public const GSCPI_COST_PENALTY_SCALAR        = 0.0095;
 
     // --- Valuation ---
@@ -247,8 +250,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         // Input cost basket: energy, metals, freight, wholesale components and shop-floor payroll, recovered in
         // equipment pricing at the firm's pricing power. Supply chain bottlenecks (expediting, air freight) add on top.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
-        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma);
-        $gscpiCostDrag = $gscpiShift * self::GSCPI_COST_PENALTY_SCALAR;
+        $gscpiCostDrag = ($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE) * self::GSCPI_COST_PENALTY_SCALAR;
 
         // Overhead absorption is the fixed cost base itself: a fuller plant spreads it over more units without the
         // variable cost per unit moving, and running past capacity is the engine's overtime premium.

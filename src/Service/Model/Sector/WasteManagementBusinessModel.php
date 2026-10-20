@@ -138,8 +138,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     public const RECYCLING_VARIANCE_SCALAR   = 0.60; // Highly volatile commodity exposure
 
     // --- Margin Squeeze & Inflation Physics ---
-    /** Share of an inflation surprise contract escalators pass through, both ways: 0.85. */
-    public const CPI_ESCALATOR_CAPTURE = 0.85;
 
     // --- Housing & Construction Waste Transmission ---
     /** Sensitivity of commercial roll-off construction and demolition (C&D) waste volume to housing starts. */
@@ -223,8 +221,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
 
         // --- Macro Demand & Pricing Sensitivities ---
         $macroBoost = $this->resolveCommercialVolumeShift($stock, $macroState);
-        // Collection contracts' CPI escalators pass the inflation surprise, both ways.
-        $cpiEscalatorBoost = $macroState->inflationSurprise() * self::CPI_ESCALATOR_CAPTURE;
 
         // Recycling is driven entirely by global commodity, energy, and scrap metal prices
         $energyShift = $macroState->energyCostPushLag / MacroConstants::ENERGY_COST_PUSH_TRANSMISSION;
@@ -241,9 +237,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         }
 
         // --- Clamped Tri-Stream Revenue Calculation ---
-        $residentialRevenue = max(0.0, $expectedRevenue * $residentialWeight * (1.0 + ($residentialZ * $baselineVol * self::RESIDENTIAL_VARIANCE_SCALAR) + $cpiEscalatorBoost));
-        // Municipal CPI escalators reprice the same collection routes: pure price revenue.
-        $priceRevenue       = $expectedRevenue * $residentialWeight * $cpiEscalatorBoost;
+        $residentialRevenue = max(0.0, $expectedRevenue * $residentialWeight * (1.0 + ($residentialZ * $baselineVol * self::RESIDENTIAL_VARIANCE_SCALAR)));
         $commercialRevenue  = max(0.0, $expectedRevenue * $commercialWeight  * (1.0 + ($commercialZ * $baselineVol * self::COMMERCIAL_VARIANCE_SCALAR) + $macroBoost));
         $recyclingRevenue   = max(0.0, $expectedRevenue * $recyclingWeight   * (1.0 + ($recyclingZ * $baselineVol * self::RECYCLING_VARIANCE_SCALAR) + $recyclingCommodityBoost));
 
@@ -273,7 +267,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
-        $specialCharge = $disasterPenalty * max(0.0, $actualRevenue - $priceRevenue);
+        $specialCharge = $disasterPenalty * max(0.0, $actualRevenue);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -283,7 +277,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-            priceRevenue: $priceRevenue,
             specialCharge: $specialCharge,
         );
     }
@@ -302,7 +295,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             'housing_starts_index_ema',
             'import_price_level',
             'industrial_metals_index_ema',
-            'inflation_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
             'real_wage_gap',

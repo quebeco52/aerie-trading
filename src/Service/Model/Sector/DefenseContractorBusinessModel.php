@@ -100,8 +100,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const FMS_VARIANCE_SCALAR = 0.35;
 
     // --- Sovereign Procurement & Cost-Plus Physics ---
-    /** Cost-plus revenue per point of inflation over what was expected, both ways: +1pp adds 1.5%. */
-    public const COST_PLUS_BONUS_SCALAR = 1.50;
 
     // --- Fixed-Price ASC 606 & Production Physics ---
     /** Negative Z-score threshold indicating development program overruns and reach-forward losses. */
@@ -125,8 +123,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const PROGRAM_OVERRUN_EXIT_HAZARD = 0.17;
     /** Ongoing quarterly reach-forward charge while the fixed-price program remains in overrun. */
     public const FORWARD_LOSS_ONGOING_PENALTY = 0.03;
-    /** Margin efficiency elasticity (Wright's Law) applied to mature FMS production volume scale. */
-    public const PRODUCTION_LEARNING_CURVE_ELASTICITY = 0.020;
 
     // --- Geopolitical Sanctions & Conflict Tail Shocks ---
     /** Negative Z-score threshold indicating congressional foreign military export sanctions or bans. */
@@ -308,9 +304,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Programme awards are defence investment, which moves 1.54 times the allied budgets it comes out of.
         $alliedOrders = MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
 
-        // Cost-plus contracts pass the inflation surprise through as nominal revenue, both ways.
-        $costPlusBonus = $macroState->inflationSurprise() * self::COST_PLUS_BONUS_SCALAR;
-
         // --- Program Execution, Forward Losses & Tail Shocks ---
         $costPlusMultiplier   = 1.0;
         $fixedPriceMultiplier = 1.0;
@@ -319,9 +312,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $forwardLossPenalty   = 0.0;
         $flagshipPenalty      = 0.0;
         $wartimeSupplyDrag    = 0.0;
-
-        // Wright's Law: Learning curve applies to mature FMS export volume
-        $learningCurveShift = -self::PRODUCTION_LEARNING_CURVE_ELASTICITY * $fmsZ * $fmsWeight;
 
         // A fixed-price development program in trouble books its reach-forward loss once, then keeps
         // taking charges every quarter until delivery or re-baselining (the tanker-program pattern).
@@ -362,7 +352,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $costPlusBook = $streams->recognizeBacklog(
             'cost_plus_procurement',
             $expectedRevenue * $costPlusWeight,
-            max(0.0, (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + $alliedOrders) * $costPlusMultiplier),
+            max(0.0, (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $alliedOrders) * $costPlusMultiplier),
             self::COST_PLUS_BACKLOG_BURN_RATE,
         );
         $fixedPriceBook = $streams->recognizeBacklog(
@@ -397,7 +387,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // --- Realized Variable Cost Margin ---
         $rawMargin = $realizedVariableMargin
-            + $learningCurveShift
             + ($forwardLossPenalty * $fixedPriceWeight)
             + ($wartimeSupplyDrag * $fmsWeight)
             + $inputCostDrag;
@@ -406,7 +395,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // --- Shock Determination ---
         // Analysts see awards and book-to-bill, but this quarter's revenue only moves at the burn rate.
-        $costPlusShock   = ((($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus) * $costPlusMultiplier + ($costPlusMultiplier - 1.0)) * self::COST_PLUS_BACKLOG_BURN_RATE;
+        $costPlusShock   = (($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR * $costPlusMultiplier) + ($costPlusMultiplier - 1.0)) * self::COST_PLUS_BACKLOG_BURN_RATE;
         $fixedPriceShock = (($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) * $fixedPriceMultiplier + ($fixedPriceMultiplier - 1.0)) * self::FIXED_PRICE_BACKLOG_BURN_RATE;
         $fmsShock        = (($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) * $fmsMultiplier + ($fmsMultiplier - 1.0)) * self::FMS_BACKLOG_BURN_RATE;
 
@@ -442,9 +431,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'import_price_level',
             'industrial_metals_index_ema',
-            'inflation_ema',
             'real_wage_gap',
-            'tips_breakeven_ema',
         ];
     }
 }

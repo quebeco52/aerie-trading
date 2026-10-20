@@ -104,20 +104,15 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     /** Consumer shipments a component shortage lets through: PCs and peripherals are allocated last. */
     public const SHORTAGE_CONSUMER_MULT = 0.80;
     /**
-     * Variable margin cost per standard deviation of supply-chain pressure (expediting, spot chips, air freight): the
-     * comm-equipment figure, as both buy the same parts through the same contract manufacturers.
+     * Variable margin cost per standard deviation of supply-chain pressure about normal, both ways (expediting, spot
+     * chips, air freight): the comm-equipment figure, as both buy the same parts through the same contract
+     * manufacturers.
      */
     public const GSCPI_MARGIN_PENALTY_SCALAR = CommunicationEquipmentBusinessModel::GSCPI_MARGIN_PENALTY_SCALAR;
     /** Positive z-score threshold indicating a massive enterprise/AI hardware super-cycle. */
     public const AI_SUPER_CYCLE_Z_SCORE = 2.40;
     /** Top-line enterprise revenue multiplier for an AI/data center super-cycle. */
     public const AI_SUPER_CYCLE_MULT = 1.20;
-
-    // --- Continuous Elasticity ---
-    /**
-     * Variable margin sensitivity to enterprise hardware sales pulling in high-margin software/support attach rates.
-     */
-    public const ENTERPRISE_SOFTWARE_ATTACH_ELASTICITY = 0.015;
 
     // --- Trade Balance & PPI Transmission ---
     /** Export volume per unit of the foreign bloc's output gap: the customers abroad. */
@@ -256,7 +251,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $consumerMultiplier = 1.0;
         $eventType = null;
         // The expediting cost is the GSCPI margin drag below, so the shortage itself only rations volume.
-        $shortagePenalty = max(0.0, $macroState->supplyChainPressureIndexEma) * self::GSCPI_MARGIN_PENALTY_SCALAR;
+        $shortagePenalty = ($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE) * self::GSCPI_MARGIN_PENALTY_SCALAR;
 
         if ($eventZ < self::SEMICONDUCTOR_SHORTAGE_Z_SCORE + (CommunicationEquipmentBusinessModel::SUPPLY_CHAIN_STRESS_LOADING * $macroState->supplyChainPressureIndexEma)) {
             $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
@@ -297,11 +292,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         // in list prices at the firm's pricing power.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        // Continuous Elasticity
-        $elasticityShift = -self::ENTERPRISE_SOFTWARE_ATTACH_ELASTICITY * $enterpriseZ * $enterpriseWeight;
-
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $rawMargin = $effectiveMargin + $shortagePenalty + $inputCostDrag + $elasticityShift;
+        $rawMargin = $effectiveMargin + $shortagePenalty + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Each stream's own shock at its revenue weight, and what a public shortage or super-cycle does to it.

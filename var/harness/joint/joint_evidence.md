@@ -185,3 +185,48 @@ sector-model review). Sanity level, one arm.
   Mining 3, Shipping 1). Seasonal amplitude large in InternetRetail 88%, Luxury 72%, Restaurant 59% (range of mean
   q/q log change by calendar quarter). TIER (PrivateEquity) price x0.01 in seed 2 while equity rose ~5x.
 - Caveats: 4 seeds; most models 1 ticker (nF 4); macro path differs by seed; beta SE clustered by firm-seed.
+
+## Earnings-model batch A sanity, baseA (a202316c) vs fixA (a202316c + batchA.patch) (2026-10-20)
+Question: does batch A (capacity drift out, sector demand factor as a level, Steel/Chemical/Railroad demand terms,
+7 inflation-surprise revenue terms and 9 demand-draw margin terms deleted, cat claims on the incurred flow, AM/HF/PE
+equity sleeve at 10y+ERP) keep the board sane and move the flagged per-model moments. Sanity level, 4 unpaired seeds.
+- Arms: `baseA` = `git archive a202316c` in `tree-baseA`; `fixA` = same + `git apply --directory=var/harness/joint/tree-fixA
+  batchA.patch` + new-files.tar; vendor symlinks; fresh caches; all deleted after. Seeds 1-4 x 20 y, 360 tpy, POLITICS=1
+  HEALTH=1. `bin/harness-batch var/harness/joint/run.sh 1-4 baseA fixA` (177 s wall), then model_moments.py, analyse.py,
+  beat_an.py, `ema_an.py 1-4 baseA fixA` (MACRO_OUT now carries `scp`, `vol_ema`), `ins_margin.py 1-4 baseA fixA`.
+- Tables: models-batchA-{base,fix}-4s.out, analyse-batchA-{base,fix}-4s.out, ema-batchA-4s.out, ins-batchA-4s.out.
+- Board: nominal GDP 4.86 -> 5.16%/y; gap mean 0.02 (sd 0.67) -> 0.79 (sd 0.10), t~2.2 unpaired, inside the -1.8..0.7
+  range of past seed means; infl sd 0.93 -> 1.25. Failures 1/1 (SHOR both), Ch11 0 -> 1 (SKUA s4 y3.6), payment
+  defaults 2 -> 2, rescues 14 -> 13. No NaN, no anomalies. FALC x135 (s2 fixA).
+- Revenue beta to real GDP base -> fix: Steel 7.99 -> 0.91 (se 1.04), Chemical 3.60 -> 3.41, Railroad 1.03 -> 0.92,
+  HeavyMfg 5.34 -> 4.55 (control, shares the demand-factor change), Semis 5.96 -> 4.89, SIM 0.95 -> 1.11.
+- EPS beat: board 76.5 -> 78.1% (HEAD f76d4750 74.1). CommEquip 84 -> 96, ClearingHouse 94 -> 97, Defense 59 -> 73
+  (rev surprise median -2.9 -> +7.8%), Telecom 80 -> 72, Tech 72 -> 78, Reit 80 -> 82, HealthIns 73 -> 77, Rest 80 -> 78.
+- Insurers: margin sd RetailIns 5.05 -> 10.86pp, Reins 4.35 -> 10.56pp; p10/p90 -2/9 -> -9/21 (RetailIns); loss
+  quarters 1.9 -> 9.4% and 2.8 -> 6.2%; worst Reins quarter -82% (s1 t0.82). Revenue beta -0.2/+0.9 -> -1.9/-1.8.
+- Caveats: arms do not pair (macro paths differ by seed after the patch); 4 seeds; most models nF 4.
+
+## Earnings-model batch A+B sanity, baseA (a202316c) vs fixAB (a202316c + batchAB.patch) (2026-10-20)
+Question: does batch B plus the three A corrections (Steel PMI accelerator back at 0.25, priced and capped cat XoL
+cover, two-sided GSCPI/VIX/unemployment/cat terms, mean-centred LawFirm/HedgeFund/ClearingHouse terms) keep the board
+sane, and does fixA's +0.79% gap mean persist. Indicative: 8 unpaired seeds per arm.
+- Arms: `baseA` seeds 1-4 reused, 5-8 new on a rebuilt `git archive a202316c` tree; `fixAB` = same archive +
+  `git apply --directory=var/harness/joint/tree-fixAB batchAB.patch` (from the repo root: `git -C <tree> apply` inside
+  the checkout silently applies nothing) + new-files.tar. Vendor symlinks, fresh caches, trees deleted after.
+  20 y, 360 tpy, POLITICS=1 HEALTH=1. `bin/harness-batch var/harness/joint/run.sh 1-8 fixAB` (173 s), `... 5-8 baseA` (147 s).
+- Tables: models-batchAB-{base,fix}-8s.out, analyse-batchAB-{base,fix}-8s.out, beat-batchAB-{base,fix}-8s.out,
+  ema-batchAB-8s.out, ins-batchAB-8s.out.
+- Board base -> fix: nominal GDP 4.69 (0.54) -> 4.45 (0.45)%/y; gap mean -0.07 (0.70) -> -0.14 (0.59), so fixA's +0.79
+  on 4 seeds does not persist; recession quarters 6.6 (5.7) -> 11.1 (6.8)%; failures 2 -> 0, Ch11 2 -> 2, payment
+  defaults 5 -> 6, rescues 34 -> 32 (sums over 8 seeds). No anomalies, no NaN. Extremes: FALC/SKUA/CNDR x20-58 both arms.
+- Revenue beta: Steel 8.54 -> 2.10 (se 0.51), Chemical 4.45 -> 3.20, Railroad 0.87 -> 1.23, HeavyMfg 5.17 -> 4.96,
+  Semis 6.16 -> 5.96, SIM 1.01 -> 1.14. ClearingHouse -0.29 -> -1.68 (se 0.60).
+- EPS beat: board 75.9 -> 75.8; CommEquip 87.2 -> 74.8, ClearingHouse 92.6 -> 88.3, Defense 64.6 -> 64.6 (rev surprise
+  median -0.22 -> -0.28%), Reit 80.5 -> 82.2, Telecom 72.0 -> 69.8, HedgeFund 81.9 -> 77.0, LawFirm 78.6 -> 79.4, HealthIns
+  75.2 -> 72.7, Tech 76.3 -> 77.3, Logistics 75.8 -> 74.5, Security 77.0 -> 77.0. LawFirm rev surprise sd 19.8 -> 17.6.
+- Insurers base -> fix: RetailIns margin 4.9/4.5sd -> 4.7/10.1sd, p10/p90 -1.5/10.2 -> -9.0/17.4, loss qtrs 1.4 -> 10.0%,
+  ROE median 15.1 -> 14.7 (p10/p90 9.6/20.5 -> 7.9/24.4), worst -21 -> -29%. Reins 4.9/3.8 -> 4.6/8.5, p10/p90 -0.3/9.8
+  -> -4.4/12.1, loss 2.2 -> 6.2%, ROE 12.7 -> 12.1, worst -24 -> -38% (fixA worst was -82%).
+- scp mean -0.035 -> -0.026 (sd 0.55 both); vol_ema 0.160 -> 0.154 (sd 0.036 -> 0.034).
+- Not measured: cover attachment frequency (the harness keeps only treasury lines from StockEvent descriptions),
+  Telecom subscriber_index and CommEquip book_to_bill (report rows carry only hedge/capture/power KPIs).

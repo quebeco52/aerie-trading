@@ -226,7 +226,12 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $this->model->getDebtMaturityRolloverRate());
     }
 
-    public function testPriceWarErodesTheSubscriberBaseAcrossQuartersAndDoesNotSnapBack(): void
+    /**
+     * A price war moves lines between carriers and destroys none: switchers leave one carrier for another, so its extra
+     * churn comes back as promotional gross adds. What it costs is the ARPU discount and the acquisition spend, for as
+     * long as it runs; the base is where it was when it ends.
+     */
+    public function testAPriceWarCostsArpuAndAcquisitionButDestroysNoLines(): void
     {
         $regimeKey = StreamContext::REGIME_STATE_PREFIX . TelecomBusinessModel::REGIME_PRICE_WAR;
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
@@ -245,34 +250,32 @@ class TelecomBusinessModelTest extends TestCase
         $clean = $run([], false);
         $this->assertEqualsWithDelta(1.0, $clean->kpis['subscriber_index'], 1e-9);
 
-        // Onset: churn jumps, promotional gross adds only partly defend the base, ARPU is discounted.
+        // Onset: churn and promotional gross adds both jump; ARPU is discounted.
         $onset = $run(['event' => -9.9], false, -2.5);
         $this->assertSame(ShockEvent::TELECOM_PRICE_WAR, $onset->eventType);
         $this->assertSame(1.0, $onset->streamZ[$regimeKey]);
-        $this->assertLessThan(1.0, $onset->kpis['subscriber_index']);
+        $this->assertEqualsWithDelta(1.0, $onset->kpis['subscriber_index'], 1e-9);
         $this->assertLessThan(1.0, $onset->kpis['arpu_index']);
         $this->assertLessThan($clean->streamRevenue['wireless_subscriptions'], $onset->streamRevenue['wireless_subscriptions']);
 
-        // Quarter 2: the war continues silently, the base keeps eroding and SAC keeps margins compressed.
+        // Quarter 2: the war continues silently and acquisition spend keeps margins compressed.
         $second = $run($onset->streamZ, false);
         $this->assertNull($second->eventType);
-        $this->assertLessThan($onset->kpis['subscriber_index'], $second->kpis['subscriber_index']);
+        $this->assertEqualsWithDelta(1.0, $second->kpis['subscriber_index'], 1e-9);
         $this->assertGreaterThan($clean->clampedMargin, $second->clampedMargin);
 
-        // Quarter 3: the war ends. ARPU normalizes at once, but lost subscribers must be re-won at the
-        // replacement rate, so the base recovers gradually rather than snapping back.
+        // Quarter 3: the war ends and ARPU normalizes at once.
         $after = $run($second->streamZ, true);
         $this->assertSame(0.0, $after->streamZ[$regimeKey]);
         $this->assertEqualsWithDelta(1.0, $after->kpis['arpu_index'], 1e-9);
-        $this->assertGreaterThan($second->kpis['subscriber_index'], $after->kpis['subscriber_index']);
-        $this->assertLessThan(1.0, $after->kpis['subscriber_index']);
+        $this->assertEqualsWithDelta(1.0, $after->kpis['subscriber_index'], 1e-9);
     }
 
     /**
-     * Involuntary disconnects rise with job losses, so unemployment above the natural rate must lift churn
-     * above the gross adds that replace it and erode the subscriber base even with no price war running.
+     * Involuntary disconnects rise with job losses and ease when jobs are plentiful: base churn is the average labour
+     * market's, so unemployment off its natural rate moves the base either way, by the same amount.
      */
-    public function testUnemploymentAboveTheNaturalRateLiftsChurnAndErodesTheSubscriberBase(): void
+    public function testUnemploymentOffTheNaturalRateMovesChurnBothWays(): void
     {
         $math = $this->createStub(MathUtility::class);
         $math->method('generatePersistentZ')->willReturn(0.0);
@@ -288,7 +291,7 @@ class TelecomBusinessModelTest extends TestCase
         $excess = 0.04;
         $expectedIndex = 1.0 - ($excess * TelecomBusinessModel::UNEMPLOYMENT_CHURN_SENSITIVITY);
         $this->assertEqualsWithDelta($expectedIndex, $run(MacroConstants::NATURAL_UNEMPLOYMENT + $excess), 1e-9);
-        $this->assertEqualsWithDelta(1.0, $run(MacroConstants::NATURAL_UNEMPLOYMENT - 0.01), 1e-9, 'A tight labor market does not create subscribers who already have a phone.');
+        $this->assertEqualsWithDelta(1.0 + (0.01 * TelecomBusinessModel::UNEMPLOYMENT_CHURN_SENSITIVITY), $run(MacroConstants::NATURAL_UNEMPLOYMENT - 0.01), 1e-9, 'A tight labour market keeps more of the base.');
     }
 
     public function testTheCycleReachesTheCostBaseThroughEquipmentVolumeOnly(): void
@@ -330,9 +333,9 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertSame(0.0, $peace->streamZ[$regimeKey]);
         $this->assertEqualsWithDelta(TelecomBusinessModel::BASE_QUARTERLY_CHURN + TelecomBusinessModel::PRICE_WAR_CHURN_UPLIFT, $war->kpis['quarterly_churn'], 1e-12);
         $this->assertEqualsWithDelta(1.0 - TelecomBusinessModel::PRICE_WAR_ARPU_DISCOUNT, $war->kpis['arpu_index'], 1e-12);
-        $this->assertLessThan($peace->kpis['subscriber_index'], $war->kpis['subscriber_index']);
+        $this->assertEqualsWithDelta($peace->kpis['subscriber_index'], $war->kpis['subscriber_index'], 1e-12, 'switchers move between carriers');
         // The war's cost comes only from the extra promotional adds and from plan costs spread over discounted ARPU.
-        $acquisition = TelecomBusinessModel::SUBSCRIBER_ACQUISITION_COST_ELASTICITY * TelecomBusinessModel::PRICE_WAR_GROSS_ADDS_RESPONSE * TelecomBusinessModel::SUBSCRIPTION_WEIGHT;
+        $acquisition = TelecomBusinessModel::SUBSCRIBER_ACQUISITION_COST_ELASTICITY * (TelecomBusinessModel::PRICE_WAR_CHURN_UPLIFT / TelecomBusinessModel::BASE_QUARTERLY_CHURN) * TelecomBusinessModel::SUBSCRIPTION_WEIGHT;
         $discount = TelecomBusinessModel::PRICE_WAR_ARPU_DISCOUNT;
         $warCost = $war->clampedMargin - $peace->clampedMargin;
         $this->assertGreaterThan($acquisition, $warCost, 'promotional adds and the ARPU cut both raise the cost ratio');
@@ -443,8 +446,7 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $rest['subscriber_index'], 1e-12, 'gross adds replace its own churn, not the default');
 
         foreach (['SKUA' => $churn, 'TEL_DEFAULT' => TelecomBusinessModel::BASE_QUARTERLY_CHURN] as $ticker => $base) {
-            $expected = 1.0 - ($base + TelecomBusinessModel::PRICE_WAR_CHURN_UPLIFT) + ($base * (1.0 + TelecomBusinessModel::PRICE_WAR_GROSS_ADDS_RESPONSE));
-            $this->assertEqualsWithDelta($expected, $run($ticker, 1)['subscriber_index'], 1e-12, $ticker);
+            $this->assertEqualsWithDelta(1.0, $run($ticker, 1)['subscriber_index'], 1e-12, "{$ticker}: the war's switchers come back as its promotional adds at {$base}.");
         }
     }
 }

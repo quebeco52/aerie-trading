@@ -16,33 +16,6 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class TechBusinessModelTest extends TestCase
 {
-    public function testSaaSARROperatingLeverageAndContinuousWageInflation(): void
-    {
-        $model = new TechBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('TECH');
-        $stock->setBeta('1.5');
-
-        // Stream draws come from generatePersistentZ: the subscription stream is drawn first at +2.0 (strong cloud
-        // ARR expansion), every later stream flat.
-        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ'])->getMock();
-        $mathUtilityMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
-
-        $macroState = MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
-        $result = $model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.30,
-            50.0,
-            0.15,
-            $macroState,
-            $mathUtilityMock,
-        );
-
-        // SaaS ARR expansion lowers variable cost percentage below 30%
-        $this->assertLessThan(1000.0 * 0.30, $result->actualVariableCosts);
-    }
-
     public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void
     {
         $model = new TechBusinessModel();

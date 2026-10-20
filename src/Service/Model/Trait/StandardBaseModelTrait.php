@@ -60,13 +60,13 @@ trait StandardBaseModelTrait
      */
     protected function createStreamContext(array $momentum, MathUtility $mathUtility, ?MacroStateDTO $macroState = null, ?Stock $stock = null): StreamContext
     {
-        $sectorInnovation = null;
+        $sectorDemandLevel = null;
         if ($macroState !== null && $stock !== null) {
             $sector = $stock->getSector();
-            $sectorInnovation = isset($macroState->sectorDemandZ[$sector]) ? (float) $macroState->sectorDemandZ[$sector] : null;
+            $sectorDemandLevel = isset($macroState->sectorDemandZ[$sector]) ? (float) $macroState->sectorDemandZ[$sector] : null;
         }
 
-        return $this->activeStreamContext = new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading(), $sectorInnovation, $this->getSectorFactorLoading());
+        return $this->activeStreamContext = new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading(), $sectorDemandLevel, $this->getSectorFactorLoading());
     }
 
     /**

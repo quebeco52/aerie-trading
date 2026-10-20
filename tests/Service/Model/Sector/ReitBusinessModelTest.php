@@ -138,7 +138,7 @@ class ReitBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.0712, (float) $stock->getBaselineRoic(), 0.0001);
     }
 
-    public function testRevenueAndRentEscalatorPhysics(): void
+    public function testRevenueStreamPhysics(): void
     {
         $model = new ReitBusinessModel();
 
@@ -146,8 +146,7 @@ class ReitBusinessModelTest extends TestCase
         $defaultStock = new Stock();
         $defaultStock->setTicker('DEFAULT_REIT');
 
-        // High inflation: 5% vs 2% target => 3% excess inflation
-        // Rent escalator = 0.03 * 0.80 = 0.024 (+2.4% lease revenue boost)
+        // Hot inflation adds nothing here: the engine carries realised inflation on the property's capacity.
         $macroState = $this->createMacroState(inflation: 0.05);
 
         // Z-scores: lease = 1.0, hospitality = 0.5, tenantDefault = 0.0
@@ -165,18 +164,17 @@ class ReitBusinessModelTest extends TestCase
 
         // Defaults: 85% lease, 15% hospitality
         // leaseShock = 1.0 * (0.20 * 0.05) = 0.01
-        // rentEscalator = 0.024
         // a quiet tenant draw leaves the roll fuller than the average quarter by the expected vacancy v (~0.9%)
-        // leaseRevenue = 1,000,000 * 0.85 * (1 + 0.01 + 0.024 + v) = 878,900 + 850,000 v
+        // leaseRevenue = 1,000,000 * 0.85 * (1 + 0.01 + v) = 858,500 + 850,000 v
         // hospitalityShock = 0.5 * (0.20 * 1.50) = 0.15
         // hospitalityRevenue = 1,000,000 * 0.15 * (1 + 0.15) = 150,000 * 1.15 = 172,500
-        // totalRevenue = 1,051,400 + 850,000 v
+        // totalRevenue = 1,031,000 + 850,000 v
         $vacancy = ReitBusinessModel::expectedTenantVacancy();
-        $this->assertEqualsWithDelta(1051400.0 + (850000.0 * $vacancy), $defaultResult->actualRevenue, 1.0);
+        $this->assertEqualsWithDelta(1031000.0 + (850000.0 * $vacancy), $defaultResult->actualRevenue, 1.0);
 
-        // Observable shock Z: ((leaseShock + rentEscalator) * leaseWeight) + (hospitalityShock * hospitalityWeight)
-        // = (0.034 * 0.85) + (0.15 * 0.15) = 0.0289 + 0.0225 = 0.0514
-        $this->assertEqualsWithDelta(0.0514, $defaultResult->observableShockZ, 0.0001);
+        // Observable shock Z: (leaseShock * leaseWeight) + (hospitalityShock * hospitalityWeight)
+        // = (0.01 * 0.85) + (0.15 * 0.15) = 0.0085 + 0.0225 = 0.0310
+        $this->assertEqualsWithDelta(0.0310, $defaultResult->observableShockZ, 0.0001);
 
         // 2. PLZA archetype tuning (80% lease, 20% hospitality)
         $plzaStock = new Stock();
@@ -193,12 +191,12 @@ class ReitBusinessModelTest extends TestCase
             mathUtility: $mathMockPlza,
         );
 
-        // leaseRevenue = 800,000 * (1.034 + v) = 827,200 + 800,000 v
+        // leaseRevenue = 800,000 * (1.01 + v) = 808,000 + 800,000 v
         // hospitalityRevenue = 200,000 * 1.15 = 230,000
-        // totalRevenue = 1,057,200 + 800,000 v
-        $this->assertEqualsWithDelta(1057200.0 + (800000.0 * $vacancy), $plzaResult->actualRevenue, 1.0);
-        // observableShockZ = (0.034 * 0.80) + (0.15 * 0.20) = 0.0272 + 0.0300 = 0.0572
-        $this->assertEqualsWithDelta(0.0572, $plzaResult->observableShockZ, 0.0001);
+        // totalRevenue = 1,038,000 + 800,000 v
+        $this->assertEqualsWithDelta(1038000.0 + (800000.0 * $vacancy), $plzaResult->actualRevenue, 1.0);
+        // observableShockZ = (0.01 * 0.80) + (0.15 * 0.20) = 0.0080 + 0.0300 = 0.0380
+        $this->assertEqualsWithDelta(0.0380, $plzaResult->observableShockZ, 0.0001);
     }
 
     public function testSecuritizationArchetypeShockInclusion(): void

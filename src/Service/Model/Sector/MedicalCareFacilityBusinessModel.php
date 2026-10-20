@@ -131,9 +131,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
      */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 1.25;
 
-    /** Insurance arbitrage revenue per point of inflation over what was expected, both ways: +1pp adds 1.5%. */
-    public const MEDICAL_CPI_EXPANSION_SCALAR = 1.50;
-
     // --- Tail Risk & Shock Events ---
     /** Positive Z-score threshold for mandatory government healthcare spending expansion. */
     public const MANDATORY_SPENDING_Z_SCORE = 2.20;
@@ -206,8 +203,8 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * The patient volume the clinical staff is rostered to: inpatient admissions and elective procedures at
-     * target weights. Billing arbitrage bills the same procedures at higher rates (booked as priceRevenue), so
-     * its inflation uplift is price, not care delivered, and its share of the base holds.
+     * target weights. Billing arbitrage bills the same procedures, so it moves no staffing of its own and its share
+     * of the base holds.
      */
     public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
     {
@@ -295,9 +292,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $patientVolumeShifts = $this->resolvePatientVolumeShifts($stock, $macroState);
         $outpatientMacroBoost = $patientVolumeShifts['elective_outpatient'];
 
-        // Insurance arbitrage expands when inflation runs ahead of expectations and contracts when it falls behind.
-        $arbitrageInflationBoost = $macroState->inflationSurprise() * self::MEDICAL_CPI_EXPANSION_SCALAR;
-
         // --- Tail Risk Events ---
         $spendingMultiplier = 1.0;
         $eventType = null;
@@ -318,9 +312,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 
         $inpatientRevenue  = max(0.0, $expectedRevenue * $inpatientWeight * (1.0 + $inpatientShock + $patientVolumeShifts['inpatient_care']) * $spendingMultiplier);
         $outpatientRevenue = max(0.0, $expectedRevenue * $outpatientWeight * (1.0 + $outpatientShock + $outpatientMacroBoost));
-        $arbitrageRevenue  = max(0.0, $expectedRevenue * $arbitrageWeight * (1.0 + $arbitrageShock + $arbitrageInflationBoost));
-        // Coding and reimbursement uplift bills the same procedures at higher rates: price, not care delivered.
-        $priceRevenue      = $expectedRevenue * $arbitrageWeight * $arbitrageInflationBoost;
+        $arbitrageRevenue  = max(0.0, $expectedRevenue * $arbitrageWeight * (1.0 + $arbitrageShock));
 
         $streamRevenues = [
             'inpatient_care'      => $inpatientRevenue,
@@ -348,7 +340,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
-        $specialCharge = $auditPenalty * max(0.0, $actualRevenue - $priceRevenue);
+        $specialCharge = $auditPenalty * max(0.0, $actualRevenue);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -358,7 +350,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-            priceRevenue: $priceRevenue,
             specialCharge: $specialCharge,
         );
     }
@@ -375,7 +366,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'import_price_level',
-            'inflation_ema',
             'nairu_ema',
             'output_gap_ema',
             'reimbursement_rate_growth',

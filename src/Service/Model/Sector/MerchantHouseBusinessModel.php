@@ -96,8 +96,9 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
     public const MERCHANT_BACKWARDATION_SCALAR = 0.35;
 
     /**
-     * Gross spread widening per standard deviation of supply-chain pressure above normal (0.57pp). Congested corridors
-     * price optionality on physical delivery, which only an owner of berths and bonded warehouses can sell.
+     * Gross spread per standard deviation of supply-chain pressure about normal, both ways (0.57pp). Congested
+     * corridors price optionality on physical delivery, which only an owner of berths and bonded warehouses can sell;
+     * slack ones price it away.
      */
     public const MERCHANT_DISRUPTION_SCALAR = 0.0057;
 
@@ -305,7 +306,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
 
         $convenienceYield = StochasticProcesses::calculateConvenienceYield($macroState->energyInventoryIndexEma);
         $dislocationRent = ($convenienceYield * self::MERCHANT_BACKWARDATION_SCALAR)
-            + (max(0.0, $macroState->supplyChainPressureIndexEma) * self::MERCHANT_DISRUPTION_SCALAR);
+            + (($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE) * self::MERCHANT_DISRUPTION_SCALAR);
 
         $fundingGap = ($macroState->policyRateEma + $macroState->macroCreditSpreadEma)
             - ($macroState->perceivedNeutralRate + $macroState->macroCreditSpreadTrend);

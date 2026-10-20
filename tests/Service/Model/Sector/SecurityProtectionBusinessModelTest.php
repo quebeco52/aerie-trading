@@ -7,6 +7,7 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SecurityProtectionBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -205,12 +206,13 @@ class SecurityProtectionBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Gov 0.40 x 0.02 x 0.30 + retainers 0 (boom side only) + expeditionary 0.20 x (0.10 x 0.8 + 0.01 x 4) =
-        // 0.0264; the cost-plus inflation escalator is price and stays out.
+        // Government posts on appropriations, retainers on the gap, expeditionary work on volatility against its anchor
+        // and spreads against their trend, all both ways; the cost-plus inflation escalator is gone.
         $expected = (SecurityProtectionBusinessModel::GOVERNMENT_CONTRACT_WEIGHT * 0.02 * SecurityProtectionBusinessModel::APPROPRIATIONS_VOLUME_SCALAR)
+            + (SecurityProtectionBusinessModel::RETAINER_WEIGHT * -0.03 * SecurityProtectionBusinessModel::CORPORATE_EXPANSION_SCALAR * $this->model->getOperatingCyclicality($stock))
             + (SecurityProtectionBusinessModel::EXPEDITIONARY_WEIGHT * (
-                ((0.30 - SecurityProtectionBusinessModel::VIX_FEAR_THRESHOLD) * SecurityProtectionBusinessModel::FEAR_PREMIUM_SCALAR)
-                + ((0.035 - SecurityProtectionBusinessModel::CREDIT_STRESS_THRESHOLD) * SecurityProtectionBusinessModel::CREDIT_STRESS_SCALAR)
+                ((0.30 - MacroConstants::MACRO_VOL_BASE_ANCHOR) * SecurityProtectionBusinessModel::FEAR_PREMIUM_SCALAR)
+                + ((0.035 - MacroConstants::BASE_CREDIT_SPREAD) * SecurityProtectionBusinessModel::CREDIT_STRESS_SCALAR)
             ));
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }

@@ -92,6 +92,41 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $this->assertGreaterThan($base->clampedMargin, $metals->clampedMargin, 'dearer scrap and ore raise the cost ratio');
     }
 
+    /**
+     * A permanent metals move is recovered once: the spot book reprices its coil by the metal cost the generic
+     * recovery leaves, so it recovers in full, and the contract book recovers at pricing power. Read as a fixed half of
+     * the index move on spot revenue on top of the generic recovery, a mill recovered two to three times its cost.
+     */
+    public function testAPermanentMetalsMoveIsRecoveredOnce(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $settle = function (float $metalsIndex) use ($mathMock): \App\DTO\ActualFinancialsDTO {
+            $stock = new Stock();
+            $stock->setTicker('STLD');
+            $stock->setBeta('1.2');
+            $macro = new MacroStateDTO(industrialMetalsIndexEma: $metalsIndex);
+            for ($quarter = 0; $quarter < 40; ++$quarter) {
+                $result = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
+                $stock->setEarningsMomentumZ($result->streamZ);
+            }
+
+            return $result;
+        };
+
+        $base = $settle(100.0);
+        $dear = $settle(150.0);
+
+        $volumeRevenue = $base->actualRevenue - $base->priceRevenue;
+        $costMove = $volumeRevenue * 0.35 * SteelManufacturingBusinessModel::INPUT_COST_EXPOSURES['metals'] * 0.50;
+        $recovered = 1.0 - (($base->ebit - $dear->ebit) / $costMove);
+
+        $contractRecovery = SteelManufacturingBusinessModel::PRICING_POWER_INDEX * SteelManufacturingBusinessModel::MAX_INPUT_COST_PASS_THROUGH;
+        $spotWeight = SteelManufacturingBusinessModel::SPOT_HRC_WEIGHT;
+        $this->assertLessThan(1.0, $recovered, 'a price taker recovers less than the cost move');
+        $this->assertEqualsWithDelta($contractRecovery + ($spotWeight * (1.0 - $contractRecovery)), $recovered, 0.03);
+    }
+
     public function testCyclicalSteelBookValueAnchoring(): void
     {
         $earningsValue = 10.0;
@@ -225,5 +260,19 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($base->actualRevenue * (1.0 + $volume + $price), $shielded->actualRevenue, 1.0);
         $this->assertEqualsWithDelta(100_000_000.0 * $price, $shielded->priceRevenue - $base->priceRevenue, 1.0);
         $this->assertEqualsWithDelta($volume, $this->model->resolveSectorActivityShift($stock, $protected) - $this->model->resolveSectorActivityShift($stock, $open), 1e-9);
+    }
+
+    /**
+     * The PMI leads orders as the accelerator on output growth, at a sensitivity of its own whatever the mill's
+     * cyclicality: scaled by cyclicality too, it carried most of the mill's revenue beta.
+     */
+    public function testThePmiLeadsOrdersAtItsOwnSensitivity(): void
+    {
+        $model = new SteelManufacturingBusinessModel();
+        $stock = (new Stock())->setTicker('STLD')->setBeta('1.2');
+        $calm = $model->resolveSectorActivityShift(clone $stock, new MacroStateDTO(manufacturingPmiEma: MacroConstants::PMI_BASELINE));
+        $expanding = $model->resolveSectorActivityShift(clone $stock, new MacroStateDTO(manufacturingPmiEma: MacroConstants::PMI_BASELINE + 5.0));
+
+        $this->assertEqualsWithDelta(0.10 * SteelManufacturingBusinessModel::PMI_ACCELERATOR_SENSITIVITY, $expanding - $calm, 1e-9);
     }
 }

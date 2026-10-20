@@ -112,7 +112,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const PRICING_POWER_INDEX = 0.65;
 
     // --- Global Supply Chain Pressure (GSCPI) & Capacity Utilization ---
-    /** Variable margin cost drag per standard deviation of supply-chain pressure above normal (1.9pp). */
+    /** Variable margin cost per standard deviation of supply-chain pressure about normal, both ways (1.9pp). */
     public const SUPPLY_CHAIN_PRESSURE_COST_SCALAR = 0.019;
     /** Sensitivity of mass-market manufacturing throughput to aggregate industrial capacity utilization (Fed G.17). */
     public const CAPACITY_UTILIZATION_THROUGHPUT_SCALAR = 0.40;
@@ -199,9 +199,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     // --- Apex Luxury & Veblen Wealth Effect ---
     /** Hypercar deliveries per unit of equity wealth over its trend, both ways: 20% above trend adds 8%. */
     public const APEX_EQUITY_WEALTH_ELASTICITY = 0.40;
-
-    /** Hypercar list prices per point of inflation over what was expected, both ways: +1pp lifts the apex line 0.8%. */
-    public const APEX_VEBLEN_INFLATION_SCALAR = 0.80;
 
     // --- Structural Gross Margin Cost Intensities for Cross-Subsidization ---
     /** Relative variable cost intensity of mass-market commuter fleet (low margin / predatory baseline). */
@@ -331,15 +328,12 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         // --- Apex Luxury Veblen & Asset Wealth Physics ---
         // Hypercar demand decouples from mass-market GDP: it follows equity wealth against its trend, both ways
-        // (Ait-Sahalia, Parker & Yogo 2004), which already carries what QE does to asset prices, and Veblen pricing.
-        $wealthEffect = $macroState->equityWealthDeviation() * self::APEX_EQUITY_WEALTH_ELASTICITY;
-        $veblenInflationPower = $macroState->inflationSurprise() * self::APEX_VEBLEN_INFLATION_SCALAR;
-
-        $apexMacroBoost = $wealthEffect + $veblenInflationPower;
+        // (Ait-Sahalia, Parker & Yogo 2004), which already carries what QE does to asset prices.
+        $apexMacroBoost = $macroState->equityWealthDeviation() * self::APEX_EQUITY_WEALTH_ELASTICITY;
 
         // Input cost basket drag on manufacturing recovered at pricing power, allocated to mass-market volume.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
-        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE);
+        $gscpiShift = ($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE);
         $inflationCostPenalty = ($inputCostDrag / max(0.05, $salesWeight)) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR * (1.0 - ($pricingPower * 0.50)));
 
         // Captive Finance NIM Squeeze & Subprime Provisioning, charged to the loan book that earns the interest: the
@@ -409,15 +403,13 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $captiveBaseMargin  = $realizedVariableMargin * (self::CAPTIVE_FINANCE_COST_INTENSITY / $blendedIntensity);
 
         $salesCosts    = $salesRevenue    * ($salesBaseMargin + $inflationCostPenalty);
-        // Veblen price hikes reprice the same hypercar deliveries: no incremental build cost on that slice.
-        $apexPriceRevenue = $expectedRevenue * $apexWeight * $veblenInflationPower;
-        $apexCosts     = max(0.0, $apexRevenue - $apexPriceRevenue) * $apexBaseMargin;
+        $apexCosts     = $apexRevenue * $apexBaseMargin;
         $softwareCosts = $softwareRevenue * $softwareBaseMargin;
         $captiveCosts  = $captiveRevenue * ($captiveBaseMargin + $macroDefaultDrag + $nimSqueeze + $ceclDrag);
 
         $totalVariableCosts = $salesCosts + $apexCosts + $softwareCosts + $captiveCosts;
         // The blended ratio is struck on volume revenue so the template method reproduces these dollar costs exactly.
-        $volumeRevenue = max(1.0, $actualRevenue - $apexPriceRevenue);
+        $volumeRevenue = max(1.0, $actualRevenue);
         $effectiveMargin = $actualRevenue > 0 ? ($totalVariableCosts / $volumeRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin);
 
@@ -441,7 +433,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-            priceRevenue: $apexPriceRevenue,
             specialCharge: $specialCharge,
         );
     }
@@ -464,7 +455,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             'household_debt_service_gap',
             'import_price_level',
             'industrial_metals_index_ema',
-            'inflation_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
             'natural_rate_ema',

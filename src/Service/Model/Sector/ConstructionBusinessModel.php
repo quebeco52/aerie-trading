@@ -121,8 +121,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Sensitivity of private development EPC orders to the credit-to-GDP gap. */
     public const CREDIT_GAP_ORDER_SENSITIVITY = 0.50;
     /**
-     * Civil orders per unit of district catastrophe burden above an average year: a season at twice the average burden
-     * adds a tenth to the infrastructure order book.
+     * Civil orders per unit of district catastrophe burden against an average year, both ways: a season at twice the
+     * average burden adds a tenth to the infrastructure order book, and a calm one leaves less to rebuild.
      */
     public const CATASTROPHE_REBUILD_SENSITIVITY = 0.10;
     /**
@@ -303,7 +303,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         // Reconstruction after a storm season is civil work booked into the backlog (Hallegatte 2008 on post-disaster
         // reconstruction demand).
-        $rebuildShift = max(0.0, $macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_REBUILD_SENSITIVITY;
+        // The average year's rebuild is in the baseline, so the burden is read against it both ways.
+        $rebuildShift = ($macroState->catastropheLossIndexEma - 1.0) * self::CATASTROPHE_REBUILD_SENSITIVITY;
 
         // --- Tail Risk Events ---
         // A slipped fixed-price project books its forward loss on the onset quarter and then bleeds idle

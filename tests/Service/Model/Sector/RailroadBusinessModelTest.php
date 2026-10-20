@@ -60,30 +60,41 @@ class RailroadBusinessModelTest extends TestCase
         );
     }
 
-    public function testFreightAndAgriCommodityIndexShifts(): void
+    /**
+     * Ocean charter rates and farm prices are prices, not tonnage: a fleet shortage or a drought that lifts them puts
+     * no more boxes or grain on the track.
+     */
+    public function testAPriceMoveAloneMovesNoCarloads(): void
     {
         $stock = new Stock();
         $stock->setTicker('UNP');
         $stock->setBeta('1.0');
 
-        $baseMacro = new MacroStateDTO(
-            freightRateIndexEma: 100.0,
-            agriculturalCommodityIndexEma: 100.0,
-        );
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $surgeMacro = new MacroStateDTO(
-            freightRateIndexEma: 140.0,
-            agriculturalCommodityIndexEma: 130.0,
-        );
+        $baseResult = $this->model->computeActualFinancials(clone $stock, 1_000_000.0, 0.40, 200_000.0, 0.0, new MacroStateDTO(freightRateIndexEma: 100.0, agriculturalCommodityIndexEma: 100.0), $mathMock);
+        $surgeResult = $this->model->computeActualFinancials(clone $stock, 1_000_000.0, 0.40, 200_000.0, 0.0, new MacroStateDTO(freightRateIndexEma: 140.0, agriculturalCommodityIndexEma: 130.0), $mathMock);
+
+        $this->assertEqualsWithDelta($baseResult->streamRevenue['intermodal_freight'], $surgeResult->streamRevenue['intermodal_freight'], 1e-6);
+        $this->assertEqualsWithDelta($baseResult->streamRevenue['bulk_commodities'], $surgeResult->streamRevenue['bulk_commodities'], 1e-6);
+    }
+
+    /**
+     * The cycle is public: it reaches the observable shock at its revenue weight, not shrunk by the firm's volatility.
+     */
+    public function testThePublicCycleReachesTheObservableShockAtFullSize(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('UNP');
+        $stock->setBeta('1.0');
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $baseResult = $this->model->computeActualFinancials($stock, 1_000_000.0, 0.40, 200_000.0, 0.0, $baseMacro, $mathMock);
-        $surgeResult = $this->model->computeActualFinancials($stock, 1_000_000.0, 0.40, 200_000.0, 0.0, $surgeMacro, $mathMock);
+        $boom = $this->model->computeActualFinancials(clone $stock, 1_000_000.0, 0.40, 200_000.0, 0.10, new MacroStateDTO(outputGapEma: 0.02), $mathMock);
 
-        $this->assertGreaterThan($baseResult->streamRevenue['intermodal_freight'], $surgeResult->streamRevenue['intermodal_freight']);
-        $this->assertGreaterThan($baseResult->streamRevenue['bulk_commodities'], $surgeResult->streamRevenue['bulk_commodities']);
+        $this->assertEqualsWithDelta(($boom->actualRevenue - 1_000_000.0) / 1_000_000.0, $boom->observableShockZ, 1e-9);
     }
 
     /** A pure freight hauler sets no subscription weight and must not grow a passenger business. */

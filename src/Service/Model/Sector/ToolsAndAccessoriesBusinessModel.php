@@ -85,10 +85,6 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     /** Top-line commercial revenue multiplier for an industrial super-cycle. */
     public const MANUFACTURING_SUPER_CYCLE_MULT = 1.15;
 
-    // --- Continuous Elasticity ---
-    /** Variable margin sensitivity to commercial precision tooling scale economies. */
-    public const PRECISION_SCALE_ELASTICITY = 0.012;
-
     // --- Manufacturing PMI, Housing & PPI Transmission ---
     /** Sensitivity of commercial B2B precision tooling demand to manufacturing PMI shifts. */
     public const PMI_COMMERCIAL_SENSITIVITY = 0.40;
@@ -248,10 +244,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         // recovered in list prices at the firm's pricing power.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        // Continuous Elasticity
-        $elasticityShift = -self::PRECISION_SCALE_ELASTICITY * $commercialZ * $commercialWeight;
-
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $supplyChainPenalty + $inputCostDrag + $elasticityShift;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $supplyChainPenalty + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Each stream's own shock at its revenue weight, and what a public congestion or super-cycle does to

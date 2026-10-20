@@ -84,42 +84,6 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(20_000_000.0, $result->streamRevenue['insurance_arbitrage'], 1.0);
     }
 
-    public function testInsuranceArbitrageExpandsWithInflation(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('CRAN');
-        $stock->setBeta('1.0');
-
-        $normalMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
-        $highInflationMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.06); // 400bps above target
-
-        $normalResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.20,
-            fixedCosts: 15_000_000.0,
-            baselineVol: 0.00,
-            macroState: $normalMacro,
-            mathUtility: $this->mathUtility,
-        );
-
-        $inflatedResult = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.20,
-            fixedCosts: 15_000_000.0,
-            baselineVol: 0.00,
-            macroState: $highInflationMacro,
-            mathUtility: $this->mathUtility,
-        );
-
-        // Insurance arbitrage stream revenue expands under high inflation
-        $this->assertGreaterThan(
-            $normalResult->streamRevenue['insurance_arbitrage'],
-            $inflatedResult->streamRevenue['insurance_arbitrage'],
-        );
-    }
-
     /**
      * Job loss ends employer coverage, so unemployment above the natural rate must defer elective outpatient
      * procedures while inpatient care, which nobody postpones, is untouched.
@@ -187,7 +151,6 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
         $math = $this->createStub(MathUtility::class);
         $math->method('generatePersistentZ')->willReturn(0.0);
         $result = $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, $recession, $math);
-        $this->assertGreaterThan(0.0, $result->priceRevenue, 'Inflation lifts the billing book.');
-        $this->assertEqualsWithDelta(($result->actualRevenue - $result->priceRevenue) / 1000.0 - 1.0, $shift, 1e-9, 'The base staffs to the care delivered, not the coding uplift.');
+        $this->assertEqualsWithDelta($result->actualRevenue / 1000.0 - 1.0, $shift, 1e-9, 'The base staffs to the care delivered.');
     }
 }

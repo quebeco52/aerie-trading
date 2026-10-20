@@ -213,10 +213,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
     public const UNDERLEVERAGED_DEBT_RATIO = 0.50;
 
-    // --- SaaS ARR Operating Leverage & Software Platform Reinvestment Physics ---
-    /** Variable margin sensitivity to SaaS ARR expansion (zero marginal cost of software delivery). */
-    public const SAAS_OPERATING_LEVERAGE      = 0.022;
-
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
@@ -329,15 +325,11 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // so wage growth above trend is the only input price that reaches the cost base.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
-        // SaaS ARR Operating Leverage: ARR expansion ($subscriptionZ > 0) creates positive operating leverage due to
-        // zero marginal cost of software delivery.
-        $saasOperatingLeverageShift = -self::SAAS_OPERATING_LEVERAGE * $subscriptionZ * $subWeight;
-
         // Crucially, antitrust and data privacy regulatory penalties apply proportionally to the Advertising
         // & Platform data-harvesting stream ($adWeight), insulating enterprise subscription margins.
         $complianceDrag = $decreeElapsed > 1 ? self::CONSENT_DECREE_COMPLIANCE_PENALTY * (0.5 + $aggression) : 0.0;
         $adCostAddon = ($regulatoryShock + $complianceDrag) * $adWeight;
-        $rawMargin = $realizedVariableMargin + $inputCostDrag + $saasOperatingLeverageShift + $adCostAddon;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag + $adCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $observableShockZ = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);

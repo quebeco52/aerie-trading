@@ -143,10 +143,11 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_VARIANCE_SCALAR = 0.60;
     /** Idiosyncratic revenue variance scalar for sticky 3PL warehousing and storage. */
     public const WAREHOUSING_VARIANCE_SCALAR = 0.10;
-    /** Z-score threshold required to trigger logistics surge pricing shock event. */
+    /**
+     * Spot draw past which the quarter reports surge pricing: the tail of the spot book's own shock, which already
+     * carries the revenue (one quarter in twenty-five).
+     */
     public const SPOT_SURGE_Z_SCORE = 1.75;
-    /** Multiplier applied to spot brokerage revenue during surge pricing crunches. */
-    public const SPOT_SURGE_MULT = 1.40;
 
     // --- Fuel Surcharge & Energy Physics ---
     /** Weight of variable margin drag attributed to energy/diesel fuel lag in observable shock Z. */
@@ -160,8 +161,11 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
      * domestic cycle.
      */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
-    /** Spot freight brokerage surge demand per standard deviation of supply-chain pressure above normal (3.8%). */
-    public const GSCPI_SPOT_SURGE_SENSITIVITY = 0.038;
+    /**
+     * Spot brokerage demand per standard deviation of supplier delivery times about neutral, both ways (3.8%): slow
+     * deliveries send shippers to the spot market, fast ones bring them back to contract.
+     */
+    public const DELIVERY_SPOT_SENSITIVITY = 0.038;
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
@@ -202,24 +206,21 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $spotWeight  = $activeWeights['spot_freight_brokerage'];
         $whWeight    = $activeWeights['value_added_warehousing'];
 
-        // Spot Freight Rate pricing power & supply chain pressure (applied strictly to market-clearing spot brokerage)
+        // Spot freight rates and supplier delivery times, applied strictly to market-clearing spot brokerage. Freight
+        // is read directly, so supply-chain pressure enters through its delivery-time reading alone, which already
+        // carries freight.
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
-        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE);
-        $spotFreightBoost = ($freightShift * self::SPOT_FREIGHT_SENSITIVITY) + ($gscpiShift * self::GSCPI_SPOT_SURGE_SENSITIVITY);
+        $deliveryZ = ($macroState->supplierDeliveryTimesEma - MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL) / MacroConstants::SUPPLY_CHAIN_DELIVERY_SD;
+        $spotFreightBoost = ($freightShift * self::SPOT_FREIGHT_SENSITIVITY) + ($deliveryZ * self::DELIVERY_SPOT_SENSITIVITY);
 
         $fleetZ = $streams->generateZ('dedicated_fleet_contracts', 0.40);
         $spotZ  = $streams->generateZ('spot_freight_brokerage', 0.15);
         $whZ    = $streams->generateZ('value_added_warehousing', 0.50);
 
-        $spotMultiplier = 1.0;
-        $eventType = null;
-        if ($spotZ > self::SPOT_SURGE_Z_SCORE) {
-            $spotMultiplier = self::SPOT_SURGE_MULT;
-            $eventType = ShockEvent::LOGISTICS_SURGE_PRICING ?? 'logistics_surge_pricing';
-        }
+        $eventType = $spotZ > self::SPOT_SURGE_Z_SCORE ? ShockEvent::LOGISTICS_SURGE_PRICING : null;
 
         $fleetRevenue = max(0.0, $expectedRevenue * $fleetWeight * (1.0 + ($fleetZ * ($baselineVol * self::DEDICATED_VARIANCE_SCALAR))));
-        $spotRevenue  = max(0.0, $expectedRevenue * $spotWeight  * (1.0 + ($spotZ  * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + $spotFreightBoost) * $spotMultiplier);
+        $spotRevenue  = max(0.0, $expectedRevenue * $spotWeight  * (1.0 + ($spotZ  * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + $spotFreightBoost));
         $whRevenue    = max(0.0, $expectedRevenue * $whWeight    * (1.0 + ($whZ    * ($baselineVol * self::WAREHOUSING_VARIANCE_SCALAR))));
 
         $streamRevenues = [
@@ -268,7 +269,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
             'import_price_level',
             'manufacturing_pmi_ema',
             'output_gap_ema',
-            'supply_chain_pressure_index_ema',
+            'supplier_delivery_times_ema',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

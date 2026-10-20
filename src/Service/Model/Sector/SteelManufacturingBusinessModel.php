@@ -74,13 +74,17 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const CONTRACT_VARIANCE_SCALAR = 0.20;
     /** Idiosyncratic revenue variance scalar for volatile spot hot-rolled coil market. */
     public const SPOT_VARIANCE_SCALAR     = 0.60;
-    /** Sensitivity of steel mill order demand to manufacturing PMI survey shifts. */
-    public const PMI_DEMAND_SENSITIVITY   = 0.50;
     /**
-     * Tonnage per unit of the lagged output gap beyond cyclicality: steel goes into investment goods, which swing
-     * harder than output (Clark 1917 accelerator).
+     * Tonnage per unit of the lagged output gap beyond cyclicality: steel goes into investment goods, whose level
+     * swings harder than output's.
      */
     public const INVESTMENT_ACCELERATOR_MULTIPLIER = 1.50;
+    /**
+     * Orders per unit of the manufacturing PMI's relative deviation, at any cyclicality (0.25): the accelerator on
+     * output growth (Clark 1917), which a diffusion index measures. Scaled by cyclicality as well, it carried five
+     * points of the mill's revenue beta on its own.
+     */
+    public const PMI_ACCELERATOR_SENSITIVITY = 0.25;
     /**
      * Spot tonnage per unit of the foreign bloc's output gap: export orders, which fall away first when the world
      * slows.
@@ -185,13 +189,26 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         return $macroState->tariffTradeLag * self::TARIFF_VOLUME_ELASTICITY;
     }
 
-    /** Domestic tonnage on the lagged output gap through the investment accelerator, led by the manufacturing PMI. */
+    /**
+     * Domestic tonnage: the level of steel use on the lagged output gap, plus the accelerator on output growth, which
+     * the manufacturing PMI leads.
+     */
     private function resolveCycleVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        $beta = $this->getOperatingCyclicality($stock);
-        $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroConstants::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
+        return ($this->resolveLaggedOutputGap($macroState) * $this->getOperatingCyclicality($stock) * self::INVESTMENT_ACCELERATOR_MULTIPLIER)
+            + MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroConstants::PMI_BASELINE, self::PMI_ACCELERATOR_SENSITIVITY);
+    }
 
-        return ($this->resolveLaggedOutputGap($macroState) * $beta * self::INVESTMENT_ACCELERATOR_MULTIPLIER) + ($pmiShift * $beta);
+    /**
+     * Hot-rolled coil reprices on a metals move by the metal cost per tonne the generic recovery leaves: the spot book
+     * then recovers its ore, scrap and coal once and in full, while the contract book recovers at pricing power.
+     */
+    private function resolveSpotMetalsRepricing(float $metalsShift, float $pricingPower, float $realizedVariableMargin): float
+    {
+        $metalsShare = (float) ($this->getInputCostExposures()['metals'] ?? 0.0);
+        $recoveredShare = max(0.0, min(1.0, $pricingPower)) * self::MAX_INPUT_COST_PASS_THROUGH;
+
+        return $metalsShift * $metalsShare * max(0.01, $realizedVariableMargin) * (1.0 - $recoveredShare);
     }
 
     /**
@@ -230,16 +247,16 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $cycleShift = $this->resolveCycleVolumeShift($stock, $macroState) + $this->resolveTariffVolumeShift($macroState);
         $tariffPriceShift = $macroState->tariffTradeLag * self::TARIFF_PRICE_ELASTICITY;
         $importDumpingShift = $this->resolveImportDumpingShift($macroState);
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $spotMetalsRepricing = $this->resolveSpotMetalsRepricing(($macroState->industrialMetalsIndexEma - 100.0) / 100.0, $pricingPower, $realizedVariableMargin);
 
         $contractZ = $streams->generateZ('contracted_oem_steel', 0.35);
         $spotZ     = $streams->generateZ('spot_hrc_market', 0.15);
 
         $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + $cycleShift + $tariffPriceShift));
-        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($metalsShift * 0.50) + $cycleShift + $importDumpingShift + $tariffPriceShift));
+        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + $spotMetalsRepricing + $cycleShift + $importDumpingShift + $tariffPriceShift));
         // Hot-rolled coil repricing and the tariff's price lift on the same tonnage are price: the mill's variable
         // cost per tonne does not follow either.
-        $priceRevenue    = ($expectedRevenue * $spotWeight * ($metalsShift * 0.50)) + ($expectedRevenue * ($contractWeight + $spotWeight) * $tariffPriceShift);
+        $priceRevenue    = ($expectedRevenue * $spotWeight * $spotMetalsRepricing) + ($expectedRevenue * ($contractWeight + $spotWeight) * $tariffPriceShift);
 
         $streamRevenues = [
             'contracted_oem_steel' => $contractRevenue,

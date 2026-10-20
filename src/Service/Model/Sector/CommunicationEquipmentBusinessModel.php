@@ -14,6 +14,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Model\ModelParam;
 use App\Service\Model\StreamContext;
 
@@ -139,7 +140,10 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const ROLLOUT_WAVE_ONSET_HAZARD = 0.03;
     /** Quarterly probability the rollout wave ends (~3-year expected build). */
     public const ROLLOUT_WAVE_EXIT_HAZARD = 0.08;
-    /** Network order intake uplift (relative) while a generational rollout is under way. */
+    /**
+     * Network orders in a generational rollout over those in the digestion years (relative): +20%. Against the average
+     * year, which carries both, a wave runs +14.5% and digestion -5.5%.
+     */
     public const ROLLOUT_WAVE_ORDER_UPLIFT = 0.20;
 
     // --- Standard-Essential Patent Licensing ---
@@ -175,7 +179,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     public const COMPONENT_SHORTAGE_DELIVERY_SLIP = 0.75;
     /** Consumer terminal volume multiplier during a shortage (retail gateways lose the allocation fight). */
     public const COMPONENT_SHORTAGE_CONSUMER_MULT = 0.85;
-    /** Variable margin penalty per standard deviation of supply-chain pressure above normal (0.57pp). */
+    /** Variable margin cost per standard deviation of supply-chain pressure about normal, both ways (0.57pp). */
     public const GSCPI_MARGIN_PENALTY_SCALAR = 0.0057;
     /**
      * Latent supply stress per standard deviation of supply-chain pressure: about half the firm's own, so shortages
@@ -187,13 +191,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
      * destock before reordering.
      */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.60;
-
-    // --- Continuous Elasticity ---
-    /**
-     * Variable margin sensitivity to network deployments pulling in high-margin optimization software and support
-     * attach.
-     */
-    public const SOFTWARE_ATTACH_ELASTICITY = 0.010;
 
     public function getReversionSpeed(): float
     {
@@ -334,7 +331,10 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         // --- Generational Rollout Wave (two-state Markov) ---
         $waveElapsed = $streams->evolveRegime(self::REGIME_ROLLOUT_WAVE, self::ROLLOUT_WAVE_ONSET_HAZARD, self::ROLLOUT_WAVE_EXIT_HAZARD);
         $eventType = $waveElapsed === 1 ? ShockEvent::NETWORK_ROLLOUT_WAVE : null;
-        $waveUplift = $waveElapsed > 0 ? self::ROLLOUT_WAVE_ORDER_UPLIFT : 0.0;
+        // Expected revenue is the average year, waves and digestion together, so the wave is measured against its
+        // stationary share: it adds what digestion gives back.
+        $waveShare = StochasticProcesses::twoStateStationaryShare(self::ROLLOUT_WAVE_ONSET_HAZARD, self::ROLLOUT_WAVE_EXIT_HAZARD);
+        $waveUplift = self::ROLLOUT_WAVE_ORDER_UPLIFT * (($waveElapsed > 0 ? 1.0 : 0.0) - $waveShare);
 
         // --- SEP Royalty Dispute (two-state Markov, Z-triggered onset) ---
         // A flagship licensee stops paying and litigates; arrears accrue for the duration and most of them come
@@ -419,13 +419,10 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
 
         // Semiconductors, RF metals, freight and contract assembly payroll, recovered at the annual frame review.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
-        $gscpiCostDrag = max(0.0, $macroState->supplyChainPressureIndexEma) * self::GSCPI_MARGIN_PENALTY_SCALAR;
-
-        // Network deployments pull high-margin optimization software and support attach with them.
-        $attachShift = -self::SOFTWARE_ATTACH_ELASTICITY * $networkZ * $networkWeight;
+        $gscpiCostDrag = ($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE) * self::GSCPI_MARGIN_PENALTY_SCALAR;
 
         $effectiveMargin = $actualRevenue > 0.0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $rawMargin = $effectiveMargin + $inputCostDrag + $gscpiCostDrag + $attachShift;
+        $rawMargin = $effectiveMargin + $inputCostDrag + $gscpiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // What the market sees is the revenue the stream draws moved: the order shock at the share of it the

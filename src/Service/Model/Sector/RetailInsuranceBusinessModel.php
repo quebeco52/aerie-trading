@@ -94,10 +94,10 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // The tail is ceded upward: the cover takes everything above the retention on the P&C book and
-        // charges a reinstatement premium for the limit it used.
+        // The tail is ceded upward: the cover takes the P&C claims above the retention up to its limit, for a premium
+        // every quarter and a reinstatement premium for the limit it used.
         $recovery = $this->resolveCatastropheRecovery($claims['gross'], $pcWeight);
-        $reinstatementPremium = $recovery > 0.0 ? self::REINSTATEMENT_PREMIUM_RATE * $pcWeight : 0.0;
+        $reinstatementPremium = $this->resolveCededPremium($pcWeight) + ($recovery > 0.0 ? self::REINSTATEMENT_PREMIUM_RATE * $pcWeight : 0.0);
 
         // A primary carrier renews its book annually and holds the harder rate well past the loss; the rate
         // reaches the P&L through the pricing-power multiplier, so a capital shortfall is not discounted here.
@@ -177,6 +177,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'catastrophe_loss_index',
             'catastrophe_loss_index_ema',
             'core_goods_inflation_ema',
             'gdp_deflator',

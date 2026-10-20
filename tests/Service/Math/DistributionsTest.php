@@ -6,6 +6,7 @@ namespace App\Tests\Service\Math;
 
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\Distributions;
+use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -165,5 +166,27 @@ class DistributionsTest extends TestCase
         }
         $this->assertEqualsWithDelta(0.437, Distributions::histogramUpperTailShare(self::EDGES, self::SHARES, 0.90), 1e-3);
         $this->assertEqualsWithDelta(0.0277, Distributions::histogramUpperPartialMoment(self::EDGES, self::SHARES, 0.90), 1e-4);
+    }
+
+    /** The closed form is the mean of the capped draw MathUtility makes. */
+    public function testTheCensoredParetoMeanIsTheMeanOfTheCappedDraw(): void
+    {
+        $math = MathUtility::ownStream(7);
+        $sum = 0.0;
+        $draws = 400_000;
+        for ($i = 0; $i < $draws; ++$i) {
+            $sum += $math->generateParetoSeverity(0.27, 1.7, 20.0);
+        }
+
+        $this->assertEqualsWithDelta(Distributions::censoredParetoMean(0.27, 1.7, 20.0), $sum / $draws, 0.01);
+        $this->assertLessThan(0.27 * 1.7 / 0.7, Distributions::censoredParetoMean(0.27, 1.7, 20.0), 'the cap takes some of the mean');
+    }
+
+    public function testTheScaleForACensoredMeanInvertsIt(): void
+    {
+        $scale = Distributions::paretoScaleForCensoredMean(2.0 / 3.0, 1.7, 20.0);
+
+        $this->assertEqualsWithDelta(2.0 / 3.0, Distributions::censoredParetoMean($scale, 1.7, 20.0), 1e-12);
+        $this->assertGreaterThan((2.0 / 3.0) * 0.7 / 1.7, $scale, 'a capped draw needs a larger scale than the untruncated mean implies');
     }
 }

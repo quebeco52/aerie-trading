@@ -12,40 +12,6 @@ use PHPUnit\Framework\TestCase;
 
 class FinancialDataBusinessModelTest extends TestCase
 {
-    public function testRatingIssuanceOperatingLeverageImpactsVariableCosts(): void
-    {
-        $model = new FinancialDataBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('FINDATA');
-        $stock->setBeta('1.0');
-
-        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
-        // Sequence of generateStandardNormal calls:
-        // 1. firm-wide demand innovation = 0.0
-        // 2. subscriptionZ = 0.0
-        // 3. transactionZ idiosyncratic = 2.5 (composite 2.0: boom in debt issuance & rating mandates)
-        $mathUtilityMock->expects($this->exactly(3))
-            ->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5);
-
-        $macroState = MacroStateDTO::fromArray([]);
-        $result = $model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.35,
-            50.0,
-            0.15,
-            $macroState,
-            $mathUtilityMock,
-        );
-
-        // Operating leverage shift = -0.020 * 2.0 * 0.15 = -0.006
-        // Variable cost realized = 1000 * (0.35 - 0.006) = 344.0
-        $this->assertLessThan(1000.0 * 0.35, $result->actualVariableCosts);
-    }
-
     public function testSubscriptionMonopolyIsUnderLeveraged(): void
     {
         $model = new FinancialDataBusinessModel();

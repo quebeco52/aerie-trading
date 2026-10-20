@@ -522,11 +522,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
     public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
     {
-        $yield10y = $macroState->yield10yEma;
-        $outputGap = $macroState->outputGapEma;
-
-        $bondReturn = $yield10y;
-        $equityReturn = self::BASE_EQUITY_RETURN + ($outputGap * self::EQUITY_RETURN_GAP_MULT * 1.5);
+        $bondReturn = $macroState->yield10yEma;
+        $equityReturn = $this->resolveEquitySleeveReturn($macroState, self::EQUITY_RETURN_GAP_MULT * self::LEVERAGED_SLEEVE_GAP_SCALE);
 
         // PE firms deploy excess cash into safe short-term sovereign debt and sponsor commitments (80% Bonds / 20%
         // Equities)

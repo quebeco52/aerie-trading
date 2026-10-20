@@ -8,8 +8,10 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LawFirmBusinessModel;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class LawFirmBusinessModelTest extends TestCase
 {
     private LawFirmBusinessModel $model;
@@ -118,9 +120,10 @@ class LawFirmBusinessModelTest extends TestCase
             $mathMock,
         );
 
-        // CLAW: 40% Retainers, 35% Litigation, 25% Restructuring
+        // CLAW: 40% Retainers, 35% Litigation, 25% Restructuring; a quarter with no verdict sits the verdicts' mean
+        // below the average year.
         $this->assertEqualsWithDelta(40_000_000.0, $result->streamRevenue['corporate_retainers'], 1.0);
-        $this->assertEqualsWithDelta(35_000_000.0, $result->streamRevenue['litigation_settlements'], 1.0);
+        $this->assertEqualsWithDelta(35_000_000.0 / LawFirmBusinessModel::expectedVerdictMultiplier(), $result->streamRevenue['litigation_settlements'], 1.0);
         $this->assertEqualsWithDelta(25_000_000.0, $result->streamRevenue['restructuring_advisory'], 1.0);
     }
 
@@ -207,5 +210,30 @@ class LawFirmBusinessModelTest extends TestCase
             - (LawFirmBusinessModel::CORPORATE_RETAINER_WEIGHT
                 * (0.03 * LawFirmBusinessModel::RETAINER_MACRO_SCALAR * LawFirmBusinessModel::OPERATING_CYCLICALITY));
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
+
+    /**
+     * A landmark verdict is the event draw's outcome: a settlement flow far above its mean books its own lumpiness and
+     * no verdict on top, which counted that draw's tail twice.
+     */
+    public function testAVerdictIsTheEventDrawNotTheSettlementFlowsTail(): void
+    {
+        $quarter = function (float $litigationZ, float $eventZ): \App\DTO\ActualFinancialsDTO {
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
+            $math->method('generateStandardNormal')->willReturn(0.0);
+            $stock = (new Stock())->setTicker('CLAW')->setBeta('0.3');
+            $stock->setEarningsMomentumZ(['litigation_settlements' => $litigationZ / 0.10, 'event' => $eventZ / 0.10]);
+
+            return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 10_000_000.0, 0.10, new MacroStateDTO(), $math);
+        };
+
+        $this->assertNull($quarter(2.5, 0.0)->eventType, 'A strong settlement flow is not a verdict.');
+        $win = $quarter(0.0, 2.5);
+        $this->assertSame(\App\Service\Event\ShockEvent::LITIGATION_SETTLEMENT_WIN, $win->eventType);
+        $this->assertEqualsWithDelta(
+            35_000_000.0 * LawFirmBusinessModel::LITIGATION_WIN_MULT / LawFirmBusinessModel::expectedVerdictMultiplier(),
+            $win->streamRevenue['litigation_settlements'],
+            1.0,
+        );
     }
 }

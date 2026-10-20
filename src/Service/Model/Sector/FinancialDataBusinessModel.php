@@ -132,10 +132,6 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** Operating margin mean reversion speed: slower speed reflects high switching costs and data monopoly moat. */
     public const MONOPOLY_REVERSION_SPEED  = 2.0;
 
-    // --- Rating Issuance Operating Leverage ---
-    /** Variable margin sensitivity to incremental debt rating & API transaction feed volume. */
-    public const TRANSACTION_LEVERAGE_SENSITIVITY = 0.020;
-
     // --- Capital Markets Deal Activity Transmission ---
     /** Sensitivity of credit rating issuance fees and market data feed volume to aggregate deal activity. */
     public const DEAL_ACTIVITY_RATING_SENSITIVITY = 0.25;
@@ -202,13 +198,9 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Rating Issuance Operating Leverage: High transaction/rating volume ($transactionZ) provides strong positive
-        // operating leverage because incremental debt ratings have near-zero marginal cost.
-        $operatingLeverageShift = -self::TRANSACTION_LEVERAGE_SENSITIVITY * $transactionZ * $transactionWeight;
-
         // Data and platform engineering payroll follows wage growth; subscription repricing recovers most of it.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $operatingLeverageShift + $inputCostDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
         $observableShockZ = (($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))
             + ($transactionMacroBonus * $transactionWeight);

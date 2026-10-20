@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ClearingHouseBusinessModel;
@@ -384,5 +385,32 @@ class ClearingHouseBusinessModelTest extends TestCase
             $distressResult->clampedMargin,
             'Systemic corporate default waves must increase member insolvency risk and default waterfall provisioning.',
         );
+    }
+
+    /**
+     * The structural margin carries the waterfall's average loss, so a quiet quarter credits it back and a healthy
+     * credit draw earns nothing beyond that; member stress reads the default rate against its trend both ways.
+     */
+    public function testTheDefaultWaterfallIsCentredOnItsAverageLoss(): void
+    {
+        $stock = (new Stock())->setTicker('ACC')->setBeta('0.8');
+        $run = function (float $defaultZ, MacroStateDTO $macro) use ($stock): float {
+            $math = $this->createStub(MathUtility::class);
+            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $defaultZ : 0.0);
+            $member = clone $stock;
+            $member->setEarningsMomentumZ(['default' => -9.9]);
+
+            return $this->model->computeActualFinancials($member, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $macro, $math)->clampedMargin;
+        };
+        $trend = new MacroStateDTO(corporateDefaultRateEma: 0.02, corporateDefaultRateTrend: 0.02, marketVolatilityEma: 0.15);
+        $expectedLoss = ClearingHouseBusinessModel::CATASTROPHE_LOSS_SCALAR * Distributions::calculateNormalLowerPartialMoment(ClearingHouseBusinessModel::CATASTROPHE_Z_THRESHOLD);
+
+        $this->assertEqualsWithDelta(0.40 - $expectedLoss, $run(0.0, $trend), 1e-9, 'A quiet quarter credits the average loss back.');
+        $this->assertEqualsWithDelta($run(0.0, $trend), $run(2.0, $trend), 1e-12, 'A healthy draw earns nothing more.');
+
+        $above = $run(0.0, new MacroStateDTO(corporateDefaultRateEma: 0.03, corporateDefaultRateTrend: 0.02, marketVolatilityEma: 0.15)) - $run(0.0, $trend);
+        $below = $run(0.0, new MacroStateDTO(corporateDefaultRateEma: 0.01, corporateDefaultRateTrend: 0.02, marketVolatilityEma: 0.15)) - $run(0.0, $trend);
+        $this->assertGreaterThan(0.0, $above);
+        $this->assertEqualsWithDelta(-$above, $below, 1e-12, 'Member stress eases below the default trend as much as it rises above it.');
     }
 }

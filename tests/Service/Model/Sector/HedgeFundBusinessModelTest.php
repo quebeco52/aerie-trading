@@ -103,6 +103,10 @@ class HedgeFundBusinessModelTest extends TestCase
 
         $root = $this->model->getMacroPhysics($stock, $boom)['macro_demand_shift'];
         $result = $this->model->computeActualFinancials($stock, 100.0 * (1.0 + $root), 0.40, 10.0, 0.10, $boom, $this->zeroAlphaMath());
+        // A quarter with no alpha books the average year's incentive fees short whatever the cycle; the calm quarter
+        // carries the same shortfall, so the boom is read against it.
+        $calm = MacroStateDTO::fromArray(['output_gap_ema' => 0.0, 'market_volatility_ema' => HedgeFundBusinessModel::VIX_ALPHA_BASELINE, 'money_supply_growth_ema' => \App\Service\Math\MacroConstants::M2_BASE_GROWTH, 'macro_credit_spread_ema' => 0.02]);
+        $calmRevenue = $this->model->computeActualFinancials($this->swan(), 100.0 * (1.0 + $this->model->getMacroPhysics($this->swan(), $calm)['macro_demand_shift']), 0.40, 10.0, 0.10, $calm, $this->zeroAlphaMath())->actualRevenue;
 
         $beta = 1.5;
         $expectedStreams = 100.0 * (
@@ -111,7 +115,7 @@ class HedgeFundBusinessModelTest extends TestCase
             + HedgeFundBusinessModel::DEFAULT_QUANT_ALPHA_WEIGHT
         );
 
-        $this->assertEqualsWithDelta($expectedStreams, $result->actualRevenue, $expectedStreams * 0.001);
+        $this->assertEqualsWithDelta($expectedStreams - 100.0, $result->actualRevenue - $calmRevenue, $expectedStreams * 0.001);
     }
 
     public function testABoomIsNotAStandingBeatOnceAnalystsSeeIt(): void
@@ -124,9 +128,13 @@ class HedgeFundBusinessModelTest extends TestCase
 
         $expected = 100.0 * (1.0 + $this->model->getMacroPhysics($stock, $boom)['macro_demand_shift']);
         $result = $this->model->computeActualFinancials($stock, $expected, 0.40, 10.0, 0.10, $boom, $this->zeroAlphaMath());
+        // A quarter with no alpha falls short of the average year's incentive fees in any cycle; the boom adds nothing.
+        $calm = MacroStateDTO::fromArray(['output_gap_ema' => 0.0, 'market_volatility_ema' => 0.22, 'money_supply_growth_ema' => \App\Service\Math\MacroConstants::M2_BASE_GROWTH, 'macro_credit_spread_ema' => 0.02]);
+        $calmExpected = 100.0 * (1.0 + $this->model->getMacroPhysics($this->swan(), $calm)['macro_demand_shift']);
+        $calmResult = $this->model->computeActualFinancials($this->swan(), $calmExpected, 0.40, 10.0, 0.10, $calm, $this->zeroAlphaMath());
 
         $this->assertGreaterThan(100.0, $expected, 'A boom lifts what analysts expect.');
-        $this->assertEqualsWithDelta(0.0, ($result->actualRevenue - $expected) / $expected, 0.002, 'No standing surprise.');
+        $this->assertEqualsWithDelta(($calmResult->actualRevenue - $calmExpected) / $calmExpected, ($result->actualRevenue - $expected) / $expected, 0.002, 'No standing surprise.');
     }
 
     public function testSectorPhysicsQuantAlphaSurgeUnderHighVix(): void
@@ -372,8 +380,8 @@ class HedgeFundBusinessModelTest extends TestCase
         $calmYield = $this->model->calculateCashYield($calmMacro);
         $this->assertGreaterThan(0.0, $calmYield);
 
-        // 80% bonds @ 4% + 20% equity @ 7% = 0.032 + 0.014 = 0.046
-        $this->assertEqualsWithDelta(0.046, $calmYield, 0.001);
+        // 80% bonds @ 4% + 20% equity at the market cost of equity, 4% + 4.5% ERP = 0.032 + 0.017 = 0.049
+        $this->assertEqualsWithDelta(0.049, $calmYield, 0.001);
 
         $stock = new Stock();
         $stock->setTicker('SWAN');
@@ -722,5 +730,38 @@ class HedgeFundBusinessModelTest extends TestCase
 
         $this->assertLessThan(0.0, $model->getMacroPhysics($stock, $recession)['macro_demand_shift']);
         $this->assertSame(0.0, $model->resolveSectorActivityShift($stock, $recession));
+    }
+
+    /**
+     * An incentive fee is a call on alpha: over the alpha draw's distribution the fee a quarter books averages what
+     * the average year already carries, so the directional book earns its expected revenue on average.
+     */
+    #[\PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations]
+    public function testIncentiveFeesAverageWhatTheAverageYearCarries(): void
+    {
+        $neutral = new MacroStateDTO();
+        $stock = (new Stock())->setTicker('HFX')->setBeta('1.5')->setTotalEquity('1000.0')->setWholesaleDebt('0.0');
+        // Expected revenue as the engine hands it over, the root shift inside, on a structural base of 100.
+        $expected = 100.0 * (1.0 + $this->model->getMacroPhysics(clone $stock, $neutral)['macro_demand_shift']);
+        $directional = function (float $z) use ($stock, $expected, $neutral): float {
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'checkProbability'])->getMock();
+            $math->method('generateStandardNormal')->willReturn(0.0);
+            $math->method('checkProbability')->willReturn(false);
+            $quarter = clone $stock;
+            $quarter->setEarningsMomentumZ(['directional_bets' => $z / HedgeFundBusinessModel::DIR_PERSISTENCE]);
+
+            return $this->model->computeActualFinancials($quarter, $expected, 0.40, 10.0, 0.10, $neutral, $math)->streamRevenue['directional_bets'];
+        };
+
+        $sum = 0.0;
+        $weights = 0.0;
+        for ($z = -6.0; $z <= 6.0; $z += 0.01) {
+            $weight = exp(-0.5 * $z * $z);
+            $sum += $weight * $directional($z);
+            $weights += $weight;
+        }
+
+        $this->assertGreaterThan($directional(1.0) - $directional(0.0), $directional(3.0) - $directional(2.0), 'The fee must pay above the hurdle for the test to have power.');
+        $this->assertEqualsWithDelta(100.0 * HedgeFundBusinessModel::DEFAULT_DIRECTIONAL_BETS_WEIGHT, $sum / $weights, 0.01);
     }
 }

@@ -10,6 +10,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
@@ -305,13 +306,17 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $litigationMult = 1.0;
         $eventType = null;
 
-        if ($litigationZ > self::LITIGATION_WIN_Z_SCORE || $eventZ > self::LITIGATION_WIN_Z_SCORE) {
+        // A landmark verdict is an outcome of its own, the event draw: the settlement flow's draw already carries the
+        // ordinary lumpiness. Expected revenue is the average year, verdicts included, so the multiplier is struck
+        // against its mean.
+        if ($eventZ > self::LITIGATION_WIN_Z_SCORE) {
             $litigationMult = self::LITIGATION_WIN_MULT;
             $eventType = ShockEvent::LITIGATION_SETTLEMENT_WIN;
-        } elseif ($litigationZ < self::LITIGATION_LOSS_Z_SCORE || $eventZ < self::LITIGATION_LOSS_Z_SCORE) {
+        } elseif ($eventZ < self::LITIGATION_LOSS_Z_SCORE) {
             $litigationMult = self::LITIGATION_LOSS_MULT;
             $eventType = ShockEvent::LITIGATION_SETTLEMENT_LOSS;
         }
+        $litigationMult /= self::expectedVerdictMultiplier();
 
         // --- Tri-Stream Revenue Calculation ---
         $retainerShock      = $retainerZ      * ($baselineVol * self::RETAINER_VARIANCE_SCALAR);
@@ -375,5 +380,13 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             'tips_breakeven_ema',
             'real_wage_gap',
         ];
+    }
+
+    /** The verdict multiplier's mean over the event draw's stationary standard normal. */
+    public static function expectedVerdictMultiplier(): float
+    {
+        return 1.0
+            + ((1.0 - Distributions::standardNormalCdf(self::LITIGATION_WIN_Z_SCORE)) * (self::LITIGATION_WIN_MULT - 1.0))
+            + (Distributions::standardNormalCdf(self::LITIGATION_LOSS_Z_SCORE) * (self::LITIGATION_LOSS_MULT - 1.0));
     }
 }

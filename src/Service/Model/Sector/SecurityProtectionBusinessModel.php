@@ -137,26 +137,23 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     public const EXPEDITIONARY_VARIANCE_SCALAR = 0.60;
 
     // --- Macro Physics Constants ---
-    /** Cost-plus government revenue per point of inflation over what was expected, both ways: +1pp adds 1.2%. */
-    public const COST_PLUS_BONUS_SCALAR = 1.20;
     /**
      * Elasticity of government guarding volume to the state spending index (0.30 = a 10% budget lift adds 3% contracted
      * posts).
      */
     public const APPROPRIATIONS_VOLUME_SCALAR = 0.30;
     /**
-     * Elasticity of corporate retainer posts to a positive output gap at unit cyclicality (new facilities need guards).
+     * Elasticity of corporate retainer posts to the output gap at unit cyclicality, both ways (new facilities need
+     * guards, and closed ones release them).
      */
     public const CORPORATE_EXPANSION_SCALAR = 0.40;
 
-    /** Baseline VIX threshold above which corporate panic triggers surge spending on executive protection. */
-    public const VIX_FEAR_THRESHOLD = 0.20;
-    /** Sensitivity scalar translating market panic (VIX) into direct top-line expeditionary bonuses. */
+    /**
+     * Expeditionary demand per unit of market volatility against its anchor, both ways: panic buys executive
+     * protection, and calm markets let the contracts lapse.
+     */
     public const FEAR_PREMIUM_SCALAR = 0.80;
-
-    /** Credit spread threshold indicating geopolitical/systemic credit stress. */
-    public const CREDIT_STRESS_THRESHOLD = 0.025;
-    /** Sensitivity scalar translating systemic credit distress into high-margin PMC deployment demand. */
+    /** Expeditionary demand per unit of the credit spread against its measured trend, both ways. */
     public const CREDIT_STRESS_SCALAR = 4.00;
 
     // --- Asymmetric Tail Risk Events ---
@@ -215,21 +212,21 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Each stream's macro volume shift: government posts on state appropriations; corporate retainers on the
-     * boom-side gap only (guarding is a survival expense nobody cuts); expeditionary deployments on market
-     * volatility and credit spreads above their stress thresholds.
+     * Each stream's macro volume shift: government posts on state appropriations; corporate retainers on the gap;
+     * expeditionary deployments on market volatility and credit spreads. Each reads its driver against where it
+     * settles, both ways, because the average year is already in the baseline.
      *
      * @return array{government_contracts: float, corporate_retainers: float, expeditionary_ops: float}
      */
     private function resolveStreamMacroShifts(Stock $stock, MacroStateDTO $macroState): array
     {
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
-        $fearPremium = max(0.0, ($macroState->marketVolatilityEma - self::VIX_FEAR_THRESHOLD) * self::FEAR_PREMIUM_SCALAR);
-        $creditDistressPremium = max(0.0, ($macroState->macroCreditSpreadEma - self::CREDIT_STRESS_THRESHOLD) * self::CREDIT_STRESS_SCALAR);
+        $fearPremium = ($macroState->marketVolatilityEma - MacroConstants::MACRO_VOL_BASE_ANCHOR) * self::FEAR_PREMIUM_SCALAR;
+        $creditDistressPremium = ($macroState->macroCreditSpreadEma - $macroState->macroCreditSpreadTrend) * self::CREDIT_STRESS_SCALAR;
 
         return [
             'government_contracts' => $govSpendShift * self::APPROPRIATIONS_VOLUME_SCALAR,
-            'corporate_retainers'  => max(0.0, $macroState->outputGapEma * self::CORPORATE_EXPANSION_SCALAR * $this->getOperatingCyclicality($stock)),
+            'corporate_retainers'  => $macroState->outputGapEma * self::CORPORATE_EXPANSION_SCALAR * $this->getOperatingCyclicality($stock),
             'expeditionary_ops'    => $fearPremium + $creditDistressPremium,
         ];
     }
@@ -277,7 +274,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // baseline budget.
         // 2. Corporate Retainers -> Mild GDP Expansion (Corporate HQ footprint expansion)
         // 3. Expeditionary & Black-Ops -> VIX (Fear) & Credit Spreads (Geopolitical/Financial Stress)
-        $costPlusBonus = $macroState->inflationSurprise() * self::COST_PLUS_BONUS_SCALAR;
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
 
@@ -299,7 +295,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // --- Clamped Tri-Stream Revenue Calculation ---
 
         // STREAM 1: Government (Rock Solid + Appropriations)
-        $govRevenue = max(0.0, $expectedRevenue * $govWeight * (1.0 + ($govZ * $baselineVol * self::GOVERNMENT_VARIANCE_SCALAR) + $costPlusBonus + $macroShifts['government_contracts']));
+        $govRevenue = max(0.0, $expectedRevenue * $govWeight * (1.0 + ($govZ * $baselineVol * self::GOVERNMENT_VARIANCE_SCALAR) + $macroShifts['government_contracts']));
 
         // STREAM 2: Corporate Retainers (Changes a little bit)
         $retainerRevenue = max(0.0, $expectedRevenue * $retainerWeight * (1.0 + ($retainerZ * $baselineVol * self::RETAINER_VARIANCE_SCALAR) + $macroShifts['corporate_retainers']) * $retainerMultiplier);
@@ -360,7 +356,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'import_price_level',
-            'inflation_ema',
             'macro_credit_spread_ema',
             'market_volatility_ema',
             'output_gap_ema',

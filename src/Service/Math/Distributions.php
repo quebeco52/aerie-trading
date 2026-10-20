@@ -6,8 +6,8 @@ namespace App\Service\Math;
 
 /**
  * The normal distribution and its relatives: density, CDF and quantile, truncated-normal inversion, partial moments
- * of a normal and of a histogram, robust scale from the mean absolute deviation, and the Gompertz-Makeham waiting
- * time. Pure functions of their arguments.
+ * of a normal and of a histogram, robust scale from the mean absolute deviation, the Gompertz-Makeham waiting time and
+ * the censored Pareto severity. Pure functions of their arguments.
  */
 final class Distributions
 {
@@ -273,5 +273,49 @@ final class Distributions
         }
 
         return $share;
+    }
+
+    // --- Censored Pareto Severity ---
+    /** Bisection steps when inverting the censored mean: halves the bracket to well below a float's resolution. */
+    private const PARETO_SCALE_BISECTION_STEPS = 100;
+
+    /**
+     * Mean of a single-parameter Pareto severity censored at a cap, E[min(X, cap)] for X = scale U^(-1/alpha):
+     * (alpha scale - scale^alpha cap^(1 - alpha)) / (alpha - 1). Below the untruncated mean, by what the cap cuts off.
+     */
+    public static function censoredParetoMean(float $scale, float $alpha, float $cap): float
+    {
+        if ($scale <= 0.0) {
+            return 0.0;
+        }
+        if ($cap <= $scale) {
+            return $cap;
+        }
+
+        return (($alpha * $scale) - (($scale ** $alpha) * ($cap ** (1.0 - $alpha)))) / ($alpha - 1.0);
+    }
+
+    /**
+     * The Pareto scale whose severity, censored at the cap, has the given mean: the censored mean rises with the
+     * scale, so bisection finds it. Sizing on the untruncated mean instead leaves the capped draw short of it.
+     */
+    public static function paretoScaleForCensoredMean(float $mean, float $alpha, float $cap): float
+    {
+        if ($mean >= $cap) {
+            return $cap;
+        }
+
+        $low = 0.0;
+        $high = $cap;
+        for ($step = 0; $step < self::PARETO_SCALE_BISECTION_STEPS; ++$step) {
+            $mid = 0.5 * ($low + $high);
+            if (self::censoredParetoMean($mid, $alpha, $cap) < $mean) {
+                $low = $mid;
+            } else {
+                $high = $mid;
+            }
+        }
+
+        return 0.5 * ($low + $high);
     }
 }

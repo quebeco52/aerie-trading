@@ -12,6 +12,7 @@ use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\Distributions;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
@@ -91,6 +92,10 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const INCENTIVE_FEE_RATE = 0.20;
     /** Alpha Z-score hurdle threshold above which incentive fees crystallize. */
     public const PERFORMANCE_FEE_HURDLE_Z = 1.25;
+    /** Directional incentive revenue per unit of alpha over the hurdle, as a multiple of the fee rate (3x). */
+    public const DIRECTIONAL_FEE_GEARING = 3.0;
+    /** Quant incentive revenue per unit of alpha over the hurdle, as a multiple of the fee rate (2x). */
+    public const QUANT_FEE_GEARING = 2.0;
     /** Fraction of excess performance fee / carry revenue paid out into portfolio manager and quant bonus pools. */
     public const PERF_BONUS_POOL_PAYOUT = 0.45;
 
@@ -376,11 +381,12 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $leverageMultiplier = 1.0 + ($actualLeverage * self::LEVERAGE_AMPLIFIER_SCALAR);
         $macroDirectionalShift = $outputGap * $beta * self::DIRECTIONAL_MACRO_SCALAR;
 
-        // In hedge fund physics ("2 and 20"): Above hurdle (Z > 1.25), performance incentive fees scale dynamically
-        // with excess alpha and leverage. Below hurdle (Z < 1.25), no performance fees are earned; directional trading
-        // revenues scale with baseline volatility.
+        // In hedge fund physics ("2 and 20"): above the hurdle (Z > 1.25), incentive fees scale with excess alpha and
+        // leverage; below it none are earned. The fee is a call on alpha, and expected revenue is the average year,
+        // fees included, so each quarter books its excess over the call's expectation, E[max(0, Z - hurdle)].
+        $averageFeeExcess = Distributions::calculateNormalLowerPartialMoment(-self::PERFORMANCE_FEE_HURDLE_Z);
         $dirBaseDrift = $dirZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::DIRECTIONAL_BASE_VOLATILITY_SCALAR * $leverageMultiplier;
-        $dirIncentiveBonus = max(0.0, ($dirZ - self::PERFORMANCE_FEE_HURDLE_Z) * self::INCENTIVE_FEE_RATE * 3.0 * $leverageMultiplier);
+        $dirIncentiveBonus = (max(0.0, $dirZ - self::PERFORMANCE_FEE_HURDLE_Z) - $averageFeeExcess) * self::INCENTIVE_FEE_RATE * self::DIRECTIONAL_FEE_GEARING * $leverageMultiplier;
 
         $dirRevenue = max(0.0, $structuralRevenue * $dirWeight
             * (1.0 + $dirBaseDrift + $dirIncentiveBonus + $macroDirectionalShift));
@@ -390,7 +396,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $vixCalmDrag        = min(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_CALM_DRAG_SCALAR);
 
         $quantBaseDrift = $quantZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::QUANT_ALPHA_VOLATILITY_SCALAR;
-        $quantIncentiveBonus = max(0.0, ($quantZ - self::PERFORMANCE_FEE_HURDLE_Z) * self::INCENTIVE_FEE_RATE * 2.0);
+        $quantIncentiveBonus = (max(0.0, $quantZ - self::PERFORMANCE_FEE_HURDLE_Z) - $averageFeeExcess) * self::INCENTIVE_FEE_RATE * self::QUANT_FEE_GEARING;
 
         $quantRevenue = max(0.0, ($structuralRevenue * $quantWeight
             * (1.0 + $quantBaseDrift + $quantIncentiveBonus + $vixCalmDrag)
@@ -459,11 +465,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
 
     public function calculateCashYield(MacroStateDTO $macroState): float
     {
-        $yield10y = $macroState->yield10yEma;
-        $outputGap = $macroState->outputGapEma;
-
-        $bondReturn = $yield10y;
-        $equityReturn = self::BASE_EQUITY_RETURN + ($outputGap * self::EQUITY_RETURN_GAP_MULT * 1.5);
+        $bondReturn = $macroState->yield10yEma;
+        $equityReturn = $this->resolveEquitySleeveReturn($macroState, self::EQUITY_RETURN_GAP_MULT * self::LEVERAGED_SLEEVE_GAP_SCALE);
 
         return max(0.0, (self::PORTFOLIO_BOND_ALLOCATION * $bondReturn) + (self::PORTFOLIO_EQUITY_ALLOCATION * $equityReturn));
     }

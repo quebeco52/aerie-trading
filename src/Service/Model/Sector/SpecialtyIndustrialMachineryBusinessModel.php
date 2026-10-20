@@ -107,7 +107,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     public const CU_EQUIPMENT_EXPANSION_SENSITIVITY = 0.50;
     /** Sensitivity of precision equipment sales expansion to manufacturing PMI diffusion shifts. */
     public const PMI_EQUIPMENT_SENSITIVITY          = 0.40;
-    /** Variable margin penalty per standard deviation of supply-chain pressure above normal (0.71pp). */
+    /** Variable margin cost per standard deviation of supply-chain pressure about normal, both ways (0.71pp). */
     public const GSCPI_MARGIN_PENALTY_SCALAR        = 0.0071;
 
     // --- Tail Risk & Shock Events ---
@@ -273,8 +273,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         // Energy, metals, wholesale components and payroll, recovered in specialty pricing at the firm's pricing power.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma);
-        $gscpiCostDrag = $gscpiShift * self::GSCPI_MARGIN_PENALTY_SCALAR;
+        $gscpiCostDrag = ($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE) * self::GSCPI_MARGIN_PENALTY_SCALAR;
 
         // Effective blended variable cost ratio
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;

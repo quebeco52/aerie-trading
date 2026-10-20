@@ -122,6 +122,15 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         // SHER trade-down bonus = 0.05 * 0.60 * (1.5 - 0.60) = 0.05 * 0.54 = +0.027
         // Blended demand shift = (-0.067 * cyclicality) + 0.027
         $this->assertEqualsWithDelta((-0.067 * $cyclicality) + 0.027, $sherPhysics['macro_demand_shift'], 0.0001);
+
+        // A boom of the same size trades consumers back up: the counter-cyclical term gives back what it added.
+        $boomMacro = new MacroStateDTO(
+            outputGapEma: 0.05,
+            consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * 0.05) + 8.0,
+            consumerSentimentMood: 8.0,
+            inflationEma: 0.02,
+        );
+        $this->assertEqualsWithDelta((0.067 * $cyclicality) - 0.030, $this->model->getMacroPhysics($genericStock, $boomMacro)['macro_demand_shift'], 0.0001);
     }
 
     public function testContractStreamFxExportCompetitiveness(): void

@@ -109,30 +109,6 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(27_500_000.0, $wealthBoomResult->streamRevenue['apex_luxury'], 1.0);
     }
 
-    public function testApexLuxuryVeblenInflationPricingPower(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('FALC');
-        $stock->setBeta('1.75');
-
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-
-        $baselineMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: self::NEUTRAL_POLICY_RATE);
-        $inflationMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.06, policyRateEma: self::NEUTRAL_POLICY_RATE);
-
-        $baselineResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $baselineMacro, $mathMock);
-        $inflationResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $inflationMacro, $mathMock);
-
-        // Apex luxury hypercars exert Veblen pricing power when inflation runs over the 2% breakevens (0.04 * 0.80 =
-        // +3.2%)
-        $this->assertGreaterThan(
-            $baselineResult->streamRevenue['apex_luxury'],
-            $inflationResult->streamRevenue['apex_luxury'],
-        );
-        $this->assertEqualsWithDelta(25_800_000.0, $inflationResult->streamRevenue['apex_luxury'], 1.0);
-    }
-
     public function testLaborStrikeObservableShockBounded(): void
     {
         $mathMock = $this->createStub(MathUtility::class);

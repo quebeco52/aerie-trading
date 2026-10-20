@@ -151,29 +151,6 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + (log(0.01729 / 0.01190) / 19.0), BiotechBusinessModel::patentedSecularGrowthRate(), 1e-15, 'Prescription spending gained share of GDP 2000-2019.');
     }
 
-    public function testContinuousPipelineProgressImpactsVariableCosts(): void
-    {
-        $model = new BiotechBusinessModel();
-        $stock = $this->makeStock();
-
-        // establishedZ = 0.0, pipelineZ = 1.5 (positive clinical progress), no pivotal readout.
-        $math = $this->mockMath([0.0, 1.5]);
-
-        $result = $model->computeActualFinancials(
-            $stock,
-            self::EXPECTED_REVENUE,
-            self::VARIABLE_MARGIN,
-            self::FIXED_COSTS,
-            0.20,
-            new MacroStateDTO(),
-            $math,
-        );
-
-        // Continuous pipeline shift = -0.015 * 1.5 * 0.30 = -0.00675
-        $this->assertEqualsWithDelta(0.29325, $result->clampedMargin, 0.0001);
-        $this->assertNull($result->eventType);
-    }
-
     /** Cumulative Bass adoption after `quarters`, from the closed form on the model's own constants. */
     private function bassAdoption(float $quarters): float
     {
@@ -623,49 +600,31 @@ class BiotechBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(31_350_000.0, $result->streamRevenue['pipeline_licensing_milestones'], 1.0);
     }
 
-    public function testReimbursementRateGrowthLiftsCommercialTherapeuticsRevenue(): void
+    /**
+     * A budget cut lowers administered drug prices once and holds them there while it lasts: the branded book earns
+     * less in every quarter of the cut, not just in the year it was made. Indexation alone moves nothing here; it is
+     * realised inflation, which the engine carries on the plant.
+     */
+    public function testAHeldPriceCutLowersBrandedRevenueForAsLongAsItLasts(): void
     {
         $model = new BiotechBusinessModel();
-        $stock = $this->makeStock();
-
-        $mathBaseline = $this->mockMath([0.0, 0.0]);
-        $baseResult = $model->computeActualFinancials(
-            $stock,
+        $revenue = fn(MacroStateDTO $macro): array => $model->computeActualFinancials(
+            $this->makeStock(),
             expectedRevenue: self::EXPECTED_REVENUE,
             realizedVariableMargin: 0.20,
             fixedCosts: self::FIXED_COSTS,
             baselineVol: self::BASELINE_VOL,
-            macroState: new MacroStateDTO(), // Baseline reimbursementRateGrowth (0.014)
-            mathUtility: $mathBaseline,
-        );
+            macroState: $macro,
+            mathUtility: $this->mockMath([0.0, 0.0]),
+        )->streamRevenue;
 
-        $mathUplift = $this->mockMath([0.0, 0.0]);
-        $upliftResult = $model->computeActualFinancials(
-            $stock,
-            expectedRevenue: self::EXPECTED_REVENUE,
-            realizedVariableMargin: 0.20,
-            fixedCosts: self::FIXED_COSTS,
-            baselineVol: self::BASELINE_VOL,
-            macroState: new MacroStateDTO(reimbursementRateGrowth: 0.04), // +4% reimbursement update vs 1.4% baseline
-            mathUtility: $mathUplift,
-        );
+        $base = $revenue(new MacroStateDTO());
+        // Second year of a 3% cut: this year's update is ordinary indexation again, the level is still 3% down.
+        $heldCut = $revenue(new MacroStateDTO(reimbursementRateGrowth: 0.014, reimbursementAusterityShare: 0.03));
+        $indexation = $revenue(new MacroStateDTO(reimbursementRateGrowth: 0.04));
 
-        // Branded commercial stream expands with reimbursement rate growth above baseline (+2.6%)
-        $this->assertGreaterThan(
-            $baseResult->streamRevenue['commercial_therapeutics'],
-            $upliftResult->streamRevenue['commercial_therapeutics'],
-        );
-        $expectedUplift = 1.0 + (0.04 - (MacroConstants::TARGET_INFLATION - MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET));
-        $this->assertEqualsWithDelta(
-            $baseResult->streamRevenue['commercial_therapeutics'] * $expectedUplift,
-            $upliftResult->streamRevenue['commercial_therapeutics'],
-            1.0,
-        );
-        // Pipeline milestone licensing stream is unaffected by healthcare reimbursement updates
-        $this->assertEqualsWithDelta(
-            $baseResult->streamRevenue['pipeline_licensing_milestones'],
-            $upliftResult->streamRevenue['pipeline_licensing_milestones'],
-            1.0,
-        );
+        $this->assertEqualsWithDelta($base['commercial_therapeutics'] * 0.97, $heldCut['commercial_therapeutics'], 1.0);
+        $this->assertEqualsWithDelta($base['commercial_therapeutics'], $indexation['commercial_therapeutics'], 1.0);
+        $this->assertEqualsWithDelta($base['pipeline_licensing_milestones'], $heldCut['pipeline_licensing_milestones'], 1.0, 'Milestone licensing is not an administered price.');
     }
 }

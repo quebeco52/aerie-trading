@@ -880,17 +880,6 @@ readonly class MacroStateDTO
     }
 
     /**
-     * Realised inflation over what the market expected, both ways: what a CPI escalator or a cost-plus contract passes
-     * through beyond the expected inflation a firm's pricing already carries. Read one-sided against the target, an
-     * escalator was paid in every quarter inflation ran hot, charged in none that ran cold, and counted the expected
-     * part twice.
-     */
-    public function inflationSurprise(): float
-    {
-        return $this->inflationEma - $this->tipsBreakevenEma;
-    }
-
-    /**
      * Equity wealth against its multi-year trend, as a fraction: the reading the engine's own equity wealth effect
      * takes. Zero before a market has been reported.
      */

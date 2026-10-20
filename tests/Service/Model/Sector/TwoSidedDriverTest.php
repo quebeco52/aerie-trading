@@ -13,7 +13,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * A contract escalator, a lending-standards gate or a counter-cyclical stream reads its driver both ways: what it pays
+ * A lending-standards gate, a wealth effect or a counter-cyclical stream reads its driver both ways: what it pays
  * the firm when the driver runs one side of neutral it gives back when the driver runs the other. Read one-sided, a
  * driver that averages neutral still paid on average, revenue no one forecast.
  */
@@ -25,17 +25,6 @@ final class TwoSidedDriverTest extends TestCase
      */
     public static function drivers(): iterable
     {
-        $hot = ['inflationEma' => 0.03, 'tipsBreakevenEma' => 0.02];
-        $expected = ['inflationEma' => 0.02, 'tipsBreakevenEma' => 0.02];
-        $cold = ['inflationEma' => 0.01, 'tipsBreakevenEma' => 0.02];
-        yield 'restaurant rent escalator' => [Sector\RestaurantBusinessModel::class, 'franchise_real_estate_leases', $hot, $expected, $cold, true];
-        yield 'waste CPI escalator' => [Sector\WasteManagementBusinessModel::class, '', $hot, $expected, $cold, true];
-        yield 'reit rent escalator' => [Sector\ReitBusinessModel::class, '', $hot, $expected, $cold, true];
-        yield 'hospital insurance arbitrage' => [Sector\MedicalCareFacilityBusinessModel::class, '', $hot, $expected, $cold, true];
-        yield 'security cost-plus' => [Sector\SecurityProtectionBusinessModel::class, '', $hot, $expected, $cold, true];
-        yield 'defence cost-plus' => [Sector\DefenseContractorBusinessModel::class, '', $hot, $expected, $cold, true];
-        yield 'hypercar list prices' => [Sector\AutoManufacturerBusinessModel::class, 'apex_luxury', $hot, $expected, $cold, true];
-
         $tight = ['sloosTighteningIndexEma' => 0.20];
         $neutral = ['sloosTighteningIndexEma' => 0.0];
         $loose = ['sloosTighteningIndexEma' => -0.20];
@@ -50,6 +39,21 @@ final class TwoSidedDriverTest extends TestCase
         yield 'law retainers' => [Sector\LawFirmBusinessModel::class, 'corporate_retainers', $boom, $flat, $slump, true];
         yield 'law restructuring' => [Sector\LawFirmBusinessModel::class, 'restructuring_advisory', $boom, $flat, $slump, true];
         yield 'degree enrolment' => [Sector\EducationBusinessModel::class, 'degree_tuition_enrollment', $boom, $flat, $slump, true];
+        yield 'security retainers' => [Sector\SecurityProtectionBusinessModel::class, 'corporate_retainers', $boom, $flat, $slump, true];
+
+        $panic = ['marketVolatilityEma' => 0.25];
+        $anchor = ['marketVolatilityEma' => 0.15];
+        $lull = ['marketVolatilityEma' => 0.05];
+        yield 'security fear premium' => [Sector\SecurityProtectionBusinessModel::class, 'expeditionary_ops', $panic, $anchor, $lull, true];
+        $busy = ['marketVolatilityEma' => 0.20];
+        $quiet = ['marketVolatilityEma' => 0.10];
+        yield 'bank trading volatility' => [Sector\InvestmentBankBusinessModel::class, '', $busy, $anchor, $quiet, true];
+
+        $stormy = ['catastropheLossIndexEma' => 1.5];
+        $average = ['catastropheLossIndexEma' => 1.0];
+        $calm = ['catastropheLossIndexEma' => 0.5];
+        yield 'construction storm rebuild' => [Sector\ConstructionBusinessModel::class, '', $stormy, $average, $calm, true];
+        yield 'reit storm vacancy' => [Sector\ReitBusinessModel::class, '', $stormy, $average, $calm, true];
 
         $rich = ['equityWealthRatio' => 1.20, 'equityWealthTrend' => 1.0];
         $usual = ['equityWealthRatio' => 1.0, 'equityWealthTrend' => 1.0];

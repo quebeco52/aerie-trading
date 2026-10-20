@@ -106,33 +106,6 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.801, $modifier, 0.001);
     }
 
-    public function testWrightsLawLearningCurveImprovesVariableMargin(): void
-    {
-        $model = new DefenseContractorBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('GRIP');
-        $stock->setBeta('0.7');
-
-        // costPlusZ = 0.0, fixedPriceZ = 0.0, fmsZ = 2.0 (high mature production volume), eventZ = 0.0
-        $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 2.0, 0.0]);
-
-        $macroState = $this->createMacroState();
-
-        $result = $model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.65,
-            50.0,
-            0.15,
-            $macroState,
-            $mathUtilityMock,
-        );
-
-        // Wright's Law scale efficiency on FMS volume reduces variable cost margin below baseline 65%
-        $this->assertLessThan(0.65, $result->clampedMargin);
-        $this->assertEqualsWithDelta(0.642, $result->clampedMargin, 0.001);
-    }
-
     public function testRevenueNotDistortedByCumulativeNominalGdpGrowth(): void
     {
         $model = new DefenseContractorBusinessModel();
@@ -161,37 +134,21 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 0.0001);
     }
 
-    public function testCostPlusBonusAppliesWhenInflationExceedsTarget(): void
+    /**
+     * Cost-plus work bills its costs plus a fee, so hot inflation is billed as the costs it raises and earns no margin
+     * of its own: the engine already carries realised inflation on the plant, and the physics adds nothing on top.
+     */
+    public function testHotInflationBooksNoCostPlusOrdersOfItsOwn(): void
     {
         $model = new DefenseContractorBusinessModel();
         $stock = new Stock();
         $stock->setTicker('GRIP');
 
-        $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]);
+        $result = $model->computeActualFinancials($stock, 10_000.0, 0.30, 3000.0, 0.15, $this->createMacroState(inflation: 0.04), $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
 
-        // Inflation running at 4% (2% in excess of 2% target)
-        $macroState = $this->createMacroState(inflation: 0.04);
-
-        $expectedRevenue = 10_000.0;
-        $result = $model->computeActualFinancials(
-            $stock,
-            $expectedRevenue,
-            0.30,
-            3000.0,
-            0.15,
-            $macroState,
-            $mathUtilityMock,
-        );
-
-        // Excess inflation (0.04 - 0.02) = 0.02 * 1.50 = 0.03 costPlusBonus on cost-plus ORDERS.
-        // Cost-Plus weight is 0.60 for GRIP (from StockModelTuning): +1.8% of orders this quarter.
-        // Percentage-of-completion recognition burns the cost-plus backlog at 15% a quarter, so revenue
-        // rises by 1.8% x 0.15 = 0.27% now ($10,027) and the remainder sits in the backlog (book-to-bill > 1).
-        $burn = DefenseContractorBusinessModel::COST_PLUS_BACKLOG_BURN_RATE;
-        $this->assertEqualsWithDelta(10_000.0 * (1.0 + (0.018 * $burn)), $result->actualRevenue, 1.0);
-        $this->assertEqualsWithDelta(0.018 * $burn, $result->observableShockZ, 0.001);
-        $this->assertGreaterThan(1.0, $result->kpis['book_to_bill']);
-        $this->assertGreaterThan((1.0 - $burn) / $burn * 0.6, $result->kpis['backlog_quarters']);
+        $this->assertEqualsWithDelta(10_000.0, $result->actualRevenue, 1.0);
+        $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 1e-9);
+        $this->assertEqualsWithDelta(1.0, $result->kpis['book_to_bill'], 1e-9);
     }
 
     /**
@@ -285,10 +242,8 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertSame(ShockEvent::GEOPOLITICAL_CONFLICT, $result->eventType);
         // FMS revenue boosted by 1.50 multiplier
         $this->assertGreaterThan(2000.0, $result->streamRevenue['foreign_military_sales']);
-        // learningCurveShift = -0.020 * 2.5 * 0.20 = -0.010
-        // wartimeSupplyDrag = 0.035 * 0.20 = 0.007
-        // Net clamped margin = 0.30 - 0.010 + 0.007 = 0.297
-        $this->assertEqualsWithDelta(0.297, $result->clampedMargin, 0.001);
+        // wartimeSupplyDrag = 0.035 * 0.20 = 0.007: clamped margin = 0.30 + 0.007 = 0.307
+        $this->assertEqualsWithDelta(0.307, $result->clampedMargin, 0.001);
     }
 
     public function testCongressionalExportBan(): void

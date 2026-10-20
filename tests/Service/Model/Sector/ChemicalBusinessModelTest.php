@@ -122,12 +122,24 @@ class ChemicalBusinessModelTest extends TestCase
         $boomPhysics = $this->model->getMacroPhysics(clone $stock, $boomMacro);
         $recessionPhysics = $this->model->getMacroPhysics(clone $stock, $recessionMacro);
 
-        // Boom demand shift = ((0.05 * 1.60) + (0.30 * 0.60)) * cyclicality * 0.70 = 0.182 * cyclicality
+        // Boom demand shift = 0.05 * 1.60 * cyclicality * 0.70 = 0.056 * cyclicality; the metals price adds nothing.
         $cyclicality = ChemicalBusinessModel::OPERATING_CYCLICALITY;
-        $this->assertEqualsWithDelta(0.182 * $cyclicality, $boomPhysics['macro_demand_shift'], 0.001);
+        $this->assertEqualsWithDelta(0.056 * $cyclicality, $boomPhysics['macro_demand_shift'], 0.001);
+        $this->assertEqualsWithDelta(-0.056 * $cyclicality, $recessionPhysics['macro_demand_shift'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $neutralPhysics['macro_demand_shift'], 0.001);
+    }
 
-        // Recession demand shift = ((-0.05 * 1.60) + (-0.30 * 0.60)) * 1.0 * 0.70 = (-0.08 - 0.18) * 0.70 = -0.182
-        $this->assertEqualsWithDelta(-0.182 * $cyclicality, $recessionPhysics['macro_demand_shift'], 0.001);
+    /** The metals price is a price, not industrial volume: on its own it orders no base chemicals. */
+    public function testAMetalsPriceMoveAloneMovesNoDemand(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CHEM');
+        $stock->setBeta('1.0');
+
+        $calm = $this->model->getMacroPhysics(clone $stock, new MacroStateDTO(industrialMetalsIndexEma: 100.0));
+        $outage = $this->model->getMacroPhysics(clone $stock, new MacroStateDTO(industrialMetalsIndexEma: 150.0));
+
+        $this->assertEqualsWithDelta($calm['macro_demand_shift'], $outage['macro_demand_shift'], 1e-12);
     }
 
     public function testAgrochemicalsDrivenByWeatherJumps(): void

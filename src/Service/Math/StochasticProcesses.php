@@ -485,6 +485,17 @@ final class StochasticProcesses
     }
 
     /**
+     * Long-run share of quarters a two-state Markov regime spends active, given its per-quarter onset and exit
+     * probabilities: onset / (onset + exit). A premium paid while the regime runs is compensated by this share.
+     */
+    public static function twoStateStationaryShare(float $onsetHazard, float $exitHazard): float
+    {
+        $total = max(0.0, $onsetHazard) + max(0.0, $exitHazard);
+
+        return $total > 0.0 ? max(0.0, $onsetHazard) / $total : 0.0;
+    }
+
+    /**
      * Weight on a fresh innovation that keeps an AR(1) series at unit variance: sqrt(1 - phi^2). Shared by
      * the draw itself and by anyone attributing a realized Z back to the factors that entered it.
      */

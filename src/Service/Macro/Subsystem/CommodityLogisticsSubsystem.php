@@ -6,6 +6,7 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Math\Distributions;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
@@ -92,6 +93,9 @@ class CommodityLogisticsSubsystem
     public const CATASTROPHE_SEVERITY_CAP = 20.0;
     /** Ceiling on the loss index itself. */
     public const MAX_CATASTROPHE_LOSS_INDEX = 50.0;
+
+    /** The severity scale catastropheSeverityScale() solves for once: a function of the constants alone. */
+    private static ?float $severityScale = null;
     /**
      * Single-event insured loss (in average-year units) that makes district news: ~1.5 years of average losses in one
      * storm, roughly a one-in-six-years event on the Pareto tail.
@@ -291,8 +295,6 @@ class CommodityLogisticsSubsystem
     // --- Supply-Chain Pressure Index ---
     /** Standard deviation of log freight against its decade trend, measured on the engine (0.20). */
     public const SUPPLY_CHAIN_FREIGHT_LOG_SD = 0.20;
-    /** Standard deviation of delivery times about neutral, measured on the engine (6.2 points). */
-    public const SUPPLY_CHAIN_DELIVERY_SD = 6.2;
     /**
      * Standard deviation of the two standardised readings summed, sqrt(2(1 + rho)) at their measured correlation of
      * 0.56: puts the index in its own standard deviations.
@@ -477,9 +479,7 @@ class CommodityLogisticsSubsystem
         $seasonalFrequency = self::CATASTROPHE_SEASONALITY[$quarter] ?? 1.0;
         $eventCount = $this->mathUtility->generatePoissonCount(self::CATASTROPHE_ARRIVAL_PER_YEAR * $seasonalFrequency * $dt);
 
-        // Pickands (1975) extreme value theory Pareto severity calibration for catastrophe loss index.
-        $meanSeverity = self::CATASTROPHE_LOSS_DECAY / self::CATASTROPHE_ARRIVAL_PER_YEAR;
-        $severityScale = $meanSeverity * (self::CATASTROPHE_SEVERITY_ALPHA - 1.0) / self::CATASTROPHE_SEVERITY_ALPHA;
+        $severityScale = self::catastropheSeverityScale();
 
         $state->catastropheLossIndex *= exp(-self::CATASTROPHE_LOSS_DECAY * $dt);
 
@@ -497,6 +497,47 @@ class CommodityLogisticsSubsystem
         }
 
         $state->catastropheLossIndex = min(self::MAX_CATASTROPHE_LOSS_INDEX, $state->catastropheLossIndex);
+    }
+
+    /**
+     * Pareto scale (Pickands 1975) at which an event's severity, censored at the cap as it is drawn, averages
+     * decay / arrival rate: the burden's stationary mean is then exactly one average year.
+     */
+    public static function catastropheSeverityScale(): float
+    {
+        return self::$severityScale ??= Distributions::paretoScaleForCensoredMean(
+            self::CATASTROPHE_LOSS_DECAY / self::CATASTROPHE_ARRIVAL_PER_YEAR,
+            self::CATASTROPHE_SEVERITY_ALPHA,
+            self::CATASTROPHE_SEVERITY_CAP,
+        );
+    }
+
+    /**
+     * Losses that arrived between two readings of the burden, net of what has settled since each arrived: the
+     * burden now less what the earlier burden decays to. The index ceiling can clip it, never below nothing.
+     */
+    public static function catastropheIncurredSince(float $indexNow, float $indexThen, float $years): float
+    {
+        return max(0.0, $indexNow - ($indexThen * exp(-self::CATASTROPHE_LOSS_DECAY * max(0.0, $years))));
+    }
+
+    /**
+     * What catastropheIncurredSince averages over the window ending at $totalTime: each calendar quarter's arrival
+     * rate, decayed to the window's end, with lambda x mean severity = decay (a unit stationary burden).
+     */
+    public static function expectedCatastropheIncurred(float $totalTime, float $years): float
+    {
+        $expected = 0.0;
+        $start = $totalTime - max(0.0, $years);
+        while ($start < $totalTime - 1e-12) {
+            $quarter = (((int) floor(($start * 4.0) + 1e-9)) % 4 + 4) % 4;
+            $end = min($totalTime, (floor(($start * 4.0) + 1e-9) + 1.0) / 4.0);
+            $expected += (self::CATASTROPHE_SEASONALITY[$quarter] ?? 1.0)
+                * (exp(-self::CATASTROPHE_LOSS_DECAY * ($totalTime - $end)) - exp(-self::CATASTROPHE_LOSS_DECAY * ($totalTime - $start)));
+            $start = $end;
+        }
+
+        return $expected;
     }
 
     /**
@@ -898,7 +939,7 @@ class CommodityLogisticsSubsystem
     public static function supplyChainPressureAt(float $freightRateIndex, float $freightTrend, float $supplierDeliveryTimes): float
     {
         $freightZ = ($freightRateIndex > 0.0 && $freightTrend > 0.0) ? log($freightRateIndex / $freightTrend) / self::SUPPLY_CHAIN_FREIGHT_LOG_SD : 0.0;
-        $deliveryZ = ($supplierDeliveryTimes - MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL) / self::SUPPLY_CHAIN_DELIVERY_SD;
+        $deliveryZ = ($supplierDeliveryTimes - MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL) / MacroConstants::SUPPLY_CHAIN_DELIVERY_SD;
 
         return ($freightZ + $deliveryZ) / self::SUPPLY_CHAIN_SUM_SD;
     }

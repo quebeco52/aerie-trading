@@ -285,7 +285,6 @@ final class InsuranceLossReserveTest extends TestCase
      */
     public function testThePhysicsReservesTheLossShareOnly(): void
     {
-        $macro = new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: 4.0);
         $fixedCosts = 1.0e9;
         $carried = [InsuranceBusinessModel::STATE_UNEARNED_PREMIUM => 2.0e10, InsuranceBusinessModel::STATE_LIFE_RESERVES => 3.0e10];
 
@@ -299,28 +298,38 @@ final class InsuranceLossReserveTest extends TestCase
                 $stock->setBeta('1.0');
                 $stock->setTotalEquity('200000000000');
                 $stock->setEarningsMomentumZ($momentum);
+                // A district held at four average years of open claims: each quarter's losses run well above average.
+                $macro = new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndex: 4.0, catastropheLossIndexEma: 4.0, totalTime: 10.0 + (0.25 * $quarter));
 
                 $result = $model->computeActualFinancials($stock, 10_000_000_000.0, 0.60, $fixedCosts, 0.2, $macro, $math);
                 $momentum = $result->streamZ;
                 $premium = $result->actualRevenue;
                 $label = $model::class . " quarter {$quarter}";
 
-                $reinstatement = 0.0;
+                // Reinsurance premium is not a loss: the cover's premium every quarter (the reinsurer buys its
+                // collateral's share of the layer), and a reinstatement in a quarter the cover paid out.
+                $coverRate = InsuranceBusinessModel::CATASTROPHE_COVER_EXPECTED_RECOVERY * (1.0 + InsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING);
+                $bookWeight = match (true) {
+                    $model instanceof RetailInsuranceBusinessModel => $result->streamRevenue['property_casualty_premiums'] / max(1.0, $premium),
+                    $model instanceof ReinsuranceBusinessModel => $result->streamRevenue['treaty_reinsurance'] / max(1.0, $premium),
+                    default => 1.0,
+                };
+                $reinstatement = $model instanceof ReinsuranceBusinessModel
+                    ? $premium * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE * $coverRate * $bookWeight
+                    : $premium * $coverRate * $bookWeight;
                 if ($result->eventType === ShockEvent::REINSURANCE_ATTACHMENT_BREACH) {
                     $breaches++;
                     if (!$model instanceof ReinsuranceBusinessModel) {
-                        $bookWeight = $model instanceof RetailInsuranceBusinessModel
-                            ? $result->streamRevenue['property_casualty_premiums'] / max(1.0, $premium) : 1.0;
-                        $reinstatement = $premium * InsuranceBusinessModel::REINSTATEMENT_PREMIUM_RATE * $bookWeight;
+                        $reinstatement += $premium * InsuranceBusinessModel::REINSTATEMENT_PREMIUM_RATE * $bookWeight;
                     }
                 }
 
                 $adjusting = $fixedCosts * InsuranceBusinessModel::FIXED_COST_LAE_SHARE;
                 $variableExpenses = $result->kpis['expense_ratio'] * $premium - ($fixedCosts - $adjusting);
                 $incurred = $momentum[InsuranceBusinessModel::STATE_INCURRED_CLAIMS];
-                // The retail cover is sized on the P&C book's target weight, which the realized stream share only
+                // A part-book cover is sized on the covered book's target weight, which the realized stream share only
                 // approximates.
-                $tolerance = $model instanceof RetailInsuranceBusinessModel && $reinstatement > 0.0 ? $premium * 1e-3 : $premium * 1e-9;
+                $tolerance = $bookWeight < 1.0 ? $premium * 3e-3 : $premium * 1e-9;
 
                 $this->assertEqualsWithDelta($result->kpis['loss_ratio'] * $premium - $reinstatement, $incurred, $tolerance, $label);
                 $this->assertEqualsWithDelta($result->actualVariableCosts - $variableExpenses - $reinstatement + $adjusting, $incurred, $tolerance, $label);

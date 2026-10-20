@@ -33,7 +33,7 @@ final class DefaultRateTrendTest extends TestCase
         yield 'bank loan book' => [Sector\CommercialBankBusinessModel::class, 'TRND', true];
         yield 'card book' => [Sector\CreditServicesBusinessModel::class, 'TRND', true];
         yield 'distressed opportunity' => [Sector\DistressedDebtBusinessModel::class, 'TRND', false];
-        yield 'clearing member stress' => [Sector\ClearingHouseBusinessModel::class, 'TRND', false];
+        yield 'clearing member stress' => [Sector\ClearingHouseBusinessModel::class, 'TRND', true];
     }
 
     /**

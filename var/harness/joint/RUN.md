@@ -56,4 +56,11 @@ Question family: does the whole simulation behave sensibly after several merges,
   with `...->isFinancial()` in place of the short name.
 - Batches: `bin/harness-batch var/harness/joint/run.sh 1-4 live` (one call, run_in_background), not `&` loops.
 
+- Batch A arms: `baseA` = tree-baseA (git archive a202316c), `fixA` = tree-fixA (same + batchA.patch); run.sh maps both
+  to `tree-<arm>`. MACRO_OUT rows carry `scp` (supplyChainPressureIndexEma) and `vol_ema` (marketVolatilityEma);
+  `ema_an.py <seeds> <arms>` tabulates them, `ins_margin.py <seeds> <arms>` gives insurer margin quantiles.
+
+- `fixAB` = tree-fixAB (a202316c + batchAB.patch + new-files.tar). Apply with `git apply --directory=var/harness/joint/tree-<arm>`
+  from the repo root; `git -C <tree> apply` inside the checkout skips every path silently.
+
 Evidence: `joint_evidence.md`.

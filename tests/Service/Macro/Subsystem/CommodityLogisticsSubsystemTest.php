@@ -6,6 +6,7 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Math\Distributions;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
@@ -256,7 +257,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $oneSd = CommodityLogisticsSubsystem::supplyChainPressureAt(
             130.0 * exp(CommodityLogisticsSubsystem::SUPPLY_CHAIN_FREIGHT_LOG_SD),
             130.0,
-            MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL + CommodityLogisticsSubsystem::SUPPLY_CHAIN_DELIVERY_SD,
+            MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL + MacroConstants::SUPPLY_CHAIN_DELIVERY_SD,
         );
         $this->assertEqualsWithDelta(2.0 / CommodityLogisticsSubsystem::SUPPLY_CHAIN_SUM_SD, $oneSd, 1e-12);
     }
@@ -473,6 +474,47 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $mean, 0.25, 'The burden averages an average year: lambda x mean severity / decay = 1.');
         $this->assertGreaterThan(3.0 * $mean, $samples[(int) floor(0.99 * $count)], 'and the worst percent of months carry several average years of losses.');
         $this->assertLessThan(0.5 * $mean, $samples[(int) floor(0.25 * $count)], 'while most months are quiet.');
+    }
+
+    /**
+     * The severity is drawn capped, so its scale is sized on the capped mean: arrival rate x mean severity / decay is
+     * then exactly one average year. Sized on the untruncated Pareto mean, the burden averaged 0.97.
+     */
+    public function testTheCappedSeverityMakesTheStationaryBurdenExactlyOneAverageYear(): void
+    {
+        $meanSeverity = Distributions::censoredParetoMean(
+            CommodityLogisticsSubsystem::catastropheSeverityScale(),
+            CommodityLogisticsSubsystem::CATASTROPHE_SEVERITY_ALPHA,
+            CommodityLogisticsSubsystem::CATASTROPHE_SEVERITY_CAP,
+        );
+
+        $this->assertEqualsWithDelta(1.0, CommodityLogisticsSubsystem::CATASTROPHE_ARRIVAL_PER_YEAR * $meanSeverity / CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY, 1e-9);
+    }
+
+    /** A storm between two readings is what the later reading holds beyond the earlier one's decay. */
+    public function testTheIncurredFlowIsTheStormNetOfItsSettlement(): void
+    {
+        $k = CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY;
+        $then = 1.2;
+        $storm = 4.0;
+        // Burden a quarter later: the old burden decayed, plus a storm that landed a month before the reading.
+        $now = ($then * exp(-$k * 0.25)) + ($storm * exp(-$k / 12.0));
+
+        $this->assertEqualsWithDelta($storm * exp(-$k / 12.0), CommodityLogisticsSubsystem::catastropheIncurredSince($now, $then, 0.25), 1e-12);
+    }
+
+    /**
+     * The expected flow follows the season: a quarter inside one calendar quarter is its rate times the decayed window.
+     */
+    public function testTheExpectedIncurredFlowFollowsTheSeason(): void
+    {
+        $k = CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY;
+        $season = CommodityLogisticsSubsystem::CATASTROPHE_SEASONALITY;
+
+        $this->assertEqualsWithDelta($season[2] * (1.0 - exp(-$k * 0.25)), CommodityLogisticsSubsystem::expectedCatastropheIncurred(10.75, 0.25), 1e-12);
+        // A window straddling Q3 and Q4: half the quarter at each rate, the older half decayed further.
+        $straddle = ($season[3] * (1.0 - exp(-$k * 0.125))) + ($season[2] * (exp(-$k * 0.125) - exp(-$k * 0.25)));
+        $this->assertEqualsWithDelta($straddle, CommodityLogisticsSubsystem::expectedCatastropheIncurred(10.875, 0.25), 1e-12);
     }
 
     public function testAHeadlineStormIsRecordedOnTheTickItLands(): void

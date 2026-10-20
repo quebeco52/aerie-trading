@@ -186,8 +186,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
      */
     public const GROSS_ADDS_VARIANCE_SCALAR = 1.50;
     /**
-     * Extra quarterly churn per unit of unemployment above the natural rate (0.10 = +10bps of churn per point of excess
-     * unemployment): involuntary disconnects and non-payment rise with job losses.
+     * Quarterly churn per unit of unemployment against the natural rate, both ways (0.10 = 10bps per point):
+     * involuntary disconnects and non-payment rise with job losses and ease when jobs are plentiful.
      */
     public const UNEMPLOYMENT_CHURN_SENSITIVITY = 0.10;
 
@@ -205,12 +205,13 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const REGIME_PRICE_WAR = 'price_war';
     /** Quarterly probability the price war ends (~4 quarter expected duration). */
     public const PRICE_WAR_EXIT_HAZARD = 0.25;
-    /** Extra quarterly churn while rivals run switching promotions. */
+    /**
+     * Extra quarterly churn while rivals run switching promotions. A switcher leaves one carrier for another, so the
+     * same rate comes back as promotional gross adds: the war moves lines between carriers and destroys none.
+     */
     public const PRICE_WAR_CHURN_UPLIFT = 0.02;
     /** ARPU discount from matching rival plan pricing during a price war. */
     public const PRICE_WAR_ARPU_DISCOUNT = 0.05;
-    /** Promotional gross adds response (relative) that carriers mount to defend the base in a price war. */
-    public const PRICE_WAR_GROSS_ADDS_RESPONSE = 0.50;
 
     // --- Generational CapEx / Spectrum Tail Risks ---
     /** Z-score threshold indicating a massive government spectrum auction or generational infrastructure leap. */
@@ -321,13 +322,12 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // quarter's net adds forward. Demand shocks move gross adds; the cycle moves ARPU (plan downgrades,
         // not cancellations); a price war lifts churn, forces promotional gross adds and discounts ARPU.
         $openingSubscribers = $streams->getPersistedState(self::STATE_SUBSCRIBER_INDEX, 1.0);
-        $unemploymentGap = max(0.0, $macroState->unemploymentGap());
-        $churnRate = $baseChurn
+        // Base churn is the average labour market's, so unemployment is read against its natural rate both ways.
+        $churnRate = max(0.0, $baseChurn
             + ($inPriceWar ? self::PRICE_WAR_CHURN_UPLIFT : 0.0)
-            + ($unemploymentGap * self::UNEMPLOYMENT_CHURN_SENSITIVITY);
-        $grossAddsRate = max(0.0, $baseChurn
-            * (1.0 + ($subscriptionZ * $baselineVol * self::GROSS_ADDS_VARIANCE_SCALAR))
-            * ($inPriceWar ? (1.0 + self::PRICE_WAR_GROSS_ADDS_RESPONSE) : 1.0));
+            + ($macroState->unemploymentGap() * self::UNEMPLOYMENT_CHURN_SENSITIVITY));
+        $grossAddsRate = max(0.0, ($baseChurn * (1.0 + ($subscriptionZ * $baselineVol * self::GROSS_ADDS_VARIANCE_SCALAR)))
+            + ($inPriceWar ? self::PRICE_WAR_CHURN_UPLIFT : 0.0));
         $subscribers = ($openingSubscribers * (1.0 - $churnRate)) + $grossAddsRate;
         $streams->registerState(self::STATE_SUBSCRIBER_INDEX, $subscribers);
 

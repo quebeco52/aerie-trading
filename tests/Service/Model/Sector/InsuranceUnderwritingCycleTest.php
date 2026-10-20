@@ -112,7 +112,8 @@ final class InsuranceUnderwritingCycleTest extends TestCase
      */
     public function testCoverAttachmentStartsTheHardMarket(): void
     {
-        // Own claim draw -3.0 on a district season at 2.5 average years: past the retention, under the threshold.
+        // Own claim draw -3.0 in a quarter with 2.5 times its average district losses: past the retention, under the
+        // threshold.
         $attached = $this->runQuarter(-3.0, 2.5);
         $this->assertSame(ShockEvent::REINSURANCE_ATTACHMENT_BREACH, $attached->eventType);
         $this->assertGreaterThan(0.0, $attached->streamZ[self::REGIME_KEY] ?? 0.0, 'An attached cover must turn the market hard.');
@@ -125,8 +126,9 @@ final class InsuranceUnderwritingCycleTest extends TestCase
     }
 
     /**
-     * The wind season reaches claims through the district burden, whose arrivals already follow the calendar.
-     * The same burden and draw must cost the same in any quarter: a second, firm-level season counted it twice.
+     * The wind season reaches claims through the district losses, whose arrivals already follow the calendar.
+     * The same multiple of a quarter's average losses and the same draw must cost the same in any quarter: a second,
+     * firm-level season counted it twice.
      */
     public function testTheSeasonReachesClaimsOnlyThroughTheDistrictBurden(): void
     {
@@ -159,11 +161,12 @@ final class InsuranceUnderwritingCycleTest extends TestCase
 
         $stock = $this->makeStock();
         $stock->setTotalEquity('600000000000');
+        $window = DistrictCatastropheWindow::prime($stock, $burden, $totalTime);
         $macro = MacroStateDTO::fromArray([
             'total_time' => $totalTime,
             'inflation_ema' => 0.02,
             'policy_rate' => InsuranceBusinessModel::DEFAULT_POLICY_RATE_FALLBACK,
-            'catastrophe_loss_index_ema' => $burden,
+            'catastrophe_loss_index' => $window['catastropheLossIndex'],
         ]);
 
         return $model->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $macro, $math);

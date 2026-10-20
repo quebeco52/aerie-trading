@@ -183,8 +183,8 @@ class PrivateEquityBusinessModelTest extends TestCase
         $calmYield = $this->model->calculateCashYield($calmMacro);
         $this->assertGreaterThan(0.0, $calmYield);
 
-        // 80% bonds @ 4% + 20% equity @ 7% = 0.032 + 0.014 = 0.046
-        $this->assertEqualsWithDelta(0.046, $calmYield, 0.001);
+        // 80% bonds @ 4% + 20% equity at the market cost of equity, 4% + 4.5% ERP = 0.032 + 0.017 = 0.049
+        $this->assertEqualsWithDelta(0.049, $calmYield, 0.001);
 
         $stock = new Stock();
         $stock->setTicker('PE_CORP');

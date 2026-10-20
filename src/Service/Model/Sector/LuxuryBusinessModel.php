@@ -104,6 +104,12 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const FOREIGN_DEMAND_SENSITIVITY = 1.50;
     /** Sensitivity of high-net-worth luxury demand to broad money supply (M2) growth liquidity. */
     public const M2_LIQUIDITY_SENSITIVITY  = 0.40;
+    /** Weight of the lagged output gap in the client book's demand blend. */
+    public const OUTPUT_GAP_DEMAND_WEIGHT  = 0.35;
+    /** Weight of the confidence mood beside the gap: the part of sentiment the cycle does not already explain. */
+    public const MOOD_DEMAND_WEIGHT        = 0.45;
+    /** Weight of property wealth against its trend. */
+    public const PROPERTY_WEALTH_DEMAND_WEIGHT = 0.20;
 
     // --- Brand Lore & Shock Thresholds ---
     /** Volatility multiplier for top-line revenue shocks in resilient luxury conglomerates. */
@@ -126,14 +132,11 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     /** Operating margin mean reversion speed: slower speed reflects sticky multi-decade brand equity. */
     public const LUXURY_REVERSION_SPEED    = 2.0;
 
-    // --- Veblen Brand Cachet & Boutique Reinvestment Physics ---
-    /** Variable margin sensitivity to haute couture brand desirability and Veblen pricing cachet. */
-    public const BRAND_CACHET_ELASTICITY   = 0.018;
-
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $this->resolveLaggedOutputGap($macroState);
-        $sentimentShift = $macroState->sentimentDeviation();
+        // The gap is priced beside it, so confidence enters as its residual over the gap (Lemmon & Portniaguina 2006).
+        $sentimentShift = $macroState->sentimentResidual();
         $beta = $this->getOperatingCyclicality($stock);
 
         $resShift = $macroState->housePriceDeviation(); // Wealth effect from property
@@ -141,7 +144,8 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
         // The ultra-wealthy buyer is as often abroad as at home: the foreign bloc's cycle is half the client book.
         $foreignShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
-        $blendedMacroShift = ($outputGap * 0.35) + ($sentimentShift * 0.45) + ($resShift * 0.20) + $m2Shift + $foreignShift + $this->resolveFxDemandShift($macroState);
+        $blendedMacroShift = ($outputGap * self::OUTPUT_GAP_DEMAND_WEIGHT) + ($sentimentShift * self::MOOD_DEMAND_WEIGHT)
+            + ($resShift * self::PROPERTY_WEALTH_DEMAND_WEIGHT) + $m2Shift + $foreignShift + $this->resolveFxDemandShift($macroState);
 
         // Luxury goods benefit from Veblen pricing power: list prices outrun expected inflation (PRICING_ELASTICITY),
         // and the engine books the gap between price and input cost as margin.
@@ -206,11 +210,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Continuous Veblen Brand Cachet Elasticity: Strong haute couture desirability ($hauteZ > 0) continuously
-        // expands pricing cachet and improves gross margin.
-        $brandCachetShift = -self::BRAND_CACHET_ELASTICITY * $hauteZ * $hauteWeight;
-
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $veblenMarginBenefit + $brandModifier + $brandCachetShift);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $veblenMarginBenefit + $brandModifier);
 
         // Analyst Visibility
         $hauteBase = max(1.0, $expectedRevenue * $hauteWeight);

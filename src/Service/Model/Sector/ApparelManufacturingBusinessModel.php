@@ -144,8 +144,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Baseline pricing power across apparel manufacturer brand portfolio. */
     public const PRICING_POWER_INDEX = 0.50;
     /**
-     * Demand boost scalar capturing consumer trade-down from premium/designer apparel into affordable mass-market
-     * basics during recessions.
+     * Mass-market demand per unit of output gap against the cycle, both ways: consumers trade down from designer
+     * labels into affordable basics in a recession and back up in a boom.
      */
     public const TRADE_DOWN_SCALAR = 0.60;
     /** Sensitivity of branded apparel demand to macroeconomic consumer sentiment swings. */
@@ -271,11 +271,11 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $sentimentShift = $macroState->sentimentResidual();
         $beta = $this->getOperatingCyclicality($stock);
 
-        // Hybrid demand physics: Pro-cyclical consumer sentiment + output gap,
-        // tempered by counter-cyclical trade-down effect during economic downturns (output gap < 0).
-        // Companies with lower pricing power (budget/mass-market basics) capture higher trade-down volume.
+        // Hybrid demand physics: pro-cyclical consumer sentiment and output gap, tempered by trading down in a
+        // downturn and back up in a boom. Companies with lower pricing power (budget/mass-market basics) gain more
+        // of the trade-down volume and lose more of it when consumers trade back up.
         $tradeDownScalar = self::TRADE_DOWN_SCALAR * (1.5 - $pricingPower);
-        $tradeDownBonus = $outputGap < 0.0 ? abs($outputGap) * $tradeDownScalar : 0.0;
+        $tradeDownBonus = -$outputGap * $tradeDownScalar;
         $proCyclicalDemand = ($outputGap * self::OUTPUT_GAP_SCALAR) + ($sentimentShift * self::CONSUMER_SENTIMENT_SCALAR);
         $blendedDemandShift = ($proCyclicalDemand * $beta) + $tradeDownBonus + $this->resolveFxDemandShift($macroState);
 

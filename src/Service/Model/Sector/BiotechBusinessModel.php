@@ -236,8 +236,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const APPROVAL_LAUNCH_COST_MARGIN_PENALTY = 0.03;
     /** Variable margin penalty from expensing the wind-down of a terminated late-stage development program. */
     public const TRIAL_FAILURE_MARGIN_PENALTY = 0.10;
-    /** Continuous variable margin sensitivity to interim Phase II/III clinical trial readouts. */
-    public const CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY = 0.015;
 
     // --- Loss of Exclusivity (LOE) Erosion ---
     /** Default remaining marketing exclusivity on the lead franchise, in quarters (~7 years). */
@@ -775,17 +773,17 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $knownShift = $streams->getPersistedState(self::STATE_KNOWN_COMMERCIAL_SHIFT, 0.0);
         $baseRevenue = $expectedRevenue / (max(0.1, 1.0 + $knownShift) * $this->getStructuralRevenueMultiplier($stock));
 
-        $reimbursementBaseline = MacroConstants::TARGET_INFLATION - MacroConstants::REIMBURSEMENT_PRODUCTIVITY_OFFSET;
-        $reimbursementShift    = $macroState->reimbursementRateGrowth - $reimbursementBaseline;
+        // Administered prices run below their indexed path by the budget cut held in them, for as long as it lasts.
+        // The indexation itself is realised inflation, which the engine carries on the plant.
+        $reimbursementShift    = -$macroState->reimbursementAusterityShare;
         $establishedRevenue    = max(0.0, $baseRevenue * $establishedWeight * $measured['marketed'] * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR)) + $reimbursementShift));
         $pipelineRevenue       = max(0.0, $baseRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));
 
         $preEventPipelineRevenue = $pipelineRevenue;
 
-        // Continuous pipeline clinical progress smoothly adjusts variable margin. Trial spend itself is
-        // capitalized as intangible R&D CapEx in this architecture, so progress reads through as
-        // higher-value royalty and collaboration mix rather than as near-term operating expense.
-        $patentModifier = -self::CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY * $pipelineZ * $pipelineWeight;
+        // Launches, trial failures and the loss-of-exclusivity defence move the cost ratio; the pipeline draw itself
+        // is revenue, which reaches EBIT against the fixed cost base already.
+        $patentModifier = 0.0;
 
         // --- Pivotal Readouts: each late-stage programme reads out at one over the Phase III duration ---
         $targetAssets = max(0.0, $params[ModelParam::LateStageAssetCount]);
@@ -987,8 +985,8 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
-     * Biotech's physics is R&D-cycle driven: the only macro reads are the administered reimbursement update and
-     * the real wage gap behind the labor share of the input basket.
+     * Biotech's physics is R&D-cycle driven: the only macro reads are the budget cut held in administered prices
+     * and the real wage gap behind the labor share of the input basket.
      *
      * @return list<string>
      */
@@ -996,7 +994,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'import_price_level',
-            'reimbursement_rate_growth',
+            'reimbursement_austerity_share',
             'real_wage_gap',
         ];
     }

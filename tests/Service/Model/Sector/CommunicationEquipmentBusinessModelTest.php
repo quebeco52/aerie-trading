@@ -10,6 +10,7 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Model\Sector\CommunicationEquipmentBusinessModel;
 use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -58,7 +59,11 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
 
     public function testThreeStreamDecompositionReproducesTheTargetCostRatioAtBaseline(): void
     {
-        $result = $this->runQuarter();
+        // A digestion quarter books orders below the average year's (the average carries the rollout waves too); one
+        // that opens with the backlog to bill its average quarter lands on the target weights.
+        $burn = CommunicationEquipmentBusinessModel::NETWORK_BACKLOG_BURN_RATE;
+        $digestionOrders = 1.0 - (CommunicationEquipmentBusinessModel::ROLLOUT_WAVE_ORDER_UPLIFT * StochasticProcesses::twoStateStationaryShare(CommunicationEquipmentBusinessModel::ROLLOUT_WAVE_ONSET_HAZARD, CommunicationEquipmentBusinessModel::ROLLOUT_WAVE_EXIT_HAZARD));
+        $result = $this->runQuarter([StreamContext::BACKLOG_STATE_PREFIX . 'carrier_networks' => (1.0 / $burn) - $digestionOrders]);
 
         $this->assertEqualsWithDelta(75_000_000.0, $result->streamRevenue['carrier_networks'], 1.0);
         $this->assertEqualsWithDelta(10_000_000.0, $result->streamRevenue['sep_licensing'], 1.0);
@@ -68,10 +73,9 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         // Fixed royalty and gateway cost ratios plus the derived network ratio must land on the engine's target.
         $this->assertEqualsWithDelta(self::VARIABLE_COST_RATIO, $result->clampedMargin, 1e-9);
 
-        // The backlog is seeded at steady state, so a flat quarter books exactly what it bills.
-        $steadyStateQuarters = (1.0 - CommunicationEquipmentBusinessModel::NETWORK_BACKLOG_BURN_RATE) / CommunicationEquipmentBusinessModel::NETWORK_BACKLOG_BURN_RATE;
-        $this->assertEqualsWithDelta(1.0, $result->kpis['book_to_bill'], 1e-9);
-        $this->assertEqualsWithDelta($steadyStateQuarters, $result->kpis['backlog_quarters'], 1e-9);
+        // Digestion books less than it bills, and the book is worked down toward its steady state.
+        $this->assertEqualsWithDelta($digestionOrders, $result->kpis['book_to_bill'], 1e-9);
+        $this->assertEqualsWithDelta((1.0 - $burn) / $burn, $result->kpis['backlog_quarters'], 1e-9);
         $this->assertNull($result->eventType);
     }
 
@@ -84,7 +88,7 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $base = $this->runQuarter();
         $boom = $this->runQuarter(macro: new MacroStateDTO(outputGapEma: 0.05));
 
-        $orderUplift = $boom->kpis['book_to_bill'] - 1.0;
+        $orderUplift = (($boom->kpis['book_to_bill'] * $boom->streamRevenue['carrier_networks']) / ($base->kpis['book_to_bill'] * $base->streamRevenue['carrier_networks'])) - 1.0;
         $revenueUplift = ($boom->streamRevenue['carrier_networks'] / $base->streamRevenue['carrier_networks']) - 1.0;
 
         $this->assertGreaterThan(0.0, $orderUplift);
@@ -185,7 +189,8 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $this->assertSame(ShockEvent::NETWORK_ROLLOUT_WAVE, $onset->eventType);
         $this->assertSame(1.0, $onset->kpis['rollout_wave_quarters']);
         $burn = CommunicationEquipmentBusinessModel::NETWORK_BACKLOG_BURN_RATE;
-        $orders = 1.0 + CommunicationEquipmentBusinessModel::ROLLOUT_WAVE_ORDER_UPLIFT;
+        $waveShare = StochasticProcesses::twoStateStationaryShare(CommunicationEquipmentBusinessModel::ROLLOUT_WAVE_ONSET_HAZARD, CommunicationEquipmentBusinessModel::ROLLOUT_WAVE_EXIT_HAZARD);
+        $orders = 1.0 + (CommunicationEquipmentBusinessModel::ROLLOUT_WAVE_ORDER_UPLIFT * (1.0 - $waveShare));
         $this->assertEqualsWithDelta($orders / ((1.0 - $burn) + ($burn * $orders)), $onset->kpis['book_to_bill'], 1e-9, 'Book-to-bill is orders over recognized revenue.');
 
         $second = $this->runQuarter($onset->streamZ);
@@ -249,8 +254,8 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(
             0.20 * CommunicationEquipmentBusinessModel::REVENUE_VARIANCE_SCALAR * CommunicationEquipmentBusinessModel::ENTERPRISE_WEIGHT * CommunicationEquipmentBusinessModel::NETWORK_BACKLOG_BURN_RATE,
             $orders->observableShockZ,
-            1e-9,
-            'An order shock is seen at the share of it the backlog delivers this quarter.',
+            2e-5,
+            'An order shock is seen at the share of it the backlog delivers this quarter (at the active weight, which the realised mix moves a little).',
         );
     }
 

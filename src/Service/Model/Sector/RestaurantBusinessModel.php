@@ -36,6 +36,11 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
      * downturns; restaurants substitute freely.
      */
     public const OPERATING_CYCLICALITY = 1.00;
+    /**
+     * Dining demand per unit of the confidence mood at unit cyclicality (0.40): ten points of mood beside the cycle
+     * move covers 4%, the sentiment loading the other discretionary consumer models carry.
+     */
+    public const DINING_MOOD_SENSITIVITY = 0.40;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.80;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
@@ -103,8 +108,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.40;
-    /** Share of an inflation surprise the franchise leases' CPI escalators pass through, both ways: 0.80. */
-    public const LEASE_INFLATION_CAPTURE  = 0.80;
 
     // --- Stream Cost Allocation ---
     /** Royalty variable cost per dollar, relative to a company-store dollar. */
@@ -132,9 +135,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const FOOD_SAFETY_REMEDIATION_PENALTY = 0.02;
     public const VIRAL_MENU_ITEM_Z_SCORE     = 2.40;
     public const VIRAL_MENU_ITEM_MULT        = 1.15;
-
-    // --- Continuous Elasticity ---
-    public const FRANCHISE_SCALE_ELASTICITY = 0.015;
 
     public function getMoatSpread(): float
     {
@@ -168,7 +168,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
      */
     protected function resolveCycleDemandShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        return parent::resolveCycleDemandShift($stock, $macroState) + ($macroState->sentimentResidual() * $this->getOperatingCyclicality($stock));
+        return parent::resolveCycleDemandShift($stock, $macroState)
+            + ($macroState->sentimentResidual() * self::DINING_MOOD_SENSITIVITY * $this->getOperatingCyclicality($stock));
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -230,8 +231,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             }
         }
 
-        // CPI escalators on franchise real estate rents pass the inflation surprise, both ways.
-        $rentEscalator = $macroState->inflationSurprise() * self::LEASE_INFLATION_CAPTURE;
         // Store traffic carries the cycle into company sales and the royalty on franchisee sales; the franchise rent
         // roll carries FRANCHISE_LEASE_CYCLE_LOADING of it.
         $cycleShares = MacroTransmission::allocateDemandShift(
@@ -242,9 +241,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
         $corporateRevenue = max(0.0, $expectedRevenue * $corporateWeight * (1.0 + ($corporateZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $cycleShares['company_operated_stores']) * $viralMultiplier);
         $franchiseRevenue = max(0.0, $expectedRevenue * $franchiseWeight * (1.0 + ($franchiseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.15)) + $cycleShares['franchise_royalties']));
-        $leaseRevenue     = max(0.0, $expectedRevenue * $leaseWeight     * (1.0 + ($leaseZ     * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.05)) + $rentEscalator + $cycleShares['franchise_real_estate_leases']));
-        // CPI escalators reprice existing franchise leases: pure price revenue with no incremental cost.
-        $priceRevenue     = $expectedRevenue * $leaseWeight * $rentEscalator;
+        $leaseRevenue     = max(0.0, $expectedRevenue * $leaseWeight     * (1.0 + ($leaseZ     * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.05)) + $cycleShares['franchise_real_estate_leases']));
 
         $streamRevenues = [
             'company_operated_stores'      => $corporateRevenue,
@@ -263,17 +260,14 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         // rents carry almost no variable cost, which the blended cost ratio above already reflects.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        // Continuous Elasticity
-        $elasticityShift = -self::FRANCHISE_SCALE_ELASTICITY * $franchiseZ * $franchiseWeight;
-
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inputCostDrag + $elasticityShift;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        $observableShockZ = ($corporateZ * $corporateWeight * self::REVENUE_VARIANCE_SCALAR * $baselineVol) + ($rentEscalator * $leaseWeight);
+        $observableShockZ = ($corporateZ * $corporateWeight * self::REVENUE_VARIANCE_SCALAR * $baselineVol) ;
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
-        $specialCharge = $scandalWriteOff * max(0.0, $actualRevenue - $priceRevenue);
+        $specialCharge = $scandalWriteOff * max(0.0, $actualRevenue);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -283,7 +277,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-            priceRevenue: $priceRevenue,
             specialCharge: $specialCharge,
         );
     }
@@ -340,7 +333,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'import_price_level',
-            'inflation_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
             'real_wage_gap',

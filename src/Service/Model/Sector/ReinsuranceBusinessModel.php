@@ -113,6 +113,8 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $tailAboveRetention = $this->resolveCatastropheRecovery($claims['gross'], $treatyWeight);
         $coverAttached = $tailAboveRetention > 0.0;
         $catBondShield = $tailAboveRetention * self::CAT_BOND_ATTACHMENT_SHIELD_SHARE;
+        // The collateral's share of the layer is bought from the bond's investors at the cover's price.
+        $shieldPremium = self::CAT_BOND_ATTACHMENT_SHIELD_SHARE * $this->resolveCededPremium($treatyWeight);
         $catBondMultiplier = $coverAttached ? (1.0 - self::CAT_BOND_DEFAULT_HAIRCUT) : 1.0;
 
         // Rates on a renewed treaty stay hard for years after the capital that withdrew has come back. The
@@ -135,9 +137,9 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         // Treaty losses are the cedants' claims, inflating with theirs while the treaty rate was set at the last
         // renewal.
         $unrecoveredClaims = $realizedVariableMargin * (1.0 - self::BASE_EXPENSE_RATIO_SHARE) * $treatyWeight * $this->resolveUnrecoveredClaimsCost($streams, $macroState);
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $unrecoveredClaims + $claims['excess'] - $catBondShield);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $unrecoveredClaims + $claims['excess'] - $catBondShield + $shieldPremium);
         // The baseline cost ratio splits as the parent's does; the claims above it are losses.
-        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, 0.0, $fixedCosts, $treatyRevenue);
+        $kpis = $this->bookUnderwritingResult($streams, $actualRevenue, $clampedMargin, $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE, $shieldPremium, $fixedCosts, $treatyRevenue);
 
         $eventType = $this->resolveClaimEvent($claims['gross'], $treatyWeight, $coverAttached);
 
@@ -194,6 +196,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'catastrophe_loss_index',
             'catastrophe_loss_index_ema',
             'core_goods_inflation_ema',
             'gdp_deflator',

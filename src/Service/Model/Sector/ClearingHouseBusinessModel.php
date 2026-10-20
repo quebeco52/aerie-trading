@@ -9,6 +9,7 @@ use App\DTO\InterestExpenseDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\Distributions;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -110,13 +111,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
     // --- VIX & Transaction Volume Bonus ---
     /**
-     * Absolute 2s10s slope at which rates-clearing volumes are normal (~70bps, the neutral curve); a curve steepening
-     * or inverting past it brings swap hedging flow.
-     */
-    public const RATES_VOL_NEUTRAL_SLOPE = 0.007;
-    /** Clearing-fee revenue per unit of 2s10s slope beyond the neutral slope (+2% per 100bp of swap hedging flow). */
-    public const RATES_VOL_REVENUE_SCALAR = 2.0;
-    /**
      * Clearing-fee revenue per unit of volatility over MacroConstants::MACRO_VOL_BASE_ANCHOR, both ways (+0.4% per vol
      * point); the only volatility channel into fees.
      */
@@ -136,10 +130,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
      * the usual run of failures.
      */
     public const MACRO_DEFAULT_STRESS_SCALAR = 0.10;
-    /** Healthy credit environment z-score threshold triggering minor margin write-backs. */
-    public const HEALTHY_CREDIT_Z_FLOOR  = 1.00;
-    /** Minor variable cost reduction during exceptionally healthy credit environments. */
-    public const HEALTHY_CREDIT_BONUS    = -0.02;
     /** Extreme default z-score threshold triggering apocalyptic clearinghouse bailout lore. */
     public const LORE_DEFAULT_Z_THRESHOLD = -3.00;
 
@@ -278,13 +268,12 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully
         // absorbed by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP
         // equity). Only a severe systemic failure pierces the waterfall to hit the CCP's Skin-in-the-Game (SITG)
-        // capital tranche.
-        $corporateDefaultShift = max(0.0, $macroState->corporateDefaultDeviation());
-        $macroMemberStress = $corporateDefaultShift * self::MACRO_DEFAULT_STRESS_SCALAR * 0.05;
+        // capital tranche. The structural margin carries that tranche's average loss (the unit layer's expectation is
+        // the normal lower partial moment), and member stress is read against the default trend both ways.
+        $macroMemberStress = $macroState->corporateDefaultDeviation() * self::MACRO_DEFAULT_STRESS_SCALAR * 0.05;
 
-        $catastropheShock = ($defaultZ < self::CATASTROPHE_Z_THRESHOLD
-            ? abs($defaultZ - self::CATASTROPHE_Z_THRESHOLD) * self::CATASTROPHE_LOSS_SCALAR
-            : ($defaultZ > self::HEALTHY_CREDIT_Z_FLOOR ? self::HEALTHY_CREDIT_BONUS : 0.0)) + $macroMemberStress;
+        $catastropheShock = (self::CATASTROPHE_LOSS_SCALAR * (max(0.0, self::CATASTROPHE_Z_THRESHOLD - $defaultZ)
+            - Distributions::calculateNormalLowerPartialMoment(self::CATASTROPHE_Z_THRESHOLD))) + $macroMemberStress;
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $catastropheShock);
 
@@ -335,17 +324,12 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * Clearing volume against normal. Equity volatility enters as the volume-volatility relation (Karpoff 1987)
-     * linearised at the sim's volatility anchor, both ways; a curve steepening or inverting past its neutral
-     * slope adds swap hedging flow.
+     * linearised at the sim's volatility anchor, both ways. The curve's slope is not rates volatility, which the
+     * macro state does not carry, so it moves no volume.
      */
     private function resolveClearingVolumeShift(\App\DTO\MacroStateDTO $macroState): float
     {
-        $volatilityShift = ($macroState->marketVolatilityEma - MacroConstants::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
-
-        $yieldCurveSlope = abs($macroState->yield10yEma - $macroState->yield2yEma);
-        $ratesVolBonus = $yieldCurveSlope > self::RATES_VOL_NEUTRAL_SLOPE ? ($yieldCurveSlope - self::RATES_VOL_NEUTRAL_SLOPE) * self::RATES_VOL_REVENUE_SCALAR : 0.0;
-
-        return $volatilityShift + $ratesVolBonus;
+        return ($macroState->marketVolatilityEma - MacroConstants::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
     }
 
     /** @return array{clearing_fees: float, custody_float: float, data_licensing: float} */
@@ -516,8 +500,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
             'inflation_ema',
             'market_volatility_ema',
             'policy_rate_ema',
-            'yield_10y_ema',
-            'yield_2y_ema',
         ];
     }
 }

@@ -33,7 +33,7 @@ class SectorDemandFactorTest extends TestCase
         $ctx = new StreamContext([], $math, 0.60, 2.0, 0.40);
         $z = $ctx->generateZ('sales', 0.0);
 
-        // e = rho_s S + rho_f F + sqrt(1 - rho_s^2 - rho_f^2) u = 0.40 * 2.0 + 0.60 * 1.0 + 0
+        // Z = rho_s S + sqrt(1 - rho_s^2) X, X loading on F at rho_f / sqrt(1 - rho_s^2): 0.40 * 2.0 + 0.60 * 1.0 + 0
         $this->assertEqualsWithDelta(1.40, $z, 1e-9);
     }
 
@@ -77,8 +77,9 @@ class SectorDemandFactorTest extends TestCase
             $results[$ticker] = $model->computeActualFinancials($stock, 100_000_000.0, 0.45, 20_000_000.0, 0.10, $macro, $math);
         }
 
-        // OEM orders persist at phi = 0.20, so the innovation is scaled by sqrt(1 - phi^2).
-        $expected = -2.0 * StandardCorporateBusinessModel::SECTOR_FACTOR_LOADING * sqrt(1.0 - 0.04);
+        // The sector level is already persistent, so it enters each stream as a level, unscaled by the stream's own
+        // AR(1).
+        $expected = -2.0 * StandardCorporateBusinessModel::SECTOR_FACTOR_LOADING;
         $this->assertEqualsWithDelta($expected, $results['ALPHA']->streamZ['oem_equipment'], 1e-9);
         $this->assertEqualsWithDelta($expected, $results['BETA']->streamZ['oem_equipment'], 1e-9);
         $this->assertLessThan(100_000_000.0, $results['ALPHA']->actualRevenue);

@@ -14,6 +14,7 @@ use App\Service\Corporate\CorporateMetrics;
 
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\Distributions;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MathUtility;
@@ -208,6 +209,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * modelled average annual loss of $117B against $895B of 2024 US P&C premiums earned (~13%).
      */
     public const DISTRICT_CATASTROPHE_LOAD = 0.13;
+    /** Persisted state key: the district loss burden at the last report, the base its incurred flow is read from. */
+    public const STATE_CATASTROPHE_BURDEN_AT_REPORT = 'state:claims:catastrophe_burden';
+    /** Persisted state key: the clock at the last report, so the flow covers the time since it. */
+    public const STATE_CATASTROPHE_BURDEN_READ_AT = 'state:claims:catastrophe_burden_at';
     /**
      * District loss burden (average-year units, smoothed) at which the market hardens for every carrier, capital shock
      * or not (the 1992, 2005 and 2017 seasons).
@@ -230,10 +235,22 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
     // --- Catastrophe Excess-of-Loss Cover ---
     /**
-     * Excess claims, as a share of the covered book's premium, the carrier retains before its catastrophe cover
-     * attaches (one year in twenty for a primary book).
+     * Excess claims, as a share of the covered book's quarterly premium, the carrier retains before its catastrophe
+     * cover attaches: about 14% of surplus, which the district's lumpy seasons breach one year in five.
      */
     public const MAX_REINSURED_LOSS_SHOCK = 0.375;
+    /**
+     * Cover above the retention, as a share of the covered book's quarterly premium: it exhausts near the
+     * one-in-two-hundred-year quarter of the district's loss process (measured on the engine).
+     */
+    public const CATASTROPHE_COVER_LIMIT = 2.9;
+    /**
+     * What the cover pays on average per quarter, as a share of the covered book's premium, measured on the engine's
+     * catastrophe process and large-loss layer at this retention and limit (2.25%, 96k quarters).
+     */
+    public const CATASTROPHE_COVER_EXPECTED_RECOVERY = 0.0225;
+    /** Reinsurer's rate over the expected recovery (rate on line ~1.5x expected loss on a working cat layer). */
+    public const CATASTROPHE_COVER_RATE_LOADING = 0.50;
     /**
      * Reinstatement premium, as a share of the covered book's premium, paid in the quarter the cover pays out to
      * restore the exhausted limit.
@@ -632,9 +649,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * Industry loss plus basis (Cummins, Lalonde & Phillips 2004): the book's share of the district's
      * catastrophe losses, which every carrier pays together, plus a large-loss layer on the firm's own
      * claim draw. The structural margin is the through-the-cycle margin, catastrophe load included, so both
-     * terms are centred: the district burden averages one, and the layer's expected payout is deducted
-     * (the unit layer's expectation is the normal lower partial moment). Seasonality arrives through the
-     * district calendar alone.
+     * terms are centred: the district's losses incurred since the last report are read against what that window
+     * averages, and the layer's expected payout is deducted (the unit layer's expectation is the normal lower partial
+     * moment). A storm is booked in the quarter it lands, as an incurred loss is; the burden index is the stock of
+     * open claims, which reached the loss ratio over six quarters and more.
      *
      * 'gross' is the uncentred loss the catastrophe cover measures its retention against; 'excess' is what
      * moves the loss ratio.
@@ -648,7 +666,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $layerScale = $bookWeight * $catScalar;
         $largeLoss = $layerScale * max(0.0, $catThreshold - $claimZ);
         $expectedLargeLoss = $layerScale * Distributions::calculateNormalLowerPartialMoment($catThreshold);
-        $districtLoss = $bookWeight * static::DISTRICT_CATASTROPHE_LOAD * ($macroState->catastropheLossIndexEma - 1.0);
+        $districtLoss = $bookWeight * static::DISTRICT_CATASTROPHE_LOAD * $this->resolveDistrictCatastropheSurprise($streams, $macroState);
 
         return [
             'excess' => $largeLoss + $districtLoss - $expectedLargeLoss,
@@ -657,10 +675,41 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         ];
     }
 
-    /** What the catastrophe excess-of-loss cover on a book pays: every claim above the retention. */
+    /**
+     * District catastrophe losses incurred since the last report against what that window averages, as a fraction:
+     * zero in an average window, and nothing on a first report, which has no earlier reading.
+     */
+    private function resolveDistrictCatastropheSurprise(StreamContext $streams, MacroStateDTO $macroState): float
+    {
+        $burden = $macroState->catastropheLossIndex;
+        $readAt = $streams->getPersistedState(self::STATE_CATASTROPHE_BURDEN_READ_AT, -1.0);
+        $streams->registerState(self::STATE_CATASTROPHE_BURDEN_AT_REPORT, $burden);
+        $streams->registerState(self::STATE_CATASTROPHE_BURDEN_READ_AT, $macroState->totalTime);
+
+        $window = $macroState->totalTime - $readAt;
+        if ($readAt < 0.0 || $window <= 0.0) {
+            return 0.0;
+        }
+
+        $expected = CommodityLogisticsSubsystem::expectedCatastropheIncurred($macroState->totalTime, $window);
+        $incurred = CommodityLogisticsSubsystem::catastropheIncurredSince($burden, $streams->getPersistedState(self::STATE_CATASTROPHE_BURDEN_AT_REPORT, $burden), $window);
+
+        return $expected > 0.0 ? ($incurred / $expected) - 1.0 : 0.0;
+    }
+
+    /** What the catastrophe excess-of-loss cover on a book pays: the claims above the retention, up to its limit. */
     protected function resolveCatastropheRecovery(float $grossExcessClaims, float $bookWeight): float
     {
-        return max(0.0, $grossExcessClaims - (self::MAX_REINSURED_LOSS_SHOCK * $bookWeight));
+        return min(self::CATASTROPHE_COVER_LIMIT * $bookWeight, max(0.0, $grossExcessClaims - (self::MAX_REINSURED_LOSS_SHOCK * $bookWeight)));
+    }
+
+    /**
+     * The quarter's premium for the catastrophe cover, as a share of the book's premium: what it pays on average plus
+     * the reinsurer's loading. Unpriced, the cover took a sixth of the catastrophe load off the book for nothing.
+     */
+    protected function resolveCededPremium(float $bookWeight): float
+    {
+        return $bookWeight * self::CATASTROPHE_COVER_EXPECTED_RECOVERY * (1.0 + self::CATASTROPHE_COVER_RATE_LOADING);
     }
 
     /** The claim headline a quarter's losses make, sized against the book's own average catastrophe year. */
@@ -819,10 +868,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $expenseScale = $expectedRevenue > 0.0 ? ($expectedRevenue / max(1.0, $actualRevenue)) : 1.0;
         $realizedExpenseRatio = $baselineExpenseRatio * $expenseScale;
 
-        // B. Loss Ratio: the catastrophe cover takes everything above the retention and charges a reinstatement
-        // premium to restore the limit it used.
+        // B. Loss Ratio: the catastrophe cover takes the claims above the retention up to its limit, for a premium
+        // every quarter and a reinstatement premium to restore the limit it used.
         $recovery = $this->resolveCatastropheRecovery($claims['gross'], 1.0);
-        $reinstatementPremium = $recovery > 0.0 ? self::REINSTATEMENT_PREMIUM_RATE : 0.0;
+        $reinstatementPremium = $this->resolveCededPremium(1.0) + ($recovery > 0.0 ? self::REINSTATEMENT_PREMIUM_RATE : 0.0);
         $realizedLossRatio = max(0.0, ($baselineLossRatio * (1.0 + $this->resolveUnrecoveredClaimsCost($streams, $macroState))) + $claims['excess'] - $recovery);
 
         // A capital shortfall hardens rates through the regime this advances, which reaches revenue and the cost
@@ -1479,6 +1528,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'catastrophe_loss_index',
             'catastrophe_loss_index_ema',
             'core_goods_inflation_ema',
             'gdp_deflator',

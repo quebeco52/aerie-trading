@@ -802,10 +802,7 @@ class EarningsEngine
         $jumpMagnitude = self::compensatedFundamentalJump(exp((float) ($jumpData['exponent'] ?? 0.0)), $jumpIntensity, $jumpMean, $jumpVol, $ctx->dt);
 
         $idiosyncraticDemandShock = $revenueVol * sqrt($ctx->dt) * $z1;
-        $secularGrowthRate = $strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime);
-        $secularDrift = $secularGrowthRate * $ctx->dt;
 
-        $ctx->secularDrift = $secularDrift;
         $ctx->idiosyncraticDemandShock = $idiosyncraticDemandShock;
         $ctx->jumpMagnitude = $jumpMagnitude;
         $ctx->capacityUtilization = $this->capacityUtilizationAt($ctx, $macroDemandShift);
@@ -912,12 +909,13 @@ class EarningsEngine
 
     /**
      * Capacity utilisation the quarter runs at under a given macro demand shift: the seasonal run rate lifted by
-     * trend, demand and the quarter's own shocks, within the plant's physical bounds.
+     * demand and the quarter's own shocks, within the plant's physical bounds. Trend growth is not here: it is a rate,
+     * and it reaches revenue as the plant it builds (resolveExpansionBudget).
      */
     private function capacityUtilizationAt(EarningsSimulationContext $ctx, float $macroDemandShift, bool $withOwnShocks = true): float
     {
         $ownShocks = $withOwnShocks ? $ctx->idiosyncraticDemandShock + $ctx->jumpMagnitude : 0.0;
-        $rawUtilization = $ctx->seasonalFactor * (1.0 + $ctx->secularDrift + $macroDemandShift + $ownShocks);
+        $rawUtilization = $ctx->seasonalFactor * (1.0 + $macroDemandShift + $ownShocks);
 
         return max(self::MIN_CAPACITY_UTILIZATION, min(self::MAX_CAPACITY_UTILIZATION, $rawUtilization));
     }

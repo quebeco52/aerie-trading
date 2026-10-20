@@ -765,8 +765,28 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($captured->quarterlyDepreciation, $captured->ebitda - $captured->ebit, 1.0);
     }
 
+    /**
+     * Trend growth is a rate and reaches revenue through the plant it builds. Utilisation is a level rebuilt every
+     * quarter, so a sector's demand drift must not sit on it: a fast sector runs at the same utilisation in its first
+     * year as after its excess has faded to trend.
+     */
+    public function testUtilisationCarriesNoTrendGrowth(): void
+    {
+        $retail = Sectors::strategyFor('Internet Retail');
+        $this->assertGreaterThan(
+            $retail->getFadedSecularGrowthRate(new Stock(), 100.0) + 0.03,
+            $retail->getFadedSecularGrowthRate(new Stock(), 0.0),
+            'the sector must open well above trend for the test to have power',
+        );
+
+        $opening = $this->reportDepreciation('Internet Retail', 0.0, 0.0);
+        $faded = $this->reportDepreciation('Internet Retail', 0.0, 100.0);
+
+        $this->assertEqualsWithDelta($faded->capacityUtilizationBeforeShocks, $opening->capacityUtilizationBeforeShocks, 1e-9);
+    }
+
     /** One report of a mature firm in the given industry at the given output gap, on a fixed draw. */
-    private function reportDepreciation(string $industry, float $outputGap): EarningsSimulationContext
+    private function reportDepreciation(string $industry, float $outputGap, float $totalTime = 0.0): EarningsSimulationContext
     {
         $captured = null;
         $dispatcher = new EventDispatcher();
@@ -779,7 +799,7 @@ class EarningsEngineTest extends TestCase
         $stock = $this->buildMatureIndustrial('WEAR');
         $stock->setIndustry($industry);
         $stock->setDepreciationRate('0.10');
-        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, outputGapEma: $outputGap), EarningsEngine::resolveReportingTick('WEAR', 252));
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, outputGapEma: $outputGap, totalTime: $totalTime), EarningsEngine::resolveReportingTick('WEAR', 252));
         $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
 
         return $captured;

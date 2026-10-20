@@ -276,4 +276,19 @@ class AssetManagementBusinessModelTest extends TestCase
         // Base fees 0.80 x net flows (-0.03 x 1.20 x 0.40); performance fees carry no macro term.
         $this->assertEqualsWithDelta(0.80 * (-0.03 * 1.20 * 0.40), $model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
+
+    /**
+     * The seed portfolio's equity earns the market cost of equity, which moves with rates: at a fixed 7% it paid the
+     * same in a 0.25% world as in a 7% one.
+     */
+    public function testTheEquitySeedEarnsTheMarketCostOfEquity(): void
+    {
+        $model = new AssetManagementBusinessModel();
+        $low = $model->calculateCashYield(new MacroStateDTO(yield10yEma: 0.01, equityRiskPremium: 0.045));
+        $high = $model->calculateCashYield(new MacroStateDTO(yield10yEma: 0.06, equityRiskPremium: 0.045));
+
+        // A point on the ten-year moves both tranches by a point.
+        $this->assertEqualsWithDelta(0.05, $high - $low, 1e-12);
+        $this->assertEqualsWithDelta((0.60 * 0.01) + (0.40 * 0.055), $low, 1e-12);
+    }
 }

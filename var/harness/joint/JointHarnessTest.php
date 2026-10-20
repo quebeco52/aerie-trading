@@ -5,18 +5,18 @@ declare(strict_types=1);
 use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
-use App\Service\Macro\MacroEngine;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\FailureSweep;
+use App\Service\Macro\MacroEngine;
 use App\Service\Market\Pricing\StockTracker;
-use App\Service\Politics\PoliticsEngine;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
+use App\Service\Politics\PoliticsEngine;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Console\Tester\CommandTester;
-use App\Service\Corporate\EarningsEngine;
 
 /**
  * Whole-board headless replay on the PRODUCTION service graph: real container, in-memory Redis, stub EM,
@@ -36,15 +36,15 @@ class JointHarnessTest extends KernelTestCase
     private array $quarters = [];
     private ?MacroStateDTO $currentMacro = null;
     private float $currentTime = 0.0;
-    private ?\App\Service\Corporate\DebtEngine $debtEngine = null;
+    private ?App\Service\Corporate\DebtEngine $debtEngine = null;
     private ?StockTracker $fvTracker = null;
-    private ?\App\Service\Market\Pricing\MarketEngine $fvEngine = null;
+    private ?App\Service\Market\Pricing\MarketEngine $fvEngine = null;
     /** @var array<string, list<array{t: float, d: string}>> */
     private array $events = [];
 
     protected static function getKernelClass(): string
     {
-        return \HarnessKernel::class;
+        return HarnessKernel::class;
     }
 
     public function testRun(): void
@@ -65,7 +65,7 @@ class JointHarnessTest extends KernelTestCase
         $c->set('doctrine.orm.default_entity_manager', $this->buildEntityManager());
 
         // --- Seed exactly as production does ---
-        $app = new \Symfony\Bundle\FrameworkBundle\Console\Application(static::$kernel);
+        $app = new Symfony\Bundle\FrameworkBundle\Console\Application(static::$kernel);
         ob_start();
         $seedTester = new CommandTester($app->find('app:market-seed'));
         $seedStatus = $seedTester->execute([]);
@@ -76,7 +76,7 @@ class JointHarnessTest extends KernelTestCase
         $id = 1;
         foreach ($this->persisted as $e) {
             if ($e instanceof Stock) {
-                (new \ReflectionProperty(Stock::class, 'id'))->setValue($e, $id++);
+                (new ReflectionProperty(Stock::class, 'id'))->setValue($e, $id++);
                 $stocks[$e->getTicker()] = $e;
             }
         }
@@ -97,10 +97,10 @@ class JointHarnessTest extends KernelTestCase
         }
 
         $macro = $c->get(MacroEngine::class);
-        $this->debtEngine = $c->get(\App\Service\Corporate\DebtEngine::class);
+        $this->debtEngine = $c->get(App\Service\Corporate\DebtEngine::class);
         $tracker = $c->get(StockTracker::class);
         $this->fvTracker = $tracker;
-        $this->fvEngine = $c->get(\App\Service\Market\Pricing\MarketEngine::class);
+        $this->fvEngine = $c->get(App\Service\Market\Pricing\MarketEngine::class);
         $sweep = $c->get(FailureSweep::class);
         // The Diet, as the ticker runs it: it reads this tick's economy and the economy reads its laws next tick.
         $politicsEngine = getenv('POLITICS') && $replayPath === null ? $c->get(PoliticsEngine::class) : null;
@@ -113,7 +113,7 @@ class JointHarnessTest extends KernelTestCase
         $operatorInterval = getenv('SIMCMD') ? 100 : (int) max(1, $tpy / 24);
         $replay = $replayPath !== null ? unserialize((string) gzuncompress((string) file_get_contents($replayPath))) : null;
         $recorded = [];
-        $reading = new \App\DTO\BoardReadingDTO();
+        $reading = new App\DTO\BoardReadingDTO();
         $dead = [];
         $reorgs = [];
         $defaults = [];
@@ -124,9 +124,9 @@ class JointHarnessTest extends KernelTestCase
         $targetProbe = [];
         $probeTicks = [1 => 'tick1', (int) round($tpy / 52) => '1w', (int) round($tpy / 12) => '1m', (int) round($tpy / 4) => '3m', (int) round($tpy / 2) => '6m', $tpy => '12m'];
         if (getenv('TARGET_OUT')) {
-            $snapshots = $c->get(\App\Service\View\CompanySnapshotBuilder::class);
+            $snapshots = $c->get(App\Service\View\CompanySnapshotBuilder::class);
             foreach ($stocks as $t => $s) {
-                $page = (new \ReflectionMethod($snapshots, 'analystTargets'))->invoke($snapshots, $s, new MacroStateDTO());
+                $page = (new ReflectionMethod($snapshots, 'analystTargets'))->invoke($snapshots, $s, new MacroStateDTO());
                 $targetProbe[$t]['page0'] = ['px' => (float) $s->getPrice(), 'consensus' => (float) ($page['consensus'] ?? 0.0), 'upside' => (float) ($page['upside_pct'] ?? 0.0), 'published' => $s->getAnalystPriceTarget()];
             }
         }
@@ -165,7 +165,7 @@ class JointHarnessTest extends KernelTestCase
             if ($tick === 1 && getenv('OPENING_OUT')) {
                 $opening = [];
                 foreach ($stocks as $t => $s) {
-                    $opening[$t] = ['eps0' => (float) $s->getEarningsPerShare(), 'fv0x' => getenv('FVX') ? $this->fvRow($s) : [], 'px0' => (float) $s->getPrice(), 'sh0' => (float) $s->getSharesOutstanding(), 'industry' => $s->getIndustry(), 'fin' => \App\Data\Company\Sectors::strategyFor($s->getIndustry())->isFinancial()];
+                    $opening[$t] = ['eps0' => (float) $s->getEarningsPerShare(), 'fv0x' => getenv('FVX') ? $this->fvRow($s) : [], 'px0' => (float) $s->getPrice(), 'sh0' => (float) $s->getSharesOutstanding(), 'industry' => $s->getIndustry(), 'fin' => App\Data\Company\Sectors::strategyFor($s->getIndustry())->isFinancial()];
                 }
             }
             $result = $tracker->updateStocks($list, $dt, false, $m, $tick, $tpy);
@@ -181,10 +181,10 @@ class JointHarnessTest extends KernelTestCase
             // TICK_CSV: price and shares of every name each tick (header row first); bad macro fields and prices to ANOM_OUT.
             if (getenv('TICK_CSV')) {
                 if ($tick === 1) {
-                    file_put_contents((string) getenv('TICK_CSV'), 'tick,' . implode(',', array_map(fn ($s) => $s->getTicker() . '_p,' . $s->getTicker() . '_n', $list)) . "\n");
+                    file_put_contents((string) getenv('TICK_CSV'), 'tick,' . implode(',', array_map(fn($s) => $s->getTicker() . '_p,' . $s->getTicker() . '_n', $list)) . "\n");
                 }
-                file_put_contents((string) getenv('TICK_CSV'), $tick . ',' . implode(',', array_map(fn ($s) => sprintf('%.6g,%.6g', (float) $s->getPrice(), (float) $s->getSharesOutstanding()), $list)) . "\n", FILE_APPEND);
-                foreach ((fn (): array => get_object_vars($this))->call($m) as $k => $v) {
+                file_put_contents((string) getenv('TICK_CSV'), $tick . ',' . implode(',', array_map(fn($s) => sprintf('%.6g,%.6g', (float) $s->getPrice(), (float) $s->getSharesOutstanding()), $list)) . "\n", FILE_APPEND);
+                foreach ((fn(): array => get_object_vars($this))->call($m) as $k => $v) {
                     if (is_float($v) && !is_finite($v) && !isset($this->anomSeen[$k])) {
                         $this->anomSeen[$k] = true;
                         file_put_contents((string) getenv('ANOM_OUT'), json_encode(['t' => $tick / $tpy, 'macro' => $k, 'v' => (string) $v]) . "\n", FILE_APPEND);
@@ -237,7 +237,7 @@ class JointHarnessTest extends KernelTestCase
                     'net_debt' => $m->sovereignNetDebtToGdp,
                     'crisis_at' => $m->lastCreditCrisisAt,
                     'spread' => $m->sovereignRiskSpread, 'tax_rate' => $m->corporateTaxRate,
-                    'y10' => $m->yield10y ?? null, 'hh' => $m->householdDebtToIncome ?? null, 'gq' => $m->realGdpQuarterlyGrowth ?? null,
+                    'y10' => $m->yield10y ?? null, 'hh' => $m->householdDebtToIncome ?? null, 'gq' => $m->realGdpQuarterlyGrowth ?? null, 'scp' => $m->supplyChainPressureIndexEma, 'vol_ema' => $m->marketVolatilityEma,
                 ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])
                     + (getenv('FISCAL') ? ['primary' => $m->primaryDeficitToGdp, 'net_tax' => $m->netTaxRate, 'spend_idx' => $m->governmentSpendingIndex] : [])
                     + (getenv('CREDIT') ? [
@@ -286,10 +286,10 @@ class JointHarnessTest extends KernelTestCase
 
         // RESET_PROBE: reopen the traded board exactly as app:market-reset does, one row at a time in seed order.
         if (getenv('RESET_PROBE')) {
-            $builder = $c->get(\App\Service\Market\Pricing\OpeningBoardBuilder::class);
+            $builder = $c->get(App\Service\Market\Pricing\OpeningBoardBuilder::class);
             $openingMacro = new MacroStateDTO();
             $spheres = [];
-            foreach (\App\Data\Company\InitialMarket::STOCKS as $row) {
+            foreach (App\Data\Company\InitialMarket::STOCKS as $row) {
                 $s = $stocks[$row['ticker']];
                 $s->resetToUnseeded();
                 $sphere = $builder->open($s, $row, $openingMacro);
@@ -325,14 +325,14 @@ class JointHarnessTest extends KernelTestCase
      *
      * @return array<string, mixed>
      */
-    private function traceFv(\App\Entity\Stock $stock): array
+    private function traceFv(Stock $stock): array
     {
         if ($this->debtEngine === null || $this->currentMacro === null || $this->fvEngine === null || $this->fvTracker === null) {
             return [];
         }
         $m = $this->currentMacro;
-        $ledger = (new \ReflectionProperty(StockTracker::class, 'anchorStakes'))->getValue($this->fvTracker);
-        $ctx = \App\DTO\MarketPricingContext::forStock($stock, $m, $this->debtEngine->analyzeDebtHealth($stock, $m), $ledger);
+        $ledger = (new ReflectionProperty(StockTracker::class, 'anchorStakes'))->getValue($this->fvTracker);
+        $ctx = App\DTO\MarketPricingContext::forStock($stock, $m, $this->debtEngine->analyzeDebtHealth($stock, $m), $ledger);
         $row = [];
         foreach (get_object_vars($ctx) as $k => $v) {
             if (is_float($v) || is_int($v)) {
@@ -341,7 +341,7 @@ class JointHarnessTest extends KernelTestCase
                 $row['c_' . $k] = $v;
             }
         }
-        $fs = (new \ReflectionMethod($this->fvEngine, 'fundamentalStateFor'))->invoke($this->fvEngine, $ctx);
+        $fs = (new ReflectionMethod($this->fvEngine, 'fundamentalStateFor'))->invoke($this->fvEngine, $ctx);
         $row['f_fv'] = $fs['perceived_fair_value'];
         $row['f_policy'] = $fs['policy_repricing'] ?? null;
         $row['f_targets'] = $fs['analyst_targets'];
@@ -352,10 +352,10 @@ class JointHarnessTest extends KernelTestCase
     /** A recording predating the output gap's published lags gets them filtered off its own gap path, as the macro would. */
     private function withDemandLags(MacroStateDTO $recorded, float $dt): MacroStateDTO
     {
-        $vars = (fn (): array => get_object_vars($this))->call($recorded);
-        $math = new \App\Service\Math\MathUtility();
-        foreach (\App\Service\Macro\Subsystem\MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
-            $this->replayLags[$field] = TimeSeries::calculateDistributedLag($this->replayLags[$field] ?? \App\Data\Macro\MacroFieldRegistry::defaults()[$field], $vars['outputGapEma'], $dt, $lagYears);
+        $vars = (fn(): array => get_object_vars($this))->call($recorded);
+        $math = new App\Service\Math\MathUtility();
+        foreach (App\Service\Macro\Subsystem\MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
+            $this->replayLags[$field] = TimeSeries::calculateDistributedLag($this->replayLags[$field] ?? App\Data\Macro\MacroFieldRegistry::defaults()[$field], $vars['outputGapEma'], $dt, $lagYears);
         }
 
         return new MacroStateDTO(...array_merge($vars, $this->replayLags));
@@ -365,7 +365,7 @@ class JointHarnessTest extends KernelTestCase
      * BOARD_NI=1: the board's trailing net income (sum of Stock::totalNetIncome, the TTM figure EarningsEngine sets)
      * over firms not bankrupt, and how many firms it covers.
      *
-     * @param list<\App\Entity\Stock> $list
+     * @param list<Stock> $list
      * @return array{board_tni: float, board_n: int}
      */
     private function boardNetIncome(array $list): array
@@ -455,17 +455,17 @@ class JointHarnessTest extends KernelTestCase
      *
      * @return array<string, float>
      */
-    private function fvRow(\App\Entity\Stock $stock): array
+    private function fvRow(Stock $stock): array
     {
         if (!getenv('FVX') || $this->debtEngine === null || $this->currentMacro === null || $this->fvEngine === null || $this->fvTracker === null) {
             return [];
         }
         $m = $this->currentMacro;
-        $math = new \App\Service\Math\MathUtility();
+        $math = new App\Service\Math\MathUtility();
         $h = $this->debtEngine->analyzeTrailingDebtHealth($stock, $m);
-        $ledger = (new \ReflectionProperty(StockTracker::class, 'anchorStakes'))->getValue($this->fvTracker);
-        $ctx = \App\DTO\MarketPricingContext::forStock($stock, $m, $h, $ledger, 0.0, 0.0);
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
+        $ledger = (new ReflectionProperty(StockTracker::class, 'anchorStakes'))->getValue($this->fvTracker);
+        $ctx = App\DTO\MarketPricingContext::forStock($stock, $m, $h, $ledger, 0.0, 0.0);
+        $strategy = App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
         $rf = $m->policyRate ?? 0.04;
         $gap = $m->outputGap ?? 0.0;
         $infl = $m->inflation ?? 0.02;
@@ -479,11 +479,36 @@ class JointHarnessTest extends KernelTestCase
         $structEps = $strategy->calculateStructuralEps($ctx->bookValuePerShare, $sroic, $ctx->revenuePerShare, $rf, $ctx->investedCapitalPerShare > 0.0 ? $ctx->investedCapitalPerShare : null);
         $stress = max(0.0, -$gap) + abs($infl - 0.02);
         $normEps = $math->calculateKalmanSmoothedEps(max(0.01, $structEps), $ctx->earningsPerShare, $ctx->currentVolatility, $stress);
-        $fs = (new \ReflectionMethod($this->fvEngine, 'evaluateFundamentalState'))->invoke($this->fvEngine,
-            $ctx->currentPrice, $gap, $infl, $ctx->beta, $ctx->liveWacc, $ctx->reversionSpeed, $ctx->earningsPerShare, $ctx->currentRoic, $ctx->roicTtm,
-            $rf, $ctx->bookValuePerShare, $ctx->dividendPerShare, $ctx->baselineIndustryPE, $ctx->revenuePerShare, $ctx->businessModel,
-            $ctx->liveCostOfEquity, $ctx->currentVolatility, $ctx->netDebtPerShare, $ctx->secularGrowth, $ctx->baselineRoic, $ctx->baselineMargin,
-            $ctx->accrualsRatio, $ctx->investedCapitalPerShare, $m, $ctx->tangibleBookValuePerShare, $ctx->targetPayoutRatio, $ctx->dividendAdjustmentSpeed);
+        $fs = (new ReflectionMethod($this->fvEngine, 'evaluateFundamentalState'))->invoke(
+            $this->fvEngine,
+            $ctx->currentPrice,
+            $gap,
+            $infl,
+            $ctx->beta,
+            $ctx->liveWacc,
+            $ctx->reversionSpeed,
+            $ctx->earningsPerShare,
+            $ctx->currentRoic,
+            $ctx->roicTtm,
+            $rf,
+            $ctx->bookValuePerShare,
+            $ctx->dividendPerShare,
+            $ctx->baselineIndustryPE,
+            $ctx->revenuePerShare,
+            $ctx->businessModel,
+            $ctx->liveCostOfEquity,
+            $ctx->currentVolatility,
+            $ctx->netDebtPerShare,
+            $ctx->secularGrowth,
+            $ctx->baselineRoic,
+            $ctx->baselineMargin,
+            $ctx->accrualsRatio,
+            $ctx->investedCapitalPerShare,
+            $m,
+            $ctx->tangibleBookValuePerShare,
+            $ctx->targetPayoutRatio,
+            $ctx->dividendAdjustmentSpeed,
+        );
 
         return ['x_rf' => $rf, 'x_erp' => (float) ($m->equityRiskPremium ?? 0.0), 'x_gap' => $gap, 'x_infl' => $infl, 'x_beta' => $ctx->beta,
             'x_wacc' => $ctx->liveWacc, 'x_coe' => $ctx->liveCostOfEquity, 'x_hurdle' => $hurdle, 'x_roicTtm' => $ctx->roicTtm, 'x_roicBase' => $ctx->baselineRoic,
@@ -496,7 +521,7 @@ class JointHarnessTest extends KernelTestCase
     }
 
     /** @return array<string, float|bool> */
-    private function healthRow(\App\Entity\Stock $stock): array
+    private function healthRow(Stock $stock): array
     {
         if ($this->debtEngine === null || $this->currentMacro === null || !getenv('HEALTH')) {
             return [];
@@ -515,7 +540,7 @@ class JointHarnessTest extends KernelTestCase
                 $this->captureReport($e);
                 return;
             }
-            if ($e instanceof \App\Entity\StockEvent && !$this->capturing) {
+            if ($e instanceof App\Entity\StockEvent && !$this->capturing) {
                 // Every event's tick, so a price jump can be told from a reported one.
                 $this->eventTicks[$e->getStock()->getTicker()][] = (int) round($this->currentTime * $this->tpyRun);
                 // Treasury distress lines ride inside the earnings description as bullets: keep only those.
@@ -536,7 +561,7 @@ class JointHarnessTest extends KernelTestCase
         $em->method('getRepository')->willReturnCallback(function (string $class) use (&$repositories) {
             if (!isset($repositories[$class])) {
                 $repositoryClass = EntityRepository::class;
-                foreach ((new \ReflectionClass($class))->getAttributes(\Doctrine\ORM\Mapping\Entity::class) as $attribute) {
+                foreach ((new ReflectionClass($class))->getAttributes(Doctrine\ORM\Mapping\Entity::class) as $attribute) {
                     $repositoryClass = $attribute->newInstance()->repositoryClass ?? EntityRepository::class;
                 }
                 $repositories[$class] = $this->createStub($repositoryClass);

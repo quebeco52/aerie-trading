@@ -152,7 +152,10 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
      * marketVolatilityEma lives.
      */
     public const VIX_ARBITRAGE_FLOOR        = MacroConstants::MACRO_VOL_BASE_ANCHOR;
-    /** S&T desk gross trading revenue capture scalar per point of excess VIX. */
+    /**
+     * S&T desk gross trading revenue per point of volatility against the anchor, both ways: client flow thins in a
+     * calm market as fast as it builds in a volatile one.
+     */
     public const VIX_ARBITRAGE_SCALAR       = 1.20;
     /** Maximum regulatory VIX threshold before FRTB VaR capital limits force aggressive balance sheet deleveraging. */
     public const BASEL_VAR_VOL_TARGET       = 0.30;
@@ -160,7 +163,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const TRADING_INVENTORY_MARKDOWN_SCALAR = 0.20;
 
     // --- Options Desk Vega & Gamma Friction ---
-    /** Top-line Vega premium capture scalar during elevated volatility. */
+    /** Top-line vega premium per point of implied volatility against the anchor, both ways. */
     public const OPTIONS_VEGA_SCALAR        = 1.50;
     /** Variable margin friction ratio per unit of excess VIX incurred from dynamic gamma delta-hedging. */
     public const OPTIONS_GAMMA_FRICTION     = 0.60;
@@ -564,9 +567,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         $varDeleverageFactor = $this->resolveVarDeleverageFactor($vixEma);
 
-        $volatilityArbitrage = $vixGap >= 0.0
-            ? ($vixGap * $vixScalar) * $varDeleverageFactor
-            : max(-0.15, $vixGap * ($vixScalar * 0.50));
+        // VaR limits cap the desk's positions above the volatility target; below it the factor is one.
+        $volatilityArbitrage = $vixGap * $vixScalar * $varDeleverageFactor;
 
         return ($volatilityArbitrage * (1.0 - $ficcShare) / (1.0 - self::FICC_TRADING_SHARE))
             + ($ficcShare * $this->resolveFiccDeskShift($macroState));
@@ -593,10 +595,10 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         return $vixEma > self::BASEL_VAR_VOL_TARGET ? self::BASEL_VAR_VOL_TARGET / $vixEma : 1.0;
     }
 
-    /** Top-line vega: implied volatility over the floor prices the premium the desk writes. */
+    /** Top-line vega: implied volatility against the anchor prices the premium the desk writes. */
     private function resolveOptionsVegaBonus(float $vixGap): float
     {
-        return $vixGap > 0.0 ? ($vixGap * self::OPTIONS_VEGA_SCALAR) : ($vixGap * 0.50);
+        return $vixGap * self::OPTIONS_VEGA_SCALAR;
     }
 
     /**

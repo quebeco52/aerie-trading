@@ -11,6 +11,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\AdvertisingAgencyBusinessModel;
 use App\Service\Model\Sector\InternetRetailBusinessModel;
+use App\Service\Model\Sector\LuxuryBusinessModel;
 use App\Service\Model\Sector\RestaurantBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -59,6 +60,26 @@ class SentimentResidualTest extends TestCase
         $shift = $model->getMacroPhysics(self::stock($ticker), self::onTheFit(self::GAP))['macro_demand_shift'];
 
         $this->assertEqualsWithDelta($parentShift, $shift, 1e-9);
+    }
+
+    /** Luxury prices the gap beside confidence, so on the fit the client book moves on its gap weight alone. */
+    public function testLuxuryReadsConfidenceAsItsMoodBesideTheGap(): void
+    {
+        $model = new LuxuryBusinessModel();
+        $shift = $model->getMacroPhysics(self::stock('PEAC'), self::onTheFit(self::GAP))['macro_demand_shift'];
+        $beta = $model->getOperatingCyclicality(self::stock('PEAC'));
+
+        $this->assertEqualsWithDelta(self::GAP * LuxuryBusinessModel::OUTPUT_GAP_DEMAND_WEIGHT * $beta * LuxuryBusinessModel::MACRO_DEMAND_SCALAR, $shift, 1e-9);
+    }
+
+    /** Ten points of mood move dining covers by its sensitivity, not one for one as if the mood were the output gap. */
+    public function testDiningMovesOnTheMoodAtItsSensitivity(): void
+    {
+        $model = new RestaurantBusinessModel();
+        $calm = $model->getMacroPhysics(self::stock('BREW'), new MacroStateDTO(exchangeRateIndexEma: 100.0))['macro_demand_shift'];
+        $buoyant = $model->getMacroPhysics(self::stock('BREW'), new MacroStateDTO(exchangeRateIndexEma: 100.0, consumerSentimentMood: 10.0))['macro_demand_shift'];
+
+        $this->assertEqualsWithDelta(0.10 * RestaurantBusinessModel::DINING_MOOD_SENSITIVITY * $model->getOperatingCyclicality(self::stock('BREW')), $buoyant - $calm, 1e-9);
     }
 
     public function testFirstPartyRetailMovesOnItsOwnGapCoefficient(): void

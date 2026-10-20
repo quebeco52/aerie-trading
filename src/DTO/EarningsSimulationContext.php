@@ -185,8 +185,6 @@ class EarningsSimulationContext
      * trend demand.
      */
     public float $industryPriceLevel = 1.0;
-    /** Trend growth in utilisation over the quarter: the secular growth rate times the step. */
-    public float $secularDrift = 0.0;
     /** The quarter's idiosyncratic demand shock to utilisation. */
     public float $idiosyncraticDemandShock = 0.0;
     /** The quarter's fundamental jump in utilisation. */

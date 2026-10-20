@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LogisticsBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class LogisticsBusinessModelTest extends TestCase
 {
     private LogisticsBusinessModel $model;
@@ -118,5 +120,56 @@ class LogisticsBusinessModelTest extends TestCase
 
         // Energy spike increases variable cost ratio (clampedMargin)
         $this->assertGreaterThan($baseResult->clampedMargin, $spikeResult->clampedMargin);
+    }
+
+    /**
+     * Surge pricing is the tail of the spot book's own shock, which already carries its revenue: the quarter that
+     * reports it books no multiplier on top, so spot revenue stays linear in the draw across the threshold.
+     */
+    public function testSurgePricingIsTheTailOfTheSpotShockNotAMultiplierOnIt(): void
+    {
+        $spot = function (float $z): \App\DTO\ActualFinancialsDTO {
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
+            $math->method('generateStandardNormal')->willReturn(0.0);
+            $stock = (new Stock())->setTicker('FDX')->setBeta('1.2');
+            $stock->setEarningsMomentumZ(['spot_freight_brokerage' => $z / 0.15]);
+
+            return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, new MacroStateDTO(), $math);
+        };
+
+        $below = $spot(1.5);
+        $above = $spot(2.0);
+        $further = $spot(2.5);
+
+        $this->assertNull($below->eventType);
+        $this->assertSame(\App\Service\Event\ShockEvent::LOGISTICS_SURGE_PRICING, $above->eventType);
+        $this->assertEqualsWithDelta(
+            $further->streamRevenue['spot_freight_brokerage'] - $above->streamRevenue['spot_freight_brokerage'],
+            $above->streamRevenue['spot_freight_brokerage'] - $below->streamRevenue['spot_freight_brokerage'],
+            1e-3,
+        );
+    }
+
+    /** Slow deliveries send shippers to the spot market and fast ones bring them back, by the same amount. */
+    public function testSupplierDeliveryTimesMoveSpotDemandBothWays(): void
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generatePersistentZ')->willReturn(0.0);
+        $run = fn(float $deliveries): float => $this->model->computeActualFinancials(
+            (new Stock())->setTicker('FDX')->setBeta('1.2'),
+            100_000_000.0,
+            0.40,
+            20_000_000.0,
+            0.0,
+            new MacroStateDTO(supplierDeliveryTimesEma: $deliveries),
+            $math,
+        )->streamRevenue['spot_freight_brokerage'];
+
+        $neutral = $run(\App\Service\Math\MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL);
+        $slow = $run(\App\Service\Math\MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL + 6.2);
+        $fast = $run(\App\Service\Math\MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL - 6.2);
+
+        $this->assertGreaterThan($neutral, $slow);
+        $this->assertEqualsWithDelta($slow - $neutral, $neutral - $fast, 1e-3);
     }
 }

@@ -349,6 +349,11 @@ final class MacroConstants
      * slower).
      */
     public const SUPPLIER_DELIVERIES_NEUTRAL = 50.0;
+    /**
+     * Standard deviation of delivery times about neutral, measured on the engine (6.2 points): the supply-chain index
+     * standardises by it, and so does a firm that reads delivery times beside freight.
+     */
+    public const SUPPLY_CHAIN_DELIVERY_SD = 6.2;
 
     // --- 3:2:1 Refining Crack Spread & Distillate Margins (Bourgeon et al. 1998) ---
     /** Baseline long-run equilibrium refining crack spread in $/bbl. */

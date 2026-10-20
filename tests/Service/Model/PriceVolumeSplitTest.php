@@ -60,7 +60,7 @@ class PriceVolumeSplitTest extends TestCase
         $this->assertEqualsWithDelta(50.0, $result->priceRevenue, 1e-9);
     }
 
-    public function testReitRentEscalatorCarriesNoOperatingCost(): void
+    public function testAFullerRentRollCarriesNoOperatingCost(): void
     {
         $model = new ReitBusinessModel();
         $stock = new Stock();
@@ -70,14 +70,13 @@ class PriceVolumeSplitTest extends TestCase
         $math = $this->createStub(MathUtility::class);
         $math->method('generatePersistentZ')->willReturn(0.0);
 
-        // 4% CPI: the 2% excess is captured at 80% by escalators on the 85% lease stream.
-        $macro = new MacroStateDTO(inflationEma: 0.04);
-        $result = $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, $macro, $math);
+        $result = $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, new MacroStateDTO(), $math);
 
-        // The quiet tenant draw leaves the roll fuller than average, which is price on the same space too.
-        $escalatorRevenue = 100_000_000.0 * 0.85 * ((0.02 * ReitBusinessModel::RENT_ESCALATOR_CAPTURE) + ReitBusinessModel::expectedTenantVacancy());
-        $this->assertEqualsWithDelta($escalatorRevenue, $result->priceRevenue, 1.0);
-        $this->assertEqualsWithDelta(($result->actualRevenue - $escalatorRevenue) * $result->clampedMargin, $result->actualVariableCosts, 1.0);
+        // The quiet tenant draw leaves the 85% lease roll fuller than average: rent on space already built, no cost.
+        $fullerRoll = 100_000_000.0 * 0.85 * ReitBusinessModel::expectedTenantVacancy();
+        $this->assertGreaterThan(0.0, $fullerRoll);
+        $this->assertEqualsWithDelta($fullerRoll, $result->priceRevenue, 1.0);
+        $this->assertEqualsWithDelta(($result->actualRevenue - $fullerRoll) * $result->clampedMargin, $result->actualVariableCosts, 1.0);
     }
 
     public function testStandardCorporateReportsInputCostLevelAtUnitElasticity(): void

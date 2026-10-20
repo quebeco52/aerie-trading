@@ -191,10 +191,10 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const MEGA_HOARDER_THRESHOLD   = 0.50;
 
     // --- Treasury Yield & 60/40 Portfolio ---
-    /** Baseline structural equity market return in neutral macroeconomic conditions. */
-    public const BASE_EQUITY_RETURN       = 0.07;
     /** Output gap multiplier scaling equity market returns during booms and busts. */
     public const EQUITY_RETURN_GAP_MULT   = 2.00;
+    /** A hedge fund's or sponsor's equity sleeve swings with the cycle half again as hard as a manager's own seed. */
+    public const LEVERAGED_SLEEVE_GAP_SCALE = 1.5;
     /** Weight allocated to fixed-income bonds in standard asset manager treasury portfolios. */
     public const TREASURY_BOND_WEIGHT     = 0.60;
     /** Weight allocated to equities in standard asset manager treasury portfolios. */
@@ -495,16 +495,21 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 
     public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
     {
-        $policyRate = $macroState->policyRateEma;
-        $yield10y = $macroState->yield10yEma;
-        $outputGap = $macroState->outputGapEma;
-
-        $bondReturn = $yield10y;
-        $equityReturn = self::BASE_EQUITY_RETURN + ($outputGap * self::EQUITY_RETURN_GAP_MULT);
+        $bondReturn = $macroState->yield10yEma;
+        $equityReturn = $this->resolveEquitySleeveReturn($macroState, self::EQUITY_RETURN_GAP_MULT);
 
         // Asset Managers invest heavily in their own funds ("eating their own cooking").
         // We use a classic 60/40 portfolio (60% Bonds / 40% Equities) which gives them higher market correlation.
         return max(0.0, (self::TREASURY_BOND_WEIGHT * $bondReturn) + (self::TREASURY_EQUITY_WEIGHT * $equityReturn));
+    }
+
+    /**
+     * The equity tranche's expected return: the market cost of equity (the ten-year plus the equity risk premium),
+     * so it moves with rates as every other return in the book does, plus the cycle term.
+     */
+    protected function resolveEquitySleeveReturn(\App\DTO\MacroStateDTO $macroState, float $gapMultiplier): float
+    {
+        return $macroState->marketCostOfEquity() + ($macroState->outputGapEma * $gapMultiplier);
     }
 
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO

@@ -106,10 +106,11 @@ class ReinsuranceBusinessModelTest extends TestCase
         $regimeKey = \App\Service\Model\StreamContext::REGIME_STATE_PREFIX . ReinsuranceBusinessModel::REGIME_HARD_MARKET;
         $this->assertSame(1.0, $result->streamZ[$regimeKey] ?? 0.0, 'The shortfall must start the regime that carries the rate.');
 
-        // A quiet quarter: only the unused large-loss layer allowance is credited back.
+        // A quiet quarter: only the unused large-loss layer allowance is credited back, and the collateral's share of
+        // the layer is paid for.
         $expectedLayer = ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR
             * Distributions::calculateNormalLowerPartialMoment(ReinsuranceBusinessModel::CATASTROPHE_Z_THRESHOLD);
-        $this->assertEqualsWithDelta($realizedVariableMargin - $expectedLayer, $result->clampedMargin, 1e-9);
+        $this->assertEqualsWithDelta($realizedVariableMargin - $expectedLayer + self::shieldPremium(), $result->clampedMargin, 1e-9);
     }
 
     public function testCatBondAttachmentBreachAbsorbsUncappedTailRisk(): void
@@ -124,13 +125,14 @@ class ReinsuranceBusinessModelTest extends TestCase
         $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -3.0);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
 
+        // Six times the quarter's average district losses.
         $burden = 6.0;
-        $macro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            yield10yEma: 0.04,
-            policyRateEma: 0.02,
-            catastropheLossIndexEma: $burden,
-        );
+        $macro = new MacroStateDTO(...[
+            'outputGapEma' => 0.0,
+            'yield10yEma' => 0.04,
+            'policyRateEma' => 0.02,
+            ...DistrictCatastropheWindow::prime($stock, $burden),
+        ]);
 
         $expectedRevenue = 10_000_000_000.0;
         $realizedVariableMargin = 0.60;
@@ -161,7 +163,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $gross = $layer + $district;
         $shield = ($gross - (ReinsuranceBusinessModel::MAX_REINSURED_LOSS_SHOCK * $treaty)) * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE;
         $this->assertGreaterThan(0.0, $shield, 'The scenario must breach the retention.');
-        $this->assertEqualsWithDelta($realizedVariableMargin + $gross - $expectedLayer - $shield, $result->clampedMargin, 1e-9);
+        $this->assertEqualsWithDelta($realizedVariableMargin + $gross - $expectedLayer - $shield + self::shieldPremium(), $result->clampedMargin, 1e-9);
     }
 
     /**
@@ -254,5 +256,12 @@ class ReinsuranceBusinessModelTest extends TestCase
 
         $regCap = $this->model->getRegulatoryDividendCap($stock, 46000000000000.0);
         $this->assertSame(0.0, $regCap, 'Regulatory dividend cap must be 0.0 when capital ratio is in regulatory distress.');
+    }
+
+    /** The collateral's share of the cover, bought at the cover's price on the treaty book. */
+    private static function shieldPremium(): float
+    {
+        return ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE
+            * ReinsuranceBusinessModel::CATASTROPHE_COVER_EXPECTED_RECOVERY * (1.0 + ReinsuranceBusinessModel::CATASTROPHE_COVER_RATE_LOADING);
     }
 }

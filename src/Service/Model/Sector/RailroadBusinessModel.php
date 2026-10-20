@@ -102,6 +102,12 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
      */
     public const TRANSIT_EMPLOYMENT_ELASTICITY = 0.25;
 
+    // --- Freight Volume Cycle ---
+    /** Intermodal volume per unit of output gap at unit cyclicality: boxes carry consumer goods and imports (1.6). */
+    public const INTERMODAL_CYCLE_ELASTICITY = 1.60;
+    /** Industrial carloads per unit of output gap at unit cyclicality, beside the PMI's lead (1.2). */
+    public const CARLOAD_CYCLE_ELASTICITY = 1.20;
+
     // --- Manufacturing PMI & Trade Transmission ---
     /** Sensitivity of industrial carload volumes to manufacturing PMI shifts. */
     public const PMI_CARLOAD_SENSITIVITY = 0.50;
@@ -225,10 +231,14 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
-        $observableShockZ = ($intermodalZ * $intermodalWeight * self::INTERMODAL_VARIANCE_SCALAR)
-            + ($bulkZ * $bulkWeight * self::BULK_VARIANCE_SCALAR)
-            + ($intermodalMacroShift * $intermodalWeight);
-        $observableShockZ *= $baselineVol;
+        // The streams' own shocks scale with the firm's volatility; the macro shifts are already fractions of revenue,
+        // and every one of them is public.
+        $observableShockZ = ((($intermodalZ * $intermodalWeight * self::INTERMODAL_VARIANCE_SCALAR)
+            + ($bulkZ * $bulkWeight * self::BULK_VARIANCE_SCALAR)) * $baselineVol)
+            + ($intermodalMacroShift * $intermodalWeight)
+            + ($industrialMacroShift * $industrialWeight)
+            + ($bulkMacroShift * $bulkWeight)
+            + (($macroShifts['transit_subscriptions'] ?? 0.0) * $transitWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -286,23 +296,22 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Each stream's macro volume shift: intermodal on the cycle, freight rates and trade; industrial carloads
-     * on the cycle and manufacturing PMI; bulk on the farm-price harvest proxy; commuter ridership on employment.
+     * Each stream's macro volume shift: intermodal on the cycle and trade; industrial carloads on the cycle and
+     * manufacturing PMI; commuter ridership on employment. Bulk harvest and power-burn tonnage does not follow the
+     * cycle, and no price is read as a volume: dearer ocean charters or grain move no carloads.
      *
      * @return array{intermodal_freight: float, bulk_commodities: float, industrial_carloads: float, transit_subscriptions: float}
      */
     private function resolveStreamMacroShifts(Stock $stock, MacroStateDTO $macroState): array
     {
         $beta = $this->getOperatingCyclicality($stock);
-        $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
-        $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
         $tradeShift = MacroTransmission::calculateForeignDemandShift($macroState->foreignOutputGapEma, sensitivity: self::FOREIGN_DEMAND_SENSITIVITY);
         $pmiShift = MacroTransmission::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_CARLOAD_SENSITIVITY);
 
         return [
-            'intermodal_freight'    => ($macroState->outputGapEma * 1.6 * $beta) + ($freightShift * 0.20) + $tradeShift,
-            'bulk_commodities'      => $agriShift * 0.30,
-            'industrial_carloads'   => ($macroState->outputGapEma * 1.2 * $beta) + $pmiShift,
+            'intermodal_freight'    => ($macroState->outputGapEma * self::INTERMODAL_CYCLE_ELASTICITY * $beta) + $tradeShift,
+            'bulk_commodities'      => 0.0,
+            'industrial_carloads'   => ($macroState->outputGapEma * self::CARLOAD_CYCLE_ELASTICITY * $beta) + $pmiShift,
             'transit_subscriptions' => $macroState->outputGapEma * self::TRANSIT_EMPLOYMENT_ELASTICITY * $beta,
         ];
     }
@@ -316,11 +325,9 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'foreign_output_gap_ema',
-            'freight_rate_index_ema',
             'import_price_level',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',

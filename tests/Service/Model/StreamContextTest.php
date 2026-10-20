@@ -349,8 +349,28 @@ class StreamContextTest extends TestCase
         $with = $withSector->getStreamZ();
         $without = $withoutSector->getStreamZ();
 
-        // sqrt(1 - phi^2) * rho_s * S: the sector's contribution to the fresh innovation, at the AR(1) weight.
-        $this->assertEqualsWithDelta(sqrt(1.0 - 0.0625) * 0.3 * 2.0, $with['revenue'] - $without['revenue'], 1e-12);
+        // rho_s * S: the sector level, whatever the stream's own persistence.
+        $this->assertEqualsWithDelta(0.3 * 2.0, $with['revenue'] - $without['revenue'], 1e-12);
         $this->assertSame($without['catastrophe'], $with['catastrophe'], 'an exogenous draw loads on no sector');
+    }
+
+    /**
+     * A sector boom last quarter is not part of this quarter's own draw: with the sector taken out, a stream that
+     * lived through the boom reads exactly as one that never saw it. Carried in the AR(1), last quarter's sector
+     * term would stay in the counterfactual and the share ledger would book it as share taken from rivals.
+     */
+    public function testTheSectorCounterfactualForgetsLastQuartersSectorLevel(): void
+    {
+        $nextQuarter = function (float $lastQuarterSector): float {
+            $math = MathUtility::ownStream(91);
+            $last = new StreamContext([], $math, 0.6, $lastQuarterSector, 0.3);
+            $last->generateZ('revenue', 0.8);
+
+            $counterfactual = new StreamContext($last->getStreamZ(), $math, 0.6, 0.0, 0.3);
+
+            return $counterfactual->generateZ('revenue', 0.8);
+        };
+
+        $this->assertEqualsWithDelta($nextQuarter(0.0), $nextQuarter(2.0), 1e-12);
     }
 }
