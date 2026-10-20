@@ -150,8 +150,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_SURGE_Z_SCORE = 1.75;
 
     // --- Fuel Surcharge & Energy Physics ---
-    /** Weight of variable margin drag attributed to energy/diesel fuel lag in observable shock Z. */
-    public const OBSERVABLE_FUEL_DRAG_WEIGHT = 0.50;
 
     // --- Manufacturing PMI, Trade & Supply Chain Transmission ---
     /** Sensitivity of contract freight and 3PL warehousing volumes to manufacturing PMI shifts. */
@@ -238,15 +236,9 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
 
-        $observableShockZ = ($fleetZ * $fleetWeight * self::DEDICATED_VARIANCE_SCALAR * $baselineVol)
-            + ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol)
-            + ($spotFreightBoost * $spotWeight)
-            - ($fuelLagDrag * self::OBSERVABLE_FUEL_DRAG_WEIGHT);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

@@ -89,11 +89,6 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.60;
     /** Standard deviation of analysts' revenue error: box counts leave little to guess beyond the fee mix. */
     public const BASE_COVERAGE_ERROR = 0.05;
-    /**
-     * Share of the yard-revenue shock the market reads before the report: dwell times are reported, storage tariffs are
-     * not.
-     */
-    public const STORAGE_VISIBILITY = 0.50;
 
     // --- Revenue Mix ---
     /** Baseline share of revenue from handling the District's own imports and exports. */
@@ -296,15 +291,9 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
         $volumeCostScale = $actualRevenue > 0.0 ? ($actualRevenue + $unearnedStorage) / $actualRevenue : 1.0;
         $clampedMargin = $this->clampMargin(($realizedVariableMargin + $inputCostDrag) * $volumeCostScale);
 
-        // Monthly box counts are public; yard revenue is half seen through the reported dwell times.
-        $observableShockZ = $expectedRevenue > 0.0
-            ? (($gatewayRevenue - $gatewayBase) + ($transshipmentRevenue - $transshipmentBase) + (self::STORAGE_VISIBILITY * ($storageRevenue - $storageBase))) / $expectedRevenue
-            : 0.0;
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

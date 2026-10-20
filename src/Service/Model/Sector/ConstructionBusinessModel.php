@@ -362,12 +362,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         // Awards are recognized as the backlog burns, so a steady change in purchases reaches revenue at its full size.
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $civilWeight * self::CIVIL_GOVERNMENT_SPENDING_SENSITIVITY * $dealMultiplier, $clampedMargin, $actualRevenue);
 
-        // Civil infrastructure wins are public tenders; maintenance is recurring; commercial is moderately visible
-        $observableShockZ = ($civilZ * $civilWeight * self::CIVIL_VARIANCE_SCALAR * 0.80)
-            + ($commercialZ * $commercialWeight * self::COMMERCIAL_EPC_VARIANCE_SCALAR * 0.35)
-            + ($maintenanceZ * $maintenanceWeight * self::FACILITIES_MAINTENANCE_VARIANCE_SCALAR * 0.90);
-        $observableShockZ *= $baselineVol;
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $overrunWriteDown * $actualRevenue;
@@ -375,7 +369,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

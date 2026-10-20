@@ -385,32 +385,6 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $this->assertLessThan(0.20 * $spotDeviation * (1.0 - 0.60 * 0.80), $marginIncrease, 'The first-quarter hit must be smaller than the steady-state squeeze.');
     }
 
-    public function testObservableShockIncludesBullwhipDrag(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('SHER');
-        $stock->setBeta('1.0');
-        $stock->setEarningsMomentumZ(['wholesale_channel' => 0.0, 'dtc_retail' => 0.0, 'contract_textile_supply' => 0.0, 'event' => 0.0]);
-
-        $recessionMacro = new MacroStateDTO(outputGapEma: -0.10); // 10% contraction
-        $mathUtility = new MathUtility();
-
-        $result = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: 100_000_000.0,
-            realizedVariableMargin: 0.20,
-            fixedCosts: 20_000_000.0,
-            baselineVol: 0.0,
-            macroState: $recessionMacro,
-            mathUtility: $mathUtility,
-        );
-
-        // Bullwhip penalty for 10% contraction = (0.10)^2 * 2.0 = 0.02
-        // Wholesale weight = 0.40
-        // Observable shock must reflect -$0.02 * 0.40 = -0.008
-        $this->assertEqualsWithDelta(-0.008, $result->observableShockZ, 0.0001);
-    }
-
     /**
      * Output is sold into a world market, so a strong domestic currency must reach expected demand through the
      * declared FX exposure rather than being discarded by this model's own macro physics.

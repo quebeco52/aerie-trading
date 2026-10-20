@@ -880,13 +880,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             $establishedWeight * ($next['marketed'] - $next['launched']) / $structuralMultiplier,
         );
 
-        // What was expected of each stream, the known book included: only the draw is a surprise.
-        $establishedBase = max(1.0, $baseRevenue * $establishedWeight * $measured['marketed']);
-        $pipelineBase    = max(1.0, $baseRevenue * $pipelineWeight);
-        $establishedShock = ($establishedRevenue - $establishedBase) / $establishedBase;
-        $pipelineShock    = ($pipelineRevenue - $pipelineBase) / $pipelineBase;
-        $observableShockZ = ($establishedShock * $establishedWeight) + ($pipelineShock * $pipelineWeight);
-
         // Standardize the discrete event into Z units of pipeline dispersion. A readout moves the asset's expected
         // peak revenue by its outcome less the odds already priced; an expiry is dated, so its erosion is no news.
         $eventZ = null;
@@ -901,7 +894,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

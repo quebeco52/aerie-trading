@@ -48,6 +48,9 @@ class MathUtility
     /** A generator of this instance's own, in place of the global one; null draws from the global mt_rand stream. */
     private ?\Random\Randomizer $privateGenerator = null;
 
+    /** True for an antithetic replay (mirroring()): every recorded uniform reflected, every normal negated. */
+    private bool $mirrored = false;
+
     /**
      * Constructor for MathUtility.
      * Pre-calculates constants for random number generation.
@@ -66,7 +69,15 @@ class MathUtility
     public function generateUniform(): float
     {
         if ($this->replayDraws !== null) {
-            return $this->replayDraws[$this->replayCursor++] ?? self::REPLAY_EXHAUSTED_DRAW;
+            if (isset($this->replayDraws[$this->replayCursor])) {
+                $draw = $this->replayDraws[$this->replayCursor++];
+
+                return $this->mirrored ? 1.0 - $draw : $draw;
+            }
+            // Past the recording: an exact replay hands out the median, a mirror draws on from a stream of its own.
+            if ($this->privateGenerator === null) {
+                return self::REPLAY_EXHAUSTED_DRAW;
+            }
         }
 
         $draw = ($this->privateGenerator !== null ? $this->privateGenerator->getInt(0, mt_getrandmax()) : mt_rand()) * $this->randMaxInverse;
@@ -111,6 +122,24 @@ class MathUtility
         $replay->spareNormal = $log['spare'] ?? null;
 
         return $replay;
+    }
+
+    /**
+     * The antithetic twin of a recorded calculation: the same draws mirrored, every uniform u handed out as 1 - u and
+     * every normal z as -z. Averaged with the original, any term linear in the draws cancels exactly, so a mean over
+     * a few pairs is sampled only in what the draws move non-linearly. A branch the recording never reached (a longer
+     * arrival count, an event only the twin hits) draws on fresh from a seeded stream of the mirror's own.
+     *
+     * @param array{uniforms?: list<float>, spare?: ?float} $log From endDrawLog().
+     */
+    public static function mirroring(array $log, int $seed): self
+    {
+        $mirror = self::replaying($log);
+        $mirror->mirrored = true;
+        $mirror->privateGenerator = new \Random\Randomizer(new \Random\Engine\Mt19937($seed));
+        $mirror->spareNormal = isset($log['spare']) ? -$log['spare'] : null;
+
+        return $mirror;
     }
 
     /**
@@ -188,8 +217,9 @@ class MathUtility
         }
 
         do {
-            $x = $this->generateUniform();
-            $y = $this->generateUniform();
+            // A mirrored replay keeps the radius and turns the angle half a circle, which negates both normals.
+            $x = $this->mirrored ? 1.0 - $this->generateUniform() : $this->generateUniform();
+            $y = $this->mirrored ? fmod(1.5 - $this->generateUniform(), 1.0) : $this->generateUniform();
         } while ($x <= 0);
 
         $radius = sqrt(-2 * log($x));

@@ -26,7 +26,7 @@ final class AeriePartyProfiles
             'motto' => 'Public services, paid for by the profits of Glasswater Row.',
             'founded' => 'In the ferry strike, the District\'s first winter',
             'voters' => 'Teachers, nurses, transit and ferry crews, municipal staff, and renters in the inner wards',
-            'heartland' => 'The inner wards and the ferry towns of the Albemarle shore',
+            'heartland' => 'The inner wards and the ferry towns of the north shore',
             'about' => [
                 'The Civic Front is the District\'s largest party of the left and the political voice of its working class and public sector. It grew out of the teachers\', nurses\', ferry crews\' and municipal unions that kept the peninsula\'s schools, clinics and crossings running in the years after the Charter, when the financial houses governed for themselves and treated public services as a cost to be contracted out.',
                 'It holds that a financial centre this rich can afford a state that carries its people through the bad years, and that the firms which gain most from the District\'s light rules should pay most toward it. Its economists accept the open markets the Charter created; what they reject is the idea that the profits of Glasswater Row belong only to those who book them.',
@@ -93,7 +93,7 @@ final class AeriePartyProfiles
             'motto' => 'Make more of what the District consumes.',
             'founded' => 'In the years after the free port opened, from the harbour and farm leagues',
             'voters' => 'Farmers, fishermen, shipyard and dock workers, the freight trades, and the small towns of the peninsula',
-            'heartland' => 'The old harbour and the farm and fishing towns of the Pamlico shore',
+            'heartland' => 'The old harbour and the farm and fishing towns of the south shore',
             'about' => [
                 'Iron Harbor began as an alliance of the peninsula\'s farmers, fishermen, shipyard mechanics and the freight trades of the old harbour, people whose livelihoods long predate Glasswater Row. Its leagues were old when the Charter was written, and they entered the Diet together, which is why the party still calls itself a coalition.',
                 'It is the Diet\'s party of the closed economy. It wants the District to depend less on the mainland and the world: a protective tariff for its farms, fisheries, yards and workshops, and immigration no faster than the District can house and employ people. It is no friend of the banks, but its quarrel is with the open door rather than with the size of the state.',
@@ -223,7 +223,7 @@ final class AeriePartyProfiles
             'heartland' => 'The barrier islands and the marsh towns of the sounds',
             'about' => [
                 'The Tideline Accord was founded by the peninsula\'s naturalists and coastal residents to protect the District\'s shoreline from the march of Glasswater Row. As resorts walled off beaches and dredging scarred the tidal bays, the Accord rallied its voters around a simple principle: the peninsula\'s coast belongs to everyone who lives on it.',
-                'Its case is practical as well as scenic. The District is low-lying and sits in the path of Atlantic hurricanes, and the Accord argues that every salt marsh paved for housing is a stretch of sea wall the District will one day build at public expense. It would refuse more housing schemes on open land, put a full price on the carbon from the District\'s power, and hold offshore drilling and mining to the strictest rules.',
+                'Its case is practical as well as scenic. The District is low-lying and sits in the path of the hurricanes that come in off the ocean, and the Accord argues that every salt marsh paved for housing is a stretch of sea wall the District will one day build at public expense. It would refuse more housing schemes on open land, put a full price on the carbon from the District\'s power, and hold offshore drilling and mining to the strictest rules.',
                 'It sits with the Civic Front on public regulation but keeps its distance from the old industrial unions, and it has no patience for Iron Harbor\'s defence of the dredgers and the shelf. Prosperity, it says, cannot come at the cost of a poisoned coast.',
             ],
             'history' => [

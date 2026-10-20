@@ -128,15 +128,6 @@ final class MiningBusinessModelTest extends TestCase
         $this->assertLessThan(100.0 * MiningBusinessModel::DISASTER_OUTPUT_MULT, $disaster->actualRevenue);
     }
 
-    /** The benchmark is read in full at any coverage; scaling it by 1/0.80 overstated it for better-covered names. */
-    public function testThePublicPriceLegIsReadInFull(): void
-    {
-        $rally = $this->report($this->macro(150.0));
-
-        $this->assertEqualsWithDelta(0.5, $rally->publishedRevenueShift, 1e-9);
-        $this->assertEqualsWithDelta(0.0, $rally->observableShockZ, 1e-9);
-    }
-
     public function testCondorSellsADiversifiedBasketAtItsTunedMix(): void
     {
         $baseline = $this->report($this->macro(100.0), ticker: 'CNDR');

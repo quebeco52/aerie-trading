@@ -13,8 +13,6 @@ readonly class SectorPhysicsResult
     /**
      * @param float                $actualRevenue     Realized revenue after sector-specific shocks.
      * @param float                $rawVariableMargin Raw variable cost ratio before template-method clamping.
-     * @param float                $observableShockZ  The shock component visible to public data (passed to
-     *                                                MarketConsensusEngine).
      * @param string|null          $eventType         Named tail-risk event type, or null.
      * @param array<string, mixed> $eventContext      Key-value lore context for NarrativeEngine.
      * @param bool|null            $isPublicEvent     For event-conditional models: true when a binary public event
@@ -30,7 +28,6 @@ readonly class SectorPhysicsResult
     public function __construct(
         public float $actualRevenue,
         public float $rawVariableMargin,
-        public float $observableShockZ,
         public ?string $eventType = null,
         public array $eventContext = [],
         public ?bool $isPublicEvent = null,
@@ -62,19 +59,9 @@ readonly class SectorPhysicsResult
          */
         public float $plantImpairment = 0.0,
         /**
-         * Change in the variable cost ratio from the last calendar quarter's season to this one: a known mix shift
-         * analysts build in, not a surprise.
-         */
-        public float $seasonalCostRatioShift = 0.0,
-        /**
          * Dollar one-off operating charge the physics booked this quarter (a recall's destroyed stock, a regulator's
          * fine): in EBIT, kept out of the run rate and the Street figure.
          */
         public float $specialCharge = 0.0,
-        /**
-         * Revenue move, as a share of expected revenue, that analysts read in full from published figures (a benchmark
-         * price, a disclosed rent roll) rather than at coverage visibility.
-         */
-        public float $publishedRevenueShift = 0.0,
     ) {}
 }

@@ -224,10 +224,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.03;
 
     // --- Analyst Read of the Quarter ---
-    /** Share of the subscriber move the market reads off the reported net adds. */
-    public const NET_ADDS_VISIBILITY = 0.90;
-    /** Share of the device-sales shock the market reads before the report (retail channel checks). */
-    public const EQUIPMENT_VISIBILITY = 0.40;
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
@@ -363,9 +359,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $subscriptionCostRatio = $subscriptionWeight > 0.0 ? max(0.0, $realizedVariableMargin - ($equipmentCosts * $equipmentCostScale)) / $subscriptionWeight : 0.0;
         $actualVariableCosts = ($subscriptionVolume * $subscriptionCostRatio) + ($equipmentRevenue * $equipmentCostRatio);
         $effectiveMargin = $actualRevenue > 0.0 ? $actualVariableCosts / $actualRevenue : $realizedVariableMargin;
-        $seasonalCostRatio = static fn(int $q): float => (($subscriptionWeight * $subscriptionCostRatio) + ($equipmentWeight * self::EQUIPMENT_SEASONALITY[$q] * $equipmentCostRatio))
-            / max(0.01, $subscriptionWeight + ($equipmentWeight * self::EQUIPMENT_SEASONALITY[$q]));
-        $seasonalCostRatioShift = $quarter !== null ? $seasonalCostRatio($quarter) - $seasonalCostRatio(($quarter + 3) % 4) : 0.0;
 
         // 1. Subscriber Acquisition Cost: every gross add costs subsidy, marketing and dealer commission
         //    dollars, so growth and churn replacement alike compress margin relative to the replacement rate.
@@ -380,21 +373,14 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $effectiveMargin + $sacDrag + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Net adds are reported every quarter and tracked closely; equipment sales carry standard retail visibility.
-        $subscriberMove = ($subscribers / max(0.01, $openingSubscribers)) - 1.0;
-        $observableShockZ = ($subscriberMove * $subscriptionWeight * self::NET_ADDS_VISIBILITY)
-            + ($equipmentZ * $equipmentWeight * self::EQUIPMENT_VARIANCE_SCALAR * self::EQUIPMENT_VISIBILITY * $baselineVol);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             scheduledCapex: $scheduledCapex,
-            seasonalCostRatioShift: $seasonalCostRatioShift,
             kpis: [
                 'subscriber_index' => $subscribers,
                 'quarterly_churn'  => $churnRate,

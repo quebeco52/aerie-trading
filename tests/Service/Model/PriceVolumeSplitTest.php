@@ -31,7 +31,6 @@ class PriceVolumeSplitTest extends TestCase
                 return new SectorPhysicsResult(
                     actualRevenue: 110.0,
                     rawVariableMargin: 0.50,
-                    observableShockZ: 0.0,
                     priceRevenue: 10.0,
                 );
             }
@@ -50,7 +49,7 @@ class PriceVolumeSplitTest extends TestCase
         $model = new class extends StandardCorporateBusinessModel {
             protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
             {
-                return new SectorPhysicsResult(actualRevenue: 50.0, rawVariableMargin: 0.40, observableShockZ: 0.0, priceRevenue: 500.0);
+                return new SectorPhysicsResult(actualRevenue: 50.0, rawVariableMargin: 0.40, priceRevenue: 500.0);
             }
         };
 

@@ -393,14 +393,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // --- Shock Determination ---
-        // Analysts see awards and book-to-bill, but this quarter's revenue only moves at the burn rate.
-        $costPlusShock   = (($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR * $costPlusMultiplier) + ($costPlusMultiplier - 1.0)) * self::COST_PLUS_BACKLOG_BURN_RATE;
-        $fixedPriceShock = (($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) * $fixedPriceMultiplier + ($fixedPriceMultiplier - 1.0)) * self::FIXED_PRICE_BACKLOG_BURN_RATE;
-        $fmsShock        = (($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) * $fmsMultiplier + ($fmsMultiplier - 1.0)) * self::FMS_BACKLOG_BURN_RATE;
-
-        $observableShockZ = ($costPlusShock * $costPlusWeight) + ($fixedPriceShock * $fixedPriceWeight) + ($fmsShock * $fmsWeight);
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = (($forwardLossProvision * $fixedPriceWeight) + ($flagshipPenalty * $costPlusWeight)) * $actualRevenue;
@@ -408,7 +400,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

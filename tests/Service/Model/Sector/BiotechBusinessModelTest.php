@@ -335,7 +335,6 @@ class BiotechBusinessModelTest extends TestCase
         $carriedWeight = $nextQuarter->streamZ['weight:commercial_therapeutics'];
         $this->assertEqualsWithDelta(self::EXPECTED_REVENUE * $carriedWeight * $launched, $nextQuarter->streamRevenue['commercial_therapeutics'], 1.0);
         $this->assertNull($nextQuarter->eventType);
-        $this->assertEqualsWithDelta(0.0, $nextQuarter->observableShockZ, 1e-9);
         // The ramping launch is protected revenue, so the protected share rises with it.
         $this->assertEqualsWithDelta(
             (BiotechBusinessModel::DEFAULT_PATENT_PROTECTED_SHARE + ($peak * $this->bassAdoption(1.0))) / $launched,
@@ -404,7 +403,6 @@ class BiotechBusinessModelTest extends TestCase
 
         $this->assertSame(ShockEvent::BIOTECH_PATENT_CLIFF, $cliff->eventType);
         $this->assertEqualsWithDelta($expectedRevenue, $cliff->actualRevenue, 1.0);
-        $this->assertEqualsWithDelta(0.0, $cliff->observableShockZ, 1e-9);
         // The whole cohort leaves exclusivity the day generics may enter, not as its sales erode.
         $this->assertEqualsWithDelta(0.0, $cliff->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE], 1e-12);
         // And the erosion keeps deepening on a known schedule: the next shift is more negative still.
@@ -433,8 +431,6 @@ class BiotechBusinessModelTest extends TestCase
 
         // Only the cohort still under patent is protected.
         $this->assertEqualsWithDelta(0.5 / (1.0 - $eroded), $result->streamZ[BiotechBusinessModel::STATE_PROTECTED_SHARE], 1e-12);
-        // The expiry was dated and already in expected revenue: it is no news.
-        $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 1e-12);
     }
 
     /** An expired cohort is never folded back into a protected base: the protected share runs on with no snap-back. */

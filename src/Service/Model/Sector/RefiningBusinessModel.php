@@ -267,9 +267,6 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         $opexPerBarrel = ($opexShare + $inputCostDrag) * $baselineRealization;
         $clampedMargin = $this->clampMargin($realization > 0.0 ? ($crudePrice + $opexPerBarrel) / $realization : $realizedVariableMargin);
 
-        // Crude and the crack are published daily and read in full; the plant's own runs are seen at coverage
-        // visibility.
-        $observableShockZ = $throughput - 1.0;
         $benchmarkCrack = $macroState->refiningCrackSpreadEma;
 
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
@@ -279,8 +276,6 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
-            publishedRevenueShift: ($realization / $baselineRealization) - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

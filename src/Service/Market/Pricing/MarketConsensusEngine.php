@@ -53,15 +53,6 @@ class MarketConsensusEngine
     /** Multiplier scaling analyst consensus prior uncertainty as VIX rises. */
     public const BAYESIAN_VIX_SCALING_FACTOR = 0.02;
 
-    // --- Reported KPIs in Consensus ---
-    /**
-     * Share of a disclosed book-to-bill deviation from parity that analysts carry into the next quarter's revenue
-     * estimate. Orders convert to revenue, so a disclosed order book is a forecast the market already holds.
-     */
-    public const BOOK_TO_BILL_CONSENSUS_SENSITIVITY = 0.35;
-    /** Bound on the resulting forward revenue tilt, so a single blowout order quarter cannot run the estimate away. */
-    public const MAX_BOOK_TO_BILL_CONSENSUS_TILT = 0.15;
-
     /**
      * The dollars the Street shades a firm's EPS estimate by: a fixed number of standard deviations of the surprise
      * the firm has measurably produced, on its quarterly revenue. A steady firm is walked down by little and a lumpy
@@ -105,39 +96,42 @@ class MarketConsensusEngine
     /**
      * Generates the analyst consensus estimate for a given quarter.
      *
-     * Formula:
-     *   analystError        = N(0,1) * coverage.errorStdDev
-     *   dynamicVisibility   = clamp(baseVisibility + analystError, minVisibility, 1.0)
+     * Analysts know the public quarter: the firm's physics averaged over its private draws, on what is published
+     * (macro terms, benchmark prices, disclosed books and announced regimes;
+     * OperatingStrategyInterface::measurePublicFinancials). They hear
+     * the firm's own news, the gap between the quarter it had and the public one, at their coverage visibility:
+     *   dynamicVisibility   = clamp(baseVisibility + N(0,1) * errorStdDev, minVisibility, 1.0)
+     *   freshEstimate       = publicRevenue * (1 + dynamicVisibility * (actualRevenue / publicRevenue - 1))
      *   analystExpectedRev  = BayesianUpdate(priorAnchor, freshEstimate) * (1 - walkdownBias)
-     *   expectedCostRatio   = blend(expectedVariableMargin, realized cost ratio) by ANALYST_COST_BASE_VISIBILITY
-     *   analystExpectedVarC = analystExpectedRev * volumeShare * expectedCostRatio
+     *   expectedCostRatio   = publicCostRatio - (1 - ANALYST_COST_BASE_VISIBILITY) * inputCostDragChange
+     *                         + dynamicVisibility * (actualCostRatio - publicCostRatio)
+     *   analystExpectedVarC = unbiased revenue * volumeShare * expectedCostRatio
      *
-     * @param ActualFinancialsDTO    $actuals                What the company actually produced this quarter.
-     * @param SectorCoverageProfile  $coverage               Analyst coverage parameters for this sector.
-     * @param float                  $expectedRevenue        Structural expected revenue before shocks.
-     * @param MathUtility            $mathUtility            PRNG for analyst estimation noise.
-     * @param \App\Entity\Stock      $stock                  The stock entity for anchor history.
-     * @param float                  $marketVolatility       Prevailing market volatility (VIX proxy).
-     * @param float|null             $expectedVariableMargin Ex-ante variable cost ratio before the sector physics move
-     *                                                       it.
-     * @param float                  $seasonalRatio          Seasonality adjustment ratio (Factor_t / Factor_{t-1}).
-     * @param float                  $priorExpectedRevenue   Pre-shock expected revenue the anchor was formed against; 0
-     *                                                       when unknown.
-     * @param float|null             $expectedRevenueBeforeShocks The quarter's expected revenue without the firm's own
-     *                                                            demand
-     *                                                     shock and jump; null when the caller has none to separate.
+     * @param ActualFinancialsDTO   $actuals                     What the company actually produced this quarter.
+     * @param ActualFinancialsDTO   $public                      The same quarter as the public expects it.
+     * @param SectorCoverageProfile $coverage                    Analyst coverage parameters for this sector.
+     * @param MathUtility           $mathUtility                 PRNG for analyst estimation noise.
+     * @param \App\Entity\Stock     $stock                       The stock entity for anchor history.
+     * @param float                 $marketVolatility            Prevailing market volatility (VIX proxy).
+     * @param float                 $expectedRevenueBeforeShocks The quarter's structural expected revenue, the base
+     *                                                           the anchor is rolled forward with.
+     * @param float                 $inputCostDragChange         Change in the cost ratio the quarter's input prices
+     *                                                           add over what the last report booked.
+     * @param float                 $seasonalRatio               Seasonality adjustment ratio (Factor_t / Factor_{t-1}).
+     * @param float                 $priorExpectedRevenue        Pre-shock expected revenue the anchor was formed
+     *                                                           against; 0 when unknown.
      */
     public function generateConsensus(
         ActualFinancialsDTO $actuals,
+        ActualFinancialsDTO $public,
         SectorCoverageProfile $coverage,
-        float $expectedRevenue,
         MathUtility $mathUtility,
         \App\Entity\Stock $stock,
-        float $marketVolatility = 0.15,
-        ?float $expectedVariableMargin = null,
+        float $marketVolatility,
+        float $expectedRevenueBeforeShocks,
+        float $inputCostDragChange = 0.0,
         float $seasonalRatio = 1.0,
         float $priorExpectedRevenue = 0.0,
-        ?float $expectedRevenueBeforeShocks = null,
     ): ConsensusDTO {
         $analystError = $mathUtility->generateStandardNormal() * $coverage->errorStdDev;
 
@@ -154,32 +148,11 @@ class MarketConsensusEngine
 
         // Analysts do not discount accruals (Bradshaw, Richardson & Sloan 2001): the Sloan (1996) anomaly is that
         // the estimate fixates on reported earnings, and the market's fair value penalty is where it is priced.
-        // The firm's own demand shock and jump this quarter are news: the estimate starts from the demand the firm
-        // was expected to see and hears the shock only at the share public data reveals, as it hears stream noise.
-        $baseExpectedRevenue = max(1.0, $expectedRevenueBeforeShocks ?? $expectedRevenue);
-        $ownShock = ($expectedRevenue / $baseExpectedRevenue) - 1.0;
-
-        // Reported KPIs feeding consensus: an order-driven firm discloses book-to-bill, and orders above
-        // parity are revenue that has already been won and not yet billed. Analysts do not ignore that —
-        // they carry it into the forward estimate, which is why a semiconductor or capital-goods forecast
-        // moves on the order line before it moves on the revenue line. Without this the backlog conversion
-        // the models already run was invisible to consensus and showed up as a standing surprise.
-        $bookToBill = $stock->getLastBookToBill();
-        $orderBookTilt = $bookToBill !== null && $bookToBill > 0.0
-            ? max(
-                -self::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
-                min(
-                    self::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
-                    ($bookToBill - 1.0) * self::BOOK_TO_BILL_CONSENSUS_SENSITIVITY,
-                ),
-            )
-            : 0.0;
-
-        // A benchmark price or a disclosed rent roll is read in full, whatever the coverage.
-        $freshEstimate = $baseExpectedRevenue * (1.0 + $orderBookTilt)
-            * (1.0 + $ownShock * $dynamicVisibility)
-            * (1.0 + $actuals->publishedRevenueShift)
-            * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
+        // What published data and the last report disclose is read in full; the firm's own news, its demand shock,
+        // its stream draws and the events it has not yet announced, only at the share coverage reveals.
+        $publicRevenue = max(1.0, $public->actualRevenue);
+        $freshEstimate = $publicRevenue * (1.0 + ((($actuals->actualRevenue / $publicRevenue) - 1.0) * $dynamicVisibility));
+        $baseExpectedRevenue = max(1.0, $expectedRevenueBeforeShocks);
 
         // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals
         // (fresh estimate)
@@ -216,16 +189,12 @@ class MarketConsensusEngine
         $analystUnbiasedRevenue = $analystExpectedRevenue;
         $analystExpectedRevenue *= (1.0 - self::ANALYST_WALKDOWN_BIAS);
 
-        // Analyst cost ratio expectation: anchor on last reported ratio, rolled to this quarter's known seasonal mix,
-        // and incorporate visible systematic cost shifts.
-        $priorCostRatio = $stock->getLastReportedCostRatio();
-        $anchorCostRatio = $priorCostRatio !== null
-            ? (float) $priorCostRatio + $actuals->seasonalCostRatioShift
-            : ($expectedVariableMargin ?? $actuals->clampedMargin);
-
-        $expectedCostRatio = $anchorCostRatio
-            + (FinancialConstants::ANALYST_COST_BASE_VISIBILITY * ($actuals->clampedMargin - $anchorCostRatio));
-        $stock->setLastReportedCostRatio((string) $actuals->clampedMargin);
+        // The public quarter's cost ratio already carries the season and today's input prices; analysts fall short of
+        // the input-cost change since the last report by the share they cannot read off published series, and hear the
+        // firm's own cost news at coverage visibility.
+        $expectedCostRatio = $public->clampedMargin
+            - ((1.0 - FinancialConstants::ANALYST_COST_BASE_VISIBILITY) * $inputCostDragChange)
+            + ($dynamicVisibility * ($actuals->clampedMargin - $public->clampedMargin));
 
         // Price is not produced, so the cost ratio bites on the volume part of revenue only — exactly as the
         // physics applies it. Charging the ratio against the whole estimate instead left every firm with a

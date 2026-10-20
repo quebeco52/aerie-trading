@@ -332,8 +332,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $inputCostDrag + $adCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        $observableShockZ = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $regulatoryFine * $adWeight * $actualRevenue;
@@ -341,7 +339,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

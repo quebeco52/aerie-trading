@@ -332,12 +332,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $inpatientWeight * self::INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY * $spendingMultiplier, $clampedMargin, $actualRevenue);
 
-        // Inpatient care and mandatory spending packages are publicly visible; billing arbitrage is opaque
-        $observableShockZ = ($inpatientZ * $inpatientWeight * self::INPATIENT_VARIANCE_SCALAR * 0.70)
-            + ($outpatientZ * $outpatientWeight * self::OUTPATIENT_VARIANCE_SCALAR * 0.40)
-            + ($arbitrageZ * $arbitrageWeight * self::ARBITRAGE_VARIANCE_SCALAR * 0.15);
-        $observableShockZ *= $baselineVol;
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $auditPenalty * max(0.0, $actualRevenue);
@@ -345,7 +339,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

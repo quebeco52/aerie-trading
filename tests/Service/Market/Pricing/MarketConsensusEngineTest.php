@@ -14,6 +14,10 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Analysts know the public quarter (the firm's physics averaged over its private draws) and hear the firm's own news
+ * at their coverage visibility.
+ */
 #[AllowMockObjectsWithoutExpectations]
 class MarketConsensusEngineTest extends TestCase
 {
@@ -26,171 +30,102 @@ class MarketConsensusEngineTest extends TestCase
         $this->engine = new MarketConsensusEngine();
     }
 
-    public function testGenerateConsensusRoutine(): void
-    {
-        // Mock standard normal return of 0.0 -> zero analyst estimation error
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $actuals = new ActualFinancialsDTO(
-            actualRevenue: 1100.0,
-            actualVariableCosts: 440.0,
-            clampedMargin: 0.40,
-            ebit: 360.0,
-            observableShockZ: 0.10, // 10% positive observable shock
-            eventType: null,
-            eventContext: [],
-            isPublicEvent: false,
-        );
-
-        $coverage = new SectorCoverageProfile(
-            baseVisibility: 0.50,
-            errorStdDev: 0.05,
-            minVisibility: 0.20,
-        );
-
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
-
-        $this->assertInstanceOf(ConsensusDTO::class, $consensus);
-        $this->assertSame(0.50, $consensus->dynamicVisibility);
-        // Bayesian update blends structural prior ($1000) with fresh signal ($1050) -> ~1036.26, minus 1.5% walkdown ->
-        // ~1020.72
-        $this->assertEqualsWithDelta(1020.72, $consensus->analystExpectedRevenue, 0.05);
-        // The cost estimate is struck on the unbiased revenue: 1036.26 * 0.40 = 414.51
-        $this->assertEqualsWithDelta(1036.26, $consensus->analystUnbiasedRevenue, 0.05);
-        $this->assertEqualsWithDelta(414.51, $consensus->analystExpectedVariableCosts, 0.05);
-    }
-
-    public function testGenerateConsensusClampingToMinVisibility(): void
-    {
-        // Mock extreme negative analyst error (-10.0 * 0.05 = -0.50)
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-10.0);
-
-        $actuals = new ActualFinancialsDTO(
-            actualRevenue: 1000.0,
-            actualVariableCosts: 300.0,
-            clampedMargin: 0.30,
-            ebit: 400.0,
-            observableShockZ: 0.20,
-            eventType: null,
-        );
-
-        $coverage = new SectorCoverageProfile(
-            baseVisibility: 0.50,
-            errorStdDev: 0.05,
-            minVisibility: 0.25,
-        );
-
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
-
-        // baseVisibility (0.50) - 0.50 = 0.0, clamped to minVisibility (0.25)
-        $this->assertSame(0.25, $consensus->dynamicVisibility);
-        $this->assertEqualsWithDelta(1020.72, $consensus->analystExpectedRevenue, 0.05);
-    }
-
-    public function testGenerateConsensusClampingToMaxVisibility(): void
-    {
-        // Mock extreme positive analyst error (+10.0 * 0.05 = +0.50)
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(10.0);
-
-        $actuals = new ActualFinancialsDTO(
-            actualRevenue: 1000.0,
-            actualVariableCosts: 300.0,
-            clampedMargin: 0.30,
-            ebit: 400.0,
-            observableShockZ: 0.10,
-            eventType: null,
-        );
-
-        $coverage = new SectorCoverageProfile(
-            baseVisibility: 0.80,
-            errorStdDev: 0.05,
-            minVisibility: 0.20,
-        );
-
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
-
-        // baseVisibility (0.80) + 0.50 = 1.30, clamped to 1.0
-        $this->assertSame(1.0, $consensus->dynamicVisibility);
-        $this->assertEqualsWithDelta(1056.44, $consensus->analystExpectedRevenue, 0.05);
-    }
-
-    public function testGenerateConsensusEventConditionalForkWhenPublicEventIsTrue(): void
-    {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $actuals = new ActualFinancialsDTO(
-            actualRevenue: 2000.0,
-            actualVariableCosts: 400.0,
-            clampedMargin: 0.20,
-            ebit: 1000.0,
-            observableShockZ: 1.0,
-            eventType: 'CLINICAL_TRIAL_SUCCESS',
-            eventContext: [],
-            isPublicEvent: true,
-        );
-
-        // Biotech / ConsumerStaples style profile: routine visibility is low (0.10), but event visibility is high
-        // (0.90)
-        $coverage = new SectorCoverageProfile(
-            baseVisibility: 0.10,
-            errorStdDev: 0.05,
-            minVisibility: 0.0,
-            eventBaseVisibility: 0.90,
-            eventMinVisibility: 0.50,
-        );
-
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
-
-        $this->assertSame(0.90, $consensus->dynamicVisibility);
-        // 1000 * (1 + 1.0 * 0.90) = 1900.0 fresh signal -> posterior ~1652.75, minus 1.5% walkdown -> ~1627.96
-        $this->assertEqualsWithDelta(1627.96, $consensus->analystExpectedRevenue, 0.05);
-    }
-
-    public function testGenerateConsensusUsesRoutineVisibilityWhenPublicEventIsFalse(): void
-    {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $actuals = new ActualFinancialsDTO(
-            actualRevenue: 1050.0,
-            actualVariableCosts: 210.0,
-            clampedMargin: 0.20,
-            ebit: 600.0,
-            observableShockZ: 0.1,
-            eventType: null,
-            eventContext: [],
-            isPublicEvent: false,
-        );
-
-        $coverage = new SectorCoverageProfile(
-            baseVisibility: 0.10,
-            errorStdDev: 0.05,
-            minVisibility: 0.0,
-            eventBaseVisibility: 0.90,
-            eventMinVisibility: 0.50,
-        );
-
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
-
-        $this->assertSame(0.10, $consensus->dynamicVisibility);
-        // 1000 * (1 + 0.1 * 0.10) = 1010.0 fresh signal -> posterior ~1007.25, minus 1.5% walkdown -> ~992.14
-        $this->assertEqualsWithDelta(992.14, $consensus->analystExpectedRevenue, 0.05);
-    }
-
-    // --- The anchor rolls forward with the structural base ---
-
-    private function flatActuals(float $revenue): ActualFinancialsDTO
+    private static function quarter(float $revenue, float $costRatio = 0.40, bool $publicEvent = false): ActualFinancialsDTO
     {
         return new ActualFinancialsDTO(
             actualRevenue: $revenue,
-            actualVariableCosts: $revenue * 0.4,
-            clampedMargin: 0.40,
-            ebit: $revenue * 0.3,
-            observableShockZ: 0.0,
-            eventType: null,
-            eventContext: [],
-            isPublicEvent: false,
+            actualVariableCosts: $revenue * $costRatio,
+            clampedMargin: $costRatio,
+            ebit: $revenue * (1.0 - $costRatio) - 100.0,
+            isPublicEvent: $publicEvent,
         );
     }
+
+    private function consensus(ActualFinancialsDTO $actuals, ActualFinancialsDTO $public, SectorCoverageProfile $coverage, ?Stock $stock = null, float $base = 1000.0, float $priorBase = 0.0): ConsensusDTO
+    {
+        return $this->engine->generateConsensus($actuals, $public, $coverage, $this->mathUtilityMock, $stock ?? new Stock(), 0.15, $base, 0.0, 1.0, $priorBase);
+    }
+
+    public function testThePrivateNewsIsHeardAtVisibility(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.05, minVisibility: 0.20);
+
+        // Public quarter 1000, actual 1100: half the private 10% is heard, a fresh signal of 1050.
+        $consensus = $this->consensus(self::quarter(1100.0), self::quarter(1000.0), $coverage);
+
+        $this->assertSame(0.50, $consensus->dynamicVisibility);
+        // The Bayesian update blends the structural prior (1000) with the fresh signal (1050): ~1036.26 unbiased,
+        // ~1020.72 after the 1.5% walk-down, and costs struck on the unbiased revenue at the cost ratio, 414.51.
+        $this->assertEqualsWithDelta(1036.26, $consensus->analystUnbiasedRevenue, 0.05);
+        $this->assertEqualsWithDelta(1020.72, $consensus->analystExpectedRevenue, 0.05);
+        $this->assertEqualsWithDelta(414.51, $consensus->analystExpectedVariableCosts, 0.05);
+    }
+
+    /**
+     * A quarter that moved only on what is public, a benchmark price, a disclosed backlog or the cycle, is forecast
+     * in full whatever the coverage: a titan's analysts and a small name's hear the same move.
+     */
+    public function testAPublicMoveIsHeardInFullWhateverTheCoverage(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $estimate = fn(float $visibility): float => $this->consensus(self::quarter(1500.0), self::quarter(1500.0), new SectorCoverageProfile(baseVisibility: $visibility, errorStdDev: 0.05), base: 1500.0)
+            ->analystUnbiasedRevenue;
+
+        $this->assertEqualsWithDelta(1500.0, $estimate(0.20), 1e-9);
+        $this->assertEqualsWithDelta(1500.0, $estimate(0.95), 1e-9);
+    }
+
+    public function testVisibilityIsClampedToItsFloor(): void
+    {
+        // Analyst error -10.0 * 0.05 = -0.50 takes visibility below the floor.
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-10.0);
+        $consensus = $this->consensus(self::quarter(1200.0), self::quarter(1000.0), new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.05, minVisibility: 0.25));
+
+        $this->assertSame(0.25, $consensus->dynamicVisibility);
+    }
+
+    public function testVisibilityIsClampedToOne(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(10.0);
+        $consensus = $this->consensus(self::quarter(1100.0), self::quarter(1000.0), new SectorCoverageProfile(baseVisibility: 0.80, errorStdDev: 0.05, minVisibility: 0.20));
+
+        $this->assertSame(1.0, $consensus->dynamicVisibility);
+        // The whole private 10% is heard: fresh 1100 -> posterior ~1072.52, ~1056.44 after the walk-down.
+        $this->assertEqualsWithDelta(1056.44, $consensus->analystExpectedRevenue, 0.05);
+    }
+
+    public function testAPublicEventOpensTheEventVisibility(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        // Routine visibility is low (0.10); an announced event lifts it to 0.90.
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.10, errorStdDev: 0.05, minVisibility: 0.0, eventBaseVisibility: 0.90, eventMinVisibility: 0.50);
+
+        $event = $this->consensus(self::quarter(2000.0, 0.20, true), self::quarter(1000.0, 0.20), $coverage);
+        $routine = $this->consensus(self::quarter(1100.0, 0.20), self::quarter(1000.0, 0.20), $coverage);
+
+        $this->assertSame(0.90, $event->dynamicVisibility);
+        // 1000 * (1 + 1.0 * 0.90) = 1900 fresh -> posterior ~1652.75, ~1627.96 after the walk-down.
+        $this->assertEqualsWithDelta(1627.96, $event->analystExpectedRevenue, 0.05);
+        $this->assertSame(0.10, $routine->dynamicVisibility);
+    }
+
+    /**
+     * The cost estimate is the public quarter's cost ratio, short of the input-cost change since the last report by
+     * the share analysts cannot read off published prices, with the firm's own cost news heard at visibility.
+     */
+    public function testTheCostRatioIsThePublicQuartersPlusPrivateNewsAtVisibility(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.05, minVisibility: 0.0);
+
+        $consensus = $this->engine->generateConsensus(self::quarter(1000.0, 0.50), self::quarter(1000.0, 0.44), $coverage, $this->mathUtilityMock, new Stock(), 0.15, 1000.0, 0.04);
+
+        // 0.44 - 0.25 * 0.04 + 0.50 * (0.50 - 0.44) = 0.46 on the 1000 the estimate settles on.
+        $this->assertEqualsWithDelta(0.46 * $consensus->analystUnbiasedRevenue, $consensus->analystExpectedVariableCosts, 1e-6);
+    }
+
+    // --- The anchor rolls forward with the structural base ---
 
     public function testTheAnchorIsCarriedForwardWithTheFirmsStructuralBase(): void
     {
@@ -203,13 +138,13 @@ class MarketConsensusEngineTest extends TestCase
         $stock = new Stock();
         $stock->setLastAnalystRevenue('1000.0');
 
-        $rolled = $this->engine->generateConsensus($this->flatActuals(1200.0), $coverage, 1200.0, $this->mathUtilityMock, $stock, 0.15, null, 1.0, 1000.0);
+        $rolled = $this->consensus(self::quarter(1200.0), self::quarter(1200.0), $coverage, $stock, 1200.0, 1000.0);
 
         // Prior 1200 (rolled) and fresh 1200 agree, so only the walkdown separates the estimate from the base.
         $this->assertEqualsWithDelta(1200.0 * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS), $rolled->analystExpectedRevenue, 1e-6);
     }
 
-    public function testWithoutAKnownPriorBaseTheAnchorBehavesAsBefore(): void
+    public function testWithoutAKnownPriorBaseTheAnchorStaysSticky(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.15, minVisibility: 0.20);
@@ -217,9 +152,8 @@ class MarketConsensusEngineTest extends TestCase
         $stock = new Stock();
         $stock->setLastAnalystRevenue('1000.0');
 
-        $frozen = $this->engine->generateConsensus($this->flatActuals(1200.0), $coverage, 1200.0, $this->mathUtilityMock, $stock, 0.15, null, 1.0, 0.0);
+        $frozen = $this->consensus(self::quarter(1200.0), self::quarter(1200.0), $coverage, $stock, 1200.0, 0.0);
 
-        // Sticky: the estimate sits well below the base, which is the defect the roll-forward removes.
         $this->assertLessThan(1100.0, $frozen->analystExpectedRevenue);
         $this->assertGreaterThan(1000.0, $frozen->analystExpectedRevenue);
     }
@@ -232,7 +166,7 @@ class MarketConsensusEngineTest extends TestCase
         $stock = new Stock();
         $stock->setLastAnalystRevenue('1000.0');
 
-        $bounded = $this->engine->generateConsensus($this->flatActuals(5000.0), $coverage, 5000.0, $this->mathUtilityMock, $stock, 0.15, null, 1.0, 1000.0);
+        $bounded = $this->consensus(self::quarter(5000.0), self::quarter(5000.0), $coverage, $stock, 5000.0, 1000.0);
 
         // Anchor rolled to at most 2000, fresh 5000: the estimate cannot have jumped all the way.
         $this->assertLessThan(4000.0, $bounded->analystExpectedRevenue);
@@ -250,34 +184,10 @@ class MarketConsensusEngineTest extends TestCase
 
         $estimate = 0.0;
         for ($quarter = 0; $quarter < 40; $quarter++) {
-            $estimate = $this->engine->generateConsensus($this->flatActuals(1000.0), $coverage, 1000.0, $this->mathUtilityMock, $stock, 0.15, null, 1.0, 1000.0)->analystExpectedRevenue;
+            $estimate = $this->consensus(self::quarter(1000.0), self::quarter(1000.0), $coverage, $stock, 1000.0, 1000.0)->analystExpectedRevenue;
         }
 
         $this->assertEqualsWithDelta(1000.0 * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS), $estimate, 0.5);
         $this->assertEqualsWithDelta(1000.0, (float) $stock->getLastAnalystRevenue(), 0.5, 'The anchor itself carries no walkdown.');
-    }
-
-    /**
-     * A benchmark price is public, so a titan's analysts and a small name's hear the same move. The models used to
-     * scale it by one over the sector's base visibility, which overshot by the titan's extra coverage (1.19x).
-     */
-    public function testAPublishedPriceIsHeardInFullWhateverTheCoverage(): void
-    {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $actuals = new ActualFinancialsDTO(
-            actualRevenue: 1500.0,
-            actualVariableCosts: 600.0,
-            clampedMargin: 0.40,
-            ebit: 500.0,
-            observableShockZ: 0.0,
-            publishedRevenueShift: 0.50,
-        );
-
-        $estimate = fn(float $visibility): float => $this->engine
-            ->generateConsensus($actuals, new SectorCoverageProfile(baseVisibility: $visibility, errorStdDev: 0.05), 1000.0, $this->mathUtilityMock, new Stock())
-            ->analystUnbiasedRevenue;
-
-        $this->assertEqualsWithDelta($estimate(0.80), $estimate(0.95), 1e-9);
-        $this->assertGreaterThan(1000.0, $estimate(0.80));
     }
 }

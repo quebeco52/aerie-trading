@@ -285,11 +285,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
 
         $hedgeGain = $expectedRevenue * $liquidsShare * $oilVolume * $hedgeRatio * ($hedgedStrike - $oilSpot) * (1.0 + $basisShift);
 
-        // The benchmark prices and the hedge book are public and read in full; the field's production is seen at
-        // coverage visibility.
-        $productionShock = $expectedRevenue > 0.0 ? ($volumeRevenue / $expectedRevenue) - 1.0 : 0.0;
-        $observableShockZ = $productionShock;
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $disasterPenalty * $volumeRevenue;
@@ -297,8 +292,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
-            publishedRevenueShift: $priceRelative - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

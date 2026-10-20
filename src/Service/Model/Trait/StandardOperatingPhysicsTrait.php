@@ -286,6 +286,13 @@ trait StandardOperatingPhysicsTrait
         return $perUnitCostRatio * $factor;
     }
 
+    // --- Public Quarter ---
+    /**
+     * Antithetic scenario pairs the public quarter averages the physics over (32 runs): linear terms cancel within a
+     * pair, so the sampling error left is the non-linear terms', well inside analysts' own coverage error.
+     */
+    public const PUBLIC_QUARTER_SCENARIO_PAIRS = 16;
+
     // --- Input Cost Basket ---
     /**
      * Share of an input price shock a firm with full pricing power recovers in its own prices; the rest lands on margin
@@ -826,6 +833,60 @@ trait StandardOperatingPhysicsTrait
         $physics = $this->calculateSectorPhysics($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $mathUtility);
         $this->takeActiveStreamContext();
 
+        return $this->assembleActualFinancials($physics, $fixedCosts);
+    }
+
+    /**
+     * The quarter as the public expects it: the physics re-run from the same opening state over scenarios of the
+     * firm's private draws (its streams, events and regime onsets; the sector's latent demand factor out), averaged.
+     * What published data and the last report disclose, the macro terms, benchmark prices, the backlog and
+     * subscriber books, announced regimes and the input-cost drag, is the same in every scenario. The scenarios come
+     * in antithetic pairs drawn from the firm's own seeded stream, so the simulation's draws are untouched and a term
+     * linear in the draws averages out exactly.
+     */
+    public function measurePublicFinancials(Stock $stock, float $expectedRevenue, float $expectedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, ?int $calendarQuarter = null, int $seed = 0): ActualFinancialsDTO
+    {
+        $sector = (string) $stock->getSector();
+        $state = isset($macroState->sectorDemandZ[$sector])
+            ? MacroStateDTO::fromArray(array_replace($macroState->toArray(), ['sector_demand_z' => [$sector => 0.0] + $macroState->sectorDemandZ]))
+            : $macroState;
+        $this->reportedCalendarQuarter = $calendarQuarter;
+
+        $sums = ['revenue' => 0.0, 'price' => 0.0, 'costs' => 0.0, 'provision' => 0.0, 'chargeOffs' => 0.0];
+        $runs = 0;
+        for ($pair = 0; $pair < self::PUBLIC_QUARTER_SCENARIO_PAIRS; ++$pair) {
+            $draws = MathUtility::ownStream($seed + $pair);
+            $draws->beginDrawLog();
+            foreach ([$draws, null] as $source) {
+                $physics = $this->calculateSectorPhysics(clone $stock, $expectedRevenue, $expectedVariableMargin, $fixedCosts, $baselineVol, $state, $source ?? MathUtility::mirroring($draws->endDrawLog(), $seed + self::PUBLIC_QUARTER_SCENARIO_PAIRS + $pair));
+                $this->takeActiveStreamContext();
+                $scenario = $this->assembleActualFinancials($physics, $fixedCosts);
+                $sums['revenue'] += $scenario->actualRevenue;
+                $sums['price'] += $scenario->priceRevenue;
+                $sums['costs'] += $scenario->actualVariableCosts;
+                $sums['provision'] += $scenario->creditLossProvision;
+                $sums['chargeOffs'] += $scenario->netChargeOffs;
+                ++$runs;
+            }
+        }
+
+        $revenue = $sums['revenue'] / $runs;
+        $volumeRevenue = max(1.0, ($sums['revenue'] - $sums['price']) / $runs);
+
+        return new ActualFinancialsDTO(
+            actualRevenue: $revenue,
+            actualVariableCosts: $sums['costs'] / $runs,
+            clampedMargin: ($sums['costs'] / $runs) / $volumeRevenue,
+            ebit: $revenue - $fixedCosts - ($sums['costs'] / $runs),
+            creditLossProvision: $sums['provision'] / $runs,
+            netChargeOffs: $sums['chargeOffs'] / $runs,
+            priceRevenue: $sums['price'] / $runs,
+        );
+    }
+
+    /** The template method's books on one run of the sector physics. */
+    private function assembleActualFinancials(SectorPhysicsResult $physics, float $fixedCosts): ActualFinancialsDTO
+    {
         $clampedMargin = $this->clampMargin($physics->rawVariableMargin);
         // Price is not produced: a rent escalator or a spot-rate spike on a fixed fleet adds revenue without
         // adding a unit of cost, so the variable cost ratio applies to the volume part of revenue only. A price
@@ -839,7 +900,6 @@ trait StandardOperatingPhysicsTrait
             actualVariableCosts: $actualVariableCosts,
             clampedMargin: $clampedMargin,
             ebit: $ebit,
-            observableShockZ: $physics->observableShockZ,
             eventType: $physics->eventType,
             eventContext: $physics->eventContext,
             isPublicEvent: $physics->isPublicEvent,
@@ -852,9 +912,7 @@ trait StandardOperatingPhysicsTrait
             netInterestSqueeze: $physics->netInterestSqueeze,
             priceRevenue: $priceRevenue,
             plantImpairment: $physics->plantImpairment,
-            seasonalCostRatioShift: $physics->seasonalCostRatioShift,
             specialCharge: max(0.0, $physics->specialCharge),
-            publishedRevenueShift: $physics->publishedRevenueShift,
         );
     }
 

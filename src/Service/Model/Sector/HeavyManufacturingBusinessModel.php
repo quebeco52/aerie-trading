@@ -257,14 +257,9 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin + $inputCostDrag + $gscpiCostDrag);
 
-        $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * self::OEM_BACKLOG_BURN_RATE)
-            + ($mroZ * $mroWeight * self::MRO_VARIANCE_SCALAR);
-        $observableShockZ *= $baselineVol;
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,

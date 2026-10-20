@@ -131,7 +131,6 @@ class DefenseContractorBusinessModelTest extends TestCase
 
         // With zero Z-scores and target inflation, actual revenue should equal expected revenue exactly ($10,000)
         $this->assertEqualsWithDelta($expectedRevenue, $result->actualRevenue, 0.01);
-        $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 0.0001);
     }
 
     /**
@@ -147,7 +146,6 @@ class DefenseContractorBusinessModelTest extends TestCase
         $result = $model->computeActualFinancials($stock, 10_000.0, 0.30, 3000.0, 0.15, $this->createMacroState(inflation: 0.04), $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]));
 
         $this->assertEqualsWithDelta(10_000.0, $result->actualRevenue, 1.0);
-        $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 1e-9);
         $this->assertEqualsWithDelta(1.0, $result->kpis['book_to_bill'], 1e-9);
     }
 

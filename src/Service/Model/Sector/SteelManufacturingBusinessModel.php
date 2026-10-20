@@ -276,14 +276,9 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag + $cuMarginAdjustment);
 
-        $observableShockZ = ($contractZ * $contractWeight * self::CONTRACT_VARIANCE_SCALAR * $baselineVol)
-            + ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol)
-            + ($cycleShift * $spotWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: null,
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),

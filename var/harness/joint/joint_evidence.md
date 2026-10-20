@@ -230,3 +230,27 @@ sane, and does fixA's +0.79% gap mean persist. Indicative: 8 unpaired seeds per 
 - scp mean -0.035 -> -0.026 (sd 0.55 both); vol_ema 0.160 -> 0.154 (sd 0.036 -> 0.034).
 - Not measured: cover attachment frequency (the harness keeps only treasury lines from StockEvent descriptions),
   Telecom subscriber_index and CommEquip book_to_bill (report rows carry only hedge/capture/power KPIs).
+
+## Batch C (analyst consensus from the public-quarter replay): baseC (29782cb5) vs fixC (+ batchC.patch) (2026-10-20)
+Question: do per-model EPS beat shares converge to ~75%, revenue surprise medians to the walk-down, surprise sd rise,
+report-day moves grow, revenue beta stay put, and what does the replay cost. Unpaired (paths diverge at the first
+report tick, tick 20: conditional draws key on consensus), 8 seeds x 20 y, 360 tpy, POLITICS=1 HEALTH=1.
+- Run: `bin/harness-batch var/harness/joint/run.sh 1-8 baseC fixC`, then `c_an.py 1-8 baseC fixC`, analyse.py,
+  model_moments.py per arm. Disclosure: `bin/harness-batch var/harness/disclosure/run.sh 1-4 baseC fixC` (30 y).
+  JointHarnessTest gained `crev` mid-batch; baseC was rerun so both arms carry it. Trees and caches deleted.
+- Tables: c-batchC-8s.out, analyse-batchC-{base,fix}-8s.out, models-batchC-{base,fix}-8s.out, beta-batchC-8s.out,
+  c-timing-batch1.out, ../disclosure/batchC-4s.out.
+- Board base -> fix: EPS beat 75.8 -> 75.7, rev beat (vs crev) 67.1 -> 69.8; CW return 6.73 -> 6.76, CW vol 15.2 ->
+  15.7, failures 0 -> 2 (both SHOR, a REIT liquidated in earlier arms too), Ch11 2 -> 2, rescues 32 -> 40 (sums). No anomalies.
+- Beat share base -> fix (se): ClearingHouse 88.3 (1.7) -> 80.4 (1.3), DistressedDebt 86.2 (2.0) -> 74.8 (0.7),
+  Defense 64.6 (6.8) -> 77.0 (1.3), Telecom 69.8 (5.1) -> 79.3 (0.7), Reit 82.2 -> 78.7, MedicalCare 65.6 -> 79.4,
+  Brokerage 66.1 -> 72.0. None outside 60-85 under fix; max PE 82.2, Reinsurance 82.9.
+- Surprise sd (rev/crev) fell for most models (Defense 15.5 -> 2.6, CommEquip 7.1 -> 3.3, Telecom 3.5 -> 1.8, CommBank
+  3.5 -> 1.9); rose for IndependentPower 6.5 -> 7.9, Refining 8.1 -> 9.5, OilGas 10.9 -> 11.8, Reinsurance 3.2 -> 3.6.
+  Medians converge on +1.4..+1.7% (actual above walked-down consensus); outliers PE +8.2, HedgeFund +0.9, OilGas +0.9.
+- Revenue beta: 5 of 56 models |z| > 2 (CompHW 3.45 -> 1.98, z -4.1; RetailIns 0.50 -> -1.33), inside arm-to-arm
+  scatter (CompHW was 2.55 vs 3.45 across batchAB arms with no revenue change).
+- Report moves: joint 2-tick window sd 3.17 (0.05) -> 3.36 (0.11)%, announcement share 6.54 (0.12) -> 6.58 (0.16)%;
+  disclosure report-day sd 2.87 (0.23) -> 2.62 (0.10)%. No growth beyond noise.
+- Wall: 142 vs 138 s/run (sd 11); first batch side by side 144 vs 138. No measurable cost.
+- Disclosure harness records 0 warnings in both arms: its warning capture is stale since the 10-19 rework.

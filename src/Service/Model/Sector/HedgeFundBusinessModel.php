@@ -59,10 +59,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.15;
     /** Base coverage estimation error is high due to unpredictable alpha generation. */
     public const BASE_COVERAGE_ERROR = 0.15;
-    /** Analyst visibility into directional long/short books (via 13F filings). */
-    public const DIR_ANALYST_VISIBILITY = 0.40;
-    /** Analyst visibility into quantitative statistical arbitrage (completely opaque). */
-    public const QUANT_ANALYST_VISIBILITY = 0.05;
 
     // --- Stream Default Weights ---
     /** Baseline fraction of revenue derived from sticky recurring AUM management fees. */
@@ -447,15 +443,9 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             $eventType = ShockEvent::HF_DIRECTIONAL_BLOWUP;
         }
 
-        // Analyst Observable Shock (Hedge funds are highly opaque)
-        $observableShockZ = (($dirZ * $dirWeight * self::DIR_ANALYST_VISIBILITY)
-            + ($quantZ * $quantWeight * self::QUANT_ANALYST_VISIBILITY))
-            * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

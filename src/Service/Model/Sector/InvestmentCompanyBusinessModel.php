@@ -137,17 +137,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     public const DEMAND_LAG_YEARS = 1.50;
 
     // --- Analyst Observability ---
-    /**
-     * Fraction of the dividend line visible to consensus. A holding declares publicly BEFORE the trust reports
-     * receiving it, so the receipt is nearly solved arithmetic.
-     */
-    public const LISTED_DIVIDEND_OBSERVABLE_DISCOUNT = 0.95;
-
-    /**
-     * Fraction of subsidiary performance visible ahead of the filing; these are unlisted and report only through the
-     * group.
-     */
-    public const WHOLLY_OWNED_OBSERVABLE_DISCOUNT = 0.45;
 
     /**
      * The volume the consolidated subsidiaries are staffed to, at their share of the balance-sheet income mix.
@@ -274,13 +263,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $ppiCostDrag);
 
-        $observableShockZ = ($ownedShock * $ownedWeight * self::WHOLLY_OWNED_OBSERVABLE_DISCOUNT)
-            + ($listedShock * $listedWeight * self::LISTED_DIVIDEND_OBSERVABLE_DISCOUNT)
-            + ($floatShock * $floatWeight * self::FLOAT_OBSERVABLE_DISCOUNT)
-            + ($ownedMacroBoost * $ownedWeight * self::WHOLLY_OWNED_OBSERVABLE_DISCOUNT)
-            + ($listedMacroBoost * $listedWeight * self::LISTED_DIVIDEND_OBSERVABLE_DISCOUNT)
-            + ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
@@ -288,7 +270,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

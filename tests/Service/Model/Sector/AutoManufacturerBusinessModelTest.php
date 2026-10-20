@@ -134,10 +134,6 @@ class AutoManufacturerBusinessModelTest extends TestCase
         );
 
         $this->assertSame(\App\Service\Event\ShockEvent::LABOR_STRIKE, $result->eventType);
-        // Strike reduces mass-market sales by 20% (on 60% of revenue -> -12% overall hit).
-        // Observable shock is properly scaled between -0.25 and 0.0, rather than blowing up to -2.0 (-200%).
-        $this->assertGreaterThan(-0.25, $result->observableShockZ);
-        $this->assertLessThan(0.0, $result->observableShockZ);
     }
 
     public function testCoverageProfile(): void
@@ -180,7 +176,6 @@ class AutoManufacturerBusinessModelTest extends TestCase
         // what the Street forecasts, which excludes it: analysts cutting their numbers for it would manufacture a beat.
         $salesRevenue = $result->streamRevenue['mass_market_sales'];
         $this->assertEqualsWithDelta(AutoManufacturerBusinessModel::MASSIVE_RECALL_PENALTY * $salesRevenue, $result->specialCharge, 1.0);
-        $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 0.001);
     }
 
     public function testExchangeRateExportDragIsCarriedOnceAtTheDeclaredExposure(): void

@@ -203,7 +203,6 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $costRatio,
-            observableShockZ: $expectedRevenue > 0.0 ? ($premium / $expectedRevenue) - 1.0 : 0.0,
             streamZ: $streams->getStreamZ(),
             streamRevenue: ['premiums' => $actualRevenue],
             kpis: [

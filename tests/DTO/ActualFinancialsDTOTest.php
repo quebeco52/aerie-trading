@@ -16,7 +16,6 @@ class ActualFinancialsDTOTest extends TestCase
             actualVariableCosts: 2000.0,
             clampedMargin: 0.40,
             ebit: 1500.0,
-            observableShockZ: 0.50,
             eventType: 'TAIL_RISK_EVENT',
             eventContext: ['severity' => 'high'],
             isPublicEvent: true,
@@ -26,7 +25,6 @@ class ActualFinancialsDTOTest extends TestCase
         $this->assertSame(2000.0, $dto->actualVariableCosts);
         $this->assertSame(0.40, $dto->clampedMargin);
         $this->assertSame(1500.0, $dto->ebit);
-        $this->assertSame(0.50, $dto->observableShockZ);
         $this->assertSame('TAIL_RISK_EVENT', $dto->eventType);
         $this->assertSame(['severity' => 'high'], $dto->eventContext);
         $this->assertTrue($dto->isPublicEvent);

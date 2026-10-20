@@ -247,15 +247,9 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $supplyChainPenalty + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Each stream's own shock at its revenue weight, and what a public congestion or super-cycle does to
-        // commercial.
-        $observableShockZ = ((($commercialShock * $cycleMultiplier) + ($cycleMultiplier - 1.0)) * $commercialWeight)
-            + ($consumerShock * $consumerWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

@@ -458,12 +458,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $rawMargin = $realizedVariableMargin + $rescueCapitalDrag + $markdownPenalty;
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
-        $observableShockZ = $expectedRevenue > 0.0 ? (($actualRevenue - $expectedRevenue) / $expectedRevenue) : 0.0;
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,

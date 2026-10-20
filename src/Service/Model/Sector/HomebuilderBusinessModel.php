@@ -201,14 +201,9 @@ class HomebuilderBusinessModel extends StandardCorporateBusinessModel
         $turnover = 1.0 - exp(-FinancialConstants::QUARTER_YEARS * $closings / $landBankYears);
         $streams->registerState(self::STATE_LAND_COST, $landCost + ($turnover * ($residualValue - $landCost)));
 
-        // The house price is published and read in full; the backlog shows the visible share of the closings.
-        $observableShockZ = $closings - 1.0;
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $costRatio,
-            observableShockZ: $observableShockZ,
-            publishedRevenueShift: $price - 1.0,
             streamZ: $streams->getStreamZ(),
             streamRevenue: ['homes' => $actualRevenue],
             kpis: [

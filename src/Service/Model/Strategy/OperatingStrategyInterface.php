@@ -43,6 +43,13 @@ interface OperatingStrategyInterface
      * @param array{uniforms: list<float>, spare: ?float} $draws
      */
     public function measureRevenueWithoutSectorFactor(Stock $stock, array $draws, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState): ?float;
+
+    /**
+     * The quarter as the public expects it before the report: the physics re-run from the same opening state averaged
+     * over the firm's private draws, on the revenue and variable margin the quarter was expected to run at. $seed
+     * fixes the scenarios, which come from a stream of their own.
+     */
+    public function measurePublicFinancials(Stock $stock, float $expectedRevenue, float $expectedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, ?int $calendarQuarter = null, int $seed = 0): ActualFinancialsDTO;
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile;
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
     /**

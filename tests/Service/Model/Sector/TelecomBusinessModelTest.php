@@ -107,8 +107,6 @@ class TelecomBusinessModelTest extends TestCase
 
         $this->assertGreaterThan($q3->clampedMargin, $q4->clampedMargin);
         $this->assertLessThan($q4->clampedMargin, $q1->clampedMargin);
-        $this->assertEqualsWithDelta($q4->clampedMargin - $q3->clampedMargin, $q4->seasonalCostRatioShift, 1e-9);
-        $this->assertEqualsWithDelta($q1->clampedMargin - $q4->clampedMargin, $q1->seasonalCostRatioShift, 1e-9);
 
         // An extra dollar of device sales costs more than a dollar: the device stream loses money at the margin.
         $deviceCostDelta = ($q4->actualVariableCosts - $q3->actualVariableCosts);

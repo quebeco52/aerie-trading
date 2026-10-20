@@ -368,15 +368,9 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::CHEMICAL_AGRI_BOOM;
         }
 
-        $observableShockZ = ($basePetroZ * $basePetroWeight * self::BASE_PETRO_VARIANCE)
-            + ($specialtyZ * $specialtyWeight * self::SPECIALTY_CHEM_VARIANCE)
-            + ($agriZ * $agriWeight * self::AGROCHEM_VARIANCE);
-        $observableShockZ *= $baselineVol;
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

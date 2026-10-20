@@ -150,7 +150,6 @@ final class ReitLeaseLadderTest extends TestCase
         $this->assertEqualsWithDelta(0.10, $kpis['in_place_rent_index'], 1e-9);
         $lease = 1_000_000_000.0 * 0.85;
         $this->assertEqualsWithDelta($lease * (1.0 + 0.10 + ReitBusinessModel::expectedTenantVacancy()), $result->streamRevenue['lease'], 1.0);
-        $this->assertEqualsWithDelta(0.10 * 0.85, $result->publishedRevenueShift, 1e-9);
         // Same space, dearer: the extra rent carries no extra operating cost.
         $this->assertEqualsWithDelta($lease * (0.10 + ReitBusinessModel::expectedTenantVacancy()), $result->priceRevenue, 1.0);
     }

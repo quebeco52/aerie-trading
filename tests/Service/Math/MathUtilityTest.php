@@ -740,4 +740,29 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta(4.0, array_sum($draws) / count($draws), 0.1);
         $this->assertEqualsWithDelta(0.25, count(array_filter($draws, static fn(int $n): bool => $n === 1)) / count($draws), 0.01);
     }
+
+    /** A mirrored replay hands out every recorded uniform reflected and every normal negated. */
+    public function testAMirroredReplayIsTheAntitheticTwinOfTheRecording(): void
+    {
+        $source = MathUtility::ownStream(42);
+        $source->beginDrawLog();
+        $normals = [$source->generateStandardNormal(), $source->generateStandardNormal(), $source->generateStandardNormal()];
+        $uniform = $source->generateUniform();
+        $log = $source->endDrawLog();
+
+        $mirror = MathUtility::mirroring($log, 7);
+        foreach ($normals as $normal) {
+            $this->assertEqualsWithDelta(-$normal, $mirror->generateStandardNormal(), 1e-12);
+        }
+        $this->assertEqualsWithDelta(1.0 - $uniform, $mirror->generateUniform(), 1e-12);
+    }
+
+    /** Past its recording a mirror draws on from its own stream rather than handing out a constant. */
+    public function testAMirrorDrawsOnPastItsRecording(): void
+    {
+        $mirror = MathUtility::mirroring(['uniforms' => [0.2], 'spare' => null], 7);
+
+        $this->assertEqualsWithDelta(0.8, $mirror->generateUniform(), 1e-12);
+        $this->assertNotSame($mirror->generateUniform(), $mirror->generateUniform());
+    }
 }

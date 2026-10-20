@@ -425,19 +425,9 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $effectiveMargin + $inputCostDrag + $gscpiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // What the market sees is the revenue the stream draws moved: the order shock at the share of it the
-        // backlog delivers this quarter, royalties and terminals in full. The event and litigation draws move
-        // revenue only through the regimes they trigger, which are public events of their own.
-        $observableShockZ = $baselineVol * self::REVENUE_VARIANCE_SCALAR * (
-            ($networkZ * $networkWeight * $burnRate)
-            + ($licensingZ * $licensingWeight * self::LICENSING_VARIANCE_RATIO)
-            + ($consumerZ * $consumerWeight * self::CONSUMER_VARIANCE_RATIO)
-        );
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

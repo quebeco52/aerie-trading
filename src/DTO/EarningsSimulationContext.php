@@ -148,6 +148,10 @@ class EarningsSimulationContext
 
     // Variables
     public float $realizedVariableMargin = 0.0;
+    /** The variable cost ratio the quarter was expected to run at: the margin's drift step without its own draw. */
+    public float $publicVariableMargin = 0.0;
+    /** The quarter as the public saw it before the report (OperatingStrategyInterface::measurePublicFinancials). */
+    public ?ActualFinancialsDTO $publicActuals = null;
 
     // Analyst
     public float $analystExpectedRevenue = 0.0;

@@ -6,10 +6,12 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\Distributions;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
+use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
 
 class CommodityLogisticsSubsystemTest extends TestCase
@@ -795,5 +797,24 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
         $state->globalDemandGapEma = 0.02;
         $this->assertGreaterThan($calm, CommodityLogisticsSubsystem::shippingTightness($state));
+    }
+
+    /** A smoothed season is read off its time of year, so a memo of one year serves every year and the past too. */
+    public function testASmoothedSeasonReadsTheSameEveryYear(): void
+    {
+        $power = static fn(float $t): float => CommodityLogisticsSubsystem::gasPowerPassThrough(CommodityLogisticsSubsystem::gasSeasonalFactor($t))
+            * CommodityLogisticsSubsystem::resolvePowerSeasonalFactor($t);
+        foreach ([0.13, 7.13, 123.37, 0.9999999, -0.4] as $time) {
+            $this->assertEqualsWithDelta(
+                TimeSeries::exponentiallySmoothedSignal($power, $time, MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS),
+                CommodityLogisticsSubsystem::smoothedPowerSeason($time),
+                1e-8,
+            );
+            $this->assertEqualsWithDelta(
+                TimeSeries::exponentiallySmoothedSignal(CommodityLogisticsSubsystem::gasSeasonalFactor(...), $time, MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS),
+                CommodityLogisticsSubsystem::smoothedGasSeason($time),
+                1e-8,
+            );
+        }
     }
 }

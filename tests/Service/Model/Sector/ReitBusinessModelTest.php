@@ -172,10 +172,6 @@ class ReitBusinessModelTest extends TestCase
         $vacancy = ReitBusinessModel::expectedTenantVacancy();
         $this->assertEqualsWithDelta(1031000.0 + (850000.0 * $vacancy), $defaultResult->actualRevenue, 1.0);
 
-        // Observable shock Z: (leaseShock * leaseWeight) + (hospitalityShock * hospitalityWeight)
-        // = (0.01 * 0.85) + (0.15 * 0.15) = 0.0085 + 0.0225 = 0.0310
-        $this->assertEqualsWithDelta(0.0310, $defaultResult->observableShockZ, 0.0001);
-
         // 2. PLZA archetype tuning (80% lease, 20% hospitality)
         $plzaStock = new Stock();
         $plzaStock->setTicker('PLZA');
@@ -195,8 +191,6 @@ class ReitBusinessModelTest extends TestCase
         // hospitalityRevenue = 200,000 * 1.15 = 230,000
         // totalRevenue = 1,038,000 + 800,000 v
         $this->assertEqualsWithDelta(1038000.0 + (800000.0 * $vacancy), $plzaResult->actualRevenue, 1.0);
-        // observableShockZ = (0.01 * 0.80) + (0.15 * 0.20) = 0.0080 + 0.0300 = 0.0380
-        $this->assertEqualsWithDelta(0.0380, $plzaResult->observableShockZ, 0.0001);
     }
 
     public function testSecuritizationArchetypeShockInclusion(): void
@@ -224,8 +218,6 @@ class ReitBusinessModelTest extends TestCase
         // Securitization revenue = 1,000,000 * 0.15 * 1.40 = 210,000
         $this->assertEqualsWithDelta(210000.0, $result->streamRevenue['securitization_income'], 1.0);
 
-        // Observable shock Z = 0.40 * 0.15 = 0.060
-        $this->assertEqualsWithDelta(0.060, $result->observableShockZ, 0.0001);
     }
 
     public function testLongevityArchetypeShockInclusion(): void
@@ -253,8 +245,6 @@ class ReitBusinessModelTest extends TestCase
         // Longevity revenue = 1,000,000 * 0.15 * 0.95 = 142,500
         $this->assertEqualsWithDelta(142500.0, $result->streamRevenue['longevity_bond_yield'], 1.0);
 
-        // Observable shock Z = -0.05 * 0.15 = -0.0075
-        $this->assertEqualsWithDelta(-0.0075, $result->observableShockZ, 0.0001);
     }
 
     /**

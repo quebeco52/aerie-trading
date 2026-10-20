@@ -92,9 +92,9 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile
     {
         return new SectorCoverageProfile(
-            baseVisibility: self::BASE_COVERAGE_VISIBILITY,
-            errorStdDev: self::BASE_COVERAGE_ERROR,
-            minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
+            baseVisibility: static::BASE_COVERAGE_VISIBILITY,
+            errorStdDev: static::BASE_COVERAGE_ERROR,
+            minVisibility: static::BASE_COVERAGE_MIN_VISIBILITY,
             eventBaseVisibility: 0.80,
             eventMinVisibility: 0.40,
         );
@@ -379,7 +379,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $alphaZ   = $streams->generateZ('alpha', 0.15); // Fund alpha / activist execution
 
         // 1. AUM net client flows & mark-to-market (Base Management Fee Stream).
-        $aumMarketBeta = $this->resolveAumCycleFlow($stock, $macroState, $aumBetaScalar);
         $clientFlowShift = $this->resolveClientFlowShift($stock, $macroState, $aumBetaScalar);
         // Mark-to-market: fee revenue is a percentage of assets, so the equity market's level against its own
         // trend moves the base directly. A run with no reported market leaves both fields at zero and the term silent.
@@ -430,15 +429,9 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             $eventType = ShockEvent::FUND_OUTFLOWS;
         }
 
-        // observableShockZ: AUM market beta component is fully public; alpha/performance fees are ~10% visible
-        // We encode the relative deviation from the macro-expected revenue as the observable shock.
-        $unanticipatedRevenueDelta = $actualRevenue - ($expectedRevenue * (1.0 + $aumMarketBeta));
-        $observableShockZ = $expectedRevenue > 0 ? ($unanticipatedRevenueDelta / $expectedRevenue) : 0.0;
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

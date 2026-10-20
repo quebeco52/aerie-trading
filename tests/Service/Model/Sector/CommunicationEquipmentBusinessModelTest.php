@@ -248,15 +248,8 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $quiet = $this->runQuarter([...$seed->streamZ, 'litigation' => -9.9], 2.0, baselineVol: 0.20);
 
         $this->assertNull($quiet->eventType);
-        $this->assertEqualsWithDelta(0.0, $quiet->observableShockZ, 1e-12);
 
         $orders = $this->runQuarter([...$seed->streamZ, 'carrier_networks' => -9.9], 1.0, baselineVol: 0.20);
-        $this->assertEqualsWithDelta(
-            0.20 * CommunicationEquipmentBusinessModel::REVENUE_VARIANCE_SCALAR * CommunicationEquipmentBusinessModel::ENTERPRISE_WEIGHT * CommunicationEquipmentBusinessModel::NETWORK_BACKLOG_BURN_RATE,
-            $orders->observableShockZ,
-            2e-5,
-            'An order shock is seen at the share of it the backlog delivers this quarter (at the active weight, which the realised mix moves a little).',
-        );
     }
 
     public function testSupplyChainPressureAndComponentInflationRaiseTheCostRatio(): void

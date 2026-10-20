@@ -362,14 +362,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $perUnitCostRatio = $realizedVariableMargin + $inputCostDrag + $merchantFuelDrag + $disasterPenalty - $capitalChargeShift;
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative));
 
-        // Regulated weather volume is perfectly visible via meter data, merchant generation is opaque, and the
-        // wholesale price is published daily. Dividing the price leg by the base visibility lets a persistent
-        // price level converge to an unbiased consensus.
-        $observableShockZ = ($weatherZ * $regulatedWeight * self::WEATHER_VARIANCE_SCALAR)
-            + ($unregulatedZ * $unregulatedWeight * self::MERCHANT_VARIANCE_SCALAR * 0.2);
-        $observableShockZ *= $baselineVol;
-        $observableShockZ += ($priceRelative - 1.0) / self::BASE_COVERAGE_VISIBILITY;
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $gridFailureCharge * $volumeRevenue;
@@ -377,7 +369,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

@@ -258,14 +258,9 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
-        $observableShockZ = ($mediaZ * $mediaWeight * self::MEDIA_VARIANCE_SCALAR * $baselineVol)
-            + ($brandZ * $brandWeight * self::BRAND_VARIANCE_SCALAR * $baselineVol)
-            + ($macroAdSpendShift * $mediaWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: null,
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),

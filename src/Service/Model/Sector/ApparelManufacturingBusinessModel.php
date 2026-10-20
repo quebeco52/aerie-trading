@@ -383,15 +383,9 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin + $inputCostDrag);
 
-        $observableShockZ = (($dtcZ * $dtcWeight * self::DTC_RETAIL_VARIANCE)
-            + ($wholesaleZ * $wholesaleWeight * self::WHOLESALE_CHANNEL_VARIANCE)
-            + ($contractZ * $contractWeight * self::CONTRACT_TEXTILE_VARIANCE)) * $baselineVol;
-        $observableShockZ -= ($bullwhipPenalty * $wholesaleWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

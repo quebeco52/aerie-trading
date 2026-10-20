@@ -891,7 +891,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $revenueZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,

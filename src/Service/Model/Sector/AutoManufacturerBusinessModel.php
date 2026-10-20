@@ -413,14 +413,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $effectiveMargin = $actualRevenue > 0 ? ($totalVariableCosts / $volumeRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin);
 
-        // Observable shock blending
-        $strikeShock = ($salesMultiplier - 1.0) * $salesWeight;
-
-        $observableShockZ = ($salesShock * $salesWeight * 0.60)
-            + ($apexShock * $apexWeight * 0.40)
-            + ((($softwareShock * $softwareWeight) + ($captiveShock * $captiveWeight)) * 0.20)
-            + ($strikeShock * 0.80);
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $recallPenalty * $salesRevenue;
@@ -428,7 +420,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

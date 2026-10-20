@@ -387,16 +387,9 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $effectiveMargin + $inputCostDrag + $strikePenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Visibility: 1P retail is visible via credit card data, 3P and Ads are opaque.
-        $observableShockZ = ($fpZ * $fpWeight * self::FIRST_PARTY_VARIANCE * 0.80)
-            + ($tpZ * $tpWeight * self::THIRD_PARTY_VARIANCE * 0.20)
-            + ($adsZ * $adsWeight * self::DIGITAL_ADS_VARIANCE * 0.10);
-        $observableShockZ *= $baselineVol;
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

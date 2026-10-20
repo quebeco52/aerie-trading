@@ -80,23 +80,6 @@ class RailroadBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($baseResult->streamRevenue['bulk_commodities'], $surgeResult->streamRevenue['bulk_commodities'], 1e-6);
     }
 
-    /**
-     * The cycle is public: it reaches the observable shock at its revenue weight, not shrunk by the firm's volatility.
-     */
-    public function testThePublicCycleReachesTheObservableShockAtFullSize(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('UNP');
-        $stock->setBeta('1.0');
-
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-
-        $boom = $this->model->computeActualFinancials(clone $stock, 1_000_000.0, 0.40, 200_000.0, 0.10, new MacroStateDTO(outputGapEma: 0.02), $mathMock);
-
-        $this->assertEqualsWithDelta(($boom->actualRevenue - 1_000_000.0) / 1_000_000.0, $boom->observableShockZ, 1e-9);
-    }
-
     /** A pure freight hauler sets no subscription weight and must not grow a passenger business. */
     public function testAFreightOnlyOperatorHasNoTransitStream(): void
     {

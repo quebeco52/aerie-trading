@@ -349,7 +349,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             // Monthly gaming filings and the rent roll reveal the quarter's revenue against expectations.
-            observableShockZ: ($actualRevenue / max(1.0, $expectedRevenue)) - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

@@ -166,6 +166,15 @@ class CommodityLogisticsSubsystem
     /** Heat rate (MMBtu/MWh) EIA quotes the spark spread at: a new, efficient combined-cycle plant. */
     public const SPARK_SPREAD_BENCHMARK_HEAT_RATE = 7.0;
 
+    // --- Smoothed Seasons ---
+    /** Decimal places of the time of year a smoothed season is read at (1e-9 years, about 0.03 seconds). */
+    private const SMOOTHED_SEASON_DECIMALS = 9;
+    /** Smoothed-season readings held before the memo is cleared; a game reads a few hundred dates a year. */
+    private const SMOOTHED_SEASON_MEMO_CAPACITY = 4096;
+
+    /** @var array<string, float> Series and time of year => the smoothed season there, already integrated. */
+    private static array $smoothedSeasonMemo = [];
+
     // --- Carbon in Wholesale Power (EPA emission factors; Fabra & Reguant 2014) ---
 
     // --- Gold (Barsky, Epstein, Lafont-Mueller & Yoo 2021, Chicago Fed Letter 464) ---
@@ -625,7 +634,7 @@ class CommodityLogisticsSubsystem
      */
     public static function smoothedGasSeason(float $totalTime): float
     {
-        return TimeSeries::exponentiallySmoothedSignal(self::gasSeasonalFactor(...), $totalTime, MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS);
+        return self::smoothedSeason('gas', self::gasSeasonalFactor(...), $totalTime);
     }
 
     /**
@@ -634,11 +643,31 @@ class CommodityLogisticsSubsystem
      */
     public static function smoothedPowerSeason(float $totalTime): float
     {
-        return TimeSeries::exponentiallySmoothedSignal(
+        return self::smoothedSeason(
+            'power',
             static fn(float $t): float => self::gasPowerPassThrough(self::gasSeasonalFactor($t)) * self::resolvePowerSeasonalFactor($t),
             $totalTime,
-            MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS,
         );
+    }
+
+    /**
+     * A yearly season read through the standard index average. The season repeats every year, so its average does:
+     * it is integrated once per time of year and read at that time of year, the same whatever was asked first.
+     *
+     * @param callable(float): float $season
+     */
+    private static function smoothedSeason(string $series, callable $season, float $totalTime): float
+    {
+        $timeOfYear = round($totalTime - floor($totalTime), self::SMOOTHED_SEASON_DECIMALS);
+        $key = $series . ':' . $timeOfYear;
+        if (!isset(self::$smoothedSeasonMemo[$key])) {
+            if (count(self::$smoothedSeasonMemo) >= self::SMOOTHED_SEASON_MEMO_CAPACITY) {
+                self::$smoothedSeasonMemo = [];
+            }
+            self::$smoothedSeasonMemo[$key] = TimeSeries::exponentiallySmoothedSignal($season, $timeOfYear, MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS);
+        }
+
+        return self::$smoothedSeasonMemo[$key];
     }
 
     /**

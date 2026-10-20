@@ -63,4 +63,10 @@ Question family: does the whole simulation behave sensibly after several merges,
 - `fixAB` = tree-fixAB (a202316c + batchAB.patch + new-files.tar). Apply with `git apply --directory=var/harness/joint/tree-<arm>`
   from the repo root; `git -C <tree> apply` inside the checkout skips every path silently.
 
+- Batch C arms: `baseC` = tree-baseC (git archive 29782cb5), `fixC` = same + batchC.patch. Report rows now carry `crev`
+  (published consensus revenue; `exp` is the model's pre-shock revenue, NOT consensus). `c_an.py <seeds> <armA> <armB>`:
+  per model n, EPS beat (se over seeds), rev/crev-1 median and within-firm sd, revenue beat, flags outside 60-85%,
+  then report-tick r^2 profile, report-window move sd and announcement share of tick variance (env WIN, default 0,1)
+  from ticks.csv, and wall s/run. `disclosure/run.sh baseC|fixC` runs those trees there (nothing forced).
+
 Evidence: `joint_evidence.md`.

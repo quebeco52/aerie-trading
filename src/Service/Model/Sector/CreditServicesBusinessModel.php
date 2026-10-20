@@ -229,17 +229,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        // observableShockZ: inflation bonus and swipe volume are visible, lending is partially visible
-        $lendingBase = max(1.0, $expectedRevenue * $lendingWeight);
-        $lendingShock = ($lendingRevenue - $lendingBase) / $lendingBase;
-        $networkBase = max(1.0, $expectedRevenue * $networkWeight);
-        $networkShock = ($networkRevenue - $networkBase) / $networkBase;
-        $observableShockZ = ($lendingShock * $lendingWeight) + ($networkShock * $networkWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,

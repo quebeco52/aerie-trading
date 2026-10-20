@@ -187,13 +187,9 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             $eventType = ShockEvent::ADVISORY_CRASH;
         }
 
-        // observableShockZ: volatility, M2 and deal flow are all published, so analysts anticipate their terms fully.
-        $observableShockZ = (($volatilityBonus + $m2Shift) * $tradingWeight) + ($advisoryDealBonus * $advisoryWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,

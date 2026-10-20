@@ -888,7 +888,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: 0.0,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: [

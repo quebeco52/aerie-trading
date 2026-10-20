@@ -36,7 +36,7 @@ its title, or `[[slug|your own words]]`. A site page links with an ordinary Mark
 - No dates. The Almanac places events against each other ("after the Harbour Ledger affair", "within the year",
   "when her term ran out"), never against the game's calendar: no "Year 1", "Year 12", "before Year 1". `sequence`
   orders entries and is never shown; leave gaps (10, 20, 30) so new entries fit between.
-- Write as the Almanac: plain, factual, British spelling. The US is "the mainland"; no real agencies, countries,
+- Write as the Almanac: plain, factual, British spelling. The US is "the mainland"; no real places, agencies, countries,
   exchanges or funds (no FBI, SEC, Fed, NYSE).
 - Name past figures freely. A Council-appointed head or a chief executive in post when the records begin can be
   named for what they did before then, never described as in post now.

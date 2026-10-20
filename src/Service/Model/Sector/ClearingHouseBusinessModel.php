@@ -284,12 +284,9 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
             $eventType = ShockEvent::VOLATILITY_SURGE;
         }
 
-        $observableShockZ = 0.0;
-
         $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,

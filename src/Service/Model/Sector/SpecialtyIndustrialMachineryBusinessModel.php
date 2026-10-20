@@ -280,15 +280,9 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $rawMargin = $effectiveMargin + $supplyChainPenalty + $inputCostDrag + $gscpiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Each stream's own shock at its revenue weight; equipment orders and a public deal reach this quarter's
-        // revenue at the backlog burn rate.
-        $observableShockZ = ((($equipmentShock * $dealMultiplier) + ($dealMultiplier - 1.0)) * $equipmentWeight * self::EQUIPMENT_BACKLOG_BURN_RATE)
-            + ($servicesShock * $servicesWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

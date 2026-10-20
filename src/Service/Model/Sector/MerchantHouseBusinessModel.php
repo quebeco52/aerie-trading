@@ -121,9 +121,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
      */
     public const BASE_COVERAGE_VISIBILITY = 0.50;
 
-    /** Fraction of desk performance visible to consensus ahead of the filing. */
-    public const MERCHANT_OBSERVABLE_DISCOUNT = 0.75;
-
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest shipments and the
      * pre-winter energy build move more tonnage across the back half of the year.
@@ -245,13 +242,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             $realizedVariableMargin + $ppiCostDrag + ($merchantCostShift * $merchantShare),
         );
 
-        $observableShockZ = ($merchantShock * $merchantWeight * self::MERCHANT_OBSERVABLE_DISCOUNT)
-            + ($tollboothShock * $tollboothWeight)
-            + ($floatShock * $floatWeight * self::FLOAT_OBSERVABLE_DISCOUNT)
-            + ($merchantSurge * $merchantWeight * self::MERCHANT_OBSERVABLE_DISCOUNT)
-            + ($tollboothMacroBoost * $tollboothWeight)
-            + ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
@@ -259,7 +249,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

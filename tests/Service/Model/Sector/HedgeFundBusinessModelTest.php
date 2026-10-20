@@ -626,34 +626,6 @@ class HedgeFundBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.40, $result->clampedMargin);
     }
 
-    public function testAnalystObservableShockOpacityWeighting(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('SWAN');
-        $stock->setTotalEquity('100.0');
-        $stock->setWholesaleDebt('0.0');
-        $stock->setEarningsMomentumZ([
-            'directional_bets' => 2.0,
-            'quant_alpha'      => 2.0,
-            'management_fees'  => 0.0,
-        ]);
-
-        $macro = MacroStateDTO::fromArray([
-            'output_gap_ema'          => 0.0,
-            'market_volatility_ema'   => 0.18,
-            'macro_credit_spread_ema' => 0.02,
-        ]);
-
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnCallback(fn($prevZ, $phi) => $prevZ);
-
-        $result = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathMock);
-
-        // Observable shock is properly dampened by low analyst visibility (DIR = 40%, QUANT = 5%)
-        $this->assertGreaterThan(0.0, $result->observableShockZ);
-        $this->assertLessThan(0.05, $result->observableShockZ);
-    }
-
     public function testModelThresholds(): void
     {
         $this->assertSame(3.0, $this->model->getWholesaleLeverageLimit());

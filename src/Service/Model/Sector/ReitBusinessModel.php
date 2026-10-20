@@ -396,24 +396,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::REIT_ELEVATED_VACANCIES;
         }
 
-        // Aggregate observable revenue shock percentage across active streams (MarketConsensusEngine applies coverage
-        // visibility). Default rates are published; which tenants fail is not. The rent roll is disclosed in full.
-        $observableShockZ
-            = (($leaseShock - $macroTenantVacancy) * $leaseWeight)
-            + ($hospitalityShock * $hospitalityWeight)
-            + ($securitizationShock * $securitizationWeight)
-            + ($longevityShock * $longevityWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             priceRevenue: $priceRevenue,
-            publishedRevenueShift: $rolledInPlaceRent * $leaseWeight,
             // The two numbers a real estate analyst reads first: how long the roll is contracted for, and
             // what the space coming up is worth against what it currently earns.
             kpis: [

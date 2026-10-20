@@ -487,9 +487,9 @@ class EarningsEngine
      * peeks at a draw that has not happened, so this is genuine foreknowledge rather than a shadow copy of the
      * quarter.
      *
-     * The warning is news only in what the last report did not already carry: consensus anchors on that
-     * report's cost ratio (MarketConsensusEngine), so the change booked then is in the estimate, and only the
-     * change the closing quarter adds, at the share analysts cannot read off published input prices, is guided.
+     * The warning is news only in what the estimate does not already carry: consensus reads the input-cost change
+     * since the last report at the share analysts can read off published input prices (MarketConsensusEngine), so
+     * only the rest of that change is guided.
      * It is priced as a report is, by the immediate share of the fair-value revision it causes.
      *
      * @return list<array<string, mixed>> the published warning event, or an empty list
@@ -522,9 +522,9 @@ class EarningsEngine
         }
         $quarterlyRevenue = max(0.0, (float) $stock->getTotalRevenue()) / 4.0;
 
-        // Analysts carry the published part of an input move (MarketConsensusEngine reads the realized cost base
-        // at ANALYST_COST_BASE_VISIBILITY), so only the share they cannot see is worth warning about, and it is a
-        // cost: it reaches the net income the estimate is struck in after tax.
+        // Analysts carry the published part of an input move (MarketConsensusEngine reads the change since the last
+        // report at ANALYST_COST_BASE_VISIBILITY), so only the share they cannot see is worth warning about, and it is
+        // a cost: it reaches the net income the estimate is struck in after tax.
         $costSqueeze = max(0.0, $dragChange)
             * $quarterlyRevenue
             * (1.0 - FinancialConstants::ANALYST_COST_BASE_VISIBILITY)
@@ -636,9 +636,10 @@ class EarningsEngine
     }
 
     /**
-     * The quarterly provision analysts already have in the estimate for a lender: the through-the-cycle
-     * charge on the gross book the firm discloses, which is exactly the replenishment the allowance
-     * roll-forward books at steady state. Nothing for a firm that keeps no loan book.
+     * The quarterly provision analysts carry for a lender: the allowance roll-forward run on the disclosed book with
+     * the public quarter's charge-offs, so both the replenishment and the convergence toward a lifetime target that
+     * moves with published spreads and recession odds are in the estimate. Only the losses the firm's own book takes
+     * beyond them surprise. Nothing for a firm that keeps no loan book.
      */
     private function resolveExpectedCreditLossProvision(EarningsSimulationContext $ctx): float
     {
@@ -646,9 +647,13 @@ class EarningsEngine
             return 0.0;
         }
 
-        $grossBook = max(0.0, (float) $ctx->stock->getEarningAssets());
-
-        return max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock)) * $grossBook / self::TTM_QUARTERS;
+        return $this->advanceCreditLossAllowance(
+            $ctx,
+            (float) $ctx->stock->getEarningAssets(),
+            (float) $ctx->stock->getCreditLossAllowance(),
+            $ctx->publicActuals->creditLossProvision ?? 0.0,
+            $ctx->publicActuals->netChargeOffs ?? 0.0,
+        )['levelCharge'];
     }
 
     /**
@@ -1129,6 +1134,10 @@ class EarningsEngine
         }
 
         $realizedVariableMargin = StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, $z2);
+        // What the ratio was expected to run at: the same step without its draw, at the output the quarter was
+        // expected to sell.
+        $ctx->publicVariableMargin = min(0.99, max(0.01, StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, 0.0)
+            + self::overtimePremium($ctx->capacityUtilizationBeforeShocks, $ctx->seasonalFactor)));
 
         $stock->setStructuralVariableMargin($realizedVariableMargin);
 
@@ -1268,6 +1277,9 @@ class EarningsEngine
             $revenueWithoutSector = $this->industryShareLedger !== null
                 ? $ctx->strategy->measureRevenueWithoutSectorFactor($streamBasis, $draws, $ctx->expectedRevenue, $ctx->realizedVariableMargin, $ctx->fixedCosts, $ctx->baselineVol, $ctx->macroState)
                 : null;
+            // The same quarter as analysts could expect it before the report: averaged over the firm's private draws,
+            // on the revenue and margin it was expected to run at, with the industry's announced regimes still in view.
+            $ctx->publicActuals = $ctx->strategy->measurePublicFinancials($streamBasis, $ctx->expectedRevenueBeforeShocks, $ctx->publicVariableMargin, $ctx->fixedCosts, $ctx->baselineVol, $ctx->macroState, $ctx->calendarQuarter, crc32($ctx->stock->getTicker() . ':' . $ctx->tickCount));
         } finally {
             $ctx->strategy->useIndustryRegimes(null);
         }
@@ -1291,15 +1303,15 @@ class EarningsEngine
         $priorExpectedRevenue = (float) (($ctx->stock->getEarningsMomentumZ() ?? [])[self::STATE_LAST_EXPECTED_REVENUE] ?? 0.0);
         $consensus = $this->marketConsensusEngine->generateConsensus(
             $actuals,
+            $ctx->publicActuals ?? $actuals,
             $coverage,
-            $ctx->expectedRevenue,
             $this->mathUtility,
             $ctx->stock,
             $ctx->macroState->marketVolatilityEma,
-            $ctx->realizedVariableMargin,
+            $ctx->expectedRevenueBeforeShocks,
+            $ctx->strategy->projectInputCostDragChange($ctx->stock, $ctx->macroState) ?? 0.0,
             $seasonalRatio,
             $priorExpectedRevenue,
-            $ctx->expectedRevenueBeforeShocks,
         );
         $ctx->analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
@@ -1366,11 +1378,6 @@ class EarningsEngine
         $grantableValue = $burnRateCap * $ctx->dt * max(0.0, $ctx->sharesOutstanding) * max(0.0, (float) $ctx->stock->getPrice());
         $ctx->stockCompensation = min($stockCompensationExpense, $grantableValue);
         $ctx->kpis['stock_compensation'] = $stockCompensationExpense;
-
-        // The order book is a disclosed, forward-looking number: analysts read it off the report and carry
-        // it into next quarter's estimate (see MarketConsensusEngine). Held on the stock so the consensus
-        // formed BEFORE the next report can see what the last one disclosed.
-        $ctx->stock->setLastBookToBill(isset($ctx->kpis['book_to_bill']) ? (float) $ctx->kpis['book_to_bill'] : null);
     }
 
     private function calculateInterestAndRunRates(EarningsSimulationContext $ctx): void
@@ -2262,14 +2269,37 @@ class EarningsEngine
             return;
         }
 
-        $grossBook = (float) $stock->getEarningAssets();
-        $allowance = (float) $stock->getCreditLossAllowance();
         $explicitProvision = $ctx->creditLossProvision;
+        [
+            'levelCharge' => $levelCharge,
+            'grossBook' => $grossBook,
+            'allowance' => $allowance,
+            'chargeOffs' => $chargeOffs,
+        ] = $this->advanceCreditLossAllowance($ctx, (float) $stock->getEarningAssets(), (float) $stock->getCreditLossAllowance(), $explicitProvision, $ctx->netChargeOffs);
+
+        $stock->setEarningAssets((string) max(0.0, $grossBook));
+        $stock->setCreditLossAllowance((string) $allowance);
+
+        $ctx->ebitda -= $levelCharge;
+        $ctx->ebit -= $levelCharge;
+        $ctx->impairmentCharges += $levelCharge;
+        $ctx->creditLossProvision = $explicitProvision + $levelCharge;
+        $ctx->netChargeOffs = $chargeOffs;
+    }
+
+    /**
+     * One quarter of a lender's allowance (ASC 326): charge-offs leave the book against the reserve, the reserve is
+     * put back and walks a quarter-step toward its lifetime target, and losses past it are charged at once.
+     *
+     * @return array{levelCharge: float, grossBook: float, allowance: float, chargeOffs: float}
+     */
+    private function advanceCreditLossAllowance(EarningsSimulationContext $ctx, float $grossBook, float $allowance, float $explicitProvision, float $reportedChargeOffs): array
+    {
         // A model whose credit physics is expressed only as a margin shock reports no dollar charge-offs;
         // its realized losses then run at the through-the-cycle rate, or the allowance would be built every
         // quarter by a charge nothing ever consumed and released back as income that was never earned.
         $throughTheCycleCharge = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock)) / 4.0 * $grossBook;
-        $chargeOffs = min($grossBook, $ctx->netChargeOffs > 0.0 ? $ctx->netChargeOffs : $throughTheCycleCharge);
+        $chargeOffs = min($grossBook, $reportedChargeOffs > 0.0 ? $reportedChargeOffs : $throughTheCycleCharge);
         $currentLossRate = $grossBook > 0.0 ? $chargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $grossBook : null;
 
         // Loans that went bad leave the book and consume the reserve held against them. No earnings effect:
@@ -2295,14 +2325,7 @@ class EarningsEngine
             $allowance = 0.0;
         }
 
-        $stock->setEarningAssets((string) max(0.0, $grossBook));
-        $stock->setCreditLossAllowance((string) $allowance);
-
-        $ctx->ebitda -= $levelCharge;
-        $ctx->ebit -= $levelCharge;
-        $ctx->impairmentCharges += $levelCharge;
-        $ctx->creditLossProvision = $explicitProvision + $levelCharge;
-        $ctx->netChargeOffs = $chargeOffs;
+        return ['levelCharge' => $levelCharge, 'grossBook' => $grossBook, 'allowance' => $allowance, 'chargeOffs' => $chargeOffs];
     }
 
     /**

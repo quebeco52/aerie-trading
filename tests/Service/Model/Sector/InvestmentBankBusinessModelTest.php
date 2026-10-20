@@ -967,43 +967,6 @@ class InvestmentBankBusinessModelTest extends TestCase
         $this->assertGreaterThan($calmIncome, $distressedIncome, 'Realized wholesale rate must override the static credit_spread approximation once a live debt calc exists.');
     }
 
-    public function testObservableShockZIncludesPublicMacroDrivers(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('GS');
-
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0); // All idiosyncratic private z-scores = 0
-        $mathMock->method('generateUniform')->willReturn(0.50);
-
-        // Macro boom that expands public advisory and trading drivers
-        $macroBoom = \App\DTO\MacroStateDTO::fromArray([
-            'output_gap_ema'          => 0.02,
-            'policy_rate'             => 0.04,
-            'policy_rate_ema'         => 0.04,
-            'yield_5y_ema'            => 0.075, // +100bps steep
-            'market_volatility_ema'   => 0.28,  // vol-arb boom
-            'macro_credit_spread_ema' => 0.015,
-            'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
-            'equity_risk_premium'     => 0.04,
-            'deal_activity_index_ema' => 120.0,
-            'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
-        ]);
-
-        $result = $this->model->computeActualFinancials(
-            $stock,
-            1000.0,
-            0.50,
-            100.0,
-            0.14,
-            $macroBoom,
-            $mathMock,
-        );
-
-        // Even with 0 private z-scores, observableShockZ must be strictly positive from public macro
-        $this->assertGreaterThan(0.05, $result->observableShockZ, 'Observable shock Z must incorporate public macro drivers.');
-    }
-
     public function testViolentRateDislocationPenalizedByInventoryMarkdown(): void
     {
         $stock = new Stock();

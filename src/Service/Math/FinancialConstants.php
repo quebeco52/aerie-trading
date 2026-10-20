@@ -185,9 +185,9 @@ class FinancialConstants
 
     // --- Analyst Cost-Base Visibility ---
     /**
-     * Share of the realized variable cost ratio analysts forecast correctly: input prices are published series
-     * (commodity indices, PPI, wage prints) and pass-through terms disclosed, so only firm-specific execution is left
-     * unseen.
+     * Share of the input-cost change since the last report analysts read into the cost ratio: input prices are
+     * published series (commodity indices, PPI, wage prints), but the firm's own pass-through and timing are not, so
+     * a quarter of the change reaches the report as news, and a standing move is fully in the next estimate.
      */
     public const ANALYST_COST_BASE_VISIBILITY = 0.75;
 

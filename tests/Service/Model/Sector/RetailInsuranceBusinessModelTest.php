@@ -90,45 +90,4 @@ class RetailInsuranceBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($adequate->clampedMargin, $impaired->clampedMargin, 1e-12);
     }
 
-    public function testObservableShockZCalculation(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('DOVE');
-        $stock->setBeta('0.8');
-        $stock->setTotalEquity('50000000000');
-
-        $mathMock = $this->createStub(MathUtility::class);
-        // pcZ = 1.0, lifeZ = 0.5, claimZ = 0.0
-        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(1.0, 0.5, 0.0);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-
-        $macro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            yield10yEma: 0.045,
-            policyRateEma: 0.025,
-        );
-
-        $expectedRevenue = 10_000_000_000.0;
-        $result = $this->model->computeActualFinancials(
-            $stock,
-            expectedRevenue: $expectedRevenue,
-            realizedVariableMargin: 0.70,
-            fixedCosts: 1_000_000_000.0,
-            baselineVol: 0.10,
-            macroState: $macro,
-            mathUtility: $mathMock,
-        );
-
-        // Observable shock should match the revenue percentage deviation
-        $pcBase = $expectedRevenue * RetailInsuranceBusinessModel::PROPERTY_CASUALTY_WEIGHT;
-        $pcShock = ($result->streamRevenue['property_casualty_premiums'] - $pcBase) / $pcBase;
-
-        $lifeBase = $expectedRevenue * RetailInsuranceBusinessModel::LIFE_INSURANCE_WEIGHT;
-        $lifeShock = ($result->streamRevenue['life_insurance_premiums'] - $lifeBase) / $lifeBase;
-
-        $expectedObservableShock = ($pcShock * RetailInsuranceBusinessModel::PROPERTY_CASUALTY_WEIGHT)
-            + ($lifeShock * RetailInsuranceBusinessModel::LIFE_INSURANCE_WEIGHT);
-
-        $this->assertEqualsWithDelta($expectedObservableShock, $result->observableShockZ, 0.0001);
-    }
 }

@@ -269,12 +269,9 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // DIVERGENT MACRO PULLS
         // =========================================================================
 
-        // 1. Government Contracts -> Rock Solid + Fiscal Appropriations + Cost-Plus Inflation Capture
-        // Inflation running above target boosts revenue via cost-plus escalation, and state appropriations scale the
-        // baseline budget.
-        // 2. Corporate Retainers -> Mild GDP Expansion (Corporate HQ footprint expansion)
+        // 1. Government Contracts -> state appropriations
+        // 2. Corporate Retainers -> the output gap (corporate HQ footprint)
         // 3. Expeditionary & Black-Ops -> VIX (Fear) & Credit Spreads (Geopolitical/Financial Stress)
-        $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
 
         // --- Asymmetric Tail Risk Events ---
@@ -320,14 +317,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR, $clampedMargin, $actualRevenue);
 
-        // Visibility: Government cost-plus inflation is fully public, Retainers are moderately public, Expeditionary
-        // Black Ops are opaque.
-        $observableShockZ = ($govZ * $govWeight * self::GOVERNMENT_VARIANCE_SCALAR * 1.0)
-            + ($retainerZ * $retainerWeight * self::RETAINER_VARIANCE_SCALAR * 0.50)
-            + ($expeditionaryZ * $expeditionaryWeight * self::EXPEDITIONARY_VARIANCE_SCALAR * 0.05)
-            + ($govSpendShift * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR);
-        $observableShockZ *= $baselineVol;
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $tacticalFailurePenalty * $actualRevenue;
@@ -335,7 +324,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

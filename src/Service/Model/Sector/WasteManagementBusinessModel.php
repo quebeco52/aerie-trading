@@ -259,12 +259,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Residential is highly visible, Commercial correlates to GDP, Recycling is visible via commodities
-        $observableShockZ = ($residentialZ * $residentialWeight * self::RESIDENTIAL_VARIANCE_SCALAR * 0.90)
-            + ($commercialZ * $commercialWeight * self::COMMERCIAL_VARIANCE_SCALAR * 0.50)
-            + ($recyclingZ * $recyclingWeight * self::RECYCLING_VARIANCE_SCALAR * 0.80);
-        $observableShockZ *= $baselineVol;
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $disasterPenalty * max(0.0, $actualRevenue);
@@ -272,7 +266,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

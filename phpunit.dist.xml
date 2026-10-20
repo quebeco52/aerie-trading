@@ -52,6 +52,7 @@
             <exclude>tests/Service/Macro/YieldCurveRealismTest.php</exclude>
             <exclude>tests/Service/Macro/PlayedDistrictRealismTest.php</exclude>
             <exclude>tests/Financial/SovereignFundDynamicsTest.php</exclude>
+            <exclude>tests/Financial/PublicQuarterUnbiasedTest.php</exclude>
             <exclude>tests/Service/Macro/HouseholdCreditCycleTest.php</exclude>
         </testsuite>
 
@@ -64,6 +65,7 @@
             <file>tests/Service/Macro/YieldCurveRealismTest.php</file>
             <file>tests/Service/Macro/PlayedDistrictRealismTest.php</file>
             <file>tests/Financial/SovereignFundDynamicsTest.php</file>
+            <file>tests/Financial/PublicQuarterUnbiasedTest.php</file>
             <file>tests/Service/Macro/HouseholdCreditCycleTest.php</file>
         </testsuite>
 

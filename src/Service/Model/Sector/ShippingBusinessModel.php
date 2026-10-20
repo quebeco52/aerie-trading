@@ -281,17 +281,9 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $bunkerInflationAdjustment);
 
-        // observableShockZ: Baltic Dry Index and Harpex are public daily data (~75% visibility via getCoverageProfile)
-        $spotBase = max(1.0, $expectedRevenue * $spotWeight);
-        $spotShock = ($spotRevenue - $spotBase) / $spotBase;
-        $contractBase = max(1.0, $expectedRevenue * $contractWeight);
-        $contractShock = ($contractRevenue - $contractBase) / $contractBase;
-        $observableShockZ = ($spotShock * $spotWeight) + ($contractShock * $contractWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

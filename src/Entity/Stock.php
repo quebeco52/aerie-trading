@@ -549,13 +549,6 @@ class Stock
     private ?float $managementIntensity = null;
 
     /**
-     * @var float|null Book-to-bill disclosed in the last report (orders booked over revenue billed); null when the firm
-     *                 discloses no order book.
-     */
-    #[ORM\Column(type: 'float', nullable: true)]
-    private ?float $lastBookToBill = null;
-
-    /**
      * @var float|null Accruals borrowed from future quarters to hit consensus and not yet reversed (Burgstahler &
      *                 Dichev 1997). Positive = earnings pulled forward and still owed back.
      */
@@ -708,13 +701,6 @@ class Stock
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
     private ?string $lastAnalystRevenue = null;
-
-    /**
-     * @var string|null Variable cost ratio as it was last REPORTED, the anchor analysts forecast the next
-     *                  quarter's cost base from. Null until the first report.
-     */
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
-    private ?string $lastReportedCostRatio = null;
 
     /**
      * @var bool Whether the company has collapsed into bankruptcy and is permanently defunct.
@@ -1647,18 +1633,6 @@ class Stock
         return $this;
     }
 
-    public function getLastBookToBill(): ?float
-    {
-        return $this->lastBookToBill;
-    }
-
-    public function setLastBookToBill(?float $lastBookToBill): static
-    {
-        $this->lastBookToBill = $lastBookToBill;
-
-        return $this;
-    }
-
     public function getManagementStyle(): \App\Data\Company\ManagementStyle
     {
         return \App\Data\Company\ManagementStyle::tryFromNullable($this->managementStyle);
@@ -2354,17 +2328,6 @@ class Stock
     public function getLastAnalystRevenue(): ?string
     {
         return $this->lastAnalystRevenue;
-    }
-
-    public function getLastReportedCostRatio(): ?string
-    {
-        return $this->lastReportedCostRatio;
-    }
-
-    public function setLastReportedCostRatio(?string $lastReportedCostRatio): self
-    {
-        $this->lastReportedCostRatio = $lastReportedCostRatio !== null ? self::cleanBcStr($lastReportedCostRatio, 6) : null;
-        return $this;
     }
 
     public function setLastAnalystRevenue(?string $lastAnalystRevenue): self

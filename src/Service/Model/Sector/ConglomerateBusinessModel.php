@@ -182,10 +182,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     public const DEAL_ACTIVITY_DIVESTITURE_SCALAR = 0.15;
 
     // --- Analyst Observability ---
-    /** Fraction of float mark-to-market noise visible to public consensus; segment reporting obscures the rest. */
-    public const FLOAT_OBSERVABLE_DISCOUNT = 0.40;
-    /** Fraction of contrarian deployment alpha visible to public consensus ahead of the filing. */
-    public const CONTRARIAN_OBSERVABLE_DISCOUNT = 0.50;
 
     public function getMinIcr(): float
     {
@@ -378,14 +374,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             + $ppiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Blended observable shock
-        $observableShockZ = ($industrialShock * $industrialWeight)
-            + ($defensiveShock * $defensiveWeight)
-            + ($floatShock * $floatWeight * self::FLOAT_OBSERVABLE_DISCOUNT)
-            + ($industrialMacroBoost * $industrialWeight)
-            + ($defensiveMacroBoost * $defensiveWeight)
-            + ($contrarianSurge * $floatWeight * self::CONTRARIAN_OBSERVABLE_DISCOUNT);
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
@@ -393,7 +381,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

@@ -286,10 +286,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         $perTonneCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue);
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perTonneCostRatio, $priceRelative));
 
-        // The benchmark is public and read in full; the mine's own output is seen at coverage visibility.
-        $outputShock = $expectedRevenue > 0.0 ? ($volumeRevenue / $expectedRevenue) - 1.0 : 0.0;
-        $observableShockZ = $outputShock;
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = $disasterPenalty * $volumeRevenue;
@@ -297,8 +293,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
-            publishedRevenueShift: $priceRelative - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

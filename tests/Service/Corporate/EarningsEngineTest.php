@@ -21,6 +21,7 @@ use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Event\MarketEventPublisher;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
@@ -31,6 +32,8 @@ use App\Service\Math\ResponseCurves;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HomebuilderBusinessModel;
 use App\Service\News\NarrativeEngine;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
@@ -783,6 +786,61 @@ class EarningsEngineTest extends TestCase
         $faded = $this->reportDepreciation('Internet Retail', 0.0, 100.0);
 
         $this->assertEqualsWithDelta($faded->capacityUtilizationBeforeShocks, $opening->capacityUtilizationBeforeShocks, 1e-9);
+    }
+
+    /** @return iterable<string, array{string}> Industries whose model moves the cycle inside its own streams. */
+    public static function industriesThatCarryTheCycleInTheirStreams(): iterable
+    {
+        foreach (['Furnishings, Fixtures & Appliances', 'Computer Hardware', 'Communication Equipment', 'Aerospace & Defense', 'Engineering & Construction', 'Telecom Services', 'Steel', 'Railroads', 'Specialty Industrial Machinery', 'Pollution & Treatment Controls', 'Security & Protection Services'] as $industry) {
+            yield $industry => [$industry];
+        }
+    }
+
+    /**
+     * Analysts know the public quarter, the cycle a model applies inside its streams included. In a steady boom with
+     * no news of the firm's own, the estimate converges on what it reports: read only through the root demand shift,
+     * a model that carried the cycle in its streams was missed every quarter for as long as the boom lasted.
+     */
+    #[DataProvider('industriesThatCarryTheCycleInTheirStreams')]
+    #[AllowMockObjectsWithoutExpectations]
+    public function testASteadyBoomIsNotAStandingSurpriseOnceAnalystsSeeIt(string $industry): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        // The firm draws nothing of its own: every quarter is the one analysts expect.
+        $quiet = $this->createPartialMock(MathUtility::class, ['generateStandardNormal', 'generateUniform', 'checkProbability', 'generatePoissonCount']);
+        $quiet->method('generateStandardNormal')->willReturn(0.0);
+        $quiet->method('generateUniform')->willReturn(0.5);
+        $quiet->method('checkProbability')->willReturn(false);
+        $quiet->method('generatePoissonCount')->willReturn(0);
+        $this->mathUtility = $quiet;
+        $engine = $this->buildEngine($dispatcher);
+        $stock = $this->buildMatureIndustrial('BOOM');
+        $stock->setIndustry($industry);
+        $gap = 0.03;
+        $boom = new MacroStateDTO(...[
+            'corporateTaxRate' => 0.21,
+            'policyRateEma' => 0.04,
+            'yield5yEma' => 0.045,
+            'outputGap' => $gap,
+            'outputGapEma' => $gap,
+            'foreignOutputGapEma' => $gap,
+            'manufacturingPmiEma' => MacroConstants::PMI_BASELINE + 2.0,
+            ...array_fill_keys(array_keys(MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS), $gap),
+        ]);
+
+        for ($quarter = 0; $quarter < 12; ++$quarter) {
+            $engine->calculate($stock, $boom, ($quarter * 63) + EarningsEngine::resolveReportingTick('BOOM', 252), 252);
+        }
+        $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+
+        // Within the jump's compensator: a quarter with no jump sits that far above its mean, and analysts hear that
+        // at their visibility. Missing the cycle missed by the whole boom, several percent.
+        $unbiased = $captured->analystExpectedRevenue / (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS);
+        $this->assertEqualsWithDelta(1.0, $unbiased / $captured->actualRevenue, 0.01);
     }
 
     /** One report of a mature firm in the given industry at the given output gap, on a fixed draw. */
@@ -2724,6 +2782,51 @@ class EarningsEngineTest extends TestCase
             $this->assertEqualsWithDelta($captured->netChargeOffs, $strategy->getThroughTheCycleCreditLossRate() / 4.0 * ($book + $captured->netChargeOffs), $captured->netChargeOffs * 0.05, 'realized losses run at the through-the-cycle rate');
         }
         $this->assertGreaterThan(0.04, $lifetimeRate, 'a card book reserves several percent of receivables');
+    }
+
+    /**
+     * The reserve build a widening spread forces is public: the lifetime loss target moves with published spreads and
+     * recession odds, so analysts carry the build the allowance roll-forward books toward it. Charged at the
+     * through-the-cycle rate alone, a lender missed by the whole build in every quarter the outlook worsened.
+     */
+    public function testAnalystsCarryTheReserveBuildAWideningSpreadForces(): void
+    {
+        $provision = function (float $spread): array {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($dispatcher);
+            $lender = $this->buildCardLender('CARD');
+            $macro = fn(float $spreadEma): MacroStateDTO => new MacroStateDTO(
+                corporateTaxRate: 0.21,
+                policyRate: 0.04,
+                policyRateEma: 0.04,
+                yield2yEma: 0.04,
+                yield5yEma: 0.042,
+                yield10yEma: 0.045,
+                equityRiskPremium: 0.05,
+                nominalGdpIndex: 1.0,
+                macroCreditSpreadEma: $spreadEma,
+                macroCreditSpreadTrend: 0.015,
+            );
+            mt_srand(20260912);
+            // The first report seeds the allowance at its target; the next one meets the spread.
+            $tick = EarningsEngine::resolveReportingTick('CARD', 252);
+            $engine->calculate($lender, $macro(0.015), $tick);
+            $engine->calculate($lender, $macro($spread), $tick + 63);
+            $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+
+            return [$captured->expectedCreditLossProvision, $captured->creditLossProvision];
+        };
+
+        [$calmExpected, $calmActual] = $provision(0.015);
+        [$wideExpected, $wideActual] = $provision(0.035);
+
+        $this->assertGreaterThan($calmActual * 1.05, $wideActual, 'the wider spread must build the reserve for the test to have power');
+        $this->assertEqualsWithDelta($wideActual - $calmActual, $wideExpected - $calmExpected, 0.05 * ($wideActual - $calmActual), 'the build is in the estimate');
     }
 
     /**

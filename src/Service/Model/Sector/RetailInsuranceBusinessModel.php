@@ -117,18 +117,9 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
 
         $structuralClaimShock = $claims['claimZ'] < $catThreshold ? $claims['claimZ'] : 0.0;
 
-        $pcBase = max(1.0, $expectedRevenue * $pcWeight);
-        $pcShock = ($pcRevenue - $pcBase) / $pcBase;
-
-        $lifeBase = max(1.0, $expectedRevenue * $lifeWeight);
-        $lifeShock = ($lifeRevenue - $lifeBase) / $lifeBase;
-
-        $observableShockZ = ($pcShock * $pcWeight) + ($lifeShock * $lifeWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

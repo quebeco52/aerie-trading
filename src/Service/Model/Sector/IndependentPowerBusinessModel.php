@@ -311,17 +311,11 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
                 : 0.0,
         );
 
-        // Prices are public and the hedge book is disclosed, so analysts read them in full; the water is seen at
-        // coverage visibility.
-        $outputShock = $output - 1.0;
-        $observableShockZ = $wholesaleWeight * $outputShock;
         $hedgeGain = $baseRevenue * $wholesaleWeight * $hedgeRatio * ($powerStrike - $powerSpot);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
-            publishedRevenueShift: $priceRelative - 1.0,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

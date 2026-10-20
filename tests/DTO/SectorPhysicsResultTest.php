@@ -14,7 +14,6 @@ class SectorPhysicsResultTest extends TestCase
         $result = new SectorPhysicsResult(
             actualRevenue: 1000.0,
             rawVariableMargin: 0.35,
-            observableShockZ: -0.5,
             eventType: 'SUPPLY_CHAIN_CRUNCH',
             eventContext: ['region' => 'Asia'],
             isPublicEvent: true,
@@ -22,7 +21,6 @@ class SectorPhysicsResultTest extends TestCase
 
         $this->assertSame(1000.0, $result->actualRevenue);
         $this->assertSame(0.35, $result->rawVariableMargin);
-        $this->assertSame(-0.5, $result->observableShockZ);
         $this->assertSame('SUPPLY_CHAIN_CRUNCH', $result->eventType);
         $this->assertSame(['region' => 'Asia'], $result->eventContext);
         $this->assertTrue($result->isPublicEvent);

@@ -296,14 +296,9 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $effectiveMargin + $shortagePenalty + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Each stream's own shock at its revenue weight, and what a public shortage or super-cycle does to it.
-        $observableShockZ = ((($enterpriseShock * $enterpriseMultiplier) + ($enterpriseMultiplier - 1.0)) * $enterpriseWeight)
-            + ((($consumerShock * $consumerMultiplier) + ($consumerMultiplier - 1.0)) * $consumerWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

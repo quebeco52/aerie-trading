@@ -201,10 +201,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const BASE_COVERAGE_VISIBILITY   = 0.30;
     /** Base coverage error dispersion for investment bank analysts. */
     public const BASE_COVERAGE_ERROR        = 0.10;
-    /** Analyst visibility fraction into advisory and M&A pipelines. */
-    public const ADVISORY_ANALYST_VISIBILITY = 0.20;
-    /** Analyst visibility fraction into sales and trading market-making flow. */
-    public const TRADING_ANALYST_VISIBILITY  = 0.55;
 
     // --- Event Lore Thresholds ---
     /** Output gap threshold triggering M&A syndication boom lore. */
@@ -461,13 +457,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             }
         }
 
-        $observableShockZ = ($advisoryMacroFactor * $advisoryWeight)
-            + ($tradingMacroShift * $tradingWeight)
-            + ($optionsVegaBonus * $optionsWeight)
-            + ($advisoryZ * $advisoryWeight * self::ADVISORY_ANALYST_VISIBILITY
-                + $tradingZ * $tradingWeight * self::TRADING_ANALYST_VISIBILITY)
-                * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
-
         // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
         // ratio.
         $specialCharge = ($regulatoryPenalty + $counterpartyDefaultPenalty) * $actualRevenue;
@@ -475,7 +464,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedVariableMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),

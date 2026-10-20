@@ -218,9 +218,6 @@ final class OilGasProducerBusinessModelTest extends TestCase
     {
         $spike = $this->report($this->producer(), $this->macro(crude: 150.0, gas: 150.0));
 
-        // Revenue is 50% above plan, all of it price: analysts, who see the benchmarks, read it in full.
-        $this->assertEqualsWithDelta(0.5, $spike->publishedRevenueShift, 1e-9);
-        $this->assertEqualsWithDelta(0.0, $spike->observableShockZ, 1e-9);
         $this->assertEqualsWithDelta(1.5, $spike->kpis['realized_price_index'], 1e-9);
     }
 

@@ -353,16 +353,9 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        $mortgageBase = max(1.0, $expectedRevenue * $mortgageWeight);
-        $mortgageShock = ($mortgageRevenue - $mortgageBase) / $mortgageBase;
-        $lendingBase = max(1.0, $expectedRevenue * $lendingWeight);
-        $lendingShock = ($lendingRevenue - $lendingBase) / $lendingBase;
-        $observableShockZ = ($mortgageShock * $mortgageWeight) + ($lendingShock * $lendingWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,

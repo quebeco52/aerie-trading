@@ -414,6 +414,7 @@ class JointHarnessTest extends KernelTestCase
             'recprov' => (float) $report->getReceivablesProvision(),
             'reps' => (float) $report->getReportedEps(),
             'ceps' => (float) $report->getConsensusEps(),
+            'crev' => (float) $report->getConsensusRevenue(),
             'ea' => (float) $report->getEarningAssets(),
             'fin' => $report->getStock()->getCustomerDeposits() !== null && (float) $report->getStock()->getCustomerDeposits() > 0.0,
             'rating' => $report->getStock()->getCreditRating(),

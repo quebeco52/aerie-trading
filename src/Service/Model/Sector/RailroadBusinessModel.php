@@ -231,19 +231,9 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
-        // The streams' own shocks scale with the firm's volatility; the macro shifts are already fractions of revenue,
-        // and every one of them is public.
-        $observableShockZ = ((($intermodalZ * $intermodalWeight * self::INTERMODAL_VARIANCE_SCALAR)
-            + ($bulkZ * $bulkWeight * self::BULK_VARIANCE_SCALAR)) * $baselineVol)
-            + ($intermodalMacroShift * $intermodalWeight)
-            + ($industrialMacroShift * $industrialWeight)
-            + ($bulkMacroShift * $bulkWeight)
-            + (($macroShifts['transit_subscriptions'] ?? 0.0) * $transitWeight);
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            observableShockZ: $observableShockZ,
             eventType: null,
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
