@@ -290,3 +290,54 @@ So the average euro-area requirement excl P2G and CCyB is ≈9.3% (my arithmetic
 The noregulator arms (new vs HEAD) differ by about nothing: gap sd 0.0176/0.0177, acf4 0.6225/0.6222, SLOOS 0.040/0.041. Moving the CCyB from its level term to the shortfall is immaterial.
 
 **Not modelled:** MAG/LEI's permanent lending-spread channel (+12-15bp per pp, steady-state output −0.09%).
+
+
+## 10. Where the +1pp step's output cost goes: three channels (2026-10-20)
+
+Question: what a +1pp requirement rise costs in output, how it splits across the three shortfall channels (Bridges
+household cut `CreditFiscalSubsystem` ~998; demand premium `MacroAggregateSubsystem::excessCreditPremium()` ~1131;
+SLOOS `calculateSloosCreditStandards()` ~1419), and whether it is counted twice. Tree: HEAD 00a71ce1 (src clean).
+
+Harness: `politics/gate.php` arm `step` (macro only, no politics, no fund, no equity cap: the equity-wealth loop is off),
+step at year 10, 20 years, 180 ticks/year, seeds 1-8 in every arm. Channel arms run detached worktrees of HEAD with
+their own vendor copy and one use site zeroed (`chan_setup.sh`); each tree also runs its own no-step arm (`off<X>`), so
+the contribution is a difference in differences, (step - off) - (noX - offX). (CCyB rises also feed the shortfall and the
+Bridges cut, so a zeroed channel moves the baseline too: pre-step |log GDP| 0.010-0.018% for step - noX.)
+
+    var/harness/regulator/chan_setup.sh
+    bin/harness-batch var/harness/regulator/chan.sh 1-8 off step noBridges noPremium noSLOOS
+    bin/harness-batch var/harness/regulator/chan.sh 1-8 step4 offBridges offPremium offSLOOS
+    python3 var/harness/regulator/chan_an.py var/harness/regulator/runs/chan_8 > var/harness/regulator/chan_8.out
+    var/harness/regulator/chan_setup.sh remove
+
+Log real GDP = log(pot x (1 + gap)), %; quarter q after the step starts; years 0-4 = q1-16, 5-8 = q17-32; gap pp;
+hdti log % at q16; SLOOS net fraction (sd 0.15 in off) mean q1-8. Paired mean (se), n = 8. No credit crisis struck in
+any arm after the step (crisis-split empty), so there are no with/without rows.
+
+```
+                             logGDP% peak (se) q    yrs0-4 (se)      yrs5-8 (se)
+step - off             all :  -0.297 (0.026) q5   -0.123 (0.012)  -0.041 (0.007) n=8 | gap -0.097 (0.010) hdti4  -0.92 (0.03) sloos02  0.023 (0.002) pre 0.000 crisis-split []
+step4 - off            all :  -0.120 (0.021) q13  -0.087 (0.010)  -0.043 (0.013) n=8 | gap -0.076 (0.009) hdti4  -0.82 (0.04) sloos02  0.006 (0.001) pre 0.000 crisis-split []
+Bridges (DiD)          all :  -0.193 (0.010) q5   -0.067 (0.011)  -0.006 (0.006) n=8 | gap -0.050 (0.009) hdti4  -0.68 (0.03) sloos02  0.000 (0.000) pre 0.000 crisis-split []
+Bridges (step-noBridges) all :  -0.191 (0.010) q5   -0.065 (0.010)  -0.001 (0.011) n=8 | gap -0.048 (0.010) hdti4  -0.90 (0.06) sloos02  0.000 (0.000) pre 0.018 crisis-split []
+Premium (DiD)          all :  -0.123 (0.026) q6   -0.045 (0.010)  -0.016 (0.007) n=8 | gap -0.034 (0.008) hdti4   0.01 (0.01) sloos02  0.000 (0.000) pre 0.000 crisis-split []
+Premium (step-noPremium) all :  -0.128 (0.029) q6   -0.049 (0.010)  -0.018 (0.008) n=8 | gap -0.038 (0.009) hdti4   0.04 (0.01) sloos02  0.000 (0.000) pre 0.016 crisis-split []
+SLOOS (DiD)            all :  -0.052 (0.008) q17  -0.019 (0.002)  -0.030 (0.007) n=8 | gap -0.018 (0.002) hdti4  -0.26 (0.02) sloos02  0.022 (0.002) pre 0.000 crisis-split []
+SLOOS (step-noSLOOS)   all :  -0.045 (0.009) q15  -0.021 (0.003)  -0.023 (0.008) n=8 | gap -0.017 (0.003) hdti4  -0.29 (0.02) sloos02  0.023 (0.002) pre 0.010 crisis-split []
+noBridges - off        all :  -0.115 (0.025) q6   -0.058 (0.011)  -0.040 (0.011) n=8 | gap -0.049 (0.009) hdti4  -0.02 (0.08) sloos02  0.023 (0.002) pre 0.018 crisis-split []
+noPremium - off        all :  -0.182 (0.009) q5   -0.074 (0.007)  -0.023 (0.008) n=8 | gap -0.059 (0.005) hdti4  -0.96 (0.03) sloos02  0.023 (0.002) pre 0.016 crisis-split []
+noSLOOS - off          all :  -0.290 (0.025) q5   -0.103 (0.010)  -0.018 (0.011) n=8 | gap -0.080 (0.008) hdti4  -0.63 (0.03) sloos02  0.000 (0.000) pre 0.010 crisis-split []
+```
+
+- Stopped at stage 8: every target |t| > 4 (step - off peak t 11, years 0-4 t 10; each DiD channel |t| >= 4.7).
+- 1-year phase-in: peak -0.30% at 1.25 years; channels at years 0-4 sum to -0.131 against a total of -0.123
+  (additive within noise). Bridges -0.067, premium -0.045, SLOOS -0.019.
+- 4-year phase-in (MAG's design): peak -0.12% at q13, below MAG's -0.17/-0.19% at 18q. The total is not overcharged
+  on MAG's own design; the 1-year arm's -0.30 is a phasing effect, driven by the Bridges stock cut (-0.19 at q5),
+  far above MAG's "slightly larger, sooner" for a 2-year phase-in.
+- Drift since section 9: that fit had SLOOS at its own 0.87 and the 0.22 premium removed; the code now routes 0.22
+  to both the premium and SLOOS. SLOOS q1-8 is +2.3 pts (section 9: peak +9 to +14).
+- Correction (2026-10-20): this is not drift. Commit a199a7fb (macro review step 1) deliberately replaced section 9's
+  SLOOS 0.87 with one CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT of 0.22, read by both the demand premium and SLOOS, fitted
+  then to MAG's -0.17% (4-year phase-in). Decision: no channel is dropped. The channels are additive, the 4-year
+  total is under MAG's, and the 1-year arm's -0.30% sits at the top of MAG's 0.07-0.31 range.

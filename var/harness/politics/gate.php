@@ -33,9 +33,18 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
         new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math));
     $policy = $politics?->liveState()->policy();
     $p = new \App\DTO\PoliticsStateDTO();
+    unset($m);
+    unset($m);
     $ticks = (int) $years * $tpy;
     for ($i = 1; $i <= $ticks; ++$i) {
+        $pre = isset($m) ? [$m->creditCrisisDrag, $m->bankCapitalBuilt, $m->bankCapitalRequirement, $m->lastCreditCrisisAt, $m->countercyclicalBufferRate] : null;
         $m = $engine->updateMacroState(1.0 / $tpy, policy: $policy);
+        if ($pre !== null && $m->lastCreditCrisisAt !== $pre[3]) {
+            // Crisis event row: the drag jump on the tick, and the capital the banks held going in.
+            fwrite($fh, json_encode(['s' => $seed, 'ev' => 'crisis', 't' => round($m->totalTime, 4), 'djump' => $m->creditCrisisDrag - $pre[0],
+                'built' => $pre[1], 'req' => $pre[2], 'ccyb' => $pre[4], 'builtAfter' => $m->bankCapitalBuilt, 'cgap' => $m->creditToGdpGapEma ?? null,
+                'scaleBuilt' => CreditFiscalSubsystem::thinCapitalDragScale($pre[1]), 'scaleReq' => CreditFiscalSubsystem::thinCapitalDragScale($pre[2])]) . "\n");
+        }
         if ($politics !== null) {
             $p = $politics->updatePolitics($m, 1.0 / $tpy);
             $policy = $p->policy();
@@ -45,6 +54,21 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             if ($arm === 'noregulator') {
                 $policy = new \App\DTO\GovernmentPolicyDTO(...(['bankCapitalRequirement' => null] + get_object_vars($policy)));
             }
+        } elseif ($arm === 'off' && getenv('FIXED_DEBT')) {
+            // FIXED_DEBT=<target>,<pace>: no politics, every lever as the off arm leaves it (founding), but the budget
+            // steers to a fixed debt target at a fixed pace from the second tick.
+            [$fdT, $fdP] = array_map('floatval', explode(',', getenv('FIXED_DEBT')));
+            $policy ??= new \App\DTO\GovernmentPolicyDTO(
+                publicSpendingShare: $m->publicSpendingShare,
+                corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate, foreignBuyerTaxRate: $m->foreignBuyerTaxRate,
+                mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
+                extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
+                reserveDrawShare: $m->reserveDrawShare, consolidationTaxShare: $m->consolidationTaxShare, reserveHomeEquityShare: $m->reserveHomeEquityShare,
+                utilityRateCaseGrantShare: $m->utilityRateCaseGrantShare, dividendTaxRate: $m->dividendTaxRate,
+                bankCapitalRequirement: $m->bankCapitalRequirement, mortgageLtvCap: $m->mortgageLtvCap, neutralCountercyclicalBuffer: $m->neutralCountercyclicalBuffer,
+                initialMarginRequirement: $m->initialMarginRequirement, earningsManagementScale: $m->earningsManagementScale,
+                debtTarget: $fdT, debtPace: $fdP,
+            );
         } elseif ($arm === 'step') {
             $policy = new \App\DTO\GovernmentPolicyDTO(
                 publicSpendingShare: $m->publicSpendingShare,
@@ -93,7 +117,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
                 'regst' => $p->regulatorStance, 'creg' => \App\Service\Politics\Council\CouncilAppointments::median($p->councilRegulationStances), 'regstart' => $p->regulatorTermStart, 'regname' => $p->regulatorName, 'seated' => $m->authorityCommitteeSeated, 'mmaj' => $m->authorityMajority,
                 'cc' => \App\Service\Politics\Policy\Platforms::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_COUNCIL] ?? null,
                 'cs' => \App\Service\Politics\Policy\Platforms::coalitionPosition($p->governingCoalition, $p->dietSeats, $p->partyPositions)[AerieDiet::AXIS_STATE] ?? null, 'g' => $m->governmentSpendingIndex, 'spend' => $m->publicSpendingShare, 'fbt' => $m->foreignBuyerTaxRate, 'cts' => $m->consolidationTaxShare ?? null, 'line' => class_exists(\App\Service\Politics\DebtBrake::class) ? \App\Service\Politics\DebtBrake::councilLine($p) : 0.90, 'wam' => $m->sovereignDebtAverageMaturity, 'ndebt' => $m->sovereignNetDebtToGdpEma, 'eff' => $m->sovereignCouponRate, 'pr' => $m->policyRate, 'meet' => $p->lastMeetingAt, 'votes' => $p->lastMeetingVotes, 'govstart' => $p->governorTermStart, 'mst' => $p->memberStances,
-                'conc' => $m->authorityConcession, 'nairu' => $m->nairu, 'psg' => $m->productivitySupplyGap, 'pn' => $m->perceivedNeutralRate, 'tr' => $m->targetRate,
+                'conc' => $m->authorityConcession, 'nairu' => $m->nairu, 'psg' => $m->productivitySupplyGap, 'pn' => $m->perceivedNeutralRate, 'tr' => $m->targetRate, 'dtgt' => $m->debtTarget, 'dpace' => $m->debtPace,
             ]) . "\n");
         }
     }

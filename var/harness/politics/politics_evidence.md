@@ -110,3 +110,72 @@ Harness: gate.php arm on via spend.sh (head_tree worktree, cp -a vendor), STAGE=
 Seeds 1-4, 60 y, burn 5 y, quarterly rows. Table in committee_4.out (diff and se in bp; maj rows are quarter shares).
 Result: rate/gap/inflation moments move <= 1 bp (mean rate -1.1 bp, se 0.3); majority mix hawk 64->47%, dove 23->8%,
 none 13->45% of quarters. ELB share 1.25% both arms. Caveat: n=4, no equity cap (equity-wealth loop off), no fund.
+
+## 2026-10-20 Debt rule: closing over DEBT_CLOSING_YEARS on debt/potential (tree) vs HEAD 00a71ce1
+
+Question: does the reworked requiredPrimaryBalanceAt() stop debt overshooting the cabinet target without moving the cycle?
+Harness: gate.php arm `on` (rows now carry dtgt, dpace), spend.sh arms newon/headon, 60 y x 180 ticks/y, burn 5 y.
+Run: `STAGE=debtrule_4 YEARS=60 TPY=180 bin/harness-batch var/harness/politics/spend.sh 1-8 newon headon`, then
+`python3 var/harness/politics/debtrule_an.py var/harness/politics/runs/debtrule_4 5`. Seeds 1-4 (debtrule_4.out) then 1-8:
+
+```
+n=8 seeds, burn 5y; mean over seeds (overshoot max = max over seeds)
+quantity                    HEAD      tree      diff      se      t
+overshoot mean pp          0.943     1.210     0.267   0.370   0.72
+overshoot max pp           2.822     5.057     0.754   0.506   1.49
+spells reached             1.750     1.625    -0.125   0.398  -0.31
+share |dev|>2pp            0.743     0.826     0.084   0.042   1.97
+mean |dev| pp             16.872    16.887     0.015   0.312   0.05
+primary bal mean %        -0.156    -0.184    -0.028   0.009  -3.31
+primary bal sd pp          0.764     0.771     0.007   0.017   0.41
+debt/GDP mean %           42.185    42.633     0.448   0.435   1.03
+debt/GDP max %            50.996    51.941     0.945   0.524   1.80
+gap sd %                   1.688     1.680    -0.008   0.005  -1.64
+rate sd pp                 1.793     1.782    -0.011   0.008  -1.47
+inflation mean %           2.153     2.152    -0.001   0.001  -0.55
+```
+
+Caveats: targets change every ~4 y and flip between ~37% and ~80% with paces 0.2-1pp, so debt reaches its target in
+only ~1.7 spells per seed in 55 y; |debt - target| averages 17pp in both arms. Overshoot rests on ~14 events per arm and
+is inside its noise. No equity cap, no fund.
+
+## 2026-10-20 Debt rule with a fixed target (0.37, pace 0.0094), tree vs HEAD 00a71ce1
+Question: with the target held fixed, does the tree rule (step = clamp((debt x (1+gap) - target)/9.7, +-pace)) stop the
+overshoot of the HEAD rule (step = clamp(debt - target, +-pace)), and how tightly does it hold debt?
+Harness: gate.php off arm with FIXED_DEBT=0.37,0.0094 (no politics, founding levers, fixed target and pace from tick 2);
+head_tree worktree as in RUN.md. `FIXED_DEBT=0.37,0.0094 STAGE=fixdebt_8 YEARS=60 TPY=180 bin/harness-batch
+var/harness/politics/spend.sh 1-8 newoff headoff`, then `python3 var/harness/politics/fixdebt_an.py runs/fixdebt_8`.
+Seeds 1-8, 60 years, 180 ticks/yr, no fund, no equity cap. Debt opens at ~50%.
+```
+n=8 seeds; window years 30-60; mean over seeds
+quantity                     HEAD     tree     diff      se      t       tree range
+first crossing yr          16.188   22.312    6.125   2.273   2.69     10.50..45.75
+overshoot 15y pp            2.011    3.066    1.055   0.537   1.96       0.68..5.42
+mean dev pp 30-60           0.253    0.931    0.678   0.838   0.81      -3.46..4.18
+mean |dev| pp               1.379    2.894    1.515   0.307   4.94       1.28..4.44
+sd dev pp                   1.498    1.878    0.380   0.224   1.70       1.23..2.93
+share |dev|>2pp             0.229    0.632    0.403   0.066   6.12       0.20..0.87
+prim bal % (all)           -0.020   -0.010    0.010   0.027   0.36      -0.15..0.21
+prim bal % (win)           -0.265   -0.245    0.020   0.066   0.30      -0.62..0.05
+gap sd % (win)              1.797    1.758   -0.039   0.008  -5.07       1.46..2.35
+rate sd pp (win)            1.819    1.784   -0.035   0.031  -1.11       1.60..2.15
+debt max % (all)           50.052   50.052    0.000   0.000   2.03     49.59..50.48
+debt min % (all)           34.235   33.168   -1.067   0.488  -2.19     30.96..36.13
+```
+Verdict: no. The tree rule crosses later (+6y), overshoots further (+1.1pp, t 2.0) and holds debt looser: mean |dev|
+2.9 vs 1.4pp, 63 vs 23% of quarters beyond 2pp (t 6). Its loop gain near target is 1/9.7 a year against about 1 a
+year for HEAD, so purchase and cycle noise move debt more than the rule pulls it back. Nothing explosive (debt 31-50%,
+gap SD 1.8%, rate SD 1.8pp in both). Stopped at stage 8: the overshoot interval excludes any reduction.
+Decision (user, 2026-10-20): the slower rule was reverted and HEAD's rule kept. Its gain of about 1 a year holds debt within
+1.4pp on average; the live game's 5-6pp overshoot sits inside its tail (worst seeds 5.4pp). Only the harness option and
+the analysis scripts remain.
+
+## 2026-10-20 Crisis drag scaled by capital built, not the requirement
+Question: does scaling the crisis drag and scar by `thinCapitalDragScale(bankCapitalBuilt)` instead of
+`(bankCapitalRequirement)` behave sensibly? HEAD 00a71ce1 vs working tree, gate.php arm `on`, seeds 1-4, 60 y, tpy 180.
+Run: see RUN.md "Crisis severity". Table: `crisis_4.out`.
+- Crises at identical ticks in both arms (10 in total; 2/0/4/4 per seed); odds untouched as intended.
+- Drag jump moves by exactly scaleBuilt/scaleReq: -2.1% (s1 y17.6, CCyB 1.35% built) and -1.7% (s4 y40.5) where
+  built > req; +1.3% (s1 y3.6) where built lagged a raised requirement. Mean jump 0.0365 -> 0.0362; scales 1.02-1.12.
+- Gap SD 0.0169 both, gap mean -0.0022 both, 3y post-crisis gap -0.0065 both; paired differences <= 1e-4.
+Caveat: 4 seeds, descriptive; built often trails a rising requirement, so the change can harden a crisis too.

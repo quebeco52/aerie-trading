@@ -1175,7 +1175,8 @@ class CreditFiscalSubsystem
      * The District is a light-touch financial centre, so both legs depart from the JST panel as Jorda, Richter,
      * Schularick & Taylor (2021) measure: banks funded beyond their deposits raise the hazard, and thin capital
      * deepens the recession a crisis brings (capital does not predict crises, only how hard they land), by as much as
-     * the Financial Regulator's requirement leaves it thin (thinCapitalDragScale()).
+     * the capital the banks have built leaves it thin (thinCapitalDragScale()), so a buffer built in the boom softens
+     * the bust it is released into.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -1203,13 +1204,13 @@ class CreditFiscalSubsystem
         $state->lastCreditCrisisAt = $state->totalTime;
         // The buffer is released on the day (see calculateHouseholdCredit()), not a tick later.
         $state->countercyclicalBufferRate = 0.0;
-        $crisisDrag = self::thinCapitalDragScale($state->bankCapitalRequirement)
-            * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
+        $thinCapital = self::thinCapitalDragScale($state->bankCapitalBuilt);
+        $crisisDrag = $thinCapital * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
         $state->creditCrisisDrag += $crisisDrag;
         $this->diagnostics?->recordEvent('creditCrisis', $crisisDrag);
         // Cerra & Saxena (2008): the output a crisis destroys does not come back; potential takes the scar as the slump
         // lasts (MacroAggregateSubsystem::absorbProductivityShocks()).
-        $state->crisisScarPending -= self::CRISIS_POTENTIAL_SCAR * self::thinCapitalDragScale($state->bankCapitalRequirement);
+        $state->crisisScarPending -= self::CRISIS_POTENTIAL_SCAR * $thinCapital;
         // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.
         $state->excessBondPremium += self::EBP_CRISIS_JUMP;
     }
@@ -1235,14 +1236,15 @@ class CreditFiscalSubsystem
     /**
      * How much harder a financial recession lands on the District's bank capital than on the US's (Jorda, Richter,
      * Schularick & Taylor 2021, Table 8): the District's equity over total assets is its opening 4.9%, moved by each
-     * point the CET1 requirement stands from the opening one at the banks' risk-weighted density, and each point short
+     * point of CET1 the banks hold over the opening requirement at their risk-weighted density, and each point short
      * of the US's 7.6% adds the share of the loss a point of capital spares. 1.095 at the opening requirement.
      *
-     * @param float $requirement The CET1 requirement in force, as a share of risk-weighted assets.
+     * @param float $capital CET1 the banks hold, requirement and buffers as far as built, a share of risk-weighted
+     *                       assets.
      */
-    public static function thinCapitalDragScale(float $requirement): float
+    public static function thinCapitalDragScale(float $capital): float
     {
-        $capitalRatio = self::DISTRICT_BANK_CAPITAL_RATIO + (($requirement - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT) * self::BANK_RWA_DENSITY);
+        $capitalRatio = self::DISTRICT_BANK_CAPITAL_RATIO + (($capital - FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT) * self::BANK_RWA_DENSITY);
 
         return 1.0 + (self::CRISIS_LOSS_SPARED_PER_CAPITAL_POINT * 100.0 * (self::US_BANK_CAPITAL_RATIO - $capitalRatio));
     }

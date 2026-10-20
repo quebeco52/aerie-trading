@@ -38,3 +38,17 @@ Evidence: `politics_evidence.md`.
   - It is NEW − BASE at gaps of 4, 8, 20, 40 and 80 years, plus Pedersen volatility.
   - It uses the same selection as the fit: parties averaging 5% or more, results of 1% or more. Without that selection, rump
     parties dominate the weighted variogram.
+
+## Debt rule (debtrule_an.py, 2026-10-20)
+`STAGE=debtrule_4 YEARS=60 TPY=180 bin/harness-batch var/harness/politics/spend.sh 1-8 newon headon` (head_tree as above), then
+`python3 var/harness/politics/debtrule_an.py var/harness/politics/runs/debtrule_4 5`: overshoot past a constant target, |debt - target|, primary balance, cycle.
+
+## Fixed debt target (fixdebt_an.py, 2026-10-20)
+`FIXED_DEBT=0.37,0.0094 STAGE=fixdebt_8 YEARS=60 TPY=180 bin/harness-batch var/harness/politics/spend.sh 1-8 newoff headoff`
+(head_tree as above; copy the tree gate.php into it, since HEAD's lacks FIXED_DEBT and dtgt), then
+`python3 var/harness/politics/fixdebt_an.py var/harness/politics/runs/fixdebt_8 [from to]`: first crossing, 15-year overshoot, years 30-60 deviation.
+
+## Crisis severity (crisis_an.py, 2026-10-20)
+gate.php writes an extra `"ev":"crisis"` row on each crisis tick (drag jump, built/req/ccyb going in, both drag scales).
+`STAGE=crisis_4 YEARS=60 TPY=180 bin/harness-batch var/harness/politics/spend.sh 1-4 newon headon` (head_tree as above,
+copy the tree gate.php into it), then `python3 var/harness/politics/crisis_an.py var/harness/politics/runs/crisis_4 5`.

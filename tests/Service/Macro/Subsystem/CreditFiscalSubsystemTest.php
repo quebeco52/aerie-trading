@@ -1982,9 +1982,10 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
-     * The Financial Regulator's requirement sets how thin the District's capital is: each point of CET1 requirement
-     * over the opening one is 0.639 points of equity over total assets, and each point of those spares 0.86 / 24.55 of
-     * a financial recession's loss.
+     * The capital the banks hold sets how thin the District's is: each point of CET1 over the opening requirement is
+     * 0.639 points of equity over total assets, and each point of those spares 0.86 / 24.55 of a financial recession's
+     * loss. A requirement spares nothing until it is built, and a countercyclical buffer built in the boom softens the
+     * bust it is released into.
      */
     public function testAStricterRequirementSoftensTheCrisisDrag(): void
     {
@@ -2004,11 +2005,18 @@ class CreditFiscalSubsystemTest extends TestCase
                 return true;
             }
         };
-        $strict = new MacroState();
-        $strict->totalTime = 12.5;
-        $strict->bankCapitalRequirement = 0.1315;
-        (new CreditFiscalSubsystem($math))->calculateCreditCrisisHazard($strict, 1.0 / 3600.0);
-        $this->assertEqualsWithDelta(CreditFiscalSubsystem::thinCapitalDragScale(0.1315) * CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE, $strict->creditCrisisDrag, 1e-12);
+        $crisis = static function (float $requirement, float $built) use ($math): float {
+            $state = new MacroState();
+            $state->totalTime = 12.5;
+            $state->bankCapitalRequirement = $requirement;
+            $state->bankCapitalBuilt = $built;
+            (new CreditFiscalSubsystem($math))->calculateCreditCrisisHazard($state, 1.0 / 3600.0);
+
+            return $state->creditCrisisDrag;
+        };
+        $this->assertEqualsWithDelta(CreditFiscalSubsystem::thinCapitalDragScale(0.1315) * CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE, $crisis(0.1315, 0.1315), 1e-12);
+        $this->assertSame($crisis($opening, $opening), $crisis(0.1315, $opening), 'A requirement not yet built spares nothing.');
+        $this->assertLessThan($crisis($opening, $opening), $crisis($opening, $opening + CreditFiscalSubsystem::MAX_CCYB), 'A built buffer softens the bust.');
     }
 
     public function testTheCrisisDragDecaysAtItsTimeConstant(): void
