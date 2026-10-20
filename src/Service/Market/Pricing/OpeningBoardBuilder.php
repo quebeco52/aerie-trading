@@ -19,6 +19,7 @@ use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\ManagementSuccessionEngine;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 
 /**
@@ -155,10 +156,8 @@ class OpeningBoardBuilder
         // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
         $targetMetrics = $strategy->getTargetMetrics($stock, $openingMacro, $this->mathUtility);
         $investedCapital = $targetMetrics['invested_capital'];
-        $impliedRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
         $taxRate = $openingMacro->corporateTaxRate;
-        $preTaxRoic = $impliedRoic / (1.0 - $taxRate);
-        $revenue = $margin > 0 ? ($investedCapital * ($preTaxRoic / $margin)) : 0.0;
+        $revenue = $margin > 0 ? $investedCapital * FirmEconomics::structuralAssetTurnover((float) $targetMetrics['baseline_roic'], $margin, $taxRate) : 0.0;
 
         $stock->setTotalRevenue((string) $revenue);
 

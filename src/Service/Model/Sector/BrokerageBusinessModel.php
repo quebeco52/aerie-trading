@@ -102,6 +102,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const MIN_OPERATING_EBIT_YIELD = 0.015;
     /** Hard ceiling on gross asset yield to prevent reverse-engineered revenue hyperinflation. */
     public const MAX_GROSS_ASSET_YIELD    = 1.50;
+    /** Persisted operating revenue (commissions and advisory) per unit of book, struck once at the opening macro. */
+    public const STATE_OPERATING_YIELD    = 'state:operating_yield';
 
     // --- Clearinghouse Liquidity Rules ---
     /** Target operating cash reserve ratio required to support clearinghouse margin and trade settlements. */
@@ -169,6 +171,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
+        $streams->registerState(self::STATE_OPERATING_YIELD, $this->resolveOperatingYield($stock, $mathUtility));
 
         // Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -219,62 +222,46 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         return $dealActivityShift * self::DEAL_ACTIVITY_ADVISORY_SCALAR;
     }
 
+    /**
+     * Commissions and advisory are the franchise's operating revenue: a yield on the book struck once, at the opening
+     * macro (resolveOperatingYield()). The rate cycle then reaches profit through the interest the margin book, the
+     * client sweep and the cash earn and the wholesale funding costs, not through a revenue target re-solved every
+     * quarter to hold the return.
+     *
+     * @return array{invested_capital: float, baseline_roic: float}
+     */
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        // Capital is tangible: goodwill absorbs no loss, so it neither sizes the book nor earns the return target.
-        $equity = $stock->getTangibleEquity();
-        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
-
-        $policyRate = $macroState->policyRateEma;
-        $taxRate = $macroState->corporateTaxRate;
-
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $treasury = (float) $stock->getCorporateTreasury();
-
-        $blendedWholesaleRate = $this->calculateBlendedWholesaleRate($stock, $macroState);
-
-        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
-
-        $effectiveEquity = max(1.0, $equity);
-
-        // Brokerages rely heavily on wholesale debt to fund high-yielding margin loans for their clients.
-        $actualLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
-        $allowedLeverage = min($actualLeverage, max(0.0, $equityLimit));
-        $optimalDebt = $effectiveEquity * $allowedLeverage;
-
-        $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
-
-        // Margin loan yield benchmarked over policy rate plus spread for target net interest income.
-        $marginLoanYield = $policyRate + FinancialConstants::MARGIN_LOAN_SPREAD;
-        $optimalInterestIncome = $optimalDebt * $marginLoanYield;
-
-        $optimalOperatingNetIncome = $effectiveEquity * $baselineRoe;
-        $optimalEbt = $optimalOperatingNetIncome / (1.0 - $taxRate);
-
-        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
-        $operatingBase = $this->getOperatingBase($stock);
-        $targetCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $optimalDebt);
-        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $targetCash;
-        $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
-
-        $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
-
-        $targetEbit = $earningAssets * $structuralAssetYield;
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
-        $targetEbit = max($minOperatingEbit, $targetEbit);
-
-        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        // Hard cap gross yield on total assets
-        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_GROSS_ASSET_YIELD);
-
-        $grossYield = $targetRevenue / max(1.0, $earningAssets);
-
         return [
-            'invested_capital' => $earningAssets,
-            'baseline_roic' => ($grossYield * $stableMargin) * (1.0 - $taxRate),
+            'invested_capital' => $this->resolveEarningAssets($stock),
+            'baseline_roic' => $this->resolveOperatingYield($stock, $mathUtility) * $stableMargin * (1.0 - $macroState->corporateTaxRate),
         ];
+    }
+
+    /**
+     * Operating revenue per unit of book, as struck, or struck now at the opening macro: the operating profit the
+     * structural return requires once the interest the firm books (calculateInterestIncome(), the same function the
+     * books are kept with) has paid its funding, grossed up by the margin, between the operating-profit floor and the
+     * gross-yield ceiling. Netted against margin interest on its debt alone at the policy rate, the target missed
+     * the margin interest on the equity-funded book, the funding spread and the sweep, and ROOK earned 31% against 20%.
+     */
+    protected function resolveOperatingYield(Stock $stock, MathUtility $mathUtility): float
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        if (isset($momentum[self::STATE_OPERATING_YIELD])) {
+            return (float) $momentum[self::STATE_OPERATING_YIELD];
+        }
+
+        $opening = new \App\DTO\MacroStateDTO();
+        $earningAssets = max(1.0, $this->resolveEarningAssets($stock));
+        $fundingRate = $this->calculateBlendedWholesaleRate($stock, $opening);
+        $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveStructuralTargetRoe($stock, $opening) / (1.0 - $opening->corporateTaxRate);
+        $netInterest = $this->calculateInterestIncome($stock, $opening, $mathUtility, $fundingRate) - ((float) $stock->getTotalDebt() * $fundingRate);
+        $targetEbit = max($earningAssets * static::MIN_OPERATING_EBIT_YIELD, $targetEbt - $netInterest);
+
+        return min($targetEbit / max(0.01, (float) $stock->getOperatingMargin()), $earningAssets * static::MAX_GROSS_ASSET_YIELD) / $earningAssets;
     }
 
     /**

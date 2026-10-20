@@ -55,9 +55,9 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
     // --- Portfolio & Asset Yield Architecture ---
     /**
-     * A thirty-year mortgage book, priced off the long end and funded overnight. Longer than a deposit
-     * bank's loan book by the whole of the difference between the two businesses, which is why a shadow
-     * bank is the first thing a hiking cycle breaks.
+     * A thirty-year mortgage book, priced off the long end and funded overnight: its 8-year duration is the tenor it
+     * is marked at and reprices over. Longer than a deposit bank's loan book by the whole of the difference between the
+     * two businesses, which is why a shadow bank is the first thing a hiking cycle breaks.
      */
     public const ASSET_DURATION_YEARS = 8.0;
 
@@ -217,17 +217,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
      *
      * @return array{floating_share: float, loan_spread: float, fee_yield: float}
      */
-    protected function resolveFranchisePricing(Stock $stock): array
+    protected function strikeFranchisePricing(Stock $stock): array
     {
-        $momentum = $stock->getEarningsMomentumZ() ?? [];
-        if (isset($momentum[self::STATE_FLOATING_LOAN_SHARE], $momentum[self::STATE_LOAN_SPREAD], $momentum[self::STATE_FEE_YIELD])) {
-            return [
-                'floating_share' => (float) $momentum[self::STATE_FLOATING_LOAN_SHARE],
-                'loan_spread' => (float) $momentum[self::STATE_LOAN_SPREAD],
-                'fee_yield' => (float) $momentum[self::STATE_FEE_YIELD],
-            ];
-        }
-
         $opening = new MacroStateDTO();
         $mortgageShare = $this->resolveLoanBookMix($stock)['residential'];
         $bookYield = ($mortgageShare * ($opening->yield30yEma + self::MORTGAGE_PORTFOLIO_SPREAD))
@@ -240,6 +231,12 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'loan_spread' => $loanSpread,
             'fee_yield' => $this->resolveCalibrationFeeYield($stock, $opening, $bookYield),
         ];
+    }
+
+    /** The mortgage book reprices over the duration it is marked at, not a deposit bank's floating quarter. */
+    protected function resolveResidentialRepricingYears(Stock $stock): float
+    {
+        return static::ASSET_DURATION_YEARS;
     }
 
     /**
@@ -335,7 +332,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // through the allowance roll-forward; the forward-looking CECL reserve moves the allowance TARGET through
         // getForwardCreditLossMultiplier(). Neither is a margin term.
         $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams, $mathUtility);
-        $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveEarningAssets($stock);
+        $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveGrossEarningAssets($stock);
         $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
 
         // Rate risk is the repricing gap itself: the mortgage book reprices over years while the repo funding resets

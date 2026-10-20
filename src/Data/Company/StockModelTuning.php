@@ -116,6 +116,8 @@ class StockModelTuning
         // Deposit-funded savings bank lending mostly fixed-rate mortgages: the board's longest duration gap.
         'PLVR' => [
             ModelParam::FeeRevenueWeight->value          => 0.15,
+            // Its mortgages are fixed for five years and funded by covered bonds, against the District's floating loans
+            ModelParam::ResidentialRepricingYears->value => 5.0,
             ModelParam::CreditRiskAppetite->value        => 0.45, // Prime owner-occupier lending
             ModelParam::ResidentialMortgageShare->value  => 0.65,
             ModelParam::ConsumerLoanShare->value         => 0.10,

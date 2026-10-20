@@ -213,7 +213,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // CECL reserve moves the allowance TARGET through getForwardCreditLossMultiplier(), where the per-ticker
         // CeclSpreadSensitivity sets how far this issuer's reserve travels with spreads.
         $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams, $mathUtility);
-        $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveEarningAssets($stock);
+        $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveGrossEarningAssets($stock);
         $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
 
         // Rate risk is the repricing gap: the card book reprices with prime while funding reprices at the deposit
@@ -261,8 +261,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
-
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
 
@@ -270,9 +268,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $depositRate = $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
-        $actualLeverage = $effectiveEquity > 0 ? ($totalDebt / $effectiveEquity) : 0.0;
-        $allowedLeverage = min($actualLeverage, max(1.0, $equityLimit));
-        $optimalDebt = $effectiveEquity * $allowedLeverage;
+        // The funding the lender carries: its leverage limit binds on the live balance sheet, not in the pricing.
+        $optimalDebt = $totalDebt;
 
         $optimalWholesaleDebt = $optimalDebt * (1.0 - $depositRatio);
         $optimalDeposits = $optimalDebt * $depositRatio;
@@ -370,7 +367,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $pd = static::CONSUMER_CHARGE_OFF_RATE * $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
 
         return [
-            'loss_rate' => CreditRisk::calculateVasicekExpectedLoss($householdZ, $pd, CreditRisk::RETAIL_ASRF_RHO, self::LGD_BASELINE)
+            'loss_rate' => $this->resolveSegmentLossRate($pd, $macroState->retailDefaultRateEma, $macroState->retailDefaultRateTrend, CreditRisk::RETAIL_ASRF_RHO, self::LGD_BASELINE)
                 * $this->getLoanShareOfEarningAssets(),
             'systematic_z' => $householdZ,
         ];

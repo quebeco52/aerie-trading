@@ -30,6 +30,10 @@ enum ModelParam: string
     case FundCustodyShare = 'fund_custody_share';
     case CreditRiskAppetite = 'credit_risk_appetite';
     case ResidentialMortgageShare = 'residential_mortgage_share';
+    /**
+     * Repricing maturity of a lender's residential book, in years: the District's floating quarter unless fixed longer.
+     */
+    case ResidentialRepricingYears = 'residential_repricing_years';
     case ConsumerLoanShare = 'consumer_loan_share';
     case CommercialRealEstateShare = 'commercial_real_estate_share';
     /** A lender's annual operating (noninterest) cost as a share of earning assets. */

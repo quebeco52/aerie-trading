@@ -20,7 +20,6 @@ interface TreasuryStrategyInterface
     public function calculateLiabilityBackingCash(float $currentLiability, float $wholesaleDebt): float;
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array;
-    public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float;
     /**
      * @param float|null $realizedWholesaleRate The blended wholesale funding rate actually realized on the debt
      *                                           side this tick (DebtMetricsDTO::$wholesaleRate), already carrying

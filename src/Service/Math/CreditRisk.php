@@ -172,6 +172,23 @@ final class CreditRisk
     }
 
     /**
+     * A book's default rate against its long-run rate, read off the observed default rate of the population it lends
+     * to: the Vasicek conditional PD at the factor the observed rate implies over the conditional PD at the factor its
+     * trend implies. It is one at trend for every book, so a book loses its long-run rate while the population's rate
+     * sits at its trend; a book at the population's own PD moves in proportion to it (observed / trend), and a
+     * lower-PD book moves further. Read straight off the factor instead, the trend's factor is below zero (a mean, not
+     * the median) and a book at another PD lost off its long-run rate at trend: a card book 8% above it.
+     *
+     * Formula: m = PD(Z(PD_t, PD_trend); PD_book) / PD(Z(PD_trend, PD_trend); PD_book)
+     */
+    public static function calculateVasicekPdMultiple(float $observedPd, float $trendPd, float $bookPd, float $rho): float
+    {
+        $atTrend = self::calculateVasicekExpectedLoss(self::calculateVasicekSystematicFactor($trendPd, $trendPd, $rho), $bookPd, $rho, 1.0);
+
+        return self::calculateVasicekExpectedLoss(self::calculateVasicekSystematicFactor($observedPd, $trendPd, $rho), $bookPd, $rho, 1.0) / max(1e-12, $atTrend);
+    }
+
+    /**
      * Loss given default on a secured loan whose recovery scales with its collateral (Frye 2000, "Collateral
      * Damage"): a fall in the collateral's value since origination lowers recovery one for one, so LGD rises in the
      * same downturn that raises defaults.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
+use App\Data\Company\ManagementProfile;
 use App\DTO\CapitalAllocationContext;
 use App\Entity\Stock;
 use App\Service\Math\Decimal;
@@ -42,10 +43,10 @@ class TreasuryEngine
     /** Additional variable spend rate (35%) scaled by economic spread (ROIC - WACC). */
     private const VARIABLE_ORGANIC_SPEND_RATE = 0.35;
 
-    // --- Lender Funding Deployment ---
+    // --- Liquidity Buffer ---
     /**
-     * Cash held above the operating target before a lender treats the rest as deployable funding (same buffer the
-     * expansion path uses).
+     * Cash held above the operating target before the rest counts as excess: 20%, the buffer a lender deploys down to
+     * and the expansion paths measure spare cash against.
      */
     private const LIQUIDITY_BUFFER_MULTIPLIER = 1.20;
 
@@ -330,7 +331,7 @@ class TreasuryEngine
             }
 
             // Subtract excess cash from the TOTAL balance sheet capacity first
-            $targetCashReserves = $manager->managedTargetCash($ctx->strategy, $ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * 1.20;
+            $targetCashReserves = $this->fundingCashTarget($ctx, $manager);
             $excessCash = max(0.0, $ctx->newTreasury - $targetCashReserves);
 
             $trueExpansionCapacity = $ctx->strategy->getUnfundedExpansionCapacity($trueExpansionCapacity, $excessCash);
@@ -431,7 +432,7 @@ class TreasuryEngine
             return;
         }
 
-        $targetCashReserves = $manager->managedTargetCash($ctx->strategy, $ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * 1.20;
+        $targetCashReserves = $manager->managedTargetCash($ctx->strategy, $ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * self::LIQUIDITY_BUFFER_MULTIPLIER;
         $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetCashReserves, $manager->appliedHoardingBase($ctx->operatingBase), $totalDebt);
         $excessCash = $hoardStatus['excess_cash'];
         $isHoarder = $hoardStatus['is_hoarder'];
@@ -526,7 +527,7 @@ class TreasuryEngine
     {
         $stock = $ctx->stock;
 
-        $targetCashReserves = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * self::LIQUIDITY_BUFFER_MULTIPLIER;
+        $targetCashReserves = $this->deployableCashTarget($ctx);
         $excessCash = max(0.0, $ctx->newTreasury - $targetCashReserves);
         $deployable = max(0.0, $excessCash - max(0.0, $ctx->retainedEarningsThisQuarter));
         if ($deployable <= 0.0) {
@@ -556,6 +557,27 @@ class TreasuryEngine
             };
             $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}."];
         }
+    }
+
+    /** The cash a lender deploys its funding down to: its strategy's operating target and buffer, unbent by style. */
+    private function deployableCashTarget(CapitalAllocationContext $ctx): float
+    {
+        return $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * self::LIQUIDITY_BUFFER_MULTIPLIER;
+    }
+
+    /**
+     * The cash a firm measures its spare cash and liquidity shortfall against before it borrows. A lender uses the
+     * target it deploys down to: measured against a style-biased one, a fortress lender's deployment left it short
+     * every quarter, and it borrowed wholesale to refill a buffer the next deployment drained. Any other firm keeps
+     * its manager's target, the dry powder that is its style.
+     */
+    private function fundingCashTarget(CapitalAllocationContext $ctx, ManagementProfile $manager): float
+    {
+        if ($ctx->strategy->deploysFundingIntoEarningAssets()) {
+            return $this->deployableCashTarget($ctx);
+        }
+
+        return $manager->managedTargetCash($ctx->strategy, $ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * self::LIQUIDITY_BUFFER_MULTIPLIER;
     }
 
     /**

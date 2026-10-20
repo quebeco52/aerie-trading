@@ -383,4 +383,16 @@ class FirmEconomicsTest extends TestCase
         $this->assertEqualsWithDelta(120.0, (float) $stock->getInventory(), 1e-9);
         $this->assertEqualsWithDelta(200.0, (float) $stock->getPayables(), 1e-9);
     }
+
+    /**
+     * A structure's turnover is its after-tax return grossed up for tax, over its margin; one earning nothing turns
+     * nothing.
+     */
+    public function testTurnoverIsTheReturnGrossedUpForTaxOverTheMargin(): void
+    {
+        $this->assertEqualsWithDelta(0.06 / 0.8 / 0.30, FirmEconomics::structuralAssetTurnover(0.06, 0.30, 0.20), 1e-12);
+        $this->assertSame(0.0, FirmEconomics::structuralAssetTurnover(0.0, 0.30, 0.20));
+        $this->assertSame(0.0, FirmEconomics::structuralAssetTurnover(-0.02, 0.30, 0.20));
+        $this->assertEqualsWithDelta(0.06 / 0.8 / FirmEconomics::MIN_TURNOVER_MARGIN, FirmEconomics::structuralAssetTurnover(0.06, 0.0, 0.20), 1e-9);
+    }
 }

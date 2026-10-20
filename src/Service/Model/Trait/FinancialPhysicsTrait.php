@@ -234,6 +234,20 @@ trait FinancialPhysicsTrait
     }
 
     /**
+     * The loans a quarter's defaults are struck on: the gross balances, before the allowance held against them. Struck
+     * on the net book, a lender charged off a lifetime reserve's worth (7% for a card book) less than its
+     * through-the-cycle rate on the book the allowance roll-forward carries.
+     */
+    public function resolveGrossEarningAssets(Stock $stock): float
+    {
+        if ($stock->hasEarningAssetLedger() && $this->deploysFundingIntoEarningAssets()) {
+            return max(1.0, (float) $stock->getEarningAssets());
+        }
+
+        return $this->resolveEarningAssets($stock);
+    }
+
+    /**
      * The annual credit provision a lender pays through the cycle on a book of this size: the through-the-
      * cycle loss rate the allowance roll-forward charges against EBIT every quarter, struck on the same
      * gross book. A lender's return target is earned AFTER this charge, so any target that reverse-engineers

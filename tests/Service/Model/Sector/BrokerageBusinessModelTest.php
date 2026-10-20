@@ -357,4 +357,83 @@ class BrokerageBusinessModelTest extends TestCase
         );
         $this->assertSame(0.0, $this->model->annualStampDutyTurnoverBase($stock->setEarningsMomentumZ(null)), 'Before its first report nothing is known to move with turnover.');
     }
+
+    /** A ROOK-shaped broker: a margin book funded by its equity and a wholesale layer about its size. */
+    private function marginBroker(string $baselineRoe = '0.20'): Stock
+    {
+        return (new Stock())->setTicker('MRGN')->setIndustry('Brokerages')
+            ->setTotalEquity('17500000000')->setWholesaleDebt('20000000000')->setCustomerDeposits('0')->setCorporateTreasury('3000000000')
+            ->setBaselineRoe($baselineRoe)->setOperatingMargin('0.34')->setCreditSpread('0.032')->setFloatingDebtRatio('0.85');
+    }
+
+    /**
+     * The return the broker books on a macro: operating profit on its struck yield plus the interest it nets, after
+     * tax.
+     */
+    private function bookedReturn(BrokerageBusinessModel $model, Stock $stock, MacroStateDTO $macro): float
+    {
+        $fundingRate = (new \ReflectionMethod($model, 'calculateBlendedWholesaleRate'))->invoke($model, $stock, $macro);
+        $operatingYield = (new \ReflectionMethod($model, 'resolveOperatingYield'))->invoke($model, $stock, $this->mathUtility);
+        $operatingProfit = $operatingYield * $model->resolveEarningAssets($stock) * (float) $stock->getOperatingMargin();
+        $netInterest = $model->calculateInterestIncome($stock, $macro, $this->mathUtility, $fundingRate) - ((float) $stock->getTotalDebt() * $fundingRate);
+
+        return ($operatingProfit + $netInterest) * (1.0 - $macro->corporateTaxRate) / $stock->getTangibleEquity();
+    }
+
+    /**
+     * At the macro its operating yield is struck at, the broker books its structural return: the target nets the
+     * interest its books show, margin interest on the whole book at its funding rate plus the sweep and the cash.
+     * Netted against margin interest on its debt alone at the policy rate, ROOK booked 31% against a 20% target.
+     */
+    public function testTheOperatingTargetNetsTheInterestTheBookBooks(): void
+    {
+        $stock = $this->marginBroker();
+        $opening = new MacroStateDTO();
+        $target = (new \ReflectionMethod($this->model, 'resolveStructuralTargetRoe'))->invoke($this->model, $stock, $opening);
+
+        $this->assertEqualsWithDelta($target, $this->bookedReturn($this->model, $stock, $opening), 1e-9);
+    }
+
+    /** The target reads the interest the model books through the one function: more interest, less operating profit. */
+    public function testTheTargetReadsTheModelsOwnInterestIncome(): void
+    {
+        $extra = 1_000_000_000.0;
+        $richer = new class ($extra) extends BrokerageBusinessModel {
+            public function __construct(private readonly float $extra) {}
+
+            public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+            {
+                return parent::calculateInterestIncome($stock, $macroState, $mathUtility, $realizedWholesaleRate) + $this->extra;
+            }
+        };
+        $stock = $this->marginBroker();
+        $operatingProfit = fn(BrokerageBusinessModel $model): float => (new \ReflectionMethod($model, 'resolveOperatingYield'))->invoke($model, $stock, $this->mathUtility)
+            * $model->resolveEarningAssets($stock) * 0.34;
+
+        $this->assertEqualsWithDelta($operatingProfit($this->model) - $extra, $operatingProfit($richer), 1.0);
+    }
+
+    /**
+     * Struck once, the operating yield holds through the rate cycle and the interest moves: a point on the policy rate
+     * leaves commissions where they were and raises the return through the equity-funded margin book and the sweep.
+     */
+    public function testAHigherRateRaisesTheBrokersReturnThroughItsInterestIncome(): void
+    {
+        $stock = $this->marginBroker();
+        $opening = new MacroStateDTO();
+        $raised = new MacroStateDTO(policyRateEma: $opening->policyRateEma + 0.01);
+        $stock->setEarningsMomentumZ($this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 0.0, 0.0, $opening, $this->mathUtility)->streamZ);
+
+        $this->assertEqualsWithDelta($this->model->getTargetMetrics($stock, $opening, $this->mathUtility)['baseline_roic'], $this->model->getTargetMetrics($stock, $raised, $this->mathUtility)['baseline_roic'], 1e-12);
+        $this->assertGreaterThan($this->bookedReturn($this->model, $stock, $opening), $this->bookedReturn($this->model, $stock, $raised));
+    }
+
+    /** The floor and the ceiling still bind: interest alone past a low target, and an absurd target. */
+    public function testTheOperatingYieldStaysBetweenItsFloorAndCeiling(): void
+    {
+        $yield = fn(Stock $stock): float => (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $stock, $this->mathUtility);
+
+        $this->assertEqualsWithDelta(BrokerageBusinessModel::MIN_OPERATING_EBIT_YIELD / 0.34, $yield($this->marginBroker('0.01')->setWholesaleDebt('0')), 1e-9);
+        $this->assertEqualsWithDelta(BrokerageBusinessModel::MAX_GROSS_ASSET_YIELD, $yield($this->marginBroker('50.0')), 1e-9);
+    }
 }

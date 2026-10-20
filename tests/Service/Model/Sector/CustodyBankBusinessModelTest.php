@@ -82,4 +82,76 @@ final class CustodyBankBusinessModelTest extends TestCase
         $this->assertLessThan(0.0, $this->invoke(new CommercialBankBusinessModel(), 'resolveInterestVolumeShift', $tight));
         $this->assertSame(0.0, $this->invoke($this->model, 'resolveInterestVolumeShift', $tight));
     }
+
+    /** An EGRT-shaped custodian: institutional deposits, a tenth of them in cash, a thin wholesale layer. */
+    private function egrtShaped(): Stock
+    {
+        return $this->custodian('EGRT')
+            ->setTotalEquity('120000000000')
+            ->setCustomerDeposits('870000000000')
+            ->setWholesaleDebt('60000000000')
+            ->setCorporateTreasury('87000000000')
+            ->setBaselineRoe('0.13')
+            ->setOperatingMargin('0.25')
+            ->setFloatingDebtRatio('0.5');
+    }
+
+    /**
+     * A custodian's securities are a short liquid book: a move at the long end alone leaves the rate they reprice at
+     * where it was, while a deposit bank's mortgage-linked book, priced between the 5- and 10-year points, takes most
+     * of it.
+     */
+    public function testTheSecuritiesSleeveRepricesAtTheCustodyTenor(): void
+    {
+        $opening = new MacroStateDTO();
+        $longEnd = new MacroStateDTO(yield10yEma: $opening->yield10yEma + 0.01, yield30yEma: $opening->yield30yEma + 0.01);
+        $bank = new CommercialBankBusinessModel();
+        $securities = fn(CommercialBankBusinessModel $model, MacroStateDTO $macro): float => $this->invoke($model, 'resolveRepricingRates', $this->custodian(), $macro)['securities'];
+
+        $this->assertEqualsWithDelta(0.0, $securities($this->model, $longEnd) - $securities($this->model, $opening), 1e-12);
+        $this->assertEqualsWithDelta(
+            0.01 * (CommercialBankBusinessModel::SECURITIES_REPRICING_YEARS - 5.0) / 5.0,
+            $securities($bank, $longEnd) - $securities($bank, $opening),
+            1e-12,
+        );
+    }
+
+    /**
+     * Its institutional cash reprices fast, so a custodian holds a book that does too: at its tenor the
+     * deposit-matching line is met with some of its loans floating and some fixed. At the aggregate's 8.4 years not
+     * even an all-floating loan book met it, and the struck loan spread went to -4%.
+     */
+    public function testTheCustodyBookMeetsTheMatchingLineWithAnInteriorFloatingShare(): void
+    {
+        $pricing = $this->invoke($this->model, 'resolveFranchisePricing', $this->egrtShaped());
+
+        $this->assertGreaterThan(0.0, $pricing['floating_share']);
+        $this->assertLessThan(1.0, $pricing['floating_share']);
+        $this->assertGreaterThanOrEqual(0.0, $pricing['loan_spread']);
+    }
+
+    /**
+     * Pricing a live book carried from before its tenors were stored was struck on the deposit bank's 8.4-year
+     * securities; a custodian strikes it again, once, on its own, and keeps it from then on.
+     */
+    public function testPricingStruckOnTheDepositBanksTenorsIsStruckAgainOnce(): void
+    {
+        $legacy = [
+            CommercialBankBusinessModel::STATE_FLOATING_LOAN_SHARE => 1.0,
+            CommercialBankBusinessModel::STATE_LOAN_SPREAD => -0.0414,
+            CommercialBankBusinessModel::STATE_FEE_YIELD => CustodyBankBusinessModel::NON_INTEREST_INCOME_TO_EARNING_ASSETS,
+        ];
+        $stock = $this->egrtShaped()->setEarningsMomentumZ($legacy);
+        $restruck = $this->invoke($this->model, 'resolveFranchisePricing', $stock);
+        $this->assertGreaterThanOrEqual(0.0, $restruck['loan_spread'], 'struck again on its own tenor');
+
+        $stock->setEarningsMomentumZ($legacy + [
+            CommercialBankBusinessModel::STATE_SECURITIES_REPRICING_YEARS => CustodyBankBusinessModel::SECURITIES_REPRICING_YEARS,
+            CommercialBankBusinessModel::STATE_RESIDENTIAL_REPRICING_YEARS => CommercialBankBusinessModel::RESIDENTIAL_REPRICING_YEARS,
+        ]);
+        $this->assertSame(-0.0414, $this->invoke($this->model, 'resolveFranchisePricing', $stock)['loan_spread'], 'pricing carried with its tenors is kept');
+
+        $bank = new CommercialBankBusinessModel();
+        $this->assertSame(-0.0414, $this->invoke($bank, 'resolveFranchisePricing', $this->egrtShaped()->setTicker('DEPOSIT')->setEarningsMomentumZ($legacy))['loan_spread'], 'a deposit bank\'s was struck on its own tenors');
+    }
 }

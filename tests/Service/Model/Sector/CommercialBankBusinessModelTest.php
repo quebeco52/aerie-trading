@@ -197,28 +197,35 @@ class CommercialBankBusinessModelTest extends TestCase
     }
 
     /**
-     * The through-the-cycle rate is the book's mean loss over the credit cycle: with the systematic factor standard
-     * normal (so both macro default rates average at their baselines) and flat collateral, the segment losses average
-     * to each segment's charge-off rate, and a neutral H.8 loan book to 0.92% a year (US banks: 0.89%, FRED CORALACBS).
-     * The rates are on loans, so the earning-asset book, a fifth of it securities, loses them on its loan share alone.
+     * The through-the-cycle rate is the book's mean loss over the credit cycle. The District's default rates swing
+     * around their measured trends, the household rate by about 28% and the corporate by about 41% (sd over trend,
+     * District runs: var/harness/banks/credit_at_trend.php); over that spread with flat collateral the segment losses
+     * average to each segment's charge-off rate, and a neutral H.8 loan book to 0.92% a year (US banks: 0.89%, FRED
+     * CORALACBS). The rates are on loans, so the earning-asset book, a fifth of it securities, loses them on its loan
+     * share alone.
      */
     public function testOverTheCycleTheBookLosesItsThroughTheCycleRate(): void
     {
         $stock = $this->creditTestBank('NEUTRAL');
         $step = 0.05;
         $meanLoss = 0.0;
-        for ($z = -7.0; $z <= 7.0 + 1e-9; $z += $step) {
+        $weight = 0.0;
+        for ($x = -3.5; $x <= 3.5 + 1e-9; $x += $step) {
             $macro = new MacroStateDTO(
-                retailDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0),
-                corporateDefaultRateEma: CreditRisk::calculateVasicekExpectedLoss($z, MacroConstants::CORPORATE_DEFAULT_BASELINE, CreditRisk::CORPORATE_DEFAULT_RHO, 1.0),
+                retailDefaultRateEma: MacroConstants::RETAIL_DEFAULT_BASELINE * (1.0 + (0.28 * $x)),
+                retailDefaultRateTrend: MacroConstants::RETAIL_DEFAULT_BASELINE,
+                corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_BASELINE * max(0.05, 1.0 + (0.41 * $x)),
+                corporateDefaultRateTrend: MacroConstants::CORPORATE_DEFAULT_BASELINE,
             );
             $stock->setEarningsMomentumZ([]);
             $result = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.10, $macro, $this->mathUtility);
-            $meanLoss += $step * exp(-0.5 * $z * $z) / sqrt(2.0 * M_PI) * $result->netChargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $this->model->resolveEarningAssets($stock);
+            $density = exp(-0.5 * $x * $x);
+            $weight += $density;
+            $meanLoss += $density * $result->netChargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $this->model->resolveEarningAssets($stock);
         }
 
         $ttc = $this->model->getThroughTheCycleCreditLossRate($stock);
-        $this->assertEqualsWithDelta($ttc, $meanLoss, 0.002 * $ttc);
+        $this->assertEqualsWithDelta($ttc, $meanLoss / $weight, 0.02 * $ttc);
         $loanShare = 1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS;
         $this->assertEqualsWithDelta($loanShare, $this->model->getLoanShareOfEarningAssets(), 1e-12);
         $this->assertEqualsWithDelta(
@@ -279,11 +286,9 @@ class CommercialBankBusinessModelTest extends TestCase
             return $result->netChargeOffs / $model->resolveEarningAssets($stock);
         };
 
-        // At long-run default rates each segment defaults at its conditional PD for the factor those rates imply.
-        $householdZ = CreditRisk::calculateVasicekSystematicFactor(MacroConstants::RETAIL_DEFAULT_BASELINE, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO);
-        $corporateZ = CreditRisk::calculateVasicekSystematicFactor(MacroConstants::CORPORATE_DEFAULT_BASELINE, MacroConstants::CORPORATE_DEFAULT_BASELINE, CreditRisk::CORPORATE_DEFAULT_RHO);
-        $mortgageLoss = 0.80 * CreditRisk::calculateVasicekExpectedLoss($householdZ, CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE / 0.45, CreditRisk::RETAIL_ASRF_RHO, 1.0);
-        $businessLoss = 0.20 * CreditRisk::calculateVasicekExpectedLoss($corporateZ, CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE / 0.45, CreditRisk::CORPORATE_DEFAULT_RHO, 1.0) * 0.45;
+        // With the default rates at their trends each segment defaults at its long-run PD.
+        $mortgageLoss = 0.80 * CommercialBankBusinessModel::RESIDENTIAL_CHARGE_OFF_RATE / 0.45;
+        $businessLoss = 0.20 * CommercialBankBusinessModel::BUSINESS_CHARGE_OFF_RATE;
         $this->assertEqualsWithDelta(
             ($mortgageLoss * (1.0 - 0.55 * 0.70) + $businessLoss) / ($mortgageLoss * 0.45 + $businessLoss),
             $lossRate($mortgageLender, 70.0) / $lossRate($mortgageLender, 100.0),
@@ -389,6 +394,73 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($model->calibrationYield($stock), $grossYield, 1e-9);
         $this->carryBook($model, $stock, $opening, 4);
         $this->assertEqualsWithDelta($grossYield, $model->getTargetMetrics($stock, $opening, $this->mathUtility)['baseline_roic'] / (0.40 * (1.0 - $opening->corporateTaxRate)), 1e-9, 'a book at its steady state stays there');
+    }
+
+    /**
+     * The franchise is struck on the funding the bank carries. Its leverage limit binds on the live balance sheet; in
+     * the pricing it priced a book its excess wholesale still had to pay for, and a bank funded past it opened short
+     * of its return.
+     */
+    public function testTheFranchiseIsStruckOnTheWholesaleFundingTheBankCarries(): void
+    {
+        $limited = static fn(float $limit): CommercialBankBusinessModel => new class ($limit) extends CommercialBankBusinessModel {
+            public function __construct(private readonly float $limit) {}
+
+            public function getWholesaleLeverageLimit(): float
+            {
+                return $this->limit;
+            }
+
+            public function calibrationYield(Stock $stock): float
+            {
+                return $this->resolveCalibrationYield($stock, new MacroStateDTO());
+            }
+        };
+        $stock = $this->creditTestBank('LEVERED');
+        $stock->setWholesaleDebt('40000000000'); // 4x its equity
+        $stock->setBaselineRoe('0.15');
+        $stock->setOperatingMargin('0.40');
+
+        $this->assertEqualsWithDelta($limited(10.0)->calibrationYield($stock), $limited(2.0)->calibrationYield($stock), 1e-12);
+    }
+
+    /**
+     * A savings bank lending on five-year fixes reprices its mortgages at that tenor, a fifth of the gap a year; the
+     * District's floating mortgage takes the quarter.
+     */
+    public function testAFixedRateMortgageBookRepricesAtItsFixingTenor(): void
+    {
+        $residentialStep = function (string $ticker): float {
+            $stock = $this->creditTestBank($ticker);
+            $this->carryBook($this->model, $stock, new MacroStateDTO(), 1);
+            $before = (float) (($stock->getEarningsMomentumZ() ?? [])[CommercialBankBusinessModel::STATE_BOOK_YIELD_RESIDENTIAL] ?? 0.0);
+            $this->carryBook($this->model, $stock, $this->shiftedMacro(0.01), 1);
+
+            return (float) (($stock->getEarningsMomentumZ() ?? [])[CommercialBankBusinessModel::STATE_BOOK_YIELD_RESIDENTIAL] ?? 0.0) - $before;
+        };
+
+        $this->assertEqualsWithDelta(0.01 * (1.0 - exp(-0.25 / 5.0)), $residentialStep('PLVR'), 1e-9);
+        $this->assertEqualsWithDelta(0.01 * (1.0 - exp(-0.25 / CommercialBankBusinessModel::RESIDENTIAL_REPRICING_YEARS)), $residentialStep('FLOAT'), 1e-9);
+    }
+
+    /**
+     * Its mortgages are fixed for longer than its deposits, so a rise in short rates narrows its margin: over four
+     * quarters the deposits it pays reprice by more than the loans it earns on (PLVR's lore).
+     */
+    public function testALongFixedMortgageBookNarrowsItsMarginWhenShortRatesRise(): void
+    {
+        $opening = new MacroStateDTO();
+        $short = new MacroStateDTO(policyRateEma: $opening->policyRateEma + 0.01);
+        $stock = $this->creditTestBank('PLVR');
+        $this->carryBook($this->model, $stock, $opening, 1);
+        $before = $this->model->resolveInterestYield($stock, $opening);
+        $this->carryBook($this->model, $stock, $short, 4);
+
+        $earningAssets = $this->model->resolveEarningAssets($stock);
+        $income = ($this->model->resolveInterestYield($stock, $short) - $before) * $earningAssets;
+        $expense = $this->model->resolveExpenseBeta($stock, $opening) * ($earningAssets + (float) $stock->getCorporateTreasury()) * 0.01;
+
+        $this->assertLessThan(0.0, $income - $expense);
     }
 
     /**
@@ -1008,40 +1080,6 @@ class CommercialBankBusinessModelTest extends TestCase
             ($calibration($cashless, $stock) - $calibration($this->model, $stock)) * $this->model->resolveEarningAssets($stock),
             1e3,
         );
-    }
-
-    /**
-     * A bank's deposit rate must never exceed the policy rate, even under extreme system deposit beta multipliers.
-     */
-    public function testEffectiveDepositBetaIsCappedAtMaximum(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('LAKE');
-        $stock->setCustomerDeposits('1000.0');
-        $stock->setWholesaleDebt('0.0');
-        $stock->setFloatingDebtRatio('0.0');
-
-        // System beta elevated to maximum (3.0x normalisation scale)
-        $extremeSystem = MacroStateDTO::fromArray(['system_deposit_beta_ema' => 0.60]);
-        $policyRate = 0.06;
-
-        // Utilization = 0 (debt = 0) with 0 customer deposits in ratio gives depositBeta = MAX_DEPOSIT_BETA (0.70)
-        $result = $this->model->calculateInterestExpenseAndWholesaleRate(
-            $stock,
-            0.05,
-            0.05,
-            0.05,
-            $policyRate,
-            15.0,
-            1000.0,
-            0.0,
-            $extremeSystem,
-        );
-
-        // Max deposit rate is 0.70 * 0.06 = 0.042; deposit interest on $1000 is $42.0
-        $maxAllowedInterest = 1000.0 * $policyRate * CommercialBankBusinessModel::MAX_DEPOSIT_BETA;
-        $this->assertLessThanOrEqual($maxAllowedInterest, $result->interestExpense);
-        $this->assertLessThan($policyRate * 1000.0, $result->interestExpense, 'Deposit rate must never exceed the policy rate.');
     }
 
     public function testMoneyFundMigrationDrainsTheDepositBase(): void

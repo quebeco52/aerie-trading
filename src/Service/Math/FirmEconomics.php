@@ -19,6 +19,10 @@ final class FirmEconomics
     /** Sensitivity of Days Payable Outstanding (DPO) contraction to interbank funding liquidity stress. */
     public const CCC_DPO_LIQUIDITY_SENSITIVITY = 500.0;
 
+    // --- Structural Turnover ---
+    /** Floor on the operating margin a turnover is struck at: 1%, so a firm at a zero margin keeps a finite one. */
+    public const MIN_TURNOVER_MARGIN = 0.01;
+
     // --- Regulated Tariffs: the Rate Case Cycle (regulatory lag and earnings attrition) ---
     /** Unrecovered non-fuel cost at which management files a general rate case rather than absorb further attrition. */
     public const RATE_CASE_FILING_THRESHOLD = 0.02;
@@ -49,6 +53,15 @@ final class FirmEconomics
     public const APPOINTED_COMMISSION_GRANTED_SHARE = 0.58 / (0.8 + (0.2 * self::ELECTED_COMMISSION_GRANT_RATIO));
     /** Lag at which interim relief is granted rather than leave the utility earning below its cost of service. */
     public const MAX_TARIFF_SHORTFALL = 0.10;
+
+    /**
+     * Revenue per unit of invested capital at which a firm earns an after-tax return at an operating margin: the
+     * return grossed up for tax, over the margin. A firm whose structure earns nothing turns over nothing.
+     */
+    public static function structuralAssetTurnover(float $afterTaxReturn, float $operatingMargin, float $taxRate): float
+    {
+        return max(0.0, $afterTaxReturn) / (max(self::MIN_TURNOVER_MARGIN, $operatingMargin) * (1.0 - $taxRate));
+    }
 
     /**
      * One step of a staggered lease roll: the slice of the rent roll expiring over dt (dt / WALT) reprices to

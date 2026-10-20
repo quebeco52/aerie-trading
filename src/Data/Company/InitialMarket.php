@@ -2612,7 +2612,9 @@ class InitialMarket
             'beta_tilt' => 0.25, // its fees are struck on market values
             'jump_intensity' => 0.50,
             'jump_vol' => 0.10,
-            'baseline_roe' => 0.11,
+            // State Street's 11% earned at 2019's low rates; at the District's its deposit franchise earns 12.8% on the
+            // same fees and costs, and 13% opens its loans at a positive spread
+            'baseline_roe' => 0.13,
             'capex_ratio' => 0.10,
             'target_payout_ratio' => 0.35,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
@@ -2674,8 +2676,9 @@ class InitialMarket
             'beta_tilt' => 0.25, // its fees are struck on market values
             'jump_intensity' => 0.60,
             'jump_vol' => 0.12,
-            // Julius Baer 2019: fees and NII less adjusted costs, 0.9% of assets after tax, at 16.5x leverage
-            'baseline_roe' => 0.12,
+            // Julius Baer earned 12% in 2019 with Swiss franc rates negative; at the District's rates its deposit
+            // franchise alone earns more than that, and 18% (break-even 17.6%) opens its loans at a positive spread
+            'baseline_roe' => 0.18,
             'capex_ratio' => 0.08,
             'target_payout_ratio' => 0.45,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,

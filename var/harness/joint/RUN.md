@@ -70,3 +70,8 @@ Question family: does the whole simulation behave sensibly after several merges,
   from ticks.csv, and wall s/run. `disclosure/run.sh baseC|fixC` runs those trees there (nothing forced).
 
 Evidence: `joint_evidence.md`.
+
+- Batch D1 arms: `baseD1` = tree-baseD1 (git archive 4bc145f4), `fixD1` = same + batchD1.patch. Report rows now carry
+  `nco`, `prov`, `allow`, `ii` (interest income) and `ttc` (strategy TTC loss rate, annual). `lender_an.py <seeds> <armA> <armB>`:
+  per lender wholesale debt y0/5/10/20, trailing ROE mean/sd, equity CAGR, EPS beat, NCO/(TTC x gross book at quarter
+  open), ROE-policy correlation, interest-income share. `lender_open.py`: year-1 ROE, revenue, interest income.

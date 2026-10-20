@@ -111,7 +111,8 @@ class ShadowBankBusinessModelTest extends TestCase
 
     /**
      * A rise in the policy rate reaches the direct loans at their next reset, inside the quarter, on the share of the
-     * book they make up, and the floating mortgages as they reset over the following months; the deal fees do not
+     * book they make up; the long mortgage book, repricing over its 8-year duration off a curve the policy rate alone
+     * does not move, keeps its yield, which is the repricing gap its overnight funding opens. The deal fees do not
      * move, and mortgage origination falls as the dearer rate prices buyers out.
      */
     #[AllowMockObjectsWithoutExpectations]
@@ -132,9 +133,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $stock->setEarningsMomentumZ($after->streamZ);
 
         $directLendingShare = (1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS) * 0.40;
-        $loanShare = 1.0 - CommercialBankBusinessModel::SECURITIES_SHARE_OF_EARNING_ASSETS;
-        $this->assertGreaterThan($directLendingShare * 0.01, $this->model->resolveInterestYield($stock, $raised) - $before, 'The mortgages start to reset too.');
-        $this->assertLessThan($loanShare * 0.01, $this->model->resolveInterestYield($stock, $raised) - $before, 'but not all of them within the quarter.');
+        $this->assertEqualsWithDelta($directLendingShare * 0.01, $this->model->resolveInterestYield($stock, $raised) - $before, 1e-9, 'the direct loans reset; the mortgage book does not');
         $this->assertLessThan($base->streamRevenue['origination_fees'], $after->streamRevenue['origination_fees'], 'A dearer floating mortgage prices buyers out.');
         $this->assertEqualsWithDelta($base->streamRevenue['direct_lending'], $after->streamRevenue['direct_lending'], 1e-3, 'deal fees do not reprice');
         $this->assertEqualsWithDelta(

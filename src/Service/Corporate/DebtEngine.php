@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\CreditRisk;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
@@ -165,10 +166,7 @@ class DebtEngine
         if ($revenue <= 0.0) {
             $targetMetrics = $strategy->getTargetMetrics($stock, $macroState, $this->mathUtility);
             $investedCapital = $targetMetrics['invested_capital'];
-            $baselineRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
-            $marginFallback = max(0.01, (float) $stock->getOperatingMargin());
-            $assetTurnover = $baselineRoic / $marginFallback;
-            $revenue = $investedCapital * $assetTurnover;
+            $revenue = $investedCapital * FirmEconomics::structuralAssetTurnover((float) $targetMetrics['baseline_roic'], (float) $stock->getOperatingMargin(), $macroState->corporateTaxRate);
         }
 
         $margin = $overrideMargin ?? (float) $stock->getOperatingMargin();

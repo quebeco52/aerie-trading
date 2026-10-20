@@ -36,11 +36,6 @@ trait StandardTreasuryTrait
         ];
     }
 
-    public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float
-    {
-        return 0.0;
-    }
-
     public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         $cash = (float) $stock->getCorporateTreasury();

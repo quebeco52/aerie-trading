@@ -788,6 +788,22 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($faded->capacityUtilizationBeforeShocks, $opening->capacityUtilizationBeforeShocks, 1e-9);
     }
 
+    /**
+     * A lender's book turns over at the yield it earns. Floored at a 1% return, a book whose yield fell below
+     * 0.01 / (margin x (1 - t)) in an easing cycle booked revenue it never earned: BNTH's by 55% at 300bp lower rates.
+     */
+    public function testALenderWhoseYieldFellTurnsOverAtThatYield(): void
+    {
+        $ctx = new EarningsSimulationContext($this->buildCardLender('LOW'), new MacroStateDTO(), Sectors::getBusinessModelStrategy('commercial_bank'), 'commercial_bank');
+        $ctx->stableMargin = 0.30;
+        $ctx->corporateTaxRate = 0.20;
+        $ctx->baselineRoic = 0.004;
+
+        $turnover = (new \ReflectionMethod(EarningsEngine::class, 'resolveAnnualCapitalTurnover'))->invoke($this->buildEngine(new EventDispatcher()), $ctx);
+
+        $this->assertEqualsWithDelta(0.004 / 0.8 / 0.30, $turnover, 1e-12, 'a 1.67% yield, not the floor\'s 4.17%');
+    }
+
     /** @return iterable<string, array{string}> Industries whose model moves the cycle inside its own streams. */
     public static function industriesThatCarryTheCycleInTheirStreams(): iterable
     {
@@ -2775,11 +2791,16 @@ class EarningsEngineTest extends TestCase
 
         mt_srand(20260909);
         for ($quarter = 1; $quarter <= 4; $quarter++) {
+            // Losses are struck on the gross book the quarter opens with (the first report seeds it); the funding the
+            // quarter deploys lands after them.
+            $openingBook = $stock->hasEarningAssetLedger() ? (float) $stock->getEarningAssets() : null;
             $engine->calculate($stock, $macroState, (($quarter - 1) * 63) + EarningsEngine::resolveReportingTick('CARD', 252));
             $this->assertNotNull($captured);
             $book = (float) $stock->getEarningAssets();
             $this->assertEqualsWithDelta($lifetimeRate, (float) $stock->getCreditLossAllowance() / $book, $lifetimeRate * 0.10, "allowance drifted from target in Q{$quarter}");
-            $this->assertEqualsWithDelta($captured->netChargeOffs, $strategy->getThroughTheCycleCreditLossRate() / 4.0 * ($book + $captured->netChargeOffs), $captured->netChargeOffs * 0.05, 'realized losses run at the through-the-cycle rate');
+            if ($openingBook !== null) {
+                $this->assertEqualsWithDelta($strategy->getThroughTheCycleCreditLossRate() / 4.0 * $openingBook, $captured->netChargeOffs, $captured->netChargeOffs * 0.005, 'with defaults at trend, losses run at the through-the-cycle rate');
+            }
         }
         $this->assertGreaterThan(0.04, $lifetimeRate, 'a card book reserves several percent of receivables');
     }
@@ -2859,10 +2880,12 @@ class EarningsEngineTest extends TestCase
         $strategy = Sectors::getBusinessModelStrategy('credit_services');
 
         mt_srand(20260912);
+        // The first report seeds the loan ledger; the second opens on it.
         $engine->calculate($lender, $macroState, EarningsEngine::resolveReportingTick('CARD', 252));
+        $openingBook = (float) $lender->getEarningAssets();
+        $engine->calculate($lender, $macroState, EarningsEngine::resolveReportingTick('CARD', 252) + 63);
         $this->assertNotNull($captured);
 
-        $openingBook = (float) $lender->getEarningAssets() + $captured->netChargeOffs;
         $this->assertEqualsWithDelta(
             $strategy->getThroughTheCycleCreditLossRate() / 4.0 * $openingBook,
             $captured->expectedCreditLossProvision,
@@ -2966,10 +2989,12 @@ class EarningsEngineTest extends TestCase
         $regimes = [$calm, $calm, $stressed, $stressed, $stressed, $stressed, $calm, $calm];
         mt_srand(20260912);
         foreach ($regimes as $i => $macro) {
+            // The gross book the quarter opens with; the first report seeds it, and is not asserted on.
+            $openingBook = (float) $stock->getEarningAssets();
             $engine->calculate($stock, $macro, ($i * 63) + EarningsEngine::resolveReportingTick('CARD', 252));
             $this->assertNotNull($captured);
-            // Provision over and above the through-the-cycle charge on the opening book: the build or release.
-            $ttcCharge = $strategy->getThroughTheCycleCreditLossRate() / 4.0 * ((float) $stock->getEarningAssets() + $captured->netChargeOffs);
+            // Provision over and above the through-the-cycle charge on the gross opening book: the build or release.
+            $ttcCharge = $strategy->getThroughTheCycleCreditLossRate() / 4.0 * $openingBook;
             $excessProvision[$i] = $captured->creditLossProvision - $ttcCharge;
         }
 

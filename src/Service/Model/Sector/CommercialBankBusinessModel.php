@@ -292,6 +292,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const STATE_LOAN_SPREAD             = 'state:loan_pricing_spread';
     /** Persisted non-interest (fee) revenue per unit of earning assets, struck once. */
     public const STATE_FEE_YIELD               = 'state:fee_yield';
+    /** Persisted repricing maturity of the securities the franchise was priced on. */
+    public const STATE_SECURITIES_REPRICING_YEARS = 'state:securities_repricing_years';
+    /** Persisted repricing maturity of the residential book the franchise was priced on. */
+    public const STATE_RESIDENTIAL_REPRICING_YEARS = 'state:residential_repricing_years';
 
     // --- Operating Cost Base ---
     /**
@@ -313,10 +317,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const MIN_CORE_LENDING_YIELD = 0.015;
 
     // --- Deposit Pricing (Drechsler, Savov & Schnabl 2017) ---
-    /** Upper bound: banks rarely pay more than 70% of the policy rate to retain depositors. */
-    public const MAX_DEPOSIT_BETA              = 0.70;
-    /** The system deposit beta at the neutral rate: the beta a deposit bank's own is expressed against. */
-    public const DEPOSIT_BETA_NORMALIZATION_BASELINE = MacroConstants::SYSTEM_DEPOSIT_BETA_BASE;
     /** Floor on any deposit rate: banks always pay some yield. */
     public const MIN_DEPOSIT_RATE              = 0.001;
     /**
@@ -537,8 +537,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $depositRate = $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
         $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $macroState->yield5yEma) + (float) $stock->getCreditSpread();
 
-        $allowedWholesaleLeverage = min($wholesaleDebt / $effectiveEquity, max(0.0, $this->getWholesaleLeverageLimit()));
-        $optimalWholesaleDebt = $effectiveEquity * $allowedWholesaleLeverage;
+        // The funding the lender carries: its leverage limit binds on the live balance sheet, and a calibration
+        // that counted less funding than it pays for struck a spread that left it short of its return.
+        $optimalWholesaleDebt = $wholesaleDebt;
         $optimalDeposits = $customerDeposits;
         $targetCash = $this->calculateTargetOperatingCash($effectiveEquity, $optimalDeposits, $optimalWholesaleDebt);
         $optimalEarningAssets = $effectiveEquity + $optimalWholesaleDebt + $optimalDeposits - $targetCash;
@@ -572,14 +573,19 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      * non-interest income per unit of book. Fees are its peer group's (FDIC); the floating share puts its interest
      * income beta on the matching line its own expense beta implies (Drechsler, Savov & Schnabl 2021); the spread is
      * what is left of the revenue its structural return requires at the opening macro. After that the rate cycle
-     * reaches the book through repricing alone.
+     * reaches the book through repricing alone. The pricing is struck on the book's repricing maturities and carried
+     * with them (resolveBookTenors()); pricing carried without them was struck on the commercial bank's, and is struck
+     * again once where this lender's book reprices otherwise.
      *
      * @return array{floating_share: float, loan_spread: float, fee_yield: float}
      */
     protected function resolveFranchisePricing(Stock $stock): array
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        if (isset($momentum[self::STATE_FLOATING_LOAN_SHARE], $momentum[self::STATE_LOAN_SPREAD], $momentum[self::STATE_FEE_YIELD])) {
+        $struckOnItsTenors = isset($momentum[self::STATE_SECURITIES_REPRICING_YEARS], $momentum[self::STATE_RESIDENTIAL_REPRICING_YEARS])
+            || (abs($this->resolveSecuritiesRepricingYears($stock) - self::SECURITIES_REPRICING_YEARS) < 1e-9
+                && abs($this->resolveResidentialRepricingYears($stock) - self::RESIDENTIAL_REPRICING_YEARS) < 1e-9);
+        if ($struckOnItsTenors && isset($momentum[self::STATE_FLOATING_LOAN_SHARE], $momentum[self::STATE_LOAN_SPREAD], $momentum[self::STATE_FEE_YIELD])) {
             return [
                 'floating_share' => (float) $momentum[self::STATE_FLOATING_LOAN_SHARE],
                 'loan_spread' => (float) $momentum[self::STATE_LOAN_SPREAD],
@@ -587,6 +593,16 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             ];
         }
 
+        return $this->strikeFranchisePricing($stock);
+    }
+
+    /**
+     * The franchise's pricing struck at the opening macro on this lender's own book.
+     *
+     * @return array{floating_share: float, loan_spread: float, fee_yield: float}
+     */
+    protected function strikeFranchisePricing(Stock $stock): array
+    {
         $opening = new MacroStateDTO();
         $floatingShare = $this->resolveMatchedFloatingShare($stock, $opening);
         $feeYield = $this->resolveNonInterestIncomeToEarningAssets($stock);
@@ -660,8 +676,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             return static::FLOATING_RATE_LOAN_SHARE;
         }
 
-        $withNoFloating = ($loanShare * $residentialShare * $repriced(static::RESIDENTIAL_REPRICING_YEARS))
-            + ((1.0 - $loanShare) * $repriced(static::SECURITIES_REPRICING_YEARS))
+        $tenors = $this->resolveBookTenors($stock);
+        $withNoFloating = ($loanShare * $residentialShare * $repriced($tenors['residential']))
+            + ((1.0 - $loanShare) * $repriced($tenors['securities']))
             + ($otherShare * $fixedRepriced);
 
         return max(0.0, min(1.0, ($targetIncomeBeta - $withNoFloating) / ($otherShare * (1.0 - $fixedRepriced))));
@@ -711,12 +728,46 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      */
     protected function resolveRepricingRates(Stock $stock, MacroStateDTO $macroState): array
     {
+        $tenors = $this->resolveBookTenors($stock);
+
         return [
             'floating' => $macroState->policyRateEma + $macroState->interbankLiquiditySpreadEma,
             'fixed' => $this->resolveCurveRate($macroState, $this->resolveFixedLoanRepricingYears()),
-            'residential' => $this->resolveCurveRate($macroState, static::RESIDENTIAL_REPRICING_YEARS),
-            'securities' => $this->resolveCurveRate($macroState, static::SECURITIES_REPRICING_YEARS),
+            'residential' => $this->resolveCurveRate($macroState, $tenors['residential']),
+            'securities' => $this->resolveCurveRate($macroState, $tenors['securities']),
         ];
+    }
+
+    /**
+     * The repricing maturities the book is carried at: those its franchise was priced on, or this lender's own for a
+     * book not yet priced.
+     *
+     * @return array{securities: float, residential: float}
+     */
+    protected function resolveBookTenors(Stock $stock): array
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        return [
+            'securities' => isset($momentum[self::STATE_SECURITIES_REPRICING_YEARS]) ? (float) $momentum[self::STATE_SECURITIES_REPRICING_YEARS] : $this->resolveSecuritiesRepricingYears($stock),
+            'residential' => isset($momentum[self::STATE_RESIDENTIAL_REPRICING_YEARS]) ? (float) $momentum[self::STATE_RESIDENTIAL_REPRICING_YEARS] : $this->resolveResidentialRepricingYears($stock),
+        ];
+    }
+
+    /** Repricing maturity of this lender's securities. */
+    protected function resolveSecuritiesRepricingYears(Stock $stock): float
+    {
+        return static::SECURITIES_REPRICING_YEARS;
+    }
+
+    /**
+     * Repricing maturity of this lender's residential book: the District's floating mortgage unless its lore fixes it.
+     */
+    protected function resolveResidentialRepricingYears(Stock $stock): float
+    {
+        return max(self::FLOATING_RESET_YEARS, (float) $this->resolveModelParameters($stock, [
+            ModelParam::ResidentialRepricingYears->value => static::RESIDENTIAL_REPRICING_YEARS,
+        ])[ModelParam::ResidentialRepricingYears]);
     }
 
     /** The smoothed curve read linearly between its tenors: the policy rate at zero, then 2, 5, 10 and 30 years. */
@@ -768,12 +819,13 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     {
         $pricing = $this->resolveFranchisePricing($stock);
         $rates = $this->resolveRepricingRates($stock, $macroState);
+        $tenors = $this->resolveBookTenors($stock);
         $quarter = 1.0 / FinancialConstants::QUARTERS_PER_YEAR;
 
         $parts = [
-            self::STATE_BOOK_YIELD_RESIDENTIAL => [$rates['residential'] + $pricing['loan_spread'], static::RESIDENTIAL_REPRICING_YEARS],
+            self::STATE_BOOK_YIELD_RESIDENTIAL => [$rates['residential'] + $pricing['loan_spread'], $tenors['residential']],
             self::STATE_BOOK_YIELD_FIXED => [$rates['fixed'] + $pricing['loan_spread'], $this->resolveFixedLoanRepricingYears()],
-            self::STATE_BOOK_YIELD_SECURITIES => [$rates['securities'], static::SECURITIES_REPRICING_YEARS],
+            self::STATE_BOOK_YIELD_SECURITIES => [$rates['securities'], $tenors['securities']],
         ];
         foreach ($parts as $key => [$marketYield, $repricingYears]) {
             $streams->registerState($key, TimeSeries::calculateDistributedLag($streams->getPersistedState($key, $marketYield), $marketYield, $quarter, $repricingYears));
@@ -783,6 +835,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_FLOATING_LOAN_SHARE, $pricing['floating_share']);
         $streams->registerState(self::STATE_LOAN_SPREAD, $pricing['loan_spread']);
         $streams->registerState(self::STATE_FEE_YIELD, $pricing['fee_yield']);
+        $streams->registerState(self::STATE_SECURITIES_REPRICING_YEARS, $tenors['securities']);
+        $streams->registerState(self::STATE_RESIDENTIAL_REPRICING_YEARS, $tenors['residential']);
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
@@ -855,14 +909,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Balance sheet loan book (Earning Assets) deployed into credit
-        $earningAssets = $this->resolveEarningAssets($stock);
-
-        // Charge-offs are the book's conditional loss this quarter. They reach EBIT once, through the allowance
-        // roll-forward, which replaces what they consumed (provision = charge-offs + change in allowance).
+        // Charge-offs are the book's conditional loss this quarter, on the gross balances that default. They reach EBIT
+        // once, through the allowance roll-forward, which replaces what they consumed (provision = charge-offs + change
+        // in allowance).
         $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams, $mathUtility);
         $defaultZ = $credit['systematic_z'];
-        $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $earningAssets;
+        $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveGrossEarningAssets($stock);
         $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
 
         // The forward-looking CECL reserve (credit spreads, recession forecast) is NOT a margin term: it moves
@@ -970,12 +1022,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * This quarter's annual loss rate on earning assets, read off the loan book segment by segment. Each segment reads
-     * the systematic factor the macro default rate implies (households the retail rate, firms the corporate rate) and
-     * applies it at the macro's own correlation to the segment's long-run PD, so every lender in the District takes the
-     * same credit cycle through its own book; the low-PD segments (mortgages, CRE) swing furthest, as they did in
-     * 2009-10. Property-secured segments lose more as collateral falls below the price the loans were written at (Frye
-     * 2000).
+     * This quarter's annual loss rate on earning assets, read off the loan book segment by segment. Each segment moves
+     * off its long-run PD by the Vasicek multiple the macro default rate implies against its trend (households the
+     * retail rate, firms the corporate rate), at the macro's own correlation, so every lender in the District takes
+     * the same credit cycle through its own book and loses its through-the-cycle rate while the rates sit at their
+     * trends; the low-PD segments (mortgages, CRE) swing furthest, as they did in 2009-10. Property-secured segments
+     * lose more as collateral falls below the price the loans were written at (Frye 2000).
      *
      * @return array{loss_rate: float, systematic_z: float}
      */
@@ -1008,12 +1060,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_COMMERCIAL_ORIGINATION_PRICE, TimeSeries::calculateDistributedLag($commercialOrigination, $commercialPrice, $quarter, self::COLLATERAL_ORIGINATION_YEARS));
 
         $pdScale = $this->resolveCreditRiskScale($stock) / self::LGD_BASELINE;
-        $householdRho = CreditRisk::RETAIL_ASRF_RHO;
-        $corporateRho = CreditRisk::CORPORATE_DEFAULT_RHO;
-        $lossRate = ($residentialShare * CreditRisk::calculateVasicekExpectedLoss($householdZ, static::RESIDENTIAL_CHARGE_OFF_RATE * $pdScale, $householdRho, $residentialLgd))
-            + ($consumerShare * CreditRisk::calculateVasicekExpectedLoss($householdZ, static::CONSUMER_CHARGE_OFF_RATE * $pdScale, $householdRho, self::LGD_BASELINE))
-            + ($creShare * CreditRisk::calculateVasicekExpectedLoss($corporateZ, static::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE * $pdScale, $corporateRho, $commercialLgd))
-            + ($businessShare * CreditRisk::calculateVasicekExpectedLoss($corporateZ, static::BUSINESS_CHARGE_OFF_RATE * $pdScale, $corporateRho, self::LGD_BASELINE));
+        $household = fn(float $chargeOffRate, float $lgd): float => $this->resolveSegmentLossRate($chargeOffRate * $pdScale, $macroState->retailDefaultRateEma, $macroState->retailDefaultRateTrend, CreditRisk::RETAIL_ASRF_RHO, $lgd);
+        $corporate = fn(float $chargeOffRate, float $lgd): float => $this->resolveSegmentLossRate($chargeOffRate * $pdScale, $macroState->corporateDefaultRateEma, $macroState->corporateDefaultRateTrend, CreditRisk::CORPORATE_DEFAULT_RHO, $lgd);
+        $lossRate = ($residentialShare * $household(static::RESIDENTIAL_CHARGE_OFF_RATE, $residentialLgd))
+            + ($consumerShare * $household(static::CONSUMER_CHARGE_OFF_RATE, self::LGD_BASELINE))
+            + ($creShare * $corporate(static::COMMERCIAL_REAL_ESTATE_CHARGE_OFF_RATE, $commercialLgd))
+            + ($businessShare * $corporate(static::BUSINESS_CHARGE_OFF_RATE, self::LGD_BASELINE));
 
         $householdWeight = $residentialShare + $consumerShare;
 
@@ -1021,6 +1073,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'loss_rate' => $lossRate * $this->getLoanShareOfEarningAssets(),
             'systematic_z' => ($householdWeight * $householdZ) + ((1.0 - $householdWeight) * $corporateZ),
         ];
+    }
+
+    /**
+     * One segment's annual loss rate: its long-run PD moved by the Vasicek multiple of the population's observed
+     * default rate against its trend, at the loss given default the collateral leaves.
+     */
+    protected function resolveSegmentLossRate(float $longRunPd, float $observedPd, float $trendPd, float $rho, float $lgd): float
+    {
+        return min(1.0, $longRunPd * CreditRisk::calculateVasicekPdMultiple($observedPd, $trendPd, $longRunPd, $rho)) * $lgd;
     }
 
     /**
@@ -1090,9 +1151,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * Through-the-cycle loss on this lender's earning assets: each segment's long-run charge-off rate (Basel's PD x
-     * LGD), which is the mean of the conditional losses whenever the macro default rates average at their baselines,
-     * on the loan share of the book. A neutral H.8 loan book loses 0.92% a year; US banks charged off 0.89% of loans
-     * over 1991-2019 (FRED CORALACBS).
+     * LGD), which is what the conditional losses come to while the macro default rates sit at their trends and the
+     * collateral at its origination price, on the loan share of the book. A neutral H.8 loan book loses 0.92% a year;
+     * US banks charged off 0.89% of loans over 1991-2019 (FRED CORALACBS).
      */
     public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
     {
@@ -1191,12 +1252,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * The rate a deposit bank pays at a policy rate and system deposit beta: the system's pass-through, which rises
-     * with the level of rates (Drechsler, Savov & Schnabl 2017), capped below the policy rate.
+     * The rate a deposit bank pays in the long run at a policy rate: the system's pass-through, one beta at every rate
+     * level, and some yield always. The rate it pays reaches it over DEPOSIT_REPRICING_YEARS (advanceBookYields()).
      */
     protected function resolveDepositRate(float $policyRate, float $systemDepositBeta): float
     {
-        return max(self::MIN_DEPOSIT_RATE, $policyRate * min(self::MAX_DEPOSIT_BETA, $systemDepositBeta));
+        return max(self::MIN_DEPOSIT_RATE, $policyRate * $systemDepositBeta);
     }
 
     /**
@@ -1211,12 +1272,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         }
 
         return $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
-    }
-
-    /** A deposit bank's own beta at the neutral rate: the system's (its pass-through is the rate cycle's). */
-    public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float
-    {
-        return self::DEPOSIT_BETA_NORMALIZATION_BASELINE;
     }
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float

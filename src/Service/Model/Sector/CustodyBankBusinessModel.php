@@ -45,6 +45,16 @@ class CustodyBankBusinessModel extends CommercialBankBusinessModel
      */
     public const LOAN_SHARE_OF_EARNING_ASSETS = 0.18;
 
+    // --- Securities Sleeve ---
+    /**
+     * Repricing maturity of a custodian's securities: 2.5 years, the short high-quality liquid book custody banks
+     * report 2-3 year durations for, against the US aggregate's 8.4; the shortest tenor at which a custodian's book
+     * meets the deposit-matching line with a floating share between none and all.
+     */
+    public const SECURITIES_REPRICING_YEARS = 2.5;
+    /** Duration the securities are marked at: the same 2.5 years, a short book of bullets with little to prepay. */
+    public const ASSET_DURATION_YEARS = 2.5;
+
     // --- Institutional Deposits ---
     /**
      * Deposit beta of institutional cash: about 75% on US interest-bearing deposits over the 2022-23 cycle (State

@@ -254,3 +254,19 @@ report tick, tick 20: conditional draws key on consensus), 8 seeds x 20 y, 360 t
   disclosure report-day sd 2.87 (0.23) -> 2.62 (0.10)%. No growth beyond noise.
 - Wall: 142 vs 138 s/run (sd 11); first batch side by side 144 vs 138. No measurable cost.
 - Disclosure harness records 0 warnings in both arms: its warning capture is stale since the 10-19 rework.
+
+## 2026-10-20 Batch D1 (banks and brokers)
+Question: does D1 (lender funding urgency at the deploy target, Vasicek PD-multiple losses on the gross book, opening
+loan spreads, PLVR/POOL repricing tenors, ROOK yield net of interest income) behave sensibly and hit its stated targets?
+Harness: JointHarnessTest.php (rows + nco/prov/allow/ii/ttc), `bin/harness-batch var/harness/joint/run.sh 1-8 baseD1 fixD1`,
+then `lender_an.py 1-8 baseD1 fixD1`, `lender_open.py`, `analyse.py`, `c_an.py`. 8 seeds x 20y, TPY 360, unpaired.
+Outputs: lenders-batchD1-8s.out, lenders-open-batchD1-8s.out, analyse-batchD1-{base,fix}-8s.out, c-batchD1-8s.out.
+- Board: EPS beat 75.7 -> 76.2%, CW index 6.8 -> 7.2 %/y, vol 15.7 -> 15.5%, failures 0.25 -> 0, Ch11 0.25 -> 0.125,
+  rescues 5.0 -> 4.9 per run, wall 143 -> 139 s/run. Macro gap sd 1.89 (0.54 sd) -> 1.43 (0.29), inside seed noise.
+- LAKE wholesale y20 4049 (532) -> 464 (109) bn; ROE run mean 0.160 -> 0.194 (target 0.21). ACC wholesale flat 8 bn both.
+- EGRT ROE yr1 0.109 -> 0.125, run 0.108 -> 0.135 (target 0.13); BNTH yr1 0.132 -> 0.202, run 0.126 -> 0.196 (0.18).
+- NCO / (TTC x gross) 0.90-0.97 in both arms for every lender (TALN 0.99 -> 0.94, STRK 0.97 -> 0.95).
+- ROOK rev/q yr1 3.23 -> 1.39 bn (-57%), interest income 0.83 -> 0.80; ROE 0.276 -> 0.189; corr(ROE, policy) 0.42 -> 0.53;
+  equity CAGR 7.9 -> 3.0%.
+- Both arms: ROE fades from year 1 to the run mean for TALN/STRK (0.26 -> 0.20), POOL (0.29 -> 0.21), PLVR (0.14 -> 0.12).
+Caveat: unpaired arms (macro paths diverge), se over 8 seeds.

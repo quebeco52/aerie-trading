@@ -307,6 +307,105 @@ class TreasuryEngineTest extends TestCase
         $this->assertFalse($ctx->debtActionTaken);
     }
 
+    /**
+     * A deposit-funded fortress bank holding exactly the cash it deploys down to: a lender measures its liquidity
+     * shortfall against that same target, so the manager's cash bias does not make it borrow.
+     *
+     * @return array{CapitalAllocationContext, TreasuryEngine}
+     */
+    private function fortressLenderAtItsDeployTarget(float $treasury): array
+    {
+        $stock = new Stock();
+        $stock->setTicker('FORT');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setTotalEquity('1000000000.00');
+        $stock->setEarningAssets('5400000000.00');
+        $stock->setCustomerDeposits('5000000000.00');
+        $stock->setWholesaleDebt('0.00');
+        $stock->setCorporateTreasury((string) $treasury);
+        $stock->setManagementStyle(ManagementStyle::Fortress);
+
+        $ctx = new CapitalAllocationContext(
+            stock: $stock,
+            macroState: MacroStateDTO::fromArray(['policy_rate_ema' => 0.04, 'yield_5y_ema' => 0.045]),
+            actualAnnualEps: 1.0,
+            quarterlyFcfPerShare: 0.25,
+            currentPrice: 50.0,
+            sharesOutstanding: 100_000_000,
+            actualTotalNetIncome: 25_000_000,
+        );
+        $ctx->strategy = new CommercialBankBusinessModel();
+        $ctx->businessModel = 'commercial_bank';
+        $ctx->isFinancial = true;
+        $ctx->newTreasury = $treasury;
+        $ctx->operatingBase = 1_000_000_000.0;
+        $ctx->wholesaleDebt = 0.0;
+        $ctx->customerDeposits = 5_000_000_000.0;
+        $ctx->health = new DebtHealthDTO(
+            grossCost: 0.04,
+            effectiveCost: 0.04,
+            cashYield: 0.04,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 3.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: 15.0,
+            wacc: 0.06,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: new DebtMetricsDTO(
+                interestExpense: 10_000_000.0,
+                blendedRate: 0.04,
+                historicalFixedRate: 0.04,
+                dynamicSpread: 0.01,
+                currentMarketRate: 0.04,
+                wholesaleRate: 0.04,
+                ebit: 30_000_000.0,
+                revenue: 100_000_000.0,
+                depreciation: 2_000_000.0,
+                ebitda: 32_000_000.0,
+            ),
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false,
+        );
+
+        // The return clears the hurdle and any draw with a chance fires, so only the bank's appetite decides.
+        $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(6_000_000_000.0);
+        $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.0);
+        $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.20);
+        $draws = $this->createStub(MathUtility::class);
+        $draws->method('checkProbability')->willReturnCallback(static fn(float $probability): bool => $probability > 0.0);
+
+        return [$ctx, new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $draws)];
+    }
+
+    /**
+     * Its deposits fund it: at the target it deploys down to (10% of deposits plus the 20% buffer, $600M), it borrows
+     * nothing. Measured against the fortress's own 1.75x cash target it was always short, and borrowed every quarter.
+     */
+    public function testAFortressLenderDoesNotBorrowToRefillTheCashItDeploys(): void
+    {
+        [$ctx, $engine] = $this->fortressLenderAtItsDeployTarget(600_000_000.0);
+        $this->debtEngine->expects($this->never())->method('issueDebt');
+
+        $engine->executeCorporateStrategy($ctx);
+
+        $this->assertFalse($ctx->debtActionTaken);
+    }
+
+    /** Short of the same target, the bank still borrows to restore its liquidity. */
+    public function testALenderShortOfItsDeployTargetStillBorrows(): void
+    {
+        [$ctx, $engine] = $this->fortressLenderAtItsDeployTarget(300_000_000.0);
+        $this->debtEngine->expects($this->once())->method('issueDebt');
+
+        $engine->executeCorporateStrategy($ctx);
+
+        $this->assertTrue($ctx->debtActionTaken);
+    }
+
     public function testFinancialInstitutionsProtectedFromCashHoarderDeleveragingSweep(): void
     {
         $stock = new Stock();

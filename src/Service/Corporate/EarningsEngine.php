@@ -1091,10 +1091,10 @@ class EarningsEngine
      */
     private function resolveAnnualCapitalTurnover(EarningsSimulationContext $ctx): float
     {
-        $afterTaxMargin = $ctx->stableMargin * (1.0 - $ctx->corporateTaxRate);
-
         if ($ctx->strategy->isFinancial()) {
-            return max(0.01, $ctx->baselineRoic) / $afterTaxMargin;
+            // The book turns over at the yield it earns: no floor, or a lender whose yield fell in an easing cycle
+            // booked revenue its book never earned.
+            return FirmEconomics::structuralAssetTurnover($ctx->baselineRoic, $ctx->stableMargin, $ctx->corporateTaxRate);
         }
 
         $stored = $ctx->stock->getAssetTurnover();
@@ -1102,7 +1102,7 @@ class EarningsEngine
             return (float) $stored;
         }
 
-        $structuralTurnover = max(0.01, (float) $ctx->stock->getBaselineRoic()) / $afterTaxMargin;
+        $structuralTurnover = FirmEconomics::structuralAssetTurnover(max(0.01, (float) $ctx->stock->getBaselineRoic()), $ctx->stableMargin, $ctx->corporateTaxRate);
         $ctx->stock->setAssetTurnover((string) $structuralTurnover);
 
         return $structuralTurnover;

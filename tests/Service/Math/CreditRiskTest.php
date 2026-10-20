@@ -506,4 +506,35 @@ class CreditRiskTest extends TestCase
         $securedB = CreditRisk::calculateRecoveryAdjustedSpread(CreditRisk::calculateRatingClassSpread('B', $ig, $hy), 0.38, 0.52);
         $this->assertEqualsWithDelta(1.0, CreditRisk::calculateIssuerSpreadMultiple($securedB, $ig, $hy, 0.38, 0.52), 1e-12, 'a secured issuer seeded on its own curve carries no premium');
     }
+
+    /** @return iterable<string, array{float}> */
+    public static function bookPds(): iterable
+    {
+        yield 'a prime mortgage book' => [0.003];
+        yield 'the population itself' => [0.025];
+        yield 'a card book' => [0.10];
+    }
+
+    /**
+     * A book loses its long-run PD while the population's default rate sits at its trend, whatever its own PD: read
+     * straight off the factor, the trend's factor sits below zero and a card book ran 8% above its long-run rate.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('bookPds')]
+    public function testABookDefaultsAtItsLongRunRateWhileThePopulationSitsAtItsTrend(float $bookPd): void
+    {
+        $this->assertEqualsWithDelta(1.0, CreditRisk::calculateVasicekPdMultiple(0.025, 0.025, $bookPd, CreditRisk::RETAIL_ASRF_RHO), 1e-12);
+        $this->assertGreaterThan(1.0, CreditRisk::calculateVasicekPdMultiple(0.035, 0.025, $bookPd, CreditRisk::RETAIL_ASRF_RHO), 'more defaults out there, more in the book');
+        $this->assertLessThan(1.0, CreditRisk::calculateVasicekPdMultiple(0.020, 0.025, $bookPd, CreditRisk::RETAIL_ASRF_RHO));
+    }
+
+    /** A book at the population's own PD moves in proportion to the population's rate; a safer book moves further. */
+    public function testThePopulationsOwnBookMovesInProportionAndASaferBookFurther(): void
+    {
+        // To the inverse normal CDF's precision.
+        $this->assertEqualsWithDelta(0.035 / 0.025, CreditRisk::calculateVasicekPdMultiple(0.035, 0.025, 0.025, CreditRisk::RETAIL_ASRF_RHO), 1e-5);
+        $this->assertGreaterThan(
+            CreditRisk::calculateVasicekPdMultiple(0.035, 0.025, 0.10, CreditRisk::RETAIL_ASRF_RHO),
+            CreditRisk::calculateVasicekPdMultiple(0.035, 0.025, 0.003, CreditRisk::RETAIL_ASRF_RHO),
+        );
+    }
 }

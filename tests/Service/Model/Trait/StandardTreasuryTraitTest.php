@@ -95,12 +95,8 @@ final class StandardTreasuryTraitTest extends TestCase
         );
     }
 
-    /**
-     * Deposit beta is a bank concept: a corporate treasury has no depositors to reprice.
-     */
-    public function testNonFinancialsHaveNoDepositBetaAndDoNotDeployFundingIntoEarningAssets(): void
+    public function testNonFinancialsDoNotDeployFundingIntoEarningAssets(): void
     {
-        $this->assertSame(0.0, $this->model->calculateDepositBeta(1_000_000.0, 500_000.0, 2.0, 900_000.0));
         $this->assertFalse($this->model->deploysFundingIntoEarningAssets(), 'A corporate deploys cash on its own judgement, never automatically.');
     }
 
