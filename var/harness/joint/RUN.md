@@ -86,3 +86,12 @@ Evidence: `joint_evidence.md`.
   with realised sleeve gains). Rows now carry `tgain` (carry:equity_sleeve:trailing_gains). `ins_bridge.py <seeds> <arms...>`:
   DOVE/SAFE equity vs premium (rev - ii) growth, payout by 5y block, erl and sleeve/eq at y0/5/10/20, and the equity
   bridge by block (residual split into sleeve mark, issuance, rest; corr(rest, d y10)).
+- `capE` = tree-capE (git archive 2f618cbc + /tmp/claude-1000/c/capE.patch: insurer stock comp at industry rates,
+  extraordinary capital-target repurchase past the NAIC ceiling); fixD2c is the HEAD arm. `ins_capE.py <seeds> <arms...>`:
+  ins_bridge with premium = `rev` (ii is separate), ROE as NI / average equity per year, rev(4q)/eq at y0/5/10/20 and the
+  split-adjusted share-count change. The bridge's `issuance` is net share growth on net-issuing quarters only (a lower
+  bound; it also catches opportunistic secondaries, which the event filter does not log).
+- `capE2` = tree-capE2 (2f618cbc + /tmp/claude-1000/c/capE2.patch: capE plus no premium-valuation raise while
+  eq/ta >= getTargetCapitalRatio). `raise_an.py <seeds> <arms...>`: per capital-target firm (banks, SAFE, DOVE) the
+  quarters with shares +2-20%, split above/below target (prior eq/ta; insurers use their y0 eq/ta as proxy) and
+  after a loss, plus NI/avg-equity ROE, 20y payout/NI and split-adjusted share change.

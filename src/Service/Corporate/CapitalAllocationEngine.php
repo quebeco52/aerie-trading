@@ -464,7 +464,11 @@ class CapitalAllocationEngine
             $maxEquitySpend = max(0.0, $currentEquity * 0.50);
             $absoluteMaxSpend = min($absoluteMaxSpend, $maxEquitySpend);
             if ($ctx->distributionRoom !== null) {
-                $absoluteMaxSpend = min($absoluteMaxSpend, $ctx->distributionRoom);
+                // An extraordinary distribution is approved when the surplus left behind still meets the firm's own
+                // target (NAIC Model Act #440, section 5), so the return of capital above it passes the ordinary
+                // ceiling. Held to the ceiling, the surplus the year's income did not create, such as shares paid as
+                // compensation, could never leave.
+                $absoluteMaxSpend = min($absoluteMaxSpend, max($ctx->distributionRoom, $capitalSurplusReturn));
             }
 
             $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());

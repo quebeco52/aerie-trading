@@ -18,6 +18,7 @@ use App\Service\Corporate\TreasuryEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
+use App\Service\Model\Sector\InsuranceBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -883,6 +884,49 @@ class CapitalAllocationEngineTest extends TestCase
 
         [$strong] = $pay('8.00');
         $this->assertSame(1.00, $strong['dividend_paid'], 'A strong year\'s income covers the held dividend.');
+    }
+
+    /**
+     * Capital an insurer holds above its own target leaves as an extraordinary distribution, which a regulator
+     * approves because the surplus left behind still meets the target (NAIC Model Act #440, section 5): in a thin
+     * year it passes the ordinary limit that holds the dividend. An insurer at its target is held to the limit.
+     */
+    public function testAnInsurerAboveItsCapitalTargetReturnsItPastTheOrdinaryLimit(): void
+    {
+        $distribute = function (float $targetPremiumToSurplus): array {
+            $insurer = new Stock();
+            $insurer->setTicker('XTRA');
+            $insurer->setIndustry('Insurance - Reinsurance');
+            $insurer->setSharesOutstanding('1000000');
+            $insurer->setPrice('40.00');
+            $insurer->setTotalEquity('20000000');
+            $insurer->setCustomerDeposits('30000000');
+            $insurer->setWholesaleDebt('0.00');
+            $insurer->setCorporateTreasury('60000000');
+            $insurer->setTargetPayoutRatio('0.30');
+            $insurer->setDividendSpeed('0.10');
+            $insurer->setLastDividend('1.00');
+            $insurer->setRetainedEarnings('15000000.00');
+            $insurer->setTotalRevenue('10000000.00');
+            $insurer->setOperatingMargin('0.05');
+            $insurer->setRoeTtm('0.05');
+            $insurer->setEarningsPerShare('0.10');
+            $insurer->setTotalNetIncome('100000');
+            $insurer->setEarningsMomentumZ([InsuranceBusinessModel::STATE_TARGET_PREMIUM_TO_SURPLUS => $targetPremiumToSurplus]);
+
+            $result = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
+                ->allocateCapital($insurer, 0.10, 0.10, 40.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+
+            return [((float) $result['dividend_paid'] * 1_000_000.0) + (float) ($result['total_cash_spent'] ?? 0.0), 0.10 * $insurer->getStatutorySurplus() / 4.0];
+        };
+
+        // A target of one dollar of premium per dollar of surplus wants ten of its twenty back.
+        [$above, $quarterLimit] = $distribute(1.0);
+        $this->assertGreaterThan(1.5 * $quarterLimit, $above, 'The surplus above target passes the ordinary limit.');
+
+        // At a premium-to-surplus of a half, the twenty it holds is its target.
+        [$atTarget] = $distribute(0.5);
+        $this->assertLessThanOrEqual($quarterLimit + 1.0, $atTarget, 'An insurer at its target is held to the limit.');
     }
 
     private function buildEngineWith(DebtEngine $debtEngine): CapitalAllocationEngine

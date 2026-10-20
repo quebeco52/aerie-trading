@@ -727,6 +727,41 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
+     * An institution steering its capital to a target sells no stock into a premium valuation while it holds that
+     * target, since the capital would leave again as the repurchase that returns the surplus; below its target it
+     * may.
+     */
+    public function testAnInstitutionHoldingItsCapitalTargetSellsNoStockIntoAPremium(): void
+    {
+        $raise = function (float $targetShareOfRatio): float {
+            $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateUniform'])->getMock();
+            $mathUtility->method('generateUniform')->willReturn(0.0);
+            $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $mathUtility);
+
+            $stock = $this->createSolventCorporate();
+            $stock->setSharesOutstanding('100000000');
+            $stock->setRoicTtm('0.30');
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 300.0);
+            $ctx->strategy = new class ($targetShareOfRatio * (float) $stock->getTotalEquity() / $stock->getTotalAssets()) extends StandardCorporateBusinessModel {
+                public function __construct(private readonly float $target) {}
+
+                public function getTargetCapitalRatio(Stock $stock, ?MacroStateDTO $macroState = null): float
+                {
+                    return $this->target;
+                }
+            };
+            $ctx->newShares = 100_000_000.0;
+
+            $engine->finalizeLiquidity($ctx);
+
+            return $ctx->equityRaised;
+        };
+
+        $this->assertSame(0.0, $raise(0.8), 'At its target, the capital raised would only be handed back.');
+        $this->assertGreaterThan(0.0, $raise(1.2), 'Below its target it may sell into the premium.');
+    }
+
+    /**
      * A firm shut out of the bond market repays maturing principal out of cash. The principal genuinely
      * leaves the balance sheet, which is the whole difference between a maturity ladder and a coupon reset.
      */

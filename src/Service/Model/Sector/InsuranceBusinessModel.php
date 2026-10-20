@@ -79,6 +79,11 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     // --- Solvency & Regulatory Capital Thresholds ---
     /** Minimum capital ratio (Equity / Assets) before regulatory balance sheet insolvency (Equity <= 0). */
     public const BANKRUPT_EQUITY_THRESHOLD = 0.0;
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Insurance (Prop/Cas.), 0.41% of revenue (Damodaran,
+     * Employee data by industry, US, January 2026).
+     */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0041;
     /** Statutory capital ratio threshold below which insurer enters regulatory capital distress. */
     public const DISTRESS_EQUITY_THRESHOLD = 2.0;
     /** Share of the Kenney target surplus below which the regulator halts every distribution: half. */

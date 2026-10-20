@@ -33,6 +33,12 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.70;
     public const BASE_COVERAGE_ERROR = 0.10;
 
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue, between Insurance (Prop/Cas.) at 0.41% and Insurance
+     * (Life) at 0.48% (Damodaran, Employee data by industry, US, January 2026).
+     */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0044;
+
     // --- Stream Weights ---
     /** Baseline fraction of revenue from short-tail Property & Casualty premiums. */
     public const PROPERTY_CASUALTY_WEIGHT = 0.55;

@@ -361,3 +361,51 @@ NI (.07-.14). Sleeve mark .05-.12; issuance ~.02; the rest +.04-.25 per block (s
 -0.57, so a bond AOCI mark quarter to quarter, but y10 is flat over the runs (4.8% -> 4.7%) and base shows the same
 +.08-.11 rest per block with no sleeve: a persistent positive drift outside NI that predates the patch.
 Caveats: unpaired; the extra failures are non-insurers (refiner CASC x3), not touched by the patch beyond shared draws.
+
+## 2026-10-20 capE (insurer stock comp at industry rates, extraordinary capital-target repurchase)
+Question: does capE.patch (stock comp 0.41/0.44/0.23% of revenue for specialty/composite/reinsurer; capitalSurplusReturn
+may pass the NAIC ordinary-distribution room) bring SAFE to its .175 ROE without hurting DOVE (.14)? Arm capE =
+git archive 2f618cbc + /tmp/claude-1000/c/capE.patch; fixD2c is the HEAD arm, baseD2 reused. Seeds 1-8 x 20 y, TPY 360,
+unpaired. `bin/harness-batch var/harness/joint/run.sh 1-8 capE`, then analyse.py, ins_an.py, ins_path.py, ins_capE.py
+(new), lender_an.py, c_an.py. Outputs: analyse-capE-8s.out, ins-/inspath-/inscapE-/lenders-/c-capE-8s.out.
+
+| quantity | baseD2 | fixD2c | capE |
+|---|---|---|---|
+| board EPS beat, CW ret/vol | 76.2, 7.2/15.5 | 75.8, 6.5/16.1 | 75.4, 7.1/14.9 |
+| Ch11 / liquidations / rescue raises per run | .13/0/4.9 | .50/.38/6.3 | .50/.25/6.3 (TIER s5, SHOR s3) |
+| SAFE ROE ttm (target .175) | .126 | .148 | .181 (.006) |
+| SAFE NI/avg eq y2/5/10/20 | .141/.141/.111/.099 | .202/.158/.139/.145 | .194/.200/.183/.207 |
+| SAFE rev/eq y0/5/10/20 | 1.32/1.26/1.22/1.25 | 1.31/1.14/1.13/1.20 | 1.41/1.25/1.19/1.30 |
+| SAFE payout/NI by 5y block | .81/.85/.79/.84 | .86/1.03/.98/.92 | .87/.95/.95/.77 |
+| SAFE shares (split-adj) | -30% | -32% | -45% |
+| SAFE onsets, attachments /decade | .63, .70 | 1.20, 1.58 | 1.27, 2.15 |
+| SAFE hard-regime share | .23 | .30 | .47 (.08) |
+| DOVE ROE ttm (target .14) | .153 | .149 | .172 (.005) |
+| DOVE NI/avg eq y2/5/10/20 | .210/.170/.134/.106 | .167/.142/.124/.150 | .178/.173/.147/.173 |
+| DOVE rev/eq y0/5/10/20 | 1.39/1.25/1.25/1.27 | 1.33/1.29/1.17/1.44 | 1.59/1.32/1.22/1.39 |
+| DOVE payout/NI by block | .77/.89/.80/.83 | .83/.95/.89/.92 | .75/.83/.94/.80 |
+| DOVE onsets, attachments /decade | 1.27, 1.71 | 1.20, 1.58 | 1.71, 2.47 |
+
+SAFE share count rises on 16 quarters in 8 runs by 2-5% (~10% of equity, P/B ~3 before): the size matches TreasuryEngine's
+opportunistic secondary (min 5% mcap, 10% invested capital); fixD2c had 6. Not logged (harness event filter). Lower bound
+on the churn: a board repurchasing past the ceiling then reissuing at the same P/B within a year.
+Caveats: unpaired; TIER s5 liquidation untouched by the patch (fixD2b had one, base TIER often negative ROE by y20).
+No firm on the board uses InsuranceBusinessModel (specialty) directly; PELI is HealthInsurer (unaffected).
+
+## 2026-10-20 capE2 (capE + no premium-valuation raise for a firm at or above its capital target)
+Question: does gating TreasuryEngine's opportunistic secondary on getTargetCapitalRatio stop SAFE's 2-5% share
+raises, and what does it do to SAFE/DOVE ROE and the banks? Arm capE2 = git archive 2f618cbc +
+/tmp/claude-1000/c/capE2.patch (tree deleted after); fixD2c and capE reused. Seeds 1-8 x 20y, TPY 360, unpaired.
+`bin/harness-batch var/harness/joint/run.sh 1-8 capE2`, then analyse.py, ins_an.py, ins_path.py, ins_capE.py,
+lender_an.py, beat_an.py and raise_an.py (new). Table: capE2.out; detail raise-/inscapE2-/ins-capE2-/inspath-capE2-/
+lenders-capE2-8s.out.
+
+SAFE raises 15 -> 10 (fixD2c 6). All 10 left sit in a quarter whose NI fell 70-100% or went negative (7 losses):
+the "bubble" test reads P/E on the depressed quarter's earnings, so a cat quarter reads as a premium valuation,
+and the loss has already taken eq/ta below target, so the new gate lets it through. None are rescue raises.
+SAFE ROE .172 (.007) vs capE .181 (target .175); DOVE .154 (.007) vs .172 (target .14) although DOVE never
+raised in any arm: the skipped uniform draw re-paths the board (recession share 8.1% vs 6.3%, both insurers'
+loss-quarter share and CR sd up together), so the DOVE and SAFE ROE moves are path noise at n=8, not the gate.
+Banks unchanged (ROE and payout inside 1 se of capE); one bank raise (BNTH s4 y19, above target, no loss).
+Caveats: unpaired, seeds re-path; above/below target is from the prior quarter's report, the insurer target
+from y0 eq/ta (the real target lives in strategy state).

@@ -678,7 +678,13 @@ class TreasuryEngine
         $bookValuePerShare = max(0.01, (float) $stock->getTotalEquity() / $sharesNow);
         $priceToBook = $ctx->currentPrice / $bookValuePerShare;
 
-        $isBubble = $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
+        // An institution steering its capital ratio to a target has no use for an opportunistic raise while it holds
+        // that target: the capital would leave again as the repurchase that returns the surplus.
+        $capitalTarget = $ctx->strategy->getTargetCapitalRatio($stock, $ctx->macroState);
+        $totalAssets = $stock->getTotalAssets();
+        $holdsItsCapitalTarget = $capitalTarget !== null && $totalAssets > 0.0 && ((float) $stock->getTotalEquity() / $totalAssets) >= $capitalTarget;
+
+        $isBubble = !$holdsItsCapitalTarget && $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
         // Principal the firm cannot fund is the reason to go to the equity market, and it used to be the one
         // shortfall this path could not see: the raise was sized on operating cash alone, so a solvent firm
         // facing a maturity it could not roll never even tried to sell stock to cover it.

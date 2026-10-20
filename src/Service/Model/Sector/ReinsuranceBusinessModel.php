@@ -51,6 +51,12 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     public const BASE_COVERAGE_ERROR = 0.10;
 
+    /**
+     * Stock-based compensation (ASC 718) as a share of revenue: Reinsurance, 0.23% of revenue (Damodaran, Employee data
+     * by industry, US, January 2026).
+     */
+    public const STOCK_COMPENSATION_INTENSITY = 0.0023;
+
     // --- Stream Weights ---
     /** Baseline fraction of revenue from core proportional and excess-of-loss treaty reinsurance: nearly all of it. */
     public const TREATY_REINSURANCE_WEIGHT = 0.97;
