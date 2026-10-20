@@ -184,3 +184,23 @@ difference shows at this n, but the 2-se bounds (volatility +-0.53, loss +-0.52p
 
 Mean-zero unsettled misreading (2026-10-09; `poll_profile_new2.out`, 20 seeds x 400y, shards): cabinet month-1 fall -0.49 -> -0.21pp (share 0.24 -> 0.11, German 0.09); month-36 fall -2.06 -> -1.81pp.
 z2 unchanged within ~1% at every horizon (1m 74.2 -> 73.4, 36m 196.0 -> 197.3); still well above the old 41.5/172.4 at short horizons.
+
+## 2026-10-20 Coalition PM growth vote (0.253) + fall hazard on a sliding gap, tree vs HEAD 59073c3f
+
+formation_run.php (full MacroEngine, no fund, no equity cap) via `OUT=var/harness/polls/runs_form/dietvote
+bin/harness-batch var/harness/polls/form.sh 1-8 new head`, 8 seeds x 200 years, 180 ticks/year; `form_an2.py`, `form_slope.py`.
+Table: `dietvote_8.out`.
+
+| quantity | HEAD | tree | diff (se) |
+|---|---|---|---|
+| Pedersen volatility | 13.63 | 13.18 | -0.46 (0.56) |
+| cabinet loss at vote (pp) | 2.95 | 2.96 | +0.01 (0.45) |
+| terms ended by a fall | 0.372 | 0.408 | +0.035 (0.045) |
+| minority cabinet share | 0.677 | 0.724 | +0.047 (0.054) |
+| single-party share | 0.487 | 0.495 | +0.007 (0.043) |
+| largest party in cabinet | 0.728 | 0.693 | -0.035 (0.074) |
+| PM-party dv, growth above - below trend (pp) | 1.45 | 0.36 | -1.08 (1.55) |
+| PM-party slope on growth gap (pooled) | 0.115 (0.258) | 0.251 (0.223) | +0.08 (0.39) paired |
+
+Nothing moves past |t| 1. The growth channel is too small to see at this n: sd(growth gap) 0.02 x 0.253 = 0.5pp against
+~3pp of term vote noise. Every moment stays where HEAD has it, between the Scandinavian and Western European references.

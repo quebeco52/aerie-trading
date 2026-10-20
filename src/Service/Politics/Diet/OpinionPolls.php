@@ -106,15 +106,21 @@ final class OpinionPolls
 
         $growth = self::growthCounted($state, $macro);
         $inflation = self::inflationCounted($state, $macro);
+        $alone = count(AerieDiet::governingParties($state->governingCoalition)) === 1;
         $swing = Election::economicVote(
             $growth - $state->supportGrowthCounted,
             $inflation - $state->supportInflationCounted,
             $math->generateStandardNormal(),
-            count(AerieDiet::governingParties($state->governingCoalition)) === 1,
+            $alone,
             self::termClock($state->totalTime - $state->termStartedAt) - self::termClock($state->supportUpdatedAt - $state->termStartedAt),
         );
         $base = self::lastingSupport($state);
         $moved = Election::applyIncumbentSwing($base, $state->governingCoalition, $swing, $state->supportParties);
+        // A coalition's growth vote goes to the party leading it.
+        $primeMinister = PartyLeaders::primeMinisterParty($state);
+        if ($primeMinister !== null) {
+            $moved = Election::applyIncumbentSwing($moved, AerieDiet::membership([$primeMinister]), Election::primeMinisterGrowthVote($growth - $state->supportGrowthCounted, $alone));
+        }
         foreach (AerieDiet::PARTIES as $party) {
             $state->supportIncumbency[$party] = ($state->supportIncumbency[$party] ?? 0.0) + log($moved[$party] / $base[$party]);
         }

@@ -24,9 +24,14 @@ final class Election
     public const CAMPAIGN_WINDOW_YEARS = 0.75;
     /**
      * Vote share a party governing alone gains per unit of growth per head above trend in the year to the vote; a
-     * coalition gains none (Powell & Whitten 1993, clarity of responsibility).
+     * coalition shares less of it (Powell & Whitten 1993, clarity of responsibility).
      */
     public const SINGLE_PARTY_GROWTH_SLOPE = 0.506;
+    /**
+     * Vote share the party leading a coalition gains per unit of growth above trend, half a lone party's; its partners
+     * and supporters gain none (Duch & Falco-Gimeno 2021, Table 2; Hobolt, Tilley & Banducci 2013).
+     */
+    public const COALITION_PRIME_MINISTER_GROWTH_SLOPE = 0.5 * self::SINGLE_PARTY_GROWTH_SLOPE;
     /** Vote share any cabinet loses per unit of annualised inflation above target over the term (ParlGov). */
     public const INFLATION_SLOPE = 0.100;
     /**
@@ -61,6 +66,12 @@ final class Election
     public const CABINET_FALL_HAZARD_MINORITY_COALITION = 0.216;
     /** Yearly hazard a majority coalition falls between votes; a party with its own majority never does (ParlGov). */
     public const CABINET_FALL_HAZARD_MAJORITY_COALITION = 0.119;
+    /**
+     * How a coalition's hazard answers the economy sliding: times exp(-6 x the output gap's fall over the year), 1.2
+     * through a year the gap loses 3 points (Walther, Hellstrom & Bergman 2019, rising unemployment). A low level of
+     * the gap does not move it (Parliamentary Affairs 2024), nor a single party's, whose risks lie elsewhere.
+     */
+    public const CABINET_FALL_GAP_SLIDE_RESPONSE = 6.0;
 
     // --- Election Uncertainty ---
     /** Days a term that talks after a fall hold the election pulse above its ramp, as measured in simulated terms. */
@@ -178,7 +189,8 @@ final class Election
 
     /**
      * The government's change in vote share: the economy as PR electorates weigh it, less the cost of ruling, plus the
-     * residual. Inflation costs every cabinet; growth counts only for a party governing alone (Powell & Whitten 1993).
+     * residual. Inflation costs every cabinet; growth counts here only for a party governing alone (Powell & Whitten
+     * 1993), and in a coalition goes to the prime minister's party (primeMinisterGrowthVote()).
      * Over part of a term the cost accrues pro rata and the residual as a random walk, so parts add to the whole.
      *
      * @param float $growthGap    Annualised real growth per head over the campaign, less trend.
@@ -193,6 +205,31 @@ final class Election
             - (self::INFLATION_SLOPE * $inflationGap)
             - (self::COST_OF_RULING * $termShare)
             + (self::RESIDUAL_SD * sqrt($termShare) * $residualDraw);
+    }
+
+    /**
+     * The prime minister's party's own change in vote share in a coalition: growth above trend at
+     * COALITION_PRIME_MINISTER_GROWTH_SLOPE, taken from every other party. None for a party governing alone, whose
+     * growth vote is the government's (economicVote()).
+     *
+     * @param float $growthGap Annualised real growth per head over the campaign, less trend.
+     * @param bool  $alone     Whether one party forms the cabinet.
+     */
+    public static function primeMinisterGrowthVote(float $growthGap, bool $alone): float
+    {
+        return $alone ? 0.0 : self::COALITION_PRIME_MINISTER_GROWTH_SLOPE * $growthGap;
+    }
+
+    /**
+     * How much faster a cabinet is falling than its fitted hazard says, as the economy slides: a coalition's hazard
+     * scaled by CABINET_FALL_GAP_SLIDE_RESPONSE on the output gap's change over the year, a single party's unmoved.
+     *
+     * @param list<string> $cabinet   The cabinet's parties.
+     * @param float        $gapChange The output gap less its level a year earlier.
+     */
+    public static function fallHazardScale(array $cabinet, float $gapChange): float
+    {
+        return count($cabinet) > 1 ? exp(-self::CABINET_FALL_GAP_SLIDE_RESPONSE * $gapChange) : 1.0;
     }
 
     /**

@@ -203,6 +203,11 @@ class PoliticsEngine
         // it.
         OpinionPolls::advance($state, $macro, $dt, $this->mathUtility);
 
+        // A coalition falls sooner while the economy slides: its fall date comes forward by the hazard's excess over
+        // the rate it was drawn at, an exact change of the draw's clock.
+        if ($state->cabinetFallsAt >= 0.0) {
+            $state->cabinetFallsAt -= (Election::fallHazardScale(AerieDiet::governingParties($state->governingCoalition), $macro->outputGap - $macro->outputGapLag12m) - 1.0) * $dt;
+        }
         if ($state->cabinetFallsAt >= 0.0 && $state->totalTime >= $state->cabinetFallsAt) {
             $this->fall($state);
         }

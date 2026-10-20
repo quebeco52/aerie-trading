@@ -100,8 +100,11 @@ class PoliticsEngineTest extends TestCase
 
     // --- The vote ---
 
-    /** Inflation costs every cabinet; growth is credited to a party governing alone and to no coalition. */
-    public function testTheEconomicVoteCreditsGrowthOnlyToAPartyGoverningAlone(): void
+    /**
+     * Inflation costs every cabinet; growth is credited to a party governing alone, and in a coalition to the party
+     * leading it at half the rate, its partners none.
+     */
+    public function testTheEconomicVoteCreditsGrowthToWhoeverLeadsTheGovernment(): void
     {
         foreach ([true, false] as $alone) {
             $atTrend = Election::economicVote(0.0, 0.0, 0.0, $alone);
@@ -111,7 +114,9 @@ class PoliticsEngineTest extends TestCase
             $this->assertEqualsWithDelta(Election::RESIDUAL_SD, Election::economicVote(0.0, 0.0, 1.0, $alone) - $atTrend, 1e-12);
         }
         $this->assertEqualsWithDelta(Election::SINGLE_PARTY_GROWTH_SLOPE * 0.01, Election::economicVote(0.01, 0.0, 0.0, true) - Election::economicVote(0.0, 0.0, 0.0, true), 1e-12);
-        $this->assertSame(Election::economicVote(0.0, 0.0, 0.0, false), Election::economicVote(0.01, 0.0, 0.0, false), 'A coalition gets no credit for growth.');
+        $this->assertSame(Election::economicVote(0.0, 0.0, 0.0, false), Election::economicVote(0.01, 0.0, 0.0, false), 'A coalition as a whole gets no credit for growth.');
+        $this->assertEqualsWithDelta(0.5 * Election::SINGLE_PARTY_GROWTH_SLOPE * 0.01, Election::primeMinisterGrowthVote(0.01, false), 1e-15, 'Its leading party does.');
+        $this->assertSame(0.0, Election::primeMinisterGrowthVote(0.01, true), 'A party governing alone takes it with the government, not twice.');
     }
 
     /**
@@ -221,7 +226,10 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(sqrt(Diet::SEED_VOTE_SHARES[Diet::CIVIC] / Diet::SEED_VOTE_SHARES[Diet::COMMON_LOT]), $small / $large, 1e-12);
     }
 
-    /** A boom over the campaign returns the government stronger; inflation over the term costs it. */
+    /**
+     * A boom over the campaign returns the government stronger, a coalition only through the party leading it;
+     * inflation over the term costs it.
+     */
     public function testGrowthAndInflationMoveTheGovernmentsVote(): void
     {
         $engine = $this->engine($this->quietMath());
@@ -235,7 +243,11 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.03, $boomAlone->electionGrowthGap, 1e-9);
         $this->assertEqualsWithDelta(0.03, $inflation->electionInflationGap, 1e-9);
         $this->assertEqualsWithDelta(Election::SINGLE_PARTY_GROWTH_SLOPE * 0.03, $boomAlone->electionIncumbentSwing - $alone->electionIncumbentSwing, 1e-9, 'A boom returns a party governing alone stronger,');
-        $this->assertEqualsWithDelta($coalition->electionIncumbentSwing, $boomCoalition->electionIncumbentSwing, 1e-12, 'and a coalition no stronger.');
+        $leaderGain = Election::COALITION_PRIME_MINISTER_GROWTH_SLOPE * 0.03;
+        $this->assertEqualsWithDelta($leaderGain, $boomCoalition->dietVoteShares[Diet::VANGUARD] - $coalition->dietVoteShares[Diet::VANGUARD], 1e-9, 'a coalition\'s leading party by half that,');
+        $this->assertLessThan($coalition->dietVoteShares[Diet::EXCHANGE], $boomCoalition->dietVoteShares[Diet::EXCHANGE], 'its partners not at all,');
+        $this->assertGreaterThan($coalition->electionIncumbentSwing, $boomCoalition->electionIncumbentSwing);
+        $this->assertLessThan($coalition->electionIncumbentSwing + $leaderGain, $boomCoalition->electionIncumbentSwing, 'so the coalition by less.');
         $this->assertEqualsWithDelta(-Election::INFLATION_SLOPE * 0.03, $inflation->electionIncumbentSwing - $coalition->electionIncumbentSwing, 1e-9, 'Inflation costs a coalition too.');
     }
 
@@ -380,6 +392,31 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame(Election::CABINET_FALL_HAZARD_MAJORITY_COALITION, Election::fallHazard([Diet::CIVIC, Diet::IRON_HARBOR], $seats));
         $this->assertSame(Election::CABINET_FALL_HAZARD_SINGLE_PARTY_MINORITY, Election::fallHazard([Diet::VANGUARD], $seats));
         $this->assertSame(Election::CABINET_FALL_HAZARD_MINORITY_COALITION, Election::fallHazard([Diet::VANGUARD, Diet::EXCHANGE], $seats));
+    }
+
+    /**
+     * A coalition falls sooner while the economy slides and later while it recovers, its day moved each tick by the
+     * hazard's excess over the rate it was drawn at; a single party's day, and a gap low but steady, move nothing.
+     */
+    public function testASlidingEconomyBringsACoalitionsFallForward(): void
+    {
+        $this->assertSame(1.0, Election::fallHazardScale([Diet::VANGUARD], -0.03));
+        $this->assertSame(1.0, Election::fallHazardScale([Diet::VANGUARD, Diet::EXCHANGE], 0.0));
+        $this->assertEqualsWithDelta(exp(0.18), Election::fallHazardScale([Diet::VANGUARD, Diet::EXCHANGE], -0.03), 1e-12, 'About 1.2 through a year the gap loses 3 points.');
+        $this->assertLessThan(1.0, Election::fallHazardScale([Diet::VANGUARD, Diet::EXCHANGE], 0.02));
+
+        $slide = new MacroStateDTO(totalTime: 10.01, sovereignDebtToGdp: 0.5, outputGap: -0.03, outputGapLag12m: 0.0);
+        $coalition = $this->governedBy([Diet::VANGUARD => 80.0, Diet::EXCHANGE => 80.0]);
+        $this->engine($this->quietMath())->advance($coalition, $slide, 0.01);
+        $this->assertEqualsWithDelta(100.0 - ((exp(0.18) - 1.0) * 0.01), $coalition->cabinetFallsAt, 1e-12);
+
+        $alone = $this->governedBy([Diet::VANGUARD => 80.0], [Diet::EXCHANGE => 80.0]);
+        $this->engine($this->quietMath())->advance($alone, $slide, 0.01);
+        $this->assertSame(100.0, $alone->cabinetFallsAt);
+
+        $lowButSteady = $this->governedBy([Diet::VANGUARD => 80.0, Diet::EXCHANGE => 80.0]);
+        $this->engine($this->quietMath())->advance($lowButSteady, new MacroStateDTO(totalTime: 10.01, sovereignDebtToGdp: 0.5, outputGap: -0.03, outputGapLag12m: -0.03), 0.01);
+        $this->assertSame(100.0, $lowButSteady->cabinetFallsAt);
     }
 
     /**

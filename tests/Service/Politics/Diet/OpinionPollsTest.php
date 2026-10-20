@@ -284,6 +284,29 @@ class OpinionPollsTest extends TestCase
         }
     }
 
+    /**
+     * In a coalition the growth vote goes to the party leading it: a year of growth above trend lifts the Vanguard's
+     * support and leaves its partner's no higher.
+     */
+    public function testACoalitionsGrowthVoteGoesToItsLeadingParty(): void
+    {
+        $at = self::ELECTION_AT - 0.25;
+        $opened = self::ELECTION_AT - Election::CAMPAIGN_WINDOW_YEARS;
+        [$trend, $boom] = [$this->termStart(), $this->termStart()];
+        foreach ([$trend, $boom] as $state) {
+            $state->totalTime = $at;
+            $state->campaignStartedAt = $opened;
+            $state->campaignStartRealGdp = Election::realGdp($this->economy($opened));
+        }
+        OpinionPolls::update($trend, $this->economy($at), $this->quietMath());
+        $booming = $this->economy($at);
+        OpinionPolls::update($boom, new MacroStateDTO(totalTime: $at, potentialGdpIndex: $booming->potentialGdpIndex * exp(0.02), consumerPriceLevel: $booming->consumerPriceLevel), $this->quietMath());
+
+        $this->assertSame(Diet::VANGUARD, \App\Service\Politics\Diet\PartyLeaders::primeMinisterParty($boom));
+        $this->assertGreaterThan(OpinionPolls::support($trend)[Diet::VANGUARD], OpinionPolls::support($boom)[Diet::VANGUARD]);
+        $this->assertLessThanOrEqual(OpinionPolls::support($trend)[Diet::EXCHANGE], OpinionPolls::support($boom)[Diet::EXCHANGE]);
+    }
+
     /** A poll is published at each month's turn, none on the vote's tick, and every one samples support as it stood. */
     public function testAPollIsPublishedEachMonthOfTheTerm(): void
     {

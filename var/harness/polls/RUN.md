@@ -13,8 +13,10 @@ Run script: `form.sh <arm> <seed>` (takes its own `bin/php-slot`; outputs in `ru
 2. Write `head_tree/var/harness/politics/formation_run_h.php` = `formation_run.php` with the require made
    `require __DIR__ . "/../../../tests/bootstrap.php";` (sed the `^require` line), or the head arm runs the new code.
 3. `bin/harness-batch var/harness/polls/form.sh 1-8 new head && python3 var/harness/polls/form_an.py var/harness/polls/runs_form`
-   (YEARS default 200, TPY default 180; 16 runs ~10 min wall). Paired NEW - HEAD: Pedersen volatility, cabinet loss
-   at the vote (pp), minority-cabinet share of formations.
+   (YEARS default 200, TPY default 180; 16 runs ~15 min wall). Paired NEW - HEAD: Pedersen volatility, cabinet loss
+   at the vote (pp), minority-cabinet share of formations. `OUT=<dir>` before the batch keeps a run apart from old ones.
+   `form_an2.py <dir>` adds terms ended by a fall, single-party and largest-party-in-cabinet shares, and the coalition
+   PM party's vote change split by the campaign growth gap; `form_slope.py <dir>` gives its slope on the gap.
 4. `git worktree remove --force var/harness/politics/head_tree`.
 
 Evidence: `polls_evidence.md`.

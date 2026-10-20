@@ -4,7 +4,7 @@
 # bootstrap); arms pnew|phead run poll_profile.php (SEEDS default 20, YEARS default 400; seed argument ignored); arm
 # levers runs lever_means.php for one seed (YEARS default 200).
 cd /home/quebeco/Projects/Code/Private/aerie-trading || exit 1
-arm=$1; seed=$2; out=var/harness/polls/runs_form
+arm=$1; seed=$2; out=${OUT:-var/harness/polls/runs_form}
 mkdir -p $out
 case $arm in
   new)   exec bin/php-slot php -d memory_limit=3G var/harness/politics/formation_run.php $seed $seed ${YEARS:-200} ${TPY:-180} $out/new_$seed.jsonl ;;
