@@ -649,3 +649,23 @@ Caveats: the blow-up is a news label (HedgeFundBusinessModel.php:454) with no pa
 firing in weak markets. fixL's vol +1.05 was seed noise (fixM same economics, vol back at base). Board drop persists
 without blow-ups: it is in the shared SWAN-capacity/POOL-target change. SWAN end ratings BBB 15/16. Rescues: one fixM
 seed has 28.
+
+## 2026-10-21 Batch O (SWAN capacity rule on a replayed macro path, paired by seed)
+Question: with the macro held fixed, does SWAN's capacity rule lower the rest of the board's market-cap growth (the
+-0.6pp/y seen unpaired in fixL/fixM/fixK-type live arms)? Harness JointHarnessTest.php; recNS (noswan tree, live,
+POLITICS=1) records each seed's macro, rpNS and rpSW replay it. Seeds 1-16 (stage 8 gave t +2.3, so extended), 20y,
+TPY 360, CREDIT=1. `python3 var/harness/joint/o_an.py 1-16`; output o_an.out.
+
+| quantity (rpSW - rpNS, n=16) | rpNS | rpSW | diff (se) | t | sd(diff) |
+|---|---|---|---|---|---|
+| board mkt-cap CAGR ex SWAN/POOL % | 4.23 | 4.30 | +0.077 (0.041) | +1.9 | 0.17 |
+| board TTM NI / revenue / book-equity CAGR % | 4.45 / 4.66 / 4.81 | 4.52 / 4.71 / 4.86 | +0.06 / +0.05 / +0.06 (0.04-0.07) | <= 1.3 | |
+| board P/E end / P/B end | 15.5 / 2.70 | 15.5 / 2.69 | +0.02 (0.18) / -0.005 (0.022) | ~0 | |
+| SWAN TTM ROE y2+ % | 14.5 | 19.8 | +5.3 (0.5) | +10.7 | |
+| SWAN D/E y20; (div+bb)/NI; expansion bonds | 1.45; 0.79; 20.6 | 1.07; 0.97; 0 | | | |
+| SWAN cap share of board+SWAN end % | 8.3 | 6.1 | -2.1 (0.5) | -4.3 | |
+Per firm: 48% of ~87 firms lower in rpSW (per-seed 38-56%), median diff +0.09pp. Replay sanity: live recNS board CAGR
+4.19 vs replayed rpNS 4.23 (diff +0.04, se 0.04).
+Caveats: the rule is active (no expansion bonds, ROE +5pp). Under replay the board drop is gone: the 2-se interval
+[-0.01, +0.16] excludes -0.5 by ~14 se. The live drop either runs through board -> macro feedback (cut by replay) or
+was macro noise; replay also drops politics on the replayed arms (both arms equally).

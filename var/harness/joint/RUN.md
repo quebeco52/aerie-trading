@@ -147,3 +147,9 @@ Evidence: `joint_evidence.md`.
   vs the first arm; pooled per-seed corr(blow-ups, vol), corr(vol, board CAGR); event-time macro vol change after a
   SWAN blow-up quarter. The blow-up/margin-call `evt` is a news label (HedgeFundBusinessModel section 6), with no
   path into macro vol. m_an.out also holds l_an.py baseK/fixM and fixL/fixM and analyse EW/CW for fixM.
+- Batch O arms (replay pairing): `recNS` = tree-noswan live (HEAD 62ab3bf7 + scratchpad noswan.patch: no SWAN capacity
+  rule or fund leverage, POOL target kept), records `runs/recNS-<s>.macro.gz` (~28 MB); `rpNS` / `rpSW` replay that
+  path into tree-noswan / tree-swan (git archive HEAD). run.sh sets MACRO_RECORD / MACRO_REPLAY for these arms and passes
+  either through otherwise; politics is off on replay. Trees deleted. `CREDIT=1 bin/harness-batch var/harness/joint/run.sh
+  1-8 recNS && CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-8 rpNS rpSW` (~6.5 min). `o_an.py <seeds> [A B live]`:
+  paired B-A board split (n_an.py run_row definitions), per-firm share lower and median diff, SWAN state, live vs replay.
