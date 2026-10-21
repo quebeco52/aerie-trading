@@ -104,8 +104,13 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const VIX_CALM_DRAG_SCALAR = 1.25;
 
     // --- Directional Bets & Leverage Physics ---
-    /** Multiplier applied to gross leverage (Debt/Equity) to amplify directional trading returns. */
+    /** Multiplier applied to the funds' gross leverage to amplify directional trading returns. */
     public const LEVERAGE_AMPLIFIER_SCALAR = 0.50;
+    /**
+     * Gross leverage of the funds by default: a long/short book runs about twice its investors' capital, borrowed from
+     * its prime brokers, not on the manager's own balance sheet.
+     */
+    public const FUND_GROSS_LEVERAGE = 2.0;
     /** Sensitivity of directional bets to macroeconomic output gap expansion or contraction. */
     public const DIRECTIONAL_MACRO_SCALAR = 1.50;
     /** Weight assigned to directional Z-score when computing composite fund alpha for performance fees. */
@@ -180,6 +185,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const LORE_DIRECTIONAL_BLOWUP_Z = -2.00;
     /** Leverage ratio threshold triggering Margin Call event lore under wide credit spreads. */
     public const LORE_MARGIN_CALL_LEVERAGE_THRESHOLD = 1.80;
+    /** Fund gross leverage above which a directional collapse reads as a blow-up rather than a bad quarter. */
+    public const LORE_DIRECTIONAL_BLOWUP_LEVERAGE_THRESHOLD = 2.0;
 
     public function getWholesaleLeverageLimit(): float
     {
@@ -326,6 +333,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             ModelParam::HfManagementFeeWeight->value   => self::DEFAULT_MGMT_FEE_WEIGHT,
             ModelParam::HfDirectionalBetsWeight->value => self::DEFAULT_DIRECTIONAL_BETS_WEIGHT,
             ModelParam::HfQuantAlphaWeight->value      => self::DEFAULT_QUANT_ALPHA_WEIGHT,
+            ModelParam::FundGrossLeverage->value       => self::FUND_GROSS_LEVERAGE,
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
@@ -350,9 +358,9 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $vixEma         = $macroState->marketVolatilityEma;
         $creditSpread   = $macroState->macroCreditSpreadEma;
         $beta           = $this->getOperatingCyclicality($stock);
-        $equity         = (float) $stock->getTotalEquity();
-        $wholesaleDebt  = (float) $stock->getWholesaleDebt();
-        $actualLeverage = $equity > 0 ? ($wholesaleDebt / $equity) : 0.0;
+        // The directional book, its margin calls and its prime brokers' haircuts run on the funds' leverage. Read off
+        // the manager's own debt, a manager that paid its borrowing down deleveraged funds it does not finance.
+        $fundLeverage   = max(0.0, $params[ModelParam::FundGrossLeverage]);
 
         // --- 1. Sticky Management Fee Revenue (Cyclical AUM Market Beta & Redemption Drag) ---
         $compositeAlphaZ = ($dirZ * self::COMPOSITE_ALPHA_DIR_WEIGHT) + ($quantZ * self::COMPOSITE_ALPHA_QUANT_WEIGHT);
@@ -370,7 +378,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             * (1.0 + ($mgmtZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::MGMT_BASE_VOLATILITY_SCALAR)) + $aumMarketBeta + $m2Shift));
 
         // --- 2. Leveraged Directional Bets & Performance Fees (Asymmetric Alpha Call Option) ---
-        $leverageMultiplier = 1.0 + ($actualLeverage * self::LEVERAGE_AMPLIFIER_SCALAR);
+        $leverageMultiplier = 1.0 + ($fundLeverage * self::LEVERAGE_AMPLIFIER_SCALAR);
         $macroDirectionalShift = $outputGap * $beta * self::DIRECTIONAL_MACRO_SCALAR;
 
         // In hedge fund physics ("2 and 20"): above the hurdle (Z > 1.25), incentive fees scale with excess alpha and
@@ -424,7 +432,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $marginCallPenalty = 0.0;
         if ($creditSpread > self::MARGIN_CALL_SPREAD_THRESHOLD) {
             $spreadDelta = $creditSpread - self::MARGIN_CALL_SPREAD_THRESHOLD;
-            $liquidationFraction = min(1.0, $actualLeverage * $spreadDelta * self::PRIME_BROKER_HAIRCUT_MULT);
+            $liquidationFraction = min(1.0, $fundLeverage * $spreadDelta * self::PRIME_BROKER_HAIRCUT_MULT);
 
             // Almgren-Chriss slippage friction: 0.5 * lambda * Q^2
             $marginCallPenalty = 0.5 * self::LIQUIDITY_FRICTION_LAMBDA * ($liquidationFraction ** 2);
@@ -437,13 +445,13 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         // --- 6. Shock Event Detection ---
         $eventType = null;
 
-        if ($creditSpread > self::MARGIN_CALL_SPREAD_THRESHOLD && $actualLeverage > self::LORE_MARGIN_CALL_LEVERAGE_THRESHOLD && $dirZ < -1.0) {
+        if ($creditSpread > self::MARGIN_CALL_SPREAD_THRESHOLD && $fundLeverage > self::LORE_MARGIN_CALL_LEVERAGE_THRESHOLD && $dirZ < -1.0) {
             $eventType = ShockEvent::HF_MARGIN_CALL;
         } elseif ($vixEma > self::LORE_VIX_SURGE_THRESHOLD && $quantZ > self::LORE_QUANT_ALPHA_SURGE_Z) {
             $eventType = ShockEvent::HF_QUANT_ALPHA_SURGE;
         } elseif ($compositeAlphaZ > self::LORE_PERFORMANCE_CRYSTALLIZATION_Z) {
             $eventType = ShockEvent::HF_PERFORMANCE_FEE_CRYSTALLIZATION;
-        } elseif ($dirZ < self::LORE_DIRECTIONAL_BLOWUP_Z && $actualLeverage > 2.0) {
+        } elseif ($dirZ < self::LORE_DIRECTIONAL_BLOWUP_Z && $fundLeverage > self::LORE_DIRECTIONAL_BLOWUP_LEVERAGE_THRESHOLD) {
             $eventType = ShockEvent::HF_DIRECTIONAL_BLOWUP;
         }
 

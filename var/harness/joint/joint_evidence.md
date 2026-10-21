@@ -521,3 +521,131 @@ table in h_an.out. Mean [range] over seeds.
 | board EPS beat % | 75.6 | 75.9 (no model outside 60-85) |
 Caveats: unpaired, 8 seeds; DIPR is unchanged code, its extra Ch11 is path divergence (it already sat 36% of quarters
 at B). REIT leverage unchanged while ratings rose: the move is the rating basis, not the balance sheet.
+
+## 2026-10-21 Batch I (seed only: SWAN target payout 0.20 -> 0.75, POOL 0.40 -> 0.80)
+Question: does a higher payout stop SWAN/POOL out-growing their market and restore ROE (expected SWAN ~17%, yield ~4%)?
+Harness: JointHarnessTest.php, `fixI` = HEAD 4b960f64 + InitialMarket patch (tree deleted). Base `fixH` (runs on disk).
+`CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-4 fixI`; `i_an.py 1-4 fixH fixI`, `i_bridge.py 1-4 fixH fixI`.
+4 seeds x 20y, TPY 360, unpaired. Mean [range]. Output: i_an.out.
+
+| quantity | fixH | fixI |
+|---|---|---|
+| SWAN TTM ROE y2+ / y2-3 / last 2y % | 15.0 / 19.9 / 14.3 | 15.3 [11.6..17.1] / 18.0 / 14.3 [5.7..18.6] |
+| SWAN equity / revenue CAGR % | 7.7 / 5.2 | 7.7 / 6.1 |
+| SWAN D/E y0/5/20 | 2.51 / 2.23 / 1.50 | 2.57 / 2.69 / 2.36 |
+| SWAN (div+bb)/NI, div yield % | 0.80, 1.8 | 0.72, 4.2 |
+| SWAN bonds for expansion n, $B/run | 21.8, 2165 | 54.8, 3505 |
+| POOL TTM ROE y2+ / y2-3 / last 2y % | 19.5 / 27.9 / 14.9 | 37.6 / 33.2 / 33.8 |
+| POOL equity / revenue CAGR % | 10.4 / 9.4 | 10.1 / 12.0 |
+| POOL D/E y0/5/20 | 4.11 / 4.38 / 2.82 | 4.28 / 6.05 / 6.51 |
+| POOL (div+bb)/NI, div yield % | 0.61, 3.7 | 0.79, 8.6 |
+| POOL bonds recap n, $B/run | 1.8, 263 | 0, 0 |
+| POOL bonds for expansion n, $B/run | 23.5, 661 | 53.2, 2177 |
+| board failures / Ch11 / payment default | 0 / 0.5 / 0.5 | 0 / 0 / 0 |
+| CW index %/y (sd) | 7.78 (0.49) | 6.50 (0.93) |
+| board EPS beat % | 76.1 | 75.7 |
+Caveats: equity CAGR did not move: growth is set by the expansion plan, funded with bonds when retention falls (D/E up,
+expansion issuance x2.5). SWAN's dividend rise displaced buybacks (total payout fell). SWAN equity bridge: ~40-50% of
+its equity growth is not ni-div-bb (i_bridge.py). CW index gap -1.3 (se ~0.5) is price return only, 4 unpaired seeds.
+
+## 2026-10-21 Batch J (fixI seed + POOL capital target 0.1964 + board-wide anti-dilution repurchase)
+Question: does buying back the quarter's stock comp (from excess cash only) stop SWAN's book outgrowing its market, and
+does POOL's capital target restore its ROE; what does the rule do board-wide?
+Harness: JointHarnessTest.php, `fixJ` (tree deleted) vs `fixH` (runs on disk). `CREDIT=1 bin/harness-batch
+var/harness/joint/run.sh 1-8 fixJ`; `i_an.py 1-8 fixH fixJ`, `j_an.py 1-8 fixH fixJ`, `i_bridge.py`. 8 seeds x 20y,
+TPY 360, unpaired. Mean [range]. Output: j_an.out.
+
+| quantity | fixH | fixJ |
+|---|---|---|
+| SWAN TTM ROE y2+ / y2-3 / last 2y % (lore 22) | 14.8 / 18.3 / 13.8 | 15.3 / 19.6 / 12.4 [6.9..15.5] |
+| SWAN equity / revenue CAGR % | 7.8 / 5.1 | 7.2 / 5.1 |
+| SWAN D/E y0/5/20 | 2.51 / 2.17 / 1.37 | 2.57 / 2.68 / 2.34 |
+| SWAN div $B, bb $B, (div+bb)/NI, div yield % | 1217, 2002, 0.79, 1.9 | 2396, 254, 0.79, 4.3 |
+| SWAN residual $B (% of d eq), shares end/start split-adj | 787 (49%), 0.68 | 691 (51%), 1.13 |
+| SWAN expansion bonds n, $B/run; end ratings | 20, 1875; BBB x6 BB x2 | 49, 3226; BB x8 (worst B once) |
+| POOL TTM ROE y2+ / y2-3 / last 2y % (lore 29) | 19.8 / 28.8 / 14.3 | 28.8 / 29.2 / 27.8 |
+| POOL equity / revenue CAGR % | 10.4 / 9.1 | 2.1 / 2.4 |
+| POOL D/E y0/5/20; (div+bb)/NI; div yield % | 4.14/4.50/2.80; 0.61; 3.9 | 4.09/4.00/3.99; 0.95; 8.0 |
+| POOL recap bonds n, $B; expansion n, $B | 2.0, 296; 22.9, 615 | 0, 0; 4.8, 25 |
+| no-target firms (75): median eq CAGR %, shares e/s, bb $B/run ex SWAN | 4.66, 0.67, 13388 (se 287) | 4.61, 0.67, 12510 (se 223) |
+| failures / Ch11 / payment default / rescues per run | 0 / 0.25 / 0.25 / 1.75 | 0.375 / 0 / 0 / 1.88 |
+| EW / CW index %/y (price) | 9.23 / 7.61 | 8.24 / 6.30 |
+| board EPS beat %; models outside 60-85% | 75.9; none | 75.6; none |
+| board (div+bb)/NI+; CW dividend yield % | 0.84; 2.1 | 0.86; 2.3 |
+Caveats: the anti-dilution rule is capped by excess cash, which SWAN (dividend x2, expansion on bonds) and most firms
+do not hold: SWAN bought back $254B against ~$900B of stock comp and its split-adjusted share count rose 13%. Board-wide
+no detectable effect (share ratio, residual, equity CAGR unchanged; buybacks lower, unpaired). POOL hits its lore ROE
+but returns ~95% of NI, so it grows 2%/y. Seed 6: credit gap 13.6% then crisis at y16, u 11.8%, corp default 17%,
+STRK/RIVR/PLVR liquidated, TIER 6 rescue raises (also seed 4): a macro tail, not traced to the rule.
+
+## 2026-10-21 Batch K (POOL capital target 0.1964; SWAN lore baseline_roe 0.22 -> 0.16; payouts unchanged)
+Question: does the rest of the board still grow slower (fixJ: -0.9pp/y market cap, t -1.9), and where do POOL and SWAN
+land? Harness: JointHarnessTest.php; base = fixH 1-8 (symlinked as baseK) + baseK 9-16 (git archive HEAD), fixK 1-16.
+16 seeds x 20y, TPY 360, CREDIT=1, unpaired. `k_an.py 1-16 baseK fixK`, `i_an.py 1-16 baseK fixK`. Output: k_an.out.
+
+| quantity | base | fixK | diff (se), t |
+|---|---|---|---|
+| board mkt-cap CAGR ex SWAN/POOL % | 4.64 (sd 1.0) | 4.45 (0.66) | -0.19 (0.30), -0.6 |
+| EW / CW index %/y | 9.30 / 7.65 | 9.02 / 7.37 | CW -0.28 (0.30) |
+| failures / Ch11 / pay. default / rescues per run | 0 / 0.25 / 0.31 / 1.75 | 0 / 0.31 / 0.44 / 2.94 | rescues +1.2 (1.2) |
+| board EPS beat %; models outside 60-85% | 76.0; none | 75.6; none | |
+| board (div+bb)/NI+; CW div yield % | 0.836; 2.13 | 0.834; 2.11 | |
+| POOL TTM ROE y2+ / y2-3 / last 2y % (lore 29) | 19.8 / 29.5 / 14.3 | 28.9 / 29.4 / 28.4 | |
+| POOL equity / revenue CAGR % | 10.4 / 9.2 | 4.7 / 4.8 | |
+| POOL D/E y0/5/20; (div+bb)/NI; div yield % | 4.14/4.48/2.87; 0.62; 3.9 | 4.09/3.98/3.98; 0.87; 3.6 | |
+| POOL div / bb $B per run; recap bonds n, $B; expansion n, $B | 432 / 91; 2.5, 359; 22, 588 | 185 / 269; 0, 0; 35.6, 250 | |
+| SWAN TTM ROE y2+ / y2-3 / last 2y % | 14.7 / 18.1 / 13.6 (lore 22) | 11.2 / 13.2 / 10.5 (lore 16) | |
+| SWAN equity / revenue CAGR %; D/E y0/5/20 | 7.8 / 5.0; 2.51/2.18/1.43 | 7.3 / 5.3; 2.48/2.32/1.61 | |
+| SWAN (div+bb)/NI; div yield %; div / bb $B | 0.78; 1.9; 1213 / 1955 | 0.67; 1.6; 697 / 1131 | |
+| SWAN expansion bonds n, $B; end ratings | 21.2, 2033; BBB x10 BB x6 | 24.6, 1991; BBB x8 BB x8 | |
+| SWAN opening price / cap $B | 107 / 1720 (16e9 sh) | 291 / 1160 (4e9 sh) | |
+Caveats: board effect inside noise (fixJ's -0.9pp came with SWAN payout 0.75, not reproduced). SWAN realises ~70% of
+its lore ROE in both arms (14.7/22, 11.2/16): the shortfall is proportional, not a lore mismatch. Rescues: fixK SINK 18
+(seeds 1, 14 mostly) and SKUA 9 vs base DIPR 8/TIER 5; unpaired tails, not traced. SWAN seeds at 4e9 shares, not 16e9.
+
+## 2026-10-21 Batch L (SWAN closed at capacity 0.50 of SAM, fund leverage 2.38 off SWAN's D/E; POOL target 0.1964)
+Question: does capacity closure bring SWAN to ~20% TTM ROE without hurting the board? Harness JointHarnessTest.php;
+base baseK 1-16 (on disk), fixL 1-8; 20y, TPY 360, CREDIT=1, unpaired. `l_an.py baseK 1-16 fixL 1-8`. Output l_an.out.
+
+| quantity | baseK (16) | fixL (8) | diff (se), t |
+|---|---|---|---|
+| SWAN TTM ROE y2+ / y2-3 / last 2y % (lore 22) | 14.7 / 18.1 / 13.6 | 18.5 / 19.9 / 17.5 | y2+ +3.8 (0.95), +4.0 |
+| SWAN addressable share y0 / peak / end | 0.42 / 0.82 / 0.72 | 0.42 / 0.50 / 0.41 | |
+| SWAN equity / revenue CAGR % | 7.9 / 5.1 | 4.6 / 2.8 | |
+| SWAN D/E y0/5/20; (div+bb)/NI; cash/eq | 2.51/2.18/1.43; 0.78; 0.36 | 2.26/1.60/1.02; 0.92; 0.15 | |
+| SWAN div / bb $B; div yield %; shares split-adj | 1206 / 1956; 1.86; 0.68 | 519 / 2344; 1.21; 0.43 | |
+| SWAN expansion bonds n, $B; NI sd/mean; blow-up q | 21.2, 2030; 0.345; 0.56 | 0, 0; 0.274; 2.1 | blow-ups +1.6 (0.49) |
+| POOL TTM ROE y2+ / last 2y %; equity CAGR % | 19.8 / 14.3; 10.4 | 28.4 / 27.4; 4.8 | |
+| board mkt-cap CAGR ex SWAN/POOL % | 4.64 | 3.63 | -1.01 (0.35), -2.9 |
+| EW / CW index %/y | 9.30 / 7.65 | 8.60 / 6.93 | |
+| Ch11 / defaults / rescues per run; payout; CW yield | 0.25/0.31/1.75; 0.836; 2.13 | 0.5/0.5/2.1; 0.843; 2.20 | inside noise |
+Caveats: board -1.0pp (t -2.9) repeats fixJ's -0.9pp, which also raised SWAN's cash payout; fixK (POOL only) was
+-0.19. Needs seeds 9-16 before it is believed. SWAN seed 8: revenue flat (100->121 $B/q) while capped equity grows with
+nominal GDP, ROE 12.3 (last TTM 3.9), BB. SWAN debt still rises (1080 -> 1676 $B seed 8) without expansion bonds.
+SWAN equity-bridge residual $479B (73% of d eq; base 48%) untraced. Addressable share omits secular drift.
+
+## 2026-10-21 Batch M (fixL with SWAN FundGrossLeverage 1.80: no blow-up or margin-call label possible)
+Question: is fixL's board drop (-1.0pp, t -2.9) caused by SWAN directional blow-ups raising macro vol? Harness
+JointHarnessTest.php; fixM 1-16 vs baseK 1-16 and fixL 1-8 (on disk); 20y, TPY 360, CREDIT=1, unpaired.
+`m_an.py baseK:1-16 fixL:1-8 fixM:1-16`, `l_an.py baseK 1-16 fixM 1-16`, `l_an.py fixL 1-8 fixM 1-16`. Output m_an.out.
+
+| quantity | baseK (16) | fixL (8) | fixM (16) | fixM-baseK (se) t | fixM-fixL (se) t |
+|---|---|---|---|---|---|
+| board mkt-cap CAGR ex SWAN/POOL % | 4.64 | 3.63 | 4.02 | -0.62 (0.35) -1.8 | +0.38 (0.34) +1.1 |
+| macro vol mean % | 15.3 | 16.4 | 15.4 | +0.03 (0.39) +0.1 | -1.02 (0.48) -2.1 |
+| macro erp mean % | 4.48 | 4.59 | 4.64 | +0.16 (0.08) +2.0 | +0.05 (0.12) +0.4 |
+| SWAN blow-up / margin-call q per run | 0.56 / 0 | 2.12 / 0 | 0 / 0 | | |
+| SWAN TTM ROE y2+ / last 2y % | 14.7 / 13.6 | 18.5 / 17.5 | 18.7 / 16.6 | +4.0 (0.69) +5.8 | +0.2 (1.1) |
+| SWAN equity / revenue CAGR %; payout; D/E y20 | 7.9 / 5.1; 0.78; 1.43 | 4.6 / 2.8; 0.92; 1.02 | 4.4 / 2.3; 0.94; 1.04 | | |
+| SWAN NI sd/mean | 0.345 | 0.274 | 0.237 | -0.11 (0.015) | -0.037 (0.013) -2.7 |
+| POOL TTM ROE y2+ %; equity CAGR % | 19.8; 10.4 | 28.4; 4.8 | 29.0; 4.4 | | |
+| EW / CW index %/y | 9.30 / 7.65 | 8.60 / 6.93 | 8.75 / 7.13 | | |
+| Ch11 / defaults / rescues per run | 0.25/0.31/1.75 | 0.5/0.5/2.1 | 0.13/0.19/3.7 | inside noise | |
+Pooled fixL+fixM vs baseK board CAGR -0.75pp (0.31), t -2.4. Pooled per seed (n=40): corr(blow-ups, mean vol) +0.44,
+corr(mean vol, board CAGR) -0.44. Event time: macro vol change from the quarter before a SWAN blow-up to k=0..4 after
+is -0.4..0.0pp vs +0.0 other quarters (26 events, |t| <= 0.6): no vol response.
+Caveats: the blow-up is a news label (HedgeFundBusinessModel.php:454) with no path into macro vol
+(AssetMarketSubsystem::calculateMarketVolatility reads gap, EBP, slope, EPU, its own draw); the corr is the label
+firing in weak markets. fixL's vol +1.05 was seed noise (fixM same economics, vol back at base). Board drop persists
+without blow-ups: it is in the shared SWAN-capacity/POOL-target change. SWAN end ratings BBB 15/16. Rescues: one fixM
+seed has 28.

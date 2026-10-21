@@ -279,6 +279,12 @@ class TreasuryEngine
     private function processDebtExpansion(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
+        // A fund closed at capacity takes no capital to grow: a borrowed dollar it put to work earned its coupon and
+        // nothing else, and carried it past the size its returns are struck at. Refinancing and the liquidity
+        // backstop are their own paths.
+        if ($ctx->strategy->getCapacityShare($stock) !== null) {
+            return;
+        }
 
         $currentEquity = (float) $stock->getTotalEquity();
         $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
@@ -678,10 +684,12 @@ class TreasuryEngine
         $priceToBook = $ctx->currentPrice / $bookValuePerShare;
 
         // An institution steering its capital ratio to a target has no use for an opportunistic raise while it holds
-        // that target: the capital would leave again as the repurchase that returns the surplus.
+        // that target, nor a fund closed at capacity at all: the capital would leave again as the repurchase that
+        // returns the surplus.
         $capitalTarget = $ctx->strategy->getTargetCapitalRatio($stock, $ctx->macroState);
         $totalAssets = $stock->getTotalAssets();
-        $holdsItsCapitalTarget = $capitalTarget !== null && $totalAssets > 0.0 && ((float) $stock->getTotalEquity() / $totalAssets) >= $capitalTarget;
+        $holdsItsCapitalTarget = ($capitalTarget !== null && $totalAssets > 0.0 && ((float) $stock->getTotalEquity() / $totalAssets) >= $capitalTarget)
+            || $ctx->strategy->getCapacityShare($stock) !== null;
 
         $isBubble = !$holdsItsCapitalTarget && $normalizedEps > 0.0 && $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
         // Principal the firm cannot fund is the reason to go to the equity market, and it used to be the one

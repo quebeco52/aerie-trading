@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Data\Company;
 
+use App\Service\Math\FinancialConstants;
 use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
 
@@ -159,6 +160,9 @@ class StockModelTuning
         'POOL' => [
             ModelParam::MortgageOriginationWeight->value => 0.60,
             ModelParam::DirectLendingWeight->value       => 0.40,
+            // Its seeded book equity/assets: the haircuts its repo and warehouse lenders set hold it there, and what it
+            // earns above that is handed back rather than lent into a book that outgrows its borrowers.
+            ModelParam::TargetCapitalRatio->value        => 0.1964,
         ],
 
         // =====================================================================
@@ -194,10 +198,15 @@ class StockModelTuning
         // --- Black Swan Capital (SWAN) ---
         // Apex predator quantitative hedge fund and tactical alternative asset manager.
         // Tri-stream engine combining sticky AUM fees, leveraged directional bets, and black-box quant alpha.
+        // Its funds take new money by invitation only: it closes where a manager's returns to scale start to fall and
+        // hands back what would carry it further. The leverage is its funds', borrowed against its investors'
+        // capital, at the gross it opens with.
         'SWAN' => [
             ModelParam::HfManagementFeeWeight->value   => 0.60,
             ModelParam::HfDirectionalBetsWeight->value => 0.20,
             ModelParam::HfQuantAlphaWeight->value      => 0.20,
+            ModelParam::CapacityShare->value           => FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD,
+            ModelParam::FundGrossLeverage->value       => 2.38,
         ],
 
         // =====================================================================

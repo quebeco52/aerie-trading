@@ -178,9 +178,9 @@ class HedgeFundBusinessModelTest extends TestCase
     public function testSectorPhysicsMarginCallTriggeredUnderCreditBlowoutAndHighLeverage(): void
     {
         $stock = new Stock();
-        $stock->setTicker('SWAN');
+        $stock->setTicker('HFUN'); // its funds at the default gross leverage, above the margin-call threshold
         $stock->setTotalEquity('100.0');
-        $stock->setWholesaleDebt('250.0'); // 2.5x leverage > 1.8x threshold
+        $stock->setWholesaleDebt('250.0');
         $stock->setEarningsMomentumZ([
             'directional_bets' => -2.5, // Negative directional momentum
             'quant_alpha'      => 0.0,
@@ -287,46 +287,35 @@ class HedgeFundBusinessModelTest extends TestCase
         $this->assertSame(ShockEvent::HF_DIRECTIONAL_BLOWUP, $result->eventType);
     }
 
-    public function testDirectionalBetsLeverageAmplification(): void
+    /**
+     * The directional book runs on its funds' leverage, borrowed against its investors' capital: a manager that pays
+     * its own debt down leaves its funds' bets as they were, and funds run at higher gross leverage swing further on
+     * the same alpha.
+     */
+    public function testDirectionalBetsRunOnTheFundsLeverageNotTheManagersDebt(): void
     {
-        $unleveredStock = new Stock();
-        $unleveredStock->setTicker('UNLEVERED');
-        $unleveredStock->setTotalEquity('100.0');
-        $unleveredStock->setWholesaleDebt('0.0');
-        $unleveredStock->setEarningsMomentumZ([
-            'directional_bets' => 1.0,
-            'quant_alpha'      => 0.0,
-            'management_fees'  => 0.0,
-        ]);
-
-        $leveredStock = new Stock();
-        $leveredStock->setTicker('LEVERED');
-        $leveredStock->setTotalEquity('100.0');
-        $leveredStock->setWholesaleDebt('200.0'); // 2.0x leverage
-        $leveredStock->setEarningsMomentumZ([
-            'directional_bets' => 1.0,
-            'quant_alpha'      => 0.0,
-            'management_fees'  => 0.0,
-        ]);
-
         $macro = MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
             'market_volatility_ema'   => 0.18,
             'macro_credit_spread_ema' => 0.02,
         ]);
+        $directional = function (string $ticker, string $debt, float $alphaZ) use ($macro): float {
+            $stock = new Stock();
+            $stock->setTicker($ticker);
+            $stock->setTotalEquity('100.0');
+            $stock->setWholesaleDebt($debt);
+            $stock->setEarningsMomentumZ(['directional_bets' => $alphaZ, 'quant_alpha' => 0.0, 'management_fees' => 0.0]);
+            $math = $this->createStub(MathUtility::class);
+            $math->method('generatePersistentZ')->willReturnCallback(static fn(float $prevZ): float => $prevZ);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
-            return $prevZ > 0 ? 1.0 : 0.0;
-        });
+            return $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $math)->streamRevenue['directional_bets'];
+        };
 
-        $unleveredResult = $this->model->computeActualFinancials($unleveredStock, 100.0, 0.40, 10.0, 0.10, $macro, $mathMock);
-        $leveredResult = $this->model->computeActualFinancials($leveredStock, 100.0, 0.40, 10.0, 0.10, $macro, $mathMock);
+        $this->assertEqualsWithDelta($directional('UNTUNED', '0.0', 1.0), $directional('UNTUNED', '200.0', 1.0), 1e-9, 'The manager\'s own debt is not the funds\' leverage.');
 
-        $this->assertGreaterThan(
-            $unleveredResult->streamRevenue['directional_bets'],
-            $leveredResult->streamRevenue['directional_bets'],
-        );
+        $beat = static fn(string $ticker): float => $directional($ticker, '0.0', 1.0) / $directional($ticker, '0.0', 0.0) - 1.0;
+        $this->assertGreaterThan(0.0, $beat('UNTUNED'));
+        $this->assertGreaterThan($beat('UNTUNED'), $beat('SWAN'), 'SWAN\'s funds run above the default gross leverage.');
     }
 
     public function testManagementFeeStabilityDuringRecession(): void

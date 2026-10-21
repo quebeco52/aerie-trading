@@ -1457,6 +1457,46 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
+     * A fund closed at capacity takes no capital to grow: the same hedge fund balance sheet borrows to expand while its
+     * return clears its hurdle, and borrows nothing once its manager has closed the funds to new money.
+     */
+    public function testAFundClosedAtCapacityBorrowsNothingToExpand(): void
+    {
+        $borrow = function (string $ticker): float {
+            $stock = new Stock();
+            $stock->setTicker($ticker);
+            $stock->setIndustry('Hedge Fund');
+            $stock->setTotalEquity('1000000000.00');
+            $stock->setWholesaleDebt('200000000.00');
+            $stock->setCorporateTreasury('300000000.00');
+
+            $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+            $ctx->strategy = new \App\Service\Model\Sector\HedgeFundBusinessModel();
+            $ctx->businessModel = 'hedge_fund';
+            $ctx->debtActionTaken = false;
+
+            $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
+            $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.0);
+            $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.40);
+
+            $issued = 0.0;
+            $debtEngine = $this->createStub(DebtEngine::class);
+            $debtEngine->method('rollMaturities')->willReturn(new MaturityRollDTO());
+            $debtEngine->method('issueDebt')->willReturnCallback(static function (Stock $issuer, float $amount) use (&$issued): void {
+                $issued += $amount;
+            });
+            $engine = new TreasuryEngine($this->corporateMetrics, $debtEngine, $this->createStub(CapExEngine::class), $this->mathUtility);
+            mt_srand(3); // seeded once every mock is built (see setUp)
+            $engine->executeCorporateStrategy($ctx);
+
+            return $issued;
+        };
+
+        $this->assertGreaterThan(0.0, $borrow('HFUN'), 'Control: an open fund borrows to expand.');
+        $this->assertSame(0.0, $borrow('SWAN'));
+    }
+
+    /**
      * However it is funded, organic plant stops at what the flexible accelerator leaves after the earnings
      * engine's own growth spend: spare cash above it stays for distribution, and borrowing taken this quarter
      * no longer forces the proceeds into plant.

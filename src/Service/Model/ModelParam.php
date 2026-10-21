@@ -94,6 +94,13 @@ enum ModelParam: string
      * converges to bank-specific, time-invariant targets (Gropp & Heider 2010).
      */
     case TargetCapitalRatio = 'target_capital_ratio';
+    /**
+     * Share of its addressable market past which a capacity-disciplined financial hands back new capital rather than
+     * grow (Berk & Green 2004): a fund that takes new money by invitation only closes where its returns start to fall.
+     */
+    case CapacityShare = 'capacity_share';
+    /** Gross leverage of the funds a hedge fund manager runs, borrowed against its investors' capital, not its own. */
+    case FundGrossLeverage = 'fund_gross_leverage';
 
     // --- Clearinghouse ---
     case ClearingFeeWeight = 'clearing_fee_weight';

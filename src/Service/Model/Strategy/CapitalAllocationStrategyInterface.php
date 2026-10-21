@@ -53,6 +53,12 @@ interface CapitalAllocationStrategyInterface
     public function getTargetCapitalRatio(Stock $stock, ?MacroStateDTO $macroState = null): ?float;
 
     /**
+     * The share of its addressable market at which the firm closes to new capital and hands back what would carry it
+     * further, or null for a firm that grows wherever its returns clear its hurdle.
+     */
+    public function getCapacityShare(Stock $stock): ?float;
+
+    /**
      * The share of taxable income the firm must distribute each year to keep a pass-through tax status, or
      * zero for a firm whose payout is its own choice.
      */

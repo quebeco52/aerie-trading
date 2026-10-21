@@ -12,7 +12,7 @@ case "$1" in
   live|tr|tr-*) TREE=$H/aerie-joint ;;
   pre)  TREE=$H/tree-d89691cc ;;
   base) TREE=$H/tree-base ;;
-  baseA|fixA|fixAB|baseC|fixC|baseD1|fixD1|baseD2|fixD2|fixD2b|fixD2c|capE|capE2|baseE|fixE|fixE2|baseF|fixF|fixG|fixH) TREE=$H/tree-$1 ;;
+  baseA|fixA|fixAB|baseC|fixC|baseD1|fixD1|baseD2|fixD2|fixD2b|fixD2c|capE|capE2|baseE|fixE|fixE2|baseF|fixF|fixG|fixH|fixI|fixJ|baseK|fixK|fixL|fixM) TREE=$H/tree-$1 ;;
   wt|wt-*) TREE=$H/tree-$1 ;;
   pre-*|rev-*) TREE=$H/tree-$1 ;;
   *) echo "usage: run.sh live|pre|<tree arm> <seed>" >&2; exit 2 ;;

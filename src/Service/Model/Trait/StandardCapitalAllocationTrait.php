@@ -69,6 +69,12 @@ trait StandardCapitalAllocationTrait
         return 0.0;
     }
 
+    /** An operating company closes to nothing: its scale is plant, which a repurchase does not shrink. */
+    public function getCapacityShare(Stock $stock): ?float
+    {
+        return null;
+    }
+
     /** An operating company has no capital ratio to manage; its payout follows its earnings and cash. */
     public function getTargetCapitalRatio(Stock $stock, ?MacroStateDTO $macroState = null): ?float
     {

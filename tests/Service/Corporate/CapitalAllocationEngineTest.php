@@ -1129,6 +1129,42 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
+     * A fund closed at capacity (Berk & Green 2004) keeps what it earns while it is below capacity, hands back the
+     * quarter's growth past it, and closes an overshoot it opened on at the speed an institution closes its capital
+     * gap, compounding to the cited annual share. Only a financial tuned to close does so.
+     */
+    public function testAFundClosedAtCapacityHandsBackWhatWouldCarryItPast(): void
+    {
+        $this->assertSame(0.0, CapitalAllocationEngine::capacityRepurchase(98.0, 95.0, 100.0), 'Below capacity it keeps its earnings.');
+        $this->assertEqualsWithDelta(4.0, CapitalAllocationEngine::capacityRepurchase(104.0, 100.0, 100.0), 1e-12, 'At capacity the quarter\'s growth leaves.');
+
+        $equity = 140.0;
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            $equity -= CapitalAllocationEngine::capacityRepurchase($equity, $equity, 100.0);
+        }
+        $this->assertEqualsWithDelta(100.0 + (40.0 * (1.0 - CapitalAllocationEngine::CAPITAL_TARGET_ADJUSTMENT_SPEED)), $equity, 1e-9);
+
+        $this->assertSame(FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD, (new \App\Service\Model\Sector\HedgeFundBusinessModel())->getCapacityShare((new Stock())->setTicker('SWAN')));
+        $this->assertNull((new \App\Service\Model\Sector\HedgeFundBusinessModel())->getCapacityShare((new Stock())->setTicker('HFUN')));
+        $this->assertNull((new \App\Service\Model\Sector\CommercialBankBusinessModel())->getCapacityShare((new Stock())->setTicker('LAKE')));
+
+        // Through the board's allocation: past capacity SWAN buys back where an open fund on the same books does not.
+        $this->corporateMetricsMock->method('calculateAddressableShare')->willReturn(0.60);
+        $repurchased = function (string $ticker): float {
+            $fund = $this->buildDistributor($ticker);
+            $fund->setIndustry('Hedge Fund');
+            $fund->setPrice('100.00');
+            $fund->setCorporateTreasury('600000');
+            $fund->setRoeTtm('0.05');
+            $fund->setRoicTtm('0.05');
+
+            return 1000000.0 - $this->engine->allocateCapital($fund, 1.00, 0.25, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), 1000000.0)['new_shares'];
+        };
+        $this->assertSame(0.0, $repurchased('HFUN'), 'Control: nothing else on these books triggers a repurchase.');
+        $this->assertGreaterThan(0.0, $repurchased('SWAN'));
+    }
+
+    /**
      * Partial adjustment toward a target capital ratio (Berger et al. 2008): the quarter's change, its retained
      * earnings included, closes the same share of the gap, compounding to the cited annual speed. At target the
      * bank returns exactly what it earned beyond holding the ratio; below target it keeps everything.

@@ -385,7 +385,7 @@ class CapitalAllocationEngine
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0;
         $minBuybackIcr = $ctx->strategy->getBuybackMinIcr();
 
-        $capitalSurplusReturn = $this->resolveCapitalSurplusReturn($ctx);
+        $capitalSurplusReturn = max($this->resolveCapitalSurplusReturn($ctx), $this->resolveCapacityReturn($ctx));
         $recapitalization = $this->resolveRecapitalizationRepurchase($ctx);
 
         // Negative carry asks the firm to stop holding idle cash against its debt. An under-levered firm's
@@ -541,6 +541,41 @@ class CapitalAllocationEngine
         $openingRatio = $ctx->openingCapitalRatio ?? ($assets > 0.0 ? $openingEquity / $assets : 0.0);
 
         return self::capitalTargetRepurchase($equity, $assets, $target, $openingRatio);
+    }
+
+    /**
+     * The repurchase that holds a capacity-closed financial at its capacity: a financial's scale is its equity, so the
+     * capital that would carry it past that share of its market is handed back.
+     */
+    private function resolveCapacityReturn(CapitalAllocationContext $ctx): float
+    {
+        $capacityShare = $ctx->strategy->getCapacityShare($ctx->stock);
+        if ($capacityShare === null) {
+            return 0.0;
+        }
+
+        $equity = $this->resolvePreBuybackEquity($ctx);
+        $share = $this->corporateMetrics->calculateAddressableShare($ctx->stock, max(1.0, $equity), $ctx->macroState);
+        $capacityCapital = $share > 0.0 ? $equity * $capacityShare / $share : $equity;
+
+        return self::capacityRepurchase($equity, (float) $ctx->stock->getTotalEquity(), $capacityCapital);
+    }
+
+    /**
+     * A fund closed at capacity (Berk & Green 2004) hands back the quarter's growth past it, and closes a quarter's
+     * partial adjustment of any overshoot it opened on, at the speed an institution closes the gap to its capital
+     * target: one that crossed its capacity before it closed is not wound down in a quarter.
+     */
+    public static function capacityRepurchase(float $capital, float $openingCapital, float $capacityCapital): float
+    {
+        if ($capital <= $capacityCapital) {
+            return 0.0;
+        }
+
+        $speed = TimeSeries::periodAdjustmentSpeed(self::CAPITAL_TARGET_ADJUSTMENT_SPEED, FinancialConstants::QUARTER_YEARS);
+        $allowed = max($capacityCapital, $openingCapital - ($speed * max(0.0, $openingCapital - $capacityCapital)));
+
+        return max(0.0, $capital - $allowed);
     }
 
     /**

@@ -120,3 +120,30 @@ Evidence: `joint_evidence.md`.
   <armB>`: BIRD/WADE/DIPR grid failures/yr, rating shares, end ratings, ND/EBITDA, penalty borrowing, EBIT margin,
   CAGR; PLZA/KITE/SHOR/ELDE rating shares, flags, equity, ND/EBITDA y20, div/NI, dividend borrowing. h_an.out also
   holds analyse/beat for both arms.
+- Batch I arm: `fixI` = tree-fixI (HEAD 4b960f64 + seed patch: SWAN payout 0.75, POOL 0.80; tree deleted); base
+  `fixH`. `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-4 fixI`. `i_an.py <seeds> <armA> <armB> [tk,...]`:
+  TTM ROE (y2+, y2-3, last 2y), equity/revenue CAGR, D/E y0/5/20, (div+bb)/NI, div yield, ratings, defaults, recap and
+  expansion bond issues, EPS beat. `i_bridge.py <seeds> <arms...>`: SWAN/POOL equity bridge residual, share ratio, cap weight.
+- Batch J arm: `fixJ` = tree-fixJ (HEAD 4b960f64 + fixI seed + POOL TargetCapitalRatio 0.1964 + board-wide
+  anti-dilution repurchase in CapitalAllocationEngine; tree deleted); base `fixH`. `CREDIT=1 bin/harness-batch
+  var/harness/joint/run.sh 1-8 fixJ` (~5 min). `j_an.py <seeds> <armA> <armB>`: SWAN/POOL bridge residual and
+  split-adjusted share ratio; for firms without a capital target (CAPT set in the script) residual share, equity CAGR,
+  NI/avg-eq first/last 2y, buybacks, cash/rev by model, top movers, borrowing-event flags; board payout and CW yield.
+  j_an.out holds i_an, j_an, analyse fixJ, beat fixH/fixJ and i_bridge.
+- Batch K arms: `baseK` = tree-baseK (git archive 4b960f64; seeds 1-8 are symlinks runs/baseK-<s>.* -> fixH-<s>.*, 9-16
+  run), `fixK` = HEAD + POOL TargetCapitalRatio 0.1964 + SWAN lore baseline_roe 0.16 (trees deleted).
+  `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-16 fixK` (~6.5 min). `k_an.py <seeds> <armA> <armB>`: unpaired
+  board market-cap CAGR ex SWAN/POOL (firms >= 70 rows) with diff se/t, failures/Ch11/defaults/rescues, board payout,
+  CW yield, SWAN/POOL opening price/cap and div/bb $B. k_an.out also holds i_an, beat_an and analyse lines for both.
+- Batch L arm: `fixL` = tree-fixL (HEAD 4b960f64 + POOL TargetCapitalRatio 0.1964 + SWAN CapacityShare 0.50 with
+  capacity repurchase, no debt-funded expansion/opportunistic issue when capacity-closed, HF FundGrossLeverage 2.38;
+  tree deleted); base `baseK` 1-16. `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-8 fixL` (~5 min).
+  `l_an.py <armA> <seedsA> <armB> <seedsB>`: unpaired, own seed sets; SWAN/POOL as i_an.py plus addressable share
+  (eq / (1T x nominal_gdp x sam_ratio), secular drift left out), split-adj shares, cash/eq, NI sd/mean, HF event
+  quarters; board as k_an.py. l_an.out also holds analyse EW/CW, beat_an, i_bridge.
+- Batch M arm: `fixM` = tree-fixM (fixL with SWAN FundGrossLeverage 1.80, below both lore thresholds; tree deleted);
+  compared with baseK 1-16 and fixL 1-8. `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-16 fixM` (~10 min).
+  `m_an.py <arm:seeds>...`: board mkt-cap CAGR ex SWAN/POOL, macro vol/erp means, SWAN blow-up/margin-call quarters
+  vs the first arm; pooled per-seed corr(blow-ups, vol), corr(vol, board CAGR); event-time macro vol change after a
+  SWAN blow-up quarter. The blow-up/margin-call `evt` is a news label (HedgeFundBusinessModel section 6), with no
+  path into macro vol. m_an.out also holds l_an.py baseK/fixM and fixL/fixM and analyse EW/CW for fixM.

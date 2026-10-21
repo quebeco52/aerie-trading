@@ -142,4 +142,15 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
 
         return $target > 0.0 ? $target : null;
     }
+
+    /**
+     * A financial's scale is its equity, so one that closes at capacity holds its market share by handing back what
+     * it earns past it. One without a tuned capacity grows wherever its returns clear its hurdle.
+     */
+    public function getCapacityShare(Stock $stock): ?float
+    {
+        $share = $this->resolveModelParameters($stock, [ModelParam::CapacityShare->value => 0.0])[ModelParam::CapacityShare];
+
+        return $share > 0.0 ? $share : null;
+    }
 }
