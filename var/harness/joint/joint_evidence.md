@@ -473,3 +473,29 @@ in `f_an.out`.
 Caveats: unpaired 8 seeds, index difference -0.66pp is inside noise (se ~0.46). fixF defaults: WADE s1 (capex 2.7B/q
 over EBITDA 2.5B, dividend already zero from y13, cured), SINK s5, CASC s5. PLZA keeps -27% equity over 20y (front-loaded
 y0-y5 fall) and still borrows for dividends in fixF.
+
+## 2026-10-21 Batch G (covenant-breach capex gate: plant spend limited to internal funds)
+Question: does limiting a breaching non-financial firm's capex to internal cash stop penalty borrowing and missed
+maturities without stunting healthy firms?
+Harness: JointHarnessTest via run.sh, CREDIT=1, 8 seeds x 20y, 360 ticks/y, unpaired. Arms: fixF (= HEAD 4a81a6af, runs
+reused) vs fixG (HEAD + capex gate). Analysis: `g_an.py 1-8 fixF fixG` + analyse/fragile/beat; all in `g_an.out`.
+
+| quantity (8 seeds) | fixF | fixG |
+|---|---|---|
+| penalty-rate borrow events / $B | 47 / 258 (CASC 203, WADE 22 ev) | 62 / 106 (BIRD 30 ev/55, WADE 14/11) |
+| missed maturities / $B | 3 / 15.7 (CASC, WADE, SINK) | 1 / 1.3 (DIPR s4) |
+| shut-out forced repayments / $B | 107 / 518 | 59 / 300 |
+| payment-default names per run / rescue raises per run | 0.375 / 8.5 | 0.125 / 1.6 |
+| constrained non-fin quarters | 5.9% | 5.3% |
+| board revenue CAGR / median per-model | 4.97% / 4.53% | 4.82% / 4.48% |
+| CW index %/y | 6.67 (sd 0.89) | 7.25 (sd 0.61) |
+| board EPS beat | 75.4% | 75.6% |
+| SINK bust capex $B/q, peak revolver drawn/commit | 3.68, 0.82 | 3.99, 0.39 |
+
+Caveats: unpaired, so commodity paths differ: last-2y crude averages ~130 in fixF vs ~95 in fixG, which accounts for
+the lower y20 revenue of CASC (555 -> 372 $B/q), SINK (46 -> 28) and DIPR (6.7 -> 4.4); PP&E for all three holds or
+rises. The fixG default is DIPR s4 (new). Penalty borrowing that remains is BIRD/LOON/SKUA/WADE, outside the gate or
+not in breach. PTRL (IB, fin=false) reads 100% "constrained" by the icr<2 proxy in both arms at capex/dep 1.0.
+DIPR s4: Generation Outage at y17.4, EBITDA 3.8 -> 0.5-1.1 $B/q, icr 0.15; the gate cut capex/dep 2.0 -> 0.24 (the 20%
+floor) yet the revolver still filled (5.9 of 6.0 $B) and a $1.29B maturity was missed at y19.6, cured next quarter:
+the shortfall there is operating and interest, not plant spend.

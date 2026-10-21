@@ -75,8 +75,14 @@ final class ReitDistributionRuleTest extends TestCase
         $floor = $ctx->strategy->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
         $stock->setCorporateTreasury((string) ($floor + $cashOverFloor));
 
+        // As the engine composes it: internal funds on the quarter's operating cash flow, less maintenance.
+        $engine = $this->buildEngine();
+        $maintenance = $ctx->quarterlyDepreciation;
+        $funds = (new ReflectionMethod(EarningsEngine::class, 'resolveInternalFunds'))
+            ->invoke($engine, $ctx, $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation);
+
         return (new ReflectionMethod(EarningsEngine::class, 'calculateGrowthCapEx'))
-            ->invoke($this->buildEngine(), $ctx, 1.0, 250_000_000.0, 0.0);
+            ->invoke($engine, $ctx, 1.0, $maintenance, max(0.0, $funds - $maintenance));
     }
 
     private function reitContext(): EarningsSimulationContext

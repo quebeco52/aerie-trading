@@ -108,3 +108,9 @@ Evidence: `joint_evidence.md`.
   end ratings, defaults, >10% cuts, div $/q y1 vs y20; board payout and CW dividend yield; firms with equity down >40%;
   SWAN/PERE margin, TTM ROE, EPS beat beside lore baseline_roe. Board sanity from analyse.py, beat_an.py, fragile_an.py
   (f_an.out holds all four for fixE2 vs fixF).
+- Batch G arm: `fixG` = tree-fixG (HEAD 4a81a6af + capex gate: a non-financial firm in covenant breach funds plant from
+  internal cash; scheduled first, maintenance floored at 20% of plan); base is `fixF` (HEAD reproduces it, runs on disk).
+  `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-8 fixG` (~4 min). `g_an.py <seeds> <armA> <armB>`: penalty-
+  borrow / missed-maturity / shut-out / revolver-cover events by firm, constrained-quarter share (head False or icr < 2,
+  Reit 1.05) and capex/dep constrained vs not, board and per-model revenue CAGR, named-firm rev/PP&E y0/10/20, SINK
+  bust capex and revolver, WADE capex/dep after a grid failure. g_an.out also holds analyse/fragile/beat for both arms.

@@ -7,6 +7,7 @@ namespace App\Tests\Service\Corporate;
 use App\Data\Company\LifecycleStage;
 use App\Data\Company\Sectors;
 use App\Data\Macro\CapitalGoodsPrices;
+use App\DTO\DebtHealthDTO;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -50,10 +51,10 @@ class EarningsEngineTest extends TestCase
         $this->earningsEngine = $this->buildEngine($this->createStub(EventDispatcherInterface::class));
     }
 
-    private function buildEngine(EventDispatcherInterface $eventDispatcher, ?IndustryShareLedger $industryShareLedger = null): EarningsEngine
+    private function buildEngine(EventDispatcherInterface $eventDispatcher, ?IndustryShareLedger $industryShareLedger = null, ?DebtEngine $debtEngine = null): EarningsEngine
     {
         $corporateMetrics = new CorporateMetrics();
-        $debtEngine = new DebtEngine($this->mathUtility, $corporateMetrics);
+        $debtEngine ??= new DebtEngine($this->mathUtility, $corporateMetrics);
         $capExEngine = new CapExEngine();
         $marketConsensusEngine = new MarketConsensusEngine();
 
@@ -1071,6 +1072,74 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($stablePrices->quarterlyDepreciation, $inflatedPrices->quarterlyDepreciation, 1.0);
         $this->assertGreaterThan(0.0, $stablePrices->maintenanceCapex);
         $this->assertEqualsWithDelta(1.20, $inflatedPrices->maintenanceCapex / $stablePrices->maintenanceCapex, 1e-9);
+    }
+
+    /**
+     * A firm in breach of its covenants pays for upkeep from its own funds once its committed outlays are met: the
+     * plan when the funds cover it, what is left of the funds when they do not, and never less than the share that
+     * keeps the plant running, however deep the hole.
+     */
+    public function testAConstrainedFirmsUpkeepIsWhatItsFundsLeaveAfterCommittedOutlays(): void
+    {
+        $floor = 100.0 * EarningsEngine::MIN_DISTRESSED_MAINTENANCE_SHARE;
+
+        $this->assertSame(100.0, EarningsEngine::fundingConstrainedMaintenance(100.0, 50.0, 400.0));
+        $this->assertSame(60.0, EarningsEngine::fundingConstrainedMaintenance(100.0, 50.0, 110.0));
+        $this->assertSame($floor, EarningsEngine::fundingConstrainedMaintenance(100.0, 50.0, 40.0), 'Committed outlays come first.');
+        $this->assertSame($floor, EarningsEngine::fundingConstrainedMaintenance(100.0, 0.0, -500.0));
+    }
+
+    /**
+     * Lenders advance no new money to a firm in breach of its covenants, leverage over the limit or coverage under the
+     * minimum, so it cuts its upkeep to what its cash pays for rather than borrow it at penalty rates. The same firm
+     * inside its covenants spends the full plan.
+     */
+    #[AllowMockObjectsWithoutExpectations]
+    public function testAFirmInBreachOfItsCovenantCutsUpkeepToItsFunds(): void
+    {
+        $run = function (array $breach): EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $assessor = new DebtEngine($this->mathUtility, new CorporateMetrics());
+            $lenders = $this->getMockBuilder(DebtEngine::class)
+                ->setConstructorArgs([$this->mathUtility, new CorporateMetrics()])
+                ->onlyMethods(['analyzeTrailingDebtHealth'])
+                ->getMock();
+            $lenders->method('analyzeTrailingDebtHealth')->willReturnCallback(
+                static fn(Stock $stock, MacroStateDTO $macro): DebtHealthDTO => new DebtHealthDTO(...[
+                    ...get_object_vars($assessor->analyzeTrailingDebtHealth($stock, $macro)),
+                    ...$breach,
+                ]),
+            );
+            $engine = $this->buildEngine($dispatcher, null, $lenders);
+
+            mt_srand(9090);
+            $stock = $this->buildMatureIndustrial('BRCH');
+            $stock->setGrossPpe('40000000000');
+            $stock->setAccumulatedDepreciation('20000000000');
+            $stock->setPpeVintageDeflator('1.000000');
+            $stock->setCorporateTreasury('100000000');
+
+            $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('BRCH', 252), 252);
+            $this->assertNotNull($captured);
+
+            return $captured;
+        };
+
+        $compliant = $run([]);
+        $this->assertGreaterThanOrEqual($compliant->strategy->getMinIcr(), $compliant->health->interestCoverage, 'Control: inside its covenants.');
+        $this->assertTrue($compliant->health->hasLeverageHeadroom);
+        $plan = $compliant->maintenanceCapex;
+        $this->assertGreaterThan(0.0, $plan);
+
+        foreach (['leverage' => ['hasLeverageHeadroom' => false], 'coverage' => ['interestCoverage' => 1.0]] as $covenant => $breach) {
+            $breached = $run($breach)->maintenanceCapex;
+            $this->assertLessThan($plan, $breached, "Breach of the {$covenant} covenant.");
+            $this->assertGreaterThanOrEqual($plan * EarningsEngine::MIN_DISTRESSED_MAINTENANCE_SHARE - 1.0, $breached);
+        }
     }
 
     /**

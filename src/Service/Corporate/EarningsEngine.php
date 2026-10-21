@@ -175,8 +175,8 @@ class EarningsEngine
     /** Most the capex cycle scales every capex line to: one and a half times plan at the peak. */
     public const MAX_CAPEX_CYCLE_MODIFIER = 1.50;
     /**
-     * Least share of its maintenance capex a loss-making firm keeps spending (20%): upkeep deferred further would idle
-     * the plant.
+     * Least share of its maintenance capex a firm cut off from borrowing keeps spending (20%): upkeep deferred further
+     * would idle the plant.
      */
     public const MIN_DISTRESSED_MAINTENANCE_SHARE = 0.20;
 
@@ -1800,23 +1800,16 @@ class EarningsEngine
             $cycleCapExModifier = max(self::MIN_CAPEX_CYCLE_MODIFIER, min(self::MAX_CAPEX_CYCLE_MODIFIER, 1.0 + ($cycleSignal * $capexCyclicality)));
 
             // Operational CapEx:
-            // 1. Maintenance CapEx: replaces depreciating physical capital in ongoing operations.
-            //    Scales with macro cyclicality and drops during severe financial distress.
-            $solvencyFactor = $ctx->actualQuarterlyNetIncome > 0
-                ? 1.0
-                : max(self::MIN_DISTRESSED_MAINTENANCE_SHARE, 1.0 + ($ctx->actualQuarterlyNetIncome / max(1.0, abs($ctx->investedCapital))));
-
-            // Replacement cost maintenance capex: scales accounting depreciation by the capital-goods replacement cost
-            // ratio.
+            // 1. Maintenance CapEx: replaces depreciating physical capital in ongoing operations, at the capital-goods
+            //    replacement cost of the plant worn out, scaled with the capex cycle.
             $ctx->replacementCostRatio = $this->resolveReplacementCostRatio($ctx);
-            $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier * $solvencyFactor;
+            $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier;
             if ($ctx->strategy->isFinancial()) {
                 // A balance-sheet business keeps no plant ledger: what it spends to stand still (branches,
                 // systems) is expensed as it is spent, so the cash out is the depreciation charge and nothing
                 // is capitalized. Any other figure would leave cash without an asset or a charge behind it.
                 $maintenanceCapEx = $ctx->quarterlyDepreciation;
             }
-            $ctx->maintenanceCapex = $maintenanceCapEx;
 
             $currentAnnualizedRevenue = $ctx->actualRevenue / max(0.001, $ctx->dt);
             $priorNwcStr = $stock->getNetWorkingCapital();
@@ -1829,13 +1822,35 @@ class EarningsEngine
             $deltaNwc = $currentNwc - $priorNwc;
             $ctx->deltaWorkingCapital = $deltaNwc;
 
-            // 2. Growth CapEx: fundamental reinvestment planned on normalized earnings power,
-            //    gated by the NPV hurdle and bounded by internally available funding.
-            $growthCapEx = $this->calculateGrowthCapEx($ctx, $cycleCapExModifier, $maintenanceCapEx, $deltaNwc);
+            // Stock-based compensation is a non-cash expense: added back to operating cash flow (ASC 718).
+            // Inventory writedowns and credit-loss provisions are non-cash, exactly like depreciation and
+            // equity compensation: they hit reported earnings but no money moves, so they come back here.
+            $operatingCashFlow = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation + $ctx->stockCompensation
+                + $ctx->inventoryWriteDown + $ctx->plantImpairment + $ctx->receivablesProvision + $ctx->creditLossProvision + $ctx->deferredTaxExpense
+                - $deltaNwc;
+            $internalFunds = $this->resolveInternalFunds($ctx, $operatingCashFlow);
+
+            // A firm in breach of its maintenance covenants (coverage under the minimum, or leverage over the limit)
+            // gets no new money from its lenders, so it builds only what the quarter's cash and its spare cash pay
+            // for: the scheduled outlays it is committed to first, then upkeep down to the least that keeps the plant
+            // running, then growth. Spent regardless, the plan was paid with emergency debt at penalty rates until a
+            // maturity could not be met.
+            $isFundingConstrained = !$ctx->strategy->isFinancial()
+                && (!$ctx->health->hasLeverageHeadroom || $ctx->health->interestCoverage < $ctx->strategy->getMinIcr());
+            if ($isFundingConstrained) {
+                $maintenanceCapEx = self::fundingConstrainedMaintenance($maintenanceCapEx, $ctx->scheduledCapex, $internalFunds);
+            }
+            $ctx->maintenanceCapex = $maintenanceCapEx;
+
+            // 2. Growth CapEx: fundamental reinvestment planned on normalized earnings power, gated by the NPV
+            //    hurdle and bounded by the internal funds the maintenance spend leaves (and, constrained, the
+            //    scheduled spend too).
+            $committedSpend = $maintenanceCapEx + ($isFundingConstrained ? $ctx->scheduledCapex : 0.0);
+            $growthCapEx = $this->calculateGrowthCapEx($ctx, $cycleCapExModifier, $maintenanceCapEx, max(0.0, $internalFunds - $committedSpend));
 
             // 3. Scheduled CapEx: outlays the sector physics itself commits (spectrum licences, grid rebuilds).
-            //    Mandatory, so it bypasses the funding gate; a cash shortfall is the treasury's problem. The
-            //    asset is not productive on day one, so it is queued as construction-in-progress.
+            //    Committed, so no funding gate cuts it; a cash shortfall is the treasury's problem. The asset is
+            //    not productive on day one, so it is queued as construction-in-progress.
             $deploysIntoEarningAssets = $ctx->strategy->isFinancial() && $stock->hasEarningAssetLedger();
             if ($ctx->scheduledCapex > 0.0 && !$deploysIntoEarningAssets) {
                 $this->capExEngine->allocateGrowthCapEx($stock, $ctx->scheduledCapex);
@@ -1852,13 +1867,8 @@ class EarningsEngine
 
             $actualCapEx = $maintenanceCapEx + $growthCapEx + $ctx->scheduledCapex;
 
-            // Stock-based compensation is a non-cash expense: added back to operating cash flow (ASC 718).
-            // Inventory writedowns and credit-loss provisions are non-cash, exactly like depreciation and
-            // equity compensation: they hit reported earnings but no money moves, so they come back here.
-            $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation + $ctx->stockCompensation
-                + $ctx->inventoryWriteDown + $ctx->plantImpairment + $ctx->receivablesProvision + $ctx->creditLossProvision + $ctx->deferredTaxExpense
-                - $deltaNwc - $actualCapEx;
-            $ctx->operatingCashFlow = $fcff + $actualCapEx;
+            $fcff = $operatingCashFlow - $actualCapEx;
+            $ctx->operatingCashFlow = $operatingCashFlow;
             $ctx->investingCashFlow = -$actualCapEx;
 
             $fcfData = [
@@ -2578,10 +2588,10 @@ class EarningsEngine
      * Three real-world gates apply:
      *  1. NPV rule: no growth investment while the structural return fails the model's hurdle rate.
      *  2. Demand: no more plant than the flexible accelerator allows (resolveExpansionBudget()).
-     *  3. Funding constraint: spend is bounded by internally generated cash plus cash above the operating floor.
+     *  3. Funding constraint: spend is bounded by the internal funds the quarter's other plant spend leaves.
      * What the accelerator still allows after this spend is left on the context for the treasury.
      */
-    private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $deltaNwc): float
+    private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $fundingCapacity): float
     {
         $stock = $ctx->stock;
         $manager = $stock->getManagementProfile();
@@ -2606,16 +2616,6 @@ class EarningsEngine
         if ($expansionBudget !== null) {
             $plannedGrowthCapEx = min($plannedGrowthCapEx, $expansionBudget);
         }
-        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
-        $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        // Cash above the operating floor, negative below it: a treasury short of its floor is refilled from the
-        // quarter's cash flow before any of it goes into growth (Fazzari, Hubbard & Petersen 1988).
-        $deployableCash = (float) $stock->getCorporateTreasury() - $minOperatingCash;
-        // What a pass-through must distribute is not the firm's to reinvest: a REIT's acquisitions are funded
-        // from what the distribution rule leaves it, its spare cash and its borrowing, never from the dividend.
-        $requiredDistribution = max(0.0, $ctx->actualQuarterlyNetIncome) * $ctx->strategy->getMinimumDistributionRatio();
-        $internalCashFlow = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $maintenanceCapEx - $requiredDistribution;
-        $fundingCapacity = max(0.0, $internalCashFlow + $deployableCash);
 
         $growthCapEx = min($plannedGrowthCapEx, $fundingCapacity);
         if ($expansionBudget !== null) {
@@ -2623,6 +2623,35 @@ class EarningsEngine
         }
 
         return $growthCapEx;
+    }
+
+    /**
+     * The cash the firm can put into plant without borrowing: the quarter's operating cash flow less what a
+     * pass-through must distribute, plus the treasury above its operating floor, or less what the treasury is short
+     * of it, since a treasury below its floor is refilled before anything is built (Fazzari, Hubbard & Petersen 1988).
+     */
+    private function resolveInternalFunds(EarningsSimulationContext $ctx, float $operatingCashFlow): float
+    {
+        $stock = $ctx->stock;
+        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
+        $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
+        // What a pass-through must distribute is not the firm's to reinvest: a REIT's acquisitions are funded
+        // from what the distribution rule leaves it, its spare cash and its borrowing, never from the dividend.
+        $requiredDistribution = max(0.0, $ctx->actualQuarterlyNetIncome) * $ctx->strategy->getMinimumDistributionRatio();
+
+        return $operatingCashFlow - $requiredDistribution + ((float) $stock->getCorporateTreasury() - $minOperatingCash);
+    }
+
+    /**
+     * The upkeep a firm cut off from borrowing can pay for (Campello, Graham & Harvey 2010: constrained firms cut
+     * investment to their own cash): what its internal funds leave after its committed outlays, never above the plan
+     * and never below the share that keeps the plant running.
+     */
+    public static function fundingConstrainedMaintenance(float $plannedMaintenance, float $committedOutlays, float $internalFunds): float
+    {
+        $floor = $plannedMaintenance * self::MIN_DISTRESSED_MAINTENANCE_SHARE;
+
+        return max($floor, min($plannedMaintenance, $internalFunds - $committedOutlays));
     }
 
     /**
