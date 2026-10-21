@@ -174,6 +174,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
 
     /** Variable cost penalty applied during multi-subsidiary restructuring or supply chain write-offs. */
     public const RESTRUCTURING_DRAG_PENALTY = 0.04;
+    /** Share of the restructuring penalty a subsidiary with full pricing power passes on in price (half). */
+    public const RESTRUCTURING_PRICING_PASS_THROUGH = 0.50;
 
     // --- Industrial & Deal Activity Sensitivities ---
     /** Sensitivity of industrial conglomerate subsidiary demand to manufacturing PMI. */
@@ -337,7 +339,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $restructuringPenalty = 0.0;
 
         if ($eventZ < self::SUBSIDIARY_WRITEDOWN_Z_SCORE) {
-            $restructuringPenalty = self::RESTRUCTURING_DRAG_PENALTY * (1.0 - ($pricingPower * 0.50));
+            $restructuringPenalty = self::RESTRUCTURING_DRAG_PENALTY * (1.0 - ($pricingPower * self::RESTRUCTURING_PRICING_PASS_THROUGH));
             $eventType = ShockEvent::CONGLOMERATE_SUBSIDIARY_WRITEDOWN;
         }
 

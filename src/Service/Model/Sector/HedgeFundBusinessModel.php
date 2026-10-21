@@ -377,8 +377,10 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         // leverage; below it none are earned. The fee is a call on alpha, and expected revenue is the average year,
         // fees included, so each quarter books its excess over the call's expectation, E[max(0, Z - hurdle)].
         $averageFeeExcess = Distributions::calculateNormalLowerPartialMoment(-self::PERFORMANCE_FEE_HURDLE_Z);
-        $dirBaseDrift = $dirZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::DIRECTIONAL_BASE_VOLATILITY_SCALAR * $leverageMultiplier;
-        $dirIncentiveBonus = (max(0.0, $dirZ - self::PERFORMANCE_FEE_HURDLE_Z) - $averageFeeExcess) * self::INCENTIVE_FEE_RATE * self::DIRECTIONAL_FEE_GEARING * $leverageMultiplier;
+        $dirAlphaSlope = $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::DIRECTIONAL_BASE_VOLATILITY_SCALAR * $leverageMultiplier;
+        $dirFeeSlope = self::INCENTIVE_FEE_RATE * self::DIRECTIONAL_FEE_GEARING * $leverageMultiplier;
+        $dirBaseDrift = $dirZ * $dirAlphaSlope;
+        $dirIncentiveBonus = (max(0.0, $dirZ - self::PERFORMANCE_FEE_HURDLE_Z) - $averageFeeExcess) * $dirFeeSlope;
 
         $dirRevenue = max(0.0, $structuralRevenue * $dirWeight
             * (1.0 + $dirBaseDrift + $dirIncentiveBonus + $macroDirectionalShift));
@@ -387,8 +389,10 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $vixAlphaMultiplier = 1.0 + max(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_ALPHA_SCALAR);
         $vixCalmDrag        = min(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_CALM_DRAG_SCALAR);
 
-        $quantBaseDrift = $quantZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::QUANT_ALPHA_VOLATILITY_SCALAR;
-        $quantIncentiveBonus = (max(0.0, $quantZ - self::PERFORMANCE_FEE_HURDLE_Z) - $averageFeeExcess) * self::INCENTIVE_FEE_RATE * self::QUANT_FEE_GEARING;
+        $quantAlphaSlope = $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::QUANT_ALPHA_VOLATILITY_SCALAR;
+        $quantFeeSlope = self::INCENTIVE_FEE_RATE * self::QUANT_FEE_GEARING;
+        $quantBaseDrift = $quantZ * $quantAlphaSlope;
+        $quantIncentiveBonus = (max(0.0, $quantZ - self::PERFORMANCE_FEE_HURDLE_Z) - $averageFeeExcess) * $quantFeeSlope;
 
         $quantRevenue = max(0.0, ($structuralRevenue * $quantWeight
             * (1.0 + $quantBaseDrift + $quantIncentiveBonus + $vixCalmDrag)
@@ -404,11 +408,15 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- 4. Compensation Pool Flex & Variable Cost Scaling ---
-        // Performance fee crystallization expands portfolio manager & quant incentive bonus pools.
+        // Portfolio managers and quants share each alpha stream's beat and none of its miss, so the bonus pool is a
+        // call on it. The planned cost ratio already carries the pool's average quarter at a neutral cycle, so each
+        // quarter books its excess over that expectation; a boom's beat on top still lifts the pool.
         $dirBaseline = $structuralRevenue * $dirWeight;
         $quantBaseline = $structuralRevenue * $quantWeight;
         $perfExcess = max(0.0, $dirRevenue - $dirBaseline) + max(0.0, $quantRevenue - $quantBaseline);
-        $bonusPoolExpense = $perfExcess * self::PERF_BONUS_POOL_PAYOUT;
+        $averagePerfExcess = ($dirBaseline * self::expectedStreamBeat($dirAlphaSlope, $dirFeeSlope))
+            + ($quantBaseline * self::expectedStreamBeat($quantAlphaSlope, $quantFeeSlope));
+        $bonusPoolExpense = ($perfExcess - $averagePerfExcess) * self::PERF_BONUS_POOL_PAYOUT;
         $effectiveVariableCosts = ($actualRevenue * $realizedVariableMargin) + $bonusPoolExpense;
         $effectiveVariableMargin = $actualRevenue > 0 ? ($effectiveVariableCosts / $actualRevenue) : $realizedVariableMargin;
 
@@ -447,6 +455,17 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
+    }
+
+    /**
+     * E[max(0, a Z + g (max(0, Z - h) - E[max(0, Z - h)]))] at hurdle h: an alpha stream's mean beat over its
+     * baseline at a neutral cycle, as a share of it, its alpha line with the centred fee call on top.
+     */
+    public static function expectedStreamBeat(float $alphaSlope, float $feeSlope): float
+    {
+        $averageFeeExcess = Distributions::calculateNormalLowerPartialMoment(-self::PERFORMANCE_FEE_HURDLE_Z);
+
+        return Distributions::normalKinkedPositivePart($alphaSlope, $feeSlope, self::PERFORMANCE_FEE_HURDLE_Z, -$feeSlope * $averageFeeExcess);
     }
 
     public function calculateCashYield(MacroStateDTO $macroState): float

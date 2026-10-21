@@ -68,6 +68,19 @@ final readonly class ManagementProfile
         return $this->scale($this->style->payoutBias());
     }
 
+    /**
+     * The share of earnings this manager pays out of a target share: the payout bias scales the odds of paying out, so
+     * a steward pays out more than the target and an empire builder less, and neither ever more than the firm earns.
+     * Scaled on the share itself, a steward on an 85% target paid out 115% and borrowed the rest.
+     */
+    public function appliedPayoutRatio(float $targetPayoutRatio): float
+    {
+        $target = max(0.0, min(1.0, $targetPayoutRatio));
+        $bias = $this->payoutBias();
+
+        return ($target * $bias) / ((1.0 - $target) + ($target * $bias));
+    }
+
     /** Multiplier on the reinvestment (capex) ratio the firm plans against. */
     public function reinvestmentBias(): float
     {

@@ -211,7 +211,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         $eventType = null;
         $restructuringPenalty = 0.0;
         if ($eventZ < self::SUBSIDIARY_WRITEDOWN_Z_SCORE) {
-            $restructuringPenalty = self::RESTRUCTURING_DRAG_PENALTY * (1.0 - ($pricingPower * 0.50));
+            $restructuringPenalty = self::RESTRUCTURING_DRAG_PENALTY * (1.0 - ($pricingPower * self::RESTRUCTURING_PRICING_PASS_THROUGH));
             $eventType = ShockEvent::CONGLOMERATE_SUBSIDIARY_WRITEDOWN;
         }
 

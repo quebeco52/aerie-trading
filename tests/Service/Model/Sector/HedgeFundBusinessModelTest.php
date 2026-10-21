@@ -740,4 +740,43 @@ class HedgeFundBusinessModelTest extends TestCase
         $this->assertGreaterThan($directional(1.0) - $directional(0.0), $directional(3.0) - $directional(2.0), 'The fee must pay above the hurdle for the test to have power.');
         $this->assertEqualsWithDelta(100.0 * HedgeFundBusinessModel::DEFAULT_DIRECTIONAL_BETS_WEIGHT, $sum / $weights, 0.01);
     }
+
+    /**
+     * The bonus pool is a call on each alpha stream's beat, and the planned cost ratio carries its average quarter:
+     * over the alpha draws at a neutral cycle the cost base averages the planned ratio, so the fund earns its margin.
+     */
+    #[\PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations]
+    public function testTheBonusPoolAveragesWhatThePlannedCostCarries(): void
+    {
+        $neutral = new MacroStateDTO(marketVolatilityEma: HedgeFundBusinessModel::VIX_ALPHA_BASELINE);
+        // Levered two to one, so the directional call is geared as a levered book's is.
+        $stock = (new Stock())->setTicker('HFX')->setBeta('1.5')->setTotalEquity('1000.0')->setWholesaleDebt('2000.0');
+        $expected = 100.0 * (1.0 + $this->model->getMacroPhysics(clone $stock, $neutral)['macro_demand_shift']);
+        $plannedRatio = 0.40;
+        $poolOverPlan = function (float $z) use ($stock, $expected, $neutral, $plannedRatio): float {
+            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'checkProbability'])->getMock();
+            $math->method('generateStandardNormal')->willReturn(0.0);
+            $math->method('checkProbability')->willReturn(false);
+            $quarter = clone $stock;
+            $quarter->setEarningsMomentumZ([
+                'directional_bets' => $z / HedgeFundBusinessModel::DIR_PERSISTENCE,
+                'quant_alpha'      => $z / HedgeFundBusinessModel::QUANT_PERSISTENCE,
+            ]);
+            $report = $this->model->computeActualFinancials($quarter, $expected, $plannedRatio, 10.0, 0.26, $neutral, $math);
+
+            return $report->actualVariableCosts - ($plannedRatio * $report->actualRevenue);
+        };
+
+        // Each stream's draw is a standard normal whatever the two share, so one draw for both gives each its mean.
+        $sum = 0.0;
+        $weights = 0.0;
+        for ($z = -6.0; $z <= 6.0; $z += 0.01) {
+            $weight = exp(-0.5 * $z * $z);
+            $sum += $weight * $poolOverPlan($z);
+            $weights += $weight;
+        }
+
+        $this->assertGreaterThan($poolOverPlan(0.0) + 1.0, $poolOverPlan(2.0), 'The pool must pay on a beat for the test to have power.');
+        $this->assertEqualsWithDelta(0.0, $sum / $weights, 0.01);
+    }
 }

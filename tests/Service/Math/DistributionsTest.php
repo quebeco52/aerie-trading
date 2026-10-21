@@ -222,4 +222,27 @@ class DistributionsTest extends TestCase
             $this->assertEqualsWithDelta($exceedance, Distributions::normalHingeLayerExceedance(0.15, -1.5, $shift), 1e-4, "shift {$shift}");
         }
     }
+
+    /**
+     * The kinked payoff's closed form against quadrature over the normal: a root below the kink, one above it (the
+     * intercept too low for the line alone), and a flat line that only the call lifts.
+     */
+    public function testKinkedNormalPayoffClosedForm(): void
+    {
+        $cases = [
+            'root below the kink' => [0.25, 1.30, 1.25, -0.07],
+            'root above the kink' => [0.05, 0.60, 1.25, -0.20],
+            'positive everywhere' => [0.0, 0.40, 1.25, 0.03],
+            'flat line, call only' => [0.0, 0.40, 1.25, -0.02],
+        ];
+        foreach ($cases as $label => [$slope, $kinkSlope, $kink, $intercept]) {
+            $expectation = 0.0;
+            for ($z = -9.0; $z <= 9.0; $z += 1e-4) {
+                $payoff = ($slope * $z) + ($kinkSlope * max(0.0, $z - $kink)) + $intercept;
+                $expectation += max(0.0, $payoff) * Distributions::standardNormalPdf($z) * 1e-4;
+            }
+
+            $this->assertEqualsWithDelta($expectation, Distributions::normalKinkedPositivePart($slope, $kinkSlope, $kink, $intercept), 1e-6, $label);
+        }
+    }
 }

@@ -382,4 +382,28 @@ final class Distributions
 
         return self::calculateNormalCDF($threshold + ($shift / $scale));
     }
+
+    // --- Kinked Normal Payoff ---
+    /**
+     * E[max(0, slope Z + kinkSlope max(0, Z - kink) + intercept)] for a standard normal Z and slopes of zero or more:
+     * the mean positive part of a line in the draw that steepens above a kink (a revenue line with a fee call on top).
+     * Turning positive below the kink, it is the line's positive part plus the call; above it, the steeper line's.
+     */
+    public static function normalKinkedPositivePart(float $slope, float $kinkSlope, float $kink, float $intercept): float
+    {
+        if (($slope * $kink) + $intercept >= 0.0) {
+            $line = $slope > 0.0 ? $slope * self::calculateNormalLowerPartialMoment($intercept / $slope) : $intercept;
+
+            return $line + ($kinkSlope * self::calculateNormalLowerPartialMoment(-$kink));
+        }
+
+        $steepSlope = $slope + $kinkSlope;
+        if ($steepSlope <= 0.0) {
+            return 0.0;
+        }
+
+        $root = (($kinkSlope * $kink) - $intercept) / $steepSlope;
+
+        return $steepSlope * self::calculateNormalLowerPartialMoment(-$root);
+    }
 }

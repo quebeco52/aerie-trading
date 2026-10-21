@@ -495,6 +495,33 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertTrue($aristocratStock->isDividendAristocrat());
     }
 
+    /**
+     * A board holds the dividend its year's earnings cover. Once a profitable year earns less than the dividend pays,
+     * it follows its target payout down at its own speed; held there, the dividend was paid from debt every quarter
+     * until the covenant cut it. An aristocrat still holds.
+     */
+    public function testAPayerWhoseEarningsNoLongerCoverItsDividendFollowsItsTarget(): void
+    {
+        [$peer, $peerStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '3000000.00');
+        [$aristocrat] = $this->payDividendOnFallingEarnings(true, $this->buildHealth(), trailingNetIncome: '3000000.00');
+
+        $target = 0.75 * $peerStock->getPolicyPayoutRatio();
+        $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $peer['dividend_paid'], 1e-9, 'Earning $0.75 a quarter does not cover $1.00.');
+        $this->assertSame(1.00, $aristocrat['dividend_paid']);
+    }
+
+    /** A dividend its earnings no longer cover is not borrowed for: the cash cap takes it, as after a loss year. */
+    public function testAPayerBorrowsNothingToHoldADividendItsEarningsDoNotCover(): void
+    {
+        [$covered, , $coveredBorrowed] = $this->payDividendShortOfCash(false);
+        [$uncovered, , $uncoveredBorrowed] = $this->payDividendShortOfCash(false, '3000000.00');
+
+        $this->assertEqualsWithDelta(1.00, $covered['dividend_paid'], 1e-9, 'Control: a covered dividend is held and its cash shortfall borrowed.');
+        $this->assertCount(1, $coveredBorrowed);
+        $this->assertSame([], $uncoveredBorrowed);
+        $this->assertLessThan(1.00, $uncovered['dividend_paid']);
+    }
+
     /** A cut ends the record the aristocrat was known for, even one a liquidity crisis forced on it. */
     public function testAForcedCutEndsTheAristocratsRecord(): void
     {

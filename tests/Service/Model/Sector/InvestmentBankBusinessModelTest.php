@@ -291,6 +291,38 @@ class InvestmentBankBusinessModelTest extends TestCase
         }
     }
 
+    /**
+     * The gamma friction reads volatility both ways: what hedging costs the options desk a few points above the anchor
+     * it saves the same few points below, so over volatility that averages its anchor the friction averages nothing.
+     */
+    public function testGammaFrictionIsChargedBothWaysAroundTheAnchor(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('generateUniform')->willReturn(0.50);
+        $margin = function (float $volatility) use ($mathMock): float {
+            $macro = \App\DTO\MacroStateDTO::fromArray([
+                'output_gap_ema'            => 0.0,
+                'macro_credit_spread_ema'   => MacroConstants::BASE_CREDIT_SPREAD,
+                'macro_credit_spread_trend' => MacroConstants::BASE_CREDIT_SPREAD,
+                'policy_rate'               => 0.04,
+                'policy_rate_ema'           => 0.04,
+                'yield_5y_ema'              => 0.04 + InvestmentBankBusinessModel::DCM_NEUTRAL_CURVE_SLOPE,
+                'market_volatility_ema'     => $volatility,
+            ]);
+
+            return $this->model->computeActualFinancials((new Stock())->setTicker('PERE'), 1000.0, 0.50, 100.0, 0.0, $macro, $mathMock)->clampedMargin;
+        };
+
+        $anchor = MacroConstants::MACRO_VOL_BASE_ANCHOR;
+        $busy = $margin($anchor + 0.05) - $margin($anchor);
+        $calm = $margin($anchor - 0.05) - $margin($anchor);
+
+        // PERE writes options on 60% of its book.
+        $this->assertEqualsWithDelta(0.05 * InvestmentBankBusinessModel::OPTIONS_GAMMA_FRICTION * 0.60, $busy, 1e-9);
+        $this->assertEqualsWithDelta(-$busy, $calm, 1e-9, 'A calm market saves what a volatile one costs.');
+    }
+
     public function testWholesaleLeverageLimitMatchesOperatingCapacity(): void
     {
         $this->assertSame(8.0, $this->model->getWholesaleLeverageLimit());

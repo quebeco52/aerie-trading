@@ -176,17 +176,20 @@ class CapitalAllocationEngine
         // Lintner (1956) and Fama & Babiak (1968) set the dividend against the year's earnings: the target moves
         // with trailing-twelve-month EPS, so one strong quarter is not a raise the floor then locks in, and one
         // weak quarter is not a cut.
-        $sustainableBase = $ctx->strategy->getSustainableDividendBase($stock, $ctx->trailingQuarterlyEps, $ctx->investedCapital, $depRate);
+        $earningsBase = $ctx->strategy->getSustainableDividendBase($stock, $ctx->trailingQuarterlyEps, $ctx->investedCapital, $depRate);
+        $sustainableBase = $earningsBase;
         if ($sustainableBase <= 0.0 && $ctx->quarterlyFcfPerShare > 0.0) {
             $sustainableBase = min($ctx->quarterlyFcfPerShare, $lastDividend / max(0.01, $effectiveTargetPayout));
         }
         $calculatedTarget = $sustainableBase > 0 ? ($sustainableBase * $effectiveTargetPayout) : 0.0;
-        // Managers are reluctant to cut (Lintner 1956): a payer holds its dividend while earnings fall, and cuts by
-        // choice only after a loss year (DeAngelo, DeAngelo & Skinner 1992). One known for an unbroken record of
-        // increases does not cut by choice even then; either one still cuts when the caps below force it to. A board
-        // paying a share of each year's earnings holds nothing, and lets the dividend fall at its own speed.
-        $isLossYear = $ctx->trailingQuarterlyEps <= 0.0;
-        $holdsDividend = $isAristocrat || (!$isLossYear && $ctx->strategy->holdsDividendThroughDownturns());
+        // Managers are reluctant to cut (Lintner 1956): a payer holds a dividend its year's earnings still cover while
+        // they fall, and once they no longer cover it, a loss year the extreme case (DeAngelo, DeAngelo & Skinner
+        // 1992), follows its target down at its own speed. Held past its earnings, a dividend was paid from debt until
+        // the lenders' covenant cut it. One known for an unbroken record of increases does not cut by choice even
+        // then; either one still cuts when the caps below force it to. A board paying a share of each year's earnings
+        // holds nothing, and lets the dividend fall at its own speed.
+        $isCoveredByEarnings = $lastDividend <= $earningsBase;
+        $holdsDividend = $isAristocrat || ($isCoveredByEarnings && $ctx->strategy->holdsDividendThroughDownturns());
         $targetDividend = $holdsDividend ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
 
         $isRegulatoryDividendHalt = false;

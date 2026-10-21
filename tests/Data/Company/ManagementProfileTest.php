@@ -126,6 +126,28 @@ final class ManagementProfileTest extends TestCase
         $this->assertGreaterThan(0.4, $spread, 'A distribution flat enough to be four points is the thing this fixes.');
     }
 
+    /**
+     * The payout bias tilts the odds of paying out, so the share stays a share: a pronounced steward on an 85% target
+     * pays out more than 85% and less than the firm earns, an empire builder pays less, and a neutral dial or a
+     * no-payout target is left where it is. On the share itself the same steward paid out 1.39 times its earnings.
+     */
+    public function testPayoutTiltNeverPaysOutMoreThanTheFirmEarns(): void
+    {
+        $steward = ManagementProfile::forStyle(ManagementStyle::Steward, ManagementProfile::MAX_INTENSITY);
+        $tilted = $steward->appliedPayoutRatio(0.85);
+        $this->assertGreaterThan(0.85, $tilted);
+        $this->assertLessThan(1.0, $tilted);
+        $this->assertEqualsWithDelta(0.85 * $steward->payoutBias() / (0.15 + (0.85 * $steward->payoutBias())), $tilted, 1e-12);
+
+        $empire = ManagementProfile::forStyle(ManagementStyle::EmpireBuilder, null);
+        $this->assertLessThan(0.40, $empire->appliedPayoutRatio(0.40));
+        $this->assertSame(0.0, $empire->appliedPayoutRatio(0.0));
+
+        // A small target is scaled by the bias, the dial's meaning where the odds and the share coincide.
+        $this->assertEqualsWithDelta(0.01 * $steward->payoutBias(), $steward->appliedPayoutRatio(0.01), 0.01 * 0.01 * $steward->payoutBias());
+        $this->assertEqualsWithDelta(0.60, ManagementProfile::forStyle(ManagementStyle::Operator, 1.5)->appliedPayoutRatio(0.60), 1e-12);
+    }
+
     /** The entity hands the engines one object, so a style and its strength cannot be picked up separately. */
     public function testEntityResolvesTheStyleAndItsStrengthTogether(): void
     {

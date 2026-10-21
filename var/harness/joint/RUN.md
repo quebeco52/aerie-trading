@@ -101,3 +101,10 @@ Evidence: `joint_evidence.md`.
   beta, Heavy write-down share, BIRD/DIPR margin sd, WADE end state, corr(starts_t, gap_t+k), starts rel sd/AR1/troughs.
   `fixE2` = HEAD + batchE2.patch (walk-down 0.60 sd, oil producers do not hold dividends). `fragile_an.py <seeds>
   <tk,...> <arm>...`: per firm and arm the default seeds, worst rating, peak ND/E, share rises >2%, end rating.
+- Batch F arm: `fixF` = tree-fixF (HEAD a0786363 + batchF patch: payout bias on the odds, dividend held only while
+  trailing EPS covers it, HF bonus centred, IB gamma friction two-sided); base is `fixE2` (HEAD reproduces it). Run
+  `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-8 fixF` (~4.5 min for 8 seeds). `f_an.py <seeds> <arms...>`:
+  dividend-borrowing events/$B by firm (top 15), per payout firm div/NI y1/20y, equity y0/5/10/20, ND/EBITDA y1/y20,
+  end ratings, defaults, >10% cuts, div $/q y1 vs y20; board payout and CW dividend yield; firms with equity down >40%;
+  SWAN/PERE margin, TTM ROE, EPS beat beside lore baseline_roe. Board sanity from analyse.py, beat_an.py, fragile_an.py
+  (f_an.out holds all four for fixE2 vs fixF).

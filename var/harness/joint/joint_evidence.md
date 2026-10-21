@@ -450,3 +450,26 @@ fragile-batchE2-8s.out (fragile_an.py SINK,ALBT,TIER over the three arms).
 | corr(starts,gap) k=0; rel sd | 0.18; 4.0 | 0.74; 11.5 | 0.76; 9.6 |
 Caveats: 8 seeds unpaired; TIER at the ND/E cap in every arm (fragile by construction); fixE2 seed 7 had 4 payment
 defaults (IBHI, DIPR, SINK, FALC), all in one macro path.
+
+## 2026-10-21 Batch F (payout bias on the odds, covered-dividend hold, HF bonus centred, IB gamma friction two-sided)
+Question: does batch F stop stewards paying >100% of earnings and borrowing for dividends without breaking the board?
+Harness: JointHarnessTest via run.sh, CREDIT=1, 8 seeds x 20y, 360 ticks/y, unpaired (full-market seeds do not pair).
+Arms: fixE2 (= HEAD a0786363) vs fixF (HEAD + batchF). Analysis: `f_an.py 1-8 fixE2 fixF` + analyse/beat/fragile; table
+in `f_an.out`.
+
+| quantity | fixE2 | fixF |
+|---|---|---|
+| borrowed-for-dividend events / $B (8 seeds) | 509 / 615 | 101 / 141 |
+| of which PLZA, SHOR, CASC (fixF) | 104/160, 49/54, 7/100 | 42/49, 27/30, 4/25 |
+| y1 div/NI WADE PLZA KITE CLAW PHIL | 1.06 1.13 1.04 1.08 1.00 | 0.83 0.90 0.80 0.94 0.78 |
+| equity 20y change WADE PLZA KITE | +44% -30% -22% | +92% -27% +13% |
+| board payout / CW div yield | 32.8% / 2.39% | 31.8% / 2.18% |
+| CW index price return %/y | 7.33 (sd 0.96) | 6.67 (sd 0.89) |
+| failures / Ch11 / payment-default names / rescues per run | 0 / 0.125 / 0.625 / 6.25 | 0 / 0 / 0.375 / 8.5 |
+| board EPS beat | 75.7% | 75.4% |
+| SWAN EBIT margin, TTM ROE (lore 22%) | 38.0%, 14.6% | 39.5%, 14.4% |
+| PERE EBIT margin, TTM ROE (lore 25%) | 33.8%, 23.0% | 33.9%, 22.9% |
+
+Caveats: unpaired 8 seeds, index difference -0.66pp is inside noise (se ~0.46). fixF defaults: WADE s1 (capex 2.7B/q
+over EBITDA 2.5B, dividend already zero from y13, cured), SINK s5, CASC s5. PLZA keeps -27% equity over 20y (front-loaded
+y0-y5 fall) and still borrows for dividends in fixF.

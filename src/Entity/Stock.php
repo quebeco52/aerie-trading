@@ -1029,7 +1029,7 @@ class Stock
      */
     public function getPolicyPayoutRatio(): float
     {
-        return (float) $this->targetPayoutRatio * $this->getManagementProfile()->payoutBias();
+        return $this->getManagementProfile()->appliedPayoutRatio((float) $this->targetPayoutRatio);
     }
 
     public function getDividendSpeed(): ?string

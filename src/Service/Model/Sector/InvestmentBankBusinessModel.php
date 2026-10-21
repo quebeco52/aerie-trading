@@ -165,7 +165,10 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     // --- Options Desk Vega & Gamma Friction ---
     /** Top-line vega premium per point of implied volatility against the anchor, both ways. */
     public const OPTIONS_VEGA_SCALAR        = 1.50;
-    /** Variable margin friction ratio per unit of excess VIX incurred from dynamic gamma delta-hedging. */
+    /**
+     * Variable cost of delta-hedging the written book per point of volatility against the anchor, both ways: the
+     * rebalancing costs more in a volatile market and less in a calm one.
+     */
     public const OPTIONS_GAMMA_FRICTION     = 0.60;
 
     // --- Revenue Shock Physics ---
@@ -359,11 +362,9 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             $optionsRevenue = max(0.0, $expectedRevenue * $optionsWeight * (1.0 + ($optionsZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) + $optionsVegaBonus));
             $streamRevenues['options_premium_income'] = $optionsRevenue;
 
-            // 2. Bottom-Line Gamma Friction: Scaled by options desk weight so it does not contaminate non-options
-            //    desks.
-            if ($vixGap > 0.0) {
-                $gammaHedgingCost = ($vixGap * self::OPTIONS_GAMMA_FRICTION) * $optionsWeight;
-            }
+            // 2. Bottom-Line Gamma Friction: hedging cost against the anchor, both ways like the vega, scaled by the
+            //    options desk weight so it does not contaminate non-options desks.
+            $gammaHedgingCost = ($vixGap * self::OPTIONS_GAMMA_FRICTION) * $optionsWeight;
         }
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));

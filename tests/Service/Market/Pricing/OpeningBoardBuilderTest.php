@@ -86,7 +86,7 @@ class OpeningBoardBuilderTest extends TestCase
         foreach ($this->openBoard(new MacroStateDTO()) as $ticker => $stock) {
             $strategy = Sectors::strategyFor((string) $stock->getIndustry());
             $quarterlyEps = max(0.0, (float) $stock->getTotalNetIncome() / (float) $stock->getSharesOutstanding() / 4.0);
-            $payout = max((float) $stock->getTargetPayoutRatio() * $stock->getManagementProfile()->payoutBias(), $strategy->getMinimumDistributionRatio());
+            $payout = max($stock->getManagementProfile()->appliedPayoutRatio((float) $stock->getTargetPayoutRatio()), $strategy->getMinimumDistributionRatio());
             $expected = $quarterlyEps * $payout;
 
             // Within 2%: the opening price loop and the anchor-stake pass re-strike earnings after the dividend is set,
