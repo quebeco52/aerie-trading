@@ -489,9 +489,9 @@ class TreasuryEngine
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
                     $actionText = match ($ctx->businessModel) {
                         'commercial_bank', 'credit_services', 'shadow_bank' => 'loan book expansion',
-                        'insurance' => 'underwriting infrastructure and float expansion',
+                        'insurance', 'retail_insurance', 'reinsurance' => 'underwriting infrastructure and float expansion',
                         'brokerage', 'investment_bank' => 'trading desk and market-making capacity',
-                        'asset_manager', 'private_equity' => 'fund seeding and AUM deployment',
+                        'asset_manager', 'private_equity', 'hedge_fund' => 'fund seeding and AUM deployment',
                         'clearing_house' => 'clearing collateral and exchange margin reserves',
                         'distressed_debt' => 'distressed credit and turnaround equity acquisitions',
                         'reit' => 'property acquisitions and development',

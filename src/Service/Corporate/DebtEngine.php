@@ -822,9 +822,14 @@ class DebtEngine
             ? $stock->getTotalAssets($leaseLiability)
             : (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt() + $leaseLiability;
 
+        // A REIT's leverage is measured on its undepreciated real estate, as its bond covenants cap total debt against
+        // total undepreciated assets: distributing past book income runs book equity down by the depreciation charge,
+        // so on book a sound trust drifted through its warning and failure floors.
+        $undepreciation = $strategy instanceof \App\Service\Model\Sector\ReitBusinessModel ? max(0.0, (float) $stock->getAccumulatedDepreciation()) : 0.0;
+
         return [
-            'capital' => $stock->getTangibleEquity(),
-            'assets' => max(1.0, $totalAssets - max(0.0, (float) $stock->getGoodwill()) - $strategy->getSegregatedCustodyLiabilities($stock)),
+            'capital' => $stock->getTangibleEquity() + $undepreciation,
+            'assets' => max(1.0, $totalAssets - max(0.0, (float) $stock->getGoodwill()) - $strategy->getSegregatedCustodyLiabilities($stock) + $undepreciation),
         ];
     }
 
@@ -1022,13 +1027,15 @@ class DebtEngine
     /**
      * The score the agency's distress caps read: the Altman Z'' (or a financial's capital ratio in its place), except
      * for an asset manager, which S&P rates on the corporate methodology's business and financial risk alone ("Key
-     * Credit Factors For Asset Managers", 2014); Altman's sample held no financials.
+     * Credit Factors For Asset Managers", 2014), and a rate-regulated utility, which it rates on its excellent
+     * business risk and the medial volatility table. Altman's samples held neither financials nor regulated utilities,
+     * and a utility's thin asset turnover scores it grey however safe its rate base.
      *
      * @return array{z_score: float|null, zone: string|null, is_bankrupt?: bool}
      */
     private function resolveRatingZScore(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $ebit, float $revenue): array
     {
-        if ($strategy instanceof \App\Service\Model\Sector\AssetManagementBusinessModel) {
+        if ($strategy instanceof \App\Service\Model\Sector\AssetManagementBusinessModel || $strategy instanceof \App\Service\Model\Sector\UtilityBusinessModel) {
             return ['z_score' => null, 'zone' => null];
         }
 

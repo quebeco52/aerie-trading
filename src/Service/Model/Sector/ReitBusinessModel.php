@@ -77,6 +77,17 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      */
     public const DISTRIBUTION_REQUIREMENT = 0.85;
 
+    // --- Solvency on Undepreciated Assets (points of equity per 100 of undepreciated assets) ---
+    /**
+     * Equity at the standard unsecured REIT bond covenant, total debt at most 60% of total undepreciated assets: below
+     * it the trust is in the agency's grey zone.
+     */
+    public const COVENANT_UNDEPRECIATED_EQUITY_SHARE = 40.0;
+    /** Equity at debt of 75% of undepreciated assets: distressed, its unencumbered pool gone. */
+    public const DISTRESSED_UNDEPRECIATED_EQUITY_SHARE = 25.0;
+    /** Equity at debt of 90% of undepreciated assets: insolvent, the property worth less than what is owed on it. */
+    public const INSOLVENT_UNDEPRECIATED_EQUITY_SHARE = 10.0;
+
     // --- Analyst Visibility & Error ---
     /** Base analyst visibility into predictable contracted commercial real estate cash flows. */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
@@ -89,15 +100,15 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     }
     public function getBankruptEquityThreshold(): float
     {
-        return 10.0;
+        return self::INSOLVENT_UNDEPRECIATED_EQUITY_SHARE;
     }
     public function getDistressEquityThreshold(): float
     {
-        return 20.0;
+        return self::DISTRESSED_UNDEPRECIATED_EQUITY_SHARE;
     }
     public function getWarningEquityThreshold(): float
     {
-        return 30.0;
+        return self::COVENANT_UNDEPRECIATED_EQUITY_SHARE;
     }
     public function getWholesaleLeverageLimit(): float
     {

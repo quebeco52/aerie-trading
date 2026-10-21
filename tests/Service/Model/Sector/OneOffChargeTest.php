@@ -32,7 +32,7 @@ final class OneOffChargeTest extends TestCase
         yield 'oil field blowout' => [Sector\OilGasProducerBusinessModel::class, -2.8, 1.0];
         yield 'refinery outage' => [Sector\RefiningBusinessModel::class, -2.8, 1.0];
         yield 'landfill clean-up' => [Sector\WasteManagementBusinessModel::class, -2.7, 1.0];
-        yield 'grid failure' => [Sector\UtilityBusinessModel::class, -2.7, 1.0];
+        yield 'grid failure' => [Sector\UtilityBusinessModel::class, -3.0, 1.0];
         yield 'generation outage' => [Sector\IndependentPowerBusinessModel::class, -2.5, 1.0];
         yield 'security breach' => [Sector\SecurityProtectionBusinessModel::class, -2.7, 1.0];
         yield 'billing clawback' => [Sector\MedicalCareFacilityBusinessModel::class, -2.4, 1.0];

@@ -269,6 +269,8 @@ enum ModelParam: string
     case PowerHedgeRatio = 'power_hedge_ratio';
     /** A utility network's exposure to district storm damage against an overhead power grid's (1.0). */
     case StormDamageExposure = 'storm_damage_exposure';
+    /** The liability and rebuild a utility network's own failure carries against an overhead power grid's (1.0). */
+    case NetworkFailureExposure = 'network_failure_exposure';
     case ResidentialWeight = 'residential_weight';
     case RecyclingWeight = 'recycling_weight';
     case ServicesWeight = 'services_weight';

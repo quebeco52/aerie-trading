@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
@@ -456,9 +457,10 @@ class UtilityBusinessModelTest extends TestCase
 
     /**
      * A water network takes a storm at its exposure, a quarter of an overhead grid's, through the onset charge, the
-     * ongoing charges and the hardening capex alike; a failure of its own is its own in full.
+     * ongoing charges and the hardening capex alike. A failure of its own is a main collapse, not a wildfire its lines
+     * start, and is charged at its own network exposure, where a power grid's own failure is charged in full.
      */
-    public function testAWaterNetworkTakesTheStormAtItsExposure(): void
+    public function testAWaterNetworkTakesTheStormAndItsOwnFailureAtItsExposure(): void
     {
         $model = $this->unhedgedModel();
         $onset = function (string $ticker, float $burden, float $eventZ) use ($model): ActualFinancialsDTO {
@@ -483,9 +485,22 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.25, ($water->specialCharge / $water->actualRevenue) / ($grid->specialCharge / $grid->actualRevenue), 0.02);
         $this->assertEqualsWithDelta(0.25 * $grid->scheduledCapex, $water->scheduledCapex, 1.0);
 
-        $ownFailure = $onset('WADE', 1.0, -3.0);
-        $this->assertGreaterThan(0.0, $ownFailure->specialCharge);
-        $this->assertEqualsWithDelta($grid->specialCharge / $grid->actualRevenue, $ownFailure->specialCharge / $ownFailure->actualRevenue, 0.01, 'Its own failure is charged in full.');
+        $gridFailure = $onset('BIRD', 1.0, -3.0);
+        $waterFailure = $onset('WADE', 1.0, -3.0);
+        $this->assertEqualsWithDelta($grid->specialCharge / $grid->actualRevenue, $gridFailure->specialCharge / $gridFailure->actualRevenue, 0.01, 'A power grid\'s own failure is charged in full.');
+        $this->assertEqualsWithDelta(0.25, ($waterFailure->specialCharge / $waterFailure->actualRevenue) / ($gridFailure->specialCharge / $gridFailure->actualRevenue), 0.02);
+        $this->assertEqualsWithDelta(0.25 * $gridFailure->scheduledCapex, $waterFailure->scheduledCapex, 1.0);
+    }
+
+    /**
+     * A utility's own catastrophic failure, a wildfire its lines start or an explosion, is about a one-in-a-century
+     * event: near the US record of roughly a dozen among some fifty large investor-owned utilities in twenty years.
+     */
+    public function testAnOwnCatastrophicFailureIsAboutOnePercentAYear(): void
+    {
+        $annual = 1.0 - ((1.0 - Distributions::calculateNormalCDF(UtilityBusinessModel::GRID_FAILURE_Z_SCORE)) ** 4);
+
+        $this->assertEqualsWithDelta(0.010, $annual, 0.002);
     }
 
     /**

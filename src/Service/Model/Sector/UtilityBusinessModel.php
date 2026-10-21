@@ -188,8 +188,12 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const MERCHANT_VARIANCE_SCALAR  = 0.15;
 
     // --- Tail Risk & Refinancing Physics ---
-    /** Z-score threshold indicating a catastrophic grid failure, pipeline explosion, or wildfire liability. */
-    public const GRID_FAILURE_Z_SCORE       = -2.50;
+    /**
+     * Z-score threshold for a catastrophic failure of the utility's own, a wildfire its lines start or a pipeline
+     * explosion: about 1% a year, near the US record of roughly a dozen such liabilities among some fifty large
+     * investor-owned utilities over 2005-2024 (PG&E, Edison, SDG&E, PacifiCorp, Hawaiian Electric, Xcel, Columbia Gas).
+     */
+    public const GRID_FAILURE_Z_SCORE       = -2.80;
     /**
      * District storm losses incurred since the last report (burden units; an average year incurs two) at which the
      * grid is damaged badly enough to open the liability and hardening regime without any failure of its own: the
@@ -198,6 +202,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const CATASTROPHE_GRID_DAMAGE_INCURRED = 4.7;
     /** A network's exposure to district storm damage by default: an overhead power grid's, in full. */
     public const STORM_DAMAGE_EXPOSURE = 1.0;
+    /** The liability and rebuild a network's own failure carries by default: an overhead power grid's, in full. */
+    public const NETWORK_FAILURE_EXPOSURE = 1.0;
     /** Stream-state key: the share of the full liability regime this one carries, set at its onset. */
     public const STATE_INFRASTRUCTURE_LIABILITY_SCALE = 'state:infrastructure_liability_scale';
     /** Variable cost penalty applied to fund massive environmental liabilities or emergency grid repairs. */
@@ -335,13 +341,15 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // A storm damages the network once, in the window its losses arrive in, and as far as the network is exposed
         // to it: overhead lines take the wind, buried mains mostly the flooding of their plant. A failure of the
-        // utility's own is its own in full.
+        // utility's own carries what its kind of network carries: a wildfire its power lines start in full, a water
+        // main's collapse far less.
         $stormLosses = $this->resolveDistrictCatastropheIncurred($streams, $macroState);
         $districtStormDamage = $stormLosses !== null && $stormLosses['incurred'] >= self::CATASTROPHE_GRID_DAMAGE_INCURRED;
         $liabilityScale = $streams->getPersistedState(self::STATE_INFRASTRUCTURE_LIABILITY_SCALE, 1.0);
         if (($eventZ < self::GRID_FAILURE_Z_SCORE || $districtStormDamage) && $liabilityElapsed === 0) {
             $liabilityElapsed = $streams->startRegime(self::REGIME_INFRASTRUCTURE_LIABILITY);
-            $liabilityScale = $eventZ < self::GRID_FAILURE_Z_SCORE ? 1.0 : $this->resolveStormDamageExposure($stock);
+            $exposure = $eventZ < self::GRID_FAILURE_Z_SCORE ? ModelParam::NetworkFailureExposure : ModelParam::StormDamageExposure;
+            $liabilityScale = max(0.0, $this->resolveRevenueMixParameters($stock)[$exposure]);
             $eventType = ShockEvent::INFRASTRUCTURE_FAILURE;
             $gridFailureCharge = self::GRID_FAILURE_PENALTY * $liabilityScale;
         } elseif ($liabilityElapsed > 1) {
@@ -434,6 +442,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             ModelParam::MerchantGasFleetShare->value     => self::MERCHANT_GAS_FLEET_SHARE,
             ModelParam::PowerHedgeRatio->value           => self::POWER_HEDGE_RATIO,
             ModelParam::StormDamageExposure->value       => self::STORM_DAMAGE_EXPOSURE,
+            ModelParam::NetworkFailureExposure->value    => self::NETWORK_FAILURE_EXPOSURE,
         ]);
     }
 
@@ -507,12 +516,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     private function resolveTariffBookLevel(Stock $stock): float
     {
         return 1.0 - ($this->resolveRegulatedRevenueShare($stock) * $this->resolveTariffShortfall($stock));
-    }
-
-    /** The network's exposure to district storm damage against an overhead power grid's, ticker override first. */
-    private function resolveStormDamageExposure(Stock $stock): float
-    {
-        return max(0.0, $this->resolveRevenueMixParameters($stock)[ModelParam::StormDamageExposure]);
     }
 
     public function getMarginReversionSpeed(): float

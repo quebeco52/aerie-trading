@@ -499,3 +499,25 @@ not in breach. PTRL (IB, fin=false) reads 100% "constrained" by the icr<2 proxy 
 DIPR s4: Generation Outage at y17.4, EBITDA 3.8 -> 0.5-1.1 $B/q, icr 0.15; the gate cut capex/dep 2.0 -> 0.24 (the 20%
 floor) yet the revolver still filled (5.9 of 6.0 $B) and a $1.29B maturity was missed at y19.6, cured next quarter:
 the shortfall there is operating and interest, not plant spend.
+
+## 2026-10-21 Batch H (utility own-failure z -2.80, WADE exposure 0.25, utilities off Altman zones, REIT ratio undepreciated)
+Arms fixG (base, on disk) vs fixH, 8 seeds x 20 y, 360 tpy, CREDIT=1, unpaired. `python3 h_an.py 1-8 fixG fixH`; full
+table in h_an.out. Mean [range] over seeds.
+| quantity | fixG | fixH |
+|---|---|---|
+| BIRD grid failures/yr | 0.063 [0..0.152] | 0.019 [0..0.051] |
+| WADE grid failures/yr | 0.057 [0..0.101] | 0.025 [0..0.051] |
+| BIRD quarters A / BB % | 38 / 59 | 96 / 0 |
+| WADE quarters A / BB % | 73 / 20 | 88 / 0 |
+| BIRD / WADE ND/EBITDA mean | 3.93 / 4.58 | 3.93 / 4.49 |
+| BIRD / WADE penalty borrow n ($B) per run | 3.8 (6.9) / 1.8 (1.4) | 1.4 (2.2) / 0 (0) |
+| DIPR (control) Ch11/default seeds | s4 default | s3, s4 Ch11 |
+| PLZA / KITE / SHOR quarters BB-or-worse % | 26 / 15 / 43 | 0 / 4 / 1 |
+| REIT end ratings | 23 BBB, 8 BB, 1 CCC | 31 BBB, 1 BB |
+| REIT ND/EBITDA y20 | 4.8-6.5 | 4.98-6.44 (same) |
+| board HY at end (mean names) | 10.5 | 6.4 |
+| board failures / Ch11 / payment default | 0 / 0 / 0.125 | 0 / 0.25 / 0.25 (both DIPR) |
+| CW index %/y | 7.25 (0.61) | 7.61 (0.55) |
+| board EPS beat % | 75.6 | 75.9 (no model outside 60-85) |
+Caveats: unpaired, 8 seeds; DIPR is unchanged code, its extra Ch11 is path divergence (it already sat 36% of quarters
+at B). REIT leverage unchanged while ratings rose: the move is the rating basis, not the balance sheet.

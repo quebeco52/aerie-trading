@@ -114,3 +114,9 @@ Evidence: `joint_evidence.md`.
   borrow / missed-maturity / shut-out / revolver-cover events by firm, constrained-quarter share (head False or icr < 2,
   Reit 1.05) and capex/dep constrained vs not, board and per-model revenue CAGR, named-firm rev/PP&E y0/10/20, SINK
   bust capex and revolver, WADE capex/dep after a grid failure. g_an.out also holds analyse/fragile/beat for both arms.
+- Batch H arm: `fixH` = tree-fixH (HEAD c54aa568 + utilities patch: own grid failure z -2.80, NetworkFailureExposure
+  WADE 0.25, utilities off the Altman zones, REIT capital ratio on undepreciated assets 40/25/10); base is `fixG` (HEAD
+  reproduces it). `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-8 fixH` (~5 min). `h_an.py <seeds> <armA>
+  <armB>`: BIRD/WADE/DIPR grid failures/yr, rating shares, end ratings, ND/EBITDA, penalty borrowing, EBIT margin,
+  CAGR; PLZA/KITE/SHOR/ELDE rating shares, flags, equity, ND/EBITDA y20, div/NI, dividend borrowing. h_an.out also
+  holds analyse/beat for both arms.

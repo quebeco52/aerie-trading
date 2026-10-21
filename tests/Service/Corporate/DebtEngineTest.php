@@ -2055,4 +2055,57 @@ class DebtEngineTest extends TestCase
         $this->assertSame('BB', $anchorOf('Private Equity', 240.0, 10.0), '2.4x adjusted equity is aggressive, whatever the EBITDA');
         $this->assertSame('BBB', $anchorOf('Hedge Fund', 120.0, 1.0), '1.2x is intermediate');
     }
+
+    /**
+     * Altman's samples held no regulated utilities, and a utility's thin asset turnover scores it grey however safe its
+     * rate base, so its rating is read on the matrix and its distance to default alone. A firm of any other kind on the
+     * same balance sheet is still capped by the zone.
+     */
+    public function testARegulatedUtilityIsNotCappedByAltmansGreyZone(): void
+    {
+        $zoneOf = function (string $industry): ?string {
+            $stock = $this->leveredFirm('ZONE', '0.5', '0.010');
+            $stock->setIndustry($industry);
+            $stock->setTotalEquity('400000000');
+            $stock->setWholesaleDebt('600000000');
+            $stock->setTotalRevenue('250000000');
+            $stock->setCreditRating('BBB');
+
+            return (new \ReflectionMethod(DebtEngine::class, 'resolveRatingZScore'))
+                ->invoke($this->engine, $stock, \App\Data\Company\Sectors::strategyFor($industry), 40_000_000.0, 250_000_000.0)['zone'];
+        };
+
+        $this->assertContains($zoneOf('General'), ['Grey', 'Distress'], 'Control: on Z\'\' this balance sheet is capped.');
+        $this->assertNull($zoneOf('Utilities - Regulated Electric'));
+    }
+
+    /**
+     * A REIT's solvency is measured on its undepreciated real estate, as its bond covenants cap total debt against
+     * total undepreciated assets. A trust whose book equity is a quarter of its assets after years of distributing past
+     * book income is sound when depreciation has taken as much again off the property's book value.
+     */
+    public function testAReitIsMeasuredOnItsUndepreciatedAssets(): void
+    {
+        // The same property at the same book value, bought for its book value or for half as much again.
+        $trust = function (float $accumulatedDepreciation): Stock {
+            $stock = new Stock();
+            $stock->setTicker('UNDP');
+            $stock->setIndustry('REIT - Industrial');
+            $stock->setTotalEquity('250000000');
+            $stock->setWholesaleDebt('750000000');
+            $stock->setTotalRevenue('100000000');
+            $stock->setGrossPpe((string) (900_000_000.0 + $accumulatedDepreciation));
+            $stock->setAccumulatedDepreciation((string) $accumulatedDepreciation);
+
+            return $stock;
+        };
+
+        $book = $this->engine->resolveTangibleCapitalBase($trust(0.0), 100_000_000.0);
+        $depreciated = $this->engine->resolveTangibleCapitalBase($trust(500_000_000.0), 100_000_000.0);
+        $this->assertEqualsWithDelta($book['capital'] + 500_000_000.0, $depreciated['capital'], 1.0);
+        $this->assertEqualsWithDelta($book['assets'] + 500_000_000.0, $depreciated['assets'], 1.0);
+
+        $this->assertNotSame('Safe', $this->engine->calculateAltmanZScore($trust(0.0), 0.0, 100_000_000.0)['zone'], 'Control: a quarter of book assets.');
+        $this->assertSame('Safe', $this->engine->calculateAltmanZScore($trust(500_000_000.0), 0.0, 100_000_000.0)['zone']);
+    }
 }
