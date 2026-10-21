@@ -160,3 +160,17 @@ Evidence: `joint_evidence.md`.
   `p_an.py <seeds> [A B]` (default rpSW rpD12): board ex SWAN/TIER/CROW/VULT/POOL (o_an.py definition), per fund ROE /
   payout / D/E / equity CAGR / addressable share / bond counts / loss quarters, TIER credit events, k_an.py board
   sanity, analyse.py EW/CW index, absurdity scans. Output p_an.out.
+- Batch Q arm: `rpIPP` = tree-ipp (git archive HEAD a9cc9383 + scratchpad dipr-fix.patch: Sectors IPP equity_limit
+  1.5 -> 0.50; tree and cache-tree-ipp deleted) replaying `runs/recNS-<s>.macro.gz`; base `rpD12` 1-16 on disk (src =
+  a9cc9383). `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-16 rpIPP` (~3.6 min). `q_an.py <seeds> [A B]`
+  (default rpD12 rpIPP), paired: DIPR reorgs/Ch11/EoD/cures, debt-rising-quarter power timing, acquisitions (goodwill
+  rises), ND/EBITDA, BB share, ROE, payout, D/E y20; board ex DIPR (k_an.py), EW/CW (analyse.py); 10 cyclicals' EBIT
+  timing of debt rises. Output q_an.out.
+- Batch R arms (TIER fix + financial return-state fixes), all replaying `runs/recNS-<s>.macro.gz`, base = the Batch P
+  `rpD12` runs on disk (= HEAD a9cc9383 src). `rpT` / `rpF0` / `rpF` = tree-T / tree-F0 / tree-F (git archive HEAD +
+  scratchpad fin/tierfix.patch / finfix-no-pull.patch / finfix.patch, vendor symlink; built by `mk_trees_r.sh`, trees
+  and their caches deleted). run.sh maps `rpX` to `tree-X`. `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-8
+  rpT rpF0 rpF` (~6 min for 24 runs). `r_an.py <seeds> [base arms...]` (default rpD12 vs rpT rpF0 rpF), paired: TIER
+  ROE by year block, payout gross / net of issuance, D/E y20, equity CAGR, acquisitions (goodwill steps), rescues,
+  revolver, rating path; all 20 financials' ROE y2-20 vs lore, payout, P/B q0/19/79; board ex funds/POOL/RIVR, credit
+  events, M&A, financial cap weight, EW/CW index (p_an.py index_stats); absurdity scans. Output r_an.out.

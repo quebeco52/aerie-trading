@@ -19,6 +19,7 @@ use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -1708,17 +1709,28 @@ class DebtEngineTest extends TestCase
 
     /**
      * A producer's cash flow swings with the price deck, so its sector carries half the book leverage of the
-     * market (Damodaran, Jan 2026: E&P 0.50 book D/E against 0.93 for all non-financials). The balance sheet a
-     * conglomerate would call under-levered is already at a producer's norm, and is not recapitalised.
+     * market (Damodaran, Jan 2026: E&P 0.50 book D/E against 0.93 for all non-financials); a merchant generator takes
+     * the power price the same way. The balance sheet a conglomerate would call under-levered is already at a
+     * producer's norm, and is not recapitalised.
      */
-    public function testAProducerAtItsIndustryLeverageIsNotRecapitalised(): void
+    #[DataProvider('producerIndustries')]
+    public function testAProducerAtItsIndustryLeverageIsNotRecapitalised(string $industry): void
     {
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
         $macro = $this->leverageMacro();
 
         $this->assertTrue($engine->analyzeDebtHealth($this->leverageFixture('Conglomerates', '40000000', '10000000'), $macro)->isUnderLeveraged);
-        $this->assertFalse($engine->analyzeDebtHealth($this->leverageFixture('Oil & Gas E&P', '40000000', '10000000'), $macro)->isUnderLeveraged);
-        $this->assertSame(0.50, \App\Data\Company\Sectors::INDUSTRY_METRICS['Oil & Gas E&P']['equity_limit']);
+        $this->assertFalse($engine->analyzeDebtHealth($this->leverageFixture($industry, '40000000', '10000000'), $macro)->isUnderLeveraged);
+        $this->assertSame(0.50, \App\Data\Company\Sectors::INDUSTRY_METRICS[$industry]['equity_limit']);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function producerIndustries(): array
+    {
+        return [
+            'oil and gas producer' => ['Oil & Gas E&P'],
+            'independent power producer' => ['Utilities - Independent Power Producers'],
+        ];
     }
 
     /**

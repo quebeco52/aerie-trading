@@ -693,3 +693,54 @@ Board sanity unchanged inside noise (Ch11 0.25->0.06, defaults 0.31->0.13, rescu
 Caveats: the rule binds (zero expansion bonds, CROW/VULT held at their open share). TIER stays at ~10% ROE: its
 ROE falls 21% (y1) -> ~5% (y16-20) in both arms as revenue/equity drifts 73% -> 48% at a flat ~42% EBIT margin, and
 D/E 1.4 legacy debt carries the interest. TIER 3y (div+bb)/NI > 1.5 in 9/16 seeds (payout through loss years).
+
+## 2026-10-22 Batch Q (DIPR: independent-power equity_limit 1.5 -> 0.50, producer book leverage)
+Question: does the IPP sector norm at producer leverage end DIPR's recurring reorganisation without board side effects?
+Harness: JointHarnessTest.php, rpIPP (HEAD a9cc9383 + scratchpad dipr-fix.patch) vs rpD12 (src = HEAD), both replaying
+recNS-<s>.macro.gz; seeds 1-16, 20y, TPY 360, CREDIT=1. `python3 var/harness/joint/q_an.py 1-16`; q_an.out. Paired.
+
+| quantity (rpIPP - rpD12, n=16) | rpD12 | rpIPP | diff (se) | t |
+|---|---|---|---|---|
+| DIPR reorganisations / events of default per run | 0.06 / 0.13 | 0 / 0 | -0.06 / -0.13 (0.06 / 0.09) | -1.0 / -1.5 |
+| DIPR debt-rising q with power > 3y trend % | 63.8 | 61.1 | -2.7 (5.6) | -0.5 |
+| DIPR amount-weighted power deviation % | +17.2 | +8.2 | -9.0 (5.5) | -1.6 |
+| DIPR acquisitions (goodwill rises) / run | 0.25 | 1.62 | +1.38 (0.74) | +1.9 |
+| DIPR ND/TTM EBITDA median / peak | 2.69 / 6.37 | 1.57 / 3.85 | -1.12 / -2.52 | -15 / -10 |
+| DIPR quarters BB or below % | 60.2 | 4.9 | -55.3 (4.5) | -12 |
+| DIPR TTM ROE y2+ % | 11.4 | 10.3 | -1.0 (0.4) | -2.5 |
+| DIPR (div+bb)/NI / D/E y20 | 0.96 / 0.79 | 0.72 / 0.35 | -0.24 / -0.44 | -7 / -10 |
+| board mkt-cap CAGR ex DIPR % | 4.11 | 4.19 | +0.08 (0.06) | +1.4 |
+| 10 cyclicals: debt-rising q with EBIT > 3y mean % | 75.9 | 75.0 | -0.9 (1.3) | -0.7 |
+
+Base: reorganisation seed 14 only (seed 2 reorganises in rpSW, not rpD12), cured default seed 11. Fix: none.
+Pooled DIPR debt-rising quarters 178 -> 125, weighted power deviation +15.4% -> -2.2%.
+Board: Ch11 and payment-default counts equal (0.06, 0.13/run); EW/CW return and vol |t| < 1.1; rescues -0.8 (0.7).
+CASC (refiner) reorganises in rpIPP seed 5 (default seed 10 too): CASC is at the edge in seeds 5/10 in every replay arm
+(rpNS seed 10 defaulted; ND/EBITDA peaks 14-216), so this is firm-path divergence after the shared draw stream shifts,
+not a DIPR channel. Caveats: failure counts are rare events (2 in base), so their t stays under 2 at 16 seeds; the
+mechanism (BB share, ND/EBITDA peak under the 4.0 covenant) is decisive. Acquisitions count goodwill rises (the harness
+does not log M&A text).
+
+## 2026-10-22 Batch R (TIER acquisitions + seeded debt, then financial return-state fixes, replayed macro)
+
+Question: does tierfix (fee managers at capacity make no acquisitions; TIER wholesale_debt 37.5B -> 12.5B) restore
+TIER's ROE (lore 0.24) without board damage, and what do the return-state fixes add, with (rpF0) and without (rpF) the
+roeTtm pull for non-insurers? Arms rpT / rpF0 / rpF vs rpD12 (HEAD a9cc9383 src, Batch P runs reused), all replaying
+runs/recNS-<s>.macro.gz, CREDIT=1, 20 y, 360 ticks/y, seeds 1-16 (stage 8 then 16: credit events were unclear at 8).
+Replay held (48/48 ok). `python3 var/harness/joint/r_an.py 1-16` -> r_an.out (full tables).
+
+| quantity (paired vs rpD12, n=16) | rpD12 | rpT | rpF0 | rpF |
+|---|---|---|---|---|
+| TIER ROE y2-5 / 6-10 / 11-15 / 16-20 | .169/.118/.083/.052 | .241/.233/.243/.238 | .214/.223/.231/.233 | .239/.228/.234/.232 |
+| TIER D/E y20 | 1.41 | 0.24 (t-7.4) | 0.23 | 0.23 |
+| TIER acquisitions / revolver draws / rescues per run | 8.8 / 4.1 / 0.38 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| TIER rating y20 | BBB9/BB7 | A16 | A16 | A16 |
+| RIVR ROE y2-20 (lore .15) | .117 | +.000 | +.021 (t8.6) | +.022 (t10.4) |
+| board cap CAGR ex funds/POOL/RIVR % | 4.30 | +0.08 (0.06) | +0.05 (0.06) | +0.57 (0.07) |
+| financial cap weight y20 % | 44.7 | +0.2 (0.7) | +1.2 (0.6) | +6.9 (0.6) |
+| CW index return %/y | 7.47 | +0.11 (0.06) | +0.16 (0.07) | +0.49 (0.08) |
+| Ch11 / payment defaults per run | .06 / .13 | +.13 / +.19 | +.19 / +.25 | +.06 / 0 |
+
+Caveats: every Ch11/default is a non-financial (DIPR, FALC, CASC, SINK, IBHI), all |t| < 2: the changed opening
+board perturbs the replay. rpF re-rates every bank and fee manager (P/B q79 +0.6..+1.5, t 3-11) with realised ROE
+unchanged (|diff| < 0.01 except RIVR/ACC): the no-pull roeTtm feeds valuation, not earnings. No absurdity hits.

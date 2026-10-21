@@ -312,8 +312,9 @@ class Sectors
         'Trucking' => ['pe' => 14.00, 'depreciation' => 0.12, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'logistics'],
         // Regulated monopolies
         'Utilities - Diversified' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'],
-        // Merchant plant: commodity cash flows carry less debt than a rate base
-        'Utilities - Independent Power Producers' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'independent_power'],
+        // Merchant plant takes the power price as a producer takes the price deck, so it carries a producer's book
+        // leverage (E&P 0.50, copper 0.44): the sector norm at 1.5 sat past its own 4.0 EBITDA covenant.
+        'Utilities - Independent Power Producers' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 0.50, 'business_model' => 'independent_power'],
         'Utilities - Regulated Electric' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'],
         'Utilities - Regulated Gas' => ['pe' => 15.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'],
         // Safest asset class on earth
