@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
+use App\Data\Company\InitialMarket;
+use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
@@ -209,23 +213,11 @@ class AssetManagementBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(80_000_000.0 * (1.0 - (AssetManagementBusinessModel::AUM_MARKET_LEVEL_DEVIATION_CAP * AssetManagementBusinessModel::AUM_MARKET_LEVEL_BETA)), $crash, 1.0);
     }
 
-    public function testSupportsUnderleveragedDebtExpansion(): void
+    /** A fee manager closed at capacity never borrows to recapitalise, a buyout sponsor included. */
+    public function testNoFeeManagerBorrowsToRecapitalise(): void
     {
-        $assetManagerModel = new AssetManagementBusinessModel();
-        $this->assertFalse($assetManagerModel->supportsUnderleveragedDebtExpansion());
-
-        $peModel = new PrivateEquityBusinessModel();
-        $this->assertTrue($peModel->supportsUnderleveragedDebtExpansion());
-    }
-
-    public function testPrivateEquityIsUnderLeveragedThreshold(): void
-    {
-        $peModel = new PrivateEquityBusinessModel();
-
-        // PE default equity limit is 2.5 (from getWholesaleLeverageLimit) or 1.0 default
-        // 85% of 1.0 (default) is 0.85
-        $this->assertTrue($peModel->isUnderLeveraged(0.80, 1.0, 5.0, 1.05));
-        $this->assertFalse($peModel->isUnderLeveraged(0.90, 1.0, 5.0, 1.05));
+        $this->assertFalse((new AssetManagementBusinessModel())->supportsUnderleveragedDebtExpansion());
+        $this->assertFalse((new PrivateEquityBusinessModel())->supportsUnderleveragedDebtExpansion());
     }
 
     public function testMoneyFundMigrationIsFeeEarningInflow(): void
@@ -290,5 +282,45 @@ class AssetManagementBusinessModelTest extends TestCase
         // A point on the ten-year moves both tranches by a point.
         $this->assertEqualsWithDelta(0.05, $high - $low, 1e-12);
         $this->assertEqualsWithDelta((0.60 * 0.01) + (0.40 * 0.055), $low, 1e-12);
+    }
+
+    /**
+     * Every fee manager closes at a capacity: an untuned one where its returns to scale start to fall, a tuned one at
+     * its own. Lenders and underwriters grow wherever their returns clear the hurdle.
+     */
+    public function testEveryFeeManagerClosesAtACapacity(): void
+    {
+        $untuned = (new Stock())->setTicker('FUND');
+        foreach (['Asset Management', 'Hedge Fund', 'Private Equity', 'Distressed Debt'] as $industry) {
+            $this->assertSame(AssetManagementBusinessModel::DEFAULT_CAPACITY_SHARE, Sectors::strategyFor($industry)->getCapacityShare($untuned), $industry);
+        }
+        $this->assertSame(FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD, AssetManagementBusinessModel::DEFAULT_CAPACITY_SHARE);
+        $this->assertSame(0.4035, Sectors::strategyFor('Hedge Fund')->getCapacityShare((new Stock())->setTicker('SWAN')));
+
+        foreach (['Banks - Regional', 'Credit Services', 'Insurance - Diversified', 'Investment Banking', 'Brokerages'] as $industry) {
+            $this->assertNull(Sectors::strategyFor($industry)->getCapacityShare($untuned), $industry);
+        }
+    }
+
+    /**
+     * A listed fee manager's capacity is the share of its market it opens with, its seeded equity over its seeded
+     * market, so its franchise grows with that market and the open is its steady state.
+     */
+    public function testEachListedFeeManagerClosesAtTheShareItOpensWith(): void
+    {
+        $managers = 0;
+        foreach (InitialMarket::STOCKS as $row) {
+            $strategy = Sectors::strategyFor($row['industry']);
+            if (!$strategy instanceof AssetManagementBusinessModel) {
+                continue;
+            }
+            $managers++;
+            $seededShare = $row['total_equity'] / (CorporateMetrics::BASELINE_SECTOR_TAM * $row['sam_ratio']);
+            $capacity = $strategy->getCapacityShare((new Stock())->setTicker($row['ticker']));
+
+            $this->assertEqualsWithDelta($seededShare, $capacity, 1e-3, $row['ticker']);
+            $this->assertLessThanOrEqual(AssetManagementBusinessModel::DEFAULT_CAPACITY_SHARE, $capacity, $row['ticker']);
+        }
+        $this->assertSame(4, $managers, 'SWAN, TIER, CROW and VULT');
     }
 }

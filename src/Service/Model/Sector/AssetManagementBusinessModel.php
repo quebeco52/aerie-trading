@@ -58,9 +58,23 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     /** Minimum visibility floor for analyst consensus models. */
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.20;
 
+    // --- Capacity ---
+    /** Share of its market an untuned fee manager closes at: where its returns to scale start to fall (0.50). */
+    public const DEFAULT_CAPACITY_SHARE = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
+
     public function getWholesaleLeverageLimit(): float
     {
         return 0.5;
+    }
+
+    /**
+     * A fee manager earns on the money its clients give it, which its own book stands in for here, so a dollar it
+     * keeps or borrows past its franchise's capacity buys fees no client pays. Every fee manager closes at its capacity
+     * (Berk & Green 2004) and hands back the rest.
+     */
+    public function getCapacityShare(Stock $stock): ?float
+    {
+        return $this->resolveModelParameters($stock, [ModelParam::CapacityShare->value => self::DEFAULT_CAPACITY_SHARE])[ModelParam::CapacityShare];
     }
 
     public function getReversionSpeed(): float

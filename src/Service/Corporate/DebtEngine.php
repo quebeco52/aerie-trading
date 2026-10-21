@@ -753,8 +753,10 @@ class DebtEngine
         // one: several models already set their recap target within 15% of the limit itself. An institution
         // steering to its own capital ratio is never under-leveraged in this sense: its capital target sets
         // its distributions (Berger et al. 2008), and its return is struck on equity, so no recap raises it.
+        // Nor is a fund closed at capacity, whose capacity sets its size and whose borrowed dollar earns its coupon.
         $managerDebtTolerance = $macroDebtTolerance * min(1.0, $stock->getManagementProfile()->leverageBias());
         $isUnderLeveraged = $strategy->getTargetCapitalRatio($stock) === null
+            && $strategy->getCapacityShare($stock) === null
             && $strategy->isUnderLeveraged($currentDebtRatio, $managerDebtTolerance, $interestCoverage, $minIcr);
 
         $isLiquidityCrisis = $interestCoverage < 0;

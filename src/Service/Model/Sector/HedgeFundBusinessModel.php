@@ -538,11 +538,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }
 
-    public function supportsUnderleveragedDebtExpansion(): bool
-    {
-        return false;
-    }
-
     public function getAcquisitionType(string $defaultType): string
     {
         return 'HOSTILE TAKEOVER';

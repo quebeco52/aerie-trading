@@ -3,7 +3,7 @@
 #   pre    tree-d89691cc (git archive d89691cc + vendor symlink); rev-<x>: tree-rev-<x>
 #   live   the tree as it stands (BASE = aerie-joint symlink to the checkout, so the cache is var/harness/cache-aerie-joint)
 #   recNS  tree-noswan live, records the macro path to runs/recNS-<seed>.macro.gz; rpNS / rpSW replay that path
-#          into tree-noswan / tree-swan (politics is off on replay)
+#          into tree-noswan / tree-swan (politics is off on replay); rpD12 replays it into tree-d12 (Batch P)
 # Env: YEARS (20), TPY (360), MACRO_RECORD / MACRO_REPLAY (passed through; the rec/rp arms set them). Outputs runs/<arm>-<seed>.{jsonl,macro.jsonl,ticks.csv,anom.jsonl,log}.
 set -eu
 H=$(cd "$(dirname "$0")" && pwd)
@@ -19,6 +19,7 @@ case "$1" in
   recNS) TREE=$H/tree-noswan; MACRO_RECORD=$RUNS/recNS-$2.macro.gz ;;
   rpNS)  TREE=$H/tree-noswan; MACRO_REPLAY=$RUNS/recNS-$2.macro.gz ;;
   rpSW)  TREE=$H/tree-swan;   MACRO_REPLAY=$RUNS/recNS-$2.macro.gz ;;
+  rpD12) TREE=$H/tree-d12;    MACRO_REPLAY=$RUNS/recNS-$2.macro.gz ;;
   pre-*|rev-*) TREE=$H/tree-$1 ;;
   *) echo "usage: run.sh live|pre|<tree arm> <seed>" >&2; exit 2 ;;
 esac

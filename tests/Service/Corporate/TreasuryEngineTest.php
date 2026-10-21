@@ -1457,22 +1457,22 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
-     * A fund closed at capacity takes no capital to grow: the same hedge fund balance sheet borrows to expand while its
-     * return clears its hurdle, and borrows nothing once its manager has closed the funds to new money.
+     * A fund closed at capacity takes no capital to grow: every fee manager's model borrows nothing to expand on a
+     * balance sheet whose return clears its hurdle, where the same hedge fund model without a capacity borrows.
      */
     public function testAFundClosedAtCapacityBorrowsNothingToExpand(): void
     {
-        $borrow = function (string $ticker): float {
+        $borrow = function (string $industry, \App\Service\Model\BusinessModelInterface $strategy): float {
             $stock = new Stock();
-            $stock->setTicker($ticker);
-            $stock->setIndustry('Hedge Fund');
+            $stock->setTicker('FUND');
+            $stock->setIndustry($industry);
             $stock->setTotalEquity('1000000000.00');
             $stock->setWholesaleDebt('200000000.00');
             $stock->setCorporateTreasury('300000000.00');
 
             $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
-            $ctx->strategy = new \App\Service\Model\Sector\HedgeFundBusinessModel();
-            $ctx->businessModel = 'hedge_fund';
+            $ctx->strategy = $strategy;
+            $ctx->businessModel = \App\Data\Company\Sectors::INDUSTRY_METRICS[$industry]['business_model'];
             $ctx->debtActionTaken = false;
 
             $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
@@ -1492,8 +1492,16 @@ class TreasuryEngineTest extends TestCase
             return $issued;
         };
 
-        $this->assertGreaterThan(0.0, $borrow('HFUN'), 'Control: an open fund borrows to expand.');
-        $this->assertSame(0.0, $borrow('SWAN'));
+        $openFund = new class extends \App\Service\Model\Sector\HedgeFundBusinessModel {
+            public function getCapacityShare(Stock $stock): ?float
+            {
+                return null;
+            }
+        };
+        $this->assertGreaterThan(0.0, $borrow('Hedge Fund', $openFund), 'Control: an open fund borrows to expand.');
+        foreach (['Hedge Fund', 'Private Equity', 'Asset Management', 'Distressed Debt'] as $industry) {
+            $this->assertSame(0.0, $borrow($industry, \App\Data\Company\Sectors::strategyFor($industry)), $industry);
+        }
     }
 
     /**

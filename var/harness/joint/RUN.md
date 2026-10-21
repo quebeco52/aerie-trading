@@ -153,3 +153,10 @@ Evidence: `joint_evidence.md`.
   either through otherwise; politics is off on replay. Trees deleted. `CREDIT=1 bin/harness-batch var/harness/joint/run.sh
   1-8 recNS && CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-8 rpNS rpSW` (~6.5 min). `o_an.py <seeds> [A B live]`:
   paired B-A board split (n_an.py run_row definitions), per-firm share lower and median diff, SWAN state, live vs replay.
+- Batch P arm: `rpD12` = tree-d12 (git archive HEAD e0639740 + scratchpad d12-fix.patch: every
+  AssetManagementBusinessModel firm closed at its capacity share, no borrowing to grow, exempt from the DebtEngine
+  leverage target; tree deleted) replaying `runs/recNS-<s>.macro.gz`; base = the Batch O `rpSW` runs on disk (src
+  unchanged 62ab3bf7..e0639740). `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-16 rpD12` (~2 min per 8).
+  `p_an.py <seeds> [A B]` (default rpSW rpD12): board ex SWAN/TIER/CROW/VULT/POOL (o_an.py definition), per fund ROE /
+  payout / D/E / equity CAGR / addressable share / bond counts / loss quarters, TIER credit events, k_an.py board
+  sanity, analyse.py EW/CW index, absurdity scans. Output p_an.out.

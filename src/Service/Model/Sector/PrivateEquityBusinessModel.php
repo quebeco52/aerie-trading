@@ -551,24 +551,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     }
 
     /**
-     * Judged against the tighter of the two limits calculateDebtExpansionCapacity() enforces. A sponsor funds
-     * itself wholesale, so its own limit binds before the sector's; measured against the sector's alone it
-     * stayed "under-levered" at a ratio it was not allowed to borrow past, and a financial in that state
-     * neither invests nor borrows, it only buys back stock.
-     */
-    public function getLeverageTarget(float $targetDebtTolerance): float
-    {
-        $wholesaleLimit = $this->getWholesaleLeverageLimit();
-        $limit = $targetDebtTolerance > 0.0 ? min($targetDebtTolerance, $wholesaleLimit) : $wholesaleLimit;
-        return $limit * 0.85;
-    }
-
-    public function supportsUnderleveragedDebtExpansion(): bool
-    {
-        return true;
-    }
-
-    /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
      *

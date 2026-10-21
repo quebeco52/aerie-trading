@@ -96,7 +96,8 @@ enum ModelParam: string
     case TargetCapitalRatio = 'target_capital_ratio';
     /**
      * Share of its addressable market past which a capacity-disciplined financial hands back new capital rather than
-     * grow (Berk & Green 2004): a fund that takes new money by invitation only closes where its returns start to fall.
+     * grow (Berk & Green 2004). Every fee manager has one (AssetManagementBusinessModel::DEFAULT_CAPACITY_SHARE when
+     * untuned); a firm tuned to its seeded share grows with its market.
      */
     case CapacityShare = 'capacity_share';
     /** Gross leverage of the funds a hedge fund manager runs, borrowed against its investors' capital, not its own. */

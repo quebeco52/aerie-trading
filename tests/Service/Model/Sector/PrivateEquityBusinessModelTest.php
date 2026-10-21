@@ -287,15 +287,6 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($normalCapacity * PrivateEquityBusinessModel::DEBT_GATE_DROUGHT_SCALAR, $frozenCapacity, 0.01);
     }
 
-    public function testUnderLeveragedThresholdAndSupport(): void
-    {
-        $this->assertTrue($this->model->supportsUnderleveragedDebtExpansion());
-
-        // Wholesale leverage limit is 2.5. 85% of 2.5 is 2.125.
-        $this->assertTrue($this->model->isUnderLeveraged(2.0, 2.5, 5.0, 1.05));
-        $this->assertFalse($this->model->isUnderLeveraged(2.2, 2.5, 5.0, 1.05));
-    }
-
     public function testASponsorIsOnlyUnderLeveredWhereItMayStillBorrow(): void
     {
         // DebtEngine passes the sector's equity limit, which sits above the sponsor's own wholesale limit.

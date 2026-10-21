@@ -1692,6 +1692,21 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * A fund closed at capacity is sized by its capacity, and the dollar it would borrow to recapitalise earns its
+     * coupon: a sponsor's book its own model calls under-levered is not recapitalised.
+     */
+    public function testAFundClosedAtCapacityIsNotRecapitalised(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $sponsor = $this->leverageFixture('Private Equity', '8000000', '4000000');
+        $strategy = \App\Data\Company\Sectors::strategyFor('Private Equity');
+
+        $this->assertNotNull($strategy->getCapacityShare($sponsor));
+        $this->assertTrue($strategy->isUnderLeveraged(0.10, 1.0, 99.0, 1.5), 'the book must sit under its model\'s leverage target');
+        $this->assertFalse($engine->analyzeDebtHealth($sponsor, $this->leverageMacro())->isUnderLeveraged);
+    }
+
+    /**
      * A producer's cash flow swings with the price deck, so its sector carries half the book leverage of the
      * market (Damodaran, Jan 2026: E&P 0.50 book D/E against 0.93 for all non-financials). The balance sheet a
      * conglomerate would call under-levered is already at a producer's norm, and is not recapitalised.

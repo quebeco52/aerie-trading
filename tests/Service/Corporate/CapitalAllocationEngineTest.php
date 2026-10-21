@@ -1131,7 +1131,7 @@ class CapitalAllocationEngineTest extends TestCase
     /**
      * A fund closed at capacity (Berk & Green 2004) keeps what it earns while it is below capacity, hands back the
      * quarter's growth past it, and closes an overshoot it opened on at the speed an institution closes its capital
-     * gap, compounding to the cited annual share. Only a financial tuned to close does so.
+     * gap, compounding to the cited annual share.
      */
     public function testAFundClosedAtCapacityHandsBackWhatWouldCarryItPast(): void
     {
@@ -1144,14 +1144,14 @@ class CapitalAllocationEngineTest extends TestCase
         }
         $this->assertEqualsWithDelta(100.0 + (40.0 * (1.0 - CapitalAllocationEngine::CAPITAL_TARGET_ADJUSTMENT_SPEED)), $equity, 1e-9);
 
-        $this->assertSame(FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD, (new \App\Service\Model\Sector\HedgeFundBusinessModel())->getCapacityShare((new Stock())->setTicker('SWAN')));
-        $this->assertNull((new \App\Service\Model\Sector\HedgeFundBusinessModel())->getCapacityShare((new Stock())->setTicker('HFUN')));
-        $this->assertNull((new \App\Service\Model\Sector\CommercialBankBusinessModel())->getCapacityShare((new Stock())->setTicker('LAKE')));
-
-        // Through the board's allocation: past capacity SWAN buys back where an open fund on the same books does not.
-        $this->corporateMetricsMock->method('calculateAddressableShare')->willReturn(0.60);
-        $repurchased = function (string $ticker): float {
-            $fund = $this->buildDistributor($ticker);
+        // Through the board's allocation: SWAN keeps what it earns below its capacity and buys back past it.
+        $addressableShare = 0.0;
+        $this->corporateMetricsMock->method('calculateAddressableShare')->willReturnCallback(static function () use (&$addressableShare): float {
+            return $addressableShare;
+        });
+        $repurchased = function (float $share) use (&$addressableShare): float {
+            $addressableShare = $share;
+            $fund = $this->buildDistributor('SWAN');
             $fund->setIndustry('Hedge Fund');
             $fund->setPrice('100.00');
             $fund->setCorporateTreasury('600000');
@@ -1160,8 +1160,8 @@ class CapitalAllocationEngineTest extends TestCase
 
             return 1000000.0 - $this->engine->allocateCapital($fund, 1.00, 0.25, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), 1000000.0)['new_shares'];
         };
-        $this->assertSame(0.0, $repurchased('HFUN'), 'Control: nothing else on these books triggers a repurchase.');
-        $this->assertGreaterThan(0.0, $repurchased('SWAN'));
+        $this->assertSame(0.0, $repurchased(0.30), 'Control: below its capacity nothing on these books triggers a repurchase.');
+        $this->assertGreaterThan(0.0, $repurchased(0.60));
     }
 
     /**

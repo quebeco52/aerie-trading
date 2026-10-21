@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Data\Company;
 
-use App\Service\Math\FinancialConstants;
 use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
 
@@ -198,14 +197,14 @@ class StockModelTuning
         // --- Black Swan Capital (SWAN) ---
         // Apex predator quantitative hedge fund and tactical alternative asset manager.
         // Tri-stream engine combining sticky AUM fees, leveraged directional bets, and black-box quant alpha.
-        // Its funds take new money by invitation only: it closes where a manager's returns to scale start to fall and
-        // hands back what would carry it further. The leverage is its funds', borrowed against its investors'
-        // capital, at the gross it opens with.
+        // Its funds take new money by invitation only and close at the share of its market it opens with (its seeded
+        // equity over its market). The leverage is its funds', borrowed against its investors' capital, at the gross
+        // it opens with.
         'SWAN' => [
             ModelParam::HfManagementFeeWeight->value   => 0.60,
             ModelParam::HfDirectionalBetsWeight->value => 0.20,
             ModelParam::HfQuantAlphaWeight->value      => 0.20,
-            ModelParam::CapacityShare->value           => FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD,
+            ModelParam::CapacityShare->value           => 0.4035,
             ModelParam::FundGrossLeverage->value       => 2.38,
         ],
 
@@ -216,10 +215,19 @@ class StockModelTuning
         // --- Vulture Capital Recovery (VULT) ---
         // Specialist distressed debt restructuring and turnaround equity sponsor.
         // Counter-cyclical predator profiting from loan-to-own liquidations and restructuring advisory fees.
+        // Its funds close at the share of its market it opens with.
         'VULT' => [
             ModelParam::RestructuringAdvisoryWeight->value => 0.35,
             ModelParam::TurnaroundGainsWeight->value       => 0.65,
             ModelParam::AumMarketBetaScalar->value         => 0.30,
+            ModelParam::CapacityShare->value               => 0.32,
+        ],
+
+        // --- Tiercel Capital Partners (TIER) ---
+        // Buyout sponsor whose funds raise what its franchise can deploy: they close at the share of its market it
+        // opens with.
+        'TIER' => [
+            ModelParam::CapacityShare->value => 0.0357,
         ],
 
         // =====================================================================
@@ -260,6 +268,8 @@ class StockModelTuning
             ModelParam::AumMarketBetaScalar->value  => 0.60,
             ModelParam::PerformanceFeeZFloor->value => 1.00,
             ModelParam::PerformanceFeeScalar->value  => 0.18,
+            // Its syndicate closes at the share of its market it opens with.
+            ModelParam::CapacityShare->value         => 0.30,
         ],
 
         // =====================================================================

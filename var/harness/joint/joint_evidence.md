@@ -669,3 +669,27 @@ Per firm: 48% of ~87 firms lower in rpSW (per-seed 38-56%), median diff +0.09pp.
 Caveats: the rule is active (no expansion bonds, ROE +5pp). Under replay the board drop is gone: the 2-se interval
 [-0.01, +0.16] excludes -0.5 by ~14 se. The live drop either runs through board -> macro feedback (cut by replay) or
 was macro noise; replay also drops politics on the replayed arms (both arms equally).
+
+## 2026-10-21 Batch P (fee-manager family capacity rule d12 on the replayed macro, paired by seed)
+Question: does closing SWAN/TIER/CROW/VULT at their opening capacity share (0.4035/0.0357/0.30/0.32), with no borrowing
+to grow and no DebtEngine leverage target, bring them to lore ROE (22/24/20/23%) without board side effects?
+Harness: JointHarnessTest.php, rpD12 (HEAD + d12-fix.patch) vs Batch O rpSW, both replaying recNS-<s>.macro.gz;
+seeds 1-16 (stage 8 left the board at t -3.5, TIER ROE t +1.7), 20y, TPY 360, CREDIT=1. `p_an.py 1-16`; p_an.out.
+
+| quantity (rpD12 - rpSW, n=16) | rpSW | rpD12 | diff (se) | t |
+|---|---|---|---|---|
+| board mkt-cap CAGR ex funds/POOL % | 4.27 | 4.10 | -0.17 (0.03) | -5.8 |
+| SWAN TTM ROE y2+ % | 19.8 | 19.3 | -0.6 (0.8) | -0.7 |
+| TIER TTM ROE y2+ % | 8.2 | 9.9 | +1.7 (1.1) | +1.6 |
+| CROW TTM ROE y2+ % | 16.5 | 18.8 | +2.3 (0.4) | +5.8 |
+| VULT TTM ROE y2+ % | 17.7 | 22.2 | +4.5 (0.5) | +9.0 |
+| CROW / VULT share end | 0.73 / 0.77 | 0.29 / 0.31 | -0.44 / -0.46 | -47 / -35 |
+| TIER D/E y20 | 2.24 | 1.41 | -0.83 (0.19) | -4.4 |
+| TIER expansion / recap bonds | 29 / 5.6 | 0 / 0 | | |
+
+Per firm: 51% of 84 lower in rpD12, mean of per-seed medians -0.02pp (se 0.04): the board drop is in a few names.
+Board sanity unchanged inside noise (Ch11 0.25->0.06, defaults 0.31->0.13, rescues 2.5->3.3/run, EW/CW return -0.07
+/ -0.10pp, vol -0.06/-0.11pp, all |t| < 2). No negative equity; no fund with TTM ROE > 40% for 8 quarters.
+Caveats: the rule binds (zero expansion bonds, CROW/VULT held at their open share). TIER stays at ~10% ROE: its
+ROE falls 21% (y1) -> ~5% (y16-20) in both arms as revenue/equity drifts 73% -> 48% at a flat ~42% EBIT margin, and
+D/E 1.4 legacy debt carries the interest. TIER 3y (div+bb)/NI > 1.5 in 9/16 seeds (payout through loss years).
