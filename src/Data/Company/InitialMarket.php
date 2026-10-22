@@ -237,7 +237,8 @@ class InitialMarket
             'fixed_cost_ratio' => 0.40,
             'operating_margin' => 0.42,
             'public_float' => 0.95,
-            'sam_ratio' => 0.125,
+            // It opens at 44% of its market, inside the share past which a lender's returns fall.
+            'sam_ratio' => 0.32,
             'floating_debt_ratio' => 0.35,
             'historical_fixed_rate' => 0.035,
             'credit_spread' => 0.0200,
@@ -965,9 +966,10 @@ class InitialMarket
             'historical_fixed_rate' => 0.050,
             'credit_spread' => 0.0170,
             'depreciation_rate' => 0.05,
-            'corporate_treasury' => 45_000_000_000.00,
+            'corporate_treasury' => 37_500_000_000.00,
             'total_equity' => 60_000_000_000.00,
-            'customer_deposits' => 425_000_000_000.00,
+            // Opens at the leverage its sector steers it to (90% of the 7x limit).
+            'customer_deposits' => 354_000_000_000.00,
             'wholesale_debt' => 24_000_000_000.00,
             'retained_earnings' => 33_750_000_000.00,
         ],
@@ -1055,9 +1057,10 @@ class InitialMarket
             'historical_fixed_rate' => 0.050,
             'credit_spread' => 0.0250,
             'depreciation_rate' => 0.05,
-            'corporate_treasury' => 22_500_000_000.00,
+            'corporate_treasury' => 20_950_000_000.00,
             'total_equity'      => 35_000_000_000.00,
-            'customer_deposits' => 225_000_000_000.00,
+            // Opens at the leverage its sector steers it to (90% of the 7x limit).
+            'customer_deposits' => 209_500_000_000.00,
             'wholesale_debt'    => 11_000_000_000.00,
             'retained_earnings' => 15_000_000_000.00,
         ],
@@ -2257,7 +2260,8 @@ class InitialMarket
             'corporate_treasury' => 6_000_000_000.00,
             'total_equity' => 25_000_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 37_500_000_000.00,
+            // A listed sponsor's leverage sits in its funds' companies, not at the manager: half its equity.
+            'wholesale_debt' => 12_500_000_000.00,
             'retained_earnings' => 15_000_000_000.00,
         ],
         [

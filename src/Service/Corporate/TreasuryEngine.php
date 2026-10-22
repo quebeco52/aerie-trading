@@ -303,8 +303,7 @@ class TreasuryEngine
 
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
-        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
-        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
+        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $evaluationCapital, $ctx->macroState);
 
         $isUnderLeveraged = $ctx->health->isUnderLeveraged ?? false;
         $isUnderLeveragedForDebt = $isUnderLeveraged
@@ -417,8 +416,7 @@ class TreasuryEngine
         $hurdleRate = $manager->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
-        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
-        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
+        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $evaluationCapital, $ctx->macroState);
 
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($marginalReturn * 2.0)));
 

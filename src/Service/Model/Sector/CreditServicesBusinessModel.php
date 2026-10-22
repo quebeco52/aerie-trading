@@ -43,6 +43,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Minimum lending EBIT floor as a fraction of core debt liabilities. */
     public const MIN_LENDING_EBIT_YIELD   = 0.05;
 
+    // --- Recapitalisation Target ---
+    /** Share of its leverage limit a card lender steers to: 90%, under-levered below it and buying back to it. */
+    public const LEVERAGE_TARGET_SHARE = 0.90;
+
     // --- High-Yield Deposit Funding ---
     /** Maximum allowable deposit beta clamp for high-yield savings accounts. */
     public const MAX_DEPOSIT_BETA_CLAMP   = 0.90;
@@ -423,7 +427,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public function getLeverageTarget(float $targetDebtTolerance): float
     {
         $bankEquityLimit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
-        return $bankEquityLimit * 0.90;
+        return $bankEquityLimit * self::LEVERAGE_TARGET_SHARE;
     }
 
     /**

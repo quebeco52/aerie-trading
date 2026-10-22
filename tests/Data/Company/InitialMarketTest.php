@@ -7,7 +7,9 @@ namespace App\Tests\Data\Company;
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Market\Index\MarketIndex;
+use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -182,5 +184,36 @@ class InitialMarketTest extends TestCase
             $debtToEquity,
             "Stock {$ticker} in industry {$industry} exceeds equity limit of {$equityLimit} (actual D/E: {$debtToEquity})",
         );
+    }
+
+    /**
+     * A financial's scale is its equity, and past half its market every unit of it earns less: no lender, insurer or
+     * fund opens past that share, or its profile return could never be earned from the first report.
+     */
+    public function testNoFinancialOpensPastTheShareItsReturnsHoldTo(): void
+    {
+        foreach (InitialMarket::STOCKS as $row) {
+            if (!Sectors::strategyFor($row['industry'])->isFinancial()) {
+                continue;
+            }
+            $share = $row['total_equity'] / (CorporateMetrics::BASELINE_SECTOR_TAM * $row['sam_ratio']);
+            $this->assertLessThanOrEqual(FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD, $share, $row['ticker']);
+        }
+    }
+
+    /** A card lender opens inside the leverage its own sector steers it to, or its first year is spent deleveraging. */
+    public function testACardLenderOpensInsideItsSectorsLeverageTarget(): void
+    {
+        $lenders = 0;
+        foreach (InitialMarket::STOCKS as $row) {
+            if ($row['industry'] !== 'Credit Services') {
+                continue;
+            }
+            $lenders++;
+            $target = Sectors::strategyFor($row['industry'])->getLeverageTarget(Sectors::INDUSTRY_METRICS[$row['industry']]['equity_limit']);
+            $debtToEquity = ($row['customer_deposits'] + $row['wholesale_debt']) / $row['total_equity'];
+            $this->assertLessThanOrEqual($target + 1e-9, $debtToEquity, $row['ticker']);
+        }
+        $this->assertGreaterThan(0, $lenders);
     }
 }

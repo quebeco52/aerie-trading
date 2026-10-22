@@ -447,7 +447,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             - (self::LEASING_BONUS_SCALE * Distributions::calculateNormalLowerPartialMoment(-self::BENIGN_LEASING_Z_FLOOR));
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0, float $afterTaxSpecialCharges = 0.0): float
     {
         // Net Operating Income is property income before depreciation, and it is the numerator of the cap
         // rate this return reverts toward below. EBIT is now struck after depreciation like every other
@@ -469,6 +469,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $stock->setRoicTtm((string) $this->revertTrailingReturn($stock, (float) $stock->getRoicTtm(), $truePostTaxReturn, $targetYield, self::TTM_ROIC_WEIGHT, abs($investedCapital), $macroState));
 
         return $truePostTaxReturn;
+    }
+
+    /** A trust's return is its untaxed net operating income, struck before depreciation, so it is EBITDA already. */
+    public function getNormalEbitda(Stock $stock, float $macroTaxRate, float $depreciation): ?float
+    {
+        $longRunReturn = $stock->getLongRunReturn();
+
+        return $longRunReturn === null ? null : (float) $longRunReturn * $stock->getInvestedCapital();
     }
 
     public function getEffectiveTaxRate(float $macroTaxRate): float

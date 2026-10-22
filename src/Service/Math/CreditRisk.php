@@ -189,6 +189,21 @@ final class CreditRisk
     }
 
     /**
+     * The annual provision per unit of net book an ASC 326 allowance charges in steady state: charge-offs at the loss
+     * rate on the gross balances (net = gross x (1 - L), L = loss rate x horizon, the lifetime reserve) plus that
+     * reserve on each year's growth of the book. A 5.85% card book over 1.5 years growing 4.5% provisions 6.85% of net.
+     *
+     * Formula: p = (r + g L) / (1 - L), L = min(0.5, r H)
+     */
+    public static function calculateSteadyStateProvisionRate(float $lossRate, float $horizonYears, float $bookGrowth): float
+    {
+        $lossRate = max(0.0, $lossRate);
+        $lifetimeLoss = min(0.5, $lossRate * max(0.0, $horizonYears));
+
+        return ($lossRate + (max(0.0, $bookGrowth) * $lifetimeLoss)) / (1.0 - $lifetimeLoss);
+    }
+
+    /**
      * Loss given default on a secured loan whose recovery scales with its collateral (Frye 2000, "Collateral
      * Damage"): a fall in the collateral's value since origination lowers recovery one for one, so LGD rises in the
      * same downturn that raises defaults.

@@ -754,10 +754,18 @@ class DebtEngine
         // steering to its own capital ratio is never under-leveraged in this sense: its capital target sets
         // its distributions (Berger et al. 2008), and its return is struck on equity, so no recap raises it.
         // Nor is a fund closed at capacity, whose capacity sets its size and whose borrowed dollar earns its coupon.
-        $managerDebtTolerance = $macroDebtTolerance * min(1.0, $stock->getManagementProfile()->leverageBias());
+        // Lenders test cash-flow leverage, so the target also stops where funded net debt reaches the same share of the
+        // covenant on normal EBITDA: struck on book equity alone, a low-return balance sheet's target sat past it.
+        $managerShare = min(1.0, $stock->getManagementProfile()->leverageBias());
+        $managerDebtTolerance = $macroDebtTolerance * $managerShare;
+        $leverageTarget = min(
+            $strategy->getLeverageTarget($managerDebtTolerance),
+            $this->resolveCovenantLeverageTarget($stock, $strategy, $corporateTaxRate, $depreciation, $ebitdaCovenantLimit, $managerShare, $netDebtCapital, $recapDebt, $equity),
+        );
         $isUnderLeveraged = $strategy->getTargetCapitalRatio($stock) === null
             && $strategy->getCapacityShare($stock) === null
-            && $strategy->isUnderLeveraged($currentDebtRatio, $managerDebtTolerance, $interestCoverage, $minIcr);
+            && $strategy->isUnderLeveraged($currentDebtRatio, $managerDebtTolerance, $interestCoverage, $minIcr)
+            && $currentDebtRatio < $leverageTarget;
 
         $isLiquidityCrisis = $interestCoverage < 0;
         $isLiquidityWarning = $interestCoverage >= 0 && $interestCoverage < $minIcr;
@@ -783,9 +791,25 @@ class DebtEngine
             $netDebtToEbitda,
             $ebitdaCovenantLimit,
             $currentDebtRatio,
-            $strategy->getLeverageTarget($managerDebtTolerance),
+            $leverageTarget,
             $this->hasPrimaryMarketAccess($stock, $debtMetrics, $interestCoverage),
         );
+    }
+
+    /**
+     * The book debt-to-equity a recapitalisation reaches when funded net debt arrives at the manager's share of the
+     * covenant on normal EBITDA: a repurchase R of that room moves the ratio to (D + R) / (E - R). Unbounded for a
+     * sector with no covenant and for a firm with no long-run return yet.
+     */
+    private function resolveCovenantLeverageTarget(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $taxRate, float $depreciation, float $covenant, float $managerShare, float $netDebt, float $recapDebt, float $equity): float
+    {
+        $normalEbitda = $covenant < self::EBITDA_COVENANT_EXEMPT_LIMIT ? $strategy->getNormalEbitda($stock, $taxRate, $depreciation) : null;
+        if ($normalEbitda === null) {
+            return INF;
+        }
+        $room = ($strategy->getLeverageTarget($covenant * $managerShare) * $normalEbitda) - $netDebt;
+
+        return $room >= $equity ? INF : ($recapDebt + $room) / max(1.0, $equity - $room);
     }
 
     /** The firm's own depreciation rate, or its industry's when it carries none. */

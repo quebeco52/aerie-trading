@@ -744,3 +744,107 @@ Replay held (48/48 ok). `python3 var/harness/joint/r_an.py 1-16` -> r_an.out (fu
 Caveats: every Ch11/default is a non-financial (DIPR, FALC, CASC, SINK, IBHI), all |t| < 2: the changed opening
 board perturbs the replay. rpF re-rates every bank and fee manager (P/B q79 +0.6..+1.5, t 3-11) with realised ROE
 unchanged (|diff| < 0.01 except RIVR/ACC): the no-pull roeTtm feeds valuation, not earnings. No absurdity hits.
+
+## 2026-10-22 Batch S (final builds of the financial batches vs the Batch R prototypes, replayed macro)
+
+Question: do the final builds behave like Batch R's prototypes? rpX1 = HEAD 289382e9 + fin1.patch (rpF0 without the
+acquisition-blend change), rpX2 = fin12.patch (rpX1 + non-insurer roeTtm a plain EWMA, like rpF). Base rpIPP 1-8 on
+disk (src = HEAD). All replay runs/recNS-<s>.macro.gz, CREDIT=1, 20 y, 360 ticks/y, seeds 1-8 (16/16 ok; stopped at 8:
+targets past |t| 4 or matching Batch R). `python3 var/harness/joint/s_an.py 1-8` -> s_an.out (full tables).
+
+| quantity (paired vs rpIPP, n=8) | rpIPP | rpX1 | rpX2 | Batch R rpF0 / rpF (vs rpD12, n=16) |
+|---|---|---|---|---|
+| TIER ROE y2-5 / 6-10 / 11-15 / 16-20 | .168/.091/.025/.048 | .235/.221/.238/.212 | .224/.226/.222/.230 | .214/.223/.231/.233 ; .239/.228/.234/.232 |
+| TIER D/E y20 / acquisitions / revolver draws | 1.78 / 10.1 / 4.8 | 0.22 / 0 / 0 | 0.23 / 0 / 0 | 0.23 / 0 / 0 both |
+| TIER rating y20 | BBB4/BB3 | A8 | A8 | A16 both |
+| RIVR ROE y2-20 (lore .15) | .112 | +.023 (t9.4) | +.022 (t7.7) | +.021 / +.022 |
+| ACC ROE y2-20 (lore .26) | .258 | -.015 (t-2.9) | -.004 (t-1.5) | +.021 / +.020 |
+| board cap CAGR ex funds/POOL/RIVR % | 4.48 | -0.20 (0.06) | +0.42 (0.07) | +0.05 / +0.57 |
+| financial cap weight y20 % | 43.4 | +0.7 (0.5) | +7.2 (0.8) | +1.2 / +6.9 |
+| CW index return %/y | 7.52 | +0.13 (0.06) | +0.48 (0.06) | +0.16 / +0.49 |
+| M&A gw steps per run | 172 | -44 (14) | -30 (13) | -20 / -23 |
+| SAFE / DOVE P/B q79 | 3.23 / 1.85 | -0.43 / +0.09 | -0.38 / +0.09 | |
+
+Direct pairing (section 5): rpX1-rpF0 12 keys past |t| 2 of ~120 (~6 by chance); real: ACC ROE -0.022 (t-4.7), payout
+-0.024 (t-3.9), P/B q79 -0.48 (t-3.6), M&A -24/run (t-2.6). rpX2-rpF 7 keys, largest ACC ROE -0.006 (t-2.6), DOVE P/B
+q79 -0.32 (t-2.3: insurers keep the pull in rpX2). Caveats: the blend change was what lifted ACC in Batch R; without it
+ACC sits 0.015 below base in rpX1. rpX2 re-rates banks and fee managers (P/B q79 +0.7..+1.8) with realised ROE flat, as
+rpF did; insurers do not re-rate. No Ch11 or absurdity hits in either arm.
+
+Extension (10-22): rpX1 seeds 9-16 added (tree-X1 rebuilt as mk_trees_s.sh, CREDIT=1, 20y x 360 tpy), `s_an16.py` ->
+s_an16.out, rpX1 paired by seed, n=16: board cap CAGR -0.11 (0.07) vs rpIPP, -0.02 (0.07) vs rpD12, -0.07 (0.07) vs
+rpF0, all inside noise (seeds 9-16 alone: -0.01 / +0.14 / -0.04); M&A -33 (9)/run, t-3.5 (TIER -9.6, HUMM -5.4, ROOK
+-2.8, PHIL -2.7, SHRK -2.4); SAFE cap CAGR -0.45 (0.27), P/B q79 -0.19 (0.15), both t<2 (9-16 alone ~0); HUMM
+acquisitions 13.9 -> 8.4 (t-3.4), share eq/(1e12 x ngdp x 0.375) at q79 0.89 -> 0.75 (t-2.8), debt steps >10% -1.7
+(0.8). The 1-8 effects on SAFE and board CAGR halve or vanish on 9-16.
+
+## 2026-10-22 Batch T (lender calibration fix: steady-state provision + TALN/STRK reseed, replayed macro)
+
+Question: does fin123 (lender revenue calibration funds CreditRisk::calculateSteadyStateProvisionRate instead of the
+net-book loss rate; TALN deposits 425 -> 354B, treasury 45 -> 37.5B; STRK deposits 225 -> 209.5B, treasury 22.5 ->
+20.95B) lift TALN and STRK to ~0.24-0.25 ROE over years 2-20 without disturbing the board?
+Harness: JointHarnessTest.php via run.sh, arms rpX2 (HEAD 289382e9 + fin12) and rpBC (HEAD + fin123), both replaying
+runs/recNS-<s>.macro.gz, CREDIT=1, 20 y, 360 ticks/y. Seeds 1-16 (stage 2: board CAGR read t -1.8 at 8 seeds and one
+Ch11 appeared; at 16 it is -0.02pp, se 0.07). `python3 var/harness/joint/t_an.py 1-16` -> t_an.out.
+
+| quantity (seeds 1-16, rpBC - rpX2) | rpX2 | rpBC | diff (se) | t |
+|---|---|---|---|---|
+| TALN ROE y2-20 (lore .25) | .189 | .241 | +.052 (.0075) | +6.9 |
+| STRK ROE y2-20 (lore .25) | .179 | .250 | +.072 (.0047) | +15.4 |
+| LAKE ROE (.21) | .188 | .193 | +.005 (.0015) | +3.3 |
+| PLVR (.11) / RIVR (.15) | .109 / .139 | .112 / .142 | +.0024 (.0013) / +.0030 (.0013) | +1.9 / +2.4 |
+| EGRT (.13) / BNTH (.18) / POOL (.29) | .131 / .193 / .289 | .130 / .193 / .293 | -.0013 / +.0001 / +.0034 | -1.2 / +0.1 / +1.8 |
+| TALN / STRK ROE y1 | .266 / .292 | .293 / .353 | +.027 (.006) / +.061 (.012) | +4.6 / +5.1 |
+| TALN / STRK payout y2-20 | .81 / .82 | .86 / .89 | +.053 (.035) / +.065 (.018) | +1.5 / +3.5 |
+| TALN / STRK equity CAGR % | 5.76 / 5.08 | 4.77 / 4.69 | -0.99 (.39) / -0.38 (.18) | -2.5 / -2.2 |
+| TALN / STRK eq/assets y2-20 % | 14.45 / 14.14 | 14.06 / 13.91 | -0.39 (.53) / -0.23 (.39) | -0.7 / -0.6 |
+| TALN / STRK prov/assets, allowance/book | 2.63 / 5.87, 3.89 / 8.30 % | unchanged | <= .015pp | |
+| board mkt-cap CAGR ex funds/POOL/RIVR/TALN/STRK % | 4.907 | 4.882 | -0.025 (.072) | -0.3 |
+| financial cap weight y20 % | 51.9 | 52.5 | +0.65 (.65) | +1.0 |
+| EW / CW index return %/y | 9.34 / 8.01 | 9.41 / 8.02 | +.07 (.05) / +.01 (.05) | +1.4 / +0.2 |
+| EW / CW vol % | 15.26 / 15.36 | 15.33 / 15.40 | +.07 / +.04 | +1.3 / +0.9 |
+| Ch11 / payment-default firms / rescues per run | 0 / .125 / 2.5 | .06 / .125 / 3.1 | +.06 / 0 / +.6 (.7) | |
+
+Lender ratings: no lender rescue, revolver quarter, default or Ch11 in either arm; worst/end rating shifts all |t| <= 1.1.
+The one Ch11 (CASC, seed 4, y18) was already rated B with icr 0.6 in the base arm; path divergence at a cliff.
+Absurdity scan (negative equity, financial ROE > 40% over 4y, financial equity CAGR > 12%, lender eq/assets < 3%,
+non-positive price, anomaly file): none in either arm.
+Caveats: the extra TALN/STRK earnings go out as payout, so their equity grows ~0.4-1pp/y slower; TALN's lift varies
+by seed (+0.001 on seed 16 to +0.12 on seed 9). Provisions and allowance are untouched: the fix moves revenue, not
+losses. Trees and caches deleted.
+
+## 2026-10-22 Batch U (covenant-share recap target, replayed macro)
+
+Question: does the DebtEngine recap target = min(book D/E target, leverage where funded net debt reaches the manager's
+share of the covenant on normal EBITDA) cut CASC's and FALC's covenant distress with M&A, failures and price formation
+in, and leave the rest of the board alone? Architect's recursion expected CASC -7.0 +- 1.2 breach quarters per run and
+FALC -42 +- 7pp BB-or-below share.
+Harness: JointHarnessTest.php via run.sh, arms rpBC (HEAD 289382e9 + fin123, Batch T, on disk) and rpRC (HEAD +
+fin1234), both replaying runs/recNS-<s>.macro.gz, CREDIT=1, 20 y, 360 ticks/y. Seeds 1-16 (seeds 9-16 of rpRC rerun
+after an interrupted session). `python3 var/harness/joint/u_an.py 1-16` -> u_an.out; 1-8 -> u_an_1-8.out.
+
+| quantity (seeds 1-16, rpRC - rpBC) | rpBC | rpRC | diff (se) | t |
+|---|---|---|---|---|
+| CASC breach quarters/run | 27.4 | 23.9 | -3.5 (1.5) | -2.4 |
+| CASC median ND/EBITDA | 2.01 | 1.69 | -0.32 (0.06) | -5.1 |
+| CASC recap bonds $B/run | 224 | 125 | -99 (11) | -9.0 |
+| CASC ROE % | 14.7 | 13.1 | -1.6 (0.35) | -4.6 |
+| CASC payout | 1.04 | 0.93 | -0.11 (0.03) | -3.2 |
+| CASC Ch11 / reorgs per run | 0.06 | 0 | -0.06 (0.06) | -1.0 |
+| FALC breach quarters/run | 20.4 | 13.6 | -6.8 (2.8) | -2.4 |
+| FALC BB-or-below share % | 73.5 | 53.8 | -19.8 (5.7) | -3.5 |
+| FALC median ND/EBITDA | 2.49 | 2.15 | -0.33 (0.11) | -3.0 |
+| board mkt-cap CAGR ex funds/POOL/RIVR % | 4.89 | 4.98 | +0.09 (0.06) | +1.6 |
+| board payout | 0.862 | 0.857 | -0.005 (0.002) | -2.5 |
+| board recap bonds $B/run | 829 | 715 | -113 (19) | -5.9 |
+| EW / CW index return %/y | 9.41 / 8.02 | 9.37 / 8.01 | -0.04 (0.04) / -0.02 (0.06) | -1.0 / -0.3 |
+| EW / CW vol % | 15.33 / 15.40 | 15.25 / 15.33 | -0.07 (0.03) / -0.07 (0.06) | -2.5 / -1.2 |
+
+Seeds 1-8 alone: CASC breach -5.5 (2.3), FALC BB share -11.7 (6.7), board CAGR +0.12 (0.08).
+EIDR, WADE, REDW, DIPR: BB share, payout and ROE all within |t| 1.6 except REDW payout +0.03 (t +2.4). Ch11, defaults,
+rescues: no change. Recap movers after CASC: FALC -9.5, RAVN -7.1, PINT -3.9, WADE -3.8 $B/run.
+Verdict: direction confirmed, magnitude about half the recursion (CASC -3.5 vs -7.0, ~2 se apart; FALC -20pp vs -42pp,
+~2.4 se apart); CASC still breaches ~24 of 77 quarters and pays for it with -1.6pp ROE. Board unchanged.
+Caveats: CASC ND/TTM EBITDA > 10 in 10 of 16 base seeds and 8 of 16 rpRC seeds (peak 495 in one base run), so breaches are
+driven by EBITDA troughs, not by the leverage the target sets; the absurdity list is otherwise the same in both arms
+(ALBT BOWR CANV FULM IBHI SINK WEAV).

@@ -12,6 +12,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MacroConstants;
 
 /**
  * Encapsulates the core financial physics overrides for financial institutions
@@ -40,7 +41,7 @@ trait FinancialPhysicsTrait
 
     /**
      * The return a balance-sheet firm's revenue capacity is struck at: its structural ROE less the saturation
-     * of its market, never below the cost-of-equity proxy. Trailing results are not an input. A book does not
+     * of its market, never below what its equity would earn idle. Trailing results are not an input. A book does not
      * yield less because last year lost money, and reading them here made every loss a lower revenue target
      * and a larger loss — the same spiral structural asset turnover removed from operating companies.
      */
@@ -48,7 +49,16 @@ trait FinancialPhysicsTrait
     {
         $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
 
-        return max($macroState->marketCostOfEquity(), max(0.01, (float) $stock->getBaselineRoe()) - $saturationPenalty);
+        return max($this->idleEquityReturn($macroState), max(0.01, (float) $stock->getBaselineRoe()) - $saturationPenalty);
+    }
+
+    /**
+     * What equity a saturated market has no use for earns: the money-market yield after tax. A financial grown past
+     * its market earns that on the excess, not its cost of equity, which no asset pays it.
+     */
+    protected function idleEquityReturn(MacroStateDTO $macroState): float
+    {
+        return $this->calculateCashYield($macroState) * (1.0 - $macroState->corporateTaxRate);
     }
 
     public function calculateEconomicReturn(Stock $stock, float $quarterlyNopatOrIncome, float $investedCapital): float
@@ -57,7 +67,11 @@ trait FinancialPhysicsTrait
         return $equity > 0 ? ($quarterlyNopatOrIncome / $equity) * 4.0 : 0.0;
     }
 
-    /** A balance-sheet firm is measured on its return on equity, required to earn its cost of equity. */
+    /**
+     * A balance-sheet firm is measured on its return on equity, required to earn its cost of equity. The quarter
+     * reports net income as filed; the return state blends it before one-off charges, as an operating company's
+     * blends EBIT, so a fine or a write-down is not read as a lower return to come.
+     */
     public function updateDynamicRoic(
         Stock $stock,
         float $actualTotalNetIncome,
@@ -68,23 +82,31 @@ trait FinancialPhysicsTrait
         float $costOfEquity = 0.10,
         ?MacroStateDTO $macroState = null,
         float $depreciation = 0.0,
+        float $afterTaxSpecialCharges = 0.0,
     ): float {
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * FinancialConstants::QUARTERS_PER_YEAR : 0.0;
+        $underlyingReturn = $equity > 0 ? (($actualTotalNetIncome + $afterTaxSpecialCharges) / $equity) * FinancialConstants::QUARTERS_PER_YEAR : 0.0;
         $reportedReturn = max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $truePostTaxReturn));
 
         $stock->setCurrentRoe((string) $reportedReturn);
-        $stock->setRoeTtm((string) $this->revertTrailingReturn(
-            $stock,
-            (float) $stock->getRoeTtm(),
-            $truePostTaxReturn,
-            $costOfEquity,
-            static::TTM_ROE_WEIGHT,
-            max(1.0, $equity),
-            $macroState,
-        ));
+        $stock->setRoeTtm((string) $this->resolveReturnState($stock, (float) $stock->getRoeTtm(), $underlyingReturn, $costOfEquity, max(1.0, $equity), $macroState));
 
         return $reportedReturn;
+    }
+
+    /**
+     * A financial's revenue is struck on its structural ROE, its franchise less the saturation of its market, never on
+     * this state, so the state is the return it is measured to earn: the quarter blended in at the shared weight. A
+     * pull toward the cost of equity plus moat here priced a fade its profits never make.
+     */
+    protected function resolveReturnState(Stock $stock, float $trailing, float $realised, float $costOfEquity, float $equity, ?MacroStateDTO $macroState): float
+    {
+        $blended = $trailing === 0.0
+            ? $realised
+            : ($realised * FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT) + ($trailing * (1.0 - FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT));
+
+        return max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $blended));
     }
 
     public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float
@@ -248,14 +270,18 @@ trait FinancialPhysicsTrait
     }
 
     /**
-     * The annual credit provision a lender pays through the cycle on a book of this size: the through-the-
-     * cycle loss rate the allowance roll-forward charges against EBIT every quarter, struck on the same
-     * gross book. A lender's return target is earned AFTER this charge, so any target that reverse-engineers
-     * revenue from an ROE has to fund it, or the firm reports its ROE minus its loss rate forever.
+     * The annual credit provision the allowance roll-forward charges a lender through the cycle on a net book of this
+     * size, growing with the economy's trend nominal income as its deposits do: charge-offs on the gross balances and
+     * the lifetime reserve each year's growth carries. A return target reverse-engineered from an ROE is earned after
+     * this charge.
      */
-    public function resolveThroughTheCycleCreditProvision(?Stock $stock, float $earningAssets): float
+    public function resolveThroughTheCycleCreditProvision(?Stock $stock, float $netEarningAssets): float
     {
-        return max(0.0, $this->getThroughTheCycleCreditLossRate($stock)) * max(0.0, $earningAssets);
+        return CreditRisk::calculateSteadyStateProvisionRate(
+            $this->getThroughTheCycleCreditLossRate($stock),
+            $this->getCreditLossHorizonYears(),
+            MacroConstants::TARGET_INFLATION + MacroConstants::TREND_REAL_GROWTH,
+        ) * max(0.0, $netEarningAssets);
     }
 
     public function getMinIcr(): float

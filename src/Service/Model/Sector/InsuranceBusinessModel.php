@@ -91,6 +91,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Statutory capital ratio threshold for regulatory grey/early warning watch. */
     public const WARNING_EQUITY_THRESHOLD  = 4.0;
 
+    // --- Return Reversion ---
+    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
+    public const TTM_ROE_WEIGHT = 0.50;
+
     // --- ROIC & ROE Target Architecture ---
     /** Weight given to historical baseline ROIC when blending with TTM ROE. */
     public const BASELINE_ROIC_WEIGHT     = 0.50;
@@ -1771,5 +1775,14 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             'supercore_inflation_ema',
             'yield_10y_ema',
         ];
+    }
+
+    /**
+     * An underwriter's premium target reads this state (getTargetMetrics), so the state carries the reversion its
+     * book's turnover follows: the quarter blended in, then pulled toward the cost of equity plus moat.
+     */
+    protected function resolveReturnState(Stock $stock, float $trailing, float $realised, float $costOfEquity, float $equity, ?MacroStateDTO $macroState): float
+    {
+        return $this->revertTrailingReturn($stock, $trailing, $realised, $costOfEquity, static::TTM_ROE_WEIGHT, $equity, $macroState);
     }
 }

@@ -139,7 +139,7 @@ class IndustryPositionBuilder
                     'severity' => $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn),
                     'trueReturn' => $trueReturn,
                     'trailingReturn' => $filedReturns === [] ? null : array_sum($filedReturns) / count($filedReturns),
-                    'marginalReturn' => $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $macroState),
+                    'marginalReturn' => $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $evaluationCapital, $macroState),
                     'moatFactor' => FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()] ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'],
                 ],
                 // Only a share of something when there is someone else in the roster to share it with, selling

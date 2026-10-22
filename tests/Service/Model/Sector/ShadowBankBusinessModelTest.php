@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
@@ -92,7 +93,7 @@ class ShadowBankBusinessModelTest extends TestCase
 
     /**
      * Fees are struck once so that, at the opening macro, fees at the lore margin plus the book's interest less the
-     * wholesale funding cost and the through-the-cycle credit charge earn the lender its structural return.
+     * wholesale funding cost and the steady-state credit provision earn the lender its structural return.
      */
     public function testTheFranchiseEarnsItsStructuralReturnAtTheOpeningMacro(): void
     {
@@ -102,7 +103,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $tax = $opening->corporateTaxRate;
         $feeRevenue = $metrics['invested_capital'] * $metrics['baseline_roic'] / (0.50 * (1.0 - $tax));
         $interestExpense = 225e9 * ((0.30 * 0.050) + (0.70 * ($opening->policyRateEma + 0.019)));
-        $provision = $this->model->getThroughTheCycleCreditLossRate($stock) * $metrics['invested_capital'];
+        $provision = CreditRisk::calculateSteadyStateProvisionRate($this->model->getThroughTheCycleCreditLossRate($stock), $this->model->getCreditLossHorizonYears(), MacroConstants::TARGET_INFLATION + MacroConstants::TREND_REAL_GROWTH) * $metrics['invested_capital'];
 
         $netIncome = (($feeRevenue * 0.50) + $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility) - $interestExpense - $provision) * (1.0 - $tax);
 

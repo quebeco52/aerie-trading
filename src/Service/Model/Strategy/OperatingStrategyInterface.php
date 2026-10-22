@@ -117,10 +117,13 @@ interface OperatingStrategyInterface
     public function getEffectiveTaxRate(float $macroTaxRate): float;
     public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float;
     /**
-     * @param float $depreciation Quarterly depreciation already deducted from $ebit, for models whose return
-     *                             is defined before it (a REIT's cap rate is struck on net operating income).
+     * @param float $depreciation           Quarterly depreciation already deducted from $ebit, for models whose
+     *                                      return is defined before it (a REIT's cap rate is struck on net operating
+     *                                      income).
+     * @param float $afterTaxSpecialCharges Restructuring, write-downs and fines already in $actualTotalNetIncome,
+     *                                      after tax: one-offs a return struck on net income keeps out of its state.
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?MacroStateDTO $macroState = null, float $depreciation = 0.0): float;
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?MacroStateDTO $macroState = null, float $depreciation = 0.0, float $afterTaxSpecialCharges = 0.0): float;
     /**
      * The sector's secular real growth at the open: trend growth plus its measured demand drift. Read the faded rate
      * below.
@@ -139,6 +142,11 @@ interface OperatingStrategyInterface
     public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float;
     public function getEffectiveReturn(Stock $stock): float;
     public function getTrueReturn(Stock $stock): float;
+    /**
+     * Through-the-cycle EBITDA: the long-run return on today's invested capital, before tax, plus depreciation. Null
+     * before the firm has a long-run return.
+     */
+    public function getNormalEbitda(Stock $stock, float $macroTaxRate, float $depreciation): ?float;
     /**
      * The return the firm is BUILT to earn on the capital its own model measures it by: ROIC for an
      * operating company, ROE for a balance-sheet one, whose ROIC field carries a placeholder the seed

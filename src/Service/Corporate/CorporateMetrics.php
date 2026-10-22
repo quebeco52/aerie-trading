@@ -22,8 +22,6 @@ class CorporateMetrics
     public const BASELINE_SECTOR_TAM = 1_000_000_000_000.00;
     /** Penrose bureaucratic friction coefficient penalizing margins at extreme scale. */
     public const DISECONOMY_FRICTION_COEFF = 0.20;
-    /** Cobb-Douglas capital output elasticity determining marginal returns on reinvestment. */
-    public const CAPITAL_MARGINAL_ELASTICITY = 0.50;
 
     // --- Capital Allocation & Life-Cycle Physics ---
     /** Maximum effective dividend payout ratio (85%) for fully saturated mature cash cows. */
@@ -156,52 +154,34 @@ class CorporateMetrics
     }
 
     /**
-     * Calculates diminishing marginal return on capital above optimal market scale, following the
-     * Cobb-Douglas Marginal Productivity Model: ROIC_marginal = ROIC_base * (K / K_optimal)^(-α).
-     *
-     * In neoclassical investment theory (Tobin's Q / Hayashi 1982), marginal productivity of capital (MP_K) decays
-     * power-law asymptotically as capital accumulation (K) outpaces serviceable demand (K_optimal). The elasticity
-     * parameter α is scaled by the firm's economic moat ($moatFactor) to reflect resistance to saturation.
+     * The return on the next unit of capital: the firm's return state, which already carries the saturation penalty
+     * on its whole base, less what that unit raises the penalty on the base (the derivative of E x p(E): Penrose 1959,
+     * Hayashi 1982) and less the Cournot haircut on the output it adds.
      */
-    public function calculateMarginalReturn(Stock $stock, float $trueReturn, float $saturationPenalty, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
+    public function calculateMarginalReturn(Stock $stock, float $trueReturn, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
         $marketShare = $this->calculateAddressableShare($stock, $investedCapital, $macroState);
 
-        $baseReturn = max(0.0, $trueReturn - $saturationPenalty - $this->calculateCournotPriceHaircut($stock, $marketShare, $investedCapital, $macroState));
-
-        return $this->applyScaleDiseconomies($stock, $baseReturn, $marketShare);
+        return max(0.0, $trueReturn - $this->calculateMarginalSaturationDrag($stock, $marketShare) - $this->calculateCournotPriceHaircut($stock, $marketShare, $investedCapital, $macroState));
     }
 
     /**
-     * Cobb-Douglas diminishing marginal productivity above the firm's optimal operating scale:
-     * ROIC_marginal = ROIC_base x (K / K_optimal)^(-alpha), with a moat factor softening the elasticity for
-     * firms whose position genuinely defends the extra scale.
-     *
-     * This is the third and last component of a marginal return, after the saturation penalty and the
-     * Cournot price haircut, and it is the one a firm growing WITH its market never pays: the decay is a
-     * function of share, so at constant share the next unit of capital is as productive as the last. That is
-     * why it belongs on the share-taking tranche alone, exactly like the Cournot haircut beside it.
-     *
-     * Extracted so the earnings engine's structural growth gate and the treasury's deployment gates apply
-     * one law rather than two: the treasury applied the decay and the earnings gate did not, so the two were
-     * composing the same marginal return from different parts. Note that the Penrose saturation penalty
-     * dominates this term over the band where it first bites, so on the structural path it is a backstop
-     * against the penalty being softened later rather than a brake that fires on its own today.
+     * What one more unit of capital adds to the saturation penalty on the capital already in place: share x dp/dshare
+     * of the quadratic penalty, nothing below the optimal share. A firm growing with its market keeps its share and
+     * never pays it.
      */
-    public function applyScaleDiseconomies(Stock $stock, float $return, float $marketShare): float
+    public function calculateMarginalSaturationDrag(Stock $stock, float $marketShare): float
     {
         $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         if ($marketShare <= $optimalThreshold) {
-            return max(0.0, $return);
+            return 0.0;
         }
 
         $moatFactor = FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()]
             ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
+        $span = max(0.01, 1.0 - $optimalThreshold);
 
-        $capitalScale = $marketShare / max(0.01, $optimalThreshold);
-        $effectiveElasticity = self::CAPITAL_MARGINAL_ELASTICITY * $moatFactor;
-
-        return max(0.0, $return * pow($capitalScale, -$effectiveElasticity));
+        return 2.0 * self::DISECONOMY_FRICTION_COEFF * $moatFactor * $marketShare * ($marketShare - $optimalThreshold) / ($span * $span);
     }
 
     /**

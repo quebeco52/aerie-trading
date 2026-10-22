@@ -972,6 +972,18 @@ trait StandardOperatingPhysicsTrait
         return (float) $stock->getRoicTtm();
     }
 
+    /** The return is NOPAT on invested capital and only a profit is taxed, so only a profit is grossed back up. */
+    public function getNormalEbitda(Stock $stock, float $macroTaxRate, float $depreciation): ?float
+    {
+        $longRunReturn = $stock->getLongRunReturn();
+        if ($longRunReturn === null) {
+            return null;
+        }
+        $nopat = (float) $longRunReturn * $stock->getInvestedCapital();
+
+        return ($nopat > 0.0 ? $nopat / (1.0 - $this->getEffectiveTaxRate($macroTaxRate)) : $nopat) + $depreciation;
+    }
+
     public function getEvaluationCapital(float $equity, float $investedCapital): float
     {
         return $investedCapital;

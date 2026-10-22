@@ -174,3 +174,28 @@ Evidence: `joint_evidence.md`.
   ROE by year block, payout gross / net of issuance, D/E y20, equity CAGR, acquisitions (goodwill steps), rescues,
   revolver, rating path; all 20 financials' ROE y2-20 vs lore, payout, P/B q0/19/79; board ex funds/POOL/RIVR, credit
   events, M&A, financial cap weight, EW/CW index (p_an.py index_stats); absurdity scans. Output r_an.out.
+- Batch S arms (final builds of the financial batches), replaying `runs/recNS-<s>.macro.gz`, base = the Batch Q `rpIPP`
+  runs on disk (= HEAD 289382e9 src). `rpX1` / `rpX2` = tree-X1 / tree-X2 (git archive HEAD + scratchpad fin1.patch /
+  fin12.patch; fin1 = rpF0 without its acquisition-blend change, fin12 = fin1 + non-insurer roeTtm as a plain EWMA,
+  like rpF); built by `mk_trees_s.sh`, trees and caches deleted. `CREDIT=1 bin/harness-batch var/harness/joint/run.sh
+  1-8 rpX1 rpX2` (~3.6 min for 16 runs). `s_an.py <seeds> [base arms...]` (default rpIPP vs rpX1 rpX2): r_an.py's
+  tables with ACC/DOVE/SAFE highlighted, plus section 5 pairing rpX1-rpF0 and rpX2-rpF and printing keys past |t| 2.
+  Output s_an.out.
+  Extension: rpX1 seeds 9-16 (tree-X1 only, deleted after); `s_an16.py` pairs rpX1 with rpIPP/rpD12/rpF0 on 1-16 and
+  9-16 (board CAGR, M&A by firm, SAFE, HUMM share/debt steps), output s_an16.out.
+- Batch T arm (lender calibration fix): `rpBC` = tree-BC (git archive HEAD 289382e9 + scratchpad fin123.patch = fin12 +
+  steady-state provision in the lender revenue calibration + TALN/STRK reseeded at the sector leverage target) replaying
+  `runs/recNS-<s>.macro.gz`; base `rpX2` (seeds 1-8 from Batch S; 9-16 run here on a rebuilt tree-X2). Trees built by
+  `mk_trees_t.sh` (`PAIRS="BC:fin123 X2:fin12"` to choose), trees and caches deleted. `CREDIT=1 bin/harness-batch
+  var/harness/joint/run.sh 1-16 rpX2 rpBC` (~4.3 min per 16 runs). `t_an.py <seeds> [A B]` (default rpX2 rpBC), paired:
+  lender ROE y2-20 vs lore, TALN/STRK y1 ROE, provisions/assets, allowance/earning assets, eq/assets, payout, equity
+  CAGR; lender rating idx / rescues / revolver / defaults; board ex funds/POOL/RIVR/TALN/STRK, fin cap weight, EW/CW,
+  Ch11/defaults/rescues; absurdity scan. Output t_an.out (1-16), t_an_9-16.out.
+- Batch U arm (covenant-share recap target): `rpRC` = tree-RC (git archive HEAD 289382e9 + scratchpad fin1234.patch =
+  fin123 + DebtEngine recap target min(book D/E target, leverage where funded net debt reaches the manager's share of
+  the covenant on normal EBITDA)) replaying `runs/recNS-<s>.macro.gz`; base `rpBC` 1-16 on disk (Batch T). Tree built
+  by `mk_trees_t.sh` (`PAIRS="RC:fin1234"`), tree and cache deleted. `CREDIT=1 bin/harness-batch
+  var/harness/joint/run.sh 1-16 rpRC` (~100 s per 8). `u_an.py <seeds> [A B]` (default rpBC rpRC), paired: CASC/FALC
+  breach quarters (ND/TTM EBITDA >= covL), reorgs, Ch11, defaults, EoD, peak/median ND/EBITDA, recap bonds, debt-funded
+  acquisitions; CASC FALC EIDR WADE REDW DIPR BB share / payout / ROE; board ex funds/POOL/RIVR, EW/CW, recap movers,
+  absurdity scan. Output u_an.out (1-16), u_an_1-8.out.

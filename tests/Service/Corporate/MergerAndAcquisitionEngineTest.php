@@ -973,6 +973,42 @@ class MergerAndAcquisitionEngineTest extends TestCase
     }
 
     /**
+     * A fee manager closed at capacity buys no growth, as it borrows and retains none for it: the empire-building
+     * sponsor makes no deal, where a bank on the same books and the same style does.
+     */
+    public function testAFundClosedAtCapacityMakesNoAcquisition(): void
+    {
+        $deal = function (string $industry): ?array {
+            $this->setUp();
+            $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+            $this->bookIssuedDebt();
+
+            $acquirer = new Stock();
+            $acquirer->setTicker('SPNS');
+            $acquirer->setName('Acquisitive Sponsor');
+            $acquirer->setIndustry($industry);
+            $acquirer->setPrice('50.00');
+            $acquirer->setSharesOutstanding('1000000000');
+            $acquirer->setCorporateTreasury('60000000000');
+            $acquirer->setTotalEquity('100000000000');
+            $acquirer->setWholesaleDebt('10000000000');
+            $acquirer->setTotalRevenue('20000000000');
+            $acquirer->setOperatingMargin('0.30');
+            $acquirer->setRetainedEarnings('40000000000');
+            $acquirer->setEarningsPerShare('4.00');
+            $acquirer->setBaselineRoe('0.12');
+            $acquirer->setManagementStyle(ManagementStyle::EmpireBuilder);
+
+            return $this->engine->evaluatePrivateAcquisition($acquirer, $this->healthyMacro(), 1.0);
+        };
+
+        $this->assertNotNull($deal('Banks - Diversified'), 'Control: the bank on these books buys.');
+        foreach (['Private Equity', 'Hedge Fund', 'Asset Management', 'Distressed Debt'] as $industry) {
+            $this->assertNull($deal($industry), $industry);
+        }
+    }
+
+    /**
      * Goodwill is not capital, so the 15% cap is struck on tangible equity: a bank carrying $60B of goodwill
      * on $100B of book equity buys with $40B of capital.
      */

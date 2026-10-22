@@ -537,4 +537,15 @@ class CreditRiskTest extends TestCase
             CreditRisk::calculateVasicekPdMultiple(0.035, 0.025, 0.003, CreditRisk::RETAIL_ASRF_RHO),
         );
     }
+
+    /**
+     * An allowance at the lifetime loss charges, per unit of net book, the charge-offs on the gross balances plus the
+     * reserve each year's growth carries: a 5.85% card book over 1.5 years growing 4.54% provisions 6.85%.
+     */
+    public function testTheSteadyStateProvisionFundsGrossChargeOffsAndTheGrowthReserve(): void
+    {
+        $this->assertEqualsWithDelta(0.068494, CreditRisk::calculateSteadyStateProvisionRate(0.0585, 1.5, 0.0454), 1e-6);
+        $this->assertSame(0.0585, CreditRisk::calculateSteadyStateProvisionRate(0.0585, 0.0, 0.0454), 'no reserve horizon: charge-offs alone');
+        $this->assertEqualsWithDelta(0.0585 / (1.0 - (0.0585 * 1.5)), CreditRisk::calculateSteadyStateProvisionRate(0.0585, 1.5, 0.0), 1e-12, 'a book that does not grow funds only the gross-up');
+    }
 }

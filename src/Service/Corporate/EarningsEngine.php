@@ -1594,6 +1594,7 @@ class EarningsEngine
             $ctx->health->costOfEquity,
             $ctx->macroState,
             $ctx->quarterlyDepreciation,
+            $ctx->specialCharges * (1.0 - $ctx->corporateTaxRate),
         );
 
         // The firm's long-run return, the level its profitability reverts to and its valuation anchors on.

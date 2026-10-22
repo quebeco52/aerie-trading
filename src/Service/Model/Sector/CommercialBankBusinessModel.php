@@ -800,12 +800,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * The yield a saturated market takes off a lender grown past its optimal scale: the Penrose penalty on its return,
-     * never past the cost-of-equity proxy, as interest yield on the book.
+     * never past what its equity would earn idle, as interest yield on the book.
      */
     private function resolveSaturationYield(Stock $stock, MacroStateDTO $macroState): float
     {
         $penalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
-        $headroom = max(0.0, max(0.01, (float) $stock->getBaselineRoe()) - $macroState->marketCostOfEquity());
+        $headroom = max(0.0, max(0.01, (float) $stock->getBaselineRoe()) - $this->idleEquityReturn($macroState));
 
         return min($penalty, $headroom) * max(1.0, $stock->getTangibleEquity())
             / ((1.0 - $macroState->corporateTaxRate) * max(1.0, $this->resolveEarningAssets($stock)));

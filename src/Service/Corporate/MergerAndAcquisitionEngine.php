@@ -341,6 +341,10 @@ class MergerAndAcquisitionEngine
         if ($ctx->health->wantsToPaydownDebt) {
             return true;
         }
+        // A fee manager closed at capacity buys no growth, as it borrows and retains none for it.
+        if ($ctx->strategy->getCapacityShare($ctx->acquirer) !== null) {
+            return true;
+        }
         return false;
     }
 

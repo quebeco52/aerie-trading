@@ -49,10 +49,6 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
         FinancialPhysicsTrait::getEquityReturn insteadof StandardValuationTrait;
     }
 
-    // --- Return Reversion ---
-    /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
-    public const TTM_ROE_WEIGHT = 0.50;
-
     // --- Bank Levy ---
     /**
      * Whether the institution is a bank the levy is charged on: deposit-takers and investment banks are; brokers,
