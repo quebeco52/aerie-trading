@@ -629,17 +629,13 @@ class MathUtility
         $dW2 ??= $this->generateStandardNormal();
 
         $clampedRho = max(-0.99, min(0.99, $rho));
-        $safeKappa = max(0.0001, $kappa);
 
         // Correlated standard normal innovations
         $zChi = $dW1;
         $zXi = ($clampedRho * $dW1) + (sqrt(1.0 - ($clampedRho * $clampedRho)) * $dW2);
 
         // Exact discretization of OU process for chi (mean-reverting to 0)
-        $expKappaDt = exp(-$safeKappa * $dt);
-        $chiDrift = $chi * $expKappaDt;
-        $chiVariance = ($sigChi * $sigChi / (2.0 * $safeKappa)) * (1.0 - exp(-2.0 * $safeKappa * $dt));
-        $nextChi = $chiDrift + sqrt($chiVariance) * $zChi;
+        $nextChi = StochasticProcesses::ornsteinUhlenbeckDiffusionStep($chi, 0.0, $kappa, $sigChi, $dt, $zChi);
 
         // Long-term equilibrium drift (Arithmetic Brownian Motion for log-equilibrium)
         $nextXi = $xi + ($muXi * $dt) + ($sigXi * sqrt($dt) * $zXi);
@@ -690,24 +686,14 @@ class MathUtility
         $dW2 ??= $this->generateStandardNormal();
 
         $clampedRho = max(-0.99, min(0.99, $rho));
-        $safeKappaChi = max(0.0001, $kappaChi);
-        $safeKappaXi = max(0.0001, $kappaXi);
 
         // Correlated standard normal innovations
         $zChi = $dW1;
         $zXi = ($clampedRho * $dW1) + (sqrt(1.0 - ($clampedRho * $clampedRho)) * $dW2);
 
-        // Exact discretization for Factor 1 (Chi)
-        $expKappaChiDt = exp(-$safeKappaChi * $dt);
-        $chiDrift = ($chi * $expKappaChiDt) + ($thetaChi * (1.0 - $expKappaChiDt));
-        $chiVariance = ($sigChi * $sigChi / (2.0 * $safeKappaChi)) * (1.0 - exp(-2.0 * $safeKappaChi * $dt));
-        $nextChi = $chiDrift + sqrt($chiVariance) * $zChi;
-
-        // Exact discretization for Factor 2 (Xi)
-        $expKappaXiDt = exp(-$safeKappaXi * $dt);
-        $xiDrift = ($xi * $expKappaXiDt) + ($thetaXi * (1.0 - $expKappaXiDt));
-        $xiVariance = ($sigXi * $sigXi / (2.0 * $safeKappaXi)) * (1.0 - exp(-2.0 * $safeKappaXi * $dt));
-        $nextXi = $xiDrift + sqrt($xiVariance) * $zXi;
+        // Exact discretization of each factor
+        $nextChi = StochasticProcesses::ornsteinUhlenbeckDiffusionStep($chi, $thetaChi, $kappaChi, $sigChi, $dt, $zChi);
+        $nextXi = StochasticProcesses::ornsteinUhlenbeckDiffusionStep($xi, $thetaXi, $kappaXi, $sigXi, $dt, $zXi);
 
         $spot = exp($nextChi + $nextXi);
 

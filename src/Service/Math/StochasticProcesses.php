@@ -338,17 +338,30 @@ final class StochasticProcesses
         // sigma S dz.
         $alpha = log($theta) - ($sigma * $sigma) / (2.0 * max(0.0001, $kappa));
 
-        // Exact solution for OU process to prevent Euler discretization errors for large kappa * dt
-        $expKappaDt = exp(-$kappa * $dt);
-        $drift = $currentLogPrice * $expKappaDt + $alpha * (1.0 - $expKappaDt);
+        return exp(self::ornsteinUhlenbeckDiffusionStep($currentLogPrice, $alpha, $kappa, $sigma, $dt, $dW));
+    }
 
-        // The exact variance of the OU process over dt
-        $variance = ($sigma * $sigma / (2.0 * max(0.0001, $kappa))) * (1.0 - exp(-2.0 * $kappa * $dt));
-        $diffusion = sqrt($variance) * $dW;
+    /**
+     * One exact step of an Ornstein-Uhlenbeck process dx = kappa (mean - x) dt + sigma dW: the decay and the
+     * conditional variance sigma^2 (1 - e^(-2 kappa dt)) / 2 kappa of the continuous process over dt, so the step does
+     * not depend on the tick length. Parameterised by the diffusion sigma, where calculateOrnsteinUhlenbeckStep() takes
+     * the stationary deviation, so it holds as kappa -> 0, where the variance falls to sigma^2 dt (a random walk).
+     *
+     * @param float $current Level now.
+     * @param float $mean    Level the process reverts to.
+     * @param float $kappa   Mean reversion per year; below zero reads as zero.
+     * @param float $sigma   Diffusion volatility per square-root year.
+     * @param float $dt      Time step in years.
+     * @param float $dW      Standard normal draw.
+     */
+    public static function ornsteinUhlenbeckDiffusionStep(float $current, float $mean, float $kappa, float $sigma, float $dt, float $dW): float
+    {
+        $kappa = max(0.0, $kappa);
+        $variance = $kappa > 0.0
+            ? $sigma * $sigma * -expm1(-2.0 * $kappa * $dt) / (2.0 * $kappa)
+            : $sigma * $sigma * $dt;
 
-        $nextLogPrice = $drift + $diffusion;
-
-        return exp($nextLogPrice);
+        return $mean + (($current - $mean) * exp(-$kappa * $dt)) + (sqrt(max(0.0, $variance)) * $dW);
     }
 
     /**

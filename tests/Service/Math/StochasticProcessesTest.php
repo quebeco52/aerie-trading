@@ -417,4 +417,42 @@ class StochasticProcessesTest extends TestCase
             1e-9,
         );
     }
+
+    /**
+     * The exact OU transition: the gap to the mean decays at e^(-kappa dt), the step's variance is the continuous
+     * process's over dt, and two half steps compose to one.
+     */
+    public function testTheDiffusionOuStepIsTheExactTransition(): void
+    {
+        [$x, $mean, $kappa, $sigma, $dt] = [0.30, 0.10, 2.0, 0.25, 0.5];
+        $step = static fn(float $from, float $over, float $dW): float => StochasticProcesses::ornsteinUhlenbeckDiffusionStep($from, $mean, $kappa, $sigma, $over, $dW);
+
+        $centre = $step($x, $dt, 0.0);
+        $this->assertEqualsWithDelta($mean + (($x - $mean) * exp(-$kappa * $dt)), $centre, 1e-15);
+        $variance = ($step($x, $dt, 1.0) - $centre) ** 2;
+        $this->assertEqualsWithDelta($sigma ** 2 * (1.0 - exp(-2.0 * $kappa * $dt)) / (2.0 * $kappa), $variance, 1e-15);
+
+        $half = $dt / 2.0;
+        $this->assertEqualsWithDelta($centre, $step($step($x, $half, 0.0), $half, 0.0), 1e-15);
+        $halfVariance = ($step($x, $half, 1.0) - $step($x, $half, 0.0)) ** 2;
+        $this->assertEqualsWithDelta($variance, ($halfVariance * exp(-2.0 * $kappa * $half)) + $halfVariance, 1e-15);
+    }
+
+    /**
+     * As reversion vanishes the step becomes a random walk, sigma sqrt(dt) a draw, and keeps its noise; so does the
+     * log-OU commodity step built on it, whose variance must not divide by a floored kappa while decaying at the raw
+     * one.
+     */
+    public function testTheOuStepBecomesARandomWalkAsReversionVanishes(): void
+    {
+        foreach ([0.0, 1e-9, 1e-6] as $kappa) {
+            $move = StochasticProcesses::ornsteinUhlenbeckDiffusionStep(0.5, 0.0, $kappa, 0.2, 0.25, 1.0)
+                - StochasticProcesses::ornsteinUhlenbeckDiffusionStep(0.5, 0.0, $kappa, 0.2, 0.25, 0.0);
+            $this->assertEqualsWithDelta(0.2 * sqrt(0.25), $move, 1e-6, "kappa {$kappa}");
+        }
+
+        $up = log(StochasticProcesses::calculateSchwartz1Factor(10.0, 1e-6, 10.0, 0.2, 0.25, 1.0));
+        $flat = log(StochasticProcesses::calculateSchwartz1Factor(10.0, 1e-6, 10.0, 0.2, 0.25, 0.0));
+        $this->assertEqualsWithDelta(0.2 * sqrt(0.25), $up - $flat, 1e-6);
+    }
 }

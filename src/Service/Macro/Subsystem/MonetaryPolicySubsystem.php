@@ -13,6 +13,7 @@ use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 
 /**
@@ -698,9 +699,7 @@ class MonetaryPolicySubsystem
     public function updateTermPremiumDynamics(MacroState $state, float $dt): void
     {
         // Diebold & Li (2006) exact Ornstein-Uhlenbeck monetary expectations path innovation.
-        $pathDecay = exp(-self::EXPECTED_PATH_SHOCK_KAPPA * $dt);
-        $pathVariance = (self::EXPECTED_PATH_SHOCK_SIGMA ** 2 / (2.0 * self::EXPECTED_PATH_SHOCK_KAPPA)) * (1.0 - exp(-2.0 * self::EXPECTED_PATH_SHOCK_KAPPA * $dt));
-        $nextPathShock = ($state->expectedPathShock * $pathDecay) + (sqrt($pathVariance) * $this->mathUtility->generateStandardNormal());
+        $nextPathShock = StochasticProcesses::ornsteinUhlenbeckDiffusionStep($state->expectedPathShock, 0.0, self::EXPECTED_PATH_SHOCK_KAPPA, self::EXPECTED_PATH_SHOCK_SIGMA, $dt, $this->mathUtility->generateStandardNormal());
         $state->expectedPathShock = max(-self::EXPECTED_PATH_SHOCK_CAP, min(self::EXPECTED_PATH_SHOCK_CAP, $nextPathShock));
 
         $factors = $this->mathUtility->calculateTwoFactorOU(
@@ -768,7 +767,7 @@ class MonetaryPolicySubsystem
      */
     public function updateMarketExpectations(MacroState $state, float $dt): void
     {
-        $state->perceivedNeutralRate += self::KOZICKI_TINSLEY_ADAPTATION_SPEED * ($state->policyRate - $state->perceivedNeutralRate) * $dt;
+        $state->perceivedNeutralRate = TimeSeries::calculateDistributedLag($state->perceivedNeutralRate, $state->policyRate, $dt, 1.0 / self::KOZICKI_TINSLEY_ADAPTATION_SPEED);
     }
 
     /**

@@ -71,7 +71,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertSame(MacroConstants::BASE_NATURAL_RATE, $state->naturalRate);
     }
 
-    /** r* moves c points per point of trend growth (HLW c = 1.113), approached at the adjustment speed. */
+    /** r* moves c points per point of trend growth (HLW c = 1.113), approached as a lag at the adjustment speed. */
     public function testTheNaturalRateLoadsOnTrendGrowthAtHlwsC(): void
     {
         $state = new MacroState();
@@ -80,7 +80,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->subsystem->calculateNaturalRate($state, MacroConstants::TFP_DRIFT + 0.01, $dt);
 
-        $expectedStep = MacroAggregateSubsystem::NATURAL_RATE_ADJUSTMENT_SPEED * MacroAggregateSubsystem::NATURAL_RATE_GROWTH_LOADING * 0.01 * $dt;
+        $expectedStep = (1.0 - exp(-MacroAggregateSubsystem::NATURAL_RATE_ADJUSTMENT_SPEED * $dt)) * MacroAggregateSubsystem::NATURAL_RATE_GROWTH_LOADING * 0.01;
         $this->assertEqualsWithDelta(MacroConstants::BASE_NATURAL_RATE + $expectedStep, $state->naturalRate, 1e-15);
     }
 
@@ -1744,7 +1744,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
         $this->subsystem->calculateNaturalRate($state, MacroConstants::TFP_DRIFT, $dt);
 
-        $expectedStep = MacroAggregateSubsystem::NATURAL_RATE_ADJUSTMENT_SPEED * MacroAggregateSubsystem::NATURAL_RATE_GROWTH_LOADING * 0.01 * $dt;
+        $expectedStep = (1.0 - exp(-MacroAggregateSubsystem::NATURAL_RATE_ADJUSTMENT_SPEED * $dt)) * MacroAggregateSubsystem::NATURAL_RATE_GROWTH_LOADING * 0.01;
         $this->assertEqualsWithDelta(MacroConstants::BASE_NATURAL_RATE + $expectedStep, $state->naturalRate, 1e-15);
     }
 

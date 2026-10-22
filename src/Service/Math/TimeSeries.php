@@ -108,21 +108,12 @@ final class TimeSeries
     }
 
     /**
-     * An exponentially weighted level: the prior decays by exp(-dt/tau) toward the observation, and a missing prior
-     * starts at the observation.
+     * An exponentially weighted level: calculateDistributedLag() from the prior toward the observation, and a missing
+     * prior starts at the observation.
      */
     public static function ewmaLevel(?float $prior, float $observation, float $dt, float $tauYears): float
     {
-        if ($prior === null) {
-            return $observation;
-        }
-        if ($dt <= 0.0 || $tauYears <= 0.0) {
-            return $prior;
-        }
-
-        $phi = exp(-$dt / $tauYears);
-
-        return ($prior * $phi) + ((1.0 - $phi) * $observation);
+        return $prior === null ? $observation : self::calculateDistributedLag($prior, $observation, $dt, $tauYears);
     }
 
     /**
@@ -151,8 +142,17 @@ final class TimeSeries
      */
     public static function crossedSimulatedBoundary(float $totalTime, float $dt, float $periodYears): bool
     {
+        return self::boundariesCrossed($totalTime, $dt, $periodYears) > 0;
+    }
+
+    /**
+     * How many period boundaries the step that ended at `$totalTime` crossed, counted as crossedSimulatedBoundary()
+     * tests for one: more than one when a step spans several periods.
+     */
+    public static function boundariesCrossed(float $totalTime, float $dt, float $periodYears): int
+    {
         if ($periodYears <= 0.0 || $dt <= 0.0) {
-            return false;
+            return 0;
         }
 
         // Half a tick, expressed in periods, applied to BOTH samples and to the floor above zero.
@@ -170,7 +170,7 @@ final class TimeSeries
         $previous = (int) floor(max(0.0, $totalTime - $dt) / $periodYears + $epsilon);
 
         // Index zero is the period the simulation starts inside, which is entered rather than crossed.
-        return $index >= 1 && $index > $previous;
+        return $index >= 1 ? max(0, $index - $previous) : 0;
     }
 
     /**

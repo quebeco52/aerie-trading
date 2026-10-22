@@ -1092,7 +1092,7 @@ class AssetMarketSubsystem
      */
     public function calculateForeignEconomy(MacroState $state, float $dt): void
     {
-        $quartersTurned = self::quarterCount($state->totalTime) - self::quarterCount($state->totalTime - $dt);
+        $quartersTurned = TimeSeries::boundariesCrossed($state->totalTime, $dt, 1.0 / self::MAINLAND_QUARTERS_PER_YEAR);
         for ($quarter = 0; $quarter < $quartersTurned; $quarter++) {
             $this->stepMainlandQuarter($state);
         }
@@ -1138,8 +1138,8 @@ class AssetMarketSubsystem
     }
 
     /**
-     * Quarters completed by a simulated time; the tolerance absorbs the clock's accumulated rounding at a quarter's
-     * turn.
+     * Quarters completed by a simulated time, for the share of the current one elapsed; the tolerance absorbs the
+     * clock's accumulated rounding at a quarter's turn.
      */
     private static function quarterCount(float $totalTime): int
     {

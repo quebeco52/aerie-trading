@@ -2713,4 +2713,25 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertSame($lines($base), $lines($economy), 'The economy-wide lines are shares of GDP already.');
     }
 
+    /**
+     * The tax rates and the measures the trailing year carries are lags, so two half steps toward a fixed law leave
+     * what one full step does; a step that adds speed x gap x dt does not.
+     */
+    public function testTheFiscalLagsAreTheSameAtAnyStep(): void
+    {
+        $law = new MacroState();
+        $law->corporateTaxPolicyShift = 0.02;
+        $law->bankLevyRate = 0.002;
+        $halves = clone $law;
+
+        $this->subsystem->calculateDynamicFiscalPolicy($law, 0.5);
+        $this->subsystem->calculateDynamicFiscalPolicy($halves, 0.25);
+        $this->subsystem->calculateDynamicFiscalPolicy($halves, 0.25);
+
+        $this->assertEqualsWithDelta($law->corporateTaxRate, $halves->corporateTaxRate, 1e-15);
+        $this->assertEqualsWithDelta($law->corporateTaxShiftRealized, $halves->corporateTaxShiftRealized, 1e-15);
+        $this->assertEqualsWithDelta($law->bankLevyEmbodied, $halves->bankLevyEmbodied, 1e-15);
+        $this->assertGreaterThan(0.0, $law->bankLevyEmbodied);
+    }
+
 }

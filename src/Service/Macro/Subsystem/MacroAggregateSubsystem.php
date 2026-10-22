@@ -753,7 +753,7 @@ class MacroAggregateSubsystem
         $targetNaturalRate = MacroConstants::BASE_NATURAL_RATE + (self::NATURAL_RATE_GROWTH_LOADING * $trendPotentialGrowthGap);
         $targetNaturalRate = max(self::MIN_NATURAL_RATE, min(self::MAX_NATURAL_RATE, $targetNaturalRate));
 
-        $state->naturalRate += self::NATURAL_RATE_ADJUSTMENT_SPEED * ($targetNaturalRate - $state->naturalRate) * $dt;
+        $state->naturalRate = TimeSeries::calculateDistributedLag($state->naturalRate, $targetNaturalRate, $dt, 1.0 / self::NATURAL_RATE_ADJUSTMENT_SPEED);
     }
 
     /**

@@ -196,6 +196,41 @@ class TimeSeriesTest extends TestCase
         $this->assertEqualsWithDelta(TimeSeries::ewmaLevel(0.08, 0.20, 1.0, 5.0), $quarterly, 1e-15);
         $this->assertEqualsWithDelta(0.08 + ((1.0 - exp(-1.0)) * 0.12), TimeSeries::ewmaLevel(0.08, 0.20, 5.0, 5.0), 1e-15);
         $this->assertSame(0.20, TimeSeries::ewmaLevel(null, 0.20, 0.25, 5.0));
+        $this->assertSame(TimeSeries::calculateDistributedLag(0.08, 0.20, 0.25, 5.0), TimeSeries::ewmaLevel(0.08, 0.20, 0.25, 5.0), 'One lag, not two.');
+    }
+
+    /**
+     * Each period turns once, on the tick that reaches it, however the clock's additions round: the floor of an
+     * accumulated clock lands a year late at 252 ticks a year, where 252 additions of 1/252 fall short of 1.
+     */
+    public function testEachPeriodTurnsOnceOnTheTickThatReachesIt(): void
+    {
+        foreach ([252, 360, 14400] as $ticksPerYear) {
+            $dt = 1.0 / $ticksPerYear;
+            $clock = 0.0;
+            $turns = [];
+            for ($tick = 1; $tick <= 3 * $ticksPerYear; $tick++) {
+                $clock += $dt;
+                $crossed = TimeSeries::boundariesCrossed($clock, $dt, 1.0);
+                if ($crossed > 0) {
+                    $turns[$tick] = $crossed;
+                }
+                $this->assertSame($crossed > 0, TimeSeries::crossedSimulatedBoundary($clock, $dt, 1.0));
+            }
+
+            $this->assertSame([$ticksPerYear => 1, 2 * $ticksPerYear => 1, 3 * $ticksPerYear => 1], $turns, "{$ticksPerYear} ticks a year");
+        }
+    }
+
+    /**
+     * A step longer than a period crosses each boundary inside it; the period a run starts in is entered, not crossed.
+     */
+    public function testAStepSpanningSeveralPeriodsCountsEachOne(): void
+    {
+        $this->assertSame(3, TimeSeries::boundariesCrossed(0.75, 0.6, 0.25));
+        $this->assertSame(4, TimeSeries::boundariesCrossed(1.0, 1.0, 0.25));
+        $this->assertSame(0, TimeSeries::boundariesCrossed(0.1, 0.1, 1.0));
+        $this->assertSame(0, TimeSeries::boundariesCrossed(1.0, 0.0, 1.0), 'No time passed, nothing crossed.');
     }
 
     /**

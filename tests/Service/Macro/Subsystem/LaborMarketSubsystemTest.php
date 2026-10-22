@@ -308,9 +308,10 @@ class LaborMarketSubsystemTest extends TestCase
         $this->subsystem->calculateLaborMarketAndWages($atTrend, MacroConstants::TFP_DRIFT, 0.25);
         $this->subsystem->calculateLaborMarketAndWages($above, MacroConstants::TFP_DRIFT, 0.25);
 
-        // The target falls by the correction speed times the gap; wages move down toward it at the rigid speed.
+        // The target falls by the correction speed times the gap; wages close the share of it the rigid speed closes
+        // in a quarter.
         $expected = -LaborMarketSubsystem::WAGE_ERROR_CORRECTION_SPEED * 0.02
-            * LaborMarketSubsystem::WAGE_ADJUSTMENT_SPEED * LaborMarketSubsystem::WAGE_DOWNWARD_RIGIDITY_FACTOR * 0.25;
+            * (1.0 - exp(-LaborMarketSubsystem::WAGE_ADJUSTMENT_SPEED * LaborMarketSubsystem::WAGE_DOWNWARD_RIGIDITY_FACTOR * 0.25));
         $this->assertEqualsWithDelta($expected, $above->wageGrowth - $atTrend->wageGrowth, 1e-12);
     }
 

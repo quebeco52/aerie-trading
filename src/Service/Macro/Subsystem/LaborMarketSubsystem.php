@@ -116,19 +116,19 @@ class LaborMarketSubsystem
         }
 
         $unemploymentGap = $targetUnemployment - $state->unemploymentRate;
-        $adjustmentSpeed = $unemploymentGap > 0 ? self::OKUNS_FIRING_SPEED : self::OKUNS_HIRING_SPEED;
+        $adjustment = TimeSeries::smoothingWeight($dt, 1.0 / ($unemploymentGap > 0 ? self::OKUNS_FIRING_SPEED : self::OKUNS_HIRING_SPEED));
 
         // The move splits into the output gap pushing unemployment off the NAIRU and the pull back onto it.
         if ($this->diagnostics?->isEnabled()) {
             $this->diagnostics->recordFlows('labour', 'nairu', ['scarring' => $scarring, 'healing' => -$healing, 'clamp' => $state->nairu - $unclampedNairu]);
             $this->diagnostics->recordFlows('labour', 'unemployment', [
-                'outputGap' => $adjustmentSpeed * ($targetUnemployment - $state->nairu) * $dt,
-                'towardNairu' => $adjustmentSpeed * ($state->nairu - $state->unemploymentRate) * $dt,
+                'outputGap' => $adjustment * ($targetUnemployment - $state->nairu),
+                'towardNairu' => $adjustment * ($state->nairu - $state->unemploymentRate),
             ]);
             $this->diagnostics->recordValues('labour', ['okunTarget' => $targetUnemployment, 'firingShare' => $unemploymentGap > 0 ? 1.0 : 0.0], $dt);
         }
 
-        $state->unemploymentRate += $adjustmentSpeed * $unemploymentGap * $dt;
+        $state->unemploymentRate += $adjustment * $unemploymentGap;
         $this->recordMonthlyUnemployment($state, $dt);
     }
 
@@ -220,7 +220,7 @@ class LaborMarketSubsystem
             ? self::WAGE_ADJUSTMENT_SPEED
             : self::WAGE_ADJUSTMENT_SPEED * self::WAGE_DOWNWARD_RIGIDITY_FACTOR;
 
-        $state->wageGrowth += $adjustmentSpeed * $wageGap * $dt;
+        $state->wageGrowth += TimeSeries::smoothingWeight($dt, 1.0 / $adjustmentSpeed) * $wageGap;
 
         // The settlement splits into the target's legs and the distance wages still trail it by.
         if ($this->diagnostics?->isEnabled()) {

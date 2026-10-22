@@ -709,9 +709,10 @@ class CreditFiscalSubsystem
     {
         $stanceTarget = self::FOUNDING_NET_TAX_RATE + self::fiscalStance($state);
         $levies = self::publicAccounts($state, $dt)->policyLevies();
-        $state->netTaxRate += MacroConstants::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $levies + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma) - $state->netTaxRate) * $dt;
-        $state->netTaxStanceRate += MacroConstants::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $state->netTaxStanceRate) * $dt;
-        $state->corporateTaxRate += MacroConstants::FISCAL_ADJUSTMENT_SPEED * (MacroConstants::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift - $state->corporateTaxRate) * $dt;
+        $fiscalYears = 1.0 / MacroConstants::FISCAL_ADJUSTMENT_SPEED;
+        $state->netTaxRate = TimeSeries::calculateDistributedLag($state->netTaxRate, $stanceTarget - $levies + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma), $dt, $fiscalYears);
+        $state->netTaxStanceRate = TimeSeries::calculateDistributedLag($state->netTaxStanceRate, $stanceTarget, $dt, $fiscalYears);
+        $state->corporateTaxRate = TimeSeries::calculateDistributedLag($state->corporateTaxRate, MacroConstants::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift, $dt, $fiscalYears);
 
         $trendWeight = TimeSeries::smoothingWeight($dt, self::TAX_RATE_TREND_YEARS);
         $state->netTaxStanceRateTrend += $trendWeight * ($state->netTaxStanceRate - $state->netTaxStanceRateTrend);
@@ -719,20 +720,24 @@ class CreditFiscalSubsystem
 
         // The legislated part of that adjustment on its own, and the laws as the trailing year's earnings carry them,
         // which the market measures what it expects against (App\Service\Market\Pricing\PolicyCapitalization).
-        $state->corporateTaxShiftRealized += MacroConstants::FISCAL_ADJUSTMENT_SPEED * ($state->corporateTaxPolicyShift - $state->corporateTaxShiftRealized) * $dt;
-        $state->corporateTaxShiftEmbodied += ($state->corporateTaxShiftRealized - $state->corporateTaxShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
-        $state->bankLevyEmbodied += ($state->bankLevyRate - $state->bankLevyEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        $state->corporateTaxShiftRealized = TimeSeries::calculateDistributedLag($state->corporateTaxShiftRealized, $state->corporateTaxPolicyShift, $dt, $fiscalYears);
+        $state->corporateTaxShiftEmbodied = TimeSeries::calculateDistributedLag($state->corporateTaxShiftEmbodied, $state->corporateTaxShiftRealized, $dt, self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
+        $state->bankLevyEmbodied = TimeSeries::calculateDistributedLag($state->bankLevyEmbodied, $state->bankLevyRate, $dt, self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
         // The rules on extraction, the stamp duty and the carbon price reach costs, turnover and the power price at
         // once, so their measures are lagged as the levy is.
-        $state->extractionCostFactorEmbodied += (FirmEconomics::calculateExtractionCostFactor($state->extractionStringency) - $state->extractionCostFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
-        $state->stampDutyVolumeFactorEmbodied += (MacroTransmission::calculateStampDutyVolumeFactor($state->stampDutyRate) - $state->stampDutyVolumeFactorEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
-        $state->carbonPowerUpliftEmbodied += (CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice) - $state->carbonPowerUpliftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        $state->extractionCostFactorEmbodied = TimeSeries::calculateDistributedLag($state->extractionCostFactorEmbodied, FirmEconomics::calculateExtractionCostFactor($state->extractionStringency), $dt, self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
+        $state->stampDutyVolumeFactorEmbodied = TimeSeries::calculateDistributedLag($state->stampDutyVolumeFactorEmbodied, MacroTransmission::calculateStampDutyVolumeFactor($state->stampDutyRate), $dt, self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
+        $state->carbonPowerUpliftEmbodied = TimeSeries::calculateDistributedLag($state->carbonPowerUpliftEmbodied, CommodityLogisticsSubsystem::carbonPowerPriceUplift($state->carbonPrice), $dt, self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
         // A commission's grant reaches the tariff as rate cases close, which the trailing year then lags.
-        $state->utilityTariffShortfallEmbodied += (FirmEconomics::steadyTariffShortfall($state->utilityRateCaseGrantShare) - $state->utilityTariffShortfallEmbodied)
-            * $dt / ((1.0 / FirmEconomics::RATE_CASE_DECISION_RATE) + self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
+        $state->utilityTariffShortfallEmbodied = TimeSeries::calculateDistributedLag(
+            $state->utilityTariffShortfallEmbodied,
+            FirmEconomics::steadyTariffShortfall($state->utilityRateCaseGrantShare),
+            $dt,
+            (1.0 / FirmEconomics::RATE_CASE_DECISION_RATE) + self::TRAILING_EARNINGS_MEAN_LAG_YEARS,
+        );
         // The firms the budget buys from read purchases through their smoothed level, which the trailing year then
         // lags.
-        $state->governmentSpendingShiftEmbodied += ((($state->governmentSpendingIndexEma / MacroConstants::GOVT_SPENDING_BASELINE) - 1.0) - $state->governmentSpendingShiftEmbodied) * $dt / self::TRAILING_EARNINGS_MEAN_LAG_YEARS;
+        $state->governmentSpendingShiftEmbodied = TimeSeries::calculateDistributedLag($state->governmentSpendingShiftEmbodied, ($state->governmentSpendingIndexEma / MacroConstants::GOVT_SPENDING_BASELINE) - 1.0, $dt, self::TRAILING_EARNINGS_MEAN_LAG_YEARS);
     }
 
     /**
@@ -1268,29 +1273,22 @@ class CreditFiscalSubsystem
      */
     public function updateExcessBondPremium(MacroState $state, float $gapChange, float $dt, float $mainlandGapChange = 0.0): void
     {
-        // The Schwartz target carries the Ito correction; handing it this level puts the log mean on EBP_LOG_MEAN.
-        $target = exp(self::EBP_LOG_MEAN + ((self::EBP_LOG_VOLATILITY ** 2) / (2.0 * self::EBP_MEAN_REVERSION)));
-        $shifted = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: $state->excessBondPremium + self::EBP_DISPLACEMENT,
+        $step = $this->mathUtility->stepJumpingLogOu(
+            current: $state->excessBondPremium + self::EBP_DISPLACEMENT,
             kappa: self::EBP_MEAN_REVERSION,
-            theta: $target,
+            theta: StochasticProcesses::schwartzThetaForLogMean(exp(self::EBP_LOG_MEAN), self::EBP_MEAN_REVERSION, self::EBP_LOG_VOLATILITY),
             sigma: self::EBP_LOG_VOLATILITY,
-            dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal(),
-        );
-        $jump = $this->mathUtility->calculateJumpDiffusion(
-            lambda: self::EBP_JUMP_INTENSITY,
+            jumpIntensity: self::EBP_JUMP_INTENSITY,
             jumpMean: 0.0,
             jumpVol: self::EBP_JUMP_LOG_VOLATILITY,
             dt: $dt,
         );
+        if ($step['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('excessBondPremium', $step['exponent']);
+        }
 
         $worldGapChange = ((1.0 - self::EBP_MAINLAND_GAP_SHARE) * $gapChange) + (self::EBP_MAINLAND_GAP_SHARE * $mainlandGapChange);
-        $shifted *= $jump['multiplier'] * exp(-self::EBP_LOG_GAP_SPEED_SENSITIVITY * $worldGapChange);
-        if ($jump['exponent'] !== null) {
-            $this->diagnostics?->recordEvent('excessBondPremium', $jump['exponent']);
-        }
-        $state->excessBondPremium = $shifted - self::EBP_DISPLACEMENT;
+        $state->excessBondPremium = ($step['level'] * exp(-self::EBP_LOG_GAP_SPEED_SENSITIVITY * $worldGapChange)) - self::EBP_DISPLACEMENT;
     }
 
     /**
@@ -1377,8 +1375,7 @@ class CreditFiscalSubsystem
      */
     public function calculateReimbursementRate(MacroState $state, float $dt): void
     {
-        $crossedYearEnd = floor($state->totalTime) > floor($state->totalTime - $dt);
-        if (!$crossedYearEnd) {
+        if (!TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0)) {
             return;
         }
 
