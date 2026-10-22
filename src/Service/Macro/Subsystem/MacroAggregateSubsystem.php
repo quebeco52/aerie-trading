@@ -85,6 +85,8 @@ class MacroAggregateSubsystem
      * answer, as the credit spread's.
      */
     public const DEFAULT_RATE_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
+    /** Time constant (years) of the HY and interbank spreads' measured trends: the IG spread's decade. */
+    public const SPREAD_TREND_YEARS = CreditFiscalSubsystem::CREDIT_SPREAD_TREND_YEARS;
     /**
      * The same decade for the recession probability's trend, the average a reserving committee reads the outlook
      * against.
@@ -1779,6 +1781,8 @@ class MacroAggregateSubsystem
         $state->freightRateIndexDecadeTrend += $supplyCostTrendWeight * ($state->freightRateIndexEma - $state->freightRateIndexDecadeTrend);
         $state->excessBondPremiumTrend += (1.0 - exp(-$dt / self::CREDIT_PREMIUM_TREND_YEARS)) * ($state->excessBondPremium - $state->excessBondPremiumTrend);
         $state->interbankLiquiditySpreadEma += $emaWeight * ($state->interbankLiquiditySpread - $state->interbankLiquiditySpreadEma);
+        $spreadTrendWeight = 1.0 - exp(-$dt / self::SPREAD_TREND_YEARS);
+        $state->interbankLiquiditySpreadTrend += $spreadTrendWeight * ($state->interbankLiquiditySpreadEma - $state->interbankLiquiditySpreadTrend);
         $state->totalFactorProductivityIndexEma += $emaWeight * ($state->totalFactorProductivityIndex - $state->totalFactorProductivityIndexEma);
         $state->capitalStockOverhangEma += $emaWeight * ($state->capitalStockOverhang - $state->capitalStockOverhangEma);
         $state->residentialPropertyIndexEma += $emaWeight * ($state->residentialPropertyIndex - $state->residentialPropertyIndexEma);
@@ -1795,6 +1799,7 @@ class MacroAggregateSubsystem
         $state->supercoreInflationEma += $emaWeight * ($state->supercoreInflation - $state->supercoreInflationEma);
         $state->coreGoodsInflationEma += $emaWeight * ($state->coreGoodsInflation - $state->coreGoodsInflationEma);
         $state->highYieldCreditSpreadEma += $emaWeight * ($state->highYieldCreditSpread - $state->highYieldCreditSpreadEma);
+        $state->highYieldCreditSpreadTrend += $spreadTrendWeight * ($state->highYieldCreditSpreadEma - $state->highYieldCreditSpreadTrend);
         $state->inventoryStockGapEma += $emaWeight * ($state->inventoryStockGap - $state->inventoryStockGapEma);
         $state->energyInventoryIndexEma += $emaWeight * ($state->energyInventoryIndex - $state->energyInventoryIndexEma);
         $state->capacityUtilizationRateEma += $emaWeight * ($state->capacityUtilizationRate - $state->capacityUtilizationRateEma);

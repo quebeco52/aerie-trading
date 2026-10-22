@@ -182,6 +182,8 @@ final class MacroFieldRegistry
         'sovereignNetFinancialLiabilitiesToGdp' => 'sovereignNetDebtToGdp',
         'sovereignCouponRate' => 'yield10y',
         'macroCreditSpreadTrend' => 'macroCreditSpreadEma',
+        'interbankLiquiditySpreadTrend' => 'interbankLiquiditySpreadEma',
+        'highYieldCreditSpreadTrend' => 'highYieldCreditSpreadEma',
         'dealActivityIndexTrend' => 'dealActivityIndexEma',
         'treasuryVolatilityTrend' => 'treasuryVolatility',
         'corporateTaxRateTrend' => 'corporateTaxRate',

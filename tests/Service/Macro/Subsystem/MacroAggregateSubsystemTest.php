@@ -2677,4 +2677,30 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(0.020, $state->retailDefaultRateTrend, 0.0002);
         $this->assertEqualsWithDelta(110.0, $state->commercialPropertyIndexTrend, 0.1);
     }
+
+    /**
+     * The HY and interbank spreads' measured trends close on a sustained level over their decade, whatever the tick.
+     */
+    public function testTheHighYieldAndInterbankSpreadTrendsAreADecadesAverage(): void
+    {
+        $highYieldBase = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
+        $path = function (int $ticksPerYear) use ($highYieldBase): array {
+            $state = new MacroState();
+            $state->interbankLiquiditySpread = MacroConstants::INTERBANK_BASELINE_SPREAD + 0.01;
+            $state->interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD + 0.01;
+            $state->interbankLiquiditySpreadTrend = MacroConstants::INTERBANK_BASELINE_SPREAD;
+            $state->highYieldCreditSpread = $highYieldBase + 0.01;
+            $state->highYieldCreditSpreadEma = $highYieldBase + 0.01;
+            $state->highYieldCreditSpreadTrend = $highYieldBase;
+            for ($tick = 0; $tick < 10 * $ticksPerYear; ++$tick) {
+                $this->subsystem->updateExponentialMovingAverages($state, 1.0 / $ticksPerYear);
+            }
+
+            return [$state->interbankLiquiditySpreadTrend, $state->highYieldCreditSpreadTrend];
+        };
+
+        $closed = 0.01 * (1.0 - exp(-10.0 / MacroAggregateSubsystem::SPREAD_TREND_YEARS));
+        $this->assertEqualsWithDelta([MacroConstants::INTERBANK_BASELINE_SPREAD + $closed, $highYieldBase + $closed], $path(12), 1e-12);
+        $this->assertEqualsWithDelta($path(12), $path(252), 1e-12);
+    }
 }

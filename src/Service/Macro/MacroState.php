@@ -272,6 +272,7 @@ class MacroState
 
     public float $interbankLiquiditySpread;
     public float $interbankLiquiditySpreadEma;
+    public float $interbankLiquiditySpreadTrend;
     public float $excessBondPremium;
     public float $excessBondPremiumTrend;
 
@@ -330,6 +331,7 @@ class MacroState
 
     public float $highYieldCreditSpread;
     public float $highYieldCreditSpreadEma;
+    public float $highYieldCreditSpreadTrend;
 
     public float $inventoryStockGap;
     public float $inventoryStockGapEma;

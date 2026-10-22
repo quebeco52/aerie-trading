@@ -51,6 +51,8 @@ class MacroFieldRegistryTest extends TestCase
         'ruleInflationGap' => 'Input to the rule behind target_rate, which is recorded.',
         'ruleOutputGap' => 'Input to the rule behind target_rate, which is recorded.',
         'macroCreditSpreadTrend' => 'Decade-long average of macro_credit_spread, which is recorded.',
+        'interbankLiquiditySpreadTrend' => 'Decade-long average of interbank_liquidity_spread, which is recorded.',
+        'highYieldCreditSpreadTrend' => 'Decade-long average of high_yield_credit_spread, which is recorded.',
         'dealActivityIndexTrend' => 'Decade-long average of deal_activity_index, which is recorded.',
         'worldActivityIdiosyncratic' => 'Latent AR(1) state behind world_activity_gap, which is recorded.',
         'mainlandCycleGap' => 'MAINLAND_CYCLE_LOADING times foreign_output_gap, both recorded; the gap channels carry its contribution.',

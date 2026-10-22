@@ -215,6 +215,40 @@ class MerchantHouseBusinessModelTest extends TestCase
     }
 
     /**
+     * The interbank leg reads the spread against its measured trend, not the base it never falls below: zero at
+     * trend however far above the base the trend sits, a cost above it and the same gain below it.
+     */
+    public function testTheInterbankLegIsTwoSidedAboutItsTrend(): void
+    {
+        $trend = MacroConstants::INTERBANK_BASELINE_SPREAD + 0.0020;
+        $gap = 0.0010;
+        $at = fn(float $spread): float => $this->model->computeActualFinancials(
+            $this->ravn(),
+            100_000_000.0,
+            0.80,
+            10_000_000.0,
+            0.0,
+            new MacroStateDTO(
+                outputGapEma: 0.0,
+                macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+                macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
+                policyRateEma: self::NEUTRAL_POLICY_RATE,
+                interbankLiquiditySpreadEma: $spread,
+                interbankLiquiditySpreadTrend: $trend,
+            ),
+            $this->deterministicMath(),
+        )->clampedMargin;
+
+        $neutral = $this->model->computeActualFinancials($this->ravn(), 100_000_000.0, 0.80, 10_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath());
+        $merchantShare = $neutral->streamRevenue['merchant_trading'] / array_sum($neutral->streamRevenue);
+        $expected = $gap * MerchantHouseBusinessModel::MERCHANT_INVENTORY_HOLDING_YEARS * $merchantShare;
+
+        $this->assertEqualsWithDelta($neutral->clampedMargin, $at($trend), 1e-12, 'At its trend the spread charges nothing.');
+        $this->assertEqualsWithDelta($expected, $at($trend + $gap) - $at($trend), 1e-12, 'Above trend it charges the gap.');
+        $this->assertEqualsWithDelta($expected, $at($trend) - $at($trend - $gap), 1e-12, 'Below trend it earns the same gap back.');
+    }
+
+    /**
      * The trade-credit ledger is the parent's contrarian float book, not a variant of it, so it must still
      * earn the front rate. This is the inherited half of the sub-model and is worth pinning: an override
      * that stopped calling it would be silent.

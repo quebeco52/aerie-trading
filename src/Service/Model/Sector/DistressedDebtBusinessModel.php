@@ -9,7 +9,6 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\CreditRisk;
-use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 
@@ -46,14 +45,13 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     }
 
     // --- Special Situations & Macro Triggers ---
-    /** Distress signal per unit of the IG spread over its decade trend: 100 bps over reads 0.20. */
-    public const SPREAD_SURGE_SCALAR            = 20.00;
+    /**
+     * Distress signal per unit of the HY spread over its decade trend, the credit cycle counted once: 100 bps over
+     * reads 0.16, about 30 bps on the IG spread.
+     */
+    public const HY_SPREAD_SURGE_SCALAR         = 16.00;
     /** Distress signal per unit of output gap, against the cycle: a -3% gap reads 0.15, a +3% boom -0.15. */
     public const RECESSION_SURGE_SCALAR         = 5.00;
-    /**
-     * Distress signal per unit of the HY spread over its trend (the IG trend at the HY multiple): 400 bps reads 0.40.
-     */
-    public const HY_SPREAD_SURGE_SCALAR         = 10.00;
     /**
      * Distress signal per unit of the corporate default rate over its measured trend, relative: defaults half again
      * the usual read 0.75, a third below it -0.50.
@@ -131,18 +129,14 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     }
 
     /**
-     * Counter-cyclical opportunity set, measured against recent conditions: the IG spread over its decade trend, the
-     * HY spread over that trend at the multiple HY is built at, defaults over their trend and the output gap, all
-     * signed. A two-sided Michaelis-Menten curve maps the signal: distress fills the book toward the fund's capacity,
-     * credit easier than usual leaves the dry powder idle toward the drag, and a usual quarter is plan.
+     * Counter-cyclical opportunity set, measured against recent conditions: the HY spread over its decade trend (the
+     * paper a distressed buyer bids for, and the one credit-cycle term), defaults over their trend and the output gap,
+     * all signed. A two-sided Michaelis-Menten curve maps the signal: distress fills the book toward the fund's
+     * capacity, credit easier than usual leaves the dry powder idle toward the drag, and a usual quarter is plan.
      */
     private function resolveDistressMultiplier(\App\DTO\MacroStateDTO $macroState): float
     {
-        $spreadTrend = $macroState->macroCreditSpreadTrend;
-        $highYieldTrend = $spreadTrend * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
-
-        $distressSignal = (($macroState->macroCreditSpread - $spreadTrend) * self::SPREAD_SURGE_SCALAR)
-            + (($macroState->highYieldCreditSpreadEma - $highYieldTrend) * self::HY_SPREAD_SURGE_SCALAR)
+        $distressSignal = (($macroState->highYieldCreditSpreadEma - $macroState->highYieldCreditSpreadTrend) * self::HY_SPREAD_SURGE_SCALAR)
             + ($macroState->corporateDefaultDeviation() * self::DEFAULT_RATE_SURGE_SCALAR)
             - ($macroState->outputGapEma * self::RECESSION_SURGE_SCALAR);
 
@@ -229,8 +223,6 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         return [
             'corporate_default_rate_ema',
             'high_yield_credit_spread_ema',
-            'macro_credit_spread',
-            'macro_credit_spread_ema',
             'output_gap_ema',
             'yield_10y_ema',
         ];

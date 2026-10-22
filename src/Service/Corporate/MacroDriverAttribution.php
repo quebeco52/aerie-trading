@@ -21,13 +21,16 @@ final class MacroDriverAttribution
 {
     // --- Neutral Readings ---
     /**
-     * Series and the trend each is neutral at: nominal output at potential, equity wealth at its trend, the IG spread
-     * at its decade average, which its readers measure it against rather than the base it is built from.
+     * Series and the trend each is neutral at: nominal output at potential, equity wealth at its trend, the IG, HY and
+     * interbank spreads at their decade averages, which their readers measure them against rather than the base they
+     * are built from.
      */
     public const NEUTRAL_TREND = [
         'nominal_gdp_index' => 'potential_gdp_index',
         'equity_wealth_ratio' => 'equity_wealth_trend',
         'macro_credit_spread' => 'macro_credit_spread_trend',
+        'interbank_liquidity_spread_ema' => 'interbank_liquidity_spread_trend',
+        'high_yield_credit_spread_ema' => 'high_yield_credit_spread_trend',
     ];
 
     /**

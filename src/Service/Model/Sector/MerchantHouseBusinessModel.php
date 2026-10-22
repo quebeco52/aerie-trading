@@ -281,7 +281,8 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
      *     and cost of goods together, which leaves the ratio untouched.
      *  2. Dislocation rent (Kaldor-Working convenience yield plus corridor congestion).
      *  3. Funding. Cargo carried on short trade credit for about a quarter, charged at the floating reference
-     *     rate plus the credit spread above where they sit at trend.
+     *     rate plus the credit spread against where they sit at trend: the policy rate at neutral and both spreads
+     *     at their decade averages, so a freeze costs the desk and funding cheaper than usual earns it the gap.
      */
     private function resolveMerchantCostShift(
         MacroStateDTO $macroState,
@@ -298,7 +299,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             + (($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE) * self::MERCHANT_DISRUPTION_SCALAR);
 
         $fundingGap = ($macroState->floatingReferenceRate() + $macroState->macroCreditSpreadEma)
-            - ($macroState->perceivedNeutralRate + MacroConstants::INTERBANK_BASELINE_SPREAD + $macroState->macroCreditSpreadTrend);
+            - ($macroState->perceivedNeutralRate + $macroState->interbankLiquiditySpreadTrend + $macroState->macroCreditSpreadTrend);
         $carryCost = $fundingGap * self::MERCHANT_INVENTORY_HOLDING_YEARS;
 
         $shift = $spreadDilution + $carryCost - $dislocationRent;

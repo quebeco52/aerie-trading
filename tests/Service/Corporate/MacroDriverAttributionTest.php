@@ -38,6 +38,20 @@ class MacroDriverAttributionTest extends TestCase
         $this->assertSame(0.018, MacroDriverAttribution::neutralReading('macro_credit_spread', $actual));
     }
 
+    /** The HY and interbank spreads are neutral at their decade trends, not the bases they are built from. */
+    public function testTheHighYieldAndInterbankSpreadsAreNeutralAtTheirTrends(): void
+    {
+        $actual = (new MacroStateDTO(
+            interbankLiquiditySpreadEma: 0.004,
+            interbankLiquiditySpreadTrend: 0.0026,
+            highYieldCreditSpreadEma: 0.07,
+            highYieldCreditSpreadTrend: 0.05,
+        ))->toArray();
+
+        $this->assertSame(0.0026, MacroDriverAttribution::neutralReading('interbank_liquidity_spread_ema', $actual));
+        $this->assertSame(0.05, MacroDriverAttribution::neutralReading('high_yield_credit_spread_ema', $actual));
+    }
+
     /**
      * Only the inputs the model reads, and only those the quarter has moved, get a counterfactual; each moves just its
      * own input.

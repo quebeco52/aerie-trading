@@ -55,6 +55,8 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         'import_price_deviation' => ['import_price_level'],
         'unemployment_gap' => ['unemployment_rate_ema', 'nairu_ema'],
         'macro_credit_spread_trend' => ['macro_credit_spread_ema'],
+        'interbank_liquidity_spread_trend' => ['interbank_liquidity_spread_ema'],
+        'high_yield_credit_spread_trend' => ['high_yield_credit_spread_ema'],
         'house_price_deviation' => ['residential_property_index_ema', 'residential_wealth_trend'],
         'mortgage_rate' => ['yield_10y_ema'],
         'money_market_yield' => ['policy_rate_ema'],
