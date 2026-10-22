@@ -14,6 +14,8 @@ use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
 use Doctrine\ORM\Mapping\Column;
+use Doctrine\ORM\Mapping\Entity;
+use Doctrine\ORM\Mapping\Table;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -30,6 +32,18 @@ use ReflectionClass;
  */
 final class MarketResetCompletenessTest extends TestCase
 {
+    /**
+     * Tables the reset keeps on purpose: everything else an entity maps is emptied.
+     *
+     * @var array<string, string>
+     */
+    private const TABLES_INTENTIONALLY_KEPT = [
+        'stocks'          => 'Each firm is reopened in place on its seed row; procedurally added firms are deleted.',
+        'etfs'            => 'Each fund is reopened in place by the fund SQL the column check below guards.',
+        'users'           => 'Accounts survive; their cash and margin are reset by statement.',
+        'watchlist_items' => 'A player\'s list of tickers, which means the same thing on the new market.',
+    ];
+
     /**
      * Columns of the fund the reset deliberately leaves alone.
      *
@@ -244,4 +258,35 @@ final class MarketResetCompletenessTest extends TestCase
         ));
     }
 
+    /**
+     * Every table an entity maps is emptied by the reset or kept on purpose. District news, notifications and price
+     * alerts once outlived a reset, so the new market opened with the old one's stories and alerts.
+     */
+    public function testResetEmptiesEveryTableItDoesNotKeep(): void
+    {
+        $source = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Command/MarketResetCommand.php');
+        preg_match_all('/TRUNCATE TABLE (\w+)/', $source, $matches);
+        $truncated = $matches[1];
+
+        $tables = [];
+        foreach (glob(dirname(__DIR__, 2) . '/src/Entity/*.php') ?: [] as $file) {
+            $name = 'App\\Entity\\' . basename($file, '.php');
+            if (!class_exists($name)) {
+                continue;
+            }
+            $class = new ReflectionClass($name);
+            if ($class->getAttributes(Entity::class) === []) {
+                continue;
+            }
+            $table = $class->getAttributes(Table::class)[0] ?? null;
+            $tables[] = $table?->getArguments()['name'] ?? $this->toSnakeCase($class->getShortName());
+        }
+
+        $missing = array_diff($tables, $truncated, array_keys(self::TABLES_INTENTIONALLY_KEPT));
+
+        $this->assertSame([], array_values($missing), sprintf(
+            'app:market-reset neither empties nor deliberately keeps: %s. Truncate it, or add it to TABLES_INTENTIONALLY_KEPT with the reason.',
+            implode(', ', $missing),
+        ));
+    }
 }

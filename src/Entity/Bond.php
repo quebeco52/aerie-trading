@@ -91,10 +91,6 @@ class Bond
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, options: ['default' => '0.000000'])]
     private string $creditSpread = '0.000000';
 
-    /** Share of face actually recovered, set when the issue is settled in a default. */
-    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, nullable: true)]
-    private ?string $recoveryRate = null;
-
     /** Original maturity in years at auction (2, 5, 10, 30). Kept for grouping; it is not the remaining life. */
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 2)]
     private string $tenorYears;
@@ -453,18 +449,6 @@ class Bond
     public function setCreditSpread(string $creditSpread): static
     {
         $this->creditSpread = $creditSpread;
-
-        return $this;
-    }
-
-    public function getRecoveryRate(): ?string
-    {
-        return $this->recoveryRate;
-    }
-
-    public function setRecoveryRate(?string $recoveryRate): static
-    {
-        $this->recoveryRate = $recoveryRate;
 
         return $this;
     }

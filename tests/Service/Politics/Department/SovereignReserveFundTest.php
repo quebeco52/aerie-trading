@@ -137,8 +137,8 @@ class SovereignReserveFundTest extends TestCase
     }
 
     /**
-     * A running game that predates the fund's head gains one on its next tick for the term in progress, and every
-     * councillor gains a stance on the reserves; catching up is not news, and the rest of the Council is untouched.
+     * A running game whose fund has no head gains one on its next tick for the term in progress; catching up is not
+     * news, and the rest of the Council is untouched.
      */
     public function testARunningGameGainsAHeadForTheTermInProgress(): void
     {
@@ -146,13 +146,11 @@ class SovereignReserveFundTest extends TestCase
         $council = $state->councilNames;
         $regulator = $state->head(Office::Regulator)['name'];
         unset($state->heads[Office::FundHead->value]);
-        $state->councilFundStances = [];
 
         self::runTo($state, 11.0 + self::DT);
 
         $this->assertSame($council, $state->councilNames);
         $this->assertSame($regulator, $state->head(Office::Regulator)['name']);
-        $this->assertCount(AerieCouncil::SEATS, $state->councilFundStances);
         $this->assertNotSame('', $state->head(Office::FundHead)['name']);
         $this->assertNotSame(AerieCouncil::OPENING_FUND_HEAD, $state->head(Office::FundHead)['name']);
         $this->assertEqualsWithDelta(Office::FundHead->openingTermEnd() + Office::FundHead->termYears(), $state->head(Office::FundHead)['termStart'], 1e-9);

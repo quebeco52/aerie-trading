@@ -79,7 +79,7 @@ class MacroFieldRegistryTest extends TestCase
         'reimbursementAusterityShare' => 'Cut the last price update priced in, inside reimbursement_rate_index and reimbursement_rate_growth, both recorded.',
         'cyclicalMigrationRate' => 'Inside potential_gdp_index and output_gap, both recorded, and immigrationPopulationShift.',
         'crisisScarStep' => 'Per-tick part of that scar, inside potential_gdp_index and output_gap, both recorded.',
-        'authorityHoldingsToGdpEma' => 'Year-long average of the holdings qe_intensity records, kept to read their change as a flow.',
+        'authorityHoldingsToGdpEma' => 'Year-long average of the holdings balance_sheet_intensity records, kept to read their change as a flow.',
         'metalsXi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
         'agriChi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
         'agriXi' => 'Latent OU state behind agriculturalCommodityIndex, which is recorded.',
@@ -125,7 +125,7 @@ class MacroFieldRegistryTest extends TestCase
         'mortgageLtvCap' => 'Input the Financial Regulator\'s head hands the economy; the politics state records it (regulatorLtvCap).',
         'ltvCutBuilt' => 'Lagged build-up of the cap\'s cut toward CreditFiscalSubsystem::mortgageLtvCreditCut(), which household_debt_to_income carries.',
         'electricityCarbonPriceLevel' => 'Lagged pass-through of carbon_price into the electricity bill, which is recorded.',
-        'lastQeLaunchAt' => 'Edge marker for the launch headline; qe_active and qe_intensity record the programme.',
+        'lastQeLaunchAt' => 'Edge marker for the launch headline; qe_active and balance_sheet_intensity record the programme.',
 
         'sovereignFundDomesticEquity' => 'Currency amount that compounds forever; sovereign_fund_to_gdp and the domestic weight record it.',
         'sovereignFundForeignEquity' => 'Foreign-currency amount that compounds forever; sovereign_fund_equity_share and sovereign_fund_to_gdp record it.',

@@ -176,15 +176,11 @@ class CompanySnapshotBuilder
         $price = (float) $stock->getPrice();
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
 
-        // dt is zero: this prices the company as it stands for display, and must not advance the path.
-        $context = MarketPricingContext::forStock($stock, $macroState, $health, $this->anchorStakes);
-
-        // Priced once, not once per reading: the call draws, so a second one would hand the page a
-        // consensus struck against a different fair value than the targets beside it.
-        $pricing = $this->marketEngine->calculateNextPrice($context);
+        // Struck without a price step or a draw: the page shows the company as it stands.
+        $pricing = $this->marketEngine->strikeFairValue(MarketPricingContext::forStock($stock, $macroState, $health, $this->anchorStakes));
 
         $targets = $pricing['analyst_targets'];
-        $fairValue = (float) ($pricing['perceived_fair_value'] ?? 0.0);
+        $fairValue = $pricing['perceived_fair_value'];
         $targets['consensus'] = $fairValue > 0.0
             ? $fairValue
             : max($targets['growth_analyst'], $targets['income_analyst'], $targets['value_analyst']);

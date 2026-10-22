@@ -96,45 +96,4 @@ class StanceRevisionTest extends TestCase
         $this->assertSame($histories[0], $histories[1]);
     }
 
-    /**
-     * A Council and committee read from a payload that held swing votes at the middle keep their people; each swing
-     * vote now leans to a camp and is marked as one, and everyone else keeps their camp.
-     */
-    public function testSwingVotesHeldAtTheMiddleAreGivenACamp(): void
-    {
-        $state = self::opened(4);
-        $types = [];
-        foreach ($state->councilStances as $seat => $stance) {
-            $types[$seat] = Authority::typeName($stance, $state->councilSwingers[$seat]);
-            if ($state->councilSwingers[$seat] > 0.0) {
-                $state->councilStances[$seat] = 0.0;
-            }
-        }
-        $state->councilSwingers = [];
-        $state->heads[Office::Governor->value]['stance'] = $state->governorSwinger > 0.0 ? 0.0 : $state->head(Office::Governor)['stance'];
-        $state->governorSwinger = -1.0;
-        foreach ($state->memberSwingers as $member => $swing) {
-            if ($swing > 0.0) {
-                $state->memberStances[$member] = 0.0;
-            }
-        }
-        $state->memberSwingers = [];
-        $names = [$state->councilNames, $state->head(Office::Governor)['name'], $state->memberNames];
-
-        $math = new MathUtility();
-        $state->totalTime = 1.0 / 52.0;
-        Appointments::advance($state, $math);
-        Authority::advance($state, new MacroStateDTO(totalTime: $state->totalTime, policyRate: 0.03), 1.0 / 52.0);
-
-        $this->assertSame($names, [$state->councilNames, $state->head(Office::Governor)['name'], $state->memberNames]);
-        foreach ($state->councilStances as $seat => $stance) {
-            $this->assertContains($stance, [1.0, -1.0]);
-            $this->assertSame($types[$seat], Authority::typeName($stance, $state->councilSwingers[$seat]));
-        }
-        foreach ([$state->head(Office::Governor)['stance'], ...$state->memberStances] as $stance) {
-            $this->assertContains($stance, [1.0, -1.0]);
-        }
-        $this->assertGreaterThanOrEqual(0.0, $state->governorSwinger);
-        $this->assertEqualsWithDelta(Authority::balance($state->head(Office::Governor)['stance'], array_values($state->memberStances)), $state->committeeBalance, 1e-12, 'The balance is refreshed with the new camps.');
-    }
 }

@@ -470,7 +470,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $step = $this->subsystem->calculateBalanceSheetOperations($state, 0.25);
 
         $this->assertLessThan(0.008, $step['new_balance_sheet_intensity'], 'Overheating must end the reinvestment hold before the clock does.');
-        $this->assertGreaterThan(0.0, $step['new_qt_intensity'], 'The portfolio being unwound is what QT intensity reports.');
     }
 
     public function testSvenssonCurvatureScalingReflectsDieboldLiEmpiricalCalibration(): void
@@ -550,7 +549,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $stateWithRoom->targetRate = 0.010;
         $stateWithRoom->outputGap = -0.020;
         $roomCurve = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $stateWithRoom, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, $dt);
-        $this->assertEquals(0.0, $roomCurve['new_qe_intensity'], 'QE must not activate while the rule\'s rate is reachable.');
+        $this->assertEquals(0.0, $roomCurve['new_balance_sheet_intensity'], 'QE must not activate while the rule\'s rate is reachable.');
 
         // At the floor with the rule asking for less: purchases begin.
         $stateAtFloor = new MacroState();
@@ -558,7 +557,7 @@ class MonetaryPolicySubsystemTest extends TestCase
         $stateAtFloor->targetRate = -0.015;
         $stateAtFloor->outputGap = -0.020;
         $floorCurve = YieldCurveProbe::balanceSheetAndCurve($this->subsystem, $stateAtFloor, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, $dt);
-        $this->assertGreaterThan(0.0, $floorCurve['new_qe_intensity'], 'QE must activate once the rule asks for a rate below the floor.');
+        $this->assertGreaterThan(0.0, $floorCurve['new_balance_sheet_intensity'], 'QE must activate once the rule asks for a rate below the floor.');
     }
 
     /**
@@ -599,8 +598,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         $bs = $this->subsystem->calculateBalanceSheetOperations($state, 0.25);
 
         $this->assertGreaterThan(0.0, $bs['new_balance_sheet_intensity']);
-        $this->assertGreaterThan(0.0, $bs['new_qe_intensity']);
-        $this->assertEquals(0.0, $bs['new_qt_intensity']);
         $this->assertEquals(0.0, $bs['new_hold_timer']);
     }
 
@@ -1127,7 +1124,6 @@ class MonetaryPolicySubsystemTest extends TestCase
         // QE compresses the ten-year premium by the habitat shift; the rule must read that as its own doing.
         $qe = clone $state;
         $qe->balanceSheetIntensity = 0.008;
-        $qe->qeIntensity = 0.0; // isolate the long-rate channel from the Wu-Xia shadow term
         $qe->termPremium10yEma = MacroConstants::NS_BASE_TERM_PREMIUM - 0.008;
 
         $this->assertEqualsWithDelta(0.0, $this->subsystem->calculateLongRateGap($qe, MacroConstants::BASE_NATURAL_RATE), 0.00001, 'Balance-sheet compression is excluded from the long-rate gap.');
@@ -1555,14 +1551,20 @@ class MonetaryPolicySubsystemTest extends TestCase
         $recovered->policyRate = 0.02;
         $recovered->outputGap = 0.012;
         $recovered->outputGapEma = 0.012;
-        $recovered->qeIntensity = 0.0;
-        // Only the QE reading the rule used to subtract; the stock's own term-premium channel is the curve's business.
+        $recovered->balanceSheetIntensity = 0.0;
         $withStock = clone $recovered;
-        $withStock->qeIntensity = 0.0095;
+        $withStock->balanceSheetIntensity = 0.0095;
+        // The stock's habitat compression is already in the term premium it is held against.
+        $withStock->termPremium10yEma += FixedIncome::calculatePreferredHabitatTermPremiumShift(
+            balanceSheetIntensity: CreditFiscalSubsystem::durationExtraction($withStock->balanceSheetIntensity, $withStock->sovereignDebtToGdpEma, $withStock->sovereignDebtAverageMaturity),
+            tau: 10.0,
+            habitatSensitivity: MacroConstants::PREFERRED_HABITAT_DURATION_SENSITIVITY,
+        );
 
-        $this->assertSame(
+        $this->assertEqualsWithDelta(
             $this->subsystem->calculateTargetRate($recovered, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE),
             $this->subsystem->calculateTargetRate($withStock, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE),
+            1e-12,
         );
     }
 

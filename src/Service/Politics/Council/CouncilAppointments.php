@@ -85,7 +85,6 @@ final class CouncilAppointments
         }
         $salt = (int) $state->authoritySalt;
         $roster = AerieCouncil::roster($time);
-        self::backfillStances($state, $salt);
 
         // A charter change of term redates the sitting seats to the new schedule, so the change itself fills no seat.
         if ($state->councilTermYears !== AerieCouncil::TERM_YEARS) {
@@ -485,8 +484,8 @@ final class CouncilAppointments
     }
 
     /**
-     * Councillors seated before seats could fall vacant mid-term get their seating dated to the term's start and their
-     * departure drawn once, counted from now, when they are known to sit.
+     * Councillors with no seating date, which a charter change of term clears, get it dated to the term's start and
+     * their departure drawn once, counted from now.
      *
      * @param list<array{seat: int, since: float, termEnds: float, beforeYearOne: bool}> $roster
      */
@@ -502,42 +501,4 @@ final class CouncilAppointments
         ksort($state->councilLeavesAt);
     }
 
-    /**
-     * Councillors seated before the Council answered a question get their stance on it drawn once, from their seat's
-     * vacancy and name, so a running game keeps its Council and gains the question.
-     */
-    private static function backfillStances(PoliticsState $state, int $salt): void
-    {
-        foreach ($state->councilNames as $seat => $name) {
-            $vacancy = self::vacancyKey("council:{$seat}", $state->councilSince[$seat] ?? 0.0);
-            if (!isset($state->councilRegulationStances[$seat])) {
-                $state->councilRegulationStances[$seat] = FinancialRegulator::drawStance(MathUtility::hashedUniform($salt, "{$vacancy}:{$name}:regulation"));
-            }
-            if (!isset($state->councilFundStances[$seat])) {
-                $state->councilFundStances[$seat] = SovereignReserveFund::drawStance(MathUtility::hashedUniform($salt, "{$vacancy}:{$name}:fund"));
-            }
-            if (!isset($state->councilDebtStances[$seat])) {
-                $state->councilDebtStances[$seat] = Exchequer::drawStance(MathUtility::hashedUniform($salt, "{$vacancy}:{$name}:debt"));
-            }
-            if (!isset($state->councilCompetitionStances[$seat])) {
-                $state->councilCompetitionStances[$seat] = FairTradingBoard::drawStance(MathUtility::hashedUniform($salt, "{$vacancy}:{$name}:competition"));
-            }
-            if (!isset($state->councilMarketsStances[$seat])) {
-                $state->councilMarketsStances[$seat] = SecuritiesCommission::drawStance(MathUtility::hashedUniform($salt, "{$vacancy}:{$name}:markets"));
-            }
-            // A councillor held at the middle on money becomes a swing vote leaning to a camp.
-            if (!isset($state->councilSwingers[$seat])) {
-                $state->councilSwingers[$seat] = ($state->councilStances[$seat] ?? 0.0) === MonetaryAuthority::STANCES['swing'] ? 1.0 : 0.0;
-                if ($state->councilSwingers[$seat] > 0.0) {
-                    $state->councilStances[$seat] = MonetaryAuthority::swingLean(MathUtility::hashedUniform($salt, "{$vacancy}:{$name}:lean"));
-                }
-            }
-        }
-        ksort($state->councilSwingers);
-        ksort($state->councilRegulationStances);
-        ksort($state->councilFundStances);
-        ksort($state->councilDebtStances);
-        ksort($state->councilCompetitionStances);
-        ksort($state->councilMarketsStances);
-    }
 }

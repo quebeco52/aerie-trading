@@ -187,9 +187,6 @@ class MacroState
     public float $perceivedNeutralRate;
 
     public bool $qeActive;
-    public float $qeIntensity;
-    public bool $qtActive;
-    public float $qtIntensity;
     public float $balanceSheetIntensity;
     public float $balanceSheetHoldTimer;
     // When the last asset-purchase programme was launched, for the one headline it earns.
@@ -660,7 +657,7 @@ class MacroState
             $state->$field = match ($field) {
                 'sectorZ', 'sectorDemandZ', 'sittingLevers', 'previousSittingLevers', 'expectedLevers', 'previousExpectedLevers', 'systemicAlarmLatches' => is_array($data[$key]) ? array_map('floatval', $data[$key]) : [],
                 'unemploymentMonthly', 'consumerPriceMonthly' => is_array($data[$key]) ? array_values(array_map('floatval', $data[$key])) : [],
-                'qeActive', 'qtActive', 'recessionDeclared' => (bool) $data[$key],
+                'qeActive', 'recessionDeclared' => (bool) $data[$key],
                 'eventType' => (string) $data[$key],
                 default => (float) $data[$key],
             };
@@ -707,10 +704,6 @@ class MacroState
         if (!isset($carried['governmentSpendingShiftEmbodied'])) {
             $state->governmentSpendingShiftEmbodied = ($state->governmentSpendingIndexEma / MacroConstants::GOVT_SPENDING_BASELINE) - 1.0;
         }
-        if (!isset($carried['balanceSheetIntensity'])) {
-            // Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed.
-            $state->balanceSheetIntensity = (float) ($data['qe_intensity'] ?? 0.0);
-        }
         if (!isset($carried['policyRateShadow'])) {
             // A state predating meetings holds the rate it has until the Authority next meets.
             $state->policyRateShadow = $state->policyRate;
@@ -731,15 +724,6 @@ class MacroState
         }
         if (!isset($carried['qeActive'])) {
             $state->qeActive = $state->balanceSheetIntensity > MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD;
-        }
-        if (!isset($carried['qeIntensity'])) {
-            $state->qeIntensity = max(0.0, $state->balanceSheetIntensity);
-        }
-        if (!isset($carried['qtActive'])) {
-            $state->qtActive = $state->balanceSheetIntensity < -MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD;
-        }
-        if (!isset($carried['qtIntensity'])) {
-            $state->qtIntensity = max(0.0, -$state->balanceSheetIntensity);
         }
         if (!isset($carried['nsBeta1'])) {
             // Nelson-Siegel beta1 is the short-end spread of the curve, not a free parameter.

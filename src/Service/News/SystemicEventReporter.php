@@ -93,7 +93,7 @@ class SystemicEventReporter
             'output_gap_pct' => number_format($macro->outputGap * 100.0, 2),
             'inversion_months' => number_format($macro->inversionDuration * 12.0, 1),
             'erp_pct' => number_format($macro->equityRiskPremium * 100.0, 2),
-            'qe_intensity_pct' => number_format($macro->qeIntensity * 100.0, 2),
+            'qe_intensity_pct' => number_format($macro->balanceSheetIntensity * 100.0, 2),
             'epu_index' => number_format($macro->policyUncertaintyIndexEma, 0),
             'sovereign_spread_bps' => number_format($macro->sovereignRiskSpread * 10000.0, 0),
             'debt_to_gdp_pct' => number_format($macro->sovereignDebtToGdp * 100.0, 0),

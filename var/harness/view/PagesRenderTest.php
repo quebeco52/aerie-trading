@@ -31,7 +31,7 @@ final class PagesRenderTest extends KernelTestCase
                 'fcfConversion' => mt_rand(40, 130) / 100,
             ];
         }
-        usort($stocks, static fn ($a, $b) => $b['marketCap'] <=> $a['marketCap']);
+        usort($stocks, static fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
         $macro = ['output_gap' => 0.0132, 'inflation' => 0.0241, 'policy_rate' => 0.0425, 'yield_10y' => 0.0461];
 
         $pages = [
@@ -57,7 +57,7 @@ final class PagesRenderTest extends KernelTestCase
                 ['username' => 'jnoble', 'total_value' => 1003002.00, 'cash_balance' => 1003002.0, 'stock_value' => 0.0, 'etf_value' => 0.0],
             ]]],
             'login' => ['/login', 'security/login.html.twig', ['error' => null, 'last_username' => '']],
-            'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'qeIntensity' => 0.0]]],
+            'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'balanceSheetIntensity' => 0.0]]],
             'stock' => ['/stock/LAKE', 'stock/index.html.twig', [
                 'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Commercial banking', 'price' => 84.21, 'isBankrupt' => false, 'bankrupt' => false, 'sharesOutstanding' => 2400000000, 'earningsPerShare' => 6.12, 'currentRoe' => 0.124, 'baselineRoe' => 0.12, 'currentRoic' => 0.09, 'baselineRoic' => 0.09, 'publicFloatPercentage' => 0.8, 'volatility' => 0.22, 'totalEquity' => 1.6e11, 'debtToEquityRatio' => 1.4, 'creditRating' => 'A', 'creditSpread' => 0.011, 'systemicImportance' => 'Systemic'],
                 'isEtf' => false, 'isFinancial' => true, 'changePercent' => 0.0342, 'businessModel' => 'commercial_bank', 'events' => [], 'generalInfo' => 'Lakebird Bank is the largest deposit-taker in the District.',
@@ -83,12 +83,12 @@ final class PagesRenderTest extends KernelTestCase
 
         foreach ($pages as $name => [$path, $template, $data]) {
             $req = Request::create($path);
-            $req->setSession(new \Symfony\Component\HttpFoundation\Session\Session(new \Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage()));
+            $req->setSession(new Symfony\Component\HttpFoundation\Session\Session(new Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage()));
             $stack->push($req);
             $tokens = $container->get('security.token_storage');
             if ($name === 'dashboard') {
-                $user = (new \App\Entity\User())->setEmail('kestrel@example.com')->setUsername('kestrel');
-                $tokens->setToken(new \Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken($user, 'main', ['ROLE_USER']));
+                $user = (new App\Entity\User())->setEmail('kestrel@example.com')->setUsername('kestrel');
+                $tokens->setToken(new Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken($user, 'main', ['ROLE_USER']));
             } else {
                 $tokens->setToken(null);
             }

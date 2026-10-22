@@ -88,7 +88,6 @@ final class OperatingCostFlexTest extends TestCase
         $stock->setCorporateTreasury('15000000000');
         $stock->setRetainedEarnings('10000000000');
         $stock->setTotalRevenue('80000000000');
-        $stock->setPreviousRevenue('80000000000');
         $stock->setOperatingMargin('0.12');
         $stock->setTargetPayoutRatio('0.30');
         $stock->setDividendSpeed('1.00');

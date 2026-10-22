@@ -121,7 +121,7 @@ final class MacroFieldCatalog
         'money_supply_growth_ema' => ['label' => 'Broad money growth', 'unit' => self::UNIT_PERCENT],
         'money_supply_growth_trend' => ['label' => 'Broad money growth trend', 'unit' => self::UNIT_PERCENT],
         'money_market_fund_share' => ['label' => 'Money-market share (spot)', 'unit' => self::UNIT_PERCENT],
-        'qe_intensity' => ['label' => 'QE intensity', 'unit' => self::UNIT_PERCENT],
+        'balance_sheet_intensity' => ['label' => 'QE intensity', 'unit' => self::UNIT_PERCENT],
         'qe_active' => ['label' => 'QE programme', 'unit' => self::UNIT_PERCENT],
         'unemployment_rate_ema' => ['label' => 'Unemployment', 'unit' => self::UNIT_PERCENT],
         'nairu_ema' => ['label' => 'Natural unemployment', 'unit' => self::UNIT_PERCENT],

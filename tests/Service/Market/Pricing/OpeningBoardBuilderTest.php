@@ -69,7 +69,7 @@ class OpeningBoardBuilderTest extends TestCase
 
         foreach ($this->openBoard($openingMacro) as $ticker => $stock) {
             $health = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro);
-            $fairValue = $this->marketEngine->calculateNextPrice(MarketPricingContext::forStock($stock, $openingMacro, $health, $this->ledger))['perceived_fair_value'];
+            $fairValue = $this->marketEngine->strikeFairValue(MarketPricingContext::forStock($stock, $openingMacro, $health, $this->ledger))['perceived_fair_value'];
 
             $this->assertEqualsWithDelta(1.0, $fairValue / (float) $stock->getPrice(), 0.005, sprintf('%s opens %.1f%% away from the value the market puts on it.', $ticker, 100.0 * ($fairValue / (float) $stock->getPrice() - 1.0)));
         }
@@ -136,7 +136,7 @@ class OpeningBoardBuilderTest extends TestCase
             $fairValue = function () use ($stock, $openingMacro): float {
                 $health = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro);
 
-                return $this->marketEngine->calculateNextPrice(MarketPricingContext::forStock($stock, $openingMacro, $health, $this->ledger))['perceived_fair_value'];
+                return $this->marketEngine->strikeFairValue(MarketPricingContext::forStock($stock, $openingMacro, $health, $this->ledger))['perceived_fair_value'];
             };
             $paying = $fairValue();
             $stock->setLastDividend('0.00');
@@ -162,7 +162,7 @@ class OpeningBoardBuilderTest extends TestCase
             $fairValue = function () use ($stock, $openingMacro): float {
                 $health = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro);
 
-                return $this->marketEngine->calculateNextPrice(MarketPricingContext::forStock($stock, $openingMacro, $health, $this->ledger))['perceived_fair_value'];
+                return $this->marketEngine->strikeFairValue(MarketPricingContext::forStock($stock, $openingMacro, $health, $this->ledger))['perceived_fair_value'];
             };
             $opening = $fairValue();
 

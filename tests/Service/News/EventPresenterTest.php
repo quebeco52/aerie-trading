@@ -146,7 +146,7 @@ class EventPresenterTest extends TestCase
     {
         $event = [
             'type' => 'SHOCK',
-            'description' => 'Sudden market shock detected.',
+            'description' => '',
             'change_percent' => -4.50,
             'recorded_at' => '2026-08-29 18:04:00',
         ];
@@ -198,12 +198,12 @@ class EventPresenterTest extends TestCase
         $this->assertSame('Quarterly earnings of $1.00 a share were in line with forecasts.', $headline('Q-Earnings: $1.00 (Met expectations exactly | +$5.00M EVA).'));
     }
 
-    /** A price shock says what the shares did, including one published before the copy named the move. */
+    /** A price shock with no description of its own says what the shares did. */
     public function testAPriceShockSaysWhatTheSharesDid(): void
     {
         $this->assertSame('Hummock Foods shares jump 12.4% in a sudden move.', EventPresenter::shockHeadline('Hummock Foods shares', 12.44));
-        $this->assertSame('Shares drop 11.0% in a sudden move.', $this->presenter->present(['type' => 'SHOCK', 'description' => 'Sudden market shock detected.', 'change_percent' => -11.0])['headline']);
-        $this->assertSame('Shares moved sharply.', $this->presenter->present(['type' => 'SHOCK', 'description' => 'Sudden market shock detected.'])['headline']);
+        $this->assertSame('Shares drop 11.0% in a sudden move.', $this->presenter->present(['type' => 'SHOCK', 'description' => '', 'change_percent' => -11.0])['headline']);
+        $this->assertSame('Shares moved sharply.', $this->presenter->present(['type' => 'SHOCK', 'description' => ''])['headline']);
     }
 
     public function testPresentStockSplit(): void

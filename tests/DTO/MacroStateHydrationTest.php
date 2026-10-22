@@ -59,24 +59,12 @@ class MacroStateHydrationTest extends TestCase
         $this->assertSame(0.0631, $both->yield5yEma);
     }
 
-    /**
-     * Balance sheet intensity was recorded as a one-sided qe_intensity before QT existed, so a
-     * pre-QT payload must still resolve both sides of the balance sheet.
-     */
-    public function testLegacyQeIntensityPayloadResolvesBothBalanceSheetSides(): void
+    /** A payload without the flag reads easing off a balance sheet held above the threshold. */
+    public function testABalanceSheetAboveTheThresholdIsEasing(): void
     {
-        $easing = MacroStateDTO::fromArray(['qe_intensity' => 0.004]);
+        $easing = MacroStateDTO::fromArray(['balance_sheet_intensity' => 0.004]);
         $this->assertSame(0.004, $easing->balanceSheetIntensity);
         $this->assertTrue($easing->qeActive);
-        $this->assertFalse($easing->qtActive);
-        $this->assertSame(0.004, $easing->qeIntensity);
-        $this->assertSame(0.0, $easing->qtIntensity);
-
-        $tightening = MacroStateDTO::fromArray(['balance_sheet_intensity' => -0.003]);
-        $this->assertFalse($tightening->qeActive);
-        $this->assertTrue($tightening->qtActive);
-        $this->assertSame(0.0, $tightening->qeIntensity);
-        $this->assertSame(0.003, $tightening->qtIntensity);
     }
 
     public function testBalanceSheetInsideTheThresholdIsNeitherEasingNorTightening(): void
@@ -86,7 +74,6 @@ class MacroStateHydrationTest extends TestCase
         ]);
 
         $this->assertFalse($flat->qeActive);
-        $this->assertFalse($flat->qtActive);
     }
 
     public function testPotentialOutputIsBackedOutOfNominalGdpAndTheGap(): void
@@ -337,7 +324,7 @@ class MacroStateHydrationTest extends TestCase
     public static function legacyPayloadProvider(): array
     {
         return [
-            'rates only' => [['policy_rate' => 0.055, 'inflation' => 0.031, 'macro_credit_spread' => 0.018, 'ns_level' => 0.041, 'nominal_gdp_index' => 1.35, 'qe_intensity' => 0.002]],
+            'rates only' => [['policy_rate' => 0.055, 'inflation' => 0.031, 'macro_credit_spread' => 0.018, 'ns_level' => 0.041, 'nominal_gdp_index' => 1.35, 'balance_sheet_intensity' => 0.002]],
             'saved currency' => [['exchange_rate_index' => 104.0, 'policy_rate' => 0.05, 'foreign_policy_rate' => 0.03, 'tips_breakeven' => 0.025]],
             'database row' => [['yield5y_ema' => 0.041, 'yield_5y_ema' => 0.039, 'policy_rate' => 0.045]],
             'laws before their lags' => [['bank_levy_rate' => 0.004, 'corporate_tax_policy_shift' => 0.02, 'carbon_price' => 80.0, 'stamp_duty_rate' => 0.003]],

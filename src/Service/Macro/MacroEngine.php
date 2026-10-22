@@ -274,14 +274,11 @@ class MacroEngine
         $state->balanceSheetIntensity = $balanceSheetData['new_balance_sheet_intensity'];
         MonetaryPolicySubsystem::rollAuthorityBookCoupon($state, $holdingsBefore, $dt);
         $state->balanceSheetHoldTimer = $balanceSheetData['new_hold_timer'];
-        $state->qeIntensity = $balanceSheetData['new_qe_intensity'];
         $qeWasActive = $state->qeActive;
-        $state->qeActive = $state->qeIntensity > MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD;
+        $state->qeActive = $state->balanceSheetIntensity > MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD;
         if ($state->qeActive && !$qeWasActive) {
             $state->lastQeLaunchAt = $state->totalTime;
         }
-        $state->qtIntensity = $balanceSheetData['new_qt_intensity'];
-        $state->qtActive = $state->qtIntensity > MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD;
 
         // 7. Adrian, Crump & Moench (2013) term premium and market expectations dynamics.
         $this->monetarySubsystem->updateTermPremiumDynamics($state, $dt);

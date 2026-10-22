@@ -356,7 +356,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         // The Authority's bond holdings, measured as the engine holds them: how far they press the 10-year yield down.
         // The bars are the quarter's purchases or run-off, the change in that stock.
         const holdingsBps = (row) => {
-            const raw = row?.balance_sheet_intensity ?? row?.qe_intensity ?? null;
+            const raw = row?.balance_sheet_intensity ?? null;
             return raw === null ? null : parseFloat(raw) * 10000;
         };
         const reportIndex = reports.length - qCount + index;

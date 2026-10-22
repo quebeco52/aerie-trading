@@ -16,22 +16,6 @@ use App\Service\Politics\Department\Office;
  */
 class PoliticsState
 {
-    /**
-     * Each post's fields in a payload saved before the posts were kept in $heads: the prefix of its name, birth, term
-     * start, stance, passed over and appointment fields, by Office value.
-     */
-    private const LEGACY_HEAD_PREFIXES = [
-        'governor' => 'governor',
-        'regulator' => 'regulator',
-        'fund' => 'fundHead',
-        'exchequer' => 'exchequerHead',
-        'fair-trading' => 'fairTradingHead',
-        'securities' => 'securitiesHead',
-        'security' => 'securityDirector',
-        'coast-guard' => 'coastGuardCommandant',
-        'state-guard' => 'stateGuardCommander',
-    ];
-
     public float $totalTime;
     public ?string $eventType;
     public float $lastElectionAt;
@@ -304,10 +288,6 @@ class PoliticsState
                 default => is_numeric($value) ? (float) $value : $opening,
             };
         }
-        if (!array_key_exists('heads', $data)) {
-            $state->heads = self::legacyHeads($data);
-        }
-
         return $state;
     }
 
@@ -369,32 +349,6 @@ class PoliticsState
         }
 
         return $hydrated;
-    }
-
-    /**
-     * The posts of a payload saved before $heads, off each one's own fields; a post with none of them stays vacant.
-     *
-     * @param array<string, mixed> $data Decoded payload keyed by field name.
-     * @return array<string, Head>
-     */
-    private static function legacyHeads(array $data): array
-    {
-        $heads = [];
-        foreach (Office::cases() as $office) {
-            $prefix = self::LEGACY_HEAD_PREFIXES[$office->value];
-            $fields = ['name' => "{$prefix}Name", 'birth' => "{$prefix}Birth", 'termStart' => "{$prefix}TermStart", 'stance' => "{$prefix}Stance", 'passedOver' => "{$prefix}PassedOver", 'appointedAt' => 'last' . ucfirst($prefix) . 'AppointedAt'];
-            $head = [];
-            foreach ($fields as $key => $field) {
-                if (array_key_exists($field, $data)) {
-                    $head[$key] = $data[$field];
-                }
-            }
-            if ($head !== []) {
-                $heads[$office->value] = self::hydrateHead($head);
-            }
-        }
-
-        return $heads;
     }
 
     /**

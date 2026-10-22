@@ -55,7 +55,6 @@ class DefenseContractorBusinessModelTest extends TestCase
             macroCreditSpread: $macroCreditSpread,
             macroCreditSpreadEma: $macroCreditSpread,
             qeActive: false,
-            qeIntensity: 0.0,
             inversionDuration: 0.0,
             nsLevel: 0.04,
             nsSlope: 0.0,

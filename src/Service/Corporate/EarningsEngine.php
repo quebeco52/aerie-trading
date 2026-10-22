@@ -2791,9 +2791,6 @@ class EarningsEngine
         // drop, and a holder who was paid the dividend did not lose it.
         $earningsEvent['dividend_per_share'] = (float) ($ctx->allocation['dividend_paid'] ?? 0.0);
 
-        // Update previous revenue for next quarter's NWC calculation (annualized)
-        $stock->setPreviousRevenue((string) ($ctx->actualRevenue * 4.0));
-
         $this->eventDispatcher->dispatch(new EarningsReportedEvent($ctx));
 
         return [$earningsEvent];

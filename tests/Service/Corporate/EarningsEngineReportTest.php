@@ -388,7 +388,7 @@ class EarningsEngineReportTest extends TestCase
         $this->assertGreaterThan(10_000_000_000.0, $revenue, 'Revenue-generating capital must not be wiped out by elevated CIP queue.');
     }
 
-    public function testAnnualizedPreviousRevenueDoesNotCauseNwcImplosion(): void
+    public function testAFirstReportReleasesNoFalseWorkingCapital(): void
     {
         $stock = new Stock();
         $stock->setTicker('NWC_BUG');
@@ -404,29 +404,20 @@ class EarningsEngineReportTest extends TestCase
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
 
-        // Simulate that the DB contains a previously *annualized* revenue of $100M
-        $stock->setPreviousRevenue('100000000');
-
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $macroState = new \App\DTO\MacroStateDTO();
         $reportingTick = $this->getReportingTick('NWC_BUG');
 
         $this->engine->calculate($stock, $macroState, $reportingTick, 252);
 
-        // Before the bug fix, $100M was treated as quarterly, generating an implied annualized previous revenue of
-        // $400M. If current revenue was flat at $100M annualized, this caused a $300M negative delta, massively
-        // inflating FCF. With the fix, the delta should be minimal, and FCF should be a reasonable portion of net
-        // income.
         $fcfPerShare = (float) $stock->getFreeCashFlowPerShare();
         $totalFcf = $fcfPerShare * (float) $stock->getSharesOutstanding();
 
-        // Under the bug, previous revenue was quadrupled to $400M, triggering an artificial $300M revenue drop
-        // that generated over $250M+ in annualized false NWC release.
-        // With the fix, annualized FCF remains within reasonable bounds (< $75M).
+        // A first report has no earlier quarter to release working capital against, so free cash flow stays bounded.
         $this->assertLessThan(
             75_000_000.0,
             $totalFcf,
-            'Free Cash Flow should not be massively inflated by a false negative NWC delta caused by annualized previous revenue mismatch.',
+            'Free cash flow must not be inflated by a false working-capital release on the first report.',
         );
     }
 
@@ -446,7 +437,6 @@ class EarningsEngineReportTest extends TestCase
             $stock->setCorporateTreasury('10000000');
             $stock->setBaselineRoic('0.10');
             $stock->setOperatingMargin('0.20');
-            $stock->setPreviousRevenue('100000000');
             return $stock;
         };
 
@@ -598,13 +588,13 @@ class EarningsEngineReportTest extends TestCase
         // Q1 results (seasonal factor 0.85), filed in the Q2 reporting season
         $q1Tick = $ticksPerQuarter + $reportingTick;
         $this->engine->calculate($stock, $macro, $q1Tick, 252);
-        $q1Revenue = (float) $stock->getPreviousRevenue(); // reported quarterly revenue, annualized
+        $q1Revenue = $this->filedQuarterRevenue($stock);
         $q1RunRate = (float) $stock->getTotalRevenue();    // seasonally adjusted annual rate
 
         // Q4 holiday results (seasonal factor 1.35), filed in the next year's first season
         $q4Tick = (4 * $ticksPerQuarter) + $reportingTick;
         $this->engine->calculate($stock, $macro, $q4Tick, 252);
-        $q4Revenue = (float) $stock->getPreviousRevenue();
+        $q4Revenue = $this->filedQuarterRevenue($stock);
         $q4RunRate = (float) $stock->getTotalRevenue();
 
         // Peak holiday Q4 reported revenue must significantly exceed trough Q1 reported revenue
@@ -951,5 +941,13 @@ class EarningsEngineReportTest extends TestCase
         $gap = EarningsEngine::reportPriceGap(100.0, 110.0, 1.0, 0.09);
         $this->assertEqualsWithDelta($gap, $ctx->priceGapPct, 1e-12);
         $this->assertEqualsWithDelta((50.0 * (1.0 + $gap)) - 1.0, (float) $stock->getPrice(), 1e-6);
+    }
+
+    /** The revenue of the quarter just filed, as the last entry of the operating history records it. */
+    private function filedQuarterRevenue(Stock $stock): float
+    {
+        $history = $stock->getQuarterlyOperatingHistory() ?? [];
+
+        return (float) (end($history)['revenue'] ?? 0.0);
     }
 }

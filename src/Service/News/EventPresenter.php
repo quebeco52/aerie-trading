@@ -51,9 +51,6 @@ class EventPresenter
         ShockEvent::COUNCILLOR_SEATED => 'COUNCIL SEAT',
     ];
 
-    /** What a price shock's description said before it named the move. */
-    private const LEGACY_SHOCK_TEXT = 'Sudden market shock detected.';
-
     /** District stories that warn of stress rather than report a fall, so they carry the caution tone. */
     private const CAUTION_TOPICS = [
         ShockEvent::BANKING_CRISIS,
@@ -264,7 +261,7 @@ class EventPresenter
         $isPositive = $changePct !== null ? $changePct >= 0 : true;
         // Read with their move, a shock says what the shares did.
         $headline = match (true) {
-            $rawDesc !== '' && $rawDesc !== self::LEGACY_SHOCK_TEXT => $rawDesc,
+            $rawDesc !== '' => $rawDesc,
             $changePct !== null => self::shockHeadline('Shares', $changePct),
             default => 'Shares moved sharply.',
         };

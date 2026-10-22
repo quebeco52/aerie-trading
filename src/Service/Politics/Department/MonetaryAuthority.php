@@ -7,7 +7,6 @@ namespace App\Service\Politics\Department;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
-use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Politics\Council\CouncilAppointments;
 use App\Service\Politics\Council\StanceRevision;
@@ -73,8 +72,7 @@ final class MonetaryAuthority
         }
         $salt = (int) $state->authoritySalt;
 
-        $changed = self::backfillSwingers($state, $salt);
-        $changed = StanceRevision::revise($state, $dt) || $changed;
+        $changed = StanceRevision::revise($state, $dt);
         $changed = self::seatGovernor($state) || $changed;
 
         for ($member = 0; $member < self::COMMITTEE_MEMBERS; ++$member) {
@@ -264,36 +262,5 @@ final class MonetaryAuthority
         $state->memberSince[$member] = $since;
         $state->memberStances[$member] = $person['stance'];
         $state->memberSwingers[$member] = $person['swing'] ?? 0.0;
-    }
-
-    /**
-     * A governor and committee seated before swing votes leaned to a camp: anyone held at the middle becomes a swing
-     * vote leaning to a camp drawn once from their seat and name; everyone else keeps their camp.
-     *
-     * @return bool Whether anyone was converted, so the committee's balance needs refreshing.
-     */
-    private static function backfillSwingers(PoliticsState $state, int $salt): bool
-    {
-        $converted = false;
-        $governor = $state->head(Office::Governor);
-        if ($state->governorSwinger < 0.0) {
-            $state->governorSwinger = $governor['stance'] === self::STANCES['swing'] ? 1.0 : 0.0;
-            if ($state->governorSwinger > 0.0) {
-                $state->heads[Office::Governor->value]['stance'] = self::swingLean(MathUtility::hashedUniform($salt, CouncilAppointments::vacancyKey(Office::Governor->value, $governor['termStart']) . ":{$governor['name']}:lean"));
-                $converted = true;
-            }
-        }
-        foreach ($state->memberStances as $member => $stance) {
-            if (!isset($state->memberSwingers[$member])) {
-                $state->memberSwingers[$member] = $stance === self::STANCES['swing'] ? 1.0 : 0.0;
-                if ($state->memberSwingers[$member] > 0.0) {
-                    $state->memberStances[$member] = self::swingLean(MathUtility::hashedUniform($salt, CouncilAppointments::vacancyKey("member:{$member}", $state->memberSince[$member] ?? 0.0) . ':' . ($state->memberNames[$member] ?? '') . ':lean'));
-                    $converted = true;
-                }
-            }
-        }
-        ksort($state->memberSwingers);
-
-        return $converted;
     }
 }

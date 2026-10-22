@@ -110,12 +110,6 @@ class Stock
     private string $totalRevenue = '0.0000';
 
     /**
-     * @var string Quarter-over-quarter revenue tracker for calculating change in net working capital (ΔNWC).
-     */
-    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
-    private string $previousRevenue = '0.0000';
-
-    /**
      * @var string|null Trade receivables: revenue billed and not yet collected. Null until first seeded.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, nullable: true)]
@@ -489,12 +483,6 @@ class Stock
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.0000'])]
     private string $roeTtm = '0.0000';
-
-    /**
-     * @var string Absolute dollar amount remaining in the board-authorized buyback program.
-     */
-    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
-    private string $buybackAuthorization = '0.0000';
 
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $fixedCostRatio = null;
@@ -1532,18 +1520,6 @@ class Stock
         return min(1.0, max(0.0, (float) $this->accumulatedDepreciation / $gross));
     }
 
-    public function getBuybackAuthorization(): ?string
-    {
-        return $this->buybackAuthorization;
-    }
-
-    public function setBuybackAuthorization(string $buybackAuthorization): static
-    {
-        $this->buybackAuthorization = self::cleanBcStr($buybackAuthorization, 4);
-
-        return $this;
-    }
-
     public function getDepreciationRate(): ?string
     {
         return $this->depreciationRate;
@@ -2008,17 +1984,6 @@ class Stock
     public function setTotalRevenue(string $totalRevenue): static
     {
         $this->totalRevenue = self::cleanBcStr($totalRevenue, 4);
-        return $this;
-    }
-
-    public function getPreviousRevenue(): string
-    {
-        return $this->previousRevenue;
-    }
-
-    public function setPreviousRevenue(string $previousRevenue): static
-    {
-        $this->previousRevenue = self::cleanBcStr($previousRevenue, 4);
         return $this;
     }
 

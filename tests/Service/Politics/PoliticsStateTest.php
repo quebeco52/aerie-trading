@@ -93,57 +93,6 @@ class PoliticsStateTest extends TestCase
         $this->assertSame(0.0, PoliticsState::fromArray($legacy)->head(Office::Governor)['passedOver'][0]['fund'], 'And on the reserves.');
     }
 
-    /**
-     * A state saved before the posts were kept by office, each in its own fields, reads into the same holders, and is
-     * written back in the new shape alone; a post the payload never had stays vacant.
-     */
-    public function testAStateSavedWithAFieldPerHeadReadsIntoTheSameHeads(): void
-    {
-        $candidate = static fn(string $name, float $birth): array => ['name' => $name, 'birth' => $birth, 'stance' => -1.0, 'regulation' => 0.25, 'fund' => 0.5, 'debt' => -0.5, 'competition' => 0.75, 'markets' => -0.25];
-        $legacy = ['totalTime' => 41.0, 'governorSwinger' => 1.0, 'fairTradingPriorStance' => 0.125, 'securitiesPriorStance' => -0.5];
-        $expected = [];
-        $fields = [
-            Office::Governor->value => ['governor', 'Governor'],
-            Office::Regulator->value => ['regulator', 'Regulator'],
-            Office::FundHead->value => ['fundHead', 'FundHead'],
-            Office::ExchequerHead->value => ['exchequerHead', 'ExchequerHead'],
-            Office::FairTradingHead->value => ['fairTradingHead', 'FairTradingHead'],
-            Office::SecuritiesHead->value => ['securitiesHead', 'SecuritiesHead'],
-            Office::SecurityDirector->value => ['securityDirector', 'SecurityDirector'],
-            Office::CoastGuardCommandant->value => ['coastGuardCommandant', 'CoastGuardCommandant'],
-            Office::StateGuardCommander->value => ['stateGuardCommander', 'StateGuardCommander'],
-        ];
-        $i = 0;
-        foreach ($fields as $office => [$prefix, $capitalised]) {
-            ++$i;
-            $head = ['name' => "Holder {$i}", 'birth' => -40.0 - $i, 'termStart' => 30.0 + $i / 8, 'stance' => $i < 7 ? $i / 10 - 0.35 : 0.0, 'passedOver' => [$candidate("Rival {$i}", -45.0 - $i)], 'appointedAt' => 30.5 + $i];
-            $legacy += ["{$prefix}Name" => $head['name'], "{$prefix}Birth" => $head['birth'], "{$prefix}TermStart" => $head['termStart'], "{$prefix}PassedOver" => $head['passedOver'], "last{$capitalised}AppointedAt" => $head['appointedAt']];
-            if ($i < 7) {
-                $legacy["{$prefix}Stance"] = $head['stance'];
-            }
-            $expected[$office] = $head;
-        }
-        $legacy = json_decode(json_encode($legacy, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), true, 512, JSON_THROW_ON_ERROR);
-
-        $state = PoliticsState::fromArray($legacy);
-
-        $this->assertSame($expected, $state->heads);
-        foreach ($expected as $office => $head) {
-            $this->assertSame($head, $state->head(Office::from($office)));
-            $this->assertSame($head, PoliticsStateDTO::fromArray($legacy)->head(Office::from($office)));
-        }
-        $this->assertSame([1.0, 0.125, -0.5], [$state->governorSwinger, $state->fairTradingPriorStance, $state->securitiesPriorStance]);
-        $saved = $state->toArray();
-        $this->assertSame($expected, $saved['heads']);
-        $perHead = array_diff(array_keys($legacy), ['totalTime', 'governorSwinger', 'fairTradingPriorStance', 'securitiesPriorStance']);
-        $this->assertSame([], array_values(array_intersect($perHead, array_keys($saved))), 'Only the new shape is written.');
-        $this->assertSame($expected, PoliticsState::fromArray($saved)->heads);
-
-        unset($legacy['stateGuardCommanderName'], $legacy['stateGuardCommanderBirth'], $legacy['stateGuardCommanderTermStart'], $legacy['stateGuardCommanderPassedOver'], $legacy['lastStateGuardCommanderAppointedAt']);
-        $this->assertArrayNotHasKey(Office::StateGuardCommander->value, PoliticsState::fromArray($legacy)->heads);
-        $this->assertSame(Office::VACANT, PoliticsState::fromArray($legacy)->head(Office::StateGuardCommander));
-    }
-
     /** A payload that omits a field, or carries one it cannot read, leaves that field at its opening. */
     public function testWhatAPayloadLacksKeepsItsOpening(): void
     {

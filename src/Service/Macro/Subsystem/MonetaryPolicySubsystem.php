@@ -624,10 +624,8 @@ class MonetaryPolicySubsystem
      * @param float      $dt    Time increment in years.
      * @return array{
      *     new_balance_sheet_intensity: float,
-     *     new_hold_timer: float,
-     *     new_qe_intensity: float,
-     *     new_qt_intensity: float
-     * } Updated balance sheet intensity and component intensities.
+     *     new_hold_timer: float
+     * } Updated balance sheet intensity and reinvestment hold.
      */
     public function calculateBalanceSheetOperations(MacroState $state, float $dt): array
     {
@@ -678,10 +676,6 @@ class MonetaryPolicySubsystem
         return [
             'new_balance_sheet_intensity' => $newBalanceSheetIntensity,
             'new_hold_timer' => $newHoldTimer,
-            // Active cumulative QE duration accommodation (Vayanos & Vila 2021 / Wu & Xia 2016).
-            'new_qe_intensity' => $newBalanceSheetIntensity,
-            // Quantitative tightening runoff portfolio tracking active balance sheet contraction.
-            'new_qt_intensity' => $inRunoff ? $newBalanceSheetIntensity : 0.0,
         ];
     }
 

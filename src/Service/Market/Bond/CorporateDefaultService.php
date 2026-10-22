@@ -109,7 +109,6 @@ final class CorporateDefaultService
             $this->ledger->processDefaultSettlement($bond, $recoveredPerBond, $macroState->totalTime, $settledAt);
 
             $bond->setStatus(Bond::STATUS_DEFAULTED)
-                ->setRecoveryRate(Decimal::format($recovery, 4))
                 ->setIsOnTheRun(false)
                 ->setPrice(Decimal::format($recoveredPerBond, 8))
                 ->setCleanPrice(Decimal::format($recoveredPerBond, 8))

@@ -97,7 +97,7 @@ class SystemicEventTest extends TestCase
         $state->totalTime = 8.25;
         $state->lastQeLaunchAt = 8.25;
         $state->qeActive = true;
-        $state->qeIntensity = 0.004;
+        $state->balanceSheetIntensity = 0.004;
         $state->outputGapEma = -0.03;
 
         $this->assertSame(ShockEvent::TITAN_INTERVENTION, $this->fire($state));
@@ -105,7 +105,7 @@ class SystemicEventTest extends TestCase
         // A year into the programme, the cooldown long spent and the stock still growing: no second launch headline.
         $state->totalTime += 1.0;
         $state->eventCooldownTimer = 0.0;
-        $state->qeIntensity = 0.009;
+        $state->balanceSheetIntensity = 0.009;
         $this->assertNull($this->fire($state), 'A programme in progress is not a new intervention.');
     }
 

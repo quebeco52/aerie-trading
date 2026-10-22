@@ -36,9 +36,6 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $roic = null;
 
-    #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
-    private bool $isAudited = false;
-
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $revenueStreams = null;
 

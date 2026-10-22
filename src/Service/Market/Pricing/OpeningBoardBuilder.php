@@ -260,7 +260,7 @@ class OpeningBoardBuilder
 
         for ($pass = 0; $pass < self::MAX_OPENING_PRICE_PASSES; $pass++) {
             $pricingCtx = MarketPricingContext::forStock($stock, $openingMacro, $this->debtEngine->analyzeDebtHealth($stock, $openingMacro), $this->anchorStakes);
-            $price = (float) $this->marketEngine->calculateNextPrice($pricingCtx)['perceived_fair_value'];
+            $price = $this->marketEngine->strikeFairValue($pricingCtx)['perceived_fair_value'];
             $stock->setPrice((string) $price);
             $this->debtEngine->calibrateAssetVolatility($stock, $openingMacro->policyRateEma);
             $rerated = $this->debtEngine->seedCreditRating($stock, $openingMacro);

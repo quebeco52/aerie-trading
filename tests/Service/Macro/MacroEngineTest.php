@@ -1236,7 +1236,6 @@ class MacroEngineTest extends TestCase
         // A bank that never bought anything has nothing to sell. Letting the intensity go negative here made it
         // net short duration -- a 60bp+ lift on the thirty-year out of a portfolio that was never acquired.
         $this->assertEquals(0.0, $noPortfolio['new_balance_sheet_intensity'], 'Overheating must not create a tightening position from a zero balance sheet.');
-        $this->assertEquals(0.0, $noPortfolio['new_qt_intensity'], 'QT intensity requires a portfolio to run off.');
 
         // With a portfolio in hand, the same overheating runs it down toward zero without overshooting.
         $withPortfolio = clone $overheatingState;
@@ -1247,7 +1246,6 @@ class MacroEngineTest extends TestCase
 
         $this->assertLessThan(0.008, $runoff['new_balance_sheet_intensity'], 'Overheating must cut the reinvestment hold short and start the runoff.');
         $this->assertGreaterThan(0.0, $runoff['new_balance_sheet_intensity'], 'A quarter of runoff must not empty the whole portfolio.');
-        $this->assertGreaterThan(0.0, $runoff['new_qt_intensity'], 'QT intensity reports the portfolio being unwound.');
 
         // Runoff is monotone to zero and stops there, however long the overheating lasts.
         $state = clone $withPortfolio;
@@ -1287,12 +1285,10 @@ class MacroEngineTest extends TestCase
 
         $step = $this->monetarySubsystem->calculateBalanceSheetOperations($state, 0.25);
         $this->assertEqualsWithDelta($peak, $step['new_balance_sheet_intensity'], 1e-9, 'The reinvestment hold keeps the portfolio flat.');
-        $this->assertEquals(0.0, $step['new_qt_intensity'], 'Holding is not runoff.');
 
         $state->balanceSheetHoldTimer = MonetaryPolicySubsystem::BALANCE_SHEET_REINVESTMENT_HOLD_YEARS;
         $step = $this->monetarySubsystem->calculateBalanceSheetOperations($state, 0.25);
         $this->assertLessThan($peak, $step['new_balance_sheet_intensity'], 'Once the hold expires the portfolio runs off.');
-        $this->assertGreaterThan(0.0, $step['new_qt_intensity'], 'Passive runoff still reports QT intensity.');
     }
 
     public function testOverheatingAcceleratesRunoffWithoutChangingItsFloor(): void
@@ -1903,8 +1899,6 @@ class MacroEngineTest extends TestCase
         $yieldData = YieldCurveProbe::balanceSheetAndCurve($monetarySubsystem, $recessionState, MacroConstants::TARGET_INFLATION, MacroConstants::BASE_NATURAL_RATE, $dt);
 
         $this->assertGreaterThan(0.0, $yieldData['new_balance_sheet_intensity'], 'QE intensity must expand when the rule asks for a rate below the floor.');
-        $this->assertGreaterThan(0.0, $yieldData['new_qe_intensity'], 'QE asset purchase intensity must be positive.');
-        $this->assertEquals(0.0, $yieldData['new_qt_intensity'], 'QT runoff must be zero when QE is active.');
     }
 
     public function testInterbankLiquiditySpreadCoupledToTheBondPremium(): void

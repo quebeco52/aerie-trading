@@ -329,8 +329,6 @@ class EarningsEngineTest extends TestCase
             interbankLiquiditySpreadEma: 0.01,
         );
 
-        $stock->setPreviousRevenue('80000000000.0000'); // $80B annualized
-
         // Quarter 1: Severe contraction
         $this->earningsEngine->calculate($stock, $macroState, 1);
 
@@ -338,7 +336,7 @@ class EarningsEngineTest extends TestCase
         // The structural margin should remain stable around 0.10, not collapse to 0.01
         $this->assertGreaterThan(0.08, $marginQ1, "Structural margin dropped too aggressively in Q1 due to cost stickiness overwrite.");
 
-        // Quarter 2: Continued contraction (let the engine use previousRevenue updated by Q1)
+        // Quarter 2: continued contraction
         $this->earningsEngine->calculate($stock, $macroState, 2);
 
         $marginQ2 = (float) $stock->getStructuralVariableMargin();
@@ -369,8 +367,6 @@ class EarningsEngineTest extends TestCase
         $stock->setCapexRatio('0.30');
 
         $stock->setStructuralVariableMargin(0.15);
-        $stock->setPreviousRevenue('80000000000.0000'); // $80B annualized
-
         // Macro boom
         $boomMacro = new MacroStateDTO(
             outputGapEma: 0.03,
@@ -461,7 +457,6 @@ class EarningsEngineTest extends TestCase
         $stock->setCorporateTreasury('15000000000');
         $stock->setRetainedEarnings('10000000000');
         $stock->setTotalRevenue('80000000000');
-        $stock->setPreviousRevenue('80000000000');
         $stock->setOperatingMargin('0.12');
         $stock->setTargetPayoutRatio('0.30');
         $stock->setDividendSpeed('1.00');

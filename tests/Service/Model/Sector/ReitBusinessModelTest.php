@@ -57,7 +57,6 @@ class ReitBusinessModelTest extends TestCase
             macroCreditSpread: 0.015,
             macroCreditSpreadEma: 0.015,
             qeActive: false,
-            qeIntensity: 0.0,
             inversionDuration: 0.0,
             nsLevel: 0.04,
             nsSlope: 0.0,

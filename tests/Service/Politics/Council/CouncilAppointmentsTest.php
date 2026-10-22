@@ -195,33 +195,6 @@ class CouncilAppointmentsTest extends TestCase
     }
 
     /**
-     * A running game whose councillors were seated before the Council answered the question of the banks keeps every
-     * councillor and their stance on money, and gains a stance on the banks for each, drawn once.
-     */
-    public function testCouncillorsSeatedBeforeTheBanksQuestionGainAStanceOnIt(): void
-    {
-        $state = self::opened(3);
-        $names = $state->councilNames;
-        $money = $state->councilStances;
-        $drawn = $state->councilRegulationStances;
-        $state->councilRegulationStances = [];
-
-        $state->totalTime += self::DT;
-        Appointments::advance($state, new MathUtility());
-
-        $this->assertSame($names, $state->councilNames);
-        $this->assertSame($money, $state->councilStances);
-        $this->assertCount(AerieCouncil::SEATS, $state->councilRegulationStances);
-        $this->assertSame(range(0, AerieCouncil::SEATS - 1), array_keys($state->councilRegulationStances));
-        $this->assertNotSame($drawn, $state->councilRegulationStances, 'The catch-up draw is keyed apart from the candidates\' own.');
-
-        $again = $state->councilRegulationStances;
-        $state->totalTime += self::DT;
-        Appointments::advance($state, new MathUtility());
-        $this->assertSame($again, $state->councilRegulationStances, 'It is drawn once.');
-    }
-
-    /**
      * A Council seated on an earlier term length keeps every councillor when the charter's term changes: their seats
      * are dated on the new schedule, no seat is filled for it, and the seats then fall vacant on the new term's
      * calendar.

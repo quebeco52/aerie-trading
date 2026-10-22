@@ -29,7 +29,7 @@ final class WireFrame
      * The district map's stress fields are added from DistrictMap.
      */
     public const LIVE_MACRO_FIELDS = [
-        'total_time', 'output_gap', 'inflation_ema', 'policy_rate', 'yield_10y', 'qe_active', 'qe_intensity',
+        'total_time', 'output_gap', 'inflation_ema', 'policy_rate', 'yield_10y', 'qe_active', 'balance_sheet_intensity',
         'nominal_gdp_index', 'foreign_bond_yield', 'sovereign_debt_to_gdp', 'sovereign_net_debt_to_gdp',
         'sovereign_fund_to_gdp', 'sovereign_fund_dollars_per_gdp', 'sovereign_fund_draw_to_gdp', 'sovereign_fund_annual_draw',
         'sovereign_fund_stabilisation_to_gdp', 'sovereign_fund_stamp_duty_to_gdp', 'sovereign_fund_stamp_duty_year_to_date',

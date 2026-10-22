@@ -24,7 +24,7 @@ export function updateEconomyVitals(payload) {
     // Only the text and the tone change here; the template owns every other class.
     const qeOn = Boolean(macro.qe_active);
     const qeStatusEl = document.getElementById('macro-qe-status');
-    if (qeStatusEl) qeStatusEl.textContent = qeOn ? `−${(macro.qe_intensity * 10000).toFixed(0)} bps` : '';
+    if (qeStatusEl) qeStatusEl.textContent = qeOn ? `−${(macro.balance_sheet_intensity * 10000).toFixed(0)} bps` : '';
     document.getElementById('qe-status-container')?.classList.toggle('hidden', !qeOn);
 
     const gapEl = document.getElementById('macro-output-gap');

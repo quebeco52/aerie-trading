@@ -47,6 +47,11 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE etf_history');
         $conn->executeStatement('TRUNCATE TABLE stock_events');
         $conn->executeStatement('TRUNCATE TABLE etf_events');
+        $conn->executeStatement('TRUNCATE TABLE district_news');
+        // A player's notices tell of fills and payments the reset erases, and their alerts were set against prices the
+        // reopened board no longer quotes, so either would fire on the new market at once.
+        $conn->executeStatement('TRUNCATE TABLE notifications');
+        $conn->executeStatement('TRUNCATE TABLE price_alerts');
         $conn->executeStatement('TRUNCATE TABLE user_stocks');
         $conn->executeStatement('TRUNCATE TABLE user_etfs');
         $conn->executeStatement('TRUNCATE TABLE user_bonds');

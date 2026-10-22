@@ -18,8 +18,6 @@ final class YieldCurveProbe
      * @return array{
      *     new_balance_sheet_intensity: float,
      *     new_hold_timer: float,
-     *     new_qe_intensity: float,
-     *     new_qt_intensity: float,
      *     level: float,
      *     curvature: float,
      *     curvature2: float,

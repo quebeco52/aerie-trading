@@ -37,9 +37,8 @@ class MacroSnapshotRecorderTest extends TestCase
         'ns_curvature2' => 'nsCurvature2',
         'manufacturing_pmi' => 'manufacturingPmi',
         'money_supply_growth_ema' => 'moneySupplyGrowthEma',
-        // The regime flags, whose bool sentinels cannot tell one from the other on their own.
+        // The regime flag, whose bool sentinel cannot tell it from another bool on its own.
         'qe_active' => 'qeActive',
-        'qt_active' => 'qtActive',
         'equity_market_cap' => 'equityMarketCap',
         'demand_shock' => 'demandShock',
         'total_time' => 'totalTime',
@@ -223,7 +222,6 @@ class MacroSnapshotRecorderTest extends TestCase
         $byColumn = array_combine($this->columnsOf($captured['sql']), $captured['types']);
 
         $this->assertSame(Types::BOOLEAN, $byColumn['qe_active']);
-        $this->assertSame(Types::BOOLEAN, $byColumn['qt_active']);
         $this->assertSame(ParameterType::STRING, $byColumn['output_gap'], 'Only the bools need a named type.');
     }
 
