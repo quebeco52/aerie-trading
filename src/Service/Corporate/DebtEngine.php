@@ -268,6 +268,7 @@ class DebtEngine
         // (rollMaturities()), not on principal repaid in cash or left unpaid.
         $blendedFixedRate = (float) $stock->getHistoricalFixedRate();
 
+        // A lender's floating wholesale resets to the interbank rate: its own charge adds the interbank spread to this.
         $floatingInterestRate = $policyRate + $dynamicSpread;
 
         // Customer Deposits & Leverage Physics

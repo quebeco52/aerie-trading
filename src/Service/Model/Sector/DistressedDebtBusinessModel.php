@@ -22,9 +22,9 @@ use App\Service\Model\ModelParam;
  *      1. Restructuring Advisory Fees: Steady retainer-based fee income earned during bankruptcy workouts.
  *      2. Distressed Asset Recovery: High-yield gains from buying defaulted senior secured debt at discounts.
  *      3. Loan-to-Own Equity Gains: Asymmetric capital gains upon post-reorganization equity emergence.
- * - Credit Spread & Recession Multipliers: When corporate credit spreads blow out above 2.5%,
- *   distressed asset acquisition opportunities and liquidation yields surge non-linearly.
- * - During prolonged bull markets with tight credit spreads, earnings remain defensive as the fund hoards dry powder.
+ * - Distress against recent conditions: when spreads and defaults run above their trends or output falls short,
+ *   recovery and loan-to-own gains rise toward the fund's capacity; when credit is easier than usual, the dry powder
+ *   sits idle and they fall short of plan. A usual quarter is plan.
  */
 class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 {
@@ -46,36 +46,28 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     }
 
     // --- Special Situations & Macro Triggers ---
-    /** Baseline macro credit spread fallback when macroeconomic state data is absent. */
-    public const DEFAULT_CREDIT_SPREAD_FALLBACK = 0.015;
-    /** Credit spread blowout threshold above which distressed asset acquisition opportunities explode. */
-    public const SPREAD_BLOWOUT_THRESHOLD       = 0.025;
-    /** Negative output gap threshold indicating severe recessionary distress and corporate defaults. */
-    public const RECESSION_GAP_THRESHOLD        = -0.015;
-    /** Sensitivity multiplier translating excess credit spreads into turnaround revenue surge. */
+    /** Distress signal per unit of the IG spread over its decade trend: 100 bps over reads 0.20. */
     public const SPREAD_SURGE_SCALAR            = 20.00;
-    /** Sensitivity multiplier translating economic contraction depth into turnaround revenue surge. */
+    /** Distress signal per unit of output gap, against the cycle: a -3% gap reads 0.15, a +3% boom -0.15. */
     public const RECESSION_SURGE_SCALAR         = 5.00;
-    /** Positive output gap threshold indicating tight credit spreads in roaring bull markets. */
-    public const BULL_MARKET_GAP_THRESHOLD      = 0.020;
-    /** Revenue contraction multiplier during prolonged bull markets with tight credit spreads. */
-    public const BULL_MARKET_REVENUE_DRAG       = -0.10;
     /**
-     * Baseline high-yield credit spread (macro IG baseline x HY multiple) above which distressed turnaround
-     * opportunities surge.
+     * Distress signal per unit of the HY spread over its trend (the IG trend at the HY multiple): 400 bps reads 0.40.
      */
-    public const HY_SPREAD_BLOWOUT_BASELINE     = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
-    /** Sensitivity multiplier translating excess high-yield credit spreads into turnaround recovery revenue. */
     public const HY_SPREAD_SURGE_SCALAR         = 10.00;
     /**
-     * Turnaround opportunities per unit of the corporate default rate over its measured trend, relative; a quiet year
-     * leaves the dry powder idle.
+     * Distress signal per unit of the corporate default rate over its measured trend, relative: defaults half again
+     * the usual read 0.75, a third below it -0.50.
      */
     public const DEFAULT_RATE_SURGE_SCALAR      = 1.50;
-    /** Maximum capacity-constrained revenue expansion multiplier during severe credit distress (+125%). */
+    /** Revenue expansion the opportunity set approaches at the fund's capacity in severe distress (+125%). */
     public const MAX_DISTRESS_REVENUE_EXPANSION = 1.25;
-    /** Sensitivity half-saturation intensity signal where 50% of the max distress expansion is realized. */
+    /** Distress signal at which half of the capacity expansion is realised. */
     public const DISTRESS_HALF_SATURATION_POINT = 1.00;
+    /**
+     * Revenue the idle dry powder forgoes as credit gets ever easier than usual (-50%): few new situations, but the
+     * book still works out the ones it holds. Sized so the multiplier averages about zero over the cycle.
+     */
+    public const MAX_IDLE_DRY_POWDER_DRAG       = 0.50;
 
     // --- Stream Weights & Variances ---
     public const RESTRUCTURING_ADVISORY_WEIGHT = 0.40;
@@ -98,10 +90,11 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const DRY_POWDER_MEGA_THRESHOLD      = 0.70;
 
     /**
-     * The situations the workout desks are staffed to: the distress opportunity set (spread and HY levels,
-     * defaults, recession depth) on the recovery and loan-to-own books at their target weights. It reads
-     * levels, not spread changes, so it counts situations rather than marks. Restructuring advisory carries
-     * no macro term here, so it counts in the mix with no activity. Positive in a slump: countercyclical.
+     * The situations the workout desks are staffed to: the distress opportunity set (spreads and defaults against
+     * their decade trends, the output gap) on the recovery and loan-to-own books at their target weights. It reads
+     * levels against slow trends, not quarter-on-quarter spread changes, so it counts situations rather than marks.
+     * Restructuring advisory carries no macro term here, so it counts in the mix with no activity. Positive in a
+     * slump, negative when credit is easier than usual: countercyclical.
      */
     public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
@@ -111,7 +104,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             return 0.0;
         }
 
-        $distressMultiplier = $this->resolveDistressMultiplier($macroState, new MathUtility());
+        $distressMultiplier = $this->resolveDistressMultiplier($macroState);
 
         return ((($weights['turnaround_recovery'] ?? 0.0) * $distressMultiplier)
             + (($weights['loan_to_own'] ?? 0.0) * $distressMultiplier * self::LOAN_TO_OWN_DISTRESS_LEVERAGE)) / $totalWeight;
@@ -138,39 +131,27 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     }
 
     /**
-     * Counter-cyclical opportunity set: when credit spreads exceed 2.5%, high-yield spreads blow out, defaults
-     * surge or the output gap is negative, distressed opportunities expand with diminishing returns to the
-     * fund's capacity; a roaring bull market with tight spreads leaves the dry powder idle.
+     * Counter-cyclical opportunity set, measured against recent conditions: the IG spread over its decade trend, the
+     * HY spread over that trend at the multiple HY is built at, defaults over their trend and the output gap, all
+     * signed. A two-sided Michaelis-Menten curve maps the signal: distress fills the book toward the fund's capacity,
+     * credit easier than usual leaves the dry powder idle toward the drag, and a usual quarter is plan.
      */
-    private function resolveDistressMultiplier(\App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    private function resolveDistressMultiplier(\App\DTO\MacroStateDTO $macroState): float
     {
-        $creditSpread = ($macroState->macroCreditSpread !== MacroConstants::BASE_CREDIT_SPREAD)
-            ? $macroState->macroCreditSpread
-            : $macroState->macroCreditSpreadEma;
-        $outputGap = $macroState->outputGapEma;
+        $spreadTrend = $macroState->macroCreditSpreadTrend;
+        $highYieldTrend = $spreadTrend * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
 
-        $hySpreadSurge = max(0.0, $macroState->highYieldCreditSpreadEma - self::HY_SPREAD_BLOWOUT_BASELINE) * self::HY_SPREAD_SURGE_SCALAR;
-        $corporateDefaultShift = max(0.0, $macroState->corporateDefaultDeviation());
-        $defaultRateSurge = $corporateDefaultShift * self::DEFAULT_RATE_SURGE_SCALAR;
+        $distressSignal = (($macroState->macroCreditSpread - $spreadTrend) * self::SPREAD_SURGE_SCALAR)
+            + (($macroState->highYieldCreditSpreadEma - $highYieldTrend) * self::HY_SPREAD_SURGE_SCALAR)
+            + ($macroState->corporateDefaultDeviation() * self::DEFAULT_RATE_SURGE_SCALAR)
+            - ($macroState->outputGapEma * self::RECESSION_SURGE_SCALAR);
 
-        if ($creditSpread > self::SPREAD_BLOWOUT_THRESHOLD || $outputGap < self::RECESSION_GAP_THRESHOLD || $hySpreadSurge > 0.0 || $defaultRateSurge > 0.0) {
-            $rawDistressSurge = ($creditSpread - self::DEFAULT_CREDIT_SPREAD_FALLBACK) * self::SPREAD_SURGE_SCALAR
-                + abs(min(0.0, $outputGap)) * self::RECESSION_SURGE_SCALAR
-                + $hySpreadSurge
-                + $defaultRateSurge;
-
-            return CreditRisk::calculateDiminishingDistressMultiplier(
-                $rawDistressSurge,
-                self::MAX_DISTRESS_REVENUE_EXPANSION,
-                self::DISTRESS_HALF_SATURATION_POINT,
-            );
-        }
-
-        if ($outputGap > self::BULL_MARKET_GAP_THRESHOLD && $creditSpread < self::DEFAULT_CREDIT_SPREAD_FALLBACK) {
-            return self::BULL_MARKET_REVENUE_DRAG;
-        }
-
-        return 0.0;
+        return CreditRisk::calculateSignedDistressMultiplier(
+            $distressSignal,
+            self::MAX_DISTRESS_REVENUE_EXPANSION,
+            self::DISTRESS_HALF_SATURATION_POINT,
+            self::MAX_IDLE_DRY_POWDER_DRAG,
+        );
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
@@ -178,7 +159,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        $distressMultiplier = $this->resolveDistressMultiplier($macroState, $mathUtility);
+        $distressMultiplier = $this->resolveDistressMultiplier($macroState);
         $eventType = null;
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---

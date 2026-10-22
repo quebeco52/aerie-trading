@@ -93,7 +93,7 @@ class ShadowBankBusinessModelTest extends TestCase
 
     /**
      * Fees are struck once so that, at the opening macro, fees at the lore margin plus the book's interest less the
-     * wholesale funding cost and the steady-state credit provision earn the lender its structural return.
+     * wholesale funding cost the lender is charged and the steady-state credit provision earn its structural return.
      */
     public function testTheFranchiseEarnsItsStructuralReturnAtTheOpeningMacro(): void
     {
@@ -102,7 +102,8 @@ class ShadowBankBusinessModelTest extends TestCase
         $metrics = $this->model->getTargetMetrics($stock, $opening, $this->mathUtility);
         $tax = $opening->corporateTaxRate;
         $feeRevenue = $metrics['invested_capital'] * $metrics['baseline_roic'] / (0.50 * (1.0 - $tax));
-        $interestExpense = 225e9 * ((0.30 * 0.050) + (0.70 * ($opening->policyRateEma + 0.019)));
+        $interestExpense = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.050, $opening->policyRateEma + 0.019, 0.0, $opening->policyRateEma, 8.0, 55e9, 225e9, $opening)->interestExpense;
+        $this->assertEqualsWithDelta(225e9 * ((0.30 * 0.050) + (0.70 * ($opening->policyRateEma + $opening->interbankLiquiditySpreadEma + 0.019))), $interestExpense, 1.0, 'the floating repo resets to the interbank rate');
         $provision = CreditRisk::calculateSteadyStateProvisionRate($this->model->getThroughTheCycleCreditLossRate($stock), $this->model->getCreditLossHorizonYears(), MacroConstants::TARGET_INFLATION + MacroConstants::TREND_REAL_GROWTH) * $metrics['invested_capital'];
 
         $netIncome = (($feeRevenue * 0.50) + $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility) - $interestExpense - $provision) * (1.0 - $tax);
@@ -296,8 +297,9 @@ class ShadowBankBusinessModelTest extends TestCase
     }
 
     /**
-     * An interbank freeze raises the repo funding cost (DebtEngine) but not what the book earns: direct loans reset
-     * over SOFR, a secured rate. Nor is it a cost-ratio term; rate risk is the repricing gap.
+     * An interbank freeze raises the repo funding cost (calculateInterestExpenseAndWholesaleRate()) but not what the
+     * book earns: direct loans reset over SOFR, a secured rate. Nor is it a cost-ratio term; rate risk is the repricing
+     * gap.
      */
     public function testAnInterbankSpikeDoesNotLiftTheBookOrTheCostRatio(): void
     {

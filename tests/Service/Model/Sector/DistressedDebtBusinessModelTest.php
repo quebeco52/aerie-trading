@@ -6,16 +6,24 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\MacroDriverAttribution;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DistressedDebtBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class DistressedDebtBusinessModelTest extends TestCase
 {
+    /** Recovery's share of the default mix: the activity shift is the distress multiplier at this weight. */
+    private const RECOVERY_SHARE = 0.60;
+
+    /** IG spread trend of the test quarters: a decade wider than the base the spread is built from. */
+    private const SPREAD_TREND = 0.018;
+
     private DistressedDebtBusinessModel $model;
     private MathUtility $mathUtility;
 
@@ -216,15 +224,140 @@ class DistressedDebtBusinessModelTest extends TestCase
             outputGapEma: -0.03,
             macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
             macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
-            highYieldCreditSpreadEma: DistressedDebtBusinessModel::HY_SPREAD_BLOWOUT_BASELINE,
+            highYieldCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
             corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_BASELINE,
         );
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Signal (0.013 - 0.015) x 20 + 0.03 x 5 = 0.11 -> 1.25 x 0.11 / 1.11; recovery 0.60 of the mix, advisory 0.40
-        // carries none.
-        $expected = 0.60 * (1.25 * 0.11 / 1.11);
+        // Spreads and defaults at their trends; signal 0.03 x 5 = 0.15 -> 1.25 x 0.15 / 1.15; recovery 0.60 of the mix,
+        // advisory 0.40 carries none.
+        $expected = 0.60 * (1.25 * 0.15 / 1.15);
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
+
+    /**
+     * A quarter with every distress input at its trend, the IG spot and its three-month average apart from it, and
+     * the named inputs overridden.
+     *
+     * @param array<string, float> $overrides MacroStateDTO constructor arguments.
+     */
+    private function quarterAtTrend(array $overrides = []): MacroStateDTO
+    {
+        return new MacroStateDTO(...array_replace([
+            'outputGapEma' => 0.0,
+            'macroCreditSpread' => self::SPREAD_TREND,
+            'macroCreditSpreadEma' => 0.030,
+            'macroCreditSpreadTrend' => self::SPREAD_TREND,
+            'highYieldCreditSpreadEma' => self::SPREAD_TREND * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
+            'corporateDefaultRateEma' => 0.020,
+            'corporateDefaultRateTrend' => 0.020,
+        ], $overrides));
+    }
+
+    private function distressMultiplier(MacroStateDTO $macroState): float
+    {
+        $stock = new Stock();
+        $stock->setTicker('DD_TEST');
+
+        return $this->model->resolveSectorActivityShift($stock, $macroState) / self::RECOVERY_SHARE;
+    }
+
+    /** Spreads and defaults at their trends with no output gap are a usual quarter: the book runs at plan. */
+    public function testAUsualQuarterIsPlan(): void
+    {
+        $this->assertEqualsWithDelta(0.0, $this->distressMultiplier($this->quarterAtTrend()), 1e-12);
+    }
+
+    /** @return iterable<string, array{array<string, float>, int}> Overrides and the sign they give the multiplier. */
+    public static function distressInputs(): iterable
+    {
+        $highYieldTrend = self::SPREAD_TREND * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
+
+        yield 'IG spread over its trend' => [['macroCreditSpread' => self::SPREAD_TREND + 0.005], 1];
+        yield 'IG spread under its trend' => [['macroCreditSpread' => self::SPREAD_TREND - 0.005], -1];
+        yield 'HY spread over its trend' => [['highYieldCreditSpreadEma' => $highYieldTrend + 0.010], 1];
+        yield 'HY spread under its trend' => [['highYieldCreditSpreadEma' => $highYieldTrend - 0.010], -1];
+        yield 'defaults over their trend' => [['corporateDefaultRateEma' => 0.030], 1];
+        yield 'defaults under their trend' => [['corporateDefaultRateEma' => 0.014], -1];
+        yield 'output short of potential' => [['outputGapEma' => -0.02], 1];
+        yield 'output over potential' => [['outputGapEma' => 0.02], -1];
+    }
+
+    /**
+     * Each input lifts the book above plan when credit is worse than usual and pulls it below when credit is easier.
+     *
+     * @param array<string, float> $overrides
+     */
+    #[DataProvider('distressInputs')]
+    public function testEachInputMovesTheBookBothWays(array $overrides, int $sign): void
+    {
+        $multiplier = $this->distressMultiplier($this->quarterAtTrend($overrides));
+
+        $this->assertGreaterThan(0.01, $sign * $multiplier);
+    }
+
+    /** No crisis takes the book past the fund's capacity, and no boom idles more than the drag. */
+    public function testTheMultiplierIsBoundedByCapacityAndTheDrag(): void
+    {
+        $crisis = $this->distressMultiplier($this->quarterAtTrend([
+            'macroCreditSpread' => 0.10,
+            'highYieldCreditSpreadEma' => 0.33,
+            'corporateDefaultRateEma' => 0.20,
+            'outputGapEma' => -0.10,
+        ]));
+        $this->assertLessThanOrEqual(DistressedDebtBusinessModel::MAX_DISTRESS_REVENUE_EXPANSION, $crisis);
+        $this->assertGreaterThan(0.9 * DistressedDebtBusinessModel::MAX_DISTRESS_REVENUE_EXPANSION, $crisis);
+
+        $boom = $this->distressMultiplier($this->quarterAtTrend([
+            'macroCreditSpread' => 0.002,
+            'highYieldCreditSpreadEma' => 0.006,
+            'corporateDefaultRateEma' => 0.0,
+            'outputGapEma' => 0.10,
+        ]));
+        $this->assertGreaterThanOrEqual(-DistressedDebtBusinessModel::MAX_IDLE_DRY_POWDER_DRAG, $boom);
+        $this->assertLessThan(-0.8 * DistressedDebtBusinessModel::MAX_IDLE_DRY_POWDER_DRAG, $boom);
+    }
+
+    /** A strong recovery quarter is no restructuring headline when credit is easier than usual. */
+    public function testNoRestructuringEventWhenCreditIsEasierThanUsual(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('VULT');
+
+        $mathStub = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generatePersistentZ'])
+            ->getMock();
+        $mathStub->method('generatePersistentZ')->willReturn(2.0);
+
+        $easy = $this->quarterAtTrend(['corporateDefaultRateEma' => 0.014, 'outputGapEma' => 0.01]);
+        $result = $this->model->computeActualFinancials($stock, 50_000_000.0, 0.35, 5_000_000.0, 0.20, $easy, $mathStub);
+
+        $this->assertNull($result->eventType);
+    }
+
+    /**
+     * The report's IG spread driver is the spread over its trend, the model's own neutral: with the spot far over the
+     * trend and its three-month average beside the spot, the counterfactual takes the whole IG term out.
+     */
+    public function testTheCreditSpreadDriverIsTheSpreadOverItsTrend(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DD_TEST');
+        $macroState = $this->quarterAtTrend(['macroCreditSpread' => 0.025, 'macroCreditSpreadEma' => 0.024]);
+
+        mt_srand(17);
+        $math = new MathUtility();
+        $basis = clone $stock;
+        $math->beginDrawLog();
+        $actual = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, $macroState, $math);
+        $draws = $math->endDrawLog();
+
+        $counterfactual = MacroDriverAttribution::counterfactualStates($this->model, $macroState)['macro_credit_spread'];
+        $effects = $this->model->measureStreamMacroEffects($basis, $draws, ['macro_credit_spread' => [$counterfactual, 100_000_000.0]], 0.40, 10_000_000.0, 0.0, $actual->streamRevenue);
+
+        // Signal (0.025 - 0.018) x 20 = 0.14 over a counterfactual at zero.
+        $expected = 1.25 * 0.14 / 1.14;
+        $this->assertEqualsWithDelta($expected, $effects['turnaround_recovery']['macro_credit_spread'], 1e-9);
     }
 }

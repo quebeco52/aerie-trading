@@ -30,6 +30,14 @@ class MacroDriverAttributionTest extends TestCase
         $this->assertNull(MacroDriverAttribution::neutralReading('equity_wealth_trend', $actual), 'A trend is a reference, never a driver.');
     }
 
+    /** The IG spread is neutral at the decade trend its readers measure it against, not the base it is built from. */
+    public function testTheCreditSpreadIsNeutralAtItsTrend(): void
+    {
+        $actual = (new MacroStateDTO(macroCreditSpread: 0.025, macroCreditSpreadEma: 0.024, macroCreditSpreadTrend: 0.018))->toArray();
+
+        $this->assertSame(0.018, MacroDriverAttribution::neutralReading('macro_credit_spread', $actual));
+    }
+
     /**
      * Only the inputs the model reads, and only those the quarter has moved, get a counterfactual; each moves just its
      * own input.

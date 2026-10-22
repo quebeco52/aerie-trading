@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\DTO\InterestExpenseDTO;
-
 use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
@@ -270,7 +268,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         // Credit services require highly competitive APYs on their high-yield savings accounts
         $depositRate = $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        // The floating wholesale at the interbank rate, as calculateInterestExpenseAndWholesaleRate() charges it.
+        $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         // The funding the lender carries: its leverage limit binds on the live balance sheet, not in the pricing.
         $optimalDebt = $totalDebt;
@@ -312,7 +311,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     /**
      * A card APR is a margin over the prime rate, which follows the policy rate and not the interbank market: an
-     * interbank freeze raises the issuer's wholesale funding cost without lifting what its book earns.
+     * interbank freeze raises the issuer's floating wholesale funding cost (calculateInterestExpenseAndWholesaleRate())
+     * without lifting what its book earns.
      *
      * @return array{floating: float, fixed: float, residential: float, securities: float}
      */
@@ -336,21 +336,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($this->getOperatingBase($stock) * self::TARGET_CASH_OPERATING_MULT));
 
         return $excessCash * $this->calculateCashYield($macroState);
-    }
-
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
-    {
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        $customerDeposits = (float) $stock->getCustomerDeposits(); // High yield savings sweeps
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
-
-        $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
-        $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
-
-        // Credit services must offer highly competitive APYs on their high-yield savings accounts to attract funding
-        $depositInterest = $customerDeposits * $this->resolvePaidDepositRate($stock, $policyRate, $macroState);
-
-        return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
     }
 
     /**

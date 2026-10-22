@@ -13,19 +13,21 @@ use App\Service\Model\BusinessModelInterface;
  * neutral reading and the quarter's own random draws; the difference in each stream's revenue is the input's
  * contribution. A one-at-a-time counterfactual, so contributions that interact need not sum to the total move.
  *
- * The neutral reading is the steady state the economy opens in (MacroStateDTO's defaults), except for a level series
- * that trends, whose neutral is the trend it is measured against: resetting it to its opening level would attribute
- * every year of growth since to the business cycle.
+ * The neutral reading is the steady state the economy opens in (MacroStateDTO's defaults), except for a series measured
+ * against a trend, whose neutral is that trend: resetting nominal output to its opening level would attribute every
+ * year of growth since to the business cycle.
  */
 final class MacroDriverAttribution
 {
     // --- Neutral Readings ---
     /**
-     * Trending level series and the trend each is neutral at: nominal output at potential, equity wealth at its trend.
+     * Series and the trend each is neutral at: nominal output at potential, equity wealth at its trend, the IG spread
+     * at its decade average, which its readers measure it against rather than the base it is built from.
      */
     public const NEUTRAL_TREND = [
         'nominal_gdp_index' => 'potential_gdp_index',
         'equity_wealth_ratio' => 'equity_wealth_trend',
+        'macro_credit_spread' => 'macro_credit_spread_trend',
     ];
 
     /**

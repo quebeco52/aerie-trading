@@ -535,6 +535,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
         $depositRate = $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
+        // The floating wholesale at the interbank rate, as calculateInterestExpenseAndWholesaleRate() charges it.
         $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $macroState->yield5yEma) + (float) $stock->getCreditSpread();
 
         // The funding the lender carries: its leverage limit binds on the live balance sheet, and a calibration
@@ -1293,12 +1294,14 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
-        // Wholesale debt is expensive and relies on fixed/floating market rates
-        $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
+        // The floating wholesale resets to the interbank rate, the index the floating loans reprice at, so it pays the
+        // interbank spread on top of the policy rate and the lender's own credit spread, and a freeze raises it.
+        $floatingWholesaleRate = $floatingInterestRate + ($macroState->interbankLiquiditySpreadEma ?? MacroConstants::INTERBANK_BASELINE_SPREAD);
+        $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingWholesaleRate);
         $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
 
         // Deposits are cheap, but the bank must pay an APY to prevent capital flight; it pays the rate its
-        // deposits have repriced to, which follows the policy rate with a lag.
+        // deposits have repriced to, which follows the policy rate with a lag and not the interbank market.
         $depositInterest = $customerDeposits * $this->resolvePaidDepositRate($stock, $policyRate, $macroState);
 
         return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);

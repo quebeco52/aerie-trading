@@ -265,9 +265,10 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Fallback blended wholesale funding rate: floating/fixed debt mix priced off the policy rate and 5-year
-     * yield curve, plus the firm's static structural credit spread. Used only when no realized wholesale rate
-     * from DebtEngine is available (e.g. market seed/reset bootstrapping, before any live debt calc has run).
+     * Fallback blended wholesale funding rate: floating/fixed debt mix priced off the interbank rate (as
+     * calculateInterestExpenseAndWholesaleRate() charges it) and the 5-year yield curve, plus the firm's static
+     * structural credit spread. Used only when no realized wholesale rate from DebtEngine is available (e.g. market
+     * seed/reset bootstrapping, before any live debt calc has run).
      *
      * IMPORTANT: this deliberately omits the dynamic Merton/BGG spread widening that
      * DebtEngine::calculateInterestExpenseAndWholesaleRate layers on, because that widening depends on the
@@ -333,8 +334,10 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        // Brokerages fund operations and margin lending purely via wholesale debt markets.
-        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
+        // Brokerages fund operations and margin lending purely via wholesale debt markets. The floating part resets to
+        // the interbank rate, so it pays the interbank spread over the policy rate, and a freeze raises it.
+        $floatingWholesaleRate = $floatingInterestRate + ($macroState->interbankLiquiditySpreadEma ?? MacroConstants::INTERBANK_BASELINE_SPREAD);
+        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingWholesaleRate);
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
 
         return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);

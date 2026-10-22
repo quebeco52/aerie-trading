@@ -328,6 +328,32 @@ class CreditRiskTest extends TestCase
     }
 
     /**
+     * The signed curve is zero at usual conditions, the one-sided curve in distress, bounded by the drag in easy
+     * conditions, and equally steep on both sides of zero.
+     */
+    public function testCalculateSignedDistressMultiplier(): void
+    {
+        $this->assertSame(0.0, CreditRisk::calculateSignedDistressMultiplier(0.0, 1.25, 1.0, 0.50));
+        $this->assertSame(
+            CreditRisk::calculateDiminishingDistressMultiplier(0.7, 1.25, 1.0),
+            CreditRisk::calculateSignedDistressMultiplier(0.7, 1.25, 1.0, 0.50),
+        );
+
+        // The downside half-saturates at K x drag / cap = 0.4, and never passes the drag.
+        $this->assertEqualsWithDelta(-0.25, CreditRisk::calculateSignedDistressMultiplier(-0.4, 1.25, 1.0, 0.50), 1e-12);
+        $deepest = CreditRisk::calculateSignedDistressMultiplier(-1_000_000.0, 1.25, 1.0, 0.50);
+        $this->assertGreaterThanOrEqual(-0.50, $deepest);
+        $this->assertLessThan(-0.49, $deepest);
+
+        // One response per unit of signal at zero: cap / K = 1.25 on both sides, so the curve has no kink.
+        $step = 1e-6;
+        $up = CreditRisk::calculateSignedDistressMultiplier($step, 1.25, 1.0, 0.50) / $step;
+        $down = -CreditRisk::calculateSignedDistressMultiplier(-$step, 1.25, 1.0, 0.50) / $step;
+        $this->assertEqualsWithDelta(1.25, $up, 1e-4);
+        $this->assertEqualsWithDelta($up, $down, 1e-4);
+    }
+
+    /**
      * The HY tranche is a fixed multiple of IG, cycle and crisis alike (ICE HY/IG ~3.3x in calm years and at the
      * December 2008 peak), and both legs respect their clamps.
      */

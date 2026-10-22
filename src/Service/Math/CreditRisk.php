@@ -531,6 +531,31 @@ final class CreditRisk
     }
 
     /**
+     * Two-sided Michaelis-Menten curve for a signed distress signal, zero at usual conditions: distress fills toward
+     * the capacity expansion as calculateDiminishingDistressMultiplier() does, easy conditions empty toward the drag.
+     * The downside half-saturates at $halfSaturation × $maxDrag / $maxMultiplier, so both sides respond alike per unit
+     * of signal at zero and the curve has no kink there to bias the mean of a signal that swings both ways.
+     *
+     * @param float $distressSignal Signed distress intensity, zero at usual conditions.
+     * @param float $maxMultiplier  Asymptotic expansion in distress (1.25 = +125%), positive.
+     * @param float $halfSaturation Signal at which half of the expansion is realised.
+     * @param float $maxDrag        Asymptotic contraction in easy conditions, as a positive fraction (0.50 = -50%).
+     * @return float Multiplier in (-maxDrag, maxMultiplier).
+     */
+    public static function calculateSignedDistressMultiplier(
+        float $distressSignal,
+        float $maxMultiplier,
+        float $halfSaturation,
+        float $maxDrag,
+    ): float {
+        if ($distressSignal >= 0.0) {
+            return self::calculateDiminishingDistressMultiplier($distressSignal, $maxMultiplier, $halfSaturation);
+        }
+
+        return -self::calculateDiminishingDistressMultiplier(-$distressSignal, $maxDrag, $halfSaturation * $maxDrag / $maxMultiplier);
+    }
+
+    /**
      * Calculates the mark-to-market revaluation of a credit portfolio under a spread move (first-order duration
      * approximation).
      *

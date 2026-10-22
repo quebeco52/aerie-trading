@@ -252,8 +252,9 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveCalibrationRoe($stock, $macroState) / max(0.01, 1.0 - $macroState->corporateTaxRate);
+        // The floating wholesale at the interbank rate, as calculateInterestExpenseAndWholesaleRate() charges it.
         $interestExpense = ($wholesaleDebt * (1.0 - $floatingRatio) * (float) $stock->getHistoricalFixedRate())
-            + ($wholesaleDebt * $floatingRatio * ($macroState->policyRateEma + (float) $stock->getCreditSpread()));
+            + ($wholesaleDebt * $floatingRatio * ($macroState->policyRateEma + $macroState->interbankLiquiditySpreadEma + (float) $stock->getCreditSpread()));
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($this->getOperatingBase($stock) * self::TARGET_OPERATING_BUFFER));
         $interestIncome = ($earningAssets * $bookYield) + ($excessCash * $this->calculateCashYield($macroState));
 
@@ -267,7 +268,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
     /**
      * A direct loan resets over SOFR, a secured overnight rate that follows the policy rate and not the unsecured
-     * interbank market: an interbank freeze raises the lender's wholesale funding cost without lifting what it earns.
+     * interbank market: an interbank freeze raises the lender's floating wholesale funding cost
+     * (calculateInterestExpenseAndWholesaleRate()) without lifting what it earns.
      *
      * @return array{floating: float, fixed: float, residential: float, securities: float}
      */
