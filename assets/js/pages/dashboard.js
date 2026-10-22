@@ -267,6 +267,8 @@ function initDashboard() {
         if (hasHoldingsUpdates) {
             let totalInvested = 0;
             let totalInvestedCost = 0;
+            // Gross, as the server's header: a short's proceeds are capital at risk, not an offset to a long's cost.
+            let grossCost = 0;
 
             for (const [ticker, holding] of Object.entries(holdings)) {
                 const quantity = holding.quantity;
@@ -275,11 +277,12 @@ function initDashboard() {
 
                 totalInvested += (currentPrice * quantity);
                 totalInvestedCost += (avgCost * quantity);
+                grossCost += Math.abs(avgCost * quantity);
             }
 
             const totalPortfolioValue = totalInvested + cash;
             const totalPnL = totalInvested - totalInvestedCost;
-            const totalPnLPct = totalInvestedCost > 0 ? (totalPnL / totalInvestedCost) * 100 : 0.0;
+            const totalPnLPct = grossCost > 0 ? (totalPnL / grossCost) * 100 : 0.0;
 
             setText(document.getElementById('total-invested'), formatCurrency(totalInvested));
 

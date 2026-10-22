@@ -98,8 +98,8 @@ final class DashboardPageBuilder
             'portfolioValue' => $portfolioValue,
             'totalInvested' => $netWorth['stock_value'] + $netWorth['etf_value'] + $netWorth['bond_value'] + $netWorth['option_value'],
             'totalInvestedCost' => $marked['cost'],
-            'totalUnrealizedPnL' => $marked['value'] - $marked['cost'],
-            'totalUnrealizedPnLPercent' => $marked['cost'] > 0 ? (($marked['value'] - $marked['cost']) / $marked['cost']) * 100 : 0.0,
+            'totalUnrealizedPnL' => $marked['pnl'],
+            'totalUnrealizedPnLPercent' => $marked['basis'] > 0 ? ($marked['pnl'] / $marked['basis']) * 100 : 0.0,
             'totalRealised' => array_sum($this->costBasis->realisedByTicker($filledOrders)),
             'cashBalance' => $netWorth['cash_balance'],
             'escrowedCash' => $escrow['cash'],
@@ -333,26 +333,30 @@ final class DashboardPageBuilder
 
     /**
      * What the positions are marked at and what they cost, summed class by class. An option's cost counts at what it
-     * tied up, so premium written does not net against premium paid.
+     * tied up, so premium written does not net against premium paid. The gain is the positions' own gains summed, and
+     * the basis it is a return on is gross: a short's proceeds are capital at risk, not an offset against a long's
+     * cost, so a hedged book is not shown a return on nothing.
      *
      * @param list<array<string, mixed>> $holdings
      *
-     * @return array{value: float, cost: float}
+     * @return array{value: float, cost: float, pnl: float, basis: float}
      */
     public static function markedTotals(array $holdings): array
     {
         $value = ['STOCK' => 0.0, 'ETF' => 0.0, 'BOND' => 0.0, 'OPTION' => 0.0];
-        $cost = 0.0;
+        $cost = $pnl = $basis = 0.0;
         foreach ($holdings as $row) {
             $value[$row['type']] += $row['marketValue'];
             $cost += $row['type'] === 'OPTION' ? abs($row['totalCost']) : $row['totalCost'];
+            $pnl += $row['unrealizedPnL'];
+            $basis += abs($row['totalCost']);
         }
 
-        return ['value' => $value['STOCK'] + $value['ETF'] + $value['BOND'] + $value['OPTION'], 'cost' => $cost];
+        return ['value' => $value['STOCK'] + $value['ETF'] + $value['BOND'] + $value['OPTION'], 'cost' => $cost, 'pnl' => $pnl, 'basis' => $basis];
     }
 
     /**
-     * Each position's share of net worth, largest position first.
+     * Each position's share of net worth, largest position first, a short's size by what it owes.
      *
      * @param list<array<string, mixed>> $holdings
      *
@@ -365,7 +369,7 @@ final class DashboardPageBuilder
         }
         unset($row);
 
-        usort($holdings, static fn(array $a, array $b): int => $b['marketValue'] <=> $a['marketValue']);
+        usort($holdings, static fn(array $a, array $b): int => abs($b['marketValue']) <=> abs($a['marketValue']));
 
         return $holdings;
     }

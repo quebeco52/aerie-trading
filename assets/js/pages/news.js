@@ -6,6 +6,7 @@
  */
 
 import { buildCard } from '../stock/events-feed.js';
+import { onPageLoad } from '../utils/page-init.js';
 
 /** Rows kept on the page as live stories push older ones off; the server lists the same number. */
 const FEED_ROWS = 60;
@@ -22,6 +23,8 @@ let frameHandler = null;
 function init() {
     const feed = document.getElementById('news-feed');
     if (!feed) return;
+    // A page shown twice without leaving it (the first-visit catch-up and its own load event) keeps one handler.
+    if (frameHandler) document.removeEventListener('market:frame', frameHandler);
     const section = feed.dataset.section || 'all';
 
     frameHandler = (e) => {
@@ -44,4 +47,4 @@ function init() {
     }, { once: true });
 }
 
-init();
+onPageLoad(init);

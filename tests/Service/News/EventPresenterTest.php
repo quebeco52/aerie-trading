@@ -79,6 +79,25 @@ class EventPresenterTest extends TestCase
         $this->assertEmpty($presented['pills']);
     }
 
+    /**
+     * When special items separate adjusted from reported earnings, the filing prints both. The beat or miss is on the
+     * adjusted figure, and the card still has to read it rather than fall back to a plain "Quarterly Earnings Report".
+     */
+    public function testPresentEarningsWithAdjustedAndReportedFiguresKeepsTheBeat(): void
+    {
+        $event = new StockEvent();
+        $event->setEventType('EARNINGS');
+        $event->setDescription("Q-Earnings: $0.71 adjusted, -$1.20 reported (Beat expectations by $0.05 | +$1.20B EVA).");
+
+        $presented = $this->presenter->present($event);
+
+        $this->assertSame('EARNINGS BEAT', $presented['badge']);
+        $this->assertSame('$0.71', $presented['eps']);
+        $this->assertSame('$0.05', $presented['surpriseAmount']);
+        $this->assertSame('+$1.20B EVA', $presented['eva']);
+        $this->assertEmpty($presented['pills'], 'The parsed line is not repeated as a pill.');
+    }
+
     public function testPresentEarningsMet(): void
     {
         $desc = "Q-Earnings: $1.50 (Met expectations exactly | +$5.00M EVA).";

@@ -79,7 +79,7 @@ final class WireFrame
     public static function liveMacro(array $macro): array
     {
         static $fields = null;
-        $fields ??= array_flip(array_merge(self::LIVE_MACRO_FIELDS, DistrictMap::stressFields()));
+        $fields ??= array_flip(array_merge(self::LIVE_MACRO_FIELDS, DistrictMap::stressFields(), DistrictMap::readoutFields()));
 
         return array_intersect_key($macro, $fields);
     }

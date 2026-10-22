@@ -787,6 +787,23 @@ class DistrictMap
     }
 
     /**
+     * The macro fields printed on the institutions: the live frame must carry them, or a readout repaints as zero.
+     *
+     * @return list<string>
+     */
+    public static function readoutFields(): array
+    {
+        $fields = [];
+        foreach (self::INSTITUTIONS as $institution) {
+            foreach ($institution['readouts'] as $readout) {
+                $fields[$readout['field']] = true;
+            }
+        }
+
+        return array_keys($fields);
+    }
+
+    /**
      * How many staves a frontage of this many tenants wraps across: one row per
      * ROW_SPLIT_THRESHOLDS step the count has passed, capped at ROW_COUNT.
      */

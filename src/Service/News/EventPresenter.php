@@ -178,8 +178,9 @@ class EventPresenter
         $headline = 'Quarterly Earnings Report';
         $remainingText = $rawDesc;
 
-        // Pattern matching: "Q-Earnings: $2.26 (Beat expectations by $0.01 | +$80.92B EVA)."
-        $pattern = '/^Q-Earnings:\s*([+-]?\$?[\d,.]+(?:\s*[BMTk])?)\s*\((Beat expectations by|Missed expectations by|Met expectations(?: exactly)?)\s*([+-]?\$?[\d,.]+(?:\s*[BMTk])?)?\s*\|\s*([+-]?\$?[\d,.]+[BMTk]?\s*EVA)\)\.?/i';
+        // Pattern matching: "Q-Earnings: $2.26 (Beat expectations by $0.01 | +$80.92B EVA).". When special items part
+        // the two, the figure reads "$2.26 adjusted, $1.80 reported"; the beat or miss is on the adjusted one.
+        $pattern = '/^Q-Earnings:\s*([+-]?\$?[\d,.]+(?:\s*[BMTk])?)(?:\s*adjusted,\s*[+-]?\$?[\d,.]+\s*reported)?\s*\((Beat expectations by|Missed expectations by|Met expectations(?: exactly)?)\s*([+-]?\$?[\d,.]+(?:\s*[BMTk])?)?\s*\|\s*([+-]?\$?[\d,.]+[BMTk]?\s*EVA)\)\.?/i';
         if (preg_match($pattern, $rawDesc, $matches)) {
             $eps = trim($matches[1]);
             $verbiage = strtolower($matches[2]);

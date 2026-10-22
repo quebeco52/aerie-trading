@@ -571,6 +571,32 @@ class CorporateLedgerServiceTest extends TestCase
     }
 
     /** A reverse split moves the same figures the other way, and keeps a negative EPS negative. */
+    /** A filing with special items prints a reported figure beside the adjusted one; both are per share. */
+    public function testASplitRestatesTheReportedFigureBesideTheAdjustedOne(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('FEED');
+
+        $this->connectionMock->method('fetchAllAssociative')
+            ->willReturnCallback(static fn(string $sql): array => str_contains($sql, 'stock_events') ? [
+                ['id' => 9, 'description' => 'Q-Earnings: $2.84 adjusted, -$4.80 reported (Beat expectations by $0.20 | +$1.20B EVA).'],
+            ] : []);
+
+        $rewrites = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []) use (&$rewrites): int {
+                if (str_contains($sql, 'UPDATE stock_events')) {
+                    $rewrites[(int) $params['id']] = $params['description'];
+                }
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 4.0, false);
+
+        $this->assertSame('Q-Earnings: $0.71 adjusted, -$1.20 reported (Beat expectations by $0.05 | +$1.20B EVA).', $rewrites[9]);
+    }
+
     public function testReverseSplitRestatesTheEventFeedTheOtherWay(): void
     {
         $stock = new Stock();

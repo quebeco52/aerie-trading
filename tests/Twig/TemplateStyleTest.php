@@ -231,6 +231,15 @@ final class TemplateStyleTest extends TestCase
         $this->assertLessThanOrEqual(self::HAND_MONEY_CEILING, $money, 'New dollar figures use |money(n); move old ones over and lower HAND_MONEY_CEILING.');
     }
 
+    /** A stray closing tag ends the page container early, and everything after it renders outside the layout. */
+    public function testEveryTemplateClosesTheDivsItOpens(): void
+    {
+        foreach ($this->templates() as $path => $source) {
+            $source = $this->stripTwigComments($source);
+            $this->assertSame(preg_match_all('/<div\b/', $source), substr_count($source, '</div>'), "{$path} opens and closes a different number of divs.");
+        }
+    }
+
     /** @return array<string, string> repo-relative path => source, player templates only */
     private function templates(): array
     {

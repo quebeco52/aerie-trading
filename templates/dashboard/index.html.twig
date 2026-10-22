@@ -541,7 +541,7 @@
                             </div>
                             <div class="py-2.5 flex justify-between">
                                 <dt class="text-on-surface-variant">Largest position</dt>
-                                <dd class="font-bold text-on-surface font-mono tabular-nums">{{ holdings|length > 0 ? holdings[0].weight|number_format(1) ~ '%' : '0.0%' }}</dd>
+                                <dd class="font-bold text-on-surface font-mono tabular-nums">{{ holdings|length > 0 ? holdings[0].weight|abs|number_format(1) ~ '%' : '—' }}</dd>
                             </div>
                             <div class="py-2.5 flex justify-between">
                                 <dt class="text-on-surface-variant">Cash share</dt>

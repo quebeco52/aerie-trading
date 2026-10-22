@@ -65,6 +65,24 @@ final class DashboardPageBuilderTest extends TestCase
         $totals = DashboardPageBuilder::markedTotals($rows);
         $this->assertSame(2.50 * $shares, $totals['cost'], 'Premium written counts at what it tied up.');
         $this->assertSame(-1.50 * $shares, $totals['value']);
+        $this->assertSame(1.00 * $shares, $totals['pnl'], 'The header gain is the decay, not the liability less the premium.');
+    }
+
+    /**
+     * A hedged book earns on both legs. Netting the short's proceeds against the long's cost left a basis of nothing,
+     * and the header printed +0.00% on a real gain; the return is on the gross capital the positions put at risk.
+     */
+    public function testAHedgedBookShowsItsReturnOnGrossCapital(): void
+    {
+        $rows = DashboardPageBuilder::stockRows([
+            (new UserStock())->setStock(self::stock('LNG', 'Tech', '110.00'))->setQuantity(100),
+            (new UserStock())->setStock(self::stock('SHT', 'Tech', '90.00'))->setQuantity(-100),
+        ], ['LNG' => 100.0, 'SHT' => 100.0], []);
+
+        $totals = DashboardPageBuilder::markedTotals($rows);
+
+        $this->assertSame(2000.0, $totals['pnl'], 'Up 1,000 on the long, 1,000 on the short.');
+        $this->assertSame(20000.0, $totals['basis']);
     }
 
     /** Index funds and bonds take their own sector lines, and a bond's line names its issuer's kind. */
@@ -114,5 +132,17 @@ final class DashboardPageBuilderTest extends TestCase
 
         $this->assertSame(['BIG', 'SML'], array_column($rows, 'ticker'));
         $this->assertSame(50.0, $rows[0]['weight']);
+    }
+
+    /** A short is sized by what it owes: a large short is the largest position, not the last. */
+    public function testALargeShortIsTheLargestPosition(): void
+    {
+        $rows = DashboardPageBuilder::weighted(DashboardPageBuilder::stockRows([
+            (new UserStock())->setStock(self::stock('LNG', 'Tech', '10.00'))->setQuantity(1000),
+            (new UserStock())->setStock(self::stock('SHT', 'Tech', '10.00'))->setQuantity(-5000),
+        ], [], []), 60000.0);
+
+        $this->assertSame(['SHT', 'LNG'], array_column($rows, 'ticker'));
+        $this->assertEqualsWithDelta(-83.33, $rows[0]['weight'], 0.01);
     }
 }

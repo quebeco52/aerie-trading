@@ -98,10 +98,12 @@ function conduitPath(sx, sy, tx, ty, laneY) {
     return `M ${sx} ${sy} V ${laneY} H ${tx} V ${ty}`;
 }
 
-/** Formats one readout value to match the server-rendered `number_format` precision exactly. */
+/** Formats one readout value to match the server-rendered `number_format` precision exactly; a missing one is '—'. */
 function formatReadoutValue(rawValue, unit) {
-    const value = Number.isFinite(rawValue) ? rawValue : 0;
-    return unit === 'pct' ? (value * 100).toFixed(2) + '%' : value.toFixed(1);
+    if (!Number.isFinite(rawValue)) {
+        return '—';
+    }
+    return unit === 'pct' ? (rawValue * 100).toFixed(2) + '%' : rawValue.toFixed(1);
 }
 
 /**

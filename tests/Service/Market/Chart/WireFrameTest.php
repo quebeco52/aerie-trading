@@ -56,6 +56,10 @@ class WireFrameTest extends TestCase
             $this->assertArrayHasKey($field, $macro, "A stress rule reads {$field}, which the macro state does not have.");
             $this->assertArrayHasKey($field, $live, "The district map reads {$field} off the frame.");
         }
+        foreach (\App\Data\District\DistrictMap::readoutFields() as $field) {
+            $this->assertArrayHasKey($field, $macro, "An institution prints {$field}, which the macro state does not have.");
+            $this->assertArrayHasKey($field, $live, "The district map prints {$field} off the frame; without it the readout repaints as zero.");
+        }
         $this->assertLessThan(count($macro) / 4, count($live), 'Most of the state stays off the wire.');
     }
 

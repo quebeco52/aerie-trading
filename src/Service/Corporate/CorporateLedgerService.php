@@ -412,6 +412,13 @@ class CorporateLedgerService
                 $restated,
             ) ?? $restated;
 
+            // "$11.75 adjusted, -$3.56 reported": the reported figure is per share too.
+            $restated = preg_replace_callback(
+                '/(adjusted,\s*-?\$)([\d,]+\.\d{2})(\s*reported)/',
+                static fn(array $m): string => $m[1] . $money($m[2]) . $m[3],
+                $restated,
+            ) ?? $restated;
+
             $restated = preg_replace_callback(
                 '/((?:Beat|Missed) expectations by\s*\$)([\d,]+\.\d{2})/',
                 static fn(array $m): string => $m[1] . $money($m[2]),
