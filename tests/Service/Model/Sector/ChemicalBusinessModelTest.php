@@ -86,6 +86,9 @@ class ChemicalBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(30_000_000.0, $result->streamRevenue['specialty_chemicals'], 1.0);
         $this->assertEqualsWithDelta(20_000_000.0, $result->streamRevenue['agrochemicals'], 1.0);
         $this->assertEqualsWithDelta(100_000_000.0, $result->actualRevenue, 1.0);
+        // The streams' cost intensities are relative: at the expected mix and no feedstock move they blend to the
+        // engine's own ratio, where the raw multipliers ran 1.5% above it.
+        $this->assertEqualsWithDelta(0.20, $result->clampedMargin, 1e-9);
     }
 
     public function testBasePetrochemicalMacroDemandShift(): void

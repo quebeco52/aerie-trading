@@ -108,6 +108,8 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const MARGIN_POOL_CUSTODY_SPREAD = 0.0015;
     /** Share of prevailing money-market yield retained by clearinghouse on member margin float (15%). */
     public const MARGIN_POOL_YIELD_RETENTION_SHARE = 0.15;
+    /** Custody revenue moves 2% for each point the policy rate sits above the neutral rate the market perceives. */
+    public const CUSTODY_RATE_SENSITIVITY = 2.0;
 
     // --- VIX & Transaction Volume Bonus ---
     /**
@@ -242,9 +244,9 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_MARGIN_VOLATILITY, $marginVolatility);
         $streams->registerState(self::STATE_MARGIN_RATE_CHANGE, self::MARGIN_VOLATILITY_ELASTICITY * log($marginVolatility / max(1e-4, $previousMarginVolatility)));
 
-        // Interest Rate Shift on Custody Float:
-        $policyRateEma = $macroState->policyRateEma;
-        $rateShift = ($policyRateEma - 0.02) * 2.0;
+        // Custody float earns more when rates sit above neutral and less below it: measured against the neutral rate
+        // the market perceives, so at neutral the stream books its expected revenue.
+        $rateShift = ($macroState->policyRateEma - $macroState->perceivedNeutralRate) * self::CUSTODY_RATE_SENSITIVITY;
 
         // 1. Clearing Revenue (Highly cyclical, gets the Vol and Rates bonus)
         $clearingRevenue = max(0.0, $expectedRevenue * $clearingWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $totalMacroBonus));
@@ -496,6 +498,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
             'corporate_default_rate_ema',
             'inflation_ema',
             'market_volatility_ema',
+            'perceived_neutral_rate',
             'policy_rate_ema',
         ];
     }

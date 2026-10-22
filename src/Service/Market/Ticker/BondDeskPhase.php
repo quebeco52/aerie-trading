@@ -55,7 +55,7 @@ final class BondDeskPhase
         // Companies come to the public market to keep their listed ladder in step with the debt the balance
         // sheet already carries; see CorporateBondDesk for why a listed issue is a tranche, not new borrowing.
         if ($tickCount % CorporateBondDesk::issuanceIntervalTicks($ticksPerYear) === 0) {
-            foreach ($this->corporateBondDesk->reconcile($stocks, $macroState->sovereignCurve(), $macroState->totalTime) as $newIssue) {
+            foreach ($this->corporateBondDesk->reconcile($stocks, $macroState->sovereignCurve(), $macroState->totalTime, $macroState) as $newIssue) {
                 $bonds[] = $newIssue;
             }
         }

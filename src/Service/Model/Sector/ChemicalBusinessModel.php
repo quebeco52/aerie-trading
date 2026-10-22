@@ -10,6 +10,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -120,6 +121,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const FEEDSTOCK_CRACK_PERSISTENCE = 0.20;
 
     // --- Structural Variable Cost Multipliers ---
+    // Relative cost per unit of revenue, scaled so the revenue-weighted mix runs at the firm's own cost ratio.
     /** Variable cost multiplier for bulk base petrochemicals with high energy intensity. */
     public const BASE_PETRO_VARIABLE_COST_MULTIPLIER = 1.15;
     /** Variable cost multiplier for high-margin specialty chemicals with patent moats. */
@@ -341,10 +343,16 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         $agriPriceSupport = $agriShift * self::AGRI_PASS_THROUGH_SCALAR;
         $agriPriceRecovery = max(min(0.0, $ownFeedstockInflation), min(max(0.0, $ownFeedstockInflation), $agriPriceSupport));
 
-        // Margin effect per stream: feedstock intensity x (own cost move - price recovery).
-        $basePetroCostRatio  = ($realizedVariableMargin * self::BASE_PETRO_VARIABLE_COST_MULTIPLIER) + (($ownFeedstockInflation - $basePetroPriceRecovery) * self::ENERGY_FEEDSTOCK_INTENSITY);
-        $specialtyCostRatio  = ($realizedVariableMargin * self::SPECIALTY_CHEM_VARIABLE_COST_MULTIPLIER) + (($ownFeedstockInflation - $specialtyPriceRecovery) * self::ENERGY_FEEDSTOCK_INTENSITY);
-        $agriCostRatio       = ($realizedVariableMargin * self::AGROCHEM_VARIABLE_COST_MULTIPLIER) + (($ownFeedstockInflation - $agriPriceRecovery) * self::ENERGY_FEEDSTOCK_INTENSITY);
+        // Each stream's structural ratio is its cost intensity against the mix, so the mix runs at the engine's ratio
+        // (the raw multipliers blended to 1.015 of it); on top, feedstock intensity x (own cost move - price recovery).
+        $structuralRatios = FirmEconomics::streamCostRatios($realizedVariableMargin, $activeWeights, [
+            'base_petrochemicals' => self::BASE_PETRO_VARIABLE_COST_MULTIPLIER,
+            'specialty_chemicals' => self::SPECIALTY_CHEM_VARIABLE_COST_MULTIPLIER,
+            'agrochemicals'       => self::AGROCHEM_VARIABLE_COST_MULTIPLIER,
+        ]);
+        $basePetroCostRatio  = $structuralRatios['base_petrochemicals'] + (($ownFeedstockInflation - $basePetroPriceRecovery) * self::ENERGY_FEEDSTOCK_INTENSITY);
+        $specialtyCostRatio  = $structuralRatios['specialty_chemicals'] + (($ownFeedstockInflation - $specialtyPriceRecovery) * self::ENERGY_FEEDSTOCK_INTENSITY);
+        $agriCostRatio       = $structuralRatios['agrochemicals'] + (($ownFeedstockInflation - $agriPriceRecovery) * self::ENERGY_FEEDSTOCK_INTENSITY);
 
         $actualVariableCosts = ($basePetroRevenue * $basePetroCostRatio)
             + ($specialtyRevenue * $specialtyCostRatio)

@@ -25,7 +25,8 @@ trait FinancialPhysicsTrait
 {
     public function getEffectiveReturn(Stock $stock): float
     {
-        return (float) ($stock->getCurrentRoe() ?: $stock->getBaselineRoe());
+        // Cast before the test: a stored zero reads "0" or "0.0000", and only the first is falsy as a string.
+        return (float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe();
     }
 
     public function getTrueReturn(Stock $stock): float

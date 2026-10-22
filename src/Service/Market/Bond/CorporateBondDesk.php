@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Bond;
 
+use App\DTO\MacroStateDTO;
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Entity\Stock;
@@ -63,6 +64,7 @@ final class CorporateBondDesk
         private readonly EntityManagerInterface $em,
         private readonly BondPricingEngine $pricingEngine,
         private readonly BondLedgerService $ledger,
+        private readonly DebtEngine $debtEngine,
     ) {}
 
     /** Ticks between reconciliations, given a tick rate. */
@@ -77,7 +79,7 @@ final class CorporateBondDesk
      * @param array<int, Stock> $stocks
      * @return array<int, Bond> Newly listed issues.
      */
-    public function reconcile(array $stocks, SovereignCurveDTO $curve, float $currentTime): array
+    public function reconcile(array $stocks, SovereignCurveDTO $curve, float $currentTime, MacroStateDTO $macroState): array
     {
         $outstanding = $this->outstandingByIssuer();
         $issued = [];
@@ -93,7 +95,7 @@ final class CorporateBondDesk
                 }
             }
 
-            $bond = $this->bringDeal($stock, $curve, $currentTime, $listed);
+            $bond = $this->bringDeal($stock, $curve, $currentTime, $listed, $macroState);
 
             if ($bond !== null) {
                 $issued[] = $bond;
@@ -136,11 +138,11 @@ final class CorporateBondDesk
     /**
      * Whether the public market is open to this issuer at all.
      *
-     * The rating floor is DebtEngine's own: a firm the primary market will not refinance is not a firm that
-     * can bring a new deal, and having two different answers to that question would let a company be shut
-     * out of rolling its maturities while still selling fresh paper.
+     * The answer is DebtEngine's own: a firm the primary market will not refinance is not a firm that can bring a new
+     * deal, and having two different answers to that question would let a company be shut out of rolling its
+     * maturities while still selling fresh paper. The rating floor is checked here first only because it is cheap.
      */
-    public function canIssue(Stock $stock): bool
+    public function canIssue(Stock $stock, MacroStateDTO $macroState): bool
     {
         if ($stock->isBankrupt()) {
             return false;
@@ -152,8 +154,11 @@ final class CorporateBondDesk
 
         $ranks = CreditRatingAgency::RATING_RANKS;
 
-        return ($ranks[$stock->getCreditRating()] ?? 0)
-            >= ($ranks[DebtEngine::REFINANCING_RATING_FLOOR] ?? 1);
+        if (($ranks[$stock->getCreditRating()] ?? 0) < ($ranks[DebtEngine::REFINANCING_RATING_FLOOR] ?? 1)) {
+            return false;
+        }
+
+        return $this->debtEngine->primaryMarketOpenTo($stock, $macroState);
     }
 
     /** The face a firm should have listed: its public share of what it already owes. */
@@ -224,9 +229,9 @@ final class CorporateBondDesk
      *
      * @param array{face: float, count: int} $outstanding What the firm already has listed.
      */
-    private function bringDeal(Stock $stock, SovereignCurveDTO $curve, float $currentTime, array $outstanding): ?Bond
+    private function bringDeal(Stock $stock, SovereignCurveDTO $curve, float $currentTime, array $outstanding, MacroStateDTO $macroState): ?Bond
     {
-        if (!$this->canIssue($stock)) {
+        if (!$this->canIssue($stock, $macroState)) {
             return null;
         }
 

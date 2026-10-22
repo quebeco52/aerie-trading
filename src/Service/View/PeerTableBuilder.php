@@ -68,9 +68,9 @@ class PeerTableBuilder
         $businessModel = Sectors::businessModelFor($peer->getIndustry());
 
         if (Sectors::isFinancial($businessModel)) {
-            return (float) ($peer->getCurrentRoe() ?: $peer->getBaselineRoe());
+            return (float) $peer->getCurrentRoe() ?: (float) $peer->getBaselineRoe();
         }
 
-        return (float) ($peer->getCurrentRoic() ?: $peer->getBaselineRoic());
+        return (float) $peer->getCurrentRoic() ?: (float) $peer->getBaselineRoic();
     }
 }

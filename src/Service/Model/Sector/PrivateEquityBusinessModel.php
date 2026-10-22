@@ -458,6 +458,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );

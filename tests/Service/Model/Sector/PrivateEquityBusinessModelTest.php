@@ -135,6 +135,8 @@ class PrivateEquityBusinessModelTest extends TestCase
         );
 
         $this->assertSame(ShockEvent::PE_HURDLE_RATE_MISSED, $result->eventType);
+        // Announced, so the street reads it at the event visibility the coverage profile sets, not the base one.
+        $this->assertTrue($result->isPublicEvent);
         $this->assertEqualsWithDelta(0.0, $result->streamRevenue['carried_interest'] ?? 0.0, 0.001);
     }
 

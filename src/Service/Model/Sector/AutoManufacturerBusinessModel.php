@@ -73,6 +73,49 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         return [0.95, 1.03, 1.00, 1.02];
     }
 
+    // --- Capital Cycle & Secular Demand ---
+    // Carmakers keep heavy machinery's capital cycle and secular drift, declared here so retuning one leaves the other.
+
+    /** Working capital per unit of revenue: dealer lots and parts inventory (0.15, against the standard 0.10). */
+    public const WORKING_CAPITAL_INTENSITY = 0.15;
+
+    /** Share of construction in progress placed in service each quarter: plants and retooling take years (0.125). */
+    public const CAPEX_COMPLETION_RATE = 0.125;
+
+    /** How hard capex swings with the cycle, against the standard 1.5: model programmes are cut deep in a downturn. */
+    public const CAPEX_CYCLICALITY = 4.0;
+
+    /**
+     * Business investment in industrial equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5), the
+     * same series heavy machinery drifts on. Its fall to 2019 puts carmakers ~1.3%/yr below trend growth.
+     */
+    public const SECULAR_SHARE_1997 = 0.0164;
+
+    /** The same share in 2019. */
+    public const SECULAR_SHARE_2019 = 0.0122;
+
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return self::WORKING_CAPITAL_INTENSITY;
+    }
+
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return self::CAPEX_COMPLETION_RATE;
+    }
+
+    public function getCapexCyclicality(): float
+    {
+        return self::CAPEX_CYCLICALITY;
+    }
+
+    /** Trend real growth plus the measured drift in the share of GDP above. */
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return MacroConstants::TREND_REAL_GROWTH
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+    }
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for automakers via monthly dealership channel registration data. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;

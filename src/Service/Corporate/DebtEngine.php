@@ -1179,6 +1179,12 @@ class DebtEngine
         return $rated;
     }
 
+    /** Whether the primary market would lend to this issuer now, as its refinancing reads it: for the bond desk. */
+    public function primaryMarketOpenTo(Stock $stock, MacroStateDTO $macroState): bool
+    {
+        return $this->analyzeDebtHealth($stock, $macroState)->hasMarketAccess;
+    }
+
     /**
      * Whether the primary market will lend to this issuer at any price: roll its maturity or fund a cash shortfall.
      */

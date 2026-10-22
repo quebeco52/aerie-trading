@@ -663,6 +663,39 @@ class MergerAndAcquisitionEngineTest extends TestCase
     }
 
     /**
+     * A deal paid partly from the treasury and partly with new notes adds its whole price to net debt. Counting only
+     * the borrowed part struck the pro-forma rating, and the coupon on the notes, as if the cash spent were still
+     * there.
+     */
+    public function testAPartlyCashFundedDealIsRatedOnItsWholePriceInNetDebt(): void
+    {
+        $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
+        $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
+        $this->debtEngineMock->method('resolveAssetVolatility')->willReturn(0.27);
+        $this->debtEngineMock->method('issueDebt')->willReturnCallback(
+            static function (Stock $borrower, float $amount): void {
+                $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
+            },
+        );
+        $rated = null;
+        $this->debtEngineMock->method('resolveProFormaRating')->willReturnCallback(
+            static function (Stock $acquirer, float $distanceToDefault, float $netDebt) use (&$rated): string {
+                $rated = $netDebt;
+
+                return 'BB';
+            },
+        );
+
+        $stock = $this->buildLedgeredAcquirer('LEVR', treasury: 1_000_000_000.0, debt: 3_000_000_000.0, shares: 100_000_000.0);
+        $netDebtBefore = (float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury();
+        $deal = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
+
+        $this->assertIsArray($deal, 'the levered deal must execute');
+        $this->assertNotNull($rated, 'the deal must borrow and be rated');
+        $this->assertEqualsWithDelta($netDebtBefore + (float) $deal['spent'], $rated, 1.0);
+    }
+
+    /**
      * A divestiture retires a pro rata slice of every ledger and books the difference between the proceeds
      * and that book value as the gain or loss. A fire sale below book is a real loss charged in full.
      */

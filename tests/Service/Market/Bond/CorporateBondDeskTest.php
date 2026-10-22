@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Bond;
 
+use App\DTO\MacroStateDTO;
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Entity\Stock;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Market\Bond\BondLedgerService;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\CorporateBondDesk;
@@ -25,13 +27,17 @@ use PHPUnit\Framework\TestCase;
  */
 class CorporateBondDeskTest extends TestCase
 {
-    private function desk(?BondLedgerService $ledger = null): CorporateBondDesk
+    /** @param bool $marketOpen What DebtEngine says when asked whether the primary market will lend to the issuer. */
+    private function desk(?BondLedgerService $ledger = null, bool $marketOpen = true): CorporateBondDesk
     {
+        $debtEngine = $this->createStub(DebtEngine::class);
+        $debtEngine->method('primaryMarketOpenTo')->willReturn($marketOpen);
 
         return new CorporateBondDesk(
             $this->createStub(EntityManagerInterface::class),
             new BondPricingEngine(),
             $ledger ?? $this->createStub(BondLedgerService::class),
+            $debtEngine,
         );
     }
 
@@ -134,26 +140,36 @@ class CorporateBondDeskTest extends TestCase
 
     public function testASolidIssuerWithRealDebtCanComeToMarket(): void
     {
-        $this->assertTrue($this->desk()->canIssue($this->issuer()));
+        $this->assertTrue($this->desk()->canIssue($this->issuer(), new MacroStateDTO()));
     }
 
     public function testAFirmBelowTheRatingFloorIsShutOut(): void
     {
         // The same floor DebtEngine applies when it asks whether a maturity can be rolled: a firm nobody
         // will refinance is not a firm that can sell fresh paper.
-        $this->assertFalse($this->desk()->canIssue($this->issuer(4.0e9, 'D')));
+        $this->assertFalse($this->desk()->canIssue($this->issuer(4.0e9, 'D'), new MacroStateDTO()));
     }
 
     public function testAFirmAtTheRatingFloorIsStillLetIn(): void
     {
-        $this->assertTrue($this->desk()->canIssue($this->issuer(4.0e9, 'CCC')));
+        $this->assertTrue($this->desk()->canIssue($this->issuer(4.0e9, 'CCC'), new MacroStateDTO()));
+    }
+
+    /**
+     * A firm DebtEngine will not refinance (its coverage gone, or its class's market shut) cannot list a new tranche
+     * either, whatever its rating. The desk used to check the rating floor alone, so a firm refused a roll still sold
+     * fresh paper.
+     */
+    public function testAFirmThePrimaryMarketWillNotLendToCannotIssue(): void
+    {
+        $this->assertFalse($this->desk(marketOpen: false)->canIssue($this->issuer(4.0e9, 'B'), new MacroStateDTO()));
     }
 
     public function testAFirmWithTooLittleDebtDoesNotBotherWithThePublicMarket(): void
     {
         $tooSmall = CorporateBondDesk::CORPORATE_MIN_PUBLIC_DEBT - 1.0;
 
-        $this->assertFalse($this->desk()->canIssue($this->issuer($tooSmall)));
+        $this->assertFalse($this->desk()->canIssue($this->issuer($tooSmall), new MacroStateDTO()));
     }
 
     public function testABankruptShellCannotIssue(): void
@@ -161,7 +177,7 @@ class CorporateBondDeskTest extends TestCase
         $stock = $this->issuer();
         $stock->setIsBankrupt(true);
 
-        $this->assertFalse($this->desk()->canIssue($stock));
+        $this->assertFalse($this->desk()->canIssue($stock, new MacroStateDTO()));
     }
 
     // --- Pricing The Deal ---

@@ -240,9 +240,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     {
         $beta = $this->getOperatingCyclicality($stock);
         $outputGap = $macroState->outputGapEma;
-        $creditSpread = ($macroState->macroCreditSpread !== MacroConstants::BASE_CREDIT_SPREAD)
-            ? $macroState->macroCreditSpread
-            : $macroState->macroCreditSpreadEma;
+        $creditSpread = $macroState->macroCreditSpread;
 
         $dealActivityShift = $macroState->dealActivityDeviation();
         $spreadShift = $creditSpread - $macroState->macroCreditSpreadTrend;

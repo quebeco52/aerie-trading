@@ -266,10 +266,13 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertSame(0.0, $this->model->getMacroPhysics(new Stock(), $this->clearingMacro($anchorVol + 0.10))['macro_demand_shift']);
     }
 
-    /** A flat 2s10s curve and the custody rate at its 2% pivot, so only volatility can move fees. */
+    /**
+     * A flat 2s10s curve and the policy rate at the neutral rate the market perceives, so only volatility can move
+     * fees. The custody pivot was a fixed 2% under a 3.5% neutral rate, which left the float 3% rich at neutral.
+     */
     private function clearingMacro(float $volatility): MacroStateDTO
     {
-        return new MacroStateDTO(policyRateEma: 0.02, yield2yEma: 0.04, yield10yEma: 0.04, marketVolatilityEma: $volatility);
+        return new MacroStateDTO(policyRateEma: 0.03, perceivedNeutralRate: 0.03, yield2yEma: 0.04, yield10yEma: 0.04, marketVolatilityEma: $volatility);
     }
 
     /**

@@ -670,7 +670,8 @@ class MergerAndAcquisitionEngine
 
             $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
             $currentNetDebt = max(0.0, $ctx->currentDebt - $ctx->treasury);
-            $newNetDebt = $currentNetDebt + $ctx->debtIssued;
+            // The price moves net debt by all of itself: the cash spent leaves the treasury, the rest is borrowed.
+            $newNetDebt = max(0.0, $ctx->currentDebt - $ctx->treasury + $ctx->purchasePrice);
 
             $newAssetValue = $marketCap + $currentNetDebt + $ctx->purchasePrice;
             // The acquired business is priced at the acquirer's own asset risk; de-levering equity volatility

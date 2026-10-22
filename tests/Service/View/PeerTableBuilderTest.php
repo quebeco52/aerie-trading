@@ -116,17 +116,10 @@ class PeerTableBuilderTest extends TestCase
     }
 
     /**
-     * Documents current behaviour, which is not the behaviour the `?:` was written for.
-     *
-     * currentRoic is a non-nullable decimal column, so an unreported company holds the string
-     * "0.0000" — which is truthy in PHP. The baseline therefore never stands in here, and a company
-     * that has not filed yet shows a flat zero. App\Controller\HomeController and
-     * App\Controller\ScreenerController write the same intent as `(float) $a ?: (float) $b`, casting
-     * before the test, so on those pages the same company shows its baseline instead. Correcting the
-     * disagreement changes displayed returns and, through
-     * App\Service\Model\Trait\FinancialPhysicsTrait, priced ones, so it is left as found here.
+     * A company that has not filed yet holds a current return of "0.0000", and shows its baseline, as on the home and
+     * screener pages and in the pricer. Tested as a string, "0.0000" is truthy, so this table used to show a flat zero.
      */
-    public function testAnUnreportedCompanyShowsAFlatZeroRatherThanItsBaseline(): void
+    public function testAnUnreportedCompanyShowsItsBaseline(): void
     {
         $fresh = $this->peer('NEW', 20.0, 1_000.0, 1.0, 'Steel');
         $fresh->setCurrentRoic('0.0000');
@@ -134,7 +127,7 @@ class PeerTableBuilderTest extends TestCase
 
         $peers = $this->builder([$fresh])->build(new Stock());
 
-        $this->assertSame(0.0, $peers[0]['roic']);
+        $this->assertSame(0.09, $peers[0]['roic']);
     }
 
     public function testACompanyWithNoPeersGetsAnEmptyTable(): void

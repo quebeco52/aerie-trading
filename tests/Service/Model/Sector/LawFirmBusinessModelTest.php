@@ -127,6 +127,29 @@ class LawFirmBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(25_000_000.0, $result->streamRevenue['restructuring_advisory'], 1.0);
     }
 
+    /**
+     * Restructuring work reads the credit spread as it stands. It used to swap in the smoothed spread whenever the spot
+     * sat exactly at its opening value, which the driver attribution's neutral run sets, so the earnings report
+     * credited the spread with a move the model never made.
+     */
+    public function testRestructuringReadsTheSpotSpreadEvenAtItsOpeningValue(): void
+    {
+        $stock = (new Stock())->setTicker('CLAW');
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $atOpening = static fn(float $smoothed): MacroStateDTO => new MacroStateDTO(
+            outputGapEma: 0.0,
+            macroCreditSpread: \App\Service\Math\MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: $smoothed,
+        );
+
+        $calm = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 10_000_000.0, 0.0, $atOpening(0.010), $mathMock);
+        $wide = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 10_000_000.0, 0.0, $atOpening(0.040), $mathMock);
+
+        $this->assertEqualsWithDelta($calm->streamRevenue['restructuring_advisory'], $wide->streamRevenue['restructuring_advisory'], 1e-6);
+    }
+
     public function testDealActivityAndCorporateDefaultRateChannels(): void
     {
         $stock = new Stock();

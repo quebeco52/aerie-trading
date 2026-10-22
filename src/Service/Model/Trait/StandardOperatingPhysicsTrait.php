@@ -959,7 +959,8 @@ trait StandardOperatingPhysicsTrait
 
     public function getEffectiveReturn(Stock $stock): float
     {
-        return (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic());
+        // Cast before the test: a stored zero reads "0" or "0.0000", and only the first is falsy as a string.
+        return (float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic();
     }
 
     public function getBaselineReturn(Stock $stock): float
