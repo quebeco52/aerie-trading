@@ -56,16 +56,6 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
      */
     public const INVENTORY_CYCLE_SENSITIVITY = 1.00;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: back-to-school and holiday device cycles.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.92, 0.97, 1.03, 1.08];
-    }
-
     // --- Balance Sheet Realism ---
     /**
      * Stock-based compensation (ASC 718) as a share of revenue: Computers/Peripherals, 2.47% of revenue, 36 firms
@@ -140,15 +130,6 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
      */
     public const CONSUMER_FX_REVENUE_EXPOSURE = 0.15;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.25;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.02;
-    }
-
     // --- Secular Demand ---
     /**
      * Spending on personal computers and peripherals plus business investment in computers and peripheral equipment as
@@ -157,6 +138,18 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     public const SECULAR_SHARE_1997 = 0.0125;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0082;
+
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.25 a year). */
+    public const ROIC_REVERSION_SPEED = 0.25;
+    /** Excess return over the required return the moat sustains (2pp). */
+    public const MOAT_SPREAD = 0.02;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: back-to-school and holiday device cycles.
+     */
+    public const SEASONALITY_FACTORS = [0.92, 0.97, 1.03, 1.08];
 
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float

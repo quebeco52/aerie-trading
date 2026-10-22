@@ -64,16 +64,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
      */
     public const PRICING_POWER_INDEX = 0.40;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q2 planting season for agrochemicals.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [1.00, 1.08, 0.95, 0.97];
-    }
-
     // --- Demand Transmission Lag ---
     /**
      * Years for a move in the output gap to reach the order book. Offtake contracts and plant scheduling hold volumes
@@ -187,7 +177,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
     // --- Valuation, Growth & CapEx Rails ---
     /** Multiplier scaling heavy continuous chemical synthesis and cracking plant capital expenditure cycles. */
-    public const CHEMICAL_CAPEX_CYCLICALITY = 3.50;
+    public const CAPEX_CYCLICALITY = 3.50;
 
     // --- Working Capital Intensities ---
     /** High inventory and hydrocarbon feedstock storage working capital intensity for base petrochemicals. */
@@ -197,35 +187,31 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     /** Seasonal fertilizer inventory stockpiling working capital intensity for agrochemicals. */
     public const AGROCHEM_NWC_INTENSITY = 0.28;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.12;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.01;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.3;
-    }
-
     // --- Secular Demand ---
     /** Chemical products value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
     public const SECULAR_SHARE_1997 = 0.0202;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0174;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.12 a year). */
+    public const ROIC_REVERSION_SPEED = 0.12;
+    /** Excess return over the required return the moat sustains (1pp). */
+    public const MOAT_SPREAD = 0.01;
+
+    // --- Capital Cycle ---
+    /** Share of construction in progress completed into plant each quarter (30%). */
+    public const CAPEX_COMPLETION_RATE = 0.3;
+
+    // --- Seasonality ---
+    /** Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q2 planting season for agrochemicals. */
+    public const SEASONALITY_FACTORS = [1.00, 1.08, 0.95, 0.97];
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return self::CHEMICAL_CAPEX_CYCLICALITY;
     }
 
     public function getWorkingCapitalIntensity(Stock $stock): float

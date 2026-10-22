@@ -73,9 +73,9 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
     // --- Core Sector Structural Constants ---
     /** Mild CapEx cyclicality; staples upgrade facilities but avoid heavy industrial boom/bust cycles. */
-    public const STAPLES_CAPEX_CYCLICALITY = 0.80;
+    public const CAPEX_CYCLICALITY = 0.80;
     /** Operating margin mean reversion speed: fast speed reflects intense retail shelf-space price competition. */
-    public const STAPLES_REVERSION_SPEED = 5.0;
+    public const MARGIN_REVERSION_SPEED = 5.0;
 
     // --- Working Capital by Stream (shares of the stream's revenue) ---
     /**
@@ -123,15 +123,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** One-off charge on the quarter's branded sales for a regulator's fine and legal fees (3%). */
     public const RECALL_MODERATE_PENALTY = 0.03;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-
     // --- Secular Demand ---
     /**
      * Spending on food and beverages for off-premises consumption as a share of US nominal GDP in 1997 (BEA NIPA Table
@@ -141,26 +132,21 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0503;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
+
+    // --- Seasonality ---
+    /** Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. Slight Q4 holiday pantry load. */
+    public const SEASONALITY_FACTORS = [0.95, 1.00, 1.00, 1.05];
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return self::STAPLES_CAPEX_CYCLICALITY;
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return [0.95, 1.00, 1.00, 1.05]; // Slight Q4 holiday pantry load
-    }
-
-    public function getMarginReversionSpeed(): float
-    {
-        return self::STAPLES_REVERSION_SPEED;
     }
 
     /**

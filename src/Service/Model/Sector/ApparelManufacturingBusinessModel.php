@@ -168,26 +168,6 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Revenue multiplier applied to DTC and Wholesale streams during a viral product sensation. */
     public const VIRAL_PRODUCT_MULT = 1.12;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-
-    public function getMoatSpread(): float
-    {
-        return 0.008;
-    }
-
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.25;
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return 1.0;
-    }
-
     // --- Secular Demand ---
     /**
      * Spending on clothing and footwear as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal
@@ -196,6 +176,25 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const SECULAR_SHARE_1997 = 0.0289;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0192;
+
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (0.8pp). */
+    public const MOAT_SPREAD = 0.008;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (1). */
+    public const CAPEX_CYCLICALITY = 1.0;
+    /** Share of construction in progress completed into plant each quarter (25%). */
+    public const CAPEX_COMPLETION_RATE = 0.25;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. Back-to-school Q3 and winter/holiday Q4
+     * apparel cycles.
+     */
+    public const SEASONALITY_FACTORS = [0.85, 0.95, 1.05, 1.15];
 
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
@@ -250,11 +249,6 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         ]);
 
         return [$params[ModelParam::DtcRetailWeight], $params[ModelParam::WholesaleChannelWeight], $params[ModelParam::ContractTextileSupplyWeight]];
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return [0.85, 0.95, 1.05, 1.15]; // Back-to-school Q3 and winter/holiday Q4 apparel cycles
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

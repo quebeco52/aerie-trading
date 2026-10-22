@@ -10,6 +10,7 @@ use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\RailroadBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\Sector\TechBusinessModel;
+use App\Tests\Support\Model\HookConstant;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -44,7 +45,7 @@ final class BusinessModelPricingPowerResolutionTest extends TestCase
             $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
             self::assertTrue(class_exists($className), "{$file} declares no class {$className}.");
             $ref = new ReflectionClass($className);
-            if ($ref->isAbstract() || !$ref->hasConstant('PRICING_POWER_INDEX')) {
+            if ($ref->isAbstract() || !HookConstant::isRedeclared($className, 'PRICING_POWER_INDEX')) {
                 continue;
             }
             $models[basename($file, '.php')] = [$className];

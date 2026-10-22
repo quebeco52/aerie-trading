@@ -7,7 +7,7 @@ namespace App\Service\View;
 use App\Data\Company\Sectors;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
-use App\Service\Model\BusinessModelInterface;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\IndependentPowerBusinessModel;
 use App\Service\Model\Sector\MiningBusinessModel;
@@ -23,7 +23,8 @@ use App\Service\Model\Sector\UtilityBusinessModel;
  * - Input costs: the model's INPUT_COST_EXPOSURES basket (shares of the variable cost base), read by
  *   StandardOperatingPhysicsTrait::resolveInputCostDrag. Only models that declare a basket are listed, less refining.
  * - Sales: the producer's own revenue mix (crude/gas split, mine product mix, merchant power share).
- * - Currency: FX_REVENUE_EXPOSURE, read by resolveFxDemandShift.
+ * - Currency: an operating firm's FX_REVENUE_EXPOSURE, read by resolveFxDemandShift; financials excluded, as none
+ *   read it.
  * - Rates: the floating share of debt, which calculateInterestExpenseAndWholesaleRate prices at the floating rate,
  *   against market value.
  * - Property: a lender's mortgage and commercial property loans, which set its collateral losses; and the REITs.
@@ -84,8 +85,9 @@ final class EconomyExposureBuilder
                 'size' => self::marketValue($stock),
             ];
 
-            // A refiner's basket is on its costs other than crude, so its shares do not compare with the others'.
-            if (self::declares($model, 'INPUT_COST_EXPOSURES') && method_exists($model, 'getInputCostExposures') && !$model instanceof RefiningBusinessModel) {
+            // Only a basket of the model's own (null buys the all-industry one); a refiner's is on its costs other than
+            // crude, so its shares do not compare with the others'.
+            if ($model instanceof AbstractBusinessModel && $model::INPUT_COST_EXPOSURES !== null && !$model instanceof RefiningBusinessModel) {
                 $basket = $model->getInputCostExposures();
                 foreach (['energy' => 'buys_energy', 'gas' => 'buys_gas', 'electricity' => 'buys_power', 'metals' => 'buys_metals', 'agri' => 'buys_farm'] as $channel => $key) {
                     $share = (float) ($basket[$channel] ?? 0.0);
@@ -132,7 +134,7 @@ final class EconomyExposureBuilder
                 }
             }
 
-            if (self::declares($model, 'FX_REVENUE_EXPOSURE')) {
+            if (!$model->isFinancial()) {
                 $collect['currency'][] = $row($model->getFxRevenueExposure());
             }
 
@@ -226,11 +228,6 @@ final class EconomyExposureBuilder
             static fn(array $r): array => ['ticker' => $r['ticker'], 'name' => $r['name'], 'value' => $r['value'], 'detail' => $r['detail']],
             array_slice($rows, 0, self::FIRMS_PER_LIST),
         );
-    }
-
-    private static function declares(BusinessModelInterface $model, string $constant): bool
-    {
-        return defined($model::class . '::' . $constant);
     }
 
     private static function marketValue(Stock $stock): float

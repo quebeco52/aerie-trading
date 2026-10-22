@@ -139,25 +139,10 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
 
-    public function getReversionSpeed(): float
-    {
-        return self::ROIC_REVERSION_SPEED;
-    }
-
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return self::CAPEX_COMPLETION_RATE;
-    }
-
     /** A mine is depleted by the ore taken out of it, so its plant is charged by units of production. */
     public function depreciatesByUnitsOfProduction(): bool
     {
         return true;
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return self::CAPEX_CYCLICALITY;
     }
 
     /**
@@ -173,11 +158,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         }
 
         return $deck > 0.0 ? log($deck) : 0.0;
-    }
-
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return self::WORKING_CAPITAL_INTENSITY;
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

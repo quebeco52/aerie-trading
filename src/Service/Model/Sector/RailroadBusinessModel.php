@@ -52,17 +52,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     /** Captive track networks: nearly all fuel and wage moves are surcharged through. */
     public const PRICING_POWER_INDEX = 0.80;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest grain carloads in the second half,
-     * winter weather in Q1.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.95, 1.00, 1.02, 1.03];
-    }
-
     // --- Balance Sheet Realism ---
     /**
      * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased locomotives
@@ -117,28 +106,32 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
      */
     public const FOREIGN_DEMAND_SENSITIVITY = 0.80;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.02;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.15;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.3;
-    }
-
     // --- Secular Demand ---
     /** Rail transportation value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
     public const SECULAR_SHARE_1997 = 0.0023;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0021;
+
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (2pp). */
+    public const MOAT_SPREAD = 0.02;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (0.7). Heavy rail maintenance CapEx. */
+    public const CAPEX_CYCLICALITY = 0.70;
+    /** Share of construction in progress completed into plant each quarter (30%). */
+    public const CAPEX_COMPLETION_RATE = 0.3;
+    /** Net working capital as a share of revenue (15%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.15;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest grain carloads in the second half,
+     * winter weather in Q1.
+     */
+    public const SEASONALITY_FACTORS = [0.95, 1.00, 1.02, 1.03];
 
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
@@ -146,11 +139,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-
-    public function getCapexCyclicality(): float
-    {
-        return 0.70;
-    } // Heavy rail maintenance CapEx
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {

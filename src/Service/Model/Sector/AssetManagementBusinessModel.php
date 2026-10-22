@@ -62,10 +62,22 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     /** Share of its market an untuned fee manager closes at: where its returns to scale start to fall (0.50). */
     public const DEFAULT_CAPACITY_SHARE = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 0.5;
-    }
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.12 a year). */
+    public const ROIC_REVERSION_SPEED = 0.12;
+    /** Excess return over the required return the moat sustains (1.2pp). */
+    public const MOAT_SPREAD = 0.012;
+
+    // --- Credit Thresholds ---
+    /** Most wholesale debt the model carries per unit of equity (0.5x equity). */
+    public const WHOLESALE_LEVERAGE_LIMIT = 0.5;
+
+    // --- Valuation ---
+    /**
+     * Weight of book value against earnings value in the consensus fair value: none. Asset managers, hedge funds and
+     * private equity trade on fee-related earnings and carry, not on book value.
+     */
+    public const FAIR_VALUE_BOOK_WEIGHT = 0.0;
 
     /**
      * A fee manager earns on the money its clients give it, which its own book stands in for here, so a dollar it
@@ -75,16 +87,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public function getCapacityShare(Stock $stock): ?float
     {
         return $this->resolveModelParameters($stock, [ModelParam::CapacityShare->value => self::DEFAULT_CAPACITY_SHARE])[ModelParam::CapacityShare];
-    }
-
-    public function getReversionSpeed(): float
-    {
-        return 0.12;
-    }
-
-    public function getMoatSpread(): float
-    {
-        return 0.012;
     }
 
     // --- Secular Demand ---
@@ -183,8 +185,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const LORE_PERFORMANCE_SURGE_Z  = 1.80;
     /** Z-score threshold triggering institutional fund outflows event lore. */
     public const LORE_FUND_OUTFLOWS_Z      = -1.80;
-
-    // --- AUM Market Beta & Performance Fee Physics ---
 
     // --- Liquidity & Cash Reserves ---
     /** Target operating cash reserve ratio applied to corporate operating base. */
@@ -471,16 +471,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return $operatingBase * self::MIN_OPERATING_BUFFER;
     }
 
-    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
-    {
-        $excessCash = max(0.0, $treasury - $targetCashReserves);
-        return [
-            'excess_cash'     => $excessCash,
-            'is_hoarder'      => $excessCash > ($operatingBase * self::HOARDER_THRESHOLD),
-            'is_mega_hoarder' => $excessCash > ($operatingBase * self::MEGA_HOARDER_THRESHOLD),
-        ];
-    }
-
     public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
     {
         $bondReturn = $macroState->yield10yEma;
@@ -516,12 +506,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     {
         // Asset managers and brokerages can expand using existing cash hoards before taking on new debt
         return max(0.0, $baseCapacity - $excessCash);
-    }
-
-    /** Asset managers, hedge funds and private equity trade on fee-related earnings and carry, not on book value. */
-    protected function getFairValueBookWeight(float $normalizedEps): float
-    {
-        return 0.0;
     }
 
     /**

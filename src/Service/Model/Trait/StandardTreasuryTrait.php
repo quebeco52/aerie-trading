@@ -26,13 +26,22 @@ trait StandardTreasuryTrait
         return 0.0;
     }
 
+    /**
+     * Cash above the target reserve, and whether it is a hoard: more than the model's thresholds of its hoarding
+     * basis (the operating base, or total debt for a lender whose cash backs its funding).
+     */
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
     {
         $excessCash = max(0.0, $treasury - $targetCashReserves);
+        $basis = match (static::HOARDING_BASIS) {
+            'operating_base' => $operatingBase,
+            'total_debt'     => $totalDebt,
+        };
+
         return [
             'excess_cash'     => $excessCash,
-            'is_hoarder'      => $excessCash > ($operatingBase * FinancialConstants::HOARDER_THRESHOLD_RATIO),
-            'is_mega_hoarder' => $excessCash > ($operatingBase * FinancialConstants::MEGA_HOARDER_THRESHOLD_RATIO),
+            'is_hoarder'      => $excessCash > ($basis * static::HOARDER_THRESHOLD),
+            'is_mega_hoarder' => $excessCash > ($basis * static::MEGA_HOARDER_THRESHOLD),
         ];
     }
 

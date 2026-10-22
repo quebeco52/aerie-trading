@@ -13,6 +13,7 @@ use App\Service\Model\Sector\LuxuryBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\Model\ConfiguredStandardModel;
+use App\Tests\Support\Model\HookConstant;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -109,8 +110,7 @@ final class DemandTransmissionLagTest extends TestCase
     }
 
     /**
-     * The trait stack's own composer (which implements no strategy interface) and every sector model that declares a
-     * lag.
+     * The configured test model and every sector model that declares a lag.
      *
      * @return array<string, array{class-string<OperatingStrategyInterface|ConfiguredStandardModel>}>
      */
@@ -125,7 +125,7 @@ final class DemandTransmissionLagTest extends TestCase
             $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
             self::assertTrue(is_subclass_of($className, OperatingStrategyInterface::class), "{$className} has no operating strategy.");
             $ref = new ReflectionClass($className);
-            if ($ref->isAbstract() || !$ref->hasConstant('DEMAND_LAG_YEARS')) {
+            if ($ref->isAbstract() || !HookConstant::isRedeclared($className, 'DEMAND_LAG_YEARS')) {
                 continue;
             }
             $models[basename($file, '.php')] = [$className];

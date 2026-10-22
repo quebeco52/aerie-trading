@@ -71,41 +71,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
      */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.80;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring construction and farm machinery
-     * deliveries.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.96, 1.04, 1.00, 1.00];
-    }
-
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.30;
     public const BASE_COVERAGE_ERROR = 0.08;
-    public function getReversionSpeed(): float
-    {
-        return 0.12;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.01;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.15;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.125;
-    }
-    // --- CapEx & Asset Physics ---
-    public function getCapexCyclicality(): float
-    {
-        return 4.0;
-    } // Much higher than standard 1.5
+
     // --- Secular Demand ---
     /**
      * Business investment in industrial equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private
@@ -114,6 +83,27 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const SECULAR_SHARE_1997 = 0.0164;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0122;
+
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.12 a year). */
+    public const ROIC_REVERSION_SPEED = 0.12;
+    /** Excess return over the required return the moat sustains (1pp). */
+    public const MOAT_SPREAD = 0.01;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (4). Much higher than standard 1.5. */
+    public const CAPEX_CYCLICALITY = 4.0;
+    /** Share of construction in progress completed into plant each quarter (12.5%). */
+    public const CAPEX_COMPLETION_RATE = 0.125;
+    /** Net working capital as a share of revenue (15%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.15;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring construction and farm machinery
+     * deliveries.
+     */
+    public const SEASONALITY_FACTORS = [0.96, 1.04, 1.00, 1.00];
 
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
@@ -154,9 +144,6 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const CAPITAL_OVERHANG_SCALAR = 0.15;
     /** Sensitivity of OEM heavy equipment orders to manufacturing PMI survey shifts. */
     public const PMI_DEMAND_SENSITIVITY = 0.50;
-
-    // --- Revenue & Shock Physics ---
-    public const REVENUE_VARIANCE_SCALAR = 0.35; // Volatile sales
 
     // --- Global Supply Chain Physics ---
     /**

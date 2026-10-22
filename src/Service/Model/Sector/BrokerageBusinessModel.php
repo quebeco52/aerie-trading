@@ -57,14 +57,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      */
     public const M2_RETAIL_TRADING_SENSITIVITY = 0.40;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 8.0;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.005;
-    }
     // --- Dual-Stream Brokerage Architecture ---
     /** Baseline fraction of revenue derived from trading desks, market making, and execution commissions. */
     public const TRADING_REVENUE_WEIGHT  = 0.60;
@@ -111,6 +103,14 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const TARGET_CASH_BACKING_RATIO = 0.15;
     /** Hard minimum liquidity floor required to prevent clearinghouse margin defaults. */
     public const MIN_CASH_BACKING_RATIO    = 0.10;
+
+    // --- Return Reversion ---
+    /** Excess return over the required return the moat sustains (0.5pp). */
+    public const MOAT_SPREAD = 0.005;
+
+    // --- Credit Thresholds ---
+    /** Most wholesale debt the model carries per unit of equity (8x equity). */
+    public const WHOLESALE_LEVERAGE_LIMIT = 8.0;
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {

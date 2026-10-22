@@ -37,17 +37,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
      */
     public const OPERATING_CYCLICALITY = 1.40;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 deal-closing surge before year end;
-     * summer lull.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.95, 1.00, 0.95, 1.10];
-    }
-
     // --- Balance Sheet Realism ---
     /**
      * Stock-based compensation (ASC 718) as a share of revenue: Brokerage & Investment Banking, 2.51% of revenue, 32
@@ -218,6 +207,13 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const LORE_DROUGHT_OUTPUT_GAP    = -0.020;
     /** Advisory z-score contraction threshold triggering advisory drought lore. */
     public const LORE_DROUGHT_Z_SCORE       = -1.50;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 deal-closing surge before year end;
+     * summer lull.
+     */
+    public const SEASONALITY_FACTORS = [0.95, 1.00, 0.95, 1.10];
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {

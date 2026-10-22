@@ -107,9 +107,9 @@ class UtilityBusinessModelTest extends TestCase
             $this->assertEqualsWithDelta(4.0, array_sum($seen[$row['ticker']]), 1e-9, $row['ticker']);
         }
 
-        $this->assertSame(UtilityBusinessModel::ELECTRIC_SEASONALITY, $seen['BIRD'] ?? null);
+        $this->assertSame(UtilityBusinessModel::SEASONALITY_FACTORS, $seen['BIRD'] ?? null);
         $this->assertSame(UtilityBusinessModel::WATER_SEASONALITY, $seen['WADE'] ?? null);
-        $this->assertSame(UtilityBusinessModel::ELECTRIC_SEASONALITY, $this->seasonalityOf('Utilities - Diversified'));
+        $this->assertSame(UtilityBusinessModel::SEASONALITY_FACTORS, $this->seasonalityOf('Utilities - Diversified'));
     }
 
     /** @return array<int, float> */

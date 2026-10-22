@@ -71,6 +71,20 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
      */
     public const EQUIPMENT_SEASONALITY = [0.94, 0.92, 0.96, 1.18];
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (1.8). Lumpy spectrum and fiber rollout cycles. */
+    public const CAPEX_CYCLICALITY = 1.8;
+    /** Share of construction in progress completed into plant each quarter (25%). */
+    public const CAPEX_COMPLETION_RATE = 0.25;
+    /** Net working capital as a share of revenue (5%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.05;
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: the device season on the default
      * equipment share; plan revenue does not move with the calendar.
@@ -110,23 +124,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.50; // Subscription metrics are reported quarterly
     public const BASE_COVERAGE_ERROR = 0.05;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.05;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.25;
-    }
-
     // --- Secular Demand ---
     /**
      * Broadcasting and telecommunications value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value
@@ -142,10 +139,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-    public function getCapexCyclicality(): float
-    {
-        return 1.8;
-    } // Lumpy spectrum and fiber rollout cycles
 
     // --- Dual-Stream Architecture ---
     /** Baseline fraction of revenue from service plans (wireless, fibre broadband): Verizon 2024 10-K, 83%. */
@@ -216,7 +209,10 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const SPECTRUM_AUCTION_CAPEX_RATIO = 0.25;
 
     // --- Bond Proxy Capital Structure ---
-    /** Quarterly share of the fixed-rate bond stock that matures and reprices (~8-year average tenor). */
+    /**
+     * Quarterly share of the fixed-rate bond stock that matures and reprices (~8-year average tenor), so rate shocks
+     * reach interest expense slowly and persist for years.
+     */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.03;
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
@@ -426,15 +422,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         }
 
         return Distributions::standardNormalQuantile(Distributions::standardNormalCdf(self::PRICE_WAR_Z_SCORE) / $carriers);
-    }
-
-    /**
-     * Bond proxy: telecoms fund networks with long-dated fixed-rate bonds, so only a small slice of the
-     * book reprices each quarter. Rate shocks therefore reach interest expense slowly and persist for years.
-     */
-    public function getDebtMaturityRolloverRate(): float
-    {
-        return self::DEBT_MATURITY_ROLLOVER_RATE;
     }
 
     /**

@@ -84,17 +84,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Regulated tollbooth escalators and staples list-price resets reprice about once a year. */
     public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: industrial spring deliveries and year-end
-     * shipments.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.96, 1.02, 1.00, 1.02];
-    }
-
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for multi-industry conglomerates with complex multi-segment reporting. */
     public const BASE_COVERAGE_VISIBILITY = 0.35;
@@ -183,35 +172,35 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Sensitivity of subsidiary divestiture proceeds and advisory alpha to capital markets deal activity. */
     public const DEAL_ACTIVITY_DIVESTITURE_SCALAR = 0.15;
 
-    public function getMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getDividendCrisisIcr(): float
-    {
-        return 1.75;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getReversionSpeed(): float
-    {
-        return 0.1;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.15;
-    }
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
+    public const ROIC_REVERSION_SPEED = 0.1;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
 
-    public function getCapexCyclicality(): float
-    {
-        return 0.50; // Blended across heavy industrial CapEx and asset-light investment float
-    }
+    // --- Capital Cycle ---
+    /**
+     * Elasticity of the capital budget to the cycle signal (0.5). Blended across heavy industrial CapEx and asset-light
+     * investment float.
+     */
+    public const CAPEX_CYCLICALITY = 0.50;
+    /** Share of construction in progress completed into plant each quarter (15%). */
+    public const CAPEX_COMPLETION_RATE = 0.15;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: industrial spring deliveries and year-end
+     * shipments.
+     */
+    public const SEASONALITY_FACTORS = [0.96, 1.02, 1.00, 1.02];
+
+    // --- Credit Thresholds ---
+    /** Minimum interest coverage the firm is held to (2.5x). */
+    public const MIN_ICR = 2.5;
+    /** Interest coverage below which a firm without a cash buffer is in a dividend crisis (1.75x). */
+    public const DIVIDEND_CRISIS_ICR = 1.75;
+    /** Interest coverage below which the firm stops repurchasing stock (2.5x). */
+    public const BUYBACK_MIN_ICR = 2.5;
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {

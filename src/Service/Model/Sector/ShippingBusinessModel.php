@@ -71,23 +71,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.75;
     public const BASE_COVERAGE_ERROR = 0.10;
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.50;
-    public function getReversionSpeed(): float
-    {
-        return 0.3;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.125;
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return [0.85, 0.95, 1.10, 1.10]; // Pre-holiday maritime trade peak in Q3-Q4
-    }
-    public function getCapexCyclicality(): float
-    {
-        return 3.0;
-    }
 
     // --- Dual-Stream Maritime Charter Architecture ---
     /** Baseline fraction of revenue derived from volatile spot market freight and short-term voyage charters. */
@@ -151,6 +134,22 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const TROUGH_BOOK_WEIGHT = 0.65;
     /** Book weight in fair value through the rest of the freight cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.30;
+
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.3 a year). */
+    public const ROIC_REVERSION_SPEED = 0.3;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (3). */
+    public const CAPEX_CYCLICALITY = 3.0;
+    /** Share of construction in progress completed into plant each quarter (12.5%). */
+    public const CAPEX_COMPLETION_RATE = 0.125;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. Pre-holiday maritime trade peak in Q3-Q4.
+     */
+    public const SEASONALITY_FACTORS = [0.85, 0.95, 1.10, 1.10];
 
     /**
      * Spot revenue is the freight rate times the cargo carried, and time charters take the cargo cycle through their

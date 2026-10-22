@@ -58,18 +58,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     public const BASE_COVERAGE_ERROR = 0.10;
-    public function getReversionSpeed(): float
-    {
-        return 0.1;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.025;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 1.0;
-    }
+
     // --- Secular Demand ---
     /**
      * Data processing, internet publishing and other information services value added as a share of US nominal GDP in
@@ -79,15 +68,23 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0127;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
+    public const ROIC_REVERSION_SPEED = 0.1;
+    /** Excess return over the required return the moat sustains (2.5pp). */
+    public const MOAT_SPREAD = 0.025;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (0.5). */
+    public const CAPEX_CYCLICALITY = 0.5;
+    /** Share of construction in progress completed into plant each quarter (100%). */
+    public const CAPEX_COMPLETION_RATE = 1.0;
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-    public function getCapexCyclicality(): float
-    {
-        return 0.5;
     }
 
     // --- Dual-Stream Financial Data Architecture ---
@@ -127,7 +124,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 
     // --- Subscription & Transaction Revenue Streams ---
     /** Operating margin mean reversion speed: slower speed reflects high switching costs and data monopoly moat. */
-    public const MONOPOLY_REVERSION_SPEED  = 2.0;
+    public const MARGIN_REVERSION_SPEED  = 2.0;
 
     // --- Capital Markets Deal Activity Transmission ---
     /** Sensitivity of credit rating issuance fees and market data feed volume to aggregate deal activity. */
@@ -246,11 +243,6 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $dealActivityShift = $macroState->dealActivityDeviation();
 
         return $dcmIssuanceBoost + $vixVolBoost + ($dealActivityShift * self::DEAL_ACTIVITY_RATING_SENSITIVITY);
-    }
-
-    public function getMarginReversionSpeed(): float
-    {
-        return self::MONOPOLY_REVERSION_SPEED; // High switching costs and data monopoly moat
     }
 
     /**

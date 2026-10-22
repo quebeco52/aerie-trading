@@ -58,7 +58,7 @@ trait StandardValuationTrait
     /** Weight of book value against earnings value in the consensus, given the firm's normalised earnings. */
     protected function getFairValueBookWeight(float $normalizedEps): float
     {
-        return FinancialConstants::FAIR_VALUE_BOOK_WEIGHT;
+        return static::FAIR_VALUE_BOOK_WEIGHT;
     }
 
     public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, float $afterTaxCostOfDebt, ?float $investedCapitalPerShare = null): float

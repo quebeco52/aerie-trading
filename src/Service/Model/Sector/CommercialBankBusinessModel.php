@@ -73,81 +73,36 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     // --- Model Thresholds ---
     /** Minimum Interest Coverage Ratio (ICR) required before distress. */
-    public const THRESHOLD_MIN_ICR = 1.05;
+    public const MIN_ICR = 1.05;
     /**
      * Tangible capital over assets, in percentage points, below which the lender has failed: 2%, the critically
      * undercapitalized line at which US prompt corrective action puts a bank into receivership (12 CFR 324.403).
      */
-    public const THRESHOLD_BANKRUPT_EQUITY = 2.0;
+    public const BANKRUPT_EQUITY_THRESHOLD = 2.0;
     /**
      * Tangible capital over assets, in percentage points, below which the lender is in distress: 4%, the leverage ratio
      * under which prompt corrective action rates a bank undercapitalized.
      */
-    public const THRESHOLD_DISTRESS_EQUITY = 4.0;
+    public const DISTRESS_EQUITY_THRESHOLD = 4.0;
     /**
      * Tangible capital over assets, in percentage points, below which the lender is on watch: a point above the 5%
      * well-capitalized leverage ratio.
      */
-    public const THRESHOLD_WARNING_EQUITY = 6.0;
+    public const WARNING_EQUITY_THRESHOLD = 6.0;
     /** Maximum allowed wholesale leverage multiplier. */
-    public const THRESHOLD_WHOLESALE_LEVERAGE_LIMIT = 2.0;
+    public const WHOLESALE_LEVERAGE_LIMIT = 2.0;
     /** ICR level below which dividends are suspended. */
-    public const THRESHOLD_DIVIDEND_CRISIS_ICR = 1.05;
+    public const DIVIDEND_CRISIS_ICR = 1.05;
     /** Minimum ICR required to execute share buybacks. */
-    public const THRESHOLD_BUYBACK_MIN_ICR = 1.15;
+    public const BUYBACK_MIN_ICR = 1.15;
     /** Speed at which ROE reverts to the mean. */
-    public const THRESHOLD_REVERSION_SPEED = 0.18;
+    public const ROIC_REVERSION_SPEED = 0.18;
     /** Spread indicating an economic moat. */
-    public const THRESHOLD_MOAT_SPREAD = 0.010;
+    public const MOAT_SPREAD = 0.010;
     /** Net Working Capital (NWC) intensity factor. */
-    public const THRESHOLD_NWC_INTENSITY = 0.0;
+    public const WORKING_CAPITAL_INTENSITY = 0.0;
     /** Rate at which planned capital expenditure is completed. */
-    public const THRESHOLD_CAPEX_COMPLETION_RATE = 1.0;
-
-    public function getMinIcr(): float
-    {
-        return self::THRESHOLD_MIN_ICR;
-    }
-    public function getBankruptEquityThreshold(): float
-    {
-        return self::THRESHOLD_BANKRUPT_EQUITY;
-    }
-    public function getDistressEquityThreshold(): float
-    {
-        return self::THRESHOLD_DISTRESS_EQUITY;
-    }
-    public function getWarningEquityThreshold(): float
-    {
-        return self::THRESHOLD_WARNING_EQUITY;
-    }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return self::THRESHOLD_WHOLESALE_LEVERAGE_LIMIT;
-    }
-    public function getDividendCrisisIcr(): float
-    {
-        return self::THRESHOLD_DIVIDEND_CRISIS_ICR;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return self::THRESHOLD_BUYBACK_MIN_ICR;
-    }
-    public function getReversionSpeed(): float
-    {
-        return self::THRESHOLD_REVERSION_SPEED;
-    }
-    public function getMoatSpread(): float
-    {
-        return self::THRESHOLD_MOAT_SPREAD;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return self::THRESHOLD_NWC_INTENSITY;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return self::THRESHOLD_CAPEX_COMPLETION_RATE;
-    }
+    public const CAPEX_COMPLETION_RATE = 1.0;
 
     // --- Non-Interest Revenue Mix ---
     /**
@@ -262,7 +217,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      * Years of expected loss the CECL allowance covers. At the through-the-cycle loss rate (~0.9% of loans) this puts
      * the reserve near 1.8% of loans, where large US banks have run since CECL adoption.
      */
-    public const CECL_LIFETIME_HORIZON_YEARS   = 2.0;
+    public const CREDIT_LOSS_HORIZON_YEARS   = 2.0;
 
     // --- Asset Repricing (Drechsler, Savov & Schnabl 2021, Table A.2: US commercial banks 1997-2017, aggregate) ---
     /**
@@ -362,10 +317,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const MMF_MIGRATION_DEPOSIT_DRAG = 1.2;
 
     // --- Hoarding & Deposit Flight ---
+    /** Banks run on fractional reserves, so a hoard is idle excess cash measured against total debt. */
+    public const HOARDING_BASIS = 'total_debt';
     /** Fraction of total debt held as idle excess cash before the bank is flagged as a hoarder. */
-    public const HOARDING_THRESHOLD_DEBT_RATIO      = 0.12;
+    public const HOARDER_THRESHOLD      = 0.12;
     /** Higher idle cash fraction that triggers more aggressive capital return pressure. */
-    public const MEGA_HOARDING_THRESHOLD_DEBT_RATIO = 0.18;
+    public const MEGA_HOARDER_THRESHOLD = 0.18;
 
     // --- Bank Valuation Weights ---
     /** Weight given to Price-to-Book value when EPS is positive. */
@@ -474,7 +431,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const BASEL_RISK_WEIGHT_SECURITIES = 0.20;
     /**
      * Basel III Pillar 1 minimum Common Equity Tier 1 (CET1) ratio, below which the bank is undercapitalized and under
-     * supervisory restriction (BCBS 2011, para. 50); it fails only at THRESHOLD_BANKRUPT_EQUITY.
+     * supervisory restriction (BCBS 2011, para. 50); it fails only at BANKRUPT_EQUITY_THRESHOLD.
      */
     public const BASEL_MIN_CET1_RATIO = 0.045;
     /**
@@ -1203,11 +1160,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return 1.0 - self::SECURITIES_SHARE_OF_EARNING_ASSETS;
     }
 
-    public function getCreditLossHorizonYears(): float
-    {
-        return self::CECL_LIFETIME_HORIZON_YEARS;
-    }
-
     /** A lender's cost base is struck on its book (EarningsEngine reads this in place of the margin's complement). */
     public function getOperatingCostToEarningAssets(Stock $stock): ?float
     {
@@ -1263,18 +1215,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             $currentLiability * self::MIN_CASH_LIABILITY_MULT,
             $wholesaleDebt * self::MIN_CASH_WHOLESALE_MULT,
         );
-    }
-
-    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
-    {
-        $excessCash = max(0.0, $treasury - $targetCashReserves);
-        return [
-            'excess_cash'     => $excessCash,
-            // Banks operate on fractional reserves. Holding more than HOARDING_THRESHOLD_DEBT_RATIO of their total debt
-            // in purely IDLE excess cash is hoarding.
-            'is_hoarder'      => $excessCash > ($totalDebt * self::HOARDING_THRESHOLD_DEBT_RATIO),
-            'is_mega_hoarder' => $excessCash > ($totalDebt * self::MEGA_HOARDING_THRESHOLD_DEBT_RATIO),
-        ];
     }
 
     /**

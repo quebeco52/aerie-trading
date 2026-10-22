@@ -110,39 +110,27 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.1;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.01;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.2;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.35;
-    }
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
+    public const ROIC_REVERSION_SPEED = 0.1;
+    /** Excess return over the required return the moat sustains (1pp). */
+    public const MOAT_SPREAD = 0.01;
 
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (0.8). Massive fixed blast furnace infrastructure. */
+    public const CAPEX_CYCLICALITY = 0.80;
+    /** Share of construction in progress completed into plant each quarter (35%). */
+    public const CAPEX_COMPLETION_RATE = 0.35;
+    /** Net working capital as a share of revenue (20%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.2;
+
+    // --- Seasonality ---
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Nucor tons shipped to outside customers
-     * by quarter, 2017-19 (10-Q, 8-K), each year over its own mean. Mills run through the year; the spring
-     * construction season lifts Q2 slightly and the holidays trim Q4.
-     *
-     * @return array<int, float>
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Nucor tons shipped to outside customers by
+     * quarter, 2017-19 (10-Q, 8-K), each year over its own mean. Mills run through the year; the spring construction
+     * season lifts Q2 slightly and the holidays trim Q4.
      */
-    public function getSeasonalityFactors(): array
-    {
-        return [1.00, 1.02, 1.00, 0.98];
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return 0.80; // Massive fixed blast furnace infrastructure
-    }
+    public const SEASONALITY_FACTORS = [1.00, 1.02, 1.00, 0.98];
 
     /**
      * The cycle reaches tonnage once, inside each stream's physics; the root shift carries no demand term

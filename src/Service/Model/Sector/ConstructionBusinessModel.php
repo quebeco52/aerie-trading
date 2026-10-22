@@ -158,44 +158,38 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Top-line multiplier boost from a landmark infrastructure contract win. */
     public const MEGA_PROJECT_MULT = 1.15;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.1;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.25;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.4;
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return [0.88, 1.06, 1.10, 0.96]; // Q1 winter ground freeze, peak warm weather Q2-Q3; backlog-damped
-    }
-
     // --- Secular Demand ---
     /** Construction value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
     public const SECULAR_SHARE_1997 = 0.0396;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0442;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
+    public const ROIC_REVERSION_SPEED = 0.1;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (0.75). */
+    public const CAPEX_CYCLICALITY = 0.75;
+    /** Share of construction in progress completed into plant each quarter (40%). */
+    public const CAPEX_COMPLETION_RATE = 0.4;
+    /** Net working capital as a share of revenue (25%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.25;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. Q1 winter ground freeze, peak warm weather
+     * Q2-Q3; backlog-damped.
+     */
+    public const SEASONALITY_FACTORS = [0.88, 1.06, 1.10, 0.96];
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return 0.75;
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

@@ -62,7 +62,7 @@ class BaseFinancialBusinessModelTest extends TestCase
         $equity = 5000.0;
         $investedCapital = 12000.0;
 
-        // Financial institutions evaluate scale on Equity rather than Invested Capital (FinancialPhysicsTrait override)
+        // Financial institutions evaluate scale on equity, not invested capital (BaseFinancialBusinessModel override)
         $evalCapital = $this->model->getEvaluationCapital($equity, $investedCapital);
         $this->assertEquals($equity, $evalCapital);
     }

@@ -145,31 +145,12 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
 
-    public function getReversionSpeed(): float
-    {
-        return self::ROIC_REVERSION_SPEED;
-    }
-
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return self::CAPEX_COMPLETION_RATE;
-    }
-
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return self::WORKING_CAPITAL_INTENSITY;
-    }
-
+    // --- Seasonality ---
     /**
      * Calendar-quarter throughput seasonality [Q1, Q2, Q3, Q4] summing to 4.0: U.S. refinery utilization by quarter
      * (EIA, 2010-2019) over its annual mean. Spring turnarounds, then the summer driving season.
-     *
-     * @return array<int, float>
      */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.9628, 1.0117, 1.0251, 1.0004];
-    }
+    public const SEASONALITY_FACTORS = [0.9628, 1.0117, 1.0251, 1.0004];
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {

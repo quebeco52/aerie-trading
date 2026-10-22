@@ -77,18 +77,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
      */
     public const DEMAND_LAG_YEARS = 0.25;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.02;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.125;
-    }
     // --- Secular Demand ---
     /**
      * Business and household investment in information processing equipment as a share of US nominal GDP in 1997 (BEA
@@ -98,15 +86,35 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0272;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (2pp). */
+    public const MOAT_SPREAD = 0.02;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (3.5). */
+    public const CAPEX_CYCLICALITY = 3.5;
+    /** Share of construction in progress completed into plant each quarter (12.5%). */
+    public const CAPEX_COMPLETION_RATE = 0.125;
+    /**
+     * Net working capital as a share of revenue (18%). High wafer fabrication lead time & finished goods inventory
+     * holding.
+     */
+    public const WORKING_CAPITAL_INTENSITY = 0.18;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. H2 consumer electronics ramps and Q4
+     * corporate budget flush.
+     */
+    public const SEASONALITY_FACTORS = [0.90, 0.95, 1.05, 1.10];
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-    public function getCapexCyclicality(): float
-    {
-        return 3.5;
     }
 
     // --- Dual-Stream Semiconductor Architecture ---
@@ -158,7 +166,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 
     // --- Capital Intensity Moat & Capital Structure ---
     /** Operating margin mean reversion speed: slower speed reflects massive capital barriers to entry. */
-    public const FAB_REVERSION_SPEED       = 2.5;
+    public const MARGIN_REVERSION_SPEED       = 2.5;
     /** Minimum interest coverage ratio required to permit recapitalization for capital intensive foundries. */
     public const MIN_RECAP_ICR_FLOOR       = 15.0;
     /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
@@ -278,22 +286,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const EVENT_BASE_VISIBILITY = 0.95;
     /** Floor on visibility in an announced-event quarter (80%). */
     public const EVENT_MIN_VISIBILITY = 0.80;
-
-    public function getMarginReversionSpeed(): float
-    {
-        // Massive capital barriers to entry (ASML EUV machines cost $300M+ each) protect excess margins for years
-        return self::FAB_REVERSION_SPEED;
-    }
-
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.18; // High wafer fabrication lead time & finished goods inventory holding
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return [0.90, 0.95, 1.05, 1.10]; // H2 consumer electronics ramps and Q4 corporate budget flush
-    }
 
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in

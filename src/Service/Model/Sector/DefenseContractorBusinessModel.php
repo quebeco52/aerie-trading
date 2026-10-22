@@ -66,17 +66,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
      */
     public const PRICING_POWER_INDEX = 0.70;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: federal fiscal year-end obligation flush in
-     * September, continuing resolutions in Q4.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.95, 0.98, 1.10, 0.97];
-    }
-
     // --- Analyst Visibility & Forecasting ---
     /** Base coverage visibility for defense contractors from public appropriations. */
     public const BASE_COVERAGE_VISIBILITY = 0.60;
@@ -162,23 +151,22 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Working capital intensity of the fixed-price book while FAR 32.503-6 withholds its progress payments. */
     public const WITHHOLDING_NWC_INTENSITY = 0.18;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.12;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.02;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.2;
-    }
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.12 a year). */
+    public const ROIC_REVERSION_SPEED = 0.12;
+    /** Excess return over the required return the moat sustains (2pp). */
+    public const MOAT_SPREAD = 0.02;
 
-    public function getCapexCyclicality(): float
-    {
-        return self::CAPEX_CYCLICALITY;
-    }
+    // --- Capital Cycle ---
+    /** Share of construction in progress completed into plant each quarter (20%). */
+    public const CAPEX_COMPLETION_RATE = 0.2;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: federal fiscal year-end obligation flush in
+     * September, continuing resolutions in Q4.
+     */
+    public const SEASONALITY_FACTORS = [0.95, 0.98, 1.10, 0.97];
 
     /**
      * A prime budgets plant against its own order book, not the domestic economy: the allied procurement gap

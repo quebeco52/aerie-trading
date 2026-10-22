@@ -61,17 +61,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Tier-one supplier contracts fix component prices for about a quarter before spot moves reach the line. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring selling season and model-year
-     * launches; weak Q1.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.95, 1.03, 1.00, 1.02];
-    }
-
     // --- Capital Cycle & Secular Demand ---
     // Carmakers keep heavy machinery's capital cycle and secular drift, declared here so retuning one leaves the other.
 
@@ -93,20 +82,18 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0122;
 
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return self::WORKING_CAPITAL_INTENSITY;
-    }
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.08 a year). */
+    public const ROIC_REVERSION_SPEED = 0.08;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
 
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return self::CAPEX_COMPLETION_RATE;
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return self::CAPEX_CYCLICALITY;
-    }
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring selling season and model-year
+     * launches; weak Q1.
+     */
+    public const SEASONALITY_FACTORS = [0.95, 1.03, 1.00, 1.02];
 
     /** Trend real growth plus the measured drift in the share of GDP above. */
     public function getSecularGrowthRate(Stock $stock): float
@@ -264,15 +251,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
     /** Revenue throughput multiplier applied during factory assembly shutdowns from labor strikes. */
     public const UAW_STRIKE_MULT = 0.80;
-
-    public function getReversionSpeed(): float
-    {
-        return 0.08;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
 
     /**
      * A vehicle is sold from stock, not built to an order book: the purchase swing lands on expected revenue, which the

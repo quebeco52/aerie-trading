@@ -75,7 +75,7 @@ trait StandardOperatingPhysicsTrait
 
     public function getCapexCyclicality(): float
     {
-        return 1.5; // DEFAULT_CAPEX_CYCLICALITY
+        return static::CAPEX_CYCLICALITY;
     }
 
     /** Most firms budget against the domestic business cycle. */
@@ -91,7 +91,7 @@ trait StandardOperatingPhysicsTrait
      */
     public function getSeasonalityFactors(): array
     {
-        return [1.0, 1.0, 1.0, 1.0];
+        return static::SEASONALITY_FACTORS;
     }
 
     /** @return array<int, float> */
@@ -139,9 +139,9 @@ trait StandardOperatingPhysicsTrait
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::BaseVisibility->value => defined('static::BASE_COVERAGE_VISIBILITY') ? static::BASE_COVERAGE_VISIBILITY : 0.20,
-            ModelParam::CoverageError->value  => defined('static::BASE_COVERAGE_ERROR') ? static::BASE_COVERAGE_ERROR : 0.06,
-            ModelParam::MinVisibility->value  => defined('static::BASE_COVERAGE_MIN_VISIBILITY') ? static::BASE_COVERAGE_MIN_VISIBILITY : 0.0,
+            ModelParam::BaseVisibility->value => static::BASE_COVERAGE_VISIBILITY,
+            ModelParam::CoverageError->value  => static::BASE_COVERAGE_ERROR,
+            ModelParam::MinVisibility->value  => static::BASE_COVERAGE_MIN_VISIBILITY,
         ]);
 
         $visibility = $params[ModelParam::BaseVisibility];
@@ -164,8 +164,8 @@ trait StandardOperatingPhysicsTrait
             baseVisibility: min(1.0, $visibility),
             errorStdDev: $error,
             minVisibility: min(1.0, $minVis),
-            eventBaseVisibility: defined('static::EVENT_BASE_VISIBILITY') ? static::EVENT_BASE_VISIBILITY : null,
-            eventMinVisibility: defined('static::EVENT_MIN_VISIBILITY') ? static::EVENT_MIN_VISIBILITY : null,
+            eventBaseVisibility: static::EVENT_BASE_VISIBILITY,
+            eventMinVisibility: static::EVENT_MIN_VISIBILITY,
         );
     }
 
@@ -174,7 +174,7 @@ trait StandardOperatingPhysicsTrait
         $shares = $this->resolveWorkingCapitalShares($stock);
 
         return $shares === null
-            ? FinancialConstants::DEFAULT_WORKING_CAPITAL_INTENSITY
+            ? (float) static::WORKING_CAPITAL_INTENSITY
             : $shares['receivables'] + $shares['inventory'] - $shares['payables'];
     }
 
@@ -210,7 +210,7 @@ trait StandardOperatingPhysicsTrait
 
     public function getCreditLossHorizonYears(): float
     {
-        return 1.0;
+        return static::CREDIT_LOSS_HORIZON_YEARS;
     }
 
     /** No credit book, no forward reserve to condition. */
@@ -343,15 +343,14 @@ trait StandardOperatingPhysicsTrait
      * gas, electricity (industrial tariffs off the wholesale power index), metals, agri, freight, ppi (wholesale
      * intermediate goods) and labor (payroll, priced by the real wage's gap to trend productivity). Shares need not
      * sum to one; the remainder is bought at prices no macro index tracks. Sector models declare
-     * INPUT_COST_EXPOSURES, measured in App\Data\Macro\InputOutputExposures.
+     * INPUT_COST_EXPOSURES, measured in App\Data\Macro\InputOutputExposures; a model that declares none buys the
+     * all-private-industries basket.
      *
      * @return array<string, float>
      */
     public function getInputCostExposures(): array
     {
-        return defined('static::INPUT_COST_EXPOSURES')
-            ? (array) static::INPUT_COST_EXPOSURES
-            : InputOutputExposures::ALL_PRIVATE_INDUSTRIES;
+        return static::INPUT_COST_EXPOSURES ?? InputOutputExposures::ALL_PRIVATE_INDUSTRIES;
     }
 
     // --- Demand Transmission Lag ---
@@ -363,9 +362,7 @@ trait StandardOperatingPhysicsTrait
      */
     public function getDemandLagYears(): float
     {
-        return defined('static::DEMAND_LAG_YEARS')
-            ? (float) static::DEMAND_LAG_YEARS
-            : FinancialConstants::DEFAULT_DEMAND_LAG_YEARS;
+        return (float) static::DEMAND_LAG_YEARS;
     }
 
     /**
@@ -390,9 +387,7 @@ trait StandardOperatingPhysicsTrait
      */
     public function getFxRevenueExposure(): float
     {
-        return defined('static::FX_REVENUE_EXPOSURE')
-            ? (float) static::FX_REVENUE_EXPOSURE
-            : FinancialConstants::DEFAULT_FX_REVENUE_EXPOSURE;
+        return (float) static::FX_REVENUE_EXPOSURE;
     }
 
     /**
@@ -415,7 +410,7 @@ trait StandardOperatingPhysicsTrait
      */
     public function getInputCostLagYears(): float
     {
-        return defined('static::INPUT_COST_LAG_YEARS') ? (float) static::INPUT_COST_LAG_YEARS : 0.0;
+        return (float) static::INPUT_COST_LAG_YEARS;
     }
 
     /**
@@ -432,9 +427,7 @@ trait StandardOperatingPhysicsTrait
      */
     public function getInputPassThroughLagYears(): float
     {
-        return defined('static::INPUT_PASS_THROUGH_LAG_YEARS')
-            ? (float) static::INPUT_PASS_THROUGH_LAG_YEARS
-            : FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS;
+        return (float) static::INPUT_PASS_THROUGH_LAG_YEARS;
     }
 
     /**
@@ -645,7 +638,7 @@ trait StandardOperatingPhysicsTrait
      */
     public function resolveExpectedInflationBasis(MacroStateDTO $macroState): float
     {
-        $basis = defined('static::PRICING_INFLATION_BASIS') ? (string) static::PRICING_INFLATION_BASIS : 'tips_breakeven_ema';
+        $basis = (string) static::PRICING_INFLATION_BASIS;
 
         return match ($basis) {
             'supercore_inflation_ema'   => $macroState->supercoreInflationEma,
@@ -657,11 +650,11 @@ trait StandardOperatingPhysicsTrait
 
     /**
      * The expected-inflation measure input costs track, chosen by the model's COST_INFLATION_BASIS
-     * constant. Falls back to resolveExpectedInflationBasis() if not declared.
+     * constant. Falls back to resolveExpectedInflationBasis() if it is null.
      */
     public function resolveCostInflationBasis(MacroStateDTO $macroState): float
     {
-        if (!defined('static::COST_INFLATION_BASIS')) {
+        if (static::COST_INFLATION_BASIS === null) {
             return $this->resolveExpectedInflationBasis($macroState);
         }
 
@@ -676,12 +669,12 @@ trait StandardOperatingPhysicsTrait
     }
 
     /**
-     * Pricing power index for this stock: ticker override, then the sector's PRICING_POWER_INDEX, then the median 0.5.
+     * Pricing power index for this stock: ticker override, then the sector's PRICING_POWER_INDEX (the median 0.5 unless
+     * declared).
      */
     protected function resolvePricingPower(Stock $stock): float
     {
-        $default = defined('static::PRICING_POWER_INDEX') ? (float) static::PRICING_POWER_INDEX : 0.5;
-        $params = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => $default]);
+        $params = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => (float) static::PRICING_POWER_INDEX]);
 
         return max(0.0, min(1.0, (float) $params[ModelParam::PricingPowerIndex]));
     }
@@ -693,16 +686,12 @@ trait StandardOperatingPhysicsTrait
      */
     public function getPriceElasticityOfDemand(): float
     {
-        return defined('static::PRICE_ELASTICITY_OF_DEMAND')
-            ? (float) static::PRICE_ELASTICITY_OF_DEMAND
-            : FinancialConstants::DEFAULT_PRICE_ELASTICITY_OF_DEMAND;
+        return (float) static::PRICE_ELASTICITY_OF_DEMAND;
     }
 
     public function getIndustrySubstitutability(): float
     {
-        return defined('static::INDUSTRY_SUBSTITUTABILITY')
-            ? (float) static::INDUSTRY_SUBSTITUTABILITY
-            : FinancialConstants::DEFAULT_INDUSTRY_SUBSTITUTABILITY;
+        return (float) static::INDUSTRY_SUBSTITUTABILITY;
     }
 
     /**
@@ -739,16 +728,12 @@ trait StandardOperatingPhysicsTrait
 
     public function getLeaseIntensity(Stock $stock): float
     {
-        return defined('static::LEASE_LIABILITY_INTENSITY')
-            ? (float) static::LEASE_LIABILITY_INTENSITY
-            : FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY;
+        return (float) static::LEASE_LIABILITY_INTENSITY;
     }
 
     public function getStockCompensationIntensity(Stock $stock): float
     {
-        return defined('static::STOCK_COMPENSATION_INTENSITY')
-            ? (float) static::STOCK_COMPENSATION_INTENSITY
-            : FinancialConstants::DEFAULT_STOCK_COMPENSATION_INTENSITY;
+        return (float) static::STOCK_COMPENSATION_INTENSITY;
     }
 
     public function getFiscalYearStartQuarter(Stock $stock): int
@@ -769,10 +754,7 @@ trait StandardOperatingPhysicsTrait
      */
     public function getEarningsManagementPropensity(Stock $stock): float
     {
-        $default = defined('static::EARNINGS_MANAGEMENT_PROPENSITY')
-            ? (float) static::EARNINGS_MANAGEMENT_PROPENSITY
-            : FinancialConstants::DEFAULT_EARNINGS_MANAGEMENT_PROPENSITY;
-        $params = $this->resolveModelParameters($stock, [ModelParam::EarningsManagementPropensity->value => $default]);
+        $params = $this->resolveModelParameters($stock, [ModelParam::EarningsManagementPropensity->value => (float) static::EARNINGS_MANAGEMENT_PROPENSITY]);
 
         return max(0.0, min(1.0, (float) $params[ModelParam::EarningsManagementPropensity]));
     }
@@ -784,18 +766,18 @@ trait StandardOperatingPhysicsTrait
      */
     public function getLaborCostShare(): float
     {
-        if (defined('static::FIXED_COST_LABOR_SHARE')) {
+        if (static::FIXED_COST_LABOR_SHARE !== null) {
             return (float) static::FIXED_COST_LABOR_SHARE;
         }
 
-        return defined('static::INPUT_COST_EXPOSURES') && isset(static::INPUT_COST_EXPOSURES['labor'])
+        return isset(static::INPUT_COST_EXPOSURES['labor'])
             ? (float) static::INPUT_COST_EXPOSURES['labor']
             : FinancialConstants::DEFAULT_FIXED_COST_LABOR_SHARE;
     }
 
     public function getCapExCompletionRate(Stock $stock): float
     {
-        return 0.33;
+        return static::CAPEX_COMPLETION_RATE;
     }
 
     /**
@@ -807,7 +789,7 @@ trait StandardOperatingPhysicsTrait
 
     public function getMarginReversionSpeed(): float
     {
-        return 4.0; // DEFAULT_MARGIN_REVERSION_SPEED
+        return static::MARGIN_REVERSION_SPEED;
     }
 
     public function clampMargin(float $rawMargin, float $minMargin = 0.01, float $maxMargin = 1.50): float
@@ -988,12 +970,12 @@ trait StandardOperatingPhysicsTrait
 
     public function getReversionSpeed(): float
     {
-        return 0.20;
+        return static::ROIC_REVERSION_SPEED;
     }
 
     public function getMoatSpread(): float
     {
-        return 0.000;
+        return static::MOAT_SPREAD;
     }
 
     public function getPhysicalCapital(Stock $stock): float

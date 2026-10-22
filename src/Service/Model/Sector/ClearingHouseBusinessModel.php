@@ -40,22 +40,37 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
      */
     public const FIXED_COST_LABOR_SHARE = 0.55;
 
-    public function getMinIcr(): float
-    {
-        return 1.05;
-    }
-    public function getBankruptEquityThreshold(): float
-    {
-        return 0.5;
-    }
-    public function getDistressEquityThreshold(): float
-    {
-        return 1.25;
-    }
-    public function getWarningEquityThreshold(): float
-    {
-        return 2.5;
-    }
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
+    public const ROIC_REVERSION_SPEED = 0.1;
+    /** Excess return over the required return the moat sustains (3pp). */
+    public const MOAT_SPREAD = 0.03;
+
+    // --- Capital Cycle ---
+    /** Share of construction in progress completed into plant each quarter (100%). */
+    public const CAPEX_COMPLETION_RATE = 1.0;
+    /** Net working capital as a share of revenue: none. */
+    public const WORKING_CAPITAL_INTENSITY = 0.0;
+
+    // --- Credit Thresholds ---
+    /** Minimum interest coverage the firm is held to (1.05x). */
+    public const MIN_ICR = 1.05;
+    /** Interest coverage below which a firm without a cash buffer is in a dividend crisis (1.05x). */
+    public const DIVIDEND_CRISIS_ICR = 1.05;
+    /** Interest coverage below which the firm stops repurchasing stock (1.15x). */
+    public const BUYBACK_MIN_ICR = 1.15;
+    /**
+     * Most wholesale debt the model carries per unit of equity: none. No discretionary corporate borrowing: a CCP funds
+     * its general business risk with liquid net assets funded by equity (CPMI-IOSCO PFMI Principle 15). Debt it already
+     * carries still refinances.
+     */
+    public const WHOLESALE_LEVERAGE_LIMIT = 0.0;
+    /** Capital ratio, in percent of assets, below which the institution is bankrupt (0.5%). */
+    public const BANKRUPT_EQUITY_THRESHOLD = 0.5;
+    /** Capital ratio, in percent of assets, below which the institution is in distress (1.25%). */
+    public const DISTRESS_EQUITY_THRESHOLD = 1.25;
+    /** Capital ratio, in percent of assets, below which the institution is in the grey zone (2.5%). */
+    public const WARNING_EQUITY_THRESHOLD = 2.5;
 
     /**
      * Member initial and variation margin. The clearinghouse holds it, invests it and keeps the spread,
@@ -66,38 +81,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public function getSegregatedCustodyLiabilities(Stock $stock): float
     {
         return max(0.0, (float) $stock->getCustomerDeposits());
-    }
-    /**
-     * No discretionary corporate borrowing: a CCP funds its general business risk with liquid net assets
-     * funded by equity (CPMI-IOSCO PFMI Principle 15). Debt it already carries still refinances.
-     */
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 0.0;
-    }
-    public function getDividendCrisisIcr(): float
-    {
-        return 1.05;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return 1.15;
-    }
-    public function getReversionSpeed(): float
-    {
-        return 0.1;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.03;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.0;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 1.0;
     }
 
     // --- Fee Revenue Floor ---
@@ -164,7 +147,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
     // --- Monopoly Valuation Moat ---
     /** Operating margin mean reversion speed: slower speed reflects toll-booth monopoly pricing power. */
-    public const MONOPOLY_REVERSION_SPEED = 2.0;
+    public const MARGIN_REVERSION_SPEED = 2.0;
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         // Clearing capacity is the house's own loss-absorbing capital, its skin in the game; the members'
@@ -432,11 +415,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
                 ];
             }
         }
-    }
-
-    public function getMarginReversionSpeed(): float
-    {
-        return self::MONOPOLY_REVERSION_SPEED; // Toll-booth monopoly moat resists margin compression
     }
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool

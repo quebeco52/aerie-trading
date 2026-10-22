@@ -63,11 +63,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      */
     public const EARNINGS_MANAGEMENT_PROPENSITY = 0.60;
 
-    public function getMoatSpread(): float
-    {
-        return 0.01;
-    }
-
     // --- The Kenney Rule & Capacity Limits ---
     /** Standard Premium-to-Surplus capacity ratio required to maintain strong credit ratings. */
     public const KENNEY_CAPACITY_RATIO    = 1.50;
@@ -92,6 +87,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const WARNING_EQUITY_THRESHOLD  = 4.0;
 
     // --- Return Reversion ---
+    /** Excess return over the required return the moat sustains (1pp). */
+    public const MOAT_SPREAD = 0.01;
     /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
     public const TTM_ROE_WEIGHT = 0.50;
 
@@ -110,7 +107,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * Underwriting operating margin mean reversion speed (quarters). Insurance policies renew annually with rapid
      * competitive repricing.
      */
-    public const INSURANCE_REVERSION_SPEED = 8.0;
+    public const MARGIN_REVERSION_SPEED = 8.0;
     /** Volatility multiplier for top-line premium revenue shocks in sticky insurance markets. */
     public const REVENUE_VARIANCE_SCALAR  = 0.05;
     /**
@@ -270,6 +267,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const MIN_OPERATING_BUFFER     = 0.03;
     /** Minimum emergency operating cash reserve ratio applied to customer deposit float. */
     public const MIN_FLOAT_BUFFER         = 0.15;
+    /** An insurer's hoard is measured against its total debt, not its premium base. */
+    public const HOARDING_BASIS = 'total_debt';
     /** Threshold ratio of excess cash over total debt triggering hoarder status. */
     public const HOARDER_THRESHOLD        = 0.20;
     /** Threshold ratio of excess cash over total debt triggering mega-hoarder status. */
@@ -1049,12 +1048,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         );
     }
 
-    public function getMarginReversionSpeed(): float
-    {
-        // 12-month annual policy contracts face rapid competitive repricing at each renewal cycle
-        return self::INSURANCE_REVERSION_SPEED;
-    }
-
     /**
      * Insurance companies invest their massive Float in long-duration bonds, bills and an equity tranche, at the mix's
      * expected yield, less the interest the life reserves credit their holders. The equity tranche's realised return
@@ -1263,16 +1256,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         return max($operatingBase * self::MIN_OPERATING_BUFFER, $currentLiability * self::MIN_FLOAT_BUFFER);
-    }
-
-    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
-    {
-        $excessCash = max(0.0, $treasury - $targetCashReserves);
-        return [
-            'excess_cash'     => $excessCash,
-            'is_hoarder'      => $excessCash > ($totalDebt * self::HOARDER_THRESHOLD),
-            'is_mega_hoarder' => $excessCash > ($totalDebt * self::MEGA_HOARDER_THRESHOLD),
-        ];
     }
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
@@ -1690,19 +1673,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // structure financing. An insurer should never trigger forced "underleveraged" share buyback spirals
         // simply because its float-to-equity ratio fluctuates.
         return false;
-    }
-
-    public function getBankruptEquityThreshold(): float
-    {
-        return self::BANKRUPT_EQUITY_THRESHOLD;
-    }
-    public function getDistressEquityThreshold(): float
-    {
-        return self::DISTRESS_EQUITY_THRESHOLD;
-    }
-    public function getWarningEquityThreshold(): float
-    {
-        return self::WARNING_EQUITY_THRESHOLD;
     }
 
     /**

@@ -419,7 +419,7 @@ class EarningsEngineTest extends TestCase
         $this->assertSame(1.0, ($joined->getEarningsMomentumZ() ?? [])[$regimeKey] ?? null);
 
         $strategy = Sectors::strategyFor('Telecom Services');
-        $this->assertNull((new \ReflectionProperty(\App\Service\Model\Sector\StandardCorporateBusinessModel::class, 'industryRegimes'))->getValue($strategy), 'no view outlives the report');
+        $this->assertNull((new \ReflectionProperty(\App\Service\Model\AbstractBusinessModel::class, 'industryRegimes'))->getValue($strategy), 'no view outlives the report');
 
         // A carrier whose own draw starts one books it for the industry from its report tick, in whole quarters.
         $booked = null;

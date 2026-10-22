@@ -157,25 +157,10 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
 
-    public function getReversionSpeed(): float
-    {
-        return self::ROIC_REVERSION_SPEED;
-    }
-
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return self::CAPEX_COMPLETION_RATE;
-    }
-
     /** A field is depleted by the barrels lifted from it, so its plant is charged by units of production. */
     public function depreciatesByUnitsOfProduction(): bool
     {
         return true;
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return self::CAPEX_CYCLICALITY;
     }
 
     /**
@@ -190,11 +175,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
         }
 
         return log($macroState->energyPriceIndexEma / MacroConstants::ENERGY_BASELINE);
-    }
-
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return self::WORKING_CAPITAL_INTENSITY;
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

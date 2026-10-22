@@ -66,16 +66,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
      */
     public const PRICING_POWER_INDEX = 0.70;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 customer capex budget flush.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.97, 1.01, 0.99, 1.03];
-    }
-
     // --- Dual-Stream Revenue Weights ---
     /** Baseline fraction of revenue from heavy equipment and automated machinery sales. */
     public const EQUIPMENT_WEIGHT = 0.70;
@@ -115,24 +105,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     /** Top-line equipment revenue multiplier for a mega infrastructure deal win. */
     public const MEGA_INFRASTRUCTURE_DEAL_MULT    = 1.20;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.1;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.025;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.18;
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return 2.5;
-    }
-
     // --- Secular Demand ---
     /**
      * Business investment in industrial equipment as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private
@@ -141,6 +113,22 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     public const SECULAR_SHARE_1997 = 0.0164;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0122;
+
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
+    public const ROIC_REVERSION_SPEED = 0.1;
+    /** Excess return over the required return the moat sustains (2.5pp). */
+    public const MOAT_SPREAD = 0.025;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (2.5). */
+    public const CAPEX_CYCLICALITY = 2.5;
+    /** Net working capital as a share of revenue (18%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.18;
+
+    // --- Seasonality ---
+    /** Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 customer capex budget flush. */
+    public const SEASONALITY_FACTORS = [0.97, 1.01, 0.99, 1.03];
 
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float

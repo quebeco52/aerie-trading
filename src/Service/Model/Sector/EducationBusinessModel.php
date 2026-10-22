@@ -62,16 +62,6 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     /** Services price off core services inflation ex-housing, not goods breakevens. */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and fall terms; summer trough.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [1.05, 0.85, 1.00, 1.10];
-    }
-
     // --- Balance Sheet Realism ---
     /**
      * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Campus and classroom
@@ -83,51 +73,43 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.40;
     public const BASE_COVERAGE_ERROR = 0.06;
 
-    public function getMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getDividendCrisisIcr(): float
-    {
-        return 1.75;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getReversionSpeed(): float
-    {
-        return 0.1;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.05;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.2;
-    }
-
     // --- Secular Demand ---
     /** Educational services value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
     public const SECULAR_SHARE_1997 = 0.0090;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0125;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
+    public const ROIC_REVERSION_SPEED = 0.1;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (0.1). */
+    public const CAPEX_CYCLICALITY = 0.10;
+    /** Share of construction in progress completed into plant each quarter (20%). */
+    public const CAPEX_COMPLETION_RATE = 0.2;
+    /** Net working capital as a share of revenue (5%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.05;
+
+    // --- Seasonality ---
+    /** Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and fall terms; summer trough. */
+    public const SEASONALITY_FACTORS = [1.05, 0.85, 1.00, 1.10];
+
+    // --- Credit Thresholds ---
+    /** Minimum interest coverage the firm is held to (2.5x). */
+    public const MIN_ICR = 2.5;
+    /** Interest coverage below which a firm without a cash buffer is in a dividend crisis (1.75x). */
+    public const DIVIDEND_CRISIS_ICR = 1.75;
+    /** Interest coverage below which the firm stops repurchasing stock (2.5x). */
+    public const BUYBACK_MIN_ICR = 2.5;
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return 0.10;
     }
 
     // --- Stream Weights ---

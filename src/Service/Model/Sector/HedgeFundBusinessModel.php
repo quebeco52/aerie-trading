@@ -186,19 +186,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     /** Fund gross leverage above which a directional collapse reads as a blow-up rather than a bad quarter. */
     public const LORE_DIRECTIONAL_BLOWUP_LEVERAGE_THRESHOLD = 2.0;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 3.0;
-    }
-    public function getReversionSpeed(): float
-    {
-        return 0.2;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.008;
-    }
-
     // --- Analyst Coverage ---
     // Returns leak through investor letters; a drawdown event is reported.
     /** Floor on routine visibility (10%). */
@@ -207,6 +194,16 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const EVENT_BASE_VISIBILITY = 0.60;
     /** Floor on visibility in an announced-event quarter (30%). */
     public const EVENT_MIN_VISIBILITY = 0.30;
+
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.2 a year). */
+    public const ROIC_REVERSION_SPEED = 0.2;
+    /** Excess return over the required return the moat sustains (0.8pp). */
+    public const MOAT_SPREAD = 0.008;
+
+    // --- Credit Thresholds ---
+    /** Most wholesale debt the model carries per unit of equity (3x equity). */
+    public const WHOLESALE_LEVERAGE_LIMIT = 3.0;
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {

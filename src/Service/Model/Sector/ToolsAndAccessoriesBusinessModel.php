@@ -47,16 +47,6 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
      */
     public const PRICING_POWER_INDEX = 0.65;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: holiday and year-end promotional volumes.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.92, 1.00, 0.98, 1.10];
-    }
-
     // --- Balance Sheet Realism ---
     /**
      * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased plants and
@@ -117,14 +107,17 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
      */
     public const FX_REVENUE_EXPOSURE = 0.10;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.08;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.03;
-    }
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.08 a year). */
+    public const ROIC_REVERSION_SPEED = 0.08;
+    /** Excess return over the required return the moat sustains (3pp). */
+    public const MOAT_SPREAD = 0.03;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: holiday and year-end promotional volumes.
+     */
+    public const SEASONALITY_FACTORS = [0.92, 1.00, 0.98, 1.10];
 
     /**
      * The cycle reaches each stream once inside the sector physics (commercial on the gap and the PMI, consumer on

@@ -14,7 +14,7 @@ namespace App\Data\Company;
  *
  * What the stock's beta column holds follows from what its model does with it. A model that re-levers through Hamada
  * every tick (StandardDebtPhysicsTrait) stores the asset beta; a financial institution, whose deposits and wholesale
- * book are operating liabilities rather than capital structure (FinancialPhysicsTrait), stores its industry's
+ * book are operating liabilities rather than capital structure (BaseFinancialBusinessModel), stores its industry's
  * levered beta, as Damodaran prices banks and insurers.
  */
 final class IndustryBetas

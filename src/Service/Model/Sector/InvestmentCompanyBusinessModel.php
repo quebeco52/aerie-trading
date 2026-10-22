@@ -136,7 +136,13 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     /** Years between the cycle and the dividend it eventually pays, via the parent's distributed-lag helper. */
     public const DEMAND_LAG_YEARS = 1.50;
 
-    // --- Analyst Observability ---
+    // --- Valuation ---
+    /**
+     * Weight of book value against earnings value in the consensus fair value (100%): a closed-end holding company is
+     * priced on its net asset value alone. The book leg is NAV per share, its multiple being one; the earnings leg is
+     * deliberately unread, and a distribution is paid out of NAV, so it is no claim beside it.
+     */
+    public const FAIR_VALUE_BOOK_WEIGHT = 1.0;
 
     /**
      * The volume the consolidated subsidiaries are staffed to, at their share of the balance-sheet income mix.
@@ -362,16 +368,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     public function getIntrinsicPbMultiple(float $structuralRoic, float $hurdleRate): float
     {
         return self::INTRINSIC_PB_MULTIPLE;
-    }
-
-    /**
-     * A closed-end holding company is priced on its net asset value alone. $pbFairValue IS NAV per share here,
-     * because the multiple above is one; the earnings leg is deliberately unread, and a distribution is paid out
-     * of NAV, so it is no claim beside it.
-     */
-    protected function getFairValueBookWeight(float $normalizedEps): float
-    {
-        return 1.0;
     }
 
     /**

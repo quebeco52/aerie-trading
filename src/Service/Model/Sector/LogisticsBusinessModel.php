@@ -63,40 +63,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.08;
 
-    public function getMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getDividendCrisisIcr(): float
-    {
-        return 1.75;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.15;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.25;
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return [0.85, 0.95, 1.10, 1.10]; // Q3-Q4 peak freight shipping & holiday logistics surge
-    }
-
     // --- Secular Demand ---
     /**
      * Truck transportation plus warehousing and storage value added as a share of US nominal GDP in 1997 (BEA GDP by
@@ -106,17 +72,44 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0126;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
+
+    // --- Capital Cycle ---
+    /**
+     * Elasticity of the capital budget to the cycle signal (0.6). Fleets, sorting hubs, and automated fulfillment
+     * centers.
+     */
+    public const CAPEX_CYCLICALITY = 0.60;
+    /** Share of construction in progress completed into plant each quarter (25%). */
+    public const CAPEX_COMPLETION_RATE = 0.25;
+    /** Net working capital as a share of revenue (15%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.15;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. Q3-Q4 peak freight shipping & holiday
+     * logistics surge.
+     */
+    public const SEASONALITY_FACTORS = [0.85, 0.95, 1.10, 1.10];
+
+    // --- Credit Thresholds ---
+    /** Minimum interest coverage the firm is held to (2.5x). */
+    public const MIN_ICR = 2.5;
+    /** Interest coverage below which a firm without a cash buffer is in a dividend crisis (1.75x). */
+    public const DIVIDEND_CRISIS_ICR = 1.75;
+    /** Interest coverage below which the firm stops repurchasing stock (2.5x). */
+    public const BUYBACK_MIN_ICR = 2.5;
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-
-    public function getCapexCyclicality(): float
-    {
-        return 0.60;
-    } // Fleets, sorting hubs, and automated fulfillment centers
 
     // --- Stream Weights ---
     /** Baseline fraction of revenue derived from long-term dedicated fleet contracts. */

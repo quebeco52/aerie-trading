@@ -87,36 +87,6 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.40; // 1P sales are visible, but 3P/Ads are a black box
     public const BASE_COVERAGE_ERROR = 0.08;
 
-    public function getMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getDividendCrisisIcr(): float
-    {
-        return 2.0;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.02;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.5;
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return [0.85, 0.90, 0.90, 1.35]; // Q4 holiday shopping surge
-    }
-
     // --- Secular Demand ---
     /** Online sales as a share of the District's retail at Year 1 (4%). */
     public const ONLINE_SHARE_YEAR_1 = 0.040;
@@ -132,6 +102,30 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const RETAIL_SHARE_2019 = 0.0593;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (2pp). */
+    public const MOAT_SPREAD = 0.02;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (1.5). Massive warehouse and server farm buildouts. */
+    public const CAPEX_CYCLICALITY = 1.5;
+    /** Share of construction in progress completed into plant each quarter (50%). */
+    public const CAPEX_COMPLETION_RATE = 0.5;
+
+    // --- Seasonality ---
+    /** Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. Q4 holiday shopping surge. */
+    public const SEASONALITY_FACTORS = [0.85, 0.90, 0.90, 1.35];
+
+    // --- Credit Thresholds ---
+    /** Minimum interest coverage the firm is held to (2.5x). */
+    public const MIN_ICR = 2.5;
+    /** Interest coverage below which a firm without a cash buffer is in a dividend crisis (2x). */
+    public const DIVIDEND_CRISIS_ICR = 2.0;
+    /** Interest coverage below which the firm stops repurchasing stock (2.5x). */
+    public const BUYBACK_MIN_ICR = 2.5;
+
     /**
      * Trend real growth plus online's drift within retail and retail's drift within GDP; the adoption fades like any
      * drift.
@@ -142,11 +136,6 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
             + MacroTransmission::gdpShareDrift(self::ONLINE_SHARE_YEAR_1, self::ONLINE_SHARE_DECADE_ON, self::ONLINE_ADOPTION_WINDOW_YEARS)
             + MacroTransmission::gdpShareDrift(self::RETAIL_SHARE_1997, self::RETAIL_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-
-    public function getCapexCyclicality(): float
-    {
-        return 1.5;
-    } // Massive warehouse and server farm buildouts
 
     // --- Tri-Stream Architecture Weights ---
     public const FIRST_PARTY_WEIGHT  = 0.45;

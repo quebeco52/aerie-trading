@@ -158,8 +158,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const STATE_IN_PLACE_RENT = 'state:in_place_rent';
 
     // --- Structural Rates ---
-    /** Speed at which operating margin reverts to its structural level. */
-    public const MARGIN_REVERSION_SPEED = 0.15;
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
     /** Return spread over WACC a destination resort's location and licence defend. */
     public const MOAT_SPREAD = 0.015;
     /** Working capital per unit of revenue: cage cash and receivables net of payables and advance deposits. */
@@ -173,28 +173,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
      * over its mean.
      */
     public const SEASONALITY_FACTORS = [0.90, 0.99, 1.18, 0.93];
-
-    public function getReversionSpeed(): float
-    {
-        return self::MARGIN_REVERSION_SPEED;
-    }
-    public function getMoatSpread(): float
-    {
-        return self::MOAT_SPREAD;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return self::WORKING_CAPITAL_INTENSITY;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return self::CAPEX_COMPLETION_RATE;
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return self::SEASONALITY_FACTORS;
-    }
 
     // --- Secular Demand ---
     /**
@@ -210,11 +188,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return self::CAPEX_CYCLICALITY;
     }
 
     /**

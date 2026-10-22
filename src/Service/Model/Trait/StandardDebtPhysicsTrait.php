@@ -38,11 +38,7 @@ trait StandardDebtPhysicsTrait
      */
     public function getLeverageTarget(float $targetDebtTolerance): float
     {
-        $targetShare = defined('static::UNDERLEVERAGED_DEBT_RATIO')
-            ? (float) static::UNDERLEVERAGED_DEBT_RATIO
-            : FinancialConstants::CORPORATE_UNDERLEVERAGED_RATIO;
-
-        return $targetDebtTolerance * $targetShare;
+        return $targetDebtTolerance * (float) static::UNDERLEVERAGED_DEBT_RATIO;
     }
 
     /**
@@ -53,7 +49,7 @@ trait StandardDebtPhysicsTrait
      */
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool
     {
-        $icrFloor = defined('static::MIN_RECAP_ICR_FLOOR')
+        $icrFloor = static::MIN_RECAP_ICR_FLOOR !== null
             ? (float) static::MIN_RECAP_ICR_FLOOR
             : max(FinancialConstants::MIN_ABSOLUTE_ICR_BUFFER, $minIcr * FinancialConstants::REQUIRED_ICR_SAFETY_MULT);
 
@@ -97,7 +93,8 @@ trait StandardDebtPhysicsTrait
 
     /**
      * A listed firm's notes are senior unsecured: Moody's ultimate recovery 47.4% (1987-2021),
-     * CorporateDefaultService::RECOVERY_SENIOR_UNSECURED.
+     * CorporateDefaultService::RECOVERY_SENIOR_UNSECURED. A financial's wholesale notes too: central bank support is
+     * liquidity, not recovery.
      */
     public function getLossGivenDefault(): float
     {
@@ -111,7 +108,7 @@ trait StandardDebtPhysicsTrait
 
     public function getDebtMaturityRolloverRate(): float
     {
-        return FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER;
+        return static::DEBT_MATURITY_ROLLOVER_RATE;
     }
 
     public function getDeleveragingEvaluationDebt(float $totalDebt, float $wholesaleDebt): float
@@ -150,7 +147,11 @@ trait StandardDebtPhysicsTrait
         return false;
     }
 
-    /** An operating company holds no client money. */
+    /**
+     * No client money held apart. An operating company holds none, and a deposit is not custody: a bank lends it out
+     * and owes it back out of its own estate, so it belongs in the balance sheet a capital ratio is struck on. Only a
+     * model that genuinely segregates client assets overrides this.
+     */
     public function getSegregatedCustodyLiabilities(Stock $stock): float
     {
         return 0.0;
@@ -160,32 +161,39 @@ trait StandardDebtPhysicsTrait
 
     public function getMinIcr(): float
     {
-        return 2.00;
+        return static::MIN_ICR;
     }
+
     public function getBankruptEquityThreshold(): float
     {
-        return 0.0;
+        return static::BANKRUPT_EQUITY_THRESHOLD;
     }
+
     public function getDistressEquityThreshold(): float
     {
-        return 0.0;
+        return static::DISTRESS_EQUITY_THRESHOLD;
     }
+
     public function getWarningEquityThreshold(): float
     {
-        return 0.0;
+        return static::WARNING_EQUITY_THRESHOLD;
     }
+
     public function getWholesaleLeverageLimit(): float
     {
-        return 1.0;
+        return static::WHOLESALE_LEVERAGE_LIMIT;
     }
+
     public function getDividendCrisisIcr(): float
     {
-        return 1.50;
+        return static::DIVIDEND_CRISIS_ICR;
     }
+
     public function getBuybackMinIcr(): float
     {
-        return 2.00;
+        return static::BUYBACK_MIN_ICR;
     }
+
     public function shouldForceDeleveragingOnJunkOrHoarding(): bool
     {
         return true;

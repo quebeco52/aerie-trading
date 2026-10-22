@@ -150,21 +150,6 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
     /** Regime key for a unit out of service. */
     public const REGIME_UNIT_OUTAGE = 'unit_outage';
 
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return self::WORKING_CAPITAL_INTENSITY;
-    }
-
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return self::CAPEX_COMPLETION_RATE;
-    }
-
-    public function getDebtMaturityRolloverRate(): float
-    {
-        return self::DEBT_MATURITY_ROLLOVER_RATE;
-    }
-
     /**
      * The wholesale price lives in the index the physics reads and carries no inflation of its own, so only the
      * capacity contracts take the engine's escalator: both multipliers carry it on the capacity share alone, and the

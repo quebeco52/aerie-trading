@@ -67,14 +67,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.05;
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.30;
-    public function getReversionSpeed(): float
-    {
-        return 0.1;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.02;
-    }
+
     // --- Secular Demand ---
     /**
      * Spending on jewelry and watches as a share of US nominal GDP in 1997 (BEA NIPA Table 2.4.5, personal consumption
@@ -83,6 +76,25 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const SECULAR_SHARE_1997 = 0.0047;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0032;
+
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
+    public const ROIC_REVERSION_SPEED = 0.1;
+    /** Excess return over the required return the moat sustains (2pp). */
+    public const MOAT_SPREAD = 0.02;
+
+    // --- Capital Cycle ---
+    /**
+     * Net working capital as a share of revenue (14%). Haute couture finished leather goods & boutique inventory
+     * holding.
+     */
+    public const WORKING_CAPITAL_INTENSITY = 0.14;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. Q4 holiday gift & festive collection surge.
+     */
+    public const SEASONALITY_FACTORS = [0.85, 0.90, 0.95, 1.30];
 
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
@@ -127,7 +139,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
     // --- Brand Equity Moat ---
     /** Operating margin mean reversion speed: slower speed reflects sticky multi-decade brand equity. */
-    public const LUXURY_REVERSION_SPEED    = 2.0;
+    public const MARGIN_REVERSION_SPEED    = 2.0;
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
@@ -214,22 +226,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
-    }
-
-    public function getMarginReversionSpeed(): float
-    {
-        // Brand equity is highly sticky over decades
-        return self::LUXURY_REVERSION_SPEED;
-    }
-
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.14; // Haute couture finished leather goods & boutique inventory holding
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return [0.85, 0.90, 0.95, 1.30]; // Q4 holiday gift & festive collection surge
     }
 
     /**

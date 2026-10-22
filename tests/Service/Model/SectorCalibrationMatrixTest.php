@@ -16,8 +16,10 @@ use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\RestaurantBusinessModel;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use App\Service\Model\Sector\ShippingBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\Sector\TelecomBusinessModel;
 use App\Service\Model\Sector\UtilityBusinessModel;
+use App\Tests\Support\Model\HookConstant;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -106,7 +108,9 @@ final class SectorCalibrationMatrixTest extends TestCase
     }
 
     /**
-     * Every constant a sector declares has to describe an industry that could exist.
+     * Every constant a sector declares, and every default it inherits, has to describe an industry that could exist.
+     *
+     * @param class-string<BusinessModelInterface> $modelClass
      */
     #[DataProvider('sectorModelProvider')]
     public function testDeclaredConstantsSitInsideTheirPlausibleBand(string $modelClass): void
@@ -114,36 +118,39 @@ final class SectorCalibrationMatrixTest extends TestCase
         $declared = 0;
 
         foreach (self::BANDS as $constant => [$min, $max, $meaning]) {
-            if (!defined("{$modelClass}::{$constant}")) {
-                continue;
-            }
-
             $value = constant("{$modelClass}::{$constant}");
-            if (is_array($value)) {
+            if ($value === null || is_array($value)) {
                 continue;
             }
 
-            $declared++;
+            if (HookConstant::isRedeclared($modelClass, $constant)) {
+                $declared++;
+            }
             $value = (float) $value;
 
             $this->assertGreaterThanOrEqual($min, $value, "{$modelClass}::{$constant} ({$meaning}) is below the plausible range.");
             $this->assertLessThanOrEqual($max, $value, "{$modelClass}::{$constant} ({$meaning}) is above the plausible range.");
         }
 
-        $this->assertGreaterThan(0, $declared, "{$modelClass} declares no calibration constants at all, so nothing pins its sector identity.");
+        // The standard corporate model is the base's defaults; every sector pins its identity with its own constants.
+        if ($modelClass !== StandardCorporateBusinessModel::class) {
+            $this->assertGreaterThan(0, $declared, "{$modelClass} declares no calibration constants at all, so nothing pins its sector identity.");
+        }
     }
 
     /**
      * Financial models are excluded from the operating-physics constants by design: a bank's earnings come
      * from a spread on a balance sheet, not from a price it charges against an input basket. This pins that
      * exclusion so a sweep cannot quietly hand a bank a pricing-power index and change how it earns.
+     *
+     * @param class-string<BusinessModelInterface> $modelClass
      */
     #[DataProvider('financialModelProvider')]
     public function testFinancialModelsDeclareNoOperatingPriceConstants(string $modelClass): void
     {
         foreach (['PRICING_POWER_INDEX', 'PRICE_ELASTICITY_OF_DEMAND'] as $constant) {
             $this->assertFalse(
-                defined("{$modelClass}::{$constant}"),
+                HookConstant::isRedeclared($modelClass, $constant),
                 "{$modelClass} is a financial model and must not declare {$constant}: its earnings are a spread, not a price.",
             );
         }
@@ -158,7 +165,7 @@ final class SectorCalibrationMatrixTest extends TestCase
     {
         $pairs = [];
         foreach (self::sectorModelProvider() as [$modelClass]) {
-            if (defined("{$modelClass}::PRICING_POWER_INDEX") && defined("{$modelClass}::PRICE_ELASTICITY_OF_DEMAND")) {
+            if (HookConstant::isRedeclared($modelClass, 'PRICING_POWER_INDEX')) {
                 $pairs[] = [(float) constant("{$modelClass}::PRICING_POWER_INDEX"), (float) constant("{$modelClass}::PRICE_ELASTICITY_OF_DEMAND")];
             }
         }
@@ -224,9 +231,7 @@ final class SectorCalibrationMatrixTest extends TestCase
         // The whole non-financial cross-section has to sit around unit cyclicality rather than drifting.
         $cyclicalities = [];
         foreach (self::sectorModelProvider() as [$modelClass]) {
-            if (defined("{$modelClass}::OPERATING_CYCLICALITY")) {
-                $cyclicalities[] = (float) constant("{$modelClass}::OPERATING_CYCLICALITY");
-            }
+            $cyclicalities[] = (float) constant("{$modelClass}::OPERATING_CYCLICALITY");
         }
         $mean = array_sum($cyclicalities) / count($cyclicalities);
         $this->assertGreaterThan(0.80, $mean, 'The average sector must move roughly with the economy.');
@@ -293,7 +298,7 @@ final class SectorCalibrationMatrixTest extends TestCase
 
         // A restaurant is the spot case: it declares no lag at all and reads the macro gap directly.
         $this->assertFalse(
-            defined(RestaurantBusinessModel::class . '::DEMAND_LAG_YEARS'),
+            HookConstant::isRedeclared(RestaurantBusinessModel::class, 'DEMAND_LAG_YEARS'),
             'A restaurant is a spot business and must read the cycle contemporaneously.',
         );
     }

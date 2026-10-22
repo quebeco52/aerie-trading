@@ -8,51 +8,44 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Model\Trait\StandardBaseModelTrait;
-use App\Service\Model\Trait\StandardCapitalAllocationTrait;
-use App\Service\Model\Trait\StandardDebtPhysicsTrait;
-use App\Service\Model\Trait\StandardMaTrait;
-use App\Service\Model\Trait\StandardOperatingPhysicsTrait;
-use App\Service\Model\Trait\StandardTreasuryTrait;
-use App\Service\Model\Trait\StandardValuationTrait;
+use App\Service\Model\AbstractBusinessModel;
 
 /**
- * The standard trait stack composed with nothing configured on top of it.
+ * The model base with nothing configured on top of it.
  *
- * Every default in these traits sits behind a `defined('static::CONST')` gate, so the fallback
- * branch runs only for a model that declines to declare the constant. Every shipped sector model declares
- * most of them, which means those fallbacks are the least-exercised code in the operating physics despite
- * being the behaviour a new sector model inherits on the day it is written. This composer declares only the
- * two factor loadings, which the stack requires of every root rather than defaulting, so a test can address
- * the gated defaults directly instead of hoping some sector happens to leave one unset.
+ * Every hook constant the standard physics reads is declared once on AbstractBusinessModel with its default. Every
+ * shipped sector model redeclares most of them, which means those defaults are the least-exercised values in the
+ * operating physics despite being the behaviour a new sector model inherits on the day it is written. This model
+ * redeclares only the sector factor loading, to keep the stack on the one-factor firm model, so a test can address
+ * the defaults directly instead of hoping some sector happens to leave one unset.
  */
-class BareStandardModel
+class BareStandardModel extends AbstractBusinessModel
 {
-    use StandardBaseModelTrait;
-    use StandardOperatingPhysicsTrait;
-    use StandardTreasuryTrait;
-    use StandardCapitalAllocationTrait;
-    use StandardDebtPhysicsTrait;
-    use StandardMaTrait;
-    use StandardValuationTrait;
-
     // --- Firm-Level Common Factor ---
-    /** One-factor loading on the firm-wide demand innovation, matching the corporate root. */
-    public const FIRM_FACTOR_LOADING = 0.60;
     /** Loading on the persistent sector demand factor; zero keeps the bare stack on the one-factor model. */
     public const SECTOR_FACTOR_LOADING = 0.0;
 
     /** Dollars of the stub's revenue that are pure price, so a test can drive the price/volume cost split. */
     public float $stubPriceRevenue = 0.0;
 
-    public function getFirmFactorLoading(): float
+    /**
+     * The root's three operating steps, neutral: the capital and return as the stock holds them, no macro demand
+     * shift or repricing, and the trailing return left where it is. Nothing a test observes of the shared physics
+     * passes through them.
+     */
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        return static::FIRM_FACTOR_LOADING;
+        return ['invested_capital' => $stock->getInvestedCapital(), 'baseline_roic' => (float) $stock->getBaselineRoic()];
     }
 
-    public function getSectorFactorLoading(): float
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        return static::SECTOR_FACTOR_LOADING;
+        return ['macro_demand_shift' => 0.0, 'pricing_power_multiplier' => 1.0, 'input_cost_multiplier' => 1.0];
+    }
+
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?MacroStateDTO $macroState = null, float $depreciation = 0.0, float $afterTaxSpecialCharges = 0.0): float
+    {
+        return (float) $stock->getRoicTtm();
     }
 
     /**

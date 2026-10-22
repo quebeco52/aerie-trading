@@ -158,19 +158,9 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
     // --- Bond Proxy Capital Structure ---
     /**
      * Quarterly share of the fixed-rate bond stock that matures and reprices (~10-year tenor of infrastructure bonds
-     * against concession cash flows).
+     * against concession cash flows), so a rate shock reaches interest expense over a decade.
      */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.025;
-
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return self::WORKING_CAPITAL_INTENSITY;
-    }
-
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return self::CAPEX_COMPLETION_RATE;
-    }
 
     /**
      * Quays are dredged and cranes bought when the berths run full: the budget follows the boxes the terminal handles.
@@ -370,15 +360,6 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
             'transshipment'    => $transshipment / $total,
             'storage_services' => $storage / $total,
         ];
-    }
-
-    /**
-     * Terminals fund quays and cranes with long infrastructure bonds against concession cash flows, so a rate shock
-     * reaches interest expense over a decade.
-     */
-    public function getDebtMaturityRolloverRate(): float
-    {
-        return self::DEBT_MATURITY_ROLLOVER_RATE;
     }
 
     /**

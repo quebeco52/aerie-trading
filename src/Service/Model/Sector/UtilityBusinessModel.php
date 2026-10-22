@@ -85,29 +85,13 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.05;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.12;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.125;
-    }
-
     // --- Seasonality (calendar-quarter revenue over its annual mean, ratio to a centred 4-quarter moving average) ---
     /**
-     * Electric: US retail electricity revenue, all sectors, 2015-2019 (EIA-861M, the data behind Electric Power Monthly
-     * Table 5.3); summer cooling load at summer tariffs, Q3 +18%.
+     * Calendar-quarter seasonality of an electric utility, summing to 4.0: US retail electricity revenue, all sectors,
+     * 2015-2019 (EIA-861M, the data behind Electric Power Monthly Table 5.3); summer cooling load at summer tariffs, Q3
+     * +18%.
      */
-    public const ELECTRIC_SEASONALITY = [0.953, 0.938, 1.183, 0.926];
+    public const SEASONALITY_FACTORS = [0.953, 0.938, 1.183, 0.926];
     /**
      * Water: American Water Works operating revenues, 2015-2019 (10-K/10-Q via SEC XBRL); outdoor irrigation lifts
      * Q2-Q3 with no winter heating load, Q3 +12%, Q1 -9%.
@@ -116,10 +100,19 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Industries on this model whose calendar is not the electric one. */
     public const SEASONALITY_BY_INDUSTRY = ['Utilities - Regulated Water' => self::WATER_SEASONALITY];
 
-    public function getSeasonalityFactors(): array
-    {
-        return self::ELECTRIC_SEASONALITY;
-    }
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (0.5). */
+    public const CAPEX_CYCLICALITY = 0.5;
+    /** Share of construction in progress completed into plant each quarter (12.5%). */
+    public const CAPEX_COMPLETION_RATE = 0.125;
+    /** Net working capital as a share of revenue (12%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.12;
 
     /** Water and electric utilities share the rate-base physics but not the weather that drives their volumes. */
     public function resolveSeasonalityFactors(Stock $stock): array
@@ -138,10 +131,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-    public function getCapexCyclicality(): float
-    {
-        return 0.5;
     }
 
     // --- Dual-Stream Utility Rate Architecture ---
@@ -246,12 +235,12 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     // --- Bond Proxy Capital Structure ---
     /**
      * Quarterly share of the fixed-rate bond stock that matures and reprices (~12-year average tenor of first mortgage
-     * bonds).
+     * bonds), so a rate shock reaches interest expense over a decade rather than a year.
      */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.02;
 
     // --- Margin Reversion ---
-    public const REGULATED_REVERSION_SPEED    = 2.0;
+    public const MARGIN_REVERSION_SPEED    = 2.0;
 
     // --- Rate-Base CapEx & Capital Structure Rails ---
     /**
@@ -506,20 +495,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     private function resolveTariffBookLevel(Stock $stock): float
     {
         return 1.0 - ($this->resolveRegulatedRevenueShare($stock) * $this->resolveTariffShortfall($stock));
-    }
-
-    public function getMarginReversionSpeed(): float
-    {
-        return self::REGULATED_REVERSION_SPEED;
-    }
-
-    /**
-     * Bond proxy: regulated utilities issue 10 to 30 year first mortgage bonds, so the fixed-rate book
-     * reprices very slowly. A rate shock reaches interest expense over a decade rather than a year.
-     */
-    public function getDebtMaturityRolloverRate(): float
-    {
-        return self::DEBT_MATURITY_ROLLOVER_RATE;
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float

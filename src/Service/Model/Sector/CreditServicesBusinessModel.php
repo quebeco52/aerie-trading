@@ -33,11 +33,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
      */
     public const OPERATING_CYCLICALITY = 1.20;
 
-    public function getMoatSpread(): float
-    {
-        return 0.005;
-    }
-
     // --- ROE & Target Architecture ---
     /** Minimum lending EBIT floor as a fraction of core debt liabilities. */
     public const MIN_LENDING_EBIT_YIELD   = 0.05;
@@ -53,6 +48,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const MIN_DEPOSIT_BETA_CLAMP   = 0.20;
     /** Supplemental deposit beta spread added to attract high-yield savings funding. */
     public const HIGH_YIELD_BETA_SPREAD   = 0.10;
+
     // --- Liquidity & Cash Target Constants ---
     /** Fraction of operating base held as cash. */
     public const TARGET_CASH_OPERATING_MULT = 0.05;
@@ -69,9 +65,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     // --- Hoarding & Deposit Flight ---
     /** Fraction of total debt held as idle excess cash before flagged as a hoarder. */
-    public const HOARDING_THRESHOLD_DEBT_RATIO      = 0.12;
+    public const HOARDER_THRESHOLD      = 0.12;
     /** Higher idle cash fraction that triggers aggressive capital return. */
-    public const MEGA_HOARDING_THRESHOLD_DEBT_RATIO = 0.18;
+    public const MEGA_HOARDER_THRESHOLD = 0.18;
 
     // --- APR & Gross Yield Ceiling ---
     /** Absolute minimum APR gross yield ceiling floor. */
@@ -92,7 +88,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
      */
     public const CONSUMER_CHARGE_OFF_RATE = 0.0469;
     /** Years of expected loss the allowance covers: revolving balances turn over in well under two years. */
-    public const CECL_LIFETIME_HORIZON_YEARS = 1.5;
+    public const CREDIT_LOSS_HORIZON_YEARS = 1.5;
     /**
      * Charge-offs over the through-the-cycle rate above which card defaults are elevated: 1.26x the 1991-2019 mean in
      * 2001-02 (FRED CORCCACBS).
@@ -149,6 +145,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
      * (4.49% of assets, earning assets 95.9% of assets; FDIC Quarterly Banking Profile, Table III-A).
      */
     public const NON_INTEREST_INCOME_TO_EARNING_ASSETS = 0.0468;
+
+    // --- Return Reversion ---
+    /** Excess return over the required return the moat sustains (0.5pp). */
+    public const MOAT_SPREAD = 0.005;
 
     /**
      * A card issuer's receivables revolve and reprice at will, so the book carries almost no duration; what
@@ -372,11 +372,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return $params[ModelParam::CeclSpreadSensitivity] / self::CECL_SPREAD_SENSITIVITY;
     }
 
-    public function getCreditLossHorizonYears(): float
-    {
-        return self::CECL_LIFETIME_HORIZON_YEARS;
-    }
-
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         return max(
@@ -393,16 +388,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             $currentLiability * self::MIN_CASH_LIABILITY_MULT,
             $wholesaleDebt * self::MIN_CASH_WHOLESALE_MULT,
         );
-    }
-
-    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
-    {
-        $excessCash = max(0.0, $treasury - $targetCashReserves);
-        return [
-            'excess_cash'     => $excessCash,
-            'is_hoarder'      => $excessCash > ($totalDebt * self::HOARDING_THRESHOLD_DEBT_RATIO),
-            'is_mega_hoarder' => $excessCash > ($totalDebt * self::MEGA_HOARDING_THRESHOLD_DEBT_RATIO),
-        ];
     }
 
     public function getLeverageTarget(float $targetDebtTolerance): float

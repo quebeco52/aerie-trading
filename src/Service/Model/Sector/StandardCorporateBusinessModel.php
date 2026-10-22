@@ -4,22 +4,13 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\DTO\InterestExpenseDTO;
-
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
-use App\Service\Model\BusinessModelInterface;
-use App\Service\Model\Trait\StandardBaseModelTrait;
-use App\Service\Model\Trait\StandardCapitalAllocationTrait;
-use App\Service\Model\Trait\StandardDebtPhysicsTrait;
-use App\Service\Model\Trait\StandardMaTrait;
-use App\Service\Model\Trait\StandardOperatingPhysicsTrait;
-use App\Service\Model\Trait\StandardTreasuryTrait;
-use App\Service\Model\Trait\StandardValuationTrait;
+use App\Service\Model\AbstractBusinessModel;
 
 /**
  * Earnings strategy for normal, non-financial companies.
@@ -29,48 +20,13 @@ use App\Service\Model\Trait\StandardValuationTrait;
  * - Subject to supply chain inflation and physical depreciation.
  * - Operating scale is based on physical assets, not financial leverage.
  */
-class StandardCorporateBusinessModel implements BusinessModelInterface
+class StandardCorporateBusinessModel extends AbstractBusinessModel
 {
-    use StandardBaseModelTrait;
-    use StandardOperatingPhysicsTrait;
-    use StandardTreasuryTrait;
-    use StandardCapitalAllocationTrait;
-    use StandardDebtPhysicsTrait;
-    use StandardMaTrait;
-    use StandardValuationTrait;
-
-    // --- Operating Cyclicality & Demand Structure ---
-    /**
-     * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). A firm whose volumes
-     * move one for one with the output gap; sector models override.
-     */
-    public const OPERATING_CYCLICALITY = 1.00;
-    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
-    public const PRICE_ELASTICITY_OF_DEMAND = 0.50;
-    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
-    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
-
-    // --- FX Exposure ---
-    /**
-     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate. A mostly domestic firm
-     * meeting a little imported competition; sector models override.
-     */
-    public const FX_REVENUE_EXPOSURE = 0.05;
-
     // --- ROIC & Target Metrics ---
     /** Weight given to historical baseline ROIC when blending with TTM ROIC. */
     public const BASELINE_ROIC_WEIGHT = 0.50;
     /** Weight given to TTM ROIC when blending with historical baseline ROIC. */
     public const TTM_ROIC_WEIGHT      = 0.50;
-
-    // --- Firm-Level Common Factor ---
-    /** One-factor loading of each revenue stream on the firm-wide demand innovation (rho^2 = 36% shared variance). */
-    public const FIRM_FACTOR_LOADING = 0.60;
-    /**
-     * Two-factor loading of each revenue stream on the persistent macro-sector demand factor (rho_s^2 = 16% variance
-     * shared with sector peers).
-     */
-    public const SECTOR_FACTOR_LOADING = 0.40;
 
     // --- Pricing Power & Macro Physics ---
     /**
@@ -92,17 +48,16 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
      */
     public const PRICE_PASS_THROUGH_LAG_YEARS = 0.75;
     /**
-     * Macro inflation measure selling prices track: goods breakevens by default; services models price off supercore.
+     * Elasticity of selling prices to expected inflation for a model that prices off a contractual or regulated
+     * formula; null derives it from pricing power (the base elasticity plus the pricing power index).
+     *
+     * @var float|null
      */
-    public const PRICING_INFLATION_BASIS = 'tips_breakeven_ema';
+    public const PRICING_ELASTICITY = null;
 
     // --- Revenue & Shock Physics ---
     /** Variance scalar applied to baseline volatility for sales volume shocks. */
     public const REVENUE_VARIANCE_SCALAR = 0.15;
-
-    // --- Analyst Visibility & Error ---
-    public const BASE_COVERAGE_VISIBILITY = 0.20;
-    public const BASE_COVERAGE_ERROR = 0.06;
 
     /**
      * Physical businesses evaluate their true structural scale based on Invested Capital
@@ -156,7 +111,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
      */
     protected function resolvePricingElasticity(Stock $stock): float
     {
-        if (defined('static::PRICING_ELASTICITY')) {
+        if (static::PRICING_ELASTICITY !== null) {
             return (float) static::PRICING_ELASTICITY;
         }
 
@@ -263,18 +218,6 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         return $truePostTaxReturn;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
-    {
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-
-        // Standard corporates pay market interest rates on ALL of their debt.
-        // They do not get the benefit of cheap customer deposits like banks do.
-        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
-        $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
-
-        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);
-    }
-
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
@@ -291,15 +234,5 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             'tips_breakeven_ema',
             'real_wage_gap',
         ];
-    }
-
-    public function getFirmFactorLoading(): float
-    {
-        return static::FIRM_FACTOR_LOADING;
-    }
-
-    public function getSectorFactorLoading(): float
-    {
-        return static::SECTOR_FACTOR_LOADING;
     }
 }

@@ -61,17 +61,6 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     /** Services price off core services inflation ex-housing, not goods breakevens. */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 holiday campaign spend, Q1 post-holiday
-     * lull.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.90, 1.00, 0.95, 1.15];
-    }
-
     // --- Balance Sheet Realism ---
     /**
      * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Agency networks
@@ -88,35 +77,6 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.25;
     public const BASE_COVERAGE_ERROR = 0.06;
 
-    public function getMinIcr(): float
-    {
-        return 3.0;
-    }
-    public function getDividendCrisisIcr(): float
-    {
-        return 2.0;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return 3.0;
-    }
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.05;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.2;
-    }
-
     // --- Secular Demand ---
     /**
      * Miscellaneous professional, scientific and technical services (advertising) value added as a share of US nominal
@@ -126,16 +86,40 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0457;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (0.1). */
+    public const CAPEX_CYCLICALITY = 0.10;
+    /** Share of construction in progress completed into plant each quarter (20%). */
+    public const CAPEX_COMPLETION_RATE = 0.2;
+    /** Net working capital as a share of revenue (5%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.05;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 holiday campaign spend, Q1 post-holiday
+     * lull.
+     */
+    public const SEASONALITY_FACTORS = [0.90, 1.00, 0.95, 1.15];
+
+    // --- Credit Thresholds ---
+    /** Minimum interest coverage the firm is held to (3x). */
+    public const MIN_ICR = 3.0;
+    /** Interest coverage below which a firm without a cash buffer is in a dividend crisis (2x). */
+    public const DIVIDEND_CRISIS_ICR = 2.0;
+    /** Interest coverage below which the firm stops repurchasing stock (3x). */
+    public const BUYBACK_MIN_ICR = 3.0;
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return 0.10;
     }
 
     // --- Stream Weights ---

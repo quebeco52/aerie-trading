@@ -60,16 +60,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     /** Clinical labor overhead and hospital supply costs inflate at market core services inflation ex-housing. */
     public const COST_INFLATION_BASIS = 'supercore_inflation_ema';
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q1 flu season admissions.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [1.06, 0.98, 0.96, 1.00];
-    }
-
     // --- Balance Sheet Realism ---
     /**
      * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Hospital campuses
@@ -143,47 +133,43 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     /** Variable cost penalty from regulatory coding audits, clawbacks, and arbitration settlements. */
     public const BILLING_AUDIT_PENALTY = 0.05;
 
-    public function getMinIcr(): float
-    {
-        return 1.8;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return 1.8;
-    }
-    public function getReversionSpeed(): float
-    {
-        return 0.12;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.08;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.35;
-    }
-
     // --- Secular Demand ---
     /** Hospitals value added as a share of US nominal GDP in 1997 (BEA GDP by Industry, value added). */
     public const SECULAR_SHARE_1997 = 0.0193;
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0244;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.12 a year). */
+    public const ROIC_REVERSION_SPEED = 0.12;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
+
+    // --- Capital Cycle ---
+    /**
+     * Elasticity of the capital budget to the cycle signal (0.6). Specialized medical equipment & facility upgrades.
+     */
+    public const CAPEX_CYCLICALITY = 0.60;
+    /** Share of construction in progress completed into plant each quarter (35%). */
+    public const CAPEX_COMPLETION_RATE = 0.35;
+    /** Net working capital as a share of revenue (8%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.08;
+
+    // --- Seasonality ---
+    /** Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q1 flu season admissions. */
+    public const SEASONALITY_FACTORS = [1.06, 0.98, 0.96, 1.00];
+
+    // --- Credit Thresholds ---
+    /** Minimum interest coverage the firm is held to (1.8x). */
+    public const MIN_ICR = 1.8;
+    /** Interest coverage below which the firm stops repurchasing stock (1.8x). */
+    public const BUYBACK_MIN_ICR = 1.8;
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return 0.60; // Specialized medical equipment & facility upgrades
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

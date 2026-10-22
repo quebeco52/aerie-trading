@@ -33,22 +33,6 @@ trait StandardBaseModelTrait
     }
 
     /**
-     * One-factor loading that every revenue stream drawn through createStreamContext() places on the
-     * firm-wide demand innovation. Each model root (StandardCorporateBusinessModel, BaseFinancialBusinessModel)
-     * declares FIRM_FACTOR_LOADING and returns it late-bound, so a sector model changes the loading by
-     * overriding the constant alone.
-     */
-    abstract public function getFirmFactorLoading(): float;
-
-    /**
-     * Loading every revenue stream places on the persistent demand factor of the firm's macro sector
-     * (MacroStateDTO::$sectorDemandZ). Peers in one sector share customers and input markets, so a slump
-     * in industrial orders reaches every machinery maker's book together; the firm factor above carries the
-     * remainder. Declared on each root as SECTOR_FACTOR_LOADING; rho_f^2 + rho_s^2 must stay below one.
-     */
-    abstract public function getSectorFactorLoading(): float;
-
-    /**
      * Builds the quarterly stream context with this model's firm-factor and sector-factor loadings applied.
      * The sector factor is read from the macro state for the stock's own sector; models that pass neither
      * (or a macro state without sector factors, as in unit tests) fall back to the one-factor firm model.
@@ -67,12 +51,11 @@ trait StandardBaseModelTrait
     }
 
     /**
-     * Ticker override first (StockModelTuning), then the sector constant, then unit cyclicality.
+     * Ticker override first (StockModelTuning), then the sector's OPERATING_CYCLICALITY.
      */
     public function getOperatingCyclicality(Stock $stock): float
     {
-        $sectorDefault = defined('static::OPERATING_CYCLICALITY') ? (float) static::OPERATING_CYCLICALITY : 1.0;
-        $params = $this->resolveModelParameters($stock, [ModelParam::OperatingCyclicality->value => $sectorDefault]);
+        $params = $this->resolveModelParameters($stock, [ModelParam::OperatingCyclicality->value => (float) static::OPERATING_CYCLICALITY]);
 
         return (float) $params[ModelParam::OperatingCyclicality];
     }

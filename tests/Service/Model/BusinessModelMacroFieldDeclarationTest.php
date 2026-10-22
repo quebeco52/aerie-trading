@@ -123,12 +123,12 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         // INPUT_COST_EXPOSURES, so a model that invokes the basket couples to every channel it has exposure to.
         // Likewise the pricing pass-through is trait code, but the inflation measure it tracks is declared per
         // model through PRICING_INFLATION_BASIS.
-        if ($this->invokesHelper($modelClass, 'resolvePricingMultipliers(') && defined($modelClass . '::PRICING_INFLATION_BASIS')) {
+        if ($this->invokesHelper($modelClass, 'resolvePricingMultipliers(')) {
             $actual[] = (string) constant($modelClass . '::PRICING_INFLATION_BASIS');
             $actual = array_values(array_unique($actual));
         }
 
-        if ($this->invokesHelper($modelClass, 'resolvePricingMultipliers(') && defined($modelClass . '::COST_INFLATION_BASIS')) {
+        if ($this->invokesHelper($modelClass, 'resolvePricingMultipliers(') && constant($modelClass . '::COST_INFLATION_BASIS') !== null) {
             $actual[] = (string) constant($modelClass . '::COST_INFLATION_BASIS');
             $actual = array_values(array_unique($actual));
         }

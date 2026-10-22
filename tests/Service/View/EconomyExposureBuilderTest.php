@@ -108,10 +108,10 @@ final class EconomyExposureBuilderTest extends TestCase
             $model = Sectors::getBusinessModelStrategy($id);
             $source = self::classSource($model::class);
 
-            if (defined($model::class . '::INPUT_COST_EXPOSURES')) {
+            if (constant($model::class . '::INPUT_COST_EXPOSURES') !== null) {
                 self::assertStringContainsString('->resolveInputCostDrag(', $source, $id . ' declares a cost basket it never applies');
             }
-            if (defined($model::class . '::FX_REVENUE_EXPOSURE')) {
+            if (!$model->isFinancial()) {
                 self::assertStringContainsString('->resolveFxDemandShift(', $source, $id . ' declares a currency share no demand line reads');
             }
             if (!$model->isFinancial()) {

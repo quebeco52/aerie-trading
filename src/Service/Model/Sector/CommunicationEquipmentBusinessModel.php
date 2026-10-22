@@ -191,19 +191,6 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
      */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.60;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.20;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.025;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.15;
-    }
-
     // --- Secular Demand ---
     /**
      * Business investment in communication equipment plus household telephone equipment as a share of US nominal GDP in
@@ -213,26 +200,27 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0073;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.2 a year). */
+    public const ROIC_REVERSION_SPEED = 0.20;
+    /** Excess return over the required return the moat sustains (2.5pp). */
+    public const MOAT_SPREAD = 0.025;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (1.2). */
+    public const CAPEX_CYCLICALITY = 1.20;
+    /** Net working capital as a share of revenue (15%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.15;
+
+    // --- Seasonality ---
+    /** Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: carrier capex budget flush in Q4. */
+    public const SEASONALITY_FACTORS = [0.91, 0.99, 0.98, 1.12];
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-
-    public function getCapexCyclicality(): float
-    {
-        return 1.20;
-    }
-
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: carrier capex budget flush in Q4.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.91, 0.99, 0.98, 1.12];
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array

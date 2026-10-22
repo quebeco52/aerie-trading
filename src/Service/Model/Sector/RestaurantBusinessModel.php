@@ -86,6 +86,17 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     /** Franchise rent: billed monthly ahead and collected in ~11 days. */
     public const FRANCHISE_LEASES_WORKING_CAPITAL = ['receivables' => 0.03, 'inventory' => 0.0, 'payables' => 0.01];
 
+    // --- Return Reversion ---
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. Spring/summer patio dining and vacation
+     * demand.
+     */
+    public const SEASONALITY_FACTORS = [0.85, 1.10, 1.20, 0.85];
+
     /** The stores carry a few days of food and owe their suppliers; the franchisor is owed its royalties and rent. */
     protected function resolveWorkingCapitalShares(Stock $stock): array
     {
@@ -134,16 +145,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const FOOD_SAFETY_REMEDIATION_PENALTY = 0.02;
     public const VIRAL_MENU_ITEM_Z_SCORE     = 2.40;
     public const VIRAL_MENU_ITEM_MULT        = 1.15;
-
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-
-    public function getSeasonalityFactors(): array
-    {
-        return [0.85, 1.10, 1.20, 0.85]; // Spring/summer patio dining and vacation demand
-    }
 
     // --- Secular Demand ---
     /**

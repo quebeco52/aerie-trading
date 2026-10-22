@@ -63,38 +63,11 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     /** Services price off core services inflation ex-housing, not goods breakevens. */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: summer event and site staffing peak.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.98, 1.00, 1.02, 1.00];
-    }
-
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for security and private military contractors. */
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     /** Base analyst forecasting error scalar for obfuscated security operations. */
     public const BASE_COVERAGE_ERROR = 0.10;
-
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.025;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.05;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.2;
-    }
 
     // --- Secular Demand ---
     /**
@@ -105,16 +78,30 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0284;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (2.5pp). */
+    public const MOAT_SPREAD = 0.025;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (0.8). Fleet, armor, and tactical hardware. */
+    public const CAPEX_CYCLICALITY = 0.8;
+    /** Share of construction in progress completed into plant each quarter (20%). */
+    public const CAPEX_COMPLETION_RATE = 0.2;
+    /** Net working capital as a share of revenue (5%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.05;
+
+    // --- Seasonality ---
+    /** Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: summer event and site staffing peak. */
+    public const SEASONALITY_FACTORS = [0.98, 1.00, 1.02, 1.00];
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-    public function getCapexCyclicality(): float
-    {
-        return 0.8;
-    } // Fleet, armor, and tactical hardware
 
     // --- Tri-Stream Architecture Weights ---
     /** Baseline fraction of revenue from rock-solid sovereign government defense contracts. */

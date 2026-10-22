@@ -45,14 +45,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.10;
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 8.0;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.005;
-    }
 
     // --- Portfolio & Asset Yield Architecture ---
     /**
@@ -93,7 +85,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
      * Years of expected loss the allowance covers: mortgages prepay and middle-market loans mature well inside their
      * contractual terms.
      */
-    public const CECL_LIFETIME_HORIZON_YEARS = 3.0;
+    public const CREDIT_LOSS_HORIZON_YEARS = 3.0;
 
     // --- Revenue Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in non-bank lending markets. */
@@ -138,6 +130,14 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
      */
     public const MORTGAGE_RATE_ORIGINATION_SENSITIVITY = 4.0;
 
+    // --- Return Reversion ---
+    /** Excess return over the required return the moat sustains (0.5pp). */
+    public const MOAT_SPREAD = 0.005;
+
+    // --- Credit Thresholds ---
+    /** Most wholesale debt the model carries per unit of equity (8x equity). */
+    public const WHOLESALE_LEVERAGE_LIMIT = 8.0;
+
     /**
      * The book is the two portfolios the revenue streams earn on: mortgages, secured on homes, and direct loans to
      * middle-market firms, charged off at the bank segment rates.
@@ -169,11 +169,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public function getOperatingCostToEarningAssets(Stock $stock): ?float
     {
         return null;
-    }
-
-    public function getCreditLossHorizonYears(): float
-    {
-        return self::CECL_LIFETIME_HORIZON_YEARS;
     }
 
     /**

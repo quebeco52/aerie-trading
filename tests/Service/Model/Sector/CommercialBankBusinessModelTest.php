@@ -1018,7 +1018,7 @@ class CommercialBankBusinessModelTest extends TestCase
     public function testCreditLossHooksAndLedgerFeedThePhysics(): void
     {
         $this->assertGreaterThan(0.0, $this->model->getThroughTheCycleCreditLossRate());
-        $this->assertEqualsWithDelta(CommercialBankBusinessModel::CECL_LIFETIME_HORIZON_YEARS, $this->model->getCreditLossHorizonYears(), 1e-9);
+        $this->assertEqualsWithDelta(CommercialBankBusinessModel::CREDIT_LOSS_HORIZON_YEARS, $this->model->getCreditLossHorizonYears(), 1e-9);
 
         $stock = new Stock();
         $stock->setTicker('LDGR');

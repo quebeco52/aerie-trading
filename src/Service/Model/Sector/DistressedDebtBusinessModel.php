@@ -39,11 +39,6 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const BASE_COVERAGE_ERROR = 0.05;
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.80;
 
-    public function getMoatSpread(): float
-    {
-        return 0.005;
-    }
-
     // --- Special Situations & Macro Triggers ---
     /**
      * Distress signal per unit of the HY spread over its decade trend, the credit cycle counted once: 100 bps over
@@ -84,8 +79,14 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const LORE_RESTRUCTURING_Z_SCORE     = 1.00;
 
     // --- Dry Powder Liquidity Rules ---
-    public const DRY_POWDER_HOARDER_THRESHOLD   = 0.40;
-    public const DRY_POWDER_MEGA_THRESHOLD      = 0.70;
+    /** Dry powder, as a share of the operating base, above which the fund is a hoarder (40%). */
+    public const HOARDER_THRESHOLD      = 0.40;
+    /** Dry powder, as a share of the operating base, above which the fund is a mega-hoarder (70%). */
+    public const MEGA_HOARDER_THRESHOLD = 0.70;
+
+    // --- Return Reversion ---
+    /** Excess return over the required return the moat sustains (0.5pp). */
+    public const MOAT_SPREAD = 0.005;
 
     /**
      * The situations the workout desks are staffed to: the distress opportunity set (spreads and defaults against
@@ -200,16 +201,6 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
-    }
-
-    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
-    {
-        $excessCash = max(0.0, $treasury - $targetCashReserves);
-        return [
-            'excess_cash'     => $excessCash,
-            'is_hoarder'      => $excessCash > ($operatingBase * self::DRY_POWDER_HOARDER_THRESHOLD),
-            'is_mega_hoarder' => $excessCash > ($operatingBase * self::DRY_POWDER_MEGA_THRESHOLD),
-        ];
     }
 
     /**

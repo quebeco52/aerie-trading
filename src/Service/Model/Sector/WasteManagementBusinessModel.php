@@ -56,49 +56,9 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     /** Landfill permitting oligopolies dictate price; diesel and crew wages are largely surcharged through. */
     public const PRICING_POWER_INDEX = 0.70;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and summer construction and yard
-     * volumes.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.94, 1.03, 1.05, 0.98];
-    }
-
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50; // High visibility due to steady municipal contracts
     public const BASE_COVERAGE_ERROR = 0.05;
-
-    public function getMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getDividendCrisisIcr(): float
-    {
-        return 1.75;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return 2.5;
-    }
-    public function getReversionSpeed(): float
-    {
-        return 0.12;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.02;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.08;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.25;
-    }
 
     // --- Secular Demand ---
     /**
@@ -109,16 +69,43 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0027;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.12 a year). */
+    public const ROIC_REVERSION_SPEED = 0.12;
+    /** Excess return over the required return the moat sustains (2pp). */
+    public const MOAT_SPREAD = 0.02;
+
+    // --- Capital Cycle ---
+    /**
+     * Elasticity of the capital budget to the cycle signal (1). Constant need for fleet upgrades and landfill cells.
+     */
+    public const CAPEX_CYCLICALITY = 1.0;
+    /** Share of construction in progress completed into plant each quarter (25%). */
+    public const CAPEX_COMPLETION_RATE = 0.25;
+    /** Net working capital as a share of revenue (8%). */
+    public const WORKING_CAPITAL_INTENSITY = 0.08;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and summer construction and yard
+     * volumes.
+     */
+    public const SEASONALITY_FACTORS = [0.94, 1.03, 1.05, 0.98];
+
+    // --- Credit Thresholds ---
+    /** Minimum interest coverage the firm is held to (2.5x). */
+    public const MIN_ICR = 2.5;
+    /** Interest coverage below which a firm without a cash buffer is in a dividend crisis (1.75x). */
+    public const DIVIDEND_CRISIS_ICR = 1.75;
+    /** Interest coverage below which the firm stops repurchasing stock (2.5x). */
+    public const BUYBACK_MIN_ICR = 2.5;
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
-    public function getCapexCyclicality(): float
-    {
-        return 1.0;
-    } // Constant need for fleet upgrades and landfill cells
 
     // --- Tri-Stream Architecture ---
     /** Baseline fraction of revenue from defensive residential collection & municipal contracts. */

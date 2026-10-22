@@ -50,17 +50,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
      */
     public const PRICING_POWER_INDEX = 0.75;
 
-    /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 enterprise budget flush and holiday
-     * advertising.
-     *
-     * @return array<int, float>
-     */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.95, 0.98, 0.97, 1.10];
-    }
-
     // --- Balance Sheet Realism ---
     /**
      * Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Office campuses and
@@ -97,18 +86,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.05;
-    public function getReversionSpeed(): float
-    {
-        return 0.1;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.025;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.5;
-    }
+
     // --- Secular Demand ---
     /**
      * Business and household spending on software as a share of US nominal GDP in 1997 (BEA NIPA Table 5.3.5, private
@@ -118,15 +96,37 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     /** The same share in 2019. */
     public const SECULAR_SHARE_2019 = 0.0265;
 
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
+    public const ROIC_REVERSION_SPEED = 0.1;
+    /** Excess return over the required return the moat sustains (2.5pp). */
+    public const MOAT_SPREAD = 0.025;
+
+    // --- Capital Cycle ---
+    /** Elasticity of the capital budget to the cycle signal (1). */
+    public const CAPEX_CYCLICALITY = 1.0;
+    /** Share of construction in progress completed into plant each quarter (50%). */
+    public const CAPEX_COMPLETION_RATE = 0.5;
+
+    // --- Seasonality ---
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 enterprise budget flush and holiday
+     * advertising.
+     */
+    public const SEASONALITY_FACTORS = [0.95, 0.98, 0.97, 1.10];
+
+    // --- Valuation ---
+    /**
+     * Weight of book value against earnings value in the consensus fair value: none. Asset-light platforms trade on
+     * cash earnings, DCF and recurring revenue power, not on book value.
+     */
+    public const FAIR_VALUE_BOOK_WEIGHT = 0.0;
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
-    }
-    public function getCapexCyclicality(): float
-    {
-        return 1.0;
     }
 
     // --- Dual-Stream Tech & Software Architecture ---
@@ -204,7 +204,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
     // --- Innovation Competition Moat & Capital Structure ---
     /** Operating margin mean reversion speed: fast speed reflects rapid technological disruption and competition. */
-    public const TECH_REVERSION_SPEED      = 5.0;
+    public const MARGIN_REVERSION_SPEED      = 5.0;
     /** Minimum interest coverage ratio required to permit recapitalization for intangible asset software models. */
     public const MIN_RECAP_ICR_FLOOR       = 15.0;
     /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
@@ -341,18 +341,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             kpis: ['bookings_to_revenue' => $subscriptionBook['book_to_bill'], 'deferred_revenue_quarters' => $subscriptionBook['backlog_quarters']],
             specialCharge: $specialCharge,
         );
-    }
-
-    public function getMarginReversionSpeed(): float
-    {
-        // Rapid innovation cycles and intense technological competition erode excess margins quickly
-        return self::TECH_REVERSION_SPEED;
-    }
-
-    /** Asset-light platforms trade on cash earnings, DCF and recurring revenue power, not on book value. */
-    protected function getFairValueBookWeight(float $normalizedEps): float
-    {
-        return 0.0;
     }
 
     /**

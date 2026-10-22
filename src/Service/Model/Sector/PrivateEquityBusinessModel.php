@@ -50,11 +50,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
      */
     public const FIXED_COST_LABOR_SHARE = 0.70;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.5;
-    }
-
     // --- Leverage & Aggression Physics ---
     /** Minimum leverage aggression multiplier when the firm is unlevered. */
     public const MIN_LEVERAGE_AGGRESSION = 0.15;
@@ -135,6 +130,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const DEBT_GATE_LBO_DRAG_THRESHOLD = 0.30;
     /** Scalar applied to debt expansion capacity during a severe deal drought. */
     public const DEBT_GATE_DROUGHT_SCALAR = 0.25;
+    /** A fund's hoard is dry powder measured against the debt it carries. */
+    public const HOARDING_BASIS = 'total_debt';
     /** Cash-to-debt ratio threshold triggering standard hoarder status. */
     public const HOARDER_THRESHOLD         = 0.15;
     /** Cash-to-debt ratio threshold triggering mega hoarder status. */
@@ -171,6 +168,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const LORE_BUST_GAP_THRESHOLD   = -0.020;
     /** Z-score contraction threshold triggering PE Deal Drought lore. */
     public const LORE_BUST_Z_SCORE         = -1.50;
+
+    // --- Credit Thresholds ---
+    /** Most wholesale debt the model carries per unit of equity (2.5x equity). */
+    public const WHOLESALE_LEVERAGE_LIMIT = 2.5;
 
     private function calculateLeverageAggression(Stock $stock): float
     {
@@ -430,16 +431,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
         return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
-    }
-
-    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
-    {
-        $excessCash = max(0.0, $treasury - $targetCashReserves);
-        return [
-            'excess_cash'     => $excessCash,
-            'is_hoarder'      => $excessCash > ($totalDebt * self::HOARDER_THRESHOLD),
-            'is_mega_hoarder' => $excessCash > ($totalDebt * self::MEGA_HOARDER_THRESHOLD),
-        ];
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float

@@ -261,7 +261,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
     // --- Patent Moat & Capital Structure Rails ---
     /** Operating margin mean reversion speed: slower speed reflects multi-year patent monopoly protection. */
-    public const PATENT_REVERSION_SPEED    = 2.5;
+    public const MARGIN_REVERSION_SPEED    = 2.5;
     /** Minimum interest coverage ratio required to permit recapitalization for binary R&D models. */
     public const MIN_RECAP_ICR_FLOOR       = 15.0;
     /** Target leverage as a share of the debt tolerance; below it the firm is under-levered. */
@@ -288,20 +288,27 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Years between the two generic benchmarks. */
     public const GENERIC_SHARE_WINDOW_YEARS = 8.0;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
+    // --- Return Reversion ---
+    /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
+    public const ROIC_REVERSION_SPEED = 0.15;
+    /** Excess return over the required return the moat sustains (1.5pp). */
+    public const MOAT_SPREAD = 0.015;
 
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
+    // --- Capital Cycle ---
+    /** Share of construction in progress completed into plant each quarter (12.5%). */
+    public const CAPEX_COMPLETION_RATE = 0.125;
+    /**
+     * Net working capital as a share of revenue (10%). Clinical drug inventory and specialized biologic materials
+     * buffer.
+     */
+    public const WORKING_CAPITAL_INTENSITY = 0.10;
 
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.125;
-    }
+    // --- Valuation ---
+    /**
+     * Weight of book value against earnings value in the consensus fair value: none. Clinical-stage biotechs trade
+     * entirely on pipeline rNPV and cash runway, not on book.
+     */
+    public const FAIR_VALUE_BOOK_WEIGHT = 0.0;
 
     /**
      * Trend real growth plus the measured drift in each book's share of GDP, blended by the share still under
@@ -898,17 +905,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getMarginReversionSpeed(): float
-    {
-        // Patents provide multi-year protection, so excess margins revert more slowly than standard tech
-        return self::PATENT_REVERSION_SPEED;
-    }
-
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.10; // Clinical drug inventory and specialized biologic materials buffer
-    }
-
     /**
      * R&D pays off through the pipeline only: the reinvestment ratio sets next quarter's Phase III entries (a
      * portfolio starved of research stops producing late-stage programmes) and nothing else. The shared margin
@@ -924,12 +920,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $trendRatio = $depreciationRate > 0.0 ? 1.0 + ($this->getSecularGrowthRate($stock) / $depreciationRate) : 1.0;
 
         $this->persistState($stock, self::STATE_RND_REPLACEMENT_RATIO, max(0.0, $reinvestmentRatio) / $trendRatio);
-    }
-
-    /** Clinical-stage biotechs trade entirely on pipeline rNPV and cash runway, not on book. */
-    protected function getFairValueBookWeight(float $normalizedEps): float
-    {
-        return 0.0;
     }
 
     /**

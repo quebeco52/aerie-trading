@@ -82,54 +82,17 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      * Equity at the standard unsecured REIT bond covenant, total debt at most 60% of total undepreciated assets: below
      * it the trust is in the agency's grey zone.
      */
-    public const COVENANT_UNDEPRECIATED_EQUITY_SHARE = 40.0;
+    public const WARNING_EQUITY_THRESHOLD = 40.0;
     /** Equity at debt of 75% of undepreciated assets: distressed, its unencumbered pool gone. */
-    public const DISTRESSED_UNDEPRECIATED_EQUITY_SHARE = 25.0;
+    public const DISTRESS_EQUITY_THRESHOLD = 25.0;
     /** Equity at debt of 90% of undepreciated assets: insolvent, the property worth less than what is owed on it. */
-    public const INSOLVENT_UNDEPRECIATED_EQUITY_SHARE = 10.0;
+    public const BANKRUPT_EQUITY_THRESHOLD = 10.0;
 
     // --- Analyst Visibility & Error ---
     /** Base analyst visibility into predictable contracted commercial real estate cash flows. */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
     /** Standard deviation of Wall Street analyst error when estimating REIT revenues. */
     public const BASE_COVERAGE_ERROR = 0.10;
-
-    public function getMinIcr(): float
-    {
-        return 1.05;
-    }
-    public function getBankruptEquityThreshold(): float
-    {
-        return self::INSOLVENT_UNDEPRECIATED_EQUITY_SHARE;
-    }
-    public function getDistressEquityThreshold(): float
-    {
-        return self::DISTRESSED_UNDEPRECIATED_EQUITY_SHARE;
-    }
-    public function getWarningEquityThreshold(): float
-    {
-        return self::COVENANT_UNDEPRECIATED_EQUITY_SHARE;
-    }
-    public function getDividendCrisisIcr(): float
-    {
-        return 1.05;
-    }
-    public function getBuybackMinIcr(): float
-    {
-        return 1.15;
-    }
-    public function getMoatSpread(): float
-    {
-        return 0.005;
-    }
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return 0.0;
-    }
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.125;
-    }
 
     // --- Cap Rate & Portfolio Turnover Rails ---
     /** Fraction of property portfolio acquired/divested per quarter adjusting baseline cap rate. */
@@ -201,7 +164,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const LEASING_BONUS_SCALE            = 0.015;
     /** Sensitivity of market cap rates to macroeconomic credit spread fluctuations. */
     public const CAP_RATE_SPREAD_SENSITIVITY    = 1.20;
-    /** Quarterly share of the fixed-rate bond stock that matures and reprices (~7-year average unsecured tenor). */
+    /**
+     * Quarterly share of the fixed-rate bond stock that matures and reprices (~7-year ladder of unsecured notes and
+     * mortgages), so rate shocks reach FFO with a lag.
+     */
     public const DEBT_MATURITY_ROLLOVER_RATE    = 0.035;
     /** Minimum operating efficiency ratio (operating revenue / fixed costs) floor. */
     public const MIN_EFFICIENCY_RATIO           = 0.35;
@@ -249,7 +215,25 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     // --- Valuation & Lease Resistance Moat ---
     /** Half-life speed (quarters) at which long-term lease margins revert toward sector equilibrium. */
-    public const LEASE_REVERSION_SPEED      = 2.0;
+    public const MARGIN_REVERSION_SPEED      = 2.0;
+
+    // --- Return Reversion ---
+    /** Excess return over the required return the moat sustains (0.5pp). */
+    public const MOAT_SPREAD = 0.005;
+
+    // --- Capital Cycle ---
+    /** Share of construction in progress completed into plant each quarter (12.5%). */
+    public const CAPEX_COMPLETION_RATE = 0.125;
+    /** Net working capital as a share of revenue: none. */
+    public const WORKING_CAPITAL_INTENSITY = 0.0;
+
+    // --- Credit Thresholds ---
+    /** Minimum interest coverage the firm is held to (1.05x). */
+    public const MIN_ICR = 1.05;
+    /** Interest coverage below which a firm without a cash buffer is in a dividend crisis (1.05x). */
+    public const DIVIDEND_CRISIS_ICR = 1.05;
+    /** Interest coverage below which the firm stops repurchasing stock (1.15x). */
+    public const BUYBACK_MIN_ICR = 1.15;
 
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
@@ -545,11 +529,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return true;
     }
 
-    public function getMarginReversionSpeed(): float
-    {
-        return self::LEASE_REVERSION_SPEED;
-    }
-
     public function requiresAlternativeZScore(): bool
     {
         return true;
@@ -558,15 +537,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public function getLossGivenDefault(): float
     {
         return self::REIT_LOSS_GIVEN_DEFAULT;
-    }
-
-    /**
-     * Bond proxy: REITs ladder unsecured notes and mortgages over roughly seven years, so only a small
-     * slice of the fixed-rate book reprices each quarter and rate shocks reach FFO with a lag.
-     */
-    public function getDebtMaturityRolloverRate(): float
-    {
-        return self::DEBT_MATURITY_ROLLOVER_RATE;
     }
 
     /**

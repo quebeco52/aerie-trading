@@ -844,7 +844,7 @@ class MarketEngine
             // A financial is valued on tangible book, since its regulator deducts goodwill from capital. The same
             // earnings over the smaller base give the same value wherever the multiple is interior; the change is
             // that the floor and ceiling then bound price to TANGIBLE book, so goodwill cannot prop up the floor.
-            // A financial's equity return is its return on capital (FinancialPhysicsTrait::getEquityReturn()).
+            // A financial's equity return is its return on capital (BaseFinancialBusinessModel::getEquityReturn()).
             if ($strategy->isFinancial() && $tangibleBookValuePerShare !== null && $bookValuePerShare > 0.0) {
                 $tangibleBook = max(0.0, $tangibleBookValuePerShare);
                 $returnOnTangible = $tangibleBook > 0.0 ? $equityReturn * $bookValuePerShare / $tangibleBook : 0.0;

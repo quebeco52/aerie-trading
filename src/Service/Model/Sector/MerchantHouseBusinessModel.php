@@ -121,16 +121,12 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
      */
     public const BASE_COVERAGE_VISIBILITY = 0.50;
 
+    // --- Seasonality ---
     /**
-     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest shipments and the
-     * pre-winter energy build move more tonnage across the back half of the year.
-     *
-     * @return array<int, float>
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest shipments and the pre-winter energy
+     * build move more tonnage across the back half of the year.
      */
-    public function getSeasonalityFactors(): array
-    {
-        return [0.95, 0.99, 1.03, 1.03];
-    }
+    public const SEASONALITY_FACTORS = [0.95, 0.99, 1.03, 1.03];
 
     /**
      * The tonnage the wharves and desks are staffed to, plus terminal throughput, at the class's fixed mix.
