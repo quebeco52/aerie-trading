@@ -103,6 +103,8 @@ class MergerAndAcquisitionEngine
     public const LIMIT_MERGER_REVIEW = 'the largest deal merger review clears';
     /** The largest deal that keeps the acquirer's tangible capital ratio well capitalized. */
     public const LIMIT_CAPITAL_TEST = 'the largest deal that keeps it well capitalized';
+    /** The largest borrowed deal its lenders' covenant allows on the combined firm's normal EBITDA. */
+    public const LIMIT_COVENANT = "the largest deal its lenders' covenant allows";
 
     // --- M&A Synergy & Target Returns (Log-Normal) ---
     /**
@@ -488,6 +490,7 @@ class MergerAndAcquisitionEngine
         $market = $this->resolveLargestAvailableTarget($ctx);
         $this->capPurchasePrice($ctx, $market['price'], $market['review_binds'] ? self::LIMIT_MERGER_REVIEW : self::LIMIT_AVAILABLE_MARKET);
         $this->capPurchasePrice($ctx, $this->resolveLargestCapitalClearedDeal($ctx), self::LIMIT_CAPITAL_TEST);
+        $this->capPurchasePrice($ctx, $this->resolveLargestCovenantClearedDeal($ctx), self::LIMIT_COVENANT);
         if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
             $ctx->dealExecuted = false;
         }
@@ -579,6 +582,45 @@ class MergerAndAcquisitionEngine
         // Past the usable cash the rest is borrowed: (C − gP) / (A − gP + ℓP + P − U) ≥ f.
         return ($base['capital'] - ($floor * ($base['assets'] - $ctx->usableTreasury)))
             / max(1e-9, $goodwillPerDollar + ($floor * (1.0 - $goodwillPerDollar + $leasePerDollar)));
+    }
+
+    /**
+     * The largest borrowed deal after which funded net debt stays at the covenant multiple of the combined firm's
+     * normal EBITDA, the acquirer's plus the operating income the target is bought for: a price P moves net debt by P,
+     * cash or debt, so ND + P <= k (N + aP). The lender tests the merged business at normal earnings, not the
+     * acquirer's trailing book. A cash or stock deal borrows nothing, and a target whose own earnings carry its price
+     * at the multiple is not limited by it.
+     */
+    private function resolveLargestCovenantClearedDeal(AcquisitionContext $ctx): float
+    {
+        if (!($ctx->config['use_leverage'] ?? false)) {
+            return INF;
+        }
+
+        $multiple = $this->debtEngine->resolveCovenantLeverageMultiple($ctx->acquirer, $ctx->strategy);
+        $normalEbitda = $multiple !== null
+            ? $ctx->strategy->getNormalEbitda($ctx->acquirer, $ctx->macroState->corporateTaxRate, $ctx->health->rawMetrics->depreciation ?? 0.0)
+            : null;
+        if ($multiple === null || $normalEbitda === null) {
+            return INF;
+        }
+
+        return self::covenantClearedPrice($multiple, $normalEbitda, $ctx->currentDebt - $ctx->treasury, $this->valueTarget($ctx, 1.0)['operating_income']);
+    }
+
+    /**
+     * The price P at which net debt ND + P reaches the multiple k of the combined EBITDA N + aP, where a is the
+     * operating income each unit of price buys: P = (kN - ND) / (1 - ka). Unbounded once the target's own earnings
+     * carry its price at the multiple (ka >= 1); nothing when the acquirer is already there.
+     */
+    public static function covenantClearedPrice(float $multiple, float $normalEbitda, float $netDebt, float $ebitdaPerUnitPrice): float
+    {
+        $slack = 1.0 - ($multiple * $ebitdaPerUnitPrice);
+        if ($slack <= 0.0) {
+            return INF;
+        }
+
+        return max(0.0, (($multiple * $normalEbitda) - $netDebt) / $slack);
     }
 
     /**
@@ -842,7 +884,7 @@ class MergerAndAcquisitionEngine
         ]);
         $terms = 'Funded with ' . implode(' and ', $funding) . "; {$billions($ctx->goodwillRecorded)} booked as goodwill.";
 
-        $sizedByRule = in_array($ctx->bindingLimit, [self::LIMIT_SPEND_CAP, self::LIMIT_AVAILABLE_MARKET, self::LIMIT_MERGER_REVIEW, self::LIMIT_CAPITAL_TEST], true);
+        $sizedByRule = in_array($ctx->bindingLimit, [self::LIMIT_SPEND_CAP, self::LIMIT_AVAILABLE_MARKET, self::LIMIT_MERGER_REVIEW, self::LIMIT_CAPITAL_TEST, self::LIMIT_COVENANT], true);
 
         return $sizedByRule ? "{$terms} Sized to {$ctx->bindingLimit}." : $terms;
     }

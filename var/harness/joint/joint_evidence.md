@@ -848,3 +848,101 @@ Verdict: direction confirmed, magnitude about half the recursion (CASC -3.5 vs -
 Caveats: CASC ND/TTM EBITDA > 10 in 10 of 16 base seeds and 8 of 16 rpRC seeds (peak 495 in one base run), so breaches are
 driven by EBITDA troughs, not by the leverage the target sets; the absurdity list is otherwise the same in both arms
 (ALBT BOWR CANV FULM IBHI SINK WEAV).
+
+## 2026-10-22 Batch V (covenant cap on debt-funded acquisitions, replayed macro)
+
+Question: does capping a leveraged deal so funded net debt (debt - cash + price) stays at the manager share of the
+covenant on combined normal EBITDA cut FALC's and the board's acquisition debt and covenant distress without
+disturbing the board?
+
+Harness: JointHarnessTest.php via run.sh; arm rpMA = tree-MA (git archive HEAD 999d4ab1 + scratchpad macov.patch, src
+only, = working-tree DebtEngine + MergerAndAcquisitionEngine diff) vs rpRC on disk (src checked identical to HEAD
+999d4ab1). Both replay runs/recNS-<s>.macro.gz, CREDIT=1, 20 y, 360 ticks/y, seeds 1-16 (stage 2: FALC unclear at 8).
+`CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-16 rpMA && python3 var/harness/joint/v_an.py 1-16`.
+Tree and cache deleted. Output v_an.out (1-16), v_an_1-8.out.
+
+```
+Batch V, seeds 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16: rpMA - rpRC, paired by seed (replay of recNS macros)
+
+## 1a. board acquisitions per run
+| quantity | rpRC | rpMA | diff (se) t | diff range | n |
+|---|---|---|---|---|---|
+| board acquisitions | 157.2 | 162.1 | +4.94 (6) t+0.8 | -42..+37 | 16 |
+| board debt-funded acquisitions | 135.8 | 141.2 | +5.44 (5.6) t+1.0 | -42..+42 | 16 |
+| board debt-funded acq $B | 2139 | 1421 | -718 (3.9e+02) t-1.9 | -5.31e+03..+300 | 16 |
+| board ex-fin debt-funded acq $B | 1217 | 1017 | -200 (64) t-3.1 | -768..+210 | 16 |
+| board goodwill added $B | 707.1 | 580.4 | -127 (70) t-1.8 | -907..+210 | 16 |
+
+## 1b. acquisitions per run, five largest drops
+| firm | rpRC | rpMA | diff (se) t |
+|---|---|---|---|
+| CHUF | 3.56 | 1.50 | -2.06 (1.55) t-1.3 |
+| GULL | 10.50 | 8.50 | -2.00 (1.68) t-1.2 |
+| GANN | 2.88 | 1.06 | -1.81 (1.15) t-1.6 |
+| LAKE | 1.69 | 0.19 | -1.50 (1.01) t-1.5 |
+| WREN | 10.69 | 9.19 | -1.50 (1.89) t-0.8 |
+
+## 1c. debt-funded acquisitions per run (n, $B debt rise)
+| quantity | rpRC | rpMA | diff (se) t | diff range | n |
+|---|---|---|---|---|---|
+| FALC dfa n | 4.188 | 5.25 | +1.06 (0.91) t+1.2 | -4..+8 | 16 |
+| FALC dfa $B | 111 | 58.43 | -52.6 (20) t-2.7 | -188..+63.7 | 16 |
+| CASC dfa n | 1.438 | 1.25 | -0.188 (0.68) t-0.3 | -6..+5 | 16 |
+| CASC dfa $B | 123.3 | 34.73 | -88.5 (43) t-2.0 | -501..+67.3 | 16 |
+| SINK dfa n | 0.75 | 0.875 | +0.125 (0.58) t+0.2 | -4..+7 | 16 |
+| SINK dfa $B | 7.381 | 5.62 | -1.76 (5.4) t-0.3 | -56.6..+48.8 | 16 |
+| HUMM dfa n | 7.125 | 7.812 | +0.688 (1) t+0.7 | -7..+10 | 16 |
+| HUMM dfa $B | 126.3 | 141.7 | +15.3 (22) t+0.7 | -159..+160 | 16 |
+| IBHI dfa n | 0.625 | 1.5 | +0.875 (0.74) t+1.2 | -4..+8 | 16 |
+| IBHI dfa $B | 16.19 | 28.91 | +12.7 (17) t+0.7 | -139..+148 | 16 |
+
+## 2. FALC / CASC covenant distress
+| quantity | rpRC | rpMA | diff (se) t | diff range | n |
+|---|---|---|---|---|---|
+| FALC breach quarters | 13.62 | 11.44 | -2.19 (1.3) t-1.7 | -10..+7 | 16 |
+| FALC BB-or-below share % | 53.75 | 44.84 | -8.91 (3.6) t-2.5 | -37.5..+13.8 | 16 |
+| FALC reorganisations | 0 | 0 | +0 (0) t=0 | +0..+0 | 16 |
+| FALC Ch11 lines | 0 | 0 | +0 (0) t=0 | +0..+0 | 16 |
+| FALC payment defaults | 0 | 0 | +0 (0) t=0 | +0..+0 | 16 |
+| FALC peak ND/EBITDA | 6.646 | 4.547 | -2.1 (0.92) t-2.3 | -12.9..+0.501 | 16 |
+| FALC median ND/EBITDA | 2.153 | 2.105 | -0.0479 (0.064) t-0.7 | -0.722..+0.498 | 16 |
+| FALC ROE % | 13.87 | 15.08 | +1.21 (0.65) t+1.8 | -3.37..+5.82 | 16 |
+| FALC payout (div+bb)/NI | 0.6872 | 0.7518 | +0.0646 (0.022) t+2.9 | -0.054..+0.217 | 16 |
+| CASC breach quarters | 23.94 | 19.69 | -4.25 (1.4) t-3.1 | -19..+3 | 16 |
+| CASC BB-or-below share % | 2.188 | 1.484 | -0.703 (1.2) t-0.6 | -12.5..+5 | 16 |
+| CASC reorganisations | 0 | 0 | +0 (0) t=0 | +0..+0 | 16 |
+| CASC Ch11 lines | 0 | 0 | +0 (0) t=0 | +0..+0 | 16 |
+| CASC payment defaults | 0.375 | 0 | -0.375 (0.38) t-1.0 | -6..+0 | 16 |
+| CASC peak ND/EBITDA | 21.73 | 120.6 | +98.9 (56) t+1.8 | -67.4..+736 | 16 |
+| CASC median ND/EBITDA | 1.689 | 1.58 | -0.109 (0.06) t-1.8 | -0.712..+0.214 | 16 |
+| CASC ROE % | 13.09 | 13.76 | +0.674 (0.39) t+1.7 | -1.61..+3.44 | 16 |
+| CASC payout (div+bb)/NI | 0.9341 | 0.9915 | +0.0574 (0.024) t+2.4 | -0.0633..+0.362 | 16 |
+
+## 3. board
+| quantity | rpRC | rpMA | diff (se) t | diff range | n |
+|---|---|---|---|---|---|
+| board mkt-cap CAGR ex funds/POOL/RIVR % | 4.976 | 4.895 | -0.0806 (0.061) t-1.3 | -0.521..+0.434 | 16 |
+| Ch11/run | 0 | 0.0625 | +0.0625 (0.062) t+1.0 | +0..+1 | 16 |
+| payment-default firms/run | 0.1875 | 0.125 | -0.0625 (0.062) t-1.0 | -1..+0 | 16 |
+| rescues/run | 2.938 | 2.5 | -0.438 (0.36) t-1.2 | -4..+1 | 16 |
+| board BB-or-below share % | 8.669 | 8.817 | +0.148 (0.19) t+0.8 | -1.67..+1.55 | 16 |
+| EW index return %/y | 9.372 | 9.341 | -0.0315 (0.039) t-0.8 | -0.311..+0.332 | 16 |
+| EW index vol % | 15.25 | 15.2 | -0.0568 (0.039) t-1.5 | -0.31..+0.223 | 16 |
+| CW index return %/y | 8.008 | 8.042 | +0.034 (0.056) t+0.6 | -0.378..+0.329 | 16 |
+| CW index vol % | 15.33 | 15.36 | +0.0288 (0.072) t+0.4 | -0.523..+0.652 | 16 |
+
+## 4. firms with >= 2 acquisitions/run in A and none in B
+  none
+  largest rises: SILC (11.2 -> 14.7), TICK (11.2 -> 12.7), BUZT (0.2 -> 1.6)
+
+## absurdity scan (firm@seed)
+  rpRC: none
+  rpMA: none
+```
+
+Caveats: debt-funded acquisition $ is the debt rise in goodwill-rise quarters (no deal records in the output), so it
+includes same-quarter recap and revolver draws; the board total includes banks' funding moves (use the ex-fin row).
+CASC peak ND/EBITDA +99 is a ratio artefact: on seeds 1, 3, 5 its TTM EBITDA fell to $0.6-2B in one quarter (net
+debt unchanged at ~$300-430B); median ND/EBITDA and breach quarters both fall. Board Ch11 +1 is FULM seed 11, which
+already had 6 payment defaults in rpRC (7 in rpMA). No firm that made >= 2 deals/run stops; deal counts are unchanged,
+sizes fall.

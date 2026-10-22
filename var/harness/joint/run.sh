@@ -21,7 +21,7 @@ case "$1" in
   rpSW)  TREE=$H/tree-swan;   MACRO_REPLAY=$RUNS/recNS-$2.macro.gz ;;
   rpD12) TREE=$H/tree-d12;    MACRO_REPLAY=$RUNS/recNS-$2.macro.gz ;;
   rpIPP) TREE=$H/tree-ipp;    MACRO_REPLAY=$RUNS/recNS-$2.macro.gz ;;
-  rpT|rpF0|rpF|rpX1|rpX2|rpBC|rpRC) TREE=$H/tree-${1#rp}; MACRO_REPLAY=$RUNS/recNS-$2.macro.gz ;;
+  rpT|rpF0|rpF|rpX1|rpX2|rpBC|rpRC|rpMA) TREE=$H/tree-${1#rp}; MACRO_REPLAY=$RUNS/recNS-$2.macro.gz ;;
   pre-*|rev-*) TREE=$H/tree-$1 ;;
   *) echo "usage: run.sh live|pre|<tree arm> <seed>" >&2; exit 2 ;;
 esac

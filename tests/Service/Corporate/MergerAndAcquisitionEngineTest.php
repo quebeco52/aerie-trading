@@ -563,6 +563,50 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertBalanced($stock, 'a leveraged acquisition');
     }
 
+    /** A price P moves net debt by P and EBITDA by aP, so the covenant clears P = (kN - ND) / (1 - ka). */
+    public function testTheCovenantClearedPriceKeepsTheCombinedFirmAtItsMultiple(): void
+    {
+        $price = MergerAndAcquisitionEngine::covenantClearedPrice(2.0, 10.0, 12.0, 0.10);
+        $this->assertEqualsWithDelta(10.0, $price, 1e-12);
+        $this->assertEqualsWithDelta(2.0 * (10.0 + (0.10 * $price)), 12.0 + $price, 1e-12, 'net debt lands on the multiple');
+
+        $this->assertSame(0.0, MergerAndAcquisitionEngine::covenantClearedPrice(2.0, 10.0, 25.0, 0.10), 'already past it');
+        $this->assertSame(INF, MergerAndAcquisitionEngine::covenantClearedPrice(2.0, 10.0, 12.0, 0.50), 'the target carries its own price');
+    }
+
+    /**
+     * Acquisition debt stops where the combined firm's funded net debt reaches its covenant multiple on normal EBITDA,
+     * as the recapitalisation does: a firm already there borrows nothing for a deal, one with a little room buys a
+     * smaller business sized to it, and one with no long-run return yet is sized as before.
+     */
+    public function testALeveragedDealStopsAtTheCovenantOnNormalEbitda(): void
+    {
+        $deal = function (?string $longRunReturn): ?array {
+            $this->setUp();
+            $stock = $this->buildLedgeredAcquirer('CVNT', treasury: 1_000_000_000.0, debt: 6_000_000_000.0, shares: 100_000_000.0);
+            $stock->setLongRunReturn($longRunReturn);
+            $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
+            $this->debtEngineMock->method('resolveCovenantLeverageMultiple')->willReturn(2.0);
+            $this->debtEngineMock->method('issueDebt')->willReturnCallback(
+                static function (Stock $borrower, float $amount): void {
+                    $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
+                },
+            );
+
+            return $this->engine->evaluatePrivateAcquisition($stock, new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035), 1.0);
+        };
+
+        $unlimited = $deal(null);
+        $this->assertIsArray($unlimited, 'Control: with no long-run return yet the deal is sized as before.');
+
+        $this->assertNull($deal('0.005'), 'At its covenant on normal EBITDA the firm borrows nothing to buy.');
+
+        $sized = $deal('0.13');
+        $this->assertIsArray($sized);
+        $this->assertLessThan((float) $unlimited['spent'], (float) $sized['spent']);
+        $this->assertStringEndsWith('Sized to ' . MergerAndAcquisitionEngine::LIMIT_COVENANT . '.', $sized['event']['description']);
+    }
+
     /**
      * The pro-forma credit check strikes the acquirer's Merton distance at its business risk, and the deal's notes
      * price at the rating that pro-forma balance sheet carries. It used to de-lever equity volatility across the

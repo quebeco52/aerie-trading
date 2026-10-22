@@ -199,3 +199,12 @@ Evidence: `joint_evidence.md`.
   breach quarters (ND/TTM EBITDA >= covL), reorgs, Ch11, defaults, EoD, peak/median ND/EBITDA, recap bonds, debt-funded
   acquisitions; CASC FALC EIDR WADE REDW DIPR BB share / payout / ROE; board ex funds/POOL/RIVR, EW/CW, recap movers,
   absurdity scan. Output u_an.out (1-16), u_an_1-8.out.
+- Batch V arm (covenant cap on debt-funded acquisitions): `rpMA` = tree-MA (git archive HEAD 999d4ab1 + scratchpad
+  macov.patch: MergerAndAcquisitionEngine/DebtEngine cap a leveraged deal's price so funded net debt (debt - cash +
+  price) stays at the manager's share of the covenant on combined normal EBITDA) replaying `runs/recNS-<s>.macro.gz`;
+  base `rpRC` on disk (its src = HEAD 999d4ab1, checked). Tree by `PAIRS="MA:macov" mk_trees_t.sh`, tree and cache
+  deleted. `CREDIT=1 bin/harness-batch var/harness/joint/run.sh 1-8 rpMA` (~100 s per 8). `v_an.py <seeds> [A B]`
+  (default rpRC rpMA), paired: board acquisitions (goodwill steps), debt-funded count and debt rise $ (proxy: no deal
+  records in the output), five largest per-firm drops, FALC/CASC/SINK/HUMM/IBHI; FALC/CASC breach quarters, BB share,
+  reorgs, Ch11, defaults, peak ND/EBITDA, ROE, payout; board CAGR, Ch11/defaults/rescues, BB share, EW/CW; firms whose
+  acquisitions stop. Output v_an.out.

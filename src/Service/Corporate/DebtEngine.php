@@ -760,7 +760,7 @@ class DebtEngine
         $managerDebtTolerance = $macroDebtTolerance * $managerShare;
         $leverageTarget = min(
             $strategy->getLeverageTarget($managerDebtTolerance),
-            $this->resolveCovenantLeverageTarget($stock, $strategy, $corporateTaxRate, $depreciation, $ebitdaCovenantLimit, $managerShare, $netDebtCapital, $recapDebt, $equity),
+            $this->resolveCovenantLeverageTarget($stock, $strategy, $corporateTaxRate, $depreciation, $netDebtCapital, $recapDebt, $equity),
         );
         $isUnderLeveraged = $strategy->getTargetCapitalRatio($stock) === null
             && $strategy->getCapacityShare($stock) === null
@@ -797,17 +797,33 @@ class DebtEngine
     }
 
     /**
-     * The book debt-to-equity a recapitalisation reaches when funded net debt arrives at the manager's share of the
-     * covenant on normal EBITDA: a repurchase R of that room moves the ratio to (D + R) / (E - R). Unbounded for a
-     * sector with no covenant and for a firm with no long-run return yet.
+     * The funded net debt a firm's lenders let it run to, as a multiple of normal EBITDA: its manager's share of the
+     * sector covenant. Null for a sector with no covenant. The recapitalisation target and acquisition debt both stop
+     * at it.
      */
-    private function resolveCovenantLeverageTarget(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $taxRate, float $depreciation, float $covenant, float $managerShare, float $netDebt, float $recapDebt, float $equity): float
+    public function resolveCovenantLeverageMultiple(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy): ?float
     {
-        $normalEbitda = $covenant < self::EBITDA_COVENANT_EXEMPT_LIMIT ? $strategy->getNormalEbitda($stock, $taxRate, $depreciation) : null;
-        if ($normalEbitda === null) {
+        $covenant = (float) (\App\Data\Company\Sectors::metricsFor($stock->getIndustry())['ebitda_limit'] ?? self::DEFAULT_EBITDA_COVENANT_LIMIT);
+        if ($covenant >= self::EBITDA_COVENANT_EXEMPT_LIMIT) {
+            return null;
+        }
+
+        return $strategy->getLeverageTarget($covenant * min(1.0, $stock->getManagementProfile()->leverageBias()));
+    }
+
+    /**
+     * The book debt-to-equity a recapitalisation reaches when funded net debt arrives at the covenant multiple on
+     * normal EBITDA: a repurchase R of that room moves the ratio to (D + R) / (E - R). Unbounded for a sector with no
+     * covenant and for a firm with no long-run return yet.
+     */
+    private function resolveCovenantLeverageTarget(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $taxRate, float $depreciation, float $netDebt, float $recapDebt, float $equity): float
+    {
+        $multiple = $this->resolveCovenantLeverageMultiple($stock, $strategy);
+        $normalEbitda = $multiple !== null ? $strategy->getNormalEbitda($stock, $taxRate, $depreciation) : null;
+        if ($multiple === null || $normalEbitda === null) {
             return INF;
         }
-        $room = ($strategy->getLeverageTarget($covenant * $managerShare) * $normalEbitda) - $netDebt;
+        $room = ($multiple * $normalEbitda) - $netDebt;
 
         return $room >= $equity ? INF : ($recapDebt + $room) / max(1.0, $equity - $room);
     }
