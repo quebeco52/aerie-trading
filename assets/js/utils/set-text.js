@@ -20,3 +20,8 @@ export function setText(node, text) {
     node.textContent = text;
     return changed;
 }
+
+/** setText() on the element with this id, for a page that writes its figures by id. */
+export function setTextById(id, text) {
+    return setText(document.getElementById(id), text);
+}

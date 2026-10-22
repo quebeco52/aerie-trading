@@ -236,6 +236,19 @@ final class TemplateStyleTest extends TestCase
     }
 
     /**
+     * A missing figure prints "—" (UiExtension::NOT_AVAILABLE, formatters.js NOT_AVAILABLE) in pages and charts alike.
+     */
+    public function testMissingFiguresPrintTheDash(): void
+    {
+        $hits = [];
+        foreach ([...$this->templates(), ...$this->scripts()] as $path => $source) {
+            $hits = [...$hits, ...$this->grep($path, $source, '/\bN\/A\b/')];
+        }
+
+        $this->assertSame([], $hits, 'Print a missing figure as "—": |pct and the other filters do it on null, NOT_AVAILABLE in scripts.');
+    }
+
+    /**
      * Each kind of figure has one filter, so a spread, a P/E or a change prints alike on every page: basis points, the
      * HHI and multiples by hand, a rate handed over as a percent (`x|number_format(2) }}%`), a hand-signed rise, and a
      * missing figure printed as a hyphen rather than "—".

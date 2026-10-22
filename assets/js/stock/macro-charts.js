@@ -1,6 +1,6 @@
 import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
-import { formatPercent } from '../utils/formatters.js';
-import { destroyChartInstance } from '../utils/chart-config.js';
+import { formatPercent, NOT_AVAILABLE } from '../utils/formatters.js';
+import { destroyChartInstance, seriesOptions } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 import {
     quarterLabels, trailingGrowth, realGdpLevel, nominalGdpLevel, potentialGdpLevel, costPushContribution, gapBreakdownSeries
@@ -8,7 +8,6 @@ import {
 
 // Series take the categorical slots in legend order (SERIES, app.css --color-series-*), the chart's
 // headline first. Reference lines stay neutral; bars that encode a sign use the up and down colours.
-const GRID_COLOR = withAlpha(THEME_COLORS.grid, 0.5);
 
 let macroEconomyChartInstance = null;
 let macroRatesChartInstance = null;
@@ -104,17 +103,17 @@ function updateMacroHud(d) {
         + (lastRealWageGap === undefined ? '' : ` · vs productivity ${formatPercent(lastRealWageGap, 1, true, true)}`));
     const lastEquityGap = [...d.equityWealthGapData].reverse().find(v => v !== null && !isNaN(v));
     const lastHousingGap = lastKnown(d.housingWealthGapData);
-    setHud('hud-macroWealthEffectChart', `Equity ${lastEquityGap === undefined ? '-' : signed(lastEquityGap, 1) + '%'} · Housing ${lastHousingGap === undefined ? '-' : signed(lastHousingGap, 1) + '%'}`);
+    setHud('hud-macroWealthEffectChart', `Equity ${lastEquityGap === undefined ? NOT_AVAILABLE : signed(lastEquityGap, 1) + '%'} · Housing ${lastHousingGap === undefined ? NOT_AVAILABLE : signed(lastHousingGap, 1) + '%'}`);
     const lastTed = [...d.interbankSpreadBpsData].reverse().find(v => v !== null);
-    setHud('hud-macroInterbankLiquidityChart', lastTed !== undefined ? `${lastTed.toFixed(0)} bps` : '-');
+    setHud('hud-macroInterbankLiquidityChart', lastTed !== undefined ? `${lastTed.toFixed(0)} bps` : NOT_AVAILABLE);
     setHud('hud-macroPropertyChart', `Commercial ${last(d.creEmaData).toFixed(1)} · Residential ${last(d.residentialEmaData).toFixed(1)} · Starts ${last(d.housingStartsData).toFixed(1)}`);
     setHud('hud-macroSentimentChart', `Sentiment ${last(d.sentimentData).toFixed(0)} · Deals ${last(d.dealActivityData).toFixed(0)}`);
     const lastGold = [...d.goldPriceData].reverse().find(v => v !== null && !isNaN(v));
-    setHud('hud-macroCommoditiesChart', `Energy ${last(d.energyPriceData).toFixed(1)} · Metals ${last(d.metalsEmaData).toFixed(1)} · Gold ${lastGold === undefined ? '-' : lastGold.toFixed(1)} · Gas ${last(d.naturalGasPriceData).toFixed(1)}`);
+    setHud('hud-macroCommoditiesChart', `Energy ${last(d.energyPriceData).toFixed(1)} · Metals ${last(d.metalsEmaData).toFixed(1)} · Gold ${lastGold === undefined ? NOT_AVAILABLE : lastGold.toFixed(1)} · Gas ${last(d.naturalGasPriceData).toFixed(1)}`);
     const spreads = energySpreadDollars(d.powerPriceIndexData, d.naturalGasPriceData);
     const lastPower = [...spreads.power].reverse().find(v => v !== null && !isNaN(v));
     const lastSpark = [...spreads.spark].reverse().find(v => v !== null && !isNaN(v));
-    setHud('hud-macroEnergySpreadsChart', `Crack $${last(d.crackSpreadData).toFixed(2)}/bbl · Power ${lastPower === undefined ? '-' : '$' + lastPower.toFixed(1)} · Spark ${lastSpark === undefined ? '-' : '$' + lastSpark.toFixed(1)}/MWh`);
+    setHud('hud-macroEnergySpreadsChart', `Crack $${last(d.crackSpreadData).toFixed(2)}/bbl · Power ${lastPower === undefined ? NOT_AVAILABLE : '$' + lastPower.toFixed(1)} · Spark ${lastSpark === undefined ? NOT_AVAILABLE : '$' + lastSpark.toFixed(1)}/MWh`);
     setHud('hud-macroTradeLogisticsChart', `FX ${last(d.fxEmaData).toFixed(1)} · Freight ${last(d.freightEmaData).toFixed(1)} · Pressure ${last(d.gscpiData) > 0 ? '+' : ''}${last(d.gscpiData).toFixed(2)}σ`);
     const lastFundSize = [...d.sovereignFundSizeData].reverse().find(v => v !== null && !isNaN(v));
     const lastFundWeight = [...d.sovereignFundWeightData].reverse().find(v => v !== null && !isNaN(v));
@@ -122,14 +121,14 @@ function updateMacroHud(d) {
     const lastFundDraw = [...d.sovereignFundDrawData].reverse().find(v => v !== null && !isNaN(v));
     const lastFundEquity = [...d.sovereignFundEquityData].reverse().find(v => v !== null && !isNaN(v));
     const lastFundDuty = [...d.sovereignFundDutyData].reverse().find(v => v !== null && !isNaN(v) && v > 0);
-    const fundPct = (v) => v === undefined ? '-' : `${v.toFixed(2)}%`;
+    const fundPct = (v) => v === undefined ? NOT_AVAILABLE : `${v.toFixed(2)}%`;
     // The header slot carries what the chart plots, as short as every other card's; the rest reads under the chart.
     setHud('hud-macroSovereignFundChart', lastFundSize === undefined
         ? 'No fund yet'
         : `District equity ${fundPct(lastFundWeight)} / ${fundPct(lastFundTarget)}`);
     setHud('stats-macroSovereignFundChart', lastFundSize === undefined
         ? ''
-        : `Fund ${lastFundSize.toFixed(0)}% of GDP · Draw ${fundPct(lastFundDraw)} of GDP · Equities ${lastFundEquity === undefined ? '-' : lastFundEquity.toFixed(1) + '%'} · Stamp duty ${lastFundDuty === undefined ? '-' : lastFundDuty.toFixed(2) + '% of GDP'}`);
+        : `Fund ${lastFundSize.toFixed(0)}% of GDP · Draw ${fundPct(lastFundDraw)} of GDP · Equities ${lastFundEquity === undefined ? NOT_AVAILABLE : lastFundEquity.toFixed(1) + '%'} · Stamp duty ${lastFundDuty === undefined ? NOT_AVAILABLE : lastFundDuty.toFixed(2) + '% of GDP'}`);
     setHud('hud-macroPublicDebtChart', `Debt ${last(d.sovereignDebtData).toFixed(1)}% · Risk premium ${last(d.sovereignRiskSpreadData).toFixed(0)} bps`);
     setHud('hud-macroGovtSpendingChart', `Spending ${last(d.govtSpendingEmaData).toFixed(1)} · Tax ${last(d.taxData).toFixed(1)}% · Deficit ${signed(last(d.primaryDeficitData), 1)}%`);
     setHud('hud-macroTermPremiumChart', `10Y ${last(d.yield10yData).toFixed(2)}% · Term premium ${last(d.termPremiumData) > 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
@@ -137,29 +136,29 @@ function updateMacroHud(d) {
     const lastHoldings = lastKnown(d.balanceSheetHoldingsData);
     const lastHoldingsChange = lastKnown(d.balanceSheetChangeData);
     setHud('hud-macroBalanceSheetChart', lastHoldings === undefined
-        ? '-'
+        ? NOT_AVAILABLE
         : !(d.balanceSheetHoldingsData ?? []).some(heldBps) ? 'None held'
         : `Holdings ${lastHoldings.toFixed(0)} bps` + (lastHoldingsChange === undefined ? '' : ` · Quarter ${signed(lastHoldingsChange, 0)} bps`));
     setHud('hud-macroFciChart', `FCI ${last(d.fciData) > 0 ? '+' : ''}${last(d.fciData).toFixed(2)}σ · Tightening ${last(d.sloosData) > 0 ? '+' : ''}${last(d.sloosData).toFixed(0)}%`);
     const lastFoodPush = lastKnown(d.foodPushData);
     const lastEnergyPush = lastKnown(d.energyPushData);
-    setHud('hud-macroCostPushChart', `Food ${lastFoodPush === undefined ? '-' : signed(lastFoodPush, 0) + ' bps'} · Energy ${lastEnergyPush === undefined ? '-' : signed(lastEnergyPush, 0) + ' bps'}`);
+    setHud('hud-macroCostPushChart', `Food ${lastFoodPush === undefined ? NOT_AVAILABLE : signed(lastFoodPush, 0) + ' bps'} · Energy ${lastEnergyPush === undefined ? NOT_AVAILABLE : signed(lastEnergyPush, 0) + ' bps'}`);
     const lastEbp = lastKnown(d.excessBondPremiumBpsData);
     setHud('hud-macroCreditCliffChart', `HY ${last(d.highYieldSpreadBpsData).toFixed(0)} bps · HY/IG ${last(d.creditCliffRatioData).toFixed(2)}x`
         + (lastEbp === undefined ? '' : ` · Excess premium ${signed(lastEbp, 0)} bps`));
     const lastEpu = lastKnown(d.policyUncertaintyData);
-    setHud('hud-macroPolicyUncertaintyChart', lastEpu === undefined ? '-' : `Index ${lastEpu.toFixed(0)}`);
+    setHud('hud-macroPolicyUncertaintyChart', lastEpu === undefined ? NOT_AVAILABLE : `Index ${lastEpu.toFixed(0)}`);
     const lastGdp = lastKnown(d.gdpGrowthData);
-    setHud('hud-macroGdpChart', lastGdp === undefined ? '-' : `${formatPercent(lastGdp, 2, true, true)} on the quarter`);
+    setHud('hud-macroGdpChart', lastGdp === undefined ? NOT_AVAILABLE : `${formatPercent(lastGdp, 2, true, true)} on the quarter`);
     const lastGapChange = lastKnown(d.gapChangeData);
-    setHud('hud-macroGapBreakdownChart', lastGapChange === undefined ? '-' : `Last quarter ${signed(lastGapChange, 2)} pp`);
+    setHud('hud-macroGapBreakdownChart', lastGapChange === undefined ? NOT_AVAILABLE : `Last quarter ${signed(lastGapChange, 2)} pp`);
     setHud('hud-macroSectoralInflationChart', `CPI ${last(d.inflationData).toFixed(1)}% · PPI ${last(d.ppiData) > 0 ? '+' : ''}${last(d.ppiData).toFixed(1)}% · Core services ${last(d.supercoreInflationData).toFixed(1)}%`);
     setHud('hud-macroInventoryCycleChart', `Overhang ${last(d.inventoryStockGapData) > 0 ? '+' : ''}${last(d.inventoryStockGapData).toFixed(1)}% · Utilisation ${last(d.capacityUtilizationData).toFixed(1)}%`);
     setHud('hud-macroPolicyRuleChart', `Rate vs rule ${last(d.policyRuleGapBpsData) > 0 ? '+' : ''}${last(d.policyRuleGapBpsData).toFixed(0)} bps`);
     setHud('hud-macroLeadingIndicatorsChart', `PMI ${last(d.pmiData).toFixed(1)} · Starts ${last(d.housingStartsData).toFixed(0)} · M2 ${last(d.moneySupplyGrowthData) > 0 ? '+' : ''}${last(d.moneySupplyGrowthData).toFixed(1)}% · Trade ${last(d.tradeBalanceData) > 0 ? '+' : ''}${last(d.tradeBalanceData).toFixed(1)}%`);
     setHud('hud-macroHouseholdCreditChart', `DSR ${last(d.householdDsrData).toFixed(1)}% · DTI ${last(d.householdDtiData).toFixed(1)}% · Buffer ${last(d.ccybRateData).toFixed(2)}% · Gap ${last(d.creditToGdpGapData) > 0 ? '+' : ''}${last(d.creditToGdpGapData).toFixed(1)}%`);
     setHud('hud-macroGlobalCycleChart', `District ${last(d.outputGapData) > 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}% · Mainland ${last(d.foreignOutputGapData) > 0 ? '+' : ''}${last(d.foreignOutputGapData).toFixed(1)}% · Global ${last(d.globalDemandGapData) > 0 ? '+' : ''}${last(d.globalDemandGapData).toFixed(1)}% · Mainland rate ${last(d.foreignPolicyRateData).toFixed(2)}%`);
-    setHud('hud-macroBankingLiquidityChart', `MMF ${last(d.mmfShareData).toFixed(1)}% · Interbank ${last(d.interbankSpreadBpsData) !== null && !isNaN(last(d.interbankSpreadBpsData)) ? last(d.interbankSpreadBpsData).toFixed(0) + ' bps' : '-'}`);
+    setHud('hud-macroBankingLiquidityChart', `MMF ${last(d.mmfShareData).toFixed(1)}% · Interbank ${last(d.interbankSpreadBpsData) !== null && !isNaN(last(d.interbankSpreadBpsData)) ? last(d.interbankSpreadBpsData).toFixed(0) + ' bps' : NOT_AVAILABLE}`);
 }
 
 export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
@@ -650,14 +649,11 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOv
             labels: labels,
             datasets: datasets
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(2) + '%' : 'N/A'}`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(2) + '%' : NOT_AVAILABLE}`
                     }
                 }
             },
@@ -665,16 +661,14 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOv
                 y: {
                     suggestedMin: -2.5,
                     suggestedMax: 4.0,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -766,25 +760,20 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             labels: labels,
             datasets: datasets
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(2) + '%' : 'N/A'}` } }
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(2) + '%' : NOT_AVAILABLE}` } }
             },
             scales: {
                 y: {
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -829,22 +818,18 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                 }
             ]
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(2) + '%'}` } } },
+        options: seriesOptions({
+            plugins: {tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? NOT_AVAILABLE : ctx.raw.toFixed(2) + '%'}` } } },
             scales: {
                 y: {
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -902,11 +887,8 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                 }
             ]
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
@@ -916,7 +898,6 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                     position: 'left',
                     min: 0,
                     suggestedMax: 12,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
@@ -931,11 +912,10 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                     title: { display: true, text: 'Volatility (%)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -985,27 +965,22 @@ function renderMacroLaborChart(labels, unemploymentData, nairuData, jobVacancies
                 }
             ]
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => ctx.raw === null ? `${ctx.dataset.label}: -` : `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+                tooltip: { callbacks: { label: (ctx) => ctx.raw === null ? `${ctx.dataset.label}: ${NOT_AVAILABLE}` : `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
                 y: {
                     type: 'linear',
                     grace: '5%',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percent of the labour force' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1072,12 +1047,9 @@ function renderMacroWagesChart(labels, wageGrowthData, tipsBreakevenData, realWa
                 }
             ]
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => ctx.raw === null ? `${ctx.dataset.label}: -` : `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+                tooltip: { callbacks: { label: (ctx) => ctx.raw === null ? `${ctx.dataset.label}: ${NOT_AVAILABLE}` : `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
                 // Rates on top, the wage LEVEL in its own panel below: left axes in one stack go top-down by descending weight.
@@ -1086,7 +1058,6 @@ function renderMacroWagesChart(labels, wageGrowthData, tipsBreakevenData, realWa
                     display: true,
                     position: 'left', stack: 'wages', stackWeight: 2, weight: 1,
                     grace: '5%',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Annual rate' }
                 },
@@ -1095,17 +1066,15 @@ function renderMacroWagesChart(labels, wageGrowthData, tipsBreakevenData, realWa
                     position: 'left', stack: 'wages', stackWeight: 1, weight: 0, offset: true,
                     // Zero is the productivity path itself, so it always stays on the axis.
                     suggestedMin: 0, suggestedMax: 0,
-                    grid: { color: GRID_COLOR },
                     grace: '10%',
                     ticks: { callback: lowerPanelTicks((val) => val.toFixed(1) + '%'), maxTicksLimit: 4 },
                     title: { display: true, text: 'Real wage gap (%)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1160,27 +1129,22 @@ function renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, term
                 }
             ]
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
                 y: {
                     type: 'linear',
                     display: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Yield (%)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1257,17 +1221,13 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
             labels: labels,
             datasets: datasets
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
                             const val = ctx.raw;
-                            if (val === null || val === undefined || isNaN(val)) return `${ctx.dataset.label}: N/A`;
+                            if (val === null || val === undefined || isNaN(val)) return `${ctx.dataset.label}: ${NOT_AVAILABLE}`;
                             if (ctx.dataset.yAxisID === 'y1') {
                                 return `${ctx.dataset.label}: ${val.toFixed(1)}%`;
                             }
@@ -1281,7 +1241,6 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
                     type: 'linear',
                     display: true,
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => (val > 0 ? '+' : '') + val.toFixed(1) + '%' },
                     title: { display: true, text: 'Growth (%)' }
                 },
@@ -1296,11 +1255,10 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
                     title: { display: true, text: 'Probability (%)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1353,15 +1311,12 @@ function renderMacroBalanceSheetChart(labels, holdingsData, changeData) {
                 }
             ]
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => ctx.raw === null
-                            ? `${ctx.dataset.label}: -`
+                            ? `${ctx.dataset.label}: ${NOT_AVAILABLE}`
                             : `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'y1' ? signed(ctx.raw, 0) : ctx.raw.toFixed(0)} bps`
                     }
                 }
@@ -1372,7 +1327,6 @@ function renderMacroBalanceSheetChart(labels, holdingsData, changeData) {
                     display: true,
                     position: 'left',
                     beginAtZero: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { precision: 0, callback: (val) => Math.round(val) + ' bps' },
                     title: { display: true, text: '10-year yield held down (bps)' }
                 },
@@ -1389,11 +1343,10 @@ function renderMacroBalanceSheetChart(labels, holdingsData, changeData) {
                     title: { display: true, text: 'Change in the quarter' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1442,24 +1395,19 @@ function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agr
     macroCommoditiesChartInstance = new Chart(ctx, {
         type: 'line',
         data: { labels, datasets },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(1)}` } }
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? NOT_AVAILABLE : ctx.raw.toFixed(1)}` } }
             },
             scales: {
                 y: {
-                    grid: { color: GRID_COLOR },
                     title: { display: true, text: 'Index' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1501,7 +1449,6 @@ function renderMacroEnergySpreadsChart(labels, crackSpreadData, powerPriceIndexD
     const ctx = canvas.getContext('2d');
     const dense = labels.length > 50;
     const spreads = energySpreadDollars(powerPriceIndexData, naturalGasPriceData);
-    const grid = { color: GRID_COLOR };
 
     macroEnergySpreadsChartInstance = new Chart(ctx, {
         type: 'line',
@@ -1513,9 +1460,7 @@ function renderMacroEnergySpreadsChart(labels, crackSpreadData, powerPriceIndexD
                 { ...commodityLine('Spark spread (7,000 Btu/kWh)', spreads.spark, ENERGY_SPREAD_SERIES_COLORS.spark, dense), yAxisID: 'yPower' },
             ]
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
                 legend: { display: true, position: 'top', labels: { boxWidth: 10, boxHeight: 2 } },
                 tooltip: {
@@ -1530,21 +1475,20 @@ function renderMacroEnergySpreadsChart(labels, crackSpreadData, powerPriceIndexD
                 yCrack: {
                     type: 'linear', position: 'left', stack: 'energySpreads', stackWeight: 1, weight: 1,
                     grace: '5%',
-                    grid, ticks: { callback: (val) => '$' + val },
+                    ticks: { callback: (val) => '$' + val },
                     title: { display: true, text: '$/bbl' }
                 },
                 yPower: {
                     type: 'linear', position: 'left', stack: 'energySpreads', stackWeight: 1, weight: 0, offset: true,
                     grace: '5%',
-                    grid, ticks: { callback: lowerPanelTicks((val) => '$' + val) },
+                    ticks: { callback: lowerPanelTicks((val) => '$' + val) },
                     title: { display: true, text: '$/MWh' }
                 },
                 x: {
-                    grid,
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1594,25 +1538,20 @@ function renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housin
             labels: labels,
             datasets: datasets
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}` } }
             },
             scales: {
                 y: {
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val },
                     title: { display: true, text: 'Index' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1665,11 +1604,8 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
             labels: labels,
             datasets: datasets
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'y1' ? (ctx.raw > 0 ? '+' : '') + ctx.raw.toFixed(2) + ' σ' : ctx.raw.toFixed(2)}`
@@ -1678,7 +1614,6 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
             },
             scales: {
                 y: {
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val },
                     title: { display: true, text: 'Index' }
                 },
@@ -1691,11 +1626,10 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpi
                     title: { display: true, text: 'Standard deviations' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1761,11 +1695,8 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                 }
             ]
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => ctx.dataset.yAxisID === 'y1'
@@ -1781,7 +1712,6 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                     position: 'left',
                     min: 0,
                     suggestedMax: 220,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val },
                     title: { display: true, text: 'Index' }
                 },
@@ -1796,11 +1726,10 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dea
                     title: { display: true, text: 'Default Rate (%)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1858,15 +1787,11 @@ function renderMacroSovereignFundChart(labels, weightData, targetData, ownership
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(2) + '%' : 'N/A'}`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(2) + '%' : NOT_AVAILABLE}`
                     }
                 }
             },
@@ -1876,16 +1801,14 @@ function renderMacroSovereignFundChart(labels, weightData, targetData, ownership
                     display: true,
                     position: 'left',
                     suggestedMin: 0,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1925,16 +1848,12 @@ function renderMacroPublicDebtChart(labels, sovereignDebtData, sovereignRiskSpre
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => ctx.raw === null
-                            ? `${ctx.dataset.label}: -`
+                            ? `${ctx.dataset.label}: ${NOT_AVAILABLE}`
                             : `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'y1' ? ctx.raw.toFixed(0) + ' bps' : ctx.raw.toFixed(1) + '%'}`
                     }
                 }
@@ -1943,7 +1862,6 @@ function renderMacroPublicDebtChart(labels, sovereignDebtData, sovereignRiskSpre
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { precision: 0, callback: (val) => val.toFixed(0) + '%' },
                     title: { display: true, text: 'Percent of GDP' }
                 },
@@ -1958,11 +1876,10 @@ function renderMacroPublicDebtChart(labels, sovereignDebtData, sovereignRiskSpre
                     title: { display: true, text: 'Risk premium (bps)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2012,16 +1929,12 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, taxData = [],
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
-                            if (ctx.raw === null) return `${ctx.dataset.label}: -`;
+                            if (ctx.raw === null) return `${ctx.dataset.label}: ${NOT_AVAILABLE}`;
                             if (ctx.dataset.yAxisID === 'y') return `${ctx.dataset.label}: ${ctx.raw.toFixed(1)} pts`;
                             return `${ctx.dataset.label}: ${ctx.dataset.type === 'bar' ? signed(ctx.raw, 1) : ctx.raw.toFixed(1)}%`;
                         }
@@ -2032,7 +1945,6 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, taxData = [],
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { precision: 0, callback: (val) => val.toFixed(0) },
                     title: { display: true, text: 'Spending index' }
                 },
@@ -2044,11 +1956,10 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, taxData = [],
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2085,11 +1996,8 @@ function renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, cred
                 }
             ]
         },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(0)} bps (${(ctx.raw / 100).toFixed(2)}%)`
@@ -2098,16 +2006,14 @@ function renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, cred
             },
             scales: {
                 y: {
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + ' bps' },
                     title: { display: true, text: 'Basis points' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2162,12 +2068,8 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
             labels: labels,
             datasets: datasets
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -2188,7 +2090,6 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
                 y: {
                     type: 'linear',
                     display: true,
-                    grid: { color: GRID_COLOR },
                     ticks: {
                         callback: (val) => (val > 0.001 ? '+' : '') + val.toFixed(2) + ' σ'
                     },
@@ -2204,11 +2105,10 @@ function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
                     title: { display: true, text: 'Net tightening (%)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2239,15 +2139,11 @@ function renderMacroCostPushChart(labels, foodPushData, energyPushData) {
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => ctx.raw === null ? `${ctx.dataset.label}: -` : `${ctx.dataset.label}: ${signed(ctx.raw, 0)} bps`
+                        label: (ctx) => ctx.raw === null ? `${ctx.dataset.label}: ${NOT_AVAILABLE}` : `${ctx.dataset.label}: ${signed(ctx.raw, 0)} bps`
                     }
                 }
             },
@@ -2256,17 +2152,15 @@ function renderMacroCostPushChart(labels, foodPushData, energyPushData) {
                     type: 'linear',
                     display: true,
                     stacked: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => (val > 0 ? '+' : '') + val.toFixed(0) + ' bps' },
                     title: { display: true, text: 'Basis points a year' }
                 },
                 x: {
                     stacked: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2324,28 +2218,22 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
             labels: labels,
             datasets: datasets
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
                 y: {
                     type: 'linear',
                     display: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Annual rate (%)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2427,16 +2315,12 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
             labels: labels,
             datasets: datasets
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => ctx.raw === null
-                            ? `${ctx.dataset.label}: -`
+                            ? `${ctx.dataset.label}: ${NOT_AVAILABLE}`
                             : (ctx.dataset.yAxisID === 'y1'
                                 ? `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}x`
                                 : `${ctx.dataset.label}: ${ctx.raw.toFixed(0)} bps`)
@@ -2447,7 +2331,6 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + ' bps' },
                     title: { display: true, text: 'Basis points' }
                 },
@@ -2461,11 +2344,10 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
                     title: { display: true, text: 'Ratio' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2531,19 +2413,15 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
             labels: labels,
             datasets: datasets
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
                             if (ctx.dataset.label === 'Strategic energy stocks') {
-                                return `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(1) : 'N/A'}`;
+                                return `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(1) : NOT_AVAILABLE}`;
                             }
-                            return `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(2) + '%' : 'N/A'}`;
+                            return `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(2) + '%' : NOT_AVAILABLE}`;
                         }
                     }
                 }
@@ -2552,7 +2430,6 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Gap (%)' }
                 },
@@ -2566,11 +2443,10 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
                     title: { display: true, text: 'Utilisation (%) / stocks (index)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2618,12 +2494,8 @@ function renderMacroPolicyRuleChart(labels, ruleGapBpsData, policyRateData, targ
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => ctx.dataset.yAxisID === 'y1'
@@ -2636,7 +2508,6 @@ function renderMacroPolicyRuleChart(labels, ruleGapBpsData, policyRateData, targ
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Rates (%)' }
                 },
@@ -2648,11 +2519,10 @@ function renderMacroPolicyRuleChart(labels, ruleGapBpsData, policyRateData, targ
                     title: { display: true, text: 'Gap (bps)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2728,12 +2598,8 @@ function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapDat
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => ctx.dataset.yAxisID === 'y1'
@@ -2746,7 +2612,6 @@ function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapDat
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + '%' },
                     title: { display: true, text: 'Deviation from trend (%)' }
                 },
@@ -2758,11 +2623,10 @@ function renderMacroWealthEffectChart(labels, ratioData, trendData, equityGapDat
                     title: { display: true, text: 'Index (start = 100)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2831,12 +2695,8 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -2857,7 +2717,6 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                     position: 'left',
                     suggestedMin: 40,
                     suggestedMax: 120,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) },
                     title: { display: true, text: 'Index' }
                 },
@@ -2869,11 +2728,10 @@ function renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, m
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2936,15 +2794,11 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? (ctx.raw >= 0 && ctx.dataset.label.toLowerCase().includes('gap') ? '+' : '') + ctx.raw.toFixed(2) + '%' : 'N/A'}`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? (ctx.raw >= 0 && ctx.dataset.label.toLowerCase().includes('gap') ? '+' : '') + ctx.raw.toFixed(2) + '%' : NOT_AVAILABLE}`
                     }
                 }
             },
@@ -2952,7 +2806,6 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
@@ -2964,11 +2817,10 @@ function renderMacroHouseholdCreditChart(labels, householdDsrData, householdDtiD
                     title: { display: true, text: 'Debt-to-Income (%)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -3031,15 +2883,11 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? (ctx.raw >= 0 && ctx.dataset.yAxisID === 'y' ? '+' : '') + ctx.raw.toFixed(2) + '%' : 'N/A'}`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? (ctx.raw >= 0 && ctx.dataset.yAxisID === 'y' ? '+' : '') + ctx.raw.toFixed(2) + '%' : NOT_AVAILABLE}`
                     }
                 }
             },
@@ -3047,7 +2895,6 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => (val > 0 ? '+' : '') + val.toFixed(1) + '%' },
                     title: { display: true, text: 'Gap (%)' }
                 },
@@ -3060,11 +2907,10 @@ function renderMacroGlobalCycleChart(labels, outputGapData, foreignOutputGapData
                     title: { display: true, text: 'Rate (%)' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -3106,19 +2952,15 @@ function renderMacroBankingLiquidityChart(labels, mmfShareData, interbankSpreadB
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
                             if (ctx.dataset.yAxisID === 'y1') {
-                                return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(0) + ' bps' : 'N/A'}`;
+                                return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(0) + ' bps' : NOT_AVAILABLE}`;
                             }
-                            return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(1) + '%' : 'N/A'}`;
+                            return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(1) + '%' : NOT_AVAILABLE}`;
                         }
                     }
                 }
@@ -3128,7 +2970,6 @@ function renderMacroBankingLiquidityChart(labels, mmfShareData, interbankSpreadB
                     type: 'linear',
                     position: 'left',
                     suggestedMin: 0,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + '%' },
                     title: { display: true, text: 'Percent' }
                 },
@@ -3141,11 +2982,10 @@ function renderMacroBankingLiquidityChart(labels, mmfShareData, interbankSpreadB
                     title: { display: true, text: 'Basis points' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -3184,12 +3024,8 @@ function renderMacroGapBreakdownChart(labels, groups, breakdownData, changeData)
 
     macroGapBreakdownChartInstance = new Chart(ctx, {
         data: { labels: labels, datasets: datasets },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     filter: (item) => item.raw !== null && Math.abs(item.raw) >= 0.005,
                     callbacks: {
@@ -3201,17 +3037,15 @@ function renderMacroGapBreakdownChart(labels, groups, breakdownData, changeData)
                 y: {
                     type: 'linear',
                     stacked: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => signed(val, 1) + ' pp' },
                     title: { display: true, text: 'Points of potential output' }
                 },
                 x: {
                     stacked: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -3261,31 +3095,25 @@ function renderMacroPolicyUncertaintyChart(labels, indexData, averageData) {
     macroPolicyUncertaintyChartInstance = new Chart(ctx, {
         type: 'line',
         data: { labels: labels, datasets: datasets },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(0)}`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? NOT_AVAILABLE : ctx.raw.toFixed(0)}`
                     }
                 }
             },
             scales: {
                 y: {
                     type: 'linear',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => Math.round(val) },
                     title: { display: true, text: 'Index' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 
@@ -3309,31 +3137,26 @@ function renderMacroGdpChart(labels, gdpGrowthData, recessionData) {
                 borderWidth: 0
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => ctx.raw === null ? '-' : `${formatPercent(ctx.raw, 2, true, true)}${recessionData[ctx.dataIndex] ? ', in recession' : ''}`
+                        label: (ctx) => ctx.raw === null ? NOT_AVAILABLE : `${formatPercent(ctx.raw, 2, true, true)}${recessionData[ctx.dataIndex] ? ', in recession' : ''}`
                     }
                 }
             },
             scales: {
                 y: {
                     type: 'linear',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) },
                     title: { display: true, text: 'Percent' }
                 },
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkipPadding: 24 }
                 }
             }
-        }
+        })
     });
 }
 

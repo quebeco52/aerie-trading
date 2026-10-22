@@ -1,6 +1,6 @@
 import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
 import { formatLarge, formatCurrency, formatPercent, formatFigure, isSignedFigure, NOT_AVAILABLE } from '../utils/formatters.js';
-import { destroyChartInstance } from '../utils/chart-config.js';
+import { destroyChartInstance, seriesOptions } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 import { refreshChartGrid } from '../utils/chart-grid.js';
 import { buildIncomeStatement, incomeStatementTableHtml } from './income-statement.js';
@@ -36,8 +36,6 @@ let kpiHistory = { labels: [], rows: [], series: {}, selected: null };
 // bank print a negative NII once the full funding cost was taken off it.
 // Series take the categorical slots in legend order (SERIES, app.css --color-series-*). Green and red stay on
 // bars whose colour says the sign of the value; the regulator's lines wear the status colours.
-const GRID_COLOR = withAlpha(THEME_COLORS.grid, 0.5);
-
 const LENDER_INTEREST_STREAMS = ['net_interest_income', 'lending', 'direct_lending'];
 
 function parseStreams(report) {
@@ -590,7 +588,7 @@ function updateFinancialHud(m) {
 
     const lastPe = last(m.peData);
     const lastPb = last(m.pbData);
-    setHud('hud-valuationMultiplesChart', `P/E ${lastPe > 0 ? lastPe.toFixed(1) + 'x' : '-'} · P/B ${lastPb > 0 ? lastPb.toFixed(2) + 'x' : '-'}`);
+    setHud('hud-valuationMultiplesChart', `P/E ${lastPe > 0 ? lastPe.toFixed(1) + 'x' : NOT_AVAILABLE} · P/B ${lastPb > 0 ? lastPb.toFixed(2) + 'x' : NOT_AVAILABLE}`);
 
     const lastEps = last(m.epsData);
     const lastBvps = last(m.bvpsData);
@@ -609,7 +607,7 @@ function updateFinancialHud(m) {
         const lastCap = last(m.capitalRatioData, null);
         const lastCet1 = last(m.cet1Data, null);
         const lastDep = last(m.customerDepositRatioData, null);
-        const parts = [`Tangible capital ${lastCap === null ? '-' : lastCap.toFixed(1) + '%'}`];
+        const parts = [`Tangible capital ${lastCap === null ? NOT_AVAILABLE : lastCap.toFixed(1) + '%'}`];
         if (lastCet1 !== null) parts.push(`CET1 ${lastCet1.toFixed(1)}%`);
         if (m.regulatorySecondaryLabel && lastDep !== null) parts.push(`${m.regulatorySecondaryLabel} ${lastDep.toFixed(1)}%`);
         setHud('hud-regulatoryRatiosChart', parts.join(' · '));
@@ -693,12 +691,8 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -712,13 +706,11 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
@@ -728,7 +720,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 }
             }
-        }
+        })
     });
 }
 
@@ -763,24 +755,18 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
     revenueStreamsChartInstance = new Chart(ctx.getContext('2d'), {
         type: 'bar',
         data: { labels: labels, datasets: datasets },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             scales: {
                 x: {
                     stacked: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     stacked: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 }
             },
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`,
@@ -802,7 +788,7 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
                     }
                 }
             }
-        }
+        })
     });
 }
 
@@ -858,24 +844,18 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
     regulatoryRatiosChartInstance = new Chart(ctx, {
         type: 'line',
         data: { labels: labels, datasets: datasets },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     filter: (item) => !item.dataset.isThreshold,
-                    callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(2) + '%'}` }
+                    callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? NOT_AVAILABLE : ctx.raw.toFixed(2) + '%'}` }
                 }
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     beginAtZero: true
                 },
@@ -888,7 +868,7 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
                     beginAtZero: true
                 }
             }
-        }
+        })
     });
 }
 
@@ -937,27 +917,21 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData, goodw
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}` } }
             },
             scales: {
                 x: {
                     stacked: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     stacked: true,
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1011,26 +985,20 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     beginAtZero: true
                 }
             }
-        }
+        })
     };
 
     if (businessModel === 'commercial_bank' || businessModel === 'credit_services') {
@@ -1091,12 +1059,8 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -1110,13 +1074,11 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val + '%' },
                     title: { display: true, text: 'Percentage' }
                 },
@@ -1127,7 +1089,7 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
                     ticks: { callback: (val) => formatLarge(val, '$') },
                 }
             }
-        }
+        })
     });
 }
 
@@ -1175,12 +1137,8 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -1194,13 +1152,11 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') },
                     beginAtZero: true,
                     suggestedMax: 100000000
@@ -1213,7 +1169,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                     beginAtZero: true
                 }
             }
-        }
+        })
     });
 }
 
@@ -1324,16 +1280,12 @@ function renderNavDiscountChart(labels, navData, priceData, discountData) {
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (c) => {
-                            if (c.raw === null || c.raw === undefined) return `${c.dataset.label}: N/A`;
+                            if (c.raw === null || c.raw === undefined) return `${c.dataset.label}: ${NOT_AVAILABLE}`;
                             return c.dataset.yAxisID === 'yDiscount'
                                 ? `${c.dataset.label}: ${c.raw > 0 ? '+' : ''}${c.raw.toFixed(1)}%`
                                 : `${c.dataset.label}: $${c.raw.toFixed(2)}`;
@@ -1352,7 +1304,7 @@ function renderNavDiscountChart(labels, navData, priceData, discountData) {
                     ticks: { callback: (v) => `${v > 0 ? '+' : ''}${v}%` }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1396,29 +1348,23 @@ function renderValuationMultiplesChart(labels, peData, pbData, psData) {
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(1) + 'x' : 'N/A'}`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(1) + 'x' : NOT_AVAILABLE}`
                     }
                 }
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(1) + 'x' }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1468,12 +1414,8 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -1487,13 +1429,11 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => '$' + val.toFixed(2) }
                 },
                 y1: {
@@ -1503,7 +1443,7 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
                     ticks: { callback: (val) => formatLarge(val) }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1542,10 +1482,7 @@ function renderEarningsSurpriseChart(labels, { reported, consensus, surprise }) 
                 },
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
                 legend: { labels: { usePointStyle: true, boxWidth: 8 } },
                 tooltip: {
@@ -1556,14 +1493,14 @@ function renderEarningsSurpriseChart(labels, { reported, consensus, surprise }) 
                 }
             },
             scales: {
-                x: { grid: { color: GRID_COLOR }, ticks: { maxTicksLimit: 12 } },
-                y: { grid: { color: GRID_COLOR }, ticks: { callback: (val) => formatCurrency(val) } }
+                x: { ticks: { maxTicksLimit: 12 } },
+                y: { ticks: { callback: (val) => formatCurrency(val) } }
             }
-        }
+        })
     });
 
     const latest = surprise.length - 1;
-    setHud('hud-earningsSurpriseChart', latest < 0 || reported[latest] === null ? '-' : `${formatCurrency(reported[latest])}, ${verdict(surprise[latest])}`);
+    setHud('hud-earningsSurpriseChart', latest < 0 || reported[latest] === null ? NOT_AVAILABLE : `${formatCurrency(reported[latest])}, ${verdict(surprise[latest])}`);
 }
 
 function sentenceCaseFirst(text) {
@@ -1631,12 +1568,8 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -1650,13 +1583,11 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
@@ -1666,7 +1597,7 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1713,12 +1644,8 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -1732,13 +1659,11 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
@@ -1748,7 +1673,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1795,12 +1720,8 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -1814,13 +1735,11 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
@@ -1830,7 +1749,7 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1889,26 +1808,20 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                 }, ...thresholdDatasets(labels, thresholds).map(line => ({ ...line, type: 'line', yAxisID: 'y' }))] : [])
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     filter: (item) => !item.dataset.isThreshold,
-                    callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? '-' : ctx.raw.toFixed(2) + '%'}` }
+                    callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw === null ? NOT_AVAILABLE : ctx.raw.toFixed(2) + '%'}` }
                 }
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 },
                 y1: {
@@ -1918,7 +1831,7 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                     ticks: { callback: (val) => val.toFixed(1) + '%' }
                 }
             }
-        }
+        })
     });
 }
 
@@ -1963,25 +1876,19 @@ function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operati
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2053,19 +1960,16 @@ function renderKpiHistoryChart() {
                 spanGaps: false,
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
                 legend: { display: false },
                 tooltip: { callbacks: { label: (ctx) => `${series.label}: ${text(ctx.raw)}` } }
             },
             scales: {
-                x: { grid: { color: GRID_COLOR }, ticks: { maxTicksLimit: 12 } },
-                y: { grid: { color: GRID_COLOR }, ticks: { callback: (val) => text(val) } }
+                x: { ticks: { maxTicksLimit: 12 } },
+                y: { ticks: { callback: (val) => text(val) } }
             }
-        }
+        })
     });
 
     const latest = [...data].reverse().find(v => v !== null);
@@ -2115,12 +2019,8 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                 }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+        options: seriesOptions({
             plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
@@ -2134,13 +2034,11 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
             },
             scales: {
                 x: {
-                    grid: { color: GRID_COLOR },
                     ticks: { maxTicksLimit: 8 }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    grid: { color: GRID_COLOR },
                     ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
@@ -2150,7 +2048,7 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 }
             }
-        }
+        })
     });
 }
 
@@ -2177,7 +2075,7 @@ export function resizeFundamentalCharts() {
  */
 function formatStatementAmount(value) {
     const n = parseFloat(value || 0);
-    if (!isFinite(n)) return '-';
+    if (!isFinite(n)) return NOT_AVAILABLE;
 
     const abs = Math.abs(n);
     const sign = n < 0 ? '-' : '';

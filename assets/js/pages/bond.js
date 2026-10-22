@@ -2,6 +2,7 @@ import { readPageData } from '../utils/page-data.js';
 import { initPriceChart, queueLivePricePoints, resizePriceChart, destroyPriceChart, setChartField, getChartField } from '../stock/price-chart.js';
 import { flashTick } from '../utils/tick-flash.js';
 import { onPageLoad } from '../utils/page-init.js';
+import { setTextById } from '../utils/set-text.js';
 import { tickPoints } from '../services/market-stream.js';
 
 let marketUpdateHandler = null;
@@ -19,11 +20,6 @@ function readContext() {
         userQuantity: Number(d.userQuantity) || 0,
         faceValue: Number(d.faceValue) || 1000
     };
-}
-
-function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
 }
 
 /**
@@ -48,10 +44,10 @@ function applyQuote(quote) {
     }
 
     if (Number.isFinite(dirty)) {
-        setText('stat-dirty', dirty.toFixed(2));
+        setTextById('stat-dirty', dirty.toFixed(2));
 
         if (context.userQuantity > 0) {
-            setText('user-holding-value', '$' + (dirty * context.userQuantity).toLocaleString('en-US', {
+            setTextById('user-holding-value', '$' + (dirty * context.userQuantity).toLocaleString('en-US', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             }));
@@ -59,22 +55,22 @@ function applyQuote(quote) {
     }
 
     if (Number.isFinite(parseFloat(quote.accrued_interest))) {
-        setText('stat-accrued', parseFloat(quote.accrued_interest).toFixed(2));
+        setTextById('stat-accrued', parseFloat(quote.accrued_interest).toFixed(2));
     }
     if (Number.isFinite(parseFloat(quote.yield_to_maturity))) {
-        setText('stat-ytm', (parseFloat(quote.yield_to_maturity) * 100).toFixed(2) + '%');
+        setTextById('stat-ytm', (parseFloat(quote.yield_to_maturity) * 100).toFixed(2) + '%');
     }
     if (Number.isFinite(parseFloat(quote.modified_duration))) {
-        setText('stat-duration', parseFloat(quote.modified_duration).toFixed(2));
+        setTextById('stat-duration', parseFloat(quote.modified_duration).toFixed(2));
     }
     if (Number.isFinite(parseFloat(quote.convexity))) {
-        setText('stat-convexity', parseFloat(quote.convexity).toFixed(1));
+        setTextById('stat-convexity', parseFloat(quote.convexity).toFixed(1));
     }
 
     // Time to maturity is the one statistic that moves on its own, with no trade behind it. Showing it
     // stale would make an issue look frozen right when it matters most: in its final quarter.
     if (Number.isFinite(parseFloat(quote.years_to_maturity))) {
-        setText('stat-ttm', parseFloat(quote.years_to_maturity).toFixed(2) + 'y');
+        setTextById('stat-ttm', parseFloat(quote.years_to_maturity).toFixed(2) + 'y');
     }
 }
 

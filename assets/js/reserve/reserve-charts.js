@@ -1,14 +1,13 @@
 import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
+import { NOT_AVAILABLE } from '../utils/formatters.js';
 
 /** The sleeve colours the page's allocation bar uses (sleeve_swatch in the template), so a sleeve reads the same in every panel. */
 const SLEEVE_COLORS = { district: SERIES.blue, equities: SERIES.orange };
 /** The flows on the money chart, in the series slots' order. */
 const FLOW_COLORS = { draw: SERIES.blue, duty: SERIES.orange };
 const REFERENCE_COLOR = THEME_COLORS.textMuted;
-const GRID_COLOR = withAlpha(THEME_COLORS.grid, 0.5);
-
 const charts = {};
 
 /** A macro_report column as a percentage, or null where the quarter has no reading. */
@@ -20,11 +19,11 @@ function pct(report, column) {
 }
 
 function percentTooltip(ctx) {
-    return `${ctx.dataset.label}: ${ctx.raw === null || ctx.raw === undefined ? 'N/A' : ctx.raw.toFixed(2) + '%'}`;
+    return `${ctx.dataset.label}: ${ctx.raw === null || ctx.raw === undefined ? NOT_AVAILABLE : ctx.raw.toFixed(2) + '%'}`;
 }
 
 function indexTooltip(ctx) {
-    return `${ctx.dataset.label}: ${ctx.raw === null || ctx.raw === undefined ? 'N/A' : ctx.raw.toFixed(1)}`;
+    return `${ctx.dataset.label}: ${ctx.raw === null || ctx.raw === undefined ? NOT_AVAILABLE : ctx.raw.toFixed(1)}`;
 }
 
 function lineDataset(label, data, color, extra = {}) {
@@ -86,11 +85,9 @@ function chartOptions({ legend = true, index = false } = {}) {
         },
         scales: {
             y: {
-                grid: { color: GRID_COLOR },
                 ticks: { callback: (val) => index ? val.toFixed(0) : val.toFixed(1) + '%' }
             },
             x: {
-                grid: { color: GRID_COLOR },
                 ticks: { maxTicksLimit: 8 }
             }
         }

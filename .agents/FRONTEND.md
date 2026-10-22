@@ -126,6 +126,8 @@ same before and after the feed repaints it.
   (economy page, `stock/_tab_financials`). Embed the partial for a card that needs a custom `hud`, `controls` above
   the canvas, `canvas_extra` inside it, or its own `footer`.
 - The stock page is a shell (`stock/index.html.twig`) over one `stock/_tab_<name>.html.twig` per tab.
+- A series chart's options go through `seriesOptions({...})` (`assets/js/utils/chart-config.js`), which sets the
+  sizing, the hover mode and the bottom legend; scales take their grid colour from `setupChartDefaults()`.
 - `<p class="source-note">{{ source_line('statistical-office') }}</p>` under a chart. Never name a Twig function
   `source`: it would replace Twig's own, which the web profiler uses.
 

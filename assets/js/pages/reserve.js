@@ -3,17 +3,13 @@ import { showLoading, showError, hideStatus } from '../utils/fetch-status.js';
 import { formatLarge, formatPercent, NOT_AVAILABLE } from '../utils/formatters.js';
 import { renderReserveCharts, resizeReserveCharts, destroyReserveCharts, returnHistory, annualisedReturn } from '../reserve/reserve-charts.js';
 import { onPageLoad } from '../utils/page-init.js';
+import { setTextById } from '../utils/set-text.js';
 
 let marketFrameHandler = null;
 let resizeHandler = null;
 /** The recorded quarters of the return index, and the live reading the trailing returns run up to. */
 let recordedReturns = [];
 let liveReturn = null;
-
-function setText(id, text) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = text;
-}
 
 /**
  * The trailing returns: a year and ten years real, and the whole record real and nominal, each annualised. They run
@@ -24,17 +20,17 @@ function paintReturns() {
     if (!now) return;
 
     const year = annualisedReturn(recordedReturns, now, 'real', 1);
-    setText('reserve-return-year', year ? formatPercent(year.rate) : NOT_AVAILABLE);
-    setText('reserve-return-year-detail', year ? `Over ${year.years.toFixed(1)} years, a year` : 'Under a year recorded');
+    setTextById('reserve-return-year', year ? formatPercent(year.rate) : NOT_AVAILABLE);
+    setTextById('reserve-return-year-detail', year ? `Over ${year.years.toFixed(1)} years, a year` : 'Under a year recorded');
 
     const decade = annualisedReturn(recordedReturns, now, 'real', 10);
-    setText('reserve-return-decade', decade ? formatPercent(decade.rate) : NOT_AVAILABLE);
+    setTextById('reserve-return-decade', decade ? formatPercent(decade.rate) : NOT_AVAILABLE);
 
     const spanReal = annualisedReturn(recordedReturns, now, 'real');
     const spanNominal = annualisedReturn(recordedReturns, now, 'index');
-    setText('reserve-return-span-real', spanReal ? formatPercent(spanReal.rate) : NOT_AVAILABLE);
-    setText('reserve-return-span-nominal', spanNominal ? formatPercent(spanNominal.rate) : NOT_AVAILABLE);
-    setText('reserve-return-span', spanReal ? `A year over ${spanReal.years.toFixed(1)} years` : 'Under a year recorded');
+    setTextById('reserve-return-span-real', spanReal ? formatPercent(spanReal.rate) : NOT_AVAILABLE);
+    setTextById('reserve-return-span-nominal', spanNominal ? formatPercent(spanNominal.rate) : NOT_AVAILABLE);
+    setTextById('reserve-return-span', spanReal ? `A year over ${spanReal.years.toFixed(1)} years` : 'Under a year recorded');
 }
 
 /**
@@ -81,34 +77,34 @@ function paintReserve(m) {
     if (!(dollarsPerGdp > 0)) return;
 
     const value = m.sovereign_fund_to_gdp * dollarsPerGdp * m.nominal_gdp_index;
-    setText('reserve-value', formatLarge(value, '$'));
-    setText('reserve-to-gdp', `${(m.sovereign_fund_to_gdp * 100).toFixed(0)}% of GDP`);
-    setText('reserve-draw', `${formatPercent(m.sovereign_fund_draw_to_gdp)} of GDP`);
-    setText('reserve-draw-value', `${formatLarge(m.sovereign_fund_annual_draw, '$')} this year`);
+    setTextById('reserve-value', formatLarge(value, '$'));
+    setTextById('reserve-to-gdp', `${(m.sovereign_fund_to_gdp * 100).toFixed(0)}% of GDP`);
+    setTextById('reserve-draw', `${formatPercent(m.sovereign_fund_draw_to_gdp)} of GDP`);
+    setTextById('reserve-draw-value', `${formatLarge(m.sovereign_fund_annual_draw, '$')} this year`);
 
     const lastYearDuty = m.sovereign_fund_stamp_duty_to_gdp;
-    setText('reserve-duty', lastYearDuty > 0 ? `${formatPercent(lastYearDuty)} of GDP` : NOT_AVAILABLE);
-    setText('reserve-duty-ytd', `${lastYearDuty > 0 ? 'Last year · ' : 'First year open · '}${formatLarge(m.sovereign_fund_stamp_duty_year_to_date, '$')} so far`);
-    setText('reserve-ownership', `${formatPercent(m.sovereign_fund_ownership_share)} of float`);
+    setTextById('reserve-duty', lastYearDuty > 0 ? `${formatPercent(lastYearDuty)} of GDP` : NOT_AVAILABLE);
+    setTextById('reserve-duty-ytd', `${lastYearDuty > 0 ? 'Last year · ' : 'First year open · '}${formatLarge(m.sovereign_fund_stamp_duty_year_to_date, '$')} so far`);
+    setTextById('reserve-ownership', `${formatPercent(m.sovereign_fund_ownership_share)} of float`);
 
     const monthsLeft = m.sovereign_fund_rebalance_months_left;
     if (monthsLeft > 0) {
         const share = m.sovereign_fund_rebalance_share;
         const months = monthsLeft.toFixed(0);
-        setText('reserve-programme', share > 0 ? 'Buying' : 'Trimming');
-        setText('reserve-programme-detail', `${formatPercent(Math.abs(share))} of float to go · ${months} ${months === '1' ? 'month' : 'months'} left`);
+        setTextById('reserve-programme', share > 0 ? 'Buying' : 'Trimming');
+        setTextById('reserve-programme-detail', `${formatPercent(Math.abs(share))} of float to go · ${months} ${months === '1' ? 'month' : 'months'} left`);
     } else {
         const last = m.last_sovereign_rebalance_at;
-        setText('reserve-programme', 'None running');
-        setText('reserve-programme-detail', last >= 0
+        setTextById('reserve-programme', 'None running');
+        setTextById('reserve-programme-detail', last >= 0
             ? `Last one ${(12 * Math.max(0, m.total_time - last)).toFixed(0)} months ago`
             : 'None since inception');
     }
 
-    setText('reserve-net-debt', `${(m.sovereign_net_debt_to_gdp * 100).toFixed(0)}% of GDP`);
-    setText('reserve-gross-debt', `Gross ${(m.sovereign_debt_to_gdp * 100).toFixed(0)}% less the fund's bonds`);
-    setText('reserve-bond-yield', formatPercent(m.foreign_bond_yield));
-    setText('reserve-return-assumed', formatPercent(m.sovereign_fund_expected_real_return));
+    setTextById('reserve-net-debt', `${(m.sovereign_net_debt_to_gdp * 100).toFixed(0)}% of GDP`);
+    setTextById('reserve-gross-debt', `Gross ${(m.sovereign_debt_to_gdp * 100).toFixed(0)}% less the fund's bonds`);
+    setTextById('reserve-bond-yield', formatPercent(m.foreign_bond_yield));
+    setTextById('reserve-return-assumed', formatPercent(m.sovereign_fund_expected_real_return));
     if (m.sovereign_fund_return_index > 0) {
         liveReturn = { time: m.total_time, index: m.sovereign_fund_return_index, real: m.sovereign_fund_real_return_index };
         paintReturns();

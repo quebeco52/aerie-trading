@@ -1,5 +1,5 @@
 import { Controller } from '@hotwired/stimulus';
-import { formatLarge } from '../js/utils/formatters.js';
+import { formatBps, formatLarge, formatPercent } from '../js/utils/formatters.js';
 import { CHART_FONT_MONO } from '../js/utils/fonts.js';
 import { readPageData } from '../js/utils/page-data.js';
 import { THEME_COLORS, SERIES, withAlpha } from '../js/utils/colors.js';
@@ -53,8 +53,8 @@ function strengthMeter(strength, isPositive) {
 function formatMacroReading(reading) {
     const value = Number(reading.value);
     if (!Number.isFinite(value)) return `${reading.label} —`;
-    if (reading.unit === 'bps') return `${reading.label} ${Math.round(value * 10000)} bps`;
-    if (reading.unit === 'pct') return `${reading.label} ${(value * 100).toFixed(2)}%`;
+    if (reading.unit === 'bps') return `${reading.label} ${formatBps(value)}`;
+    if (reading.unit === 'pct') return `${reading.label} ${formatPercent(value, 2)}`;
     if (reading.unit === 'level') return `${reading.label} ${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}`;
     return `${reading.label} ${value.toFixed(1)}`;
 }

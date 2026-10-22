@@ -59,6 +59,23 @@ export function setupChartDefaults() {
 }
 
 /**
+ * The options every series chart on the economy and company pages shares: it fills its card, hovering reads every
+ * series at that date, and the legend sits under the plot as one dot per series. Pass the chart's own options; a
+ * `plugins.legend` of its own replaces the shared one. Grid colours come from setupChartDefaults().
+ * @param {object} options
+ * @returns {object}
+ */
+export function seriesOptions(options = {}) {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        ...options,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, ...options.plugins },
+    };
+}
+
+/**
  * Safely destroys a Chart.js instance.
  * @param {Chart|null|undefined} chartInstance 
  * @returns {null}
