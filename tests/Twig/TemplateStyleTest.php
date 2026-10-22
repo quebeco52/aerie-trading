@@ -28,14 +28,13 @@ final class TemplateStyleTest extends TestCase
     private const PALETTE_SCRIPT = 'assets/js/utils/colors.js';
 
     // --- Ratchets: lower these as pages move onto the shared filters, never raise them ---
-    /** Percentages still formatted by hand, `(x * 100)|number_format(n)`, where |pct does not fit yet. */
-    private const HAND_PERCENT_CEILING = 6;
-    /** Figures a builder hands over as a percent rather than a fraction, printed `x|number_format(n) }}%`. */
-    private const PERCENT_UNIT_CEILING = 19;
+    /**
+     * Percentages still formatted by hand, `(x * 100)|number_format(n)` outside a CSS length, where |pct does not fit
+     * yet.
+     */
+    private const HAND_PERCENT_CEILING = 2;
     /** Dollar figures still formatted by hand, `${{ ... }}`, where |money does not fit yet. */
     private const HAND_MONEY_CEILING = 7;
-    /** Rises signed by hand, `x > 0 ? '+'`, where the filter's own sign does not fit yet. */
-    private const HAND_SIGN_CEILING = 3;
     /** Missing figures still printed as a hyphen, `: '-' }}` or `>-<`, rather than the dash. */
     private const HYPHEN_PLACEHOLDER_CEILING = 50;
 
@@ -227,31 +226,39 @@ final class TemplateStyleTest extends TestCase
 
     public function testHandFormattedFiguresOnlyShrink(): void
     {
-        $percent = $percentUnit = $money = $sign = $hyphen = 0;
+        $percent = $money = $hyphen = 0;
         foreach ($this->templates() as $source) {
-            $percent += preg_match_all('/\*\s*100\s*\)\|number_format/', $source);
-            $percentUnit += preg_match_all('/number_format\(\d+\)\s*\}\}%/', $source);
+            // A bar's CSS width is a length, not a figure the reader sees.
+            $percent += preg_match_all('/\*\s*100\s*\)\|number_format/', (string) preg_replace('/style="[^"]*"/', '', $source));
             $money += preg_match_all('/\$\{\{/', $source);
-            $sign += preg_match_all("/>\s*0\s*\?\s*'\+'/", $source);
             $hyphen += preg_match_all("/'-'\s*\}\}|>-</", $source);
         }
 
         $this->assertLessThanOrEqual(self::HAND_PERCENT_CEILING, $percent, 'New percentages use |pct(n); move old ones over and lower HAND_PERCENT_CEILING.');
-        $this->assertLessThanOrEqual(self::PERCENT_UNIT_CEILING, $percentUnit, 'Builders hand rates over as fractions for |pct; move old ones over and lower PERCENT_UNIT_CEILING.');
         $this->assertLessThanOrEqual(self::HAND_MONEY_CEILING, $money, 'New dollar figures use |money(n); move old ones over and lower HAND_MONEY_CEILING.');
-        $this->assertLessThanOrEqual(self::HAND_SIGN_CEILING, $sign, "Sign a rise with the filter's own flag (|pct(2, true), |bps(0, true)); lower HAND_SIGN_CEILING.");
         $this->assertLessThanOrEqual(self::HYPHEN_PLACEHOLDER_CEILING, $hyphen, 'A missing figure prints "—" (the filters do it on null); lower HYPHEN_PLACEHOLDER_CEILING.');
     }
 
-    /** Basis points, the HHI and multiples each have one filter, so a spread or a P/E prints alike on every page. */
-    public function testBasisPointsAndMultiplesUseTheirFilters(): void
+    /**
+     * Each kind of figure has one filter, so a spread, a P/E or a change prints alike on every page: basis points, the
+     * HHI and multiples by hand, a rate handed over as a percent (`x|number_format(2) }}%`) and a hand-signed rise.
+     */
+    public function testFiguresUseTheirFilters(): void
     {
+        $rules = [
+            '/\*\s*[12]0000\b/',
+            "/number_format\(\d\)\s*(~\s*'[x×]'|\}\}[x×])/u",
+            '/number_format\(\d+\)\s*\}\}%/',
+            "/>\s*0\s*\?\s*'\+'/",
+        ];
         $hits = [];
         foreach ($this->templates() as $path => $source) {
-            $hits = [...$hits, ...$this->grep($path, $source, '/\*\s*[12]0000\b/'), ...$this->grep($path, $source, "/number_format\(\d\)\s*(~\s*'[x×]'|\}\}[x×])/u")];
+            foreach ($rules as $rule) {
+                $hits = [...$hits, ...$this->grep($path, $source, $rule)];
+            }
         }
 
-        $this->assertSame([], $hits, 'Print basis points with |bps, the HHI with |hhi and a multiple with |multiple.');
+        $this->assertSame([], $hits, 'Use |bps, |hhi, |multiple, and |pct on a fraction with its own sign flag (|pct(2, true)).');
     }
 
     /** A stray closing tag ends the page container early, and everything after it renders outside the layout. */

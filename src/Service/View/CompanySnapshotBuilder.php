@@ -195,7 +195,7 @@ class CompanySnapshotBuilder
         }
 
         $targets['rating'] = $stock->getAnalystRating();
-        $targets['upside_pct'] = $price > 0.0 ? (($targets['consensus'] - $price) / $price) * 100.0 : 0.0;
+        $targets['upside'] = $price > 0.0 ? ($targets['consensus'] - $price) / $price : 0.0;
 
         return $targets;
     }

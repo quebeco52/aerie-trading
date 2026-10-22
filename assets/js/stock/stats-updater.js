@@ -12,7 +12,7 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
     if (!el) return;
 
     const oldPrice = previousPrice || newPrice;
-    el.textContent = '$' + newPrice.toFixed(2);
+    el.textContent = formatCurrency(newPrice);
     flashTick(el, newPrice - oldPrice);
     previousPrice = newPrice;
 
@@ -88,12 +88,12 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
 
         const mktShareEl = document.getElementById('stat-market-share');
         if (mktShareEl && stockUpdate.market_share !== undefined) {
-            mktShareEl.textContent = stockUpdate.market_share.toFixed(2) + '%';
+            mktShareEl.textContent = formatPercent(stockUpdate.market_share, 2, true);
         }
 
         const volEl = document.getElementById('stat-volatility');
         if (volEl && stockUpdate.current_volatility !== undefined) {
-            volEl.textContent = stockUpdate.current_volatility.toFixed(2) + '%';
+            volEl.textContent = formatPercent(stockUpdate.current_volatility, 2, true);
         }
 
         const sharesEl = document.getElementById('stat-shares');
@@ -103,7 +103,7 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
 
         const roicEl = document.getElementById('stat-roic');
         if (roicEl && stockUpdate.current_roic !== undefined) {
-            roicEl.textContent = (stockUpdate.current_roic * 100).toFixed(2) + '%';
+            roicEl.textContent = formatPercent(stockUpdate.current_roic, 2);
         }
 
         if (stockUpdate.analyst_targets) {
@@ -156,20 +156,19 @@ function updateAnalystTargets(stockUpdate, newPrice) {
     };
 
     if (consensusEl) {
-        consensusEl.textContent = '$' + compositeTarget.toFixed(2);
+        consensusEl.textContent = formatCurrency(compositeTarget);
         applyTargetTone(consensusEl, compositeTarget);
     }
 
     const upsideEl = document.getElementById('target-upside');
     if (upsideEl && newPrice > 0) {
-        const upside = ((compositeTarget - newPrice) / newPrice) * 100;
-        upsideEl.textContent = (upside > 0 ? '+' : '') + upside.toFixed(1) + '% to target';
+        upsideEl.textContent = `${formatPercent((compositeTarget - newPrice) / newPrice, 1, false, true)} to target`;
         applyTargetTone(upsideEl, compositeTarget);
     }
 
-    if (growthEl) growthEl.textContent = '$' + growthTarget.toFixed(2);
-    if (incomeEl) incomeEl.textContent = '$' + incomeTarget.toFixed(2);
-    if (valueEl) valueEl.textContent = '$' + valueTarget.toFixed(2);
+    if (growthEl) growthEl.textContent = formatCurrency(growthTarget);
+    if (incomeEl) incomeEl.textContent = formatCurrency(incomeTarget);
+    if (valueEl) valueEl.textContent = formatCurrency(valueTarget);
 
     if (badgeEl) {
         // The rating the server published, struck on the standing target against the live price with the

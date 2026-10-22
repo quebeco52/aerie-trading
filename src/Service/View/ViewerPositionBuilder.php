@@ -39,7 +39,7 @@ class ViewerPositionBuilder
             'userQuantity' => 0,
             'userAvgCost' => (float) $asset->getPrice(),
             'userUnrealizedPnL' => 0.0,
-            'userUnrealizedPnLPercent' => 0.0,
+            'userUnrealizedReturn' => 0.0,
             'userDividendIncome' => 0.0,
             'userBorrowAccrued' => 0.0,
             'userRealised' => 0.0,
@@ -86,7 +86,7 @@ class ViewerPositionBuilder
 
         $position['userAvgCost'] = $averageCost;
         $position['userUnrealizedPnL'] = $unrealised;
-        $position['userUnrealizedPnLPercent'] = abs($positionCost) > 0.0 ? ($unrealised / abs($positionCost)) * 100.0 : 0.0;
+        $position['userUnrealizedReturn'] = abs($positionCost) > 0.0 ? $unrealised / abs($positionCost) : 0.0;
         $position['userBorrowAccrued'] = $holding instanceof UserStock ? (float) $holding->getBorrowAccrued() : 0.0;
 
         return $position;

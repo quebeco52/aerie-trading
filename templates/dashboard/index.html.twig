@@ -15,7 +15,7 @@
                     <p class="text-sm font-mono tabular-nums">
                         <span id="portfolio-pnl-badge" class="font-semibold {{ totalUnrealizedPnL|signed_class }}">
                             <span id="portfolio-pnl-val">{{ totalUnrealizedPnL|money(2, true) }}</span>
-                            <span id="portfolio-pnl-pct">({{ totalUnrealizedPnL > 0 ? '+' : '' }}{{ totalUnrealizedPnLPercent|number_format(2) }}%)</span>
+                            <span id="portfolio-pnl-pct">({{ totalUnrealizedReturn|pct(2, true) }})</span>
                         </span>
                         <span class="font-sans text-xs text-on-surface-variant">unrealised</span>
                         <span class="ml-3 font-semibold {{ totalRealised|signed_class }}">{{ totalRealised|money(2, true) }}</span>
@@ -209,7 +209,7 @@
                                     <td class="px-5 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="value-{{ holding.ticker }}">{{ holding.marketValue|money(2) }}</td>
                                     <td class="px-5 py-3 font-mono tabular-nums text-right font-bold {{ holding.unrealizedPnL|signed_class }}" id="pnl-{{ holding.ticker }}">
                                         <div>{{ holding.unrealizedPnL|money(2, true) }}</div>
-                                        <div class="text-2xs font-normal opacity-80">({{ holding.unrealizedPnL > 0 ? '+' : '' }}{{ holding.unrealizedPnLPercent|number_format(2) }}%)</div>
+                                        <div class="text-2xs font-normal opacity-80">({{ holding.unrealizedReturn|pct(2, true) }})</div>
                                         {% if holding.borrowAccrued|default(0) > 0 %}
                                             <div class="text-2xs font-normal text-tertiary mt-0.5" title="Borrow fees paid to keep this short open">
                                                 &minus;{{ holding.borrowAccrued|money(2) }} borrow
@@ -221,7 +221,7 @@
                                             </div>
                                         {% endif %}
                                     </td>
-                                    <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant text-xs">{{ holding.weight|number_format(1) }}%</td>
+                                    <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant text-xs">{{ holding.weight|pct(1) }}</td>
                                     <td class="px-5 py-3 text-right">
                                         <a href="{{ holding.type == 'BOND' ? path('app_bond_view', { ticker: holding.ticker }) : '/stock/' ~ (holding.underlying|default(holding.ticker)) }}" class="relative z-10 inline-flex items-center px-2.5 py-1 rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high text-xs font-medium transition-colors">
                                             Trade
@@ -518,11 +518,11 @@
                                     <span class="text-on-surface">{{ sec.name }}</span>
                                     <div class="flex items-center gap-2">
                                         <span class="font-mono tabular-nums text-on-surface">{{ sec.value|money(2) }}</span>
-                                        <span class="text-on-surface-variant font-mono tabular-nums text-xs">{{ sec.percent|number_format(1) }}%</span>
+                                        <span class="text-on-surface-variant font-mono tabular-nums text-xs">{{ sec.share|pct(1) }}</span>
                                     </div>
                                 </div>
                                 <div class="w-full bg-surface-container-lowest h-1.5 rounded overflow-hidden">
-                                    <div class="bg-primary h-full rounded transition-all duration-500" style="width: {{ sec.percent }}%;"></div>
+                                    <div class="bg-primary h-full rounded transition-all duration-500" style="width: {{ (sec.share * 100)|number_format(2, '.', '') }}%;"></div>
                                 </div>
                             </div>
                         {% else %}
@@ -541,7 +541,7 @@
                             </div>
                             <div class="py-2.5 flex justify-between">
                                 <dt class="text-on-surface-variant">Largest position</dt>
-                                <dd class="font-bold text-on-surface font-mono tabular-nums">{{ holdings|length > 0 ? holdings[0].weight|abs|number_format(1) ~ '%' : '—' }}</dd>
+                                <dd class="font-bold text-on-surface font-mono tabular-nums">{{ holdings|length > 0 ? holdings[0].weight|abs|pct(1) : '—' }}</dd>
                             </div>
                             <div class="py-2.5 flex justify-between">
                                 <dt class="text-on-surface-variant">Cash share</dt>

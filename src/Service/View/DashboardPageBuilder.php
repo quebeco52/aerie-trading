@@ -99,7 +99,7 @@ final class DashboardPageBuilder
             'totalInvested' => $netWorth['stock_value'] + $netWorth['etf_value'] + $netWorth['bond_value'] + $netWorth['option_value'],
             'totalInvestedCost' => $marked['cost'],
             'totalUnrealizedPnL' => $marked['pnl'],
-            'totalUnrealizedPnLPercent' => $marked['basis'] > 0 ? ($marked['pnl'] / $marked['basis']) * 100 : 0.0,
+            'totalUnrealizedReturn' => $marked['basis'] > 0 ? $marked['pnl'] / $marked['basis'] : 0.0,
             'totalRealised' => array_sum($this->costBasis->realisedByTicker($filledOrders)),
             'cashBalance' => $netWorth['cash_balance'],
             'escrowedCash' => $escrow['cash'],
@@ -166,7 +166,7 @@ final class DashboardPageBuilder
                 'totalCost' => $positionCost,
                 'marketValue' => $marketValue,
                 'unrealizedPnL' => $unrealizedPnL,
-                'unrealizedPnLPercent' => abs($positionCost) > 0.0 ? ($unrealizedPnL / abs($positionCost)) * 100 : 0.0,
+                'unrealizedReturn' => abs($positionCost) > 0.0 ? $unrealizedPnL / abs($positionCost) : 0.0,
                 'dividendsReceived' => $dividends[$ticker] ?? 0.0,
                 'isBankrupt' => $stock->isBankrupt(),
                 'isShort' => $quantity < 0,
@@ -215,7 +215,7 @@ final class DashboardPageBuilder
                 'totalCost' => $positionCost,
                 'marketValue' => $marketValue,
                 'unrealizedPnL' => $unrealizedPnL,
-                'unrealizedPnLPercent' => $positionCost > 0 ? ($unrealizedPnL / $positionCost) * 100 : 0.0,
+                'unrealizedReturn' => $positionCost > 0 ? $unrealizedPnL / $positionCost : 0.0,
                 'dividendsReceived' => $dividends[$ticker] ?? 0.0,
                 'isBankrupt' => false,
                 'weight' => 0.0,
@@ -263,7 +263,7 @@ final class DashboardPageBuilder
                 'totalCost' => $positionCost,
                 'marketValue' => $marketValue,
                 'unrealizedPnL' => $unrealizedPnL,
-                'unrealizedPnLPercent' => $positionCost > 0 ? ($unrealizedPnL / $positionCost) * 100 : 0.0,
+                'unrealizedReturn' => $positionCost > 0 ? $unrealizedPnL / $positionCost : 0.0,
                 'dividendsReceived' => $coupons[$ticker] ?? 0.0,
                 'isBankrupt' => false,
                 'weight' => 0.0,
@@ -317,7 +317,7 @@ final class DashboardPageBuilder
                 'unrealizedPnL' => $unrealizedPnL,
                 // Measured against what the position tied up, not against a signed cost: a written contract has a
                 // negative basis, and dividing by it would report a profitable short as a loss.
-                'unrealizedPnLPercent' => abs($positionCost) > 0.0 ? ($unrealizedPnL / abs($positionCost)) * 100 : 0.0,
+                'unrealizedReturn' => abs($positionCost) > 0.0 ? $unrealizedPnL / abs($positionCost) : 0.0,
                 'dividendsReceived' => 0.0,
                 'isBankrupt' => false,
                 'weight' => 0.0,
@@ -365,7 +365,7 @@ final class DashboardPageBuilder
     public static function weighted(array $holdings, float $portfolioValue): array
     {
         foreach ($holdings as &$row) {
-            $row['weight'] = $portfolioValue > 0 ? ($row['marketValue'] / $portfolioValue) * 100 : 0.0;
+            $row['weight'] = $portfolioValue > 0 ? $row['marketValue'] / $portfolioValue : 0.0;
         }
         unset($row);
 
@@ -381,7 +381,7 @@ final class DashboardPageBuilder
      *
      * @param list<array<string, mixed>> $holdings
      *
-     * @return list<array{name: string, value: float, percent: float}>
+     * @return list<array{name: string, value: float, share: float}>
      */
     public static function sectorBreakdown(array $holdings): array
     {
@@ -397,7 +397,7 @@ final class DashboardPageBuilder
             $breakdown[] = [
                 'name' => (string) $sectorName,
                 'value' => $value,
-                'percent' => $investedTotal > 0 ? ($value / $investedTotal) * 100 : 0.0,
+                'share' => $investedTotal > 0 ? $value / $investedTotal : 0.0,
             ];
         }
         usort($breakdown, static fn(array $a, array $b): int => $b['value'] <=> $a['value']);

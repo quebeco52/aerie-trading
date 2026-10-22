@@ -40,13 +40,13 @@ final class DashboardPageBuilderTest extends TestCase
 
         $this->assertSame(7000.0, $sectors['Tech']['value'], 'A $2,000 short adds to the sector, not nets against it.');
         $this->assertSame(3000.0, $sectors['Energy']['value']);
-        $this->assertEqualsWithDelta(100.0, $sectors['Tech']['percent'] + $sectors['Energy']['percent'], 1e-9);
+        $this->assertEqualsWithDelta(1.0, $sectors['Tech']['share'] + $sectors['Energy']['share'], 1e-12);
 
         $short = array_column($rows, null, 'ticker')['BRT'];
         $this->assertTrue($short['isShort']);
         $this->assertSame(-2000.0, $short['marketValue'], 'A short is marked as the obligation.');
         $this->assertSame(500.0, $short['unrealizedPnL'], 'Sold at 25, worth 20: a gain.');
-        $this->assertEqualsWithDelta(20.0, $short['unrealizedPnLPercent'], 1e-9, 'Against what the short raised, not a negative cost.');
+        $this->assertEqualsWithDelta(0.20, $short['unrealizedReturn'], 1e-12, 'Against what the short raised, not a negative cost.');
     }
 
     /** A written contract is a liability whose decay is profit, and it ties up its premium in the invested cost. */
@@ -59,7 +59,7 @@ final class DashboardPageBuilderTest extends TestCase
         $shares = 2 * FinancialConstants::OPTION_CONTRACT_MULTIPLIER;
         $this->assertSame(-1.50 * $shares, $rows[0]['marketValue']);
         $this->assertSame(1.00 * $shares, $rows[0]['unrealizedPnL'], 'Written at 2.50, worth 1.50.');
-        $this->assertEqualsWithDelta(40.0, $rows[0]['unrealizedPnLPercent'], 1e-9);
+        $this->assertEqualsWithDelta(0.40, $rows[0]['unrealizedReturn'], 1e-12);
         $this->assertSame('APX Call $60.00', $rows[0]['name']);
 
         $totals = DashboardPageBuilder::markedTotals($rows);
@@ -131,7 +131,7 @@ final class DashboardPageBuilderTest extends TestCase
         ], [], []), 8000.0);
 
         $this->assertSame(['BIG', 'SML'], array_column($rows, 'ticker'));
-        $this->assertSame(50.0, $rows[0]['weight']);
+        $this->assertSame(0.5, $rows[0]['weight']);
     }
 
     /** A short is sized by what it owes: a large short is the largest position, not the last. */
@@ -143,6 +143,6 @@ final class DashboardPageBuilderTest extends TestCase
         ], [], []), 60000.0);
 
         $this->assertSame(['SHT', 'LNG'], array_column($rows, 'ticker'));
-        $this->assertEqualsWithDelta(-83.33, $rows[0]['weight'], 0.01);
+        $this->assertEqualsWithDelta(-0.8333, $rows[0]['weight'], 0.0001);
     }
 }

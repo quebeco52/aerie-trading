@@ -52,7 +52,7 @@ class StockPageBuilderTest extends TestCase
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
         'peRatio', 'peers', 'pieData', 'pieLabels', 'pipeline', 'sharesMap', 'shortInterest', 'shortUtilization', 'strategicStake',
         'ticksPerYear', 'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades',
-        'userUnrealizedPnL', 'userUnrealizedPnLPercent',
+        'userUnrealizedPnL', 'userUnrealizedReturn',
     ];
 
     private const TICKS_PER_YEAR = 14400;
@@ -62,7 +62,7 @@ class StockPageBuilderTest extends TestCase
         'userQuantity' => 0,
         'userAvgCost' => 0.0,
         'userUnrealizedPnL' => 0.0,
-        'userUnrealizedPnLPercent' => 0.0,
+        'userUnrealizedReturn' => 0.0,
         'userDividendIncome' => 0.0,
         'openOrders' => [],
         'userTrades' => [],

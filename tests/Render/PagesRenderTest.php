@@ -189,7 +189,7 @@ final class PagesRenderTest extends KernelTestCase
                     ['type' => 'CREDIT DOWNGRADE', 'description' => 'Shrike Standard Ratings cut Lakebird Bank to A-.', 'change_percent' => -1.4, 'recorded_at' => '2026-09-12 12:00'],
                 ],
                 'userQuantity' => 0, 'userDividendIncome' => 0, 'marketCap' => 2.02e11, 'peRatio' => 13.76, 'dividendYield' => 0.031, 'strategicStake' => 0, 'macro' => ['sovereignFundOwnershipShare' => 0.23, 'stampDutyRate' => 0.001],
-                'analystTargets' => ['rating' => 'Outperform', 'upside_pct' => 8.4, 'consensus' => 91.3, 'growth_analyst' => 95.1, 'value_analyst' => 88.2, 'income_analyst' => 90.4],
+                'analystTargets' => ['rating' => 'Outperform', 'upside' => 0.084, 'consensus' => 91.3, 'growth_analyst' => 95.1, 'value_analyst' => 88.2, 'income_analyst' => 90.4],
                 'openOrders' => [], 'tradeHistory' => [], 'optionsListed' => false, 'optionExpiries' => [], 'lifecycleStage' => \App\Data\Company\LifecycleStage::Mature, 'lifecycleStages' => \App\Data\Company\LifecycleStage::cases(), 'financialSummary' => [], 'peers' => [], 'industry' => null, 'management' => null, 'anchorPortfolio' => null, 'netAssetValue' => null, 'capital' => null, 'credit' => null, 'ticksPerYear' => 14400, 'halfSpread' => 0.0004, 'advShares' => 3400000, 'borrowFee' => 0.01, 'availableToBorrow' => 1000000, 'shortUtilization' => 0.2,
                 'borrowWarnings' => ['expensiveFee' => 0.05, 'scarceUtilization' => 0.90, 'recallUtilization' => 0.97],
                 'shortInterest' => ['shares' => 21600000, 'floatShare' => 0.01125, 'daysToCover' => 6.35],
@@ -218,10 +218,10 @@ final class PagesRenderTest extends KernelTestCase
                 ],
             ]],
             'dashboard' => ['/dashboard', 'dashboard/index.html.twig', [
-                'portfolioValue' => 1234567.89, 'totalUnrealizedPnL' => -23456.7, 'totalUnrealizedPnLPercent' => -1.9, 'cashBalance' => 200000.0, 'totalInvested' => 1034567.89, 'escrowedCash' => 1200.0, 'totalDividendIncome' => 4321.0,
+                'portfolioValue' => 1234567.89, 'totalUnrealizedPnL' => -23456.7, 'totalUnrealizedReturn' => -0.019, 'cashBalance' => 200000.0, 'totalInvested' => 1034567.89, 'escrowedCash' => 1200.0, 'totalDividendIncome' => 4321.0,
                 'holdings' => [
-                    ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'type' => 'STOCK', 'sector' => 'Financials', 'quantity' => 1200, 'avgCost' => 70.1, 'price' => 84.21, 'marketValue' => 101052.0, 'unrealizedPnL' => 16932.0, 'unrealizedPnLPercent' => 20.1, 'weight' => 8.2, 'dividendsReceived' => 120.0, 'isBankrupt' => false],
-                    ['ticker' => 'PEAC', 'name' => 'Peacock Heritage Group', 'type' => 'STOCK', 'sector' => 'Consumer Discretionary', 'quantity' => 300, 'avgCost' => 210.0, 'price' => 210.0, 'marketValue' => 63000.0, 'unrealizedPnL' => 0.0, 'unrealizedPnLPercent' => 0.0, 'weight' => 5.1, 'dividendsReceived' => 0.0, 'isBankrupt' => false],
+                    ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'type' => 'STOCK', 'sector' => 'Financials', 'quantity' => 1200, 'avgCost' => 70.1, 'price' => 84.21, 'marketValue' => 101052.0, 'unrealizedPnL' => 16932.0, 'unrealizedReturn' => 0.201, 'weight' => 0.082, 'dividendsReceived' => 120.0, 'isBankrupt' => false],
+                    ['ticker' => 'PEAC', 'name' => 'Peacock Heritage Group', 'type' => 'STOCK', 'sector' => 'Consumer Discretionary', 'quantity' => 300, 'avgCost' => 210.0, 'price' => 210.0, 'marketValue' => 63000.0, 'unrealizedPnL' => 0.0, 'unrealizedReturn' => 0.0, 'weight' => 0.051, 'dividendsReceived' => 0.0, 'isBankrupt' => false],
                 ],
                 'openOrders' => [['id' => 41, 'ticker' => 'LAKE', 'action' => 'BUY', 'orderType' => 'STOP_LIMIT', 'quantity' => 100, 'limitPrice' => 80.0, 'stopPrice' => 82.0, 'createdAt' => new \DateTimeImmutable('2026-10-01')]],
                 'tradeHistory' => [], 'dividendPayments' => [], 'allocation' => [
@@ -231,7 +231,7 @@ final class PagesRenderTest extends KernelTestCase
                 ],
                 'cashShare' => 0.162, 'escrowedShareValue' => 0.0, 'optionMultiplier' => 100,
                 'totalRealised' => 3150.25, 'cashRate' => 0.0425, 'marginRate' => 0.075,
-                'sectorBreakdown' => [['name' => 'Financials', 'value' => 500000, 'percent' => 48.3], ['name' => 'Industrials', 'value' => 300000, 'percent' => 29.0]],
+                'sectorBreakdown' => [['name' => 'Financials', 'value' => 500000, 'share' => 0.483], ['name' => 'Industrials', 'value' => 300000, 'share' => 0.29]],
                 'margin' => ['buyingPower' => 200000, 'shortMarketValue' => 0, 'optionShortValue' => 0, 'equity' => 1234567, 'maintenanceRequirement' => 0, 'isCalled' => false, 'equityRatio' => 1.0, 'callAmount' => 0], 'marginDebit' => 0, 'livePrices' => [], 'totalInvestedCost' => 1000000,
                 'couponPayments' => [], 'tradePage' => 1, 'tradePages' => 1,
                 'checklist' => ['complete' => false, 'items' => [
@@ -287,6 +287,36 @@ final class PagesRenderTest extends KernelTestCase
                     ['share' => 0.03, 'adoption' => 0.4, 'exclusivityQuarters' => 46.0], ['share' => 0.10, 'adoption' => 1.0, 'exclusivityQuarters' => -3.0],
                 ], 0.29),
                 'runway' => ['years' => 6.8, 'quarterlyBurn' => 4.1e8],
+            ],
+        ])];
+
+        // An index fund: the index and holdings tabs in place of the company's. Rates and weights are fractions.
+        $members = [
+            ['rank' => 1, 'ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'price' => 84.21, 'marketCap' => 2.02e11, 'floatCap' => 1.01e11, 'adjustedCap' => 1.01e11, 'volatility' => 0.21, 'weight' => 0.4125, 'targetWeight' => 0.40, 'changePercent' => 0.0342, 'isNew' => false],
+            ['rank' => 2, 'ticker' => 'GULL', 'name' => 'Gull Resorts', 'sector' => 'Consumer Cyclical', 'price' => 41.07, 'marketCap' => 1.1e11, 'floatCap' => 8.3e10, 'adjustedCap' => 8.3e10, 'volatility' => 0.32, 'weight' => 0.3375, 'targetWeight' => 0.3376, 'changePercent' => -0.012, 'isNew' => false],
+            ['rank' => 3, 'ticker' => 'WIRE', 'name' => 'Wirefield Telecom', 'sector' => 'Communication Services', 'price' => 22.9, 'marketCap' => 7.4e10, 'floatCap' => 6.1e10, 'adjustedCap' => 6.1e10, 'volatility' => 0.18, 'weight' => 0.25, 'targetWeight' => null, 'changePercent' => null, 'isNew' => true],
+        ];
+        $pages['stock-etf'] = ['/stock/LBI', 'stock/index.html.twig', array_replace($pages['stock'][2], [
+            'isEtf' => true, 'isFinancial' => false, 'businessModel' => null,
+            'asset' => array_replace($pages['stock'][2]['asset'], ['ticker' => 'LBI', 'name' => 'Skein Lakebird 30 ETF', 'price' => 412.37]),
+            'components' => $members, 'pieLabels' => array_column($members, 'ticker'), 'pieData' => array_column($members, 'adjustedCap'),
+            'sharesMap' => ['LAKE' => 1.2e9, 'GULL' => 2.02e9, 'WIRE' => 2.66e9],
+            'indexFacts' => [
+                'ticker' => 'LBI', 'label' => 'Headline index', 'indexName' => 'Skein Lakebird 30', 'indexProvider' => 'Skein Indices', 'indexProviderTicker' => 'SKN',
+                'providerIsConstituent' => false, 'mandate' => 'The thirty largest companies on the board by free float.', 'isSelective' => true,
+                'carriesPassiveBook' => true, 'passiveShare' => 0.62, 'constituentCount' => 30, 'memberCount' => 3, 'listedCount' => 60,
+                'universe' => 'the whole listed board', 'rankingLabel' => 'Free-float capitalisation', 'weightingLabel' => 'Capped float weight',
+                'weightingDescription' => 'Each member is held in proportion to its free float', 'isCapped' => true, 'maxConstituentWeight' => 0.10,
+                'appliesConcentrationBudget' => false, 'screensEarnings' => true, 'totalFloatCap' => 2.45e11, 'topWeight' => 1.0, 'topN' => 3,
+                'largest' => $members[0],
+                'sectorWeights' => [['sector' => 'Financials', 'weight' => 0.4125, 'count' => 1], ['sector' => 'Consumer Cyclical', 'weight' => 0.3375, 'count' => 1], ['sector' => 'Communication Services', 'weight' => 0.25, 'count' => 1]],
+                'divisor' => 8.1e8, 'reconstitutionsPerYear' => 4, 'added' => ['WIRE'], 'deleted' => ['KITE'], 'hasRoster' => true,
+                'daysSinceReconstitution' => 40.0, 'daysUntilReconstitution' => 50.0, 'bands' => ['inner' => 24, 'outer' => 36],
+                'atRisk' => [['rank' => 31, 'ticker' => 'POOL', 'name' => 'Pool Capital', 'sector' => 'Financials', 'exits' => false]],
+                'contenders' => [['rank' => 23, 'ticker' => 'KITE', 'name' => 'Kite Industrial REIT', 'sector' => 'Real Estate', 'qualifies' => true]],
+                'expenseRatio' => 0.0005, 'navPremium' => 0.00042, 'arbitrageBand' => 0.0015, 'sharesOutstanding' => 4.2e7,
+                'distributionYield' => 0.0105, 'accruedIncome' => 0.85, 'feesPaidPerShare' => 1.94, 'tradingCostsPerShare' => 0.12,
+                'trackingDifference' => 0.0012,
             ],
         ])];
 

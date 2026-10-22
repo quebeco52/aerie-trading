@@ -131,7 +131,7 @@ class EtfCompositionBuilder
 
         foreach ($adjustedCaps as $ticker => $adjustedCap) {
             $stock = $stockByTicker[$ticker];
-            $weight = $totalAdjustedCap > 0.0 ? ($adjustedCap / $totalAdjustedCap) * 100.0 : 0.0;
+            $weight = $totalAdjustedCap > 0.0 ? $adjustedCap / $totalAdjustedCap : 0.0;
             $sector = $stock->getSector();
 
             $pieLabels[] = $ticker;
@@ -154,7 +154,7 @@ class EtfCompositionBuilder
                 'volatility' => $volByTicker[$ticker],
                 'weight' => $weight,
                 // Target review weight; variance reflects drift between index rebalances.
-                'targetWeight' => isset($targets[$ticker]) ? $targets[$ticker] * 100.0 : null,
+                'targetWeight' => $targets[$ticker] ?? null,
                 'changePercent' => $changes[$ticker] ?? null,
                 'isNew' => isset($added[$ticker]),
             ];
@@ -193,7 +193,7 @@ class EtfCompositionBuilder
                 'mandate' => $index->mandate(),
                 'isSelective' => $index->isSelective(),
                 'carriesPassiveBook' => $index->carriesPassiveBook(),
-                'passiveShare' => $index->passiveShare() * 100.0,
+                'passiveShare' => $index->passiveShare(),
                 'constituentCount' => $index->constituentCount(),
                 'memberCount' => count($components),
                 'listedCount' => count($capByTicker),
@@ -202,7 +202,7 @@ class EtfCompositionBuilder
                 'weightingLabel' => $index->weighting()->label(),
                 'weightingDescription' => $index->weighting()->description(),
                 'isCapped' => $index->weightCap() !== null,
-                'maxConstituentWeight' => ($index->weightCap() ?? 0.0) * 100.0,
+                'maxConstituentWeight' => $index->weightCap() ?? 0.0,
                 'appliesConcentrationBudget' => $index->appliesConcentrationBudget(),
                 'screensEarnings' => $index->requiresEarningsViability(),
                 'totalFloatCap' => $totalFloatCap,
@@ -253,20 +253,20 @@ class EtfCompositionBuilder
         $price = (float) $fund->getPrice();
 
         return [
-            'expenseRatio' => $fund->getExpenseRatio() * 100.0,
+            'expenseRatio' => $fund->getExpenseRatio(),
             // NAV premium/discount and arbitrage threshold band.
-            'navPremium' => $fund->getNavPremium() * 100.0,
-            'arbitrageBand' => $fund->getArbitrageBand() * 100.0,
+            'navPremium' => $fund->getNavPremium(),
+            'arbitrageBand' => $fund->getArbitrageBand(),
             'sharesOutstanding' => $fund->getSharesOutstanding(),
-            'distributionYield' => $price > 0.0 ? ($fund->trailingDistribution() / $price) * 100.0 : 0.0,
+            'distributionYield' => $price > 0.0 ? $fund->trailingDistribution() / $price : 0.0,
             // Undistributed accrued dividend income reflected in share price.
             'accruedIncome' => $fund->getAccruedIncome(),
             // Cumulative management fees paid per share.
             'feesPaidPerShare' => $fund->getCumulativeFeesPaid(),
             // Cumulative index rebalance transaction costs per share.
             'tradingCostsPerShare' => $fund->getCumulativeTradingCosts(),
-            // Cumulative percentage tracking difference versus benchmark basket.
-            'trackingDifference' => (1.0 - $fund->getBasketPerShare()) * 100.0,
+            // Cumulative tracking difference versus the benchmark basket, as a fraction of it.
+            'trackingDifference' => 1.0 - $fund->getBasketPerShare(),
         ];
     }
 

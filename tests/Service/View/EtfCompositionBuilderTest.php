@@ -96,8 +96,8 @@ class EtfCompositionBuilderTest extends TestCase
 
         $weights = array_column($composition['components'], 'weight', 'ticker');
 
-        $this->assertEqualsWithDelta(100.0, array_sum($weights), 1e-9);
-        $this->assertEqualsWithDelta(300_000 / 310_000 * 100, $weights['BIG'], 1e-9);
+        $this->assertEqualsWithDelta(1.0, array_sum($weights), 1e-12);
+        $this->assertEqualsWithDelta(300_000 / 310_000, $weights['BIG'], 1e-12);
     }
 
     public function testConstituentsAreListedHeaviestFirstAndRanked(): void
@@ -126,7 +126,7 @@ class EtfCompositionBuilderTest extends TestCase
         $this->assertSame(['LIVE'], array_column($composition['components'], 'ticker'));
         $this->assertSame(['LIVE'], $composition['pieLabels']);
         $this->assertArrayNotHasKey('DEAD', $composition['sharesMap']);
-        $this->assertEqualsWithDelta(100.0, $composition['components'][0]['weight'], 1e-9);
+        $this->assertEqualsWithDelta(1.0, $composition['components'][0]['weight'], 1e-12);
     }
 
     public function testTheSeriesStayAlignedWithTheConstituentList(): void
@@ -168,8 +168,8 @@ class EtfCompositionBuilderTest extends TestCase
         $byTicker = array_column($components, null, 'ticker');
 
         $this->assertGreaterThan($byTicker['CLOSED']['weight'], $byTicker['OPEN']['weight']);
-        $this->assertEqualsWithDelta(80.0, $byTicker['OPEN']['weight'], 1e-6);
-        $this->assertEqualsWithDelta(20.0, $byTicker['CLOSED']['weight'], 1e-6);
+        $this->assertEqualsWithDelta(0.80, $byTicker['OPEN']['weight'], 1e-8);
+        $this->assertEqualsWithDelta(0.20, $byTicker['CLOSED']['weight'], 1e-8);
     }
 
     public function testTheLiveRepaintSharesAreFloatAdjustedToo(): void
@@ -240,8 +240,8 @@ class EtfCompositionBuilderTest extends TestCase
 
         $this->assertSame(['Technology', 'Financials'], array_column($sectors, 'sector'));
         $this->assertSame([2, 1], array_column($sectors, 'count'));
-        $this->assertEqualsWithDelta(70.0, $sectors[0]['weight'], 1e-9);
-        $this->assertEqualsWithDelta(100.0, array_sum(array_column($sectors, 'weight')), 1e-9);
+        $this->assertEqualsWithDelta(0.70, $sectors[0]['weight'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum(array_column($sectors, 'weight')), 1e-12);
     }
 
     public function testConcentrationIsTheWeightOfTheLargestTen(): void
@@ -258,7 +258,7 @@ class EtfCompositionBuilderTest extends TestCase
         }
 
         $this->assertSame(EtfCompositionBuilder::CONCENTRATION_TOP_N, $facts['topN']);
-        $this->assertEqualsWithDelta($expected / $total * 100.0, $facts['topWeight'], 1e-9);
+        $this->assertEqualsWithDelta($expected / $total, $facts['topWeight'], 1e-12);
         $this->assertSame('T000', $facts['largest']['ticker']);
     }
 
@@ -407,8 +407,8 @@ class EtfCompositionBuilderTest extends TestCase
         $result = $this->builder($board)->build(MarketIndex::LowVolatility);
         $weights = array_column($result['components'], 'weight', 'ticker');
 
-        $this->assertEqualsWithDelta(75.0, $weights['SMALL'], 1e-9);
-        $this->assertEqualsWithDelta(25.0, $weights['BIG'], 1e-9);
+        $this->assertEqualsWithDelta(0.75, $weights['SMALL'], 1e-12);
+        $this->assertEqualsWithDelta(0.25, $weights['BIG'], 1e-12);
 
         // Rows are ordered by what the fund holds, so the largest HOLDING leads whatever its size.
         $this->assertSame('SMALL', $result['components'][0]['ticker']);
@@ -416,7 +416,7 @@ class EtfCompositionBuilderTest extends TestCase
 
         // And the target the review set is carried beside the drifted weight.
         $targets = array_column($result['components'], 'targetWeight', 'ticker');
-        $this->assertEqualsWithDelta(75.0, $targets['SMALL'], 1e-9);
+        $this->assertEqualsWithDelta(0.75, $targets['SMALL'], 1e-12);
     }
 
     /**
@@ -473,12 +473,12 @@ class EtfCompositionBuilderTest extends TestCase
 
         $facts = $this->builder($this->rankedBoard(1))->build(MarketIndex::Headline, $fund)['indexFacts'];
 
-        $this->assertEqualsWithDelta(0.05, $facts['expenseRatio'], 1e-9);
+        $this->assertEqualsWithDelta(0.0005, $facts['expenseRatio'], 1e-12);
         $this->assertEqualsWithDelta(1.94, $facts['feesPaidPerShare'], 1e-9);
         $this->assertEqualsWithDelta(0.85, $facts['accruedIncome'], 1e-9);
 
         // A trailing yield is the year of payments over the price, not the last one annualised.
-        $this->assertEqualsWithDelta((2.10 / 200.0) * 100.0, $facts['distributionYield'], 1e-9);
+        $this->assertEqualsWithDelta(2.10 / 200.0, $facts['distributionYield'], 1e-12);
 
         // What following the index cost in spread, reported apart from the fee because it is a different
         // cost with a different cause — and because a cap-weighted fund pays almost none of it.
@@ -486,7 +486,7 @@ class EtfCompositionBuilderTest extends TestCase
 
         // How far the basket has fallen behind the one index unit a share started with: the fund's
         // cumulative tracking difference, whatever the costs that caused it.
-        $this->assertEqualsWithDelta(0.12, $facts['trackingDifference'], 1e-9);
+        $this->assertEqualsWithDelta(0.0012, $facts['trackingDifference'], 1e-12);
     }
 
     /** Without a fund there is no fund to report on, and the page says so rather than inventing zeroes. */

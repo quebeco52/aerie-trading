@@ -1,3 +1,4 @@
+import { formatPercent } from '../utils/formatters.js';
 import { setText } from '../utils/set-text.js';
 
 /**
@@ -42,12 +43,12 @@ export function updateConstituentRows(payload, sharesMap = {}) {
     if (total <= 0) return;
 
     Object.keys(caps).forEach(ticker => {
-        const weight = (caps[ticker] / total) * 100;
-        setText(document.getElementById(`idx-weight-${ticker}`), weight.toFixed(2) + '%');
+        const weight = caps[ticker] / total;
+        setText(document.getElementById(`idx-weight-${ticker}`), formatPercent(weight, 2));
 
         const bar = document.getElementById(`idx-bar-${ticker}`);
         if (bar) {
-            const width = Math.max(0, Math.min(100, weight)).toFixed(2) + '%';
+            const width = Math.max(0, Math.min(100, weight * 100)).toFixed(2) + '%';
             if (bar.style.width !== width) bar.style.width = width;
         }
     });

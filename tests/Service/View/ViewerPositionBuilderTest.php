@@ -112,7 +112,7 @@ class ViewerPositionBuilderTest extends TestCase
         $this->assertSame(10, $position['userQuantity']);
         $this->assertSame(80.0, $position['userAvgCost']);
         $this->assertEqualsWithDelta(200.0, $position['userUnrealizedPnL'], 1e-9);
-        $this->assertEqualsWithDelta(25.0, $position['userUnrealizedPnLPercent'], 1e-9);
+        $this->assertEqualsWithDelta(0.25, $position['userUnrealizedReturn'], 1e-12);
     }
 
     public function testALossIsMarkedTheSameWay(): void
@@ -123,7 +123,7 @@ class ViewerPositionBuilderTest extends TestCase
         $position = $this->builder()->build($this->stock(100.0), 'LAKE', new User());
 
         $this->assertEqualsWithDelta(-200.0, $position['userUnrealizedPnL'], 1e-9);
-        $this->assertEqualsWithDelta(-100.0 / 3.0, $position['userUnrealizedPnLPercent'], 1e-9);
+        $this->assertEqualsWithDelta(-1.0 / 3.0, $position['userUnrealizedReturn'], 1e-12);
     }
 
     /**
@@ -196,7 +196,7 @@ class ViewerPositionBuilderTest extends TestCase
         $this->assertSame(-10, $position['userQuantity']);
         $this->assertSame(80.0, $position['userAvgCost']);
         $this->assertEqualsWithDelta(-200.0, $position['userUnrealizedPnL'], 1e-9);
-        $this->assertEqualsWithDelta(-25.0, $position['userUnrealizedPnLPercent'], 1e-9);
+        $this->assertEqualsWithDelta(-0.25, $position['userUnrealizedReturn'], 1e-12);
         $this->assertSame(12.5, $position['userBorrowAccrued']);
     }
 
@@ -208,6 +208,6 @@ class ViewerPositionBuilderTest extends TestCase
         $position = $this->builder()->build($this->stock(60.0), 'LAKE', new User());
 
         $this->assertEqualsWithDelta(200.0, $position['userUnrealizedPnL'], 1e-9);
-        $this->assertEqualsWithDelta(25.0, $position['userUnrealizedPnLPercent'], 1e-9);
+        $this->assertEqualsWithDelta(0.25, $position['userUnrealizedReturn'], 1e-12);
     }
 }

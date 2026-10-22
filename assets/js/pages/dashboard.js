@@ -1,5 +1,5 @@
 import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
-import { formatCurrency, signedClass, SIGNED_CLASSES } from '../utils/formatters.js';
+import { formatCurrency, formatPercent, signedClass, SIGNED_CLASSES } from '../utils/formatters.js';
 import { CHART_FONT_MONO } from '../utils/fonts.js';
 import { readPageData } from '../utils/page-data.js';
 import { flashTick } from '../utils/tick-flash.js';
@@ -234,11 +234,11 @@ function initDashboard() {
                 const avgCost = Number(holdings[stock.ticker]?.avgCost) || newPrice;
                 const totalCost = avgCost * quantity;
                 const unrealizedPnL = holdingValue - totalCost;
-                const unrealizedPnLPct = totalCost !== 0 ? (unrealizedPnL / Math.abs(totalCost)) * 100 : 0.0;
+                const unrealizedReturn = totalCost !== 0 ? unrealizedPnL / Math.abs(totalCost) : 0.0;
 
                 const priceEl = document.getElementById(`price-${stock.ticker}`);
                 if (priceEl) {
-                    setText(priceEl, '$' + newPrice.toFixed(2));
+                    setText(priceEl, formatCurrency(newPrice));
                     flashTick(priceEl, newPrice - oldPrice);
                 }
 
@@ -258,7 +258,7 @@ function initDashboard() {
                     }
                     const lines = pnlEl.children;
                     setText(lines[0], `${sign}${formatCurrency(unrealizedPnL)}`);
-                    setText(lines[1], `(${sign}${unrealizedPnLPct.toFixed(2)}%)`);
+                    setText(lines[1], `(${formatPercent(unrealizedReturn, 2, false, true)})`);
                 }
 
                 previousPrices[stock.ticker] = newPrice;
@@ -284,7 +284,7 @@ function initDashboard() {
 
             const totalPortfolioValue = totalInvested + cash;
             const totalPnL = totalInvested - totalInvestedCost;
-            const totalPnLPct = grossCost > 0 ? (totalPnL / grossCost) * 100 : 0.0;
+            const totalReturn = grossCost > 0 ? totalPnL / grossCost : 0.0;
 
             setText(document.getElementById('total-invested'), formatCurrency(totalInvested));
 
@@ -304,7 +304,7 @@ function initDashboard() {
             if (pnlValEl && pnlPctEl && pnlBadge) {
                 const sign = totalPnL > 0 ? '+' : '';
                 setText(pnlValEl, `${sign}${formatCurrency(totalPnL)}`);
-                setText(pnlPctEl, `(${sign}${totalPnLPct.toFixed(2)}%)`);
+                setText(pnlPctEl, `(${formatPercent(totalReturn, 2, false, true)})`);
 
                 const tone = signedClass(totalPnL);
                 if (!pnlBadge.classList.contains(tone)) {
