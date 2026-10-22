@@ -15,6 +15,7 @@ use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Math\MacroConstants;
@@ -89,7 +90,6 @@ class SystemicEventReporter
             'hy_spread_pct' => number_format($macro->highYieldCreditSpread * 100.0, 2),
             'recession_prob_pct' => number_format($macro->recessionProbability * 100.0, 1),
             'unemployment_pct' => number_format($macro->unemploymentRate * 100.0, 1),
-            'gdp_fall_pct' => number_format(-$macro->realGdpQuarterlyGrowth * 100.0, 1),
             'output_gap_pct' => number_format($macro->outputGap * 100.0, 2),
             'inversion_months' => number_format($macro->inversionDuration * 12.0, 1),
             'erp_pct' => number_format($macro->equityRiskPremium * 100.0, 2),
@@ -106,7 +106,7 @@ class SystemicEventReporter
             'swf_target_pct' => number_format($macro->sovereignFundTargetWeight * 100.0, 2),
             'swf_size_gdp_pct' => number_format($macro->sovereignFundToGdp * 100.0, 0),
             'swf_months' => number_format($macro->sovereignFundRebalanceMonthsLeft, 0),
-        ] + self::electionContext($politics) + self::fallContext($politics) + self::formationContext($politics) + self::budgetContext($politics)
+        ] + self::recessionCallContext($macro) + self::electionContext($politics) + self::fallContext($politics) + self::formationContext($politics) + self::budgetContext($politics)
             + self::authorityContext($politics)
             + self::leaderContext($politics)
             + self::fundHeadContext($macro, $politics)
@@ -124,6 +124,20 @@ class SystemicEventReporter
             $this->narrativeEngine->generateLore($story[1], $context),
             $monthMove === null ? null : 100.0 * $monthMove,
         ), $stories);
+    }
+
+    /**
+     * The quarter's fall, quoted only while the latest quarter is the one that made the recession call. A call reported
+     * late, behind a bigger story, would otherwise quote whatever the latest quarter did, a rise included.
+     *
+     * @return array<string, string>
+     */
+    private static function recessionCallContext(MacroStateDTO $macro): array
+    {
+        $callingQuarter = $macro->realGdpQuarterlyGrowth < 0.0
+            && $macro->gdpQuarterStreak === -(float) MacroAggregateSubsystem::RECESSION_CALL_QUARTERS;
+
+        return $callingQuarter ? ['gdp_fall_pct' => number_format(-$macro->realGdpQuarterlyGrowth * 100.0, 1)] : [];
     }
 
     /**

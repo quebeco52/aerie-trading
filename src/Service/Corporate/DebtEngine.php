@@ -216,7 +216,8 @@ class DebtEngine
         $desc = $isDowngrade
             ? sprintf('[CREDIT DOWNGRADE] %s: Credit rating downgraded from %s to %s due to deteriorating %s.', $stock->getTicker(), $oldRating, $newRating, $debt > 0.0 ? 'credit profile' : 'fundamental solvency')
             : sprintf('[CREDIT UPGRADE] %s: Credit rating upgraded from %s to %s following balance sheet strengthening.', $stock->getTicker(), $oldRating, $newRating);
-        $this->marketEventPublisher->publish($stock, $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE', $desc, $isDowngrade ? -3.0 : 2.0);
+        // No move on the card: a rating change has no price channel of its own, and a fixed figure would be invented.
+        $this->marketEventPublisher->publish($stock, $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE', $desc, null);
     }
 
     /**

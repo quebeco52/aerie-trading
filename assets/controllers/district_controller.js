@@ -103,7 +103,7 @@ function formatReadoutValue(rawValue, unit) {
     if (!Number.isFinite(rawValue)) {
         return '—';
     }
-    return unit === 'pct' ? (rawValue * 100).toFixed(2) + '%' : rawValue.toFixed(1);
+    return formatReading({ value: rawValue, unit });
 }
 
 /**

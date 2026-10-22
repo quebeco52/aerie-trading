@@ -76,7 +76,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo($stock),
                 $this->equalTo('CREDIT_DOWNGRADE'),
                 $this->stringContains('downgraded from BBB to BB'),
-                $this->equalTo(-3.0),
+                $this->isNull(),
             );
 
         $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
@@ -112,7 +112,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo($stock),
                 $this->equalTo('CREDIT_UPGRADE'),
                 $this->stringContains('upgraded from BBB to A'),
-                $this->equalTo(2.0),
+                $this->isNull(),
             );
 
         $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
@@ -317,7 +317,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo($stock),
                 $this->equalTo('CREDIT_UPGRADE'),
                 $this->stringContains('upgraded from BBB to A'),
-                $this->equalTo(2.0),
+                $this->isNull(),
             );
 
         $this->engine->reviewRatingAndPriceDebt($stock, $macroState);
@@ -352,7 +352,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo($stock),
                 $this->equalTo('CREDIT_DOWNGRADE'),
                 $this->stringContains('downgraded from AAA to CCC'),
-                $this->equalTo(-3.0),
+                $this->isNull(),
             );
 
         $this->engine->reviewRatingAndPriceDebt($stock, $macroState);

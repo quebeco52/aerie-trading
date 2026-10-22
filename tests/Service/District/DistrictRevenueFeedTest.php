@@ -8,6 +8,7 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\District\DistrictRevenueFeed;
+use App\Service\View\ReportCalendar;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -320,16 +321,27 @@ class DistrictRevenueFeedTest extends TestCase
         $this->assertNull($this->feed->latestRevenueMixByTicker([$stock])['LAKE']['ttmRevenue']);
     }
 
-    public function testStampsThePeriodAndFilingDateOnTheMix(): void
+    /** The period is the District quarter the filing covers, as on the stock page, never the real-world date. */
+    public function testLabelsTheMixWithTheDistrictQuarterTheReportCovers(): void
     {
         $stock = $this->makeStock('LAKE');
         $report = $this->makeReport($stock, 100.0, ['fee_income' => 100.0], []);
         $report->setRecordedAt(new \DateTime('2026-08-14 09:30:00'));
+        $report->setTotalTime('12.30');
         $this->repository->method('findForStocksNewestFirst')->willReturn([$report]);
 
         $mix = $this->feed->latestRevenueMixByTicker([$stock])['LAKE'];
 
-        $this->assertSame('Q3 2026', $mix['periodLabel']);
-        $this->assertStringStartsWith('2026-08-14', $mix['reportedAt']);
+        $this->assertSame(ReportCalendar::coveredQuarter(12.30), $mix['periodLabel']);
+        $this->assertStringStartsWith('Year 13', (string) $mix['periodLabel']);
+    }
+
+    public function testAReportFiledBeforeFilingTimesWereRecordedHasNoPeriod(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        $report = $this->makeReport($stock, 100.0, ['fee_income' => 100.0], []);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$report]);
+
+        $this->assertNull($this->feed->latestRevenueMixByTicker([$stock])['LAKE']['periodLabel']);
     }
 }

@@ -137,7 +137,7 @@ class DistrictConduitTopologyTest extends TestCase
     public function testEveryInstitutionReadoutIsADeclaredFieldWithAValidUnit(): void
     {
         $dtoFields = array_keys((new MacroStateDTO())->toArray());
-        $validUnits = [DistrictMap::UNIT_PERCENT, DistrictMap::UNIT_INDEX];
+        $validUnits = [DistrictMap::UNIT_PERCENT, DistrictMap::UNIT_BPS, DistrictMap::UNIT_INDEX];
 
         foreach (DistrictMap::INSTITUTIONS as $institutionId => $institution) {
             $this->assertNotEmpty(

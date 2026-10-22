@@ -346,10 +346,12 @@ class NarrativeEngine
                 ],
             ),
             ShockEvent::RECESSION_DECLARED => $this->getRandomPhrase(
-                isset($context['gdp_fall_pct']) || isset($context['output_gap_pct']) ? [
-                    "Recession confirmed: Output shrank " . (isset($context['gdp_fall_pct']) ? "{$context['gdp_fall_pct']}% " : '') . "last quarter, the second fall in a row, with unemployment at " . ($context['unemployment_pct'] ?? 'a higher') . "%.",
-                    "Two quarters of contraction: The statistics office declares a recession after output fell " . (isset($context['gdp_fall_pct']) ? "{$context['gdp_fall_pct']}% " : 'again ') . "on the quarter; output stands " . ($context['output_gap_pct'] ?? 'below') . "% against potential.",
-                    "Recession confirmed: A second straight quarterly fall in output" . (isset($context['gdp_fall_pct']) ? ", down {$context['gdp_fall_pct']}%," : '') . " puts the economy in recession; the jobless rate is " . ($context['unemployment_pct'] ?? 'rising') . "%.",
+                // The quarter's fall comes only with the quarter that made the call; a late report falls back on the
+                // rest.
+                isset($context['gdp_fall_pct']) ? [
+                    "Recession confirmed: Output shrank {$context['gdp_fall_pct']}% last quarter, the second fall in a row, with unemployment at " . ($context['unemployment_pct'] ?? 'a higher') . "%.",
+                    "Two quarters of contraction: The statistics office declares a recession after output fell {$context['gdp_fall_pct']}% on the quarter; output stands " . ($context['output_gap_pct'] ?? 'below') . "% against potential.",
+                    "Recession confirmed: A second straight quarterly fall in output, down {$context['gdp_fall_pct']}%, puts the economy in recession; the jobless rate is " . ($context['unemployment_pct'] ?? 'rising') . "%.",
                 ] : [
                     "Recession confirmed: Macroeconomic indicators signaled sustained output contraction and rising economic slack.",
                     "Technical recession confirmed: Contracting aggregate output and deteriorating labor conditions met formal recession criteria.",

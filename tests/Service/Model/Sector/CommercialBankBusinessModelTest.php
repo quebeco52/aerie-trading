@@ -1244,4 +1244,36 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($usual, $settled, 1e-12);
         $this->assertGreaterThan($usual, $rising);
     }
+
+    /**
+     * "Depositors fled" reports money leaving. A quarter whose deposits grew, however far below trend, is not a flight;
+     * one whose deposits fell reports the amount that left.
+     */
+    public function testADepositFlightStoryNeedsDepositsToFall(): void
+    {
+        $macro = new MacroStateDTO(inflationEma: 0.02);
+
+        $slowGrowth = $this->depositQuarter($macro, -1.5);
+        $this->assertGreaterThan(0.0, $slowGrowth['change'], 'z = -1.5 still grows the base at 2% inflation');
+        $this->assertNotContains(ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, array_column($slowGrowth['events'], 'event_type'));
+
+        $outflow = $this->depositQuarter($macro, -4.0);
+        $this->assertLessThan(0.0, $outflow['change']);
+        $flight = array_values(array_filter($outflow['events'], static fn(array $e): bool => $e['event_type'] === ShockEvent::CUSTOMER_DEPOSIT_FLIGHT));
+        $this->assertCount(1, $flight);
+        $this->assertSame(number_format(-$outflow['change'] / 1_000_000_000, 2), $flight[0]['context']['amount']);
+    }
+
+    /** @return array{change: float, events: list<array<string, mixed>>} */
+    private function depositQuarter(MacroStateDTO $macro, float $z): array
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('generateStandardNormal')->willReturn($z);
+        $deposits = 400_000_000_000.0;
+        $state = ['customerDeposits' => $deposits, 'treasury' => 50_000_000_000.0, 'events' => []];
+
+        $this->model->processPassiveLiabilityGrowth((new Stock())->setTicker('LAKE'), $macro, $state, $math);
+
+        return ['change' => $state['customerDeposits'] - $deposits, 'events' => $state['events']];
+    }
 }

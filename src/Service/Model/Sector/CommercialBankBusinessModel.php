@@ -489,8 +489,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     /** Absolute limit on quarterly liability change fraction. */
     public const LIABILITY_MAX_CHANGE_LIMIT = 0.15;
-    /** Quarterly shortfall against trend nominal income growth that triggers a deposit flight event. */
-    public const LIABILITY_FLIGHT_THRESHOLD = -0.005;
     /** Quarterly excess over trend nominal income growth that triggers a captured new deposits event. */
     public const LIABILITY_CAPTURE_THRESHOLD = 0.005;
 
@@ -1401,11 +1399,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
                 $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => $amtB]];
             }
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
-            // News is the departure from trend: a base growing with the economy is not a capture.
-            $departureFromTrend = ($liabilityChange / $currentLiabilities) - $trendGrowthQuarterly;
-            if ($departureFromTrend < self::LIABILITY_FLIGHT_THRESHOLD) {
+            // A flight is money leaving, not a base growing slower than trend. A capture is the departure above trend:
+            // a base growing with the economy is not news.
+            if ($liabilityChange < 0.0) {
                 $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)]];
-            } elseif ($departureFromTrend > self::LIABILITY_CAPTURE_THRESHOLD) {
+            } elseif (($liabilityChange / $currentLiabilities) - $trendGrowthQuarterly > self::LIABILITY_CAPTURE_THRESHOLD) {
                 $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)]];
             }
         }

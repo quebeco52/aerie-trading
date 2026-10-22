@@ -7,6 +7,7 @@ namespace App\Tests\Data\District;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Data\District\DistrictMap;
+use App\Data\Macro\MacroFieldCatalog;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -330,5 +331,25 @@ class DistrictMapTest extends TestCase
 
         $this->assertSame(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE['none'], DistrictMap::plotWidthForImportance(null));
         $this->assertSame(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE['none'], DistrictMap::plotWidthForImportance('unrecognised-tier'));
+    }
+
+    /**
+     * A reading on the street prints in the same unit as in the filings, so one spread is never "1.25%" and "125 bps".
+     */
+    public function testEveryCataloguedReadoutUsesTheCataloguesUnit(): void
+    {
+        $checked = 0;
+        foreach (DistrictMap::INSTITUTIONS as $id => $institution) {
+            foreach ($institution['readouts'] ?? [] as $readout) {
+                $catalogued = MacroFieldCatalog::FIELDS[$readout['field']] ?? null;
+                if ($catalogued === null || !in_array($catalogued['unit'], [MacroFieldCatalog::UNIT_PERCENT, MacroFieldCatalog::UNIT_BPS], true)) {
+                    continue;
+                }
+                $this->assertSame($catalogued['unit'], $readout['unit'], "{$id} reads {$readout['field']}");
+                $checked++;
+            }
+        }
+
+        $this->assertGreaterThan(0, $checked);
     }
 }

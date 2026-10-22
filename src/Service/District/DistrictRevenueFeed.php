@@ -9,6 +9,7 @@ use App\Data\Macro\MacroFieldCatalog;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Math\FirmEconomics;
+use App\Service\View\ReportCalendar;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -103,7 +104,6 @@ class DistrictRevenueFeed
             'totalRevenue' => 0.0,
             'streams' => [],
             'periodLabel' => null,
-            'reportedAt' => null,
             'totalQoq' => null,
             'totalYoy' => null,
             'ttmRevenue' => null,
@@ -172,8 +172,7 @@ class DistrictRevenueFeed
         return [
             'totalRevenue' => $totalRevenue,
             'streams' => $streams,
-            'periodLabel' => $this->periodLabel($latest),
-            'reportedAt' => $latest->getRecordedAt()->format(\DATE_ATOM),
+            'periodLabel' => $latest->getTotalTime() !== null ? ReportCalendar::coveredQuarter((float) $latest->getTotalTime()) : null,
             'totalQoq' => $this->growthRate($totalRevenue, $previous !== null ? $previousTotal : null),
             'totalYoy' => $this->growthRate($totalRevenue, $yearAgo !== null ? $yearAgoTotal : null),
             'ttmRevenue' => $this->trailingTwelveMonths($history),
@@ -247,17 +246,5 @@ class DistrictRevenueFeed
         }
 
         return $streams;
-    }
-
-    /**
-     * Calendar quarter the report was filed in. The simulation has no fiscal calendar of its own,
-     * so the filing timestamp is the period — the same stamp the report is ordered by.
-     */
-    private function periodLabel(CorporateReport $report): string
-    {
-        $recordedAt = $report->getRecordedAt();
-        $quarter = (int) ceil(((int) $recordedAt->format('n')) / 3);
-
-        return sprintf('Q%d %s', $quarter, $recordedAt->format('Y'));
     }
 }

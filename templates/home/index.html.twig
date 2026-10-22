@@ -22,8 +22,9 @@
 
 			{# Inflation #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/20">
-				<p class="text-xs text-on-surface-variant mb-1">Inflation</p>
-				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ (macro.inflation|default(0) * 100)|number_format(2) }}%</p>
+				{# The quarter's annual rate, as on the economy page, not the instant's noisy reading. #}
+				<p class="text-xs text-on-surface-variant mb-1">Inflation (CPI)</p>
+				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ macro.inflation_ema|pct(2) }}</p>
 				<p class="text-xs text-on-surface-variant mt-1">Target <span class="font-mono">2.00%</span></p>
 			</div>
 

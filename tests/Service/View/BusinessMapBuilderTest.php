@@ -52,6 +52,24 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.6, $this->card($map['produced'], 'rev:equipment_sales')['share'], 1e-12);
     }
 
+    /** Shipping names its order book after the stream (contract_book_to_bill), and the map reads it there. */
+    public function testAStreamNamedOrderBookShowsOnItsStream(): void
+    {
+        $report = $this->report(1000.0, '0.2000', ['contract_book_to_bill' => 0.94, 'contract_backlog_quarters' => 3.4]);
+        $report->setRevenueStreams(['contract' => 600.0, 'spot' => 400.0]);
+        $report->setStreamDetails(['contract' => ['qoq_delta' => 0.0, 'drivers' => []], 'spot' => ['qoq_delta' => 0.0, 'drivers' => []]]);
+        $stock = (new Stock())->setTicker('KEEL')->setIndustry('Marine Shipping');
+        $stock->setEarningsMomentumZ([StreamContext::BACKLOG_STATE_PREFIX . 'contract' => 3.2]);
+
+        $map = $this->builder->fromReports($stock, $report, null);
+        $this->assertNotNull($map);
+
+        $orders = $this->card($map['inside'], 'ops:contract');
+        $this->assertSame(0.94, $orders['value']);
+        $this->assertStringContainsString('3.4 quarters', (string) $orders['note']);
+        $this->assertNull($this->card($map['inside'], 'ops:spot')['value'], 'spot charters carry no book');
+    }
+
     /**
      * Input lines point the way the price moved the cost base: metals above normal hurt, pay below productivity helped.
      */

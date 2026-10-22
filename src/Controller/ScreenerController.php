@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Repository\StockRepository;
+use App\Service\Market\Bond\CreditRatingAgency;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -46,7 +47,7 @@ class ScreenerController extends AbstractController
             $peRatio = $eps > 0 ? $price / $eps : null;
             $dividendYield = $price > 0 ? ((float) $stock->getLastDividend() * 4) / $price : 0.0;
             $equity = (float) $stock->getTotalEquity();
-            $debtToEquity = $equity > 0 ? ((float) $stock->getTotalDebt() / $equity) : null;
+            $debtToEquity = $stock->getDebtToEquity();
 
             $businessModel = \App\Data\Company\Sectors::businessModelFor($stock->getIndustry());
             $isFinancial = \App\Data\Company\Sectors::isFinancial($businessModel);
@@ -77,6 +78,8 @@ class ScreenerController extends AbstractController
                 'eps'          => $eps,
                 'dividendYield' => $dividendYield,
                 'creditRating' => $stock->getCreditRating(),
+                // Sorted by credit quality, not alphabetically (A, AA, AAA, B, ...).
+                'creditRatingRank' => CreditRatingAgency::RATING_RANKS[$stock->getCreditRating()] ?? null,
                 'dividendAristocrat' => $stock->isDividendAristocrat(),
                 'currentRoic'  => $effectiveRoic,
                 'equity'       => $equity,

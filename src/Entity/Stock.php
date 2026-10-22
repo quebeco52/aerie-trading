@@ -2214,8 +2214,20 @@ class Stock
     }
 
     /**
+     * Total debt over book equity, as the pages show it: null when equity is not positive, where the ratio means
+     * nothing. getDebtToEquityRatio() floors equity at $1 instead, which the deal screen reads as maximum leverage.
+     */
+    public function getDebtToEquity(): ?float
+    {
+        $equity = (float) $this->totalEquity;
+
+        return $equity > 0.0 ? (float) $this->getTotalDebt() / $equity : null;
+    }
+
+    /**
      * Calculates the Debt-to-Equity Ratio dynamically based on Absolute Debt and Equity.
-     * * @return string The calculated Debt-to-Equity Ratio.
+     *
+     * @return string The calculated Debt-to-Equity Ratio.
      */
     public function getDebtToEquityRatio(): string
     {

@@ -256,9 +256,12 @@ final class BusinessMapBuilder
             };
         }
 
-        $hasBacklog = isset($state[StreamContext::BACKLOG_STATE_PREFIX . $key]) && is_numeric($kpis['book_to_bill'] ?? null);
-        if ($hasBacklog) {
-            $bookToBill = (float) $kpis['book_to_bill'];
+        // A firm with one backlog stream publishes book_to_bill; one that names the stream (Shipping's charters)
+        // publishes <stream>_book_to_bill.
+        $bookToBill = $kpis[$key . '_book_to_bill'] ?? $kpis['book_to_bill'] ?? null;
+        $backlogQuarters = $kpis[$key . '_backlog_quarters'] ?? $kpis['backlog_quarters'] ?? null;
+        if (isset($state[StreamContext::BACKLOG_STATE_PREFIX . $key]) && is_numeric($bookToBill)) {
+            $bookToBill = (float) $bookToBill;
 
             return [
                 'id' => 'ops:' . $key,
@@ -270,7 +273,7 @@ final class BusinessMapBuilder
                     'Orders ran %s%% %s shipments. The backlog holds %s quarters of sales.',
                     number_format(abs($bookToBill - 1.0) * 100.0, 0),
                     $bookToBill >= 1.0 ? 'ahead of' : 'behind',
-                    number_format((float) ($kpis['backlog_quarters'] ?? $state[StreamContext::BACKLOG_STATE_PREFIX . $key]), 1),
+                    number_format((float) ($backlogQuarters ?? $state[StreamContext::BACKLOG_STATE_PREFIX . $key]), 1),
                 ),
                 'chips' => $chips,
             ];

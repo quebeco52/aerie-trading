@@ -29,7 +29,7 @@ final class TemplateStyleTest extends TestCase
 
     // --- Ratchets: lower these as pages move onto the shared filters, never raise them ---
     /** Percentages still formatted by hand, `(x * 100)|number_format(n)`, where |pct does not fit yet. */
-    private const HAND_PERCENT_CEILING = 40;
+    private const HAND_PERCENT_CEILING = 38;
     /** Dollar figures still formatted by hand, `${{ ... }}`, where |money does not fit yet. */
     private const HAND_MONEY_CEILING = 7;
 
@@ -238,6 +238,17 @@ final class TemplateStyleTest extends TestCase
             $source = $this->stripTwigComments($source);
             $this->assertSame(preg_match_all('/<div\b/', $source), substr_count($source, '</div>'), "{$path} opens and closes a different number of divs.");
         }
+    }
+
+    /** Twig escapes a string passed to a macro, so an HTML entity in one prints as typed ("&mdash;"). */
+    public function testMacroArgumentsCarryNoHtmlEntities(): void
+    {
+        $hits = [];
+        foreach ($this->templates() as $path => $source) {
+            $hits = [...$hits, ...$this->grep($path, $source, "/\\bui\\.\\w+\\(\\s*'[^']*&[a-z]+;/")];
+        }
+
+        $this->assertSame([], $hits, 'Write the character itself in a macro argument, not its HTML entity.');
     }
 
     /** @return array<string, string> repo-relative path => source, player templates only */

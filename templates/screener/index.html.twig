@@ -81,7 +81,7 @@
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.currentRoic|signed_class }}" data-value="{{ stock.currentRoic }}">
                                 {{ stock.currentRoic|pct(2) }}
                             </td>
-                            <td class="px-4 py-2.5 font-mono tabular-nums text-center text-on-surface" data-value="{{ stock.creditRating|default('BBB') }}">
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-center text-on-surface" data-value="{{ stock.creditRatingRank }}">
                                 <span class="px-1.5 py-0.5 rounded text-2xs font-semibold border border-outline-variant/30 text-on-surface-variant">{{ stock.creditRating|default('—') }}</span>
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.equity }}">{{ stock.equity|format_large('$') }}</td>

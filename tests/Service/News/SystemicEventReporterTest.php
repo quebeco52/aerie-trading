@@ -86,6 +86,32 @@ class SystemicEventReporterTest extends TestCase
         $this->assertNull($this->persisted[0]->getChangePercent());
     }
 
+    /** The story quotes the fall of the quarter that made the call. */
+    public function testARecessionCalledThisQuarterQuotesTheQuartersFall(): void
+    {
+        $macro = new MacroStateDTO(eventType: ShockEvent::RECESSION_DECLARED, recessionDeclared: true, gdpQuarterStreak: -2.0, realGdpQuarterlyGrowth: -0.006);
+
+        $this->reporter(bufferedPrice: 100.0)->report($macro, new PoliticsStateDTO(), $this->benchmarkAt('97'));
+
+        $this->assertStringContainsString('0.6%', (string) $this->persisted[0]->getDescription());
+    }
+
+    /**
+     * A call reported late, behind a bigger story on the declaring tick, lands in a later quarter that may have grown.
+     * It must not say output shrank by that quarter's figure.
+     */
+    public function testARecessionReportedLateQuotesNoQuarterlyFall(): void
+    {
+        $macro = new MacroStateDTO(eventType: ShockEvent::RECESSION_DECLARED, recessionDeclared: true, gdpQuarterStreak: 1.0, realGdpQuarterlyGrowth: 0.004);
+
+        $this->reporter(bufferedPrice: 100.0)->report($macro, new PoliticsStateDTO(), $this->benchmarkAt('97'));
+
+        $description = (string) $this->persisted[0]->getDescription();
+        $this->assertStringNotContainsString('-0.4%', $description);
+        $this->assertStringNotContainsString('shrank', $description);
+        $this->assertMatchesRegularExpression('/recession/i', $description);
+    }
+
     /**
      * A hung Diet's headline names the largest party, the party opening the talks and the biggest mover, and never the
      * cabinet the talks will produce or try: that is settled on the day but not known until it takes office.

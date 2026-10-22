@@ -71,7 +71,8 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
 
         const debtRatioEl = document.getElementById('stat-debt-ratio');
         if (debtRatioEl && stockUpdate.debt_ratio !== undefined) {
-            debtRatioEl.textContent = stockUpdate.debt_ratio.toFixed(2) + 'x';
+            // Null on negative equity, where the server renders "—" too.
+            debtRatioEl.textContent = stockUpdate.debt_ratio === null ? '—' : stockUpdate.debt_ratio.toFixed(2) + 'x';
         }
 
         // The rating and the spread its credit trades at are separate nodes, so repainting one leaves the other.

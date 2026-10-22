@@ -560,7 +560,8 @@
 									{% else %}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="text-on-surface-variant">Debt to equity</dt>
-											<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
+											{# No ratio on negative equity: debt over nothing is not a leverage figure. #}
+											<dd class="font-medium font-mono tabular-nums {{ asset.debtToEquity is null ? 'text-on-surface-faint' : 'text-on-surface' }}" id="stat-debt-ratio">{{ asset.debtToEquity is null ? '—' : asset.debtToEquity|number_format(2) ~ 'x' }}</dd>
 										</div>
 									{% endif %}
 									{% if asset.creditRating is defined %}
@@ -629,7 +630,7 @@
 											<span class="term">Net debt / EBITDA</span>
 											{{ ui.tooltip('Funded net debt over trailing EBITDA, the leverage an incurrence covenant is tested on. Past the limit the firm may not take on new discretionary debt.', 'left', 'w-72') }}
 										</dt>
-										<dd class="font-medium font-mono tabular-nums {{ credit.hasCovenantHeadroom ? 'text-on-surface' : 'text-tertiary' }}">
+										<dd class="font-medium font-mono tabular-nums {{ credit.hasCovenantHeadroom ? 'text-on-surface' : 'text-warning' }}">
 											{{ credit.netDebtToEbitda|number_format(2) }}x{% if credit.covenantLimit is not null %} <span class="text-on-surface-variant font-normal text-2xs">limit {{ credit.covenantLimit|number_format(1) }}x</span>{% endif %}
 										</dd>
 									</div>
@@ -638,7 +639,7 @@
 											<span class="term">Interest coverage</span>
 											{{ ui.tooltip('How many times operating income covers the interest bill. Below the sector minimum the firm pays down debt before it pays out.', 'left', 'w-72') }}
 										</dt>
-										<dd class="font-medium font-mono tabular-nums {{ credit.coverageState == 'adequate' ? 'text-on-surface' : 'text-tertiary' }}">
+										<dd class="font-medium font-mono tabular-nums {{ credit.coverageState == 'adequate' ? 'text-on-surface' : (credit.coverageState == 'negative' ? 'text-tertiary' : 'text-warning') }}">
 											{{ credit.interestCoverage|number_format(1) }}x{% if credit.coverageState != 'adequate' %} <span class="font-normal text-2xs">{{ credit.coverageState }}</span>{% endif %}
 										</dd>
 									</div>
@@ -999,7 +1000,7 @@
 												{% if comp.targetWeight is not null and (comp.weight - comp.targetWeight)|abs >= 0.05 %}
 													<span class="group relative cursor-help text-4xs font-mono text-on-surface-faint block" tabindex="0">
 														{{ comp.targetWeight|number_format(2) }}% set
-														{{ ui.tooltip('The weight the last review set. Weights drift with prices between reviews because the fund holds a fixed number of shares &mdash; it does not trade again until the next review pulls it back to target.', 'left', 'w-64') }}
+														{{ ui.tooltip('The weight the last review set. Weights drift with prices between reviews because the fund holds a fixed number of shares: it does not trade again until the next review pulls it back to target.', 'left', 'w-64') }}
 													</span>
 												{% endif %}
 											</div>
