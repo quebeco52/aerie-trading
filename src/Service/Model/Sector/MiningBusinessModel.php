@@ -196,7 +196,7 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
      *
      * @return array{base_metals: float, precious_metals: float, energy_minerals: float, fertilizer_minerals: float}
      */
-    public function resolveStreamPriceRelatives(MacroStateDTO $macroState): array
+    private function resolveStreamPriceRelatives(MacroStateDTO $macroState): array
     {
         return [
             'base_metals' => max(0.0, $macroState->industrialMetalsIndexEma) / MacroConstants::METALS_BASELINE,

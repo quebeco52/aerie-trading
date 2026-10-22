@@ -154,11 +154,11 @@ final class OptionPricingEngine
     /**
      * The surface of a stock at one expiry, from what the row carries.
      *
-     * @param float|null $leveredBeta The beta the price step is using, when the caller has already computed
-     *                                it; the one the last tick stored otherwise, and the asset beta before any.
+     * The beta is the one the last tick stored, and the asset beta before any.
+     *
      * @return array{atm_volatility: float, skewness: float, excess_kurtosis: float}
      */
-    public function surfaceFor(Stock $stock, float $timeToExpiry, ?float $leveredBeta = null): array
+    public function surfaceFor(Stock $stock, float $timeToExpiry): array
     {
         $spotVolatility = $stock->getCurrentVolatility() !== null
             ? (float) $stock->getCurrentVolatility()
@@ -167,7 +167,7 @@ final class OptionPricingEngine
         return $this->surface(
             $spotVolatility,
             (float) $stock->getVolatility(),
-            $leveredBeta ?? $stock->getLeveredBeta() ?? (float) $stock->getBeta(),
+            $stock->getLeveredBeta() ?? (float) $stock->getBeta(),
             (float) $stock->getJumpIntensity(),
             (float) $stock->getJumpVol(),
             $timeToExpiry,
@@ -279,16 +279,11 @@ final class OptionPricingEngine
 
     /**
      * Prices one listed contract as of a tick.
-     *
-     * @param array{atm_volatility: float, skewness: float, excess_kurtosis: float}|null $surface Reuse across
-     *        a ladder; struck here when the caller is pricing a single contract.
      */
     public function quoteContract(
         OptionContract $contract,
         SovereignCurveDTO $curve,
         float $currentTime,
-        ?array $surface = null,
-        ?float $leveredBeta = null,
     ): OptionQuoteDTO {
         $stock = $contract->getStock();
         $timeToExpiry = $contract->timeToExpiry($currentTime);
@@ -297,7 +292,7 @@ final class OptionPricingEngine
             (float) $stock->getPrice(),
             (float) $contract->getStrike(),
             $contract->isCall(),
-            $surface ?? $this->surfaceFor($stock, $timeToExpiry, $leveredBeta),
+            $this->surfaceFor($stock, $timeToExpiry),
             $this->riskFreeRate($curve, $timeToExpiry),
             $this->dividendYield($stock),
             $timeToExpiry,
@@ -310,7 +305,7 @@ final class OptionPricingEngine
      * @param array<int, OptionContract> $contracts
      * @return array<string, OptionQuoteDTO> Keyed by contract ticker.
      */
-    public function quoteChain(array $contracts, SovereignCurveDTO $curve, float $currentTime, ?float $leveredBeta = null): array
+    public function quoteChain(array $contracts, SovereignCurveDTO $curve, float $currentTime): array
     {
         $surfaces = [];
         $rates = [];
@@ -323,7 +318,7 @@ final class OptionPricingEngine
             $key = $stock->getTicker() . '|' . $contract->getExpirySerial();
 
             if (!isset($surfaces[$key])) {
-                $surfaces[$key] = $this->surfaceFor($stock, $timeToExpiry, $leveredBeta);
+                $surfaces[$key] = $this->surfaceFor($stock, $timeToExpiry);
                 $rates[$key] = $this->riskFreeRate($curve, $timeToExpiry);
                 $yields[$key] = $this->dividendYield($stock);
             }

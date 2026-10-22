@@ -26,7 +26,6 @@ class MarketEventPublisher
     public function __construct(
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
-        private \Redis $redis,
         private EventPresenter $presenter = new EventPresenter(),
         private ?\App\Service\Notification\PlayerNotifier $notifier = null,
     ) {}
@@ -125,7 +124,7 @@ class MarketEventPublisher
     }
 
     /**
-     * Presents the event for the wire, files it with the news desk, and pushes it to the Redis feed. The wire copy
+     * Presents the event for the wire, and files it with the news desk. The wire copy
      * carries its section and headline verdict, so the newswire and the headline strip agree with a page load.
      *
      * @return array{type: string, ticker: string|null, description: string, change_percent: float|null, sim_time: float|null, presented: array<string, mixed>, scope: string, section: string, headline: bool}
@@ -152,9 +151,6 @@ class MarketEventPublisher
             'section' => NewsDesk::sectionOf($scope, (string) $presented['category']),
             'headline' => NewsDesk::isHeadline($presented, $annualVolatility, $dealShareOfValue),
         ];
-
-        $this->redis->lPush('market_events_list', json_encode($eventData));
-        $this->redis->lTrim('market_events_list', 0, 49);
 
         return $eventData;
     }

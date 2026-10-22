@@ -2746,29 +2746,6 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(2.0 * ($move ** 2) / FinancialConstants::QUARTER_YEARS, (float) $stock->getAnnouncementVarianceEma(), 1e-9);
     }
 
-    public function testMeanAbsoluteScaleRecoversSigmaAndResistsASingleOutlier(): void
-    {
-        $math = new MathUtility();
-
-        // A zero-mean normal sample: the estimator must recover its sigma.
-        mt_srand(2468);
-        $sample = [];
-        for ($i = 0; $i < 4000; $i++) {
-            $sample[] = $math->generateStandardNormal() * 0.20;
-        }
-        $this->assertEqualsWithDelta(0.20, Distributions::calculateMeanAbsoluteScale($sample), 0.01);
-
-        // One catastrophic quarter must not swamp the scale the way a sum of squares would.
-        $ordinary = array_fill(0, 7, 0.05);
-        $withOutlier = array_merge($ordinary, [2.0]);
-
-        $robust = Distributions::calculateMeanAbsoluteScale($withOutlier);
-        $sumOfSquares = sqrt(array_sum(array_map(static fn(float $x): float => $x * $x, $withOutlier)) / count($withOutlier));
-
-        $this->assertLessThan($sumOfSquares, $robust);
-        $this->assertEqualsWithDelta(0.0, Distributions::calculateMeanAbsoluteScale([]), 1e-12);
-    }
-
     private function pricingPowerMultiplier(Stock $stock, MacroStateDTO $macroState): float
     {
         $industry = $stock->getIndustry();

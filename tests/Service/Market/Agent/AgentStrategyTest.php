@@ -55,17 +55,17 @@ class AgentStrategyTest extends TestCase
     {
         $strategy = new FundamentalistStrategy();
 
-        $this->assertGreaterThan(0.0, $strategy->signal($this->view(price: 80.0, fairValue: 100.0), []));
-        $this->assertLessThan(0.0, $strategy->signal($this->view(price: 125.0, fairValue: 100.0), []));
-        $this->assertSame(0.0, $strategy->signal($this->view(price: 100.0, fairValue: 100.0), []));
+        $this->assertGreaterThan(0.0, $strategy->signal($this->view(price: 80.0, fairValue: 100.0)));
+        $this->assertLessThan(0.0, $strategy->signal($this->view(price: 125.0, fairValue: 100.0)));
+        $this->assertSame(0.0, $strategy->signal($this->view(price: 100.0, fairValue: 100.0)));
     }
 
     public function testTheFundamentalistsConvictionIsBoundedNoMatterHowExtremeTheMispricing(): void
     {
         $strategy = new FundamentalistStrategy();
 
-        $this->assertSame(1.0, $strategy->signal($this->view(price: 1.0, fairValue: 100.0), []));
-        $this->assertSame(-1.0, $strategy->signal($this->view(price: 1000.0, fairValue: 1.0), []));
+        $this->assertSame(1.0, $strategy->signal($this->view(price: 1.0, fairValue: 100.0)));
+        $this->assertSame(-1.0, $strategy->signal($this->view(price: 1000.0, fairValue: 1.0)));
     }
 
     public function testMispricingIsSymmetricInLogs(): void
@@ -84,8 +84,8 @@ class AgentStrategyTest extends TestCase
     {
         $strategy = new FundamentalistStrategy();
 
-        $this->assertSame(0.0, $strategy->signal($this->view(price: 0.0, fairValue: 100.0), []));
-        $this->assertSame(0.0, $strategy->signal($this->view(price: 100.0, fairValue: 0.0), []));
+        $this->assertSame(0.0, $strategy->signal($this->view(price: 0.0, fairValue: 100.0)));
+        $this->assertSame(0.0, $strategy->signal($this->view(price: 100.0, fairValue: 0.0)));
     }
 
     // --- Momentum ---
@@ -94,8 +94,8 @@ class AgentStrategyTest extends TestCase
     {
         $strategy = new MomentumStrategy();
 
-        $this->assertGreaterThan(0.0, $strategy->signal($this->view(momentum: 0.10), []));
-        $this->assertLessThan(0.0, $strategy->signal($this->view(momentum: -0.10), []));
+        $this->assertGreaterThan(0.0, $strategy->signal($this->view(momentum: 0.10)));
+        $this->assertLessThan(0.0, $strategy->signal($this->view(momentum: -0.10)));
     }
 
     public function testTheChartistAndTheFundamentalistTakeOppositeSidesOfAnExpensiveRally(): void
@@ -104,8 +104,8 @@ class AgentStrategyTest extends TestCase
         // buy to one and a sell to the other, and which of them holds the capital decides what happens.
         $rallyingAndExpensive = $this->view(price: 140.0, fairValue: 100.0, momentum: 0.15);
 
-        $this->assertLessThan(0.0, (new FundamentalistStrategy())->signal($rallyingAndExpensive, []));
-        $this->assertGreaterThan(0.0, (new MomentumStrategy())->signal($rallyingAndExpensive, []));
+        $this->assertLessThan(0.0, (new FundamentalistStrategy())->signal($rallyingAndExpensive));
+        $this->assertGreaterThan(0.0, (new MomentumStrategy())->signal($rallyingAndExpensive));
     }
 
     /**
@@ -116,21 +116,21 @@ class AgentStrategyTest extends TestCase
     {
         $strategy = new MomentumStrategy();
 
-        $this->assertSame(0.0, $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.10), []));
+        $this->assertSame(0.0, $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.10)));
         $this->assertEqualsWithDelta(
             MomentumStrategy::AGENT_MOMENTUM_GAIN * 0.10,
-            $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.0), []),
+            $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.0)),
             1e-12,
         );
-        $this->assertGreaterThan(0.0, $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.04), []));
+        $this->assertGreaterThan(0.0, $strategy->signal($this->view(momentum: 0.10, recentMonth: 0.04)));
     }
 
     public function testTheChartistsConvictionIsAlsoBounded(): void
     {
         $strategy = new MomentumStrategy();
 
-        $this->assertSame(1.0, $strategy->signal($this->view(momentum: 10.0), []));
-        $this->assertSame(-1.0, $strategy->signal($this->view(momentum: -10.0), []));
+        $this->assertSame(1.0, $strategy->signal($this->view(momentum: 10.0)));
+        $this->assertSame(-1.0, $strategy->signal($this->view(momentum: -10.0)));
     }
 
     // --- Index fund ---
@@ -141,8 +141,8 @@ class AgentStrategyTest extends TestCase
         // and keeps selling into a cheap one.
         $strategy = new IndexFundStrategy();
 
-        $cheap = $strategy->signal($this->view(price: 50.0, fairValue: 100.0, momentum: -0.2), []);
-        $dear = $strategy->signal($this->view(price: 200.0, fairValue: 100.0, momentum: 0.2), []);
+        $cheap = $strategy->signal($this->view(price: 50.0, fairValue: 100.0, momentum: -0.2));
+        $dear = $strategy->signal($this->view(price: 200.0, fairValue: 100.0, momentum: 0.2));
 
         $this->assertSame($cheap, $dear);
     }
@@ -151,9 +151,9 @@ class AgentStrategyTest extends TestCase
     {
         $strategy = new IndexFundStrategy();
 
-        $easy = $strategy->signal($this->view(conditions: -1.0), []);
-        $neutral = $strategy->signal($this->view(conditions: 0.0), []);
-        $tight = $strategy->signal($this->view(conditions: 1.0), []);
+        $easy = $strategy->signal($this->view(conditions: -1.0));
+        $neutral = $strategy->signal($this->view(conditions: 0.0));
+        $tight = $strategy->signal($this->view(conditions: 1.0));
 
         $this->assertGreaterThan($neutral, $easy);
         $this->assertLessThan($neutral, $tight);
@@ -167,14 +167,14 @@ class AgentStrategyTest extends TestCase
         $base = IndexFundStrategy::AGENT_INDEX_BASE_SHARE;
         $bound = IndexFundStrategy::AGENT_INDEX_MAX_FLOW_TILT;
 
-        $this->assertEqualsWithDelta($base * (1.0 - $bound), $strategy->signal($this->view(conditions: 5.0), []), 1e-12);
-        $this->assertEqualsWithDelta($base * (1.0 + $bound), $strategy->signal($this->view(conditions: -5.0), []), 1e-12);
-        $this->assertGreaterThan(0.0, $strategy->signal($this->view(conditions: 5.0), []), 'A tight regime does not empty the passive book.');
+        $this->assertEqualsWithDelta($base * (1.0 - $bound), $strategy->signal($this->view(conditions: 5.0)), 1e-12);
+        $this->assertEqualsWithDelta($base * (1.0 + $bound), $strategy->signal($this->view(conditions: -5.0)), 1e-12);
+        $this->assertGreaterThan(0.0, $strategy->signal($this->view(conditions: 5.0)), 'A tight regime does not empty the passive book.');
 
         // Inside the bound the tilt is a fraction of the base, not an absolute share.
         $this->assertEqualsWithDelta(
             $base * (1.0 - IndexFundStrategy::AGENT_INDEX_FLOW_SENSITIVITY),
-            $strategy->signal($this->view(conditions: 1.0), []),
+            $strategy->signal($this->view(conditions: 1.0)),
             1e-12,
         );
     }
@@ -190,9 +190,9 @@ class AgentStrategyTest extends TestCase
     {
         $strategy = new IndexFundStrategy();
 
-        $crowded = $strategy->signal($this->view(passiveOwnership: 2.0), []);
-        $average = $strategy->signal($this->view(passiveOwnership: 1.0), []);
-        $thin = $strategy->signal($this->view(passiveOwnership: 0.3), []);
+        $crowded = $strategy->signal($this->view(passiveOwnership: 2.0));
+        $average = $strategy->signal($this->view(passiveOwnership: 1.0));
+        $thin = $strategy->signal($this->view(passiveOwnership: 0.3));
 
         $this->assertGreaterThan($average, $crowded);
         $this->assertGreaterThan($thin, $average);
@@ -203,7 +203,7 @@ class AgentStrategyTest extends TestCase
     {
         $strategy = new IndexFundStrategy();
 
-        $this->assertSame(0.0, $strategy->signal($this->view(passiveOwnership: 0.0), []));
+        $this->assertSame(0.0, $strategy->signal($this->view(passiveOwnership: 0.0)));
     }
 
     /**
@@ -230,7 +230,7 @@ class AgentStrategyTest extends TestCase
         $strategy = new IndexFundStrategy();
 
         foreach ([-5.0, -1.0, 0.0, 1.0, 5.0] as $conditions) {
-            $this->assertGreaterThanOrEqual(0.0, $strategy->signal($this->view(conditions: $conditions), []));
+            $this->assertGreaterThanOrEqual(0.0, $strategy->signal($this->view(conditions: $conditions)));
         }
     }
 
@@ -349,9 +349,9 @@ class AgentStrategyTest extends TestCase
         $target = VolatilityTargetStrategy::AGENT_VOL_TARGET_VOLATILITY;
         $base = VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE;
 
-        $this->assertEqualsWithDelta($base, $strategy->signal($this->view(volatility: $target), []), 1e-12);
-        $this->assertEqualsWithDelta($base / 2.0, $strategy->signal($this->view(volatility: 2.0 * $target), []), 1e-12);
-        $this->assertEqualsWithDelta($base * 2.0, $strategy->signal($this->view(volatility: $target / 2.0), []), 1e-12);
+        $this->assertEqualsWithDelta($base, $strategy->signal($this->view(volatility: $target)), 1e-12);
+        $this->assertEqualsWithDelta($base / 2.0, $strategy->signal($this->view(volatility: 2.0 * $target)), 1e-12);
+        $this->assertEqualsWithDelta($base * 2.0, $strategy->signal($this->view(volatility: $target / 2.0)), 1e-12);
     }
 
     public function testTheVolTargetingBookSellsIntoAVolatilitySpikeWhateverThePriceDid(): void
@@ -360,9 +360,9 @@ class AgentStrategyTest extends TestCase
         // the same if they now show the same volatility.
         $strategy = new VolatilityTargetStrategy();
 
-        $calm = $strategy->signal($this->view(volatility: 0.20), []);
-        $stressed = $strategy->signal($this->view(volatility: 0.60), []);
-        $stressedAfterRally = $strategy->signal($this->view(price: 150.0, fairValue: 100.0, momentum: 0.3, volatility: 0.60), []);
+        $calm = $strategy->signal($this->view(volatility: 0.20));
+        $stressed = $strategy->signal($this->view(volatility: 0.60));
+        $stressedAfterRally = $strategy->signal($this->view(price: 150.0, fairValue: 100.0, momentum: 0.3, volatility: 0.60));
 
         $this->assertLessThan($calm, $stressed);
         $this->assertSame($stressed, $stressedAfterRally);
@@ -373,16 +373,16 @@ class AgentStrategyTest extends TestCase
         $strategy = new VolatilityTargetStrategy();
         $capped = VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE * VolatilityTargetStrategy::AGENT_VOL_TARGET_MAX_LEVERAGE;
 
-        $this->assertEqualsWithDelta($capped, $strategy->signal($this->view(volatility: 0.01), []), 1e-12);
-        $this->assertEqualsWithDelta($capped, $strategy->signal($this->view(volatility: 0.001), []), 1e-12);
+        $this->assertEqualsWithDelta($capped, $strategy->signal($this->view(volatility: 0.01)), 1e-12);
+        $this->assertEqualsWithDelta($capped, $strategy->signal($this->view(volatility: 0.001)), 1e-12);
     }
 
     public function testWithoutARealizedVolatilityTheVolTargetingBookHoldsItsSizeAtTarget(): void
     {
         $strategy = new VolatilityTargetStrategy();
 
-        $this->assertSame(VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: 0.0), []));
-        $this->assertSame(VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: -1.0), []));
+        $this->assertSame(VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: 0.0)));
+        $this->assertSame(VolatilityTargetStrategy::AGENT_VOL_TARGET_BASE_SHARE, $strategy->signal($this->view(volatility: -1.0)));
         $this->assertFalse($strategy->competesForCapital());
     }
 
@@ -395,9 +395,9 @@ class AgentStrategyTest extends TestCase
         $strategy = new RelativeValueStrategy();
         $ownMispricing = $this->view(price: 90.0, fairValue: 100.0)->logMispricing();
 
-        $this->assertEqualsWithDelta(0.0, $strategy->signal($this->view(price: 90.0, fairValue: 100.0, marketMispricing: $ownMispricing), []), 1e-12);
-        $this->assertGreaterThan(0.0, $strategy->signal($this->view(price: 90.0, fairValue: 100.0, marketMispricing: 0.0), []));
-        $this->assertLessThan(0.0, $strategy->signal($this->view(price: 100.0, fairValue: 100.0, marketMispricing: $ownMispricing), []), 'Fairly priced in a cheap market is dear relative to it.');
+        $this->assertEqualsWithDelta(0.0, $strategy->signal($this->view(price: 90.0, fairValue: 100.0, marketMispricing: $ownMispricing)), 1e-12);
+        $this->assertGreaterThan(0.0, $strategy->signal($this->view(price: 90.0, fairValue: 100.0, marketMispricing: 0.0)));
+        $this->assertLessThan(0.0, $strategy->signal($this->view(price: 100.0, fairValue: 100.0, marketMispricing: $ownMispricing)), 'Fairly priced in a cheap market is dear relative to it.');
     }
 
     public function testRelativeValueIsMarketNeutralAcrossTheNamesItSees(): void
@@ -412,7 +412,7 @@ class AgentStrategyTest extends TestCase
 
         $total = 0.0;
         foreach ($prices as $price) {
-            $total += $strategy->signal($this->view(price: $price, fairValue: 100.0, marketMispricing: $average), []);
+            $total += $strategy->signal($this->view(price: $price, fairValue: 100.0, marketMispricing: $average));
         }
 
         $this->assertEqualsWithDelta(0.0, $total, 1e-12);
@@ -423,7 +423,7 @@ class AgentStrategyTest extends TestCase
         // Falling back to the absolute mispricing would make it a second fundamentalist on the first tick.
         $strategy = new RelativeValueStrategy();
 
-        $this->assertSame(0.0, $strategy->signal($this->view(price: 50.0, fairValue: 100.0), []));
+        $this->assertSame(0.0, $strategy->signal($this->view(price: 50.0, fairValue: 100.0)));
         $this->assertFalse($strategy->competesForCapital());
     }
 
@@ -432,7 +432,7 @@ class AgentStrategyTest extends TestCase
         $strategy = new RelativeValueStrategy();
         $share = RelativeValueStrategy::AGENT_RELATIVE_VALUE_SHARE;
 
-        $this->assertEqualsWithDelta($share, $strategy->signal($this->view(price: 10.0, fairValue: 100.0, marketMispricing: 0.0), []), 1e-12);
-        $this->assertEqualsWithDelta(-$share, $strategy->signal($this->view(price: 1000.0, fairValue: 100.0, marketMispricing: 0.0), []), 1e-12);
+        $this->assertEqualsWithDelta($share, $strategy->signal($this->view(price: 10.0, fairValue: 100.0, marketMispricing: 0.0)), 1e-12);
+        $this->assertEqualsWithDelta(-$share, $strategy->signal($this->view(price: 1000.0, fairValue: 100.0, marketMispricing: 0.0)), 1e-12);
     }
 }

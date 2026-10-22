@@ -200,7 +200,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         $dealActivityShift = $macroState->dealActivityDeviation();
         $contrarianSurge = $this->resolveContrarianFloatSurge(
             $macroState,
-            $mathUtility,
             $outputGap,
             $macroState->macroCreditSpreadEma,
             $macroState->macroCreditSpread - $macroState->macroCreditSpreadEma,
@@ -236,7 +235,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin)
             * max(0.0, 1.0 - $floatShare - $merchantShare);
 
-        $merchantCostShift = $this->resolveMerchantCostShift($macroState, $mathUtility, $realizedVariableMargin, $priceLift);
+        $merchantCostShift = $this->resolveMerchantCostShift($macroState, $realizedVariableMargin, $priceLift);
 
         $clampedMargin = $this->clampMargin(
             $realizedVariableMargin + $ppiCostDrag + ($merchantCostShift * $merchantShare),
@@ -284,7 +283,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
      */
     private function resolveMerchantCostShift(
         MacroStateDTO $macroState,
-        MathUtility $mathUtility,
         float $realizedVariableMargin,
         float $merchantPriceLift,
     ): float {

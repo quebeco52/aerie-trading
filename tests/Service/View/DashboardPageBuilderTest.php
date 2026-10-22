@@ -36,7 +36,7 @@ final class DashboardPageBuilderTest extends TestCase
             (new UserStock())->setStock(self::stock('CLM', 'Energy', '10.00'))->setQuantity(300),
         ], ['APX' => 40.0, 'BRT' => 25.0], []);
 
-        $sectors = array_column(DashboardPageBuilder::sectorBreakdown($rows, 10000.0), null, 'name');
+        $sectors = array_column(DashboardPageBuilder::sectorBreakdown($rows), null, 'name');
 
         $this->assertSame(7000.0, $sectors['Tech']['value'], 'A $2,000 short adds to the sector, not nets against it.');
         $this->assertSame(3000.0, $sectors['Energy']['value']);
@@ -96,7 +96,7 @@ final class DashboardPageBuilderTest extends TestCase
             ], ['AT-10Y' => 100.0], ['AT-10Y' => 3.0]),
         ];
 
-        $names = array_column(DashboardPageBuilder::sectorBreakdown($rows, 2000.0), 'name');
+        $names = array_column(DashboardPageBuilder::sectorBreakdown($rows), 'name');
         sort($names);
         $this->assertSame(['Corporate debt', 'Market Index (ETF)', 'Sovereign debt'], $names);
 

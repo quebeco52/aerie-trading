@@ -75,10 +75,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     {
         return 2.5;
     }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.0;
-    }
     public function getDividendCrisisIcr(): float
     {
         return 1.75;
@@ -193,10 +189,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             ModelParam::RecyclingWeight->value   => self::RECYCLING_WEIGHT,
         ]);
 
-        $residentialWeight = $params[ModelParam::ResidentialWeight];
-        $commercialWeight  = $params[ModelParam::CommercialWeight];
-        $recyclingWeight   = $params[ModelParam::RecyclingWeight];
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
@@ -230,7 +222,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $disasterPenalty = 0.0;
 
         if ($eventZ < self::ENVIRONMENTAL_DISASTER_Z_SCORE) {
-            $eventType = ShockEvent::ENVIRONMENTAL_DISASTER ?? 'environmental_liability';
+            $eventType = ShockEvent::ENVIRONMENTAL_DISASTER;
             $disasterPenalty = self::ENVIRONMENTAL_CLEANUP_PENALTY;
         }
 

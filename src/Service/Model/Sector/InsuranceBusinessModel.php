@@ -1474,7 +1474,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * @param array<string, float> $momentum
      * @return array{unearned: float, loss: float, life: float}
      */
-    public function resolveOpeningReserves(Stock $stock, float $float, array $momentum): array
+    private function resolveOpeningReserves(Stock $stock, float $float, array $momentum): array
     {
         $ratios = $this->resolveReserveRatios($stock);
         $base = $momentum[self::STATE_UNEARNED_PREMIUM_BASE] ?? null;
@@ -1608,7 +1608,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /** The life reserves' part of that float: a share 1 − e^(−H/τ) of the policy reserve's settled level. */
-    public function resolveBookLifeFloatRatio(Stock $stock, float $horizonYears): float
+    private function resolveBookLifeFloatRatio(Stock $stock, float $horizonYears): float
     {
         return $this->resolveReserveRatios($stock)['life'] * (1.0 - exp(-$horizonYears / $this->resolveLifeReserveRunoffYears($stock)));
     }

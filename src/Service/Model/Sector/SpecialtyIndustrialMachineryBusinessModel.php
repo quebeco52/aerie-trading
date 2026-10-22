@@ -179,8 +179,6 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         ]);
 
         $pricingPower    = $this->resolvePricingPower($stock);
-        $equipmentWeight = $params[ModelParam::EquipmentWeight];
-        $servicesWeight  = $params[ModelParam::ServicesWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

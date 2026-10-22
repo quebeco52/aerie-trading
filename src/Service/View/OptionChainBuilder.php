@@ -58,7 +58,6 @@ class OptionChainBuilder
                 'optionsListed' => false,
                 'optionsReason' => $this->whyNotListed($stock),
                 'optionExpiries' => [],
-                'optionDealerGamma' => 0.0,
                 'optionDealerGammaPerPercent' => 0.0,
                 'optionOpenInterest' => 0,
                 'optionMultiplier' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER,
@@ -88,7 +87,6 @@ class OptionChainBuilder
                 $expiries[$serial] = [
                     'serial' => $serial,
                     'expiresAtTime' => $contract->getExpiresAtTime(),
-                    'yearsToExpiry' => max(0.0, $contract->getExpiresAtTime() - $currentTime),
                     'daysToExpiry' => max(0.0, ($contract->getExpiresAtTime() - $currentTime) * 365.0),
                     'atmVolatility' => null,
                     'atmDistance' => null,
@@ -138,10 +136,8 @@ class OptionChainBuilder
             'optionsListed' => true,
             'optionsReason' => null,
             'optionExpiries' => array_values($expiries),
-            // Shares of stock the desk must trade per 1.00 move. The desk is SHORT this, so a positive
-            // number means it buys into strength and sells into weakness.
-            'optionDealerGamma' => $dealerGamma,
-            // The same figure in the unit a reader can weigh against daily volume: shares per 1% move.
+            // Shares of stock the desk must trade per 1% move. The desk is SHORT this, so a positive number means
+            // it buys into strength and sells into weakness.
             'optionDealerGammaPerPercent' => $dealerGamma * $underlying * 0.01,
             'optionOpenInterest' => $openInterest,
             'optionMultiplier' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER,

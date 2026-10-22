@@ -45,8 +45,6 @@ final class PlayerNotificationTest extends TestCase
         $redis->expects($this->never())->method('publish');
 
         $notifier->queue(7, Notification::KIND_FILL, 'Bought 10 GULL at $12.00');
-
-        $this->assertSame(1, $notifier->pendingCount());
     }
 
     public function testDiscardDropsAMessageFromARolledBackTick(): void
@@ -89,7 +87,6 @@ final class PlayerNotificationTest extends TestCase
         $this->assertSame('Order filled', $pushed[0]['label']);
         $this->assertSame('badge-warn', $pushed[1]['tone']);
         $this->assertSame('1 Apr, Year 13', $pushed[0]['dateline']);
-        $this->assertSame(0, $notifier->pendingCount());
     }
 
     public function testWatchedNewsGoesToEveryWatcherOfThatNameOnly(): void

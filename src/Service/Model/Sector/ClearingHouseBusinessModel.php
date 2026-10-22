@@ -104,10 +104,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     /** Minimum structural EBIT floor as a fraction of equity. Prevents degenerate zero-revenue states. */
     public const MIN_EQUITY_EBIT_YIELD = 0.05;
 
-    /** Net custody interest spread (15 bps) earned on member initial margin deposits. */
-    public const MARGIN_POOL_CUSTODY_SPREAD = 0.0015;
-    /** Share of prevailing money-market yield retained by clearinghouse on member margin float (15%). */
-    public const MARGIN_POOL_YIELD_RETENTION_SHARE = 0.15;
     /** Custody revenue moves 2% for each point the policy rate sits above the neutral rate the market perceives. */
     public const CUSTODY_RATE_SENSITIVITY = 2.0;
 
@@ -169,20 +165,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     // --- Monopoly Valuation Moat ---
     /** Operating margin mean reversion speed: slower speed reflects toll-booth monopoly pricing power. */
     public const MONOPOLY_REVERSION_SPEED = 2.0;
-    /**
-     * Calculates the effective annual custody spread rate earned on member initial margin deposits.
-     * Includes base custody fee (15 bps) + dynamic retention share of short-term policy yields.
-     */
-    public function calculateEffectiveCustodySpread(\App\DTO\MacroStateDTO $macroState): float
-    {
-        $cashYield = $this->calculateCashYield($macroState);
-        $policyRate = $macroState->policyRateEma;
-        $retentionMultiplier = min(1.0, max(0.0, ($policyRate - 0.01) / 0.03));
-        $dynamicRetentionShare = self::MARGIN_POOL_YIELD_RETENTION_SHARE * $retentionMultiplier;
-
-        return self::MARGIN_POOL_CUSTODY_SPREAD + ($cashYield * $dynamicRetentionShare);
-    }
-
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         // Clearing capacity is the house's own loss-absorbing capital, its skin in the game; the members'

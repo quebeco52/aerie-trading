@@ -2559,7 +2559,6 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($accounts->primaryDeficit(), $state->primaryDeficitToGdp, 1e-15);
         $this->assertEqualsWithDelta($state->sovereignDebtToGdp - 0.15, $state->sovereignNetDebtToGdp, 1e-12);
         $this->assertEqualsWithDelta($accounts->fundContribution, $accounts->fundFinancedSpending, 1e-15, 'What the fund pays in, the budget spends.');
-        $this->assertEqualsWithDelta(0.45 - 1.10, $accounts->netFinancialWorth(), 1e-12);
         $this->assertEqualsWithDelta($state->sovereignDebtToGdp - 0.45, $state->sovereignNetFinancialLiabilitiesToGdp, 1e-12, 'A crisis on the day books no rescue: debt moves by the accounts alone.');
         $this->assertEqualsWithDelta(1.10 - 0.15, $accounts->netDebt(), 1e-12);
     }

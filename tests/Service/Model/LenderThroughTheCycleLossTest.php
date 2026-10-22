@@ -44,7 +44,7 @@ final class LenderThroughTheCycleLossTest extends TestCase
         );
 
         $loss = (new \ReflectionMethod($model, 'resolveConditionalCreditLossRate'))
-            ->invoke($model, $stock, $atTrend, new StreamContext([], new MathUtility()), new MathUtility());
+            ->invoke($model, $stock, $atTrend, new StreamContext([], new MathUtility()));
 
         $this->assertEqualsWithDelta($model->getThroughTheCycleCreditLossRate($stock), $loss['loss_rate'], 1e-12);
     }
@@ -73,7 +73,7 @@ final class LenderThroughTheCycleLossTest extends TestCase
             );
             $density = exp(-0.5 * $x * $x);
             $weight += $density;
-            $sum += $density * $loss->invoke($model, $stock, $macro, new StreamContext([], new MathUtility()), new MathUtility())['loss_rate'];
+            $sum += $density * $loss->invoke($model, $stock, $macro, new StreamContext([], new MathUtility()))['loss_rate'];
         }
 
         $ttc = $model->getThroughTheCycleCreditLossRate($stock);

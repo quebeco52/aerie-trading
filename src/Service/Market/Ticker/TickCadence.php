@@ -127,7 +127,7 @@ final class TickCadence
     }
 
     /** Whether a tick writes the stock and fund chart buffers. */
-    public static function isEquityBufferTick(int $tickCount, int $ticksPerYear): bool
+    private static function isEquityBufferTick(int $tickCount, int $ticksPerYear): bool
     {
         return $tickCount % self::equityBufferStride($ticksPerYear) === 0;
     }
@@ -200,7 +200,7 @@ final class TickCadence
      * count, so it survives a restart with no accumulator to carry, and it is exact wherever the target
      * does divide the rate: at 14,400 this is still every sixth tick to the tick.
      */
-    public static function barIndex(int $tickCount, int $ticksPerYear): int
+    private static function barIndex(int $tickCount, int $ticksPerYear): int
     {
         return intdiv(max(0, $tickCount) * self::historyPointsPerYear($ticksPerYear), max(1, $ticksPerYear));
     }

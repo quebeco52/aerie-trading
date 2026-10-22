@@ -44,11 +44,11 @@ class StockPageBuilderTest extends TestCase
      * @var list<string>
      */
     private const TEMPLATE_KEYS = [
-        'advShares', 'allAssets', 'analystTargets', 'anchorPortfolio', 'asset', 'availableToBorrow',
+        'advShares', 'analystTargets', 'anchorPortfolio', 'asset', 'availableToBorrow',
         'borrowFee', 'borrowWarnings', 'businessMap', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'corporateBonds', 'creditHealth', 'dividendYield',
         'events', 'financialSummary', 'generalInfo', 'halfSpread', 'hasProfile', 'indexFacts', 'industry', 'isEtf',
         'isFinancial', 'isInsurer', 'kpiSeries', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
-        'marketShare', 'netAssetValue', 'nextReport', 'openOrders', 'optionDealerGamma', 'optionDealerGammaPerPercent',
+        'marketShare', 'netAssetValue', 'nextReport', 'openOrders', 'optionDealerGammaPerPercent',
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
         'peRatio', 'peers', 'pieData', 'pieLabels', 'pipeline', 'sharesMap', 'shortInterest', 'shortUtilization', 'strategicStake',
         'ticksPerYear', 'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades',
@@ -90,7 +90,6 @@ class StockPageBuilderTest extends TestCase
 
         $etfComposition = $this->createMock(EtfCompositionBuilder::class);
         $etfComposition->method('build')->willReturn([
-            'allAssets' => [],
             'pieLabels' => [],
             'pieData' => [],
             'sharesMap' => [],
@@ -116,7 +115,6 @@ class StockPageBuilderTest extends TestCase
             'optionsListed' => false,
             'optionsReason' => 'No class open on this name.',
             'optionExpiries' => [],
-            'optionDealerGamma' => 0.0,
             'optionDealerGammaPerPercent' => 0.0,
             'optionOpenInterest' => 0,
             'optionMultiplier' => 100,

@@ -67,8 +67,6 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
             ModelParam::CatastropheLossScalar->value  => self::CATASTROPHE_LOSS_SCALAR,
         ]);
 
-        $pcWeight     = $params[ModelParam::PropertyCasualtyWeight];
-        $lifeWeight   = $params[ModelParam::LifeAndAnnuityWeight];
         $catThreshold = $params[ModelParam::CatastropheZThreshold];
         $catScalar    = $params[ModelParam::CatastropheLossScalar];
 

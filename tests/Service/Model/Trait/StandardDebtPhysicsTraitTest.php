@@ -222,7 +222,6 @@ final class StandardDebtPhysicsTraitTest extends TestCase
         $this->assertSame(0.0, $this->model->getWarningEquityThreshold());
 
         $this->assertEqualsWithDelta(1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $this->model->getLossGivenDefault(), 1e-12, 'A listed firm\'s notes are senior unsecured.');
-        $this->assertSame(0.30, $this->model->getMaxFloatingDebtRatio(), 'A corporate terms out most of its debt.');
         $this->assertSame(FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER, $this->model->getDebtMaturityRolloverRate());
         $this->assertFalse($this->model->requiresAlternativeZScore(), 'Altman Z applies to a normal balance sheet.');
         $this->assertFalse($this->model->supportsUnderleveragedDebtExpansion(), 'An operating company recapitalizes by repurchase, not by borrowing into its treasury.');
@@ -234,8 +233,6 @@ final class StandardDebtPhysicsTraitTest extends TestCase
      */
     public function testCorporateCapacityAndEvaluationBasesAreUnadjusted(): void
     {
-        $this->assertSame(1.0, $this->model->calculateCapacityModifier(1000.0, 500.0, 2.0), 'No deposit funding means no capacity adjustment.');
-        $this->assertSame(1.0, $this->model->calculateCapacityModifier(0.0, 1.0, 99.0, 5000.0), 'Core liabilities are a bank concept here.');
         $this->assertSame(750.0, $this->model->getUnfundedExpansionCapacity(750.0, 900.0), 'Excess cash does not extend a corporate borrowing base.');
         $this->assertSame(600.0, $this->model->getExpansionCapacityBasis(400.0, 200.0, 600.0), 'Capacity is measured on invested capital.');
         $this->assertSame(900.0, $this->model->getDeleveragingEvaluationDebt(900.0, 300.0), 'Deleveraging is judged on total debt, not the wholesale slice.');

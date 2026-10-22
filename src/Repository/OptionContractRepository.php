@@ -42,14 +42,4 @@ class OptionContractRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
-
-    /**
-     * Every listed contract across the market, for the repricing sweep.
-     *
-     * @return array<int, OptionContract>
-     */
-    public function findAllActive(): array
-    {
-        return $this->findBy(['status' => OptionContract::STATUS_ACTIVE]);
-    }
 }

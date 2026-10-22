@@ -283,13 +283,6 @@ class DistrictMapTest extends TestCase
         }
     }
 
-    public function testPaletteForSectorFallsBackRatherThanFailing(): void
-    {
-        $this->assertSame(DistrictMap::SECTOR_PALETTE_FALLBACK, DistrictMap::paletteForSector(null));
-        $this->assertSame(DistrictMap::SECTOR_PALETTE_FALLBACK, DistrictMap::paletteForSector('Nonexistent Sector'));
-        $this->assertSame(DistrictMap::SECTOR_PALETTE['Financials'], DistrictMap::paletteForSector('Financials'));
-    }
-
     /**
      * The height window is fitted per request, so what the cartography pins is the shape of the
      * fit: headroom that actually pads, a minimum span that is a real span, and an empty-street

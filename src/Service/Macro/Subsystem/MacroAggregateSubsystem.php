@@ -1111,7 +1111,7 @@ class MacroAggregateSubsystem
     }
 
     /** A supply cost's relative distance from its own trend; none before the trend has opened. */
-    public static function supplyCostShift(float $level, float $trend): float
+    private static function supplyCostShift(float $level, float $trend): float
     {
         return $trend > 0.0 ? ($level - $trend) / $trend : 0.0;
     }
@@ -1348,7 +1348,7 @@ class MacroAggregateSubsystem
      * Partners' duty on the District's goods in answer to its own, in logs: the 2018 retaliation ratio (Fajgelbaum et
      * al. 2020) on the ad valorem rate.
      */
-    public static function retaliatoryDuty(float $tariffDuty): float
+    private static function retaliatoryDuty(float $tariffDuty): float
     {
         return log(1.0 + (MacroConstants::TARIFF_RETALIATION_RATIO * (exp($tariffDuty) - 1.0)));
     }

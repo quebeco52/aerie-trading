@@ -69,7 +69,6 @@ final class PlayerPanelBuilder
             'progress' => Season::LENGTH_YEARS > 0 ? min(1.0, max(0.0, 1.0 - $yearsLeft / Season::LENGTH_YEARS)) : 0.0,
             'row' => SeasonService::rowFor($table, $user),
             'ranked' => SeasonService::rankedCount($table),
-            'entrants' => count($table),
             'qualifyingWeeks' => Season::MIN_QUALIFYING_WEEKS,
         ];
     }

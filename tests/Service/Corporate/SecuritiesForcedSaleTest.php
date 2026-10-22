@@ -65,7 +65,6 @@ final class SecuritiesForcedSaleTest extends TestCase
     {
         $ctx = new CapitalAllocationContext($stock, new MacroStateDTO(), 1.0, 0.0, 10.0, 1_000_000_000.0);
         $ctx->strategy = new CommercialBankBusinessModel();
-        $ctx->isFinancial = true;
         $ctx->newTreasury = 1_000_000_000.0;
 
         $this->liquidate->invoke($this->engine, $ctx, self::CASH_FLOOR);
@@ -163,7 +162,6 @@ final class SecuritiesForcedSaleTest extends TestCase
         // A shortfall small enough that securities alone cover it, so part of the portfolio survives.
         $ctx = new CapitalAllocationContext($stock, new MacroStateDTO(), 1.0, 0.0, 10.0, 1_000_000_000.0);
         $ctx->strategy = $model;
-        $ctx->isFinancial = true;
         $ctx->newTreasury = 1_000_000_000.0;
         $this->liquidate->invoke($this->engine, $ctx, 6_000_000_000.0);
 

@@ -431,7 +431,7 @@ class SovereignFundSubsystem
     }
 
     /** The expected compound real return on the fund at its sleeve weights today; zero for an empty fund. */
-    public function currentExpectedRealReturn(MacroState $state): float
+    private function currentExpectedRealReturn(MacroState $state): float
     {
         $fund = $this->fundValue($state);
         if ($fund <= 0.0) {
@@ -479,15 +479,6 @@ class SovereignFundSubsystem
             + (2.0 * $domestic * $equity * self::FOREIGN_EQUITY_MARKET_CORRELATION * $equityVol * $boardVol);
 
         return $arithmetic - (0.5 * $variance);
-    }
-
-    /**
-     * The compound return of the fund at its policy mix for a given domestic weight: the foreign sleeves on their
-     * policy split.
-     */
-    public function policyCompoundRealReturn(MacroState $state, float $domesticWeight): float
-    {
-        return $this->expectedCompoundRealReturn($state, $domesticWeight, $this->foreignEquityShare($state) * (1.0 - $domesticWeight));
     }
 
     /**

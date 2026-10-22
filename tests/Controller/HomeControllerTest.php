@@ -36,20 +36,4 @@ class HomeControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
         $this->assertSelectorExists('h1, table, #mainChartContainer, div');
     }
-
-    public function testApiMarketReturnsJson(): void
-    {
-        $client = static::createClient();
-        $client->request('GET', '/api/market');
-
-        $this->assertResponseIsSuccessful();
-        $this->assertResponseHeaderSame('content-type', 'application/json');
-
-        $content = $client->getResponse()->getContent();
-        $this->assertIsString($content);
-        $data = json_decode($content, true);
-        $this->assertArrayHasKey('etf', $data);
-        $this->assertArrayHasKey('stocks', $data);
-        $this->assertIsArray($data['stocks']);
-    }
 }

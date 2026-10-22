@@ -147,10 +147,6 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     {
         return 3.0;
     }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 1.5;
-    }
     public function getDividendCrisisIcr(): float
     {
         return 2.0;
@@ -268,9 +264,6 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             ModelParam::RestructuringAdvisoryWeight->value  => self::RESTRUCTURING_ADVISORY_WEIGHT,
         ]);
 
-        $retainerWeight      = $params[ModelParam::CorporateRetainerWeight];
-        $litigationWeight    = $params[ModelParam::LitigationContingencyWeight];
-        $restructuringWeight = $params[ModelParam::RestructuringAdvisoryWeight];
         $pricingPower        = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];

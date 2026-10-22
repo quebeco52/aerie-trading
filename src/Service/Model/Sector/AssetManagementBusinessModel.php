@@ -341,8 +341,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         // Resolve company-specific tuned asset management parameters
         $params = $this->resolveFeeParameters($stock);
 
-        $baseWeight      = $params[ModelParam::BaseFeeWeight];
-        $perfWeight      = $params[ModelParam::PerformanceFeeWeight];
         $aumBetaScalar   = $params[ModelParam::AumMarketBetaScalar];
         $perfZFloor      = $params[ModelParam::PerformanceFeeZFloor];
         $perfScalar      = $params[ModelParam::PerformanceFeeScalar];

@@ -408,7 +408,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
      * E[max(0, a Z + g (max(0, Z - h) - E[max(0, Z - h)]))] at hurdle h: an alpha stream's mean beat over its
      * baseline at a neutral cycle, as a share of it, its alpha line with the centred fee call on top.
      */
-    public static function expectedStreamBeat(float $alphaSlope, float $feeSlope): float
+    private static function expectedStreamBeat(float $alphaSlope, float $feeSlope): float
     {
         $averageFeeExcess = Distributions::calculateNormalLowerPartialMoment(-self::PERFORMANCE_FEE_HURDLE_Z);
 

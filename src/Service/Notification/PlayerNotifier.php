@@ -106,12 +106,6 @@ class PlayerNotifier
         $this->pendingWatched[] = ['ticker' => $ticker, 'title' => $title, 'body' => $body, 'link' => $link];
     }
 
-    /** Messages waiting for publish(). */
-    public function pendingCount(): int
-    {
-        return count($this->pending) + count($this->pendingWatched);
-    }
-
     /** Drops everything queued since the last publish: the transaction that raised it rolled back. */
     public function discard(): void
     {

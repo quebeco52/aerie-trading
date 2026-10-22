@@ -189,7 +189,6 @@ class StockModelTuningTest extends TestCase
             'retail_insurance' => [ModelParam::PropertyCasualtyWeight, ModelParam::LifeAndAnnuityWeight],
             'steel' => [ModelParam::ContractOemWeight, ModelParam::SpotHrcWeight],
             'heavy_mfg' => [ModelParam::OemEquipmentWeight, ModelParam::AftermarketMroWeight],
-            'biotech' => [ModelParam::CommercialTherapeuticsWeight, ModelParam::PipelineMilestonesWeight],
             'biotech_drug_mix' => [ModelParam::EstablishedDrugWeight, ModelParam::PipelineDrugWeight],
             'logistics' => [ModelParam::DedicatedFleetWeight, ModelParam::SpotBrokerageWeight, ModelParam::Warehousing3plWeight],
             // SubscriptionWeight carries commuter transit for a passenger operator; a pure freight hauler
@@ -263,7 +262,7 @@ class StockModelTuningTest extends TestCase
         // board via AnchorHoldings, subsidiaries the residual. A sleeve entered here is a second copy of a
         // number the balance sheet already settles, and both that used to live here went stale.
         foreach (['wholly_owned_nav_share', 'listed_portfolio_nav_share', 'treasury_nav_share'] as $sleeve) {
-            $this->assertArrayNotHasKey($sleeve, StockModelTuning::getOverridesForTicker('BRKW'), $sleeve);
+            $this->assertSame(-1.0, StockModelTuning::get('BRKW', $sleeve, -1.0), $sleeve);
         }
         $this->assertSame(0.90, StockModelTuning::get('BRKW', ModelParam::PricingPowerIndex, 0.0));
         $this->assertSame(0.45, StockModelTuning::get('BRKW', ModelParam::OperatingCyclicality, 0.0));
@@ -317,9 +316,6 @@ class StockModelTuningTest extends TestCase
         // Sinking Shore Extraction (SINK): an oil-weighted deepwater producer running a token swap ladder.
         $this->assertSame(0.85, StockModelTuning::get('SINK', ModelParam::LiquidsRevenueShare, 0.0));
         $this->assertSame(0.15, StockModelTuning::get('SINK', ModelParam::OilHedgeRatio, 0.0));
-
-        // Cascade Refining (CASC) runs on the refining model's own constants.
-        $this->assertFalse(StockModelTuning::hasOverrides('CASC'));
 
         // Bird Power (BIRD) sells its merchant renewables at the wholesale price and burns no gas for them.
         $this->assertSame(0.00, StockModelTuning::get('BIRD', ModelParam::MerchantGasFleetShare, 1.0));

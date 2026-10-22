@@ -46,7 +46,7 @@ class EtfTracker
      * Redis key holding an index's divisor. One key per index, because a divisor written in two places is
      * two answers to what the index is worth.
      */
-    public static function divisorKey(string $ticker): string
+    private static function divisorKey(string $ticker): string
     {
         return 'market_index_divisor:' . $ticker;
     }

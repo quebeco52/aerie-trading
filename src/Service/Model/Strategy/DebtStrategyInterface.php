@@ -16,7 +16,6 @@ use App\Service\Math\MathUtility;
 
 interface DebtStrategyInterface
 {
-    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float;
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?MacroStateDTO $macroState = null): InterestExpenseDTO;
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float;
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO;
@@ -34,7 +33,6 @@ interface DebtStrategyInterface
     public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float;
     public function getLossGivenDefault(): float;
     public function getRequiredIcrBuffer(): float;
-    public function getMaxFloatingDebtRatio(): float;
     /**
      * Fraction of the fixed-rate debt stock that matures and is refinanced at the current market rate each
      * quarter. This is the ONLY channel through which the yield curve reaches a firm's interest expense:

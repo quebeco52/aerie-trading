@@ -145,7 +145,7 @@ class LaborMarketSubsystem
     }
 
     /** At each month end, the unemployment rate joins the month-end record the year-on-year change is read off. */
-    public function recordMonthlyUnemployment(MacroState $state, float $dt): void
+    private function recordMonthlyUnemployment(MacroState $state, float $dt): void
     {
         if (!TimeSeries::crossedSimulatedBoundary($state->totalTime, $dt, 1.0 / 12.0)) {
             return;

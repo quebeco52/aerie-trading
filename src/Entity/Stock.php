@@ -760,7 +760,7 @@ class Stock
     private string $committedCostScale = '1.000000';
 
     /** @return numeric-string */
-    public static function cleanBcStr(int|float|string|null $val, int $scale = 4): string
+    private static function cleanBcStr(int|float|string|null $val, int $scale = 4): string
     {
         return Decimal::of($val, $scale);
     }
@@ -2000,18 +2000,6 @@ class Stock
         return \bcdiv(self::cleanBcStr($this->totalEquity, 4), $sharesStr, 4);
     }
 
-    /**
-     * Sets the Book Value Per Share by updating the Absolute Total Equity.
-     *
-     * @param string $bookValuePerShare The target Book Value Per Share.
-     */
-    public function setBookValuePerShare(string $bookValuePerShare): static
-    {
-        $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
-        $this->totalEquity = self::cleanBcStr(\bcmul(self::cleanBcStr($bookValuePerShare, 4), $sharesStr, 4), 4);
-        return $this;
-    }
-
     public function getTotalRevenue(): string
     {
         return $this->totalRevenue;
@@ -2168,17 +2156,6 @@ class Stock
         }
 
         return (string) ($this->getNetReceivables() + $this->getNetInventory() - (float) ($this->payables ?? 0.0));
-    }
-
-    /**
-     * Calculates Revenue Per Share based on computed Total Revenue.
-     *
-     * @return string The calculated Revenue Per Share.
-     */
-    public function getRevenuePerShare(): string
-    {
-        $sharesStr = (float) $this->sharesOutstanding < 1.0 ? '1.00000000' : (string) $this->sharesOutstanding;
-        return \bcdiv((string) $this->getTotalRevenue(), $sharesStr, 4);
     }
 
     /**

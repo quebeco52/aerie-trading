@@ -79,10 +79,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     /** Base analyst forecasting error scalar for obfuscated security operations. */
     public const BASE_COVERAGE_ERROR = 0.10;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 1.5;
-    }
     public function getReversionSpeed(): float
     {
         return 0.15;
@@ -239,10 +235,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
             ModelParam::RetainerWeight->value           => self::RETAINER_WEIGHT,
             ModelParam::ExpeditionaryWeight->value      => self::EXPEDITIONARY_WEIGHT,
         ]);
-
-        $govWeight          = $params[ModelParam::GovernmentContractWeight];
-        $retainerWeight     = $params[ModelParam::RetainerWeight];
-        $expeditionaryWeight = $params[ModelParam::ExpeditionaryWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

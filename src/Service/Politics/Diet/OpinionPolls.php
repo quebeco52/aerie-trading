@@ -66,7 +66,7 @@ final class OpinionPolls
 
         self::update($state, $macro, $math);
         if ($state->authoritySalt >= 0.0) {
-            self::publish($state, (int) $state->authoritySalt, $math);
+            self::publish($state, (int) $state->authoritySalt);
         }
     }
 
@@ -101,8 +101,8 @@ final class OpinionPolls
             $state->supportDriftYears[$party] = ($state->supportDriftYears[$party] ?? self::elapsedInTerm($state, $state->supportUpdatedAt)) + $partyYears;
         }
         [$state->normalVoteShares, $carried] = self::walkNormals($state->normalVoteShares, $state->supportLasting, $years, $normalDraws);
-        $state->supportLasting = self::driftLasting($carried, $drift, $lastingDraws, $state->normalVoteShares, $math);
-        $state->partyShortTermShocks = self::fadeShortTerm($state->partyShortTermShocks, $years, self::campaignOverlap($state->supportUpdatedAt, $state->totalTime), $shortTermDraws, $state->normalVoteShares, $math);
+        $state->supportLasting = self::driftLasting($carried, $drift, $lastingDraws, $state->normalVoteShares);
+        $state->partyShortTermShocks = self::fadeShortTerm($state->partyShortTermShocks, $years, self::campaignOverlap($state->supportUpdatedAt, $state->totalTime), $shortTermDraws, $state->normalVoteShares);
 
         $growth = self::growthCounted($state, $macro);
         $inflation = self::inflationCounted($state, $macro);
@@ -165,7 +165,7 @@ final class OpinionPolls
      * @param array<string, float> $normals Normal votes by party.
      * @return array<string, float>
      */
-    public static function driftLasting(array $lasting, array $years, array $draws, array $normals, MathUtility $math): array
+    public static function driftLasting(array $lasting, array $years, array $draws, array $normals): array
     {
         $termPersistence = Election::NORMAL_VOTE_PERSISTENCE ** Election::TERM_YEARS;
 
@@ -231,7 +231,7 @@ final class OpinionPolls
      * @param array<string, float> $normals       Normal votes by party, which size each party's swing.
      * @return array<string, float>
      */
-    public static function fadeShortTerm(array $swings, float $years, float $campaignYears, array $draws, array $normals, MathUtility $math): array
+    public static function fadeShortTerm(array $swings, float $years, float $campaignYears, array $draws, array $normals): array
     {
         $fade = self::fadeOver($years);
         $build = StochasticProcesses::persistentInnovationScale(self::fadeOver($campaignYears))
@@ -365,7 +365,7 @@ final class OpinionPolls
     }
 
     /** Publishes this month's poll. */
-    private static function publish(PoliticsState $state, int $salt, MathUtility $math): void
+    private static function publish(PoliticsState $state, int $salt): void
     {
         $key = CouncilAppointments::vacancyKey('poll', $state->totalTime);
         $persistence = 0.5 ** (1.0 / self::POLLS_PER_YEAR / self::UNSETTLED_HALF_LIFE_YEARS);

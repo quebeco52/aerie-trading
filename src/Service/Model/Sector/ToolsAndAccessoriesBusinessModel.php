@@ -183,9 +183,6 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
             ModelParam::ConsumerWeight->value   => self::CONSUMER_WEIGHT,
         ]);
 
-        $commercialWeight = $params[ModelParam::CommercialWeight];
-        $consumerWeight   = $params[ModelParam::ConsumerWeight];
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 

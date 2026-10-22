@@ -130,7 +130,7 @@ class StreamContext
      * The firm-wide N(0,1) innovation for this quarter, drawn once on first use so every loaded stream
      * (and any model-level demand logic) sees the same realization.
      */
-    public function getFirmInnovation(): float
+    private function getFirmInnovation(): float
     {
         return $this->firmInnovation ??= $this->mathUtility->generateStandardNormal();
     }
@@ -141,7 +141,7 @@ class StreamContext
      * @param string $key The unique identifier for this revenue stream.
      * @param float $z    The Z-score to register.
      */
-    public function registerZ(string $key, float $z): void
+    private function registerZ(string $key, float $z): void
     {
         $this->nextZ[$key] = $z;
     }

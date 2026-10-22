@@ -35,7 +35,7 @@ final class ReportCalendar
     }
 
     /** Simulation time of the most recent reporting tick, at or before now. */
-    public static function latestReportTime(string $ticker, int $tickCount, int $ticksPerYear, float $totalTime): float
+    private static function latestReportTime(string $ticker, int $tickCount, int $ticksPerYear, float $totalTime): float
     {
         return $totalTime - EarningsEngine::ticksSinceReportingTick($ticker, $tickCount, $ticksPerYear) / max(1, $ticksPerYear);
     }

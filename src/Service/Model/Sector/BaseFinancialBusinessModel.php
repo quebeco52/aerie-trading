@@ -38,7 +38,6 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
         FinancialPhysicsTrait::getPhysicalCapital insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getDepreciableBase insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::allowsPhysicalOrganicCapex insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getReturnBasisIncome insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getEffectiveReturn insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getBaselineReturn insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getPriceElasticityOfDemand insteadof StandardOperatingPhysicsTrait;

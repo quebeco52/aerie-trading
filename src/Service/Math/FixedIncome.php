@@ -55,28 +55,6 @@ final class FixedIncome
     }
 
     /**
-     * Calculates the yield for a given maturity using the Nelson-Siegel curve model.
-     *
-     * @param float $level     The long-term yield level.
-     * @param float $slope     The short-term yield component.
-     * @param float $curvature The medium-term hump component.
-     * @param float $tau       The maturity in years (e.g., 10.0 for the 10-year yield).
-     * @param float $lambda    The decay factor.
-     * @return float The calculated yield for the specified maturity.
-     */
-    public static function calculateNelsonSiegelYield(float $level, float $slope, float $curvature, float $tau, float $lambda = 0.5): float
-    {
-        if ($tau <= 0.0) {
-            return $level + $slope;
-        }
-
-        $term1 = (1 - exp(-$lambda * $tau)) / ($lambda * $tau);
-        $term2 = $term1 - exp(-$lambda * $tau);
-
-        return $level + ($slope * $term1) + ($curvature * $term2);
-    }
-
-    /**
      * Term premium duration scale (Adrian, Crump & Moench 2013): the compensation investors demand for
      * bearing duration rises with maturity and saturates, so a two-year note carries only a fraction of the
      * premium a ten-year bond does. Normalized to 1.0 at the ten-year point, where the benchmark premium is

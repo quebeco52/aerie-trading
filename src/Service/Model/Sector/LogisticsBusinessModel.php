@@ -67,10 +67,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     {
         return 2.5;
     }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.0;
-    }
     public function getDividendCrisisIcr(): float
     {
         return 1.75;
@@ -183,10 +179,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
             ModelParam::SpotBrokerageWeight->value  => self::SPOT_BROKERAGE_WEIGHT,
             ModelParam::Warehousing3plWeight->value => self::WAREHOUSING_3PL_WEIGHT,
         ]);
-
-        $fleetWeight = $params[ModelParam::DedicatedFleetWeight];
-        $spotWeight  = $params[ModelParam::SpotBrokerageWeight];
-        $whWeight    = $params[ModelParam::Warehousing3plWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

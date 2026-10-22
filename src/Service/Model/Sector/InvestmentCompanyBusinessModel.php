@@ -223,7 +223,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         $dealActivityShift = $macroState->dealActivityDeviation();
         $contrarianSurge = $this->resolveContrarianFloatSurge(
             $macroState,
-            $mathUtility,
             $macroState->outputGapEma,
             $macroState->macroCreditSpreadEma,
             $macroState->macroCreditSpread - $macroState->macroCreditSpreadEma,

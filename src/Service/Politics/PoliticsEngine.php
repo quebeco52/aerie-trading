@@ -242,7 +242,7 @@ class PoliticsEngine
         Office::SecurityDirector->fill($state);
         Office::CoastGuardCommandant->fill($state);
         Office::StateGuardCommander->fill($state);
-        PartyLeaders::advance($state, $dt, $this->mathUtility);
+        PartyLeaders::advance($state, $dt);
         ElectionForecast::advance($state, MacroEngine::recessionDeclared($macro), $forecastOffTick);
 
         $state->eventType = self::headline($state);

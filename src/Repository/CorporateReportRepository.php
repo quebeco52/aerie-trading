@@ -64,7 +64,7 @@ class CorporateReportRepository extends ServiceEntityRepository
      *
      * @return list<array<string, mixed>>
      */
-    public static function withPriceAtFiling(Connection $conn, int $stockId, int $newest): array
+    private static function withPriceAtFiling(Connection $conn, int $stockId, int $newest): array
     {
         $reports = $conn->fetchAllAssociative(
             'SELECT newest.* FROM (

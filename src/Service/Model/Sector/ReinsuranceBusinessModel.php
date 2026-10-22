@@ -106,8 +106,6 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
             ModelParam::CatastropheLossScalar->value   => self::CATASTROPHE_LOSS_SCALAR,
         ]);
 
-        $treatyWeight  = $params[ModelParam::TreatyReinsuranceWeight];
-        $catBondWeight = $params[ModelParam::CatBondSpreadWeight];
         $catThreshold  = $params[ModelParam::CatastropheZThreshold];
         $catScalar     = $params[ModelParam::CatastropheLossScalar];
 

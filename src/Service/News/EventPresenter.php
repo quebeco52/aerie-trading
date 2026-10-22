@@ -93,10 +93,10 @@ class EventPresenter
         } else {
             $rawType = strtoupper((string) ($event['type'] ?? $event['eventType'] ?? 'EVENT'));
             $rawDesc = (string) ($event['description'] ?? '');
-            $changePct = isset($event['change_percent']) ? (float) $event['change_percent'] : (isset($event['changePercent']) ? (float) $event['changePercent'] : null);
+            $changePct = isset($event['change_percent']) ? (float) $event['change_percent'] : null;
             $topic = isset($event['topic']) ? (string) $event['topic'] : null;
-            $simTime = isset($event['sim_time']) ? (float) $event['sim_time'] : (isset($event['simTime']) ? (float) $event['simTime'] : null);
-            $recordedAt = isset($event['recorded_at']) ? new \DateTime((string) $event['recorded_at']) : (isset($event['recordedAt']) ? ($event['recordedAt'] instanceof \DateTimeInterface ? $event['recordedAt'] : new \DateTime((string) $event['recordedAt'])) : new \DateTime());
+            $simTime = isset($event['sim_time']) ? (float) $event['sim_time'] : null;
+            $recordedAt = isset($event['recorded_at']) ? new \DateTime((string) $event['recorded_at']) : new \DateTime();
         }
 
         $card = match (EventCategory::forType($rawType)) {

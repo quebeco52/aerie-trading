@@ -74,7 +74,7 @@ class CompanySnapshotBuilder
      * 12 USC 1831o), which is why price-to-tangible-book rather than price-to-book is how a bank is quoted.
      * Null for a firm its capital ratio does not govern.
      *
-     * @return array{tangibleEquity: float, tangibleBookPerShare: float, priceToTangibleBook: float|null, returnOnTangibleEquity: float|null, goodwillShare: float|null, ratio: float, zone: string, cet1: float|null}|null
+     * @return array{tangibleBookPerShare: float, priceToTangibleBook: float|null, returnOnTangibleEquity: float|null, goodwillShare: float|null, ratio: float, zone: string, cet1: float|null}|null
      */
     private function capitalPosition(Stock $stock, string $businessModel, float $price): ?array
     {
@@ -92,7 +92,6 @@ class CompanySnapshotBuilder
         $closure = $this->debtEngine->calculateAltmanZScore($stock, $revenue * (float) $stock->getOperatingMargin(), $revenue);
 
         return [
-            'tangibleEquity' => $tangibleEquity,
             'tangibleBookPerShare' => $tangibleBookPerShare,
             'priceToTangibleBook' => $tangibleBookPerShare > 0.0 ? $price / $tangibleBookPerShare : null,
             'returnOnTangibleEquity' => $tangibleEquity > 0.0 && count($history) >= 4 ? array_sum(array_slice($history, -4)) / $tangibleEquity : null,

@@ -160,7 +160,7 @@ class PriceAlertService
     }
 
     /** Rewrites the nearest waiting targets on either side for one instrument, or drops it from the hash. */
-    public function rebuildBounds(string $ticker): void
+    private function rebuildBounds(string $ticker): void
     {
         $row = $this->entityManager->getConnection()->fetchAssociative(
             "SELECT MIN(CASE WHEN direction = 'ABOVE' THEN target_price END) AS above,

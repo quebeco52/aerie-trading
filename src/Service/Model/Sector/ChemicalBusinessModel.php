@@ -197,10 +197,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     /** Seasonal fertilizer inventory stockpiling working capital intensity for agrochemicals. */
     public const AGROCHEM_NWC_INTENSITY = 0.28;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 1.5;
-    }
     public function getReversionSpeed(): float
     {
         return 0.12;

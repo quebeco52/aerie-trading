@@ -36,8 +36,6 @@ final readonly class PublicAccountsDTO
         public float $grossDebt,
         /** The fund's bonds, the debt instruments the government holds. */
         public float $fundBonds,
-        /** The whole fund, bonds and equities. */
-        public float $fundAssets,
     ) {}
 
     public function revenue(): float
@@ -74,11 +72,5 @@ final readonly class PublicAccountsDTO
     public function netDebt(): float
     {
         return $this->grossDebt - $this->fundBonds;
-    }
-
-    /** Net financial worth: everything the government holds less what it owes. */
-    public function netFinancialWorth(): float
-    {
-        return $this->fundAssets - $this->grossDebt;
     }
 }

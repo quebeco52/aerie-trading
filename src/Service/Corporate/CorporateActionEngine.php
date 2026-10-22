@@ -174,7 +174,7 @@ class CorporateActionEngine
      * @return array{price: float, shares: float, event: array|null} Returns details about the executed split.
      * @throws \Exception
      */
-    public function executeReverseSplit(Stock $stock, float $newPrice, float $simTime): array
+    private function executeReverseSplit(Stock $stock, float $newPrice, float $simTime): array
     {
         $oldPrice = $newPrice;
         $oldShares = (float) $stock->getSharesOutstanding();

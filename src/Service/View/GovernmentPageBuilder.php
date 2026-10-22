@@ -34,7 +34,6 @@ use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
 use App\Service\Politics\Department\Office;
 use App\Service\Politics\Department\SovereignReserveFund;
-use App\Service\Politics\Diet\CoalitionFormation;
 use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\Diet\PartyLeaders;
@@ -329,7 +328,6 @@ class GovernmentPageBuilder
                 'supportedSeats' => $coalitionSeats + $sumSeats($support),
                 'minority' => $coalitionSeats < AerieDiet::MAJORITY_SEATS,
                 'formed' => $politics->lastGovernmentFormedAt < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($politics->coalitionFormedAt),
-                'range' => CoalitionFormation::ideologicalRange($coalition, $politics->partyPositions),
                 'caretaker' => $talking,
                 'primeMinister' => self::primeMinister($politics),
             ] + $coalitionPosition,

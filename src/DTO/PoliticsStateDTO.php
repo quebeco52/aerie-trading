@@ -440,7 +440,7 @@ readonly class PoliticsStateDTO
      * The Securities Commission stance whose rules are in force; null for the founding rules
      * (SecuritiesCommission::stanceInForce()).
      */
-    public function securitiesStanceInForce(): ?float
+    private function securitiesStanceInForce(): ?float
     {
         $head = $this->head(Office::SecuritiesHead);
 

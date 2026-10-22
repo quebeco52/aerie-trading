@@ -192,8 +192,6 @@ enum ModelParam: string
     // --- Healthcare, Biopharma & Medical Care Facilities ---
     case EstablishedDrugWeight = 'established_drug_weight';
     case PipelineDrugWeight = 'pipeline_drug_weight';
-    case CommercialTherapeuticsWeight = 'commercial_therapeutics_weight';
-    case PipelineMilestonesWeight = 'pipeline_milestones_weight';
     case PatentProtectedRevenueShare = 'patent_protected_revenue_share';
     case LoeExposureShare = 'loe_exposure_share';
     case ExclusivityQuarters = 'exclusivity_quarters';

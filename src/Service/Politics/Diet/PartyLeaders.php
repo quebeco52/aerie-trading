@@ -78,14 +78,14 @@ final class PartyLeaders
      *
      * @param PoliticsState $state Advanced in place; its Council must already be read (the game's salt drawn).
      */
-    public static function advance(PoliticsState $state, float $dt, MathUtility $math): void
+    public static function advance(PoliticsState $state, float $dt): void
     {
         if ($state->authoritySalt < 0.0) {
             return;
         }
         $salt = (int) $state->authoritySalt;
         if ($state->leaderNames === []) {
-            self::open($state, $salt, $math);
+            self::open($state, $salt);
 
             return;
         }
@@ -104,7 +104,7 @@ final class PartyLeaders
             }
             $exitAt = $state->leaderExitAt[$party] ?? -1.0;
             if (($exitAt >= 0.0 && $state->totalTime >= $exitAt) || $state->leaderHazardUsed[$party] >= self::hazardBudget($salt, $party, $state->leaderSince[$party])) {
-                self::replace($state, $party, $salt, $math);
+                self::replace($state, $party, $salt);
             }
         }
     }
@@ -183,7 +183,7 @@ final class PartyLeaders
     }
 
     /** A leader steps down, into the party's record, and a successor takes the lead. */
-    private static function replace(PoliticsState $state, string $party, int $salt, MathUtility $math): void
+    private static function replace(PoliticsState $state, string $party, int $salt): void
     {
         $state->leaderHistory[$party][] = [
             'name' => $state->leaderNames[$party],
@@ -191,7 +191,7 @@ final class PartyLeaders
             'since' => $state->leaderSince[$party],
             'until' => $state->totalTime,
         ];
-        self::seat($state, $party, self::draw($salt, $party, $state->totalTime, $state, $math), $state->totalTime);
+        self::seat($state, $party, self::draw($salt, $party, $state->totalTime, $state), $state->totalTime);
         if ($state->lastLeaderChangeAt !== $state->totalTime) {
             $state->lastLeaderChangeAt = $state->totalTime;
             $state->lastLeaderChangeParty = $party;
@@ -202,13 +202,13 @@ final class PartyLeaders
      * The leaders as they stand when the parties are first read: each drawn as a new leader at an age drawn at their
      * selection, having led for a time drawn at the overall hazard, and none weighed against a vote already past.
      */
-    private static function open(PoliticsState $state, int $salt, MathUtility $math): void
+    private static function open(PoliticsState $state, int $salt): void
     {
         $state->leaderNames = $state->leaderBirths = $state->leaderSince = $state->leaderHazardUsed = $state->leaderExitAt = $state->leaderHistory = [];
         foreach (AerieDiet::PARTIES as $party) {
             $led = -log(max(1e-300, MathUtility::hashedUniform($salt, "leader-opening:{$party}"))) / self::OVERALL_HAZARD;
             $since = $state->totalTime - $led;
-            self::seat($state, $party, self::draw($salt, $party, $since, $state, $math), $since);
+            self::seat($state, $party, self::draw($salt, $party, $since, $state), $since);
         }
         $state->leadersReviewedElection = $state->lastElectionAt;
     }
@@ -219,7 +219,7 @@ final class PartyLeaders
      *
      * @return array{name: string, birth: float}
      */
-    private static function draw(int $salt, string $party, float $since, PoliticsState $state, MathUtility $math): array
+    private static function draw(int $salt, string $party, float $since, PoliticsState $state): array
     {
         $key = CouncilAppointments::vacancyKey("leader:{$party}", $since);
         $age = Distributions::truncatedNormalInverse(MathUtility::hashedUniform($salt, "{$key}:age"), self::SELECTION_AGE_MEAN, self::SELECTION_AGE_SD, self::SELECTION_AGE_MIN, self::SELECTION_AGE_MAX);

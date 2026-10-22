@@ -126,17 +126,12 @@ class CapitalAllocationEngine
 
         $ctx->industry = $stock->getIndustry() ?: 'General';
         $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);
-        $ctx->isFinancial = \App\Data\Company\Sectors::isFinancial($ctx->businessModel);
         $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
 
         // Coverage, cost of capital and the hurdle that gate distributions and borrowing are read off what the
         // firm actually earned over the last twelve months, as its lenders measure it; the structural margin
         // moves only through reinvestment decay, and one annualized quarter flips with the seasons.
         $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
-
-        $ebit = $ctx->health->rawMetrics->ebit ?? 0.0;
-        $nopat = $ebit > 0 ? $ebit * (1.0 - $ctx->macroState->corporateTaxRate) : $ebit;
-        $ctx->quarterlyNopat = $nopat / 4.0;
 
         $totalFcfGenerated = $ctx->quarterlyFcfPerShare * $ctx->sharesOutstanding;
         $ctx->newTreasury = $ctx->currentTreasury + $totalFcfGenerated;

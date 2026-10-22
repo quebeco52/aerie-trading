@@ -71,25 +71,4 @@ class StockRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
-
-    /**
-     * The single best match for a typed query, preferring an exact ticker over a partial match.
-     *
-     * Used when the search box is submitted without picking a suggestion, so the reader lands on the
-     * company they spelled out rather than on whichever partial match happened to sort first.
-     */
-    public function findBestMatch(string $query): ?Stock
-    {
-        $exact = $this->findOneByTicker(strtoupper($query));
-        if ($exact !== null) {
-            return $exact;
-        }
-
-        return $this->createQueryBuilder('s')
-            ->where('s.ticker LIKE :query OR s.name LIKE :query')
-            ->setParameter('query', '%' . $query . '%')
-            ->setMaxResults(1)
-            ->getQuery()
-            ->getOneOrNullResult();
-    }
 }

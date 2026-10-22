@@ -120,37 +120,37 @@ class OpeningBoardBuilder
             $stock->setLongRunReturn((string) $roic);
         }
 
-        $stock->setCapexRatio((string) ($stockData['capex_ratio'] ?? 0.20));
-        $stock->setTargetPayoutRatio((string) ($stockData['target_payout_ratio'] ?? 0.30));
-        $stock->setDividendSpeed((string) ($stockData['dividendSpeed'] ?? 0.20));
+        $stock->setCapexRatio((string) $stockData['capex_ratio']);
+        $stock->setTargetPayoutRatio((string) $stockData['target_payout_ratio']);
+        $stock->setDividendSpeed((string) $stockData['dividendSpeed']);
         $stock->setDividendAristocrat((bool) ($stockData['dividend_aristocrat'] ?? false));
-        $stock->setFixedCostRatio((float) ($stockData['fixed_cost_ratio'] ?? 0.35));
+        $stock->setFixedCostRatio((float) $stockData['fixed_cost_ratio']);
         $stock->setDepreciationRate((string) ($stockData['depreciation_rate'] ?? Sectors::metricsFor($stockData['industry'] ?? null)['depreciation']));
 
-        $stock->setCorporateTreasury((string) ($stockData['corporate_treasury'] ?? 1000000000.00));
-        $stock->setFloatingDebtRatio((string) ($stockData['floating_debt_ratio'] ?? 0.30));
-        $stock->setOperatingMargin((string) ($stockData['operating_margin'] ?? 0.15));
+        $stock->setCorporateTreasury((string) $stockData['corporate_treasury']);
+        $stock->setFloatingDebtRatio((string) $stockData['floating_debt_ratio']);
+        $stock->setOperatingMargin((string) $stockData['operating_margin']);
         // Shares an anchor sphere holds are not tradable, so the float is the declared one less
         // whatever AnchorHoldings locks away. Derived so a stake and a float cannot drift apart.
         $stock->setPublicFloatPercentage((string) AnchorHoldings::tradableFloat(
             $stockData['ticker'],
-            (float) ($stockData['public_float'] ?? 0.90),
+            (float) $stockData['public_float'],
         ));
         $stock->setTotalEquity(Decimal::of($stockData['total_equity'] ?? 0.0));
         $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
         $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
         $stock->setRetainedEarnings(Decimal::of($stockData['retained_earnings'] ?? 0.0));
-        $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
-        $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
+        $stock->setCreditSpread((string) $stockData['credit_spread']);
+        $stock->setHistoricalFixedRate((string) $stockData['historical_fixed_rate']);
         // Provisional, at book, until the market strikes the opening price below: the debt analysis sizes the
         // equity it weighs against the firm's own book rather than the entity's placeholder.
         $stock->setPrice($stock->getBookValuePerShare());
-        $stock->setSamRatio((string) ($stockData['sam_ratio'] ?? 1.00));
+        $stock->setSamRatio((string) $stockData['sam_ratio']);
         $stock->setManagementStyle(ManagementStyle::tryFromNullable($stockData['management_style'] ?? null));
         $stock->setCeoTenureYears(ManagementSuccessionEngine::drawSeedTenure($this->mathUtility));
         $stock->setManagementIntensity(ManagementProfile::drawIntensity($this->mathUtility));
 
-        $margin = $stockData['operating_margin'] ?? 0.15;
+        $margin = $stockData['operating_margin'];
         $strategy = Sectors::getBusinessModelStrategy($businessModel);
 
         // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
@@ -190,7 +190,7 @@ class OpeningBoardBuilder
             $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));
         }
 
-        $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
+        $shares = $stockData['shares_outstanding'];
         $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
         $stock->setTotalNetIncome((string) $netIncome);
         $stock->setEarningsPerShare((string) round($annualEps, 2));

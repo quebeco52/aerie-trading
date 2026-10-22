@@ -271,7 +271,6 @@ interface OperatingStrategyInterface
      */
     public function getOpeningInvestmentAssets(Stock $stock): ?float;
     public function allowsPhysicalOrganicCapex(): bool;
-    public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float;
     /**
      * @return array<int, float> Quarterly revenue seasonality multipliers [Q1, Q2, Q3, Q4] summing to 4.0.
      */

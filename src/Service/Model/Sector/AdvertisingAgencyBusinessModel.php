@@ -92,10 +92,6 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     {
         return 3.0;
     }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 1.5;
-    }
     public function getDividendCrisisIcr(): float
     {
         return 2.0;
@@ -214,10 +210,6 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
             ModelParam::BrandRetainerWeight->value      => self::BRAND_RETAINER_WEIGHT,
             ModelParam::MartechConsultingWeight->value => self::MARTECH_CONSULTING_WEIGHT,
         ]);
-
-        $mediaWeight   = $params[ModelParam::MediaBuyingWeight];
-        $brandWeight   = $params[ModelParam::BrandRetainerWeight];
-        $martechWeight = $params[ModelParam::MartechConsultingWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

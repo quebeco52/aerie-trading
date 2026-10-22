@@ -24,10 +24,9 @@ interface AgentStrategyInterface
     /**
      * Conviction, in [-1, 1]. Positive is long.
      *
-     * @param AgentMarketViewDTO         $view      What the strategy can see.
-     * @param array<string, float> $positions Every strategy's current position in shares, keyed by identifier.
+     * @param AgentMarketViewDTO $view What the strategy can see.
      */
-    public function signal(AgentMarketViewDTO $view, array $positions): float;
+    public function signal(AgentMarketViewDTO $view): float;
 
     /**
      * Whether this strategy competes for capital in the discrete-choice switching.

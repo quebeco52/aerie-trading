@@ -106,25 +106,4 @@ class BondRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
-
-    /**
-     * Best matching active bond for a query.
-     */
-    public function findBestMatch(string $query): ?Bond
-    {
-        $exact = $this->findOneByTicker(strtoupper($query));
-        if ($exact !== null && $exact->getStatus() === Bond::STATUS_ACTIVE) {
-            return $exact;
-        }
-
-        return $this->createQueryBuilder('b')
-            ->leftJoin('b.issuer', 's')
-            ->where('LOWER(b.ticker) LIKE LOWER(:query) OR LOWER(b.name) LIKE LOWER(:query) OR LOWER(s.name) LIKE LOWER(:query)')
-            ->andWhere('b.status = :status')
-            ->setParameter('query', '%' . $query . '%')
-            ->setParameter('status', Bond::STATUS_ACTIVE)
-            ->setMaxResults(1)
-            ->getQuery()
-            ->getOneOrNullResult();
-    }
 }

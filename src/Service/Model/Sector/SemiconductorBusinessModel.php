@@ -183,9 +183,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             ModelParam::DesignRevenueWeight->value  => self::DESIGN_REVENUE_WEIGHT,
         ]);
 
-        $foundryWeight = $params[ModelParam::FoundryRevenueWeight];
-        $designWeight  = $params[ModelParam::DesignRevenueWeight];
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 

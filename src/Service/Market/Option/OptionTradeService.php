@@ -327,7 +327,7 @@ final class OptionTradeService
     }
 
     /** The account's position in one contract, or null if it holds none. */
-    public function findPosition(User $user, OptionContract $contract): ?UserOption
+    private function findPosition(User $user, OptionContract $contract): ?UserOption
     {
         return $this->em->getRepository(UserOption::class)->findOneBy([
             'user' => $user,

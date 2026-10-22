@@ -135,9 +135,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             ModelParam::AdvisoryRevenueWeight->value => self::ADVISORY_REVENUE_WEIGHT,
         ]);
 
-        $tradingWeight  = $params[ModelParam::TradingRevenueWeight];
-        $advisoryWeight = $params[ModelParam::AdvisoryRevenueWeight];
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 

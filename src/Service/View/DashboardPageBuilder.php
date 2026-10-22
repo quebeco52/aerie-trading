@@ -85,7 +85,7 @@ final class DashboardPageBuilder
         $escrow = $this->portfolio->openOrderEscrow($userId);
 
         // Summed in holdings order, before the table is sorted by size.
-        $sectorBreakdown = self::sectorBreakdown($holdings, $portfolioValue);
+        $sectorBreakdown = self::sectorBreakdown($holdings);
         $holdings = self::weighted($holdings, $portfolioValue);
 
         $tradePages = max(1, (int) ceil($this->orders->countSettledForUser($user) / self::TRADE_HISTORY_ROWS));
@@ -381,9 +381,9 @@ final class DashboardPageBuilder
      *
      * @param list<array<string, mixed>> $holdings
      *
-     * @return list<array{name: string, value: float, percent: float, portfolioPercent: float}>
+     * @return list<array{name: string, value: float, percent: float}>
      */
-    public static function sectorBreakdown(array $holdings, float $portfolioValue): array
+    public static function sectorBreakdown(array $holdings): array
     {
         $sectorValues = [];
         foreach ($holdings as $row) {
@@ -398,7 +398,6 @@ final class DashboardPageBuilder
                 'name' => (string) $sectorName,
                 'value' => $value,
                 'percent' => $investedTotal > 0 ? ($value / $investedTotal) * 100 : 0.0,
-                'portfolioPercent' => $portfolioValue > 0 ? ($value / $portfolioValue) * 100 : 0.0,
             ];
         }
         usort($breakdown, static fn(array $a, array $b): int => $b['value'] <=> $a['value']);

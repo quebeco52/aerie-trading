@@ -107,7 +107,7 @@ class HomebuilderBusinessModel extends StandardCorporateBusinessModel
     }
 
     /** Owned lots in years of closings, ticker override first. */
-    public function resolveLandBankYears(Stock $stock): float
+    private function resolveLandBankYears(Stock $stock): float
     {
         $params = $this->resolveModelParameters($stock, [ModelParam::LandBankYears->value => self::LAND_BANK_YEARS]);
 
@@ -115,13 +115,13 @@ class HomebuilderBusinessModel extends StandardCorporateBusinessModel
     }
 
     /** Market housing starts over the level they revert to: the firm keeps its share of a market of this size. */
-    public function resolveStartsRelative(MacroStateDTO $macroState): float
+    private function resolveStartsRelative(MacroStateDTO $macroState): float
     {
         return max(0.0, $macroState->housingStartsIndexEma) / MacroConstants::HOUSING_STARTS_BASELINE;
     }
 
     /** The real house price over the trend it has measurably settled at. */
-    public function resolveHousePriceRelative(MacroStateDTO $macroState): float
+    private function resolveHousePriceRelative(MacroStateDTO $macroState): float
     {
         return max(0.0, $macroState->residentialPropertyIndexEma) / max(1.0, $macroState->residentialWealthTrend);
     }

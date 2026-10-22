@@ -39,11 +39,6 @@ final class CreditRisk
      * risk alone quotes through the market.
      */
     public const CORPORATE_ILLIQUIDITY_SPREAD = 0.0040;
-    /**
-     * Ceiling on the credit spread a listed issue may be discounted at, matching the cap the Merton spread itself
-     * carries.
-     */
-    public const MAX_CORPORATE_SPREAD = 1.00;
 
     // --- Corporate Credit: Rating-Class Spread Curve (Jarrow, Lando & Turnbull 1997; Ben Dor et al. 2007) ---
     /**
@@ -665,67 +660,6 @@ final class CreditRisk
         $d2 = $d1 - ($assetVolatility * sqrt($timeToMaturity));
 
         return $d2;
-    }
-
-    /**
-     * Calculates the theoretical credit spread based on Merton's Structural Model.
-     *
-     * @param float $distanceToDefault The distance to default (d2).
-     * @param float $lossGivenDefault  The expected loss percentage if default occurs (LGD).
-     * @param float $timeToMaturity    The time to maturity of the debt in years (T).
-     * @return float The theoretical credit spread in decimal (e.g. 0.02 for 2%).
-     */
-    public static function calculateMertonCreditSpread(float $distanceToDefault, float $lossGivenDefault = 0.40, float $timeToMaturity = 1.0): float
-    {
-        // Probability of Default (PD) is N(-DD)
-        $probabilityOfDefault = Distributions::calculateNormalCDF(-$distanceToDefault);
-
-        // Failsafe: Cap PD slightly below 1.0 to prevent log(0) in the spread formula
-        $probabilityOfDefault = min(0.9999, $probabilityOfDefault);
-
-        $spread = - (1.0 / $timeToMaturity) * log(1.0 - ($probabilityOfDefault * $lossGivenDefault));
-
-        // Failsafe: Prevent negative spreads or astronomical blowout
-        return max(0.0, min(1.0, $spread)); // Max spread capped at 10,000 bps
-    }
-
-    /**
-     * The spread a corporate issue is discounted at, over the sovereign curve.
-     *
-     * Two components, because a corporate spread is not all compensation for default. Longstaff, Mithal &
-     * Neis (2005) separate the two by comparing bond spreads with credit default swap premia and find a
-     * material non-default residual: a buyer charges for holding a claim they cannot sell as readily as a
-     * sovereign, whether or not the issuer is ever going to miss a payment. A bond priced on default risk
-     * alone quotes through the market at every rating, and worst at the safe end, where the default
-     * component is nearly nothing and the residual is nearly all of it.
-     *
-     * The default component is the issuer's own Merton spread at the claim's horizon, so it carries the
-     * term structure of default risk rather than a flat number: a firm close to the barrier is far riskier
-     * over ten years than over one, and a distressed one is riskier over one year than over ten because it
-     * either survives that year or does not.
-     *
-     * @param float $distanceToDefault The issuer's Merton d2.
-     * @param float $lossGivenDefault  One minus the recovery on this claim.
-     * @param float $timeToMaturity    Years to maturity.
-     * @param float $illiquidityPremium Non-default component.
-     * @return float Continuously compounded spread over the sovereign curve.
-     */
-    public static function calculateCorporateSpread(
-        float $distanceToDefault,
-        float $lossGivenDefault,
-        float $timeToMaturity,
-        float $illiquidityPremium = self::CORPORATE_ILLIQUIDITY_SPREAD,
-    ): float {
-        $defaultComponent = self::calculateMertonCreditSpread(
-            $distanceToDefault,
-            $lossGivenDefault,
-            max(1.0e-6, $timeToMaturity),
-        );
-
-        return max(0.0, min(
-            self::MAX_CORPORATE_SPREAD,
-            $defaultComponent + max(0.0, $illiquidityPremium),
-        ));
     }
 
     /**

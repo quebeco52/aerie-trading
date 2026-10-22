@@ -242,7 +242,7 @@ final class PagesRenderTest extends KernelTestCase
                     ['label' => 'Set a price alert', 'done' => false, 'href' => '/guide#alerts'],
                 ]],
                 'season' => [
-                    'number' => 4, 'endsOn' => 'Year 17 Q1', 'realSecondsLeft' => 9.5 * 86400, 'progress' => 0.66, 'ranked' => 31, 'entrants' => 38, 'qualifyingWeeks' => 13,
+                    'number' => 4, 'endsOn' => 'Year 17 Q1', 'realSecondsLeft' => 9.5 * 86400, 'progress' => 0.66, 'ranked' => 31, 'qualifyingWeeks' => 13,
                     'row' => ['rank' => 7, 'forfeited' => false, 'weeks' => 137, 'return' => 0.214, 'benchmarkReturn' => 0.171, 'excess' => 0.043, 'sharpe' => 0.81, 'beta' => 1.12, 'alpha' => 0.018, 'maxDrawdown' => 0.137],
                 ],
                 'watchlist' => [['ticker' => 'HUMM', 'name' => 'Hummock Foods', 'assetType' => 'STOCK', 'price' => 41.07, 'change' => -0.0121]],

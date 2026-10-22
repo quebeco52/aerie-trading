@@ -64,6 +64,7 @@ class SovereignFundSubsystemTest extends TestCase
     {
         $fund = new SovereignFundSubsystem(new MathUtility());
         $state = new MacroState();
+        $policyReturn = static fn(float $domesticWeight): float => $fund->expectedCompoundRealReturn($state, $domesticWeight, $fund->foreignEquityShare($state) * (1.0 - $domesticWeight));
 
         // All in the reserve portfolio: its arithmetic real return less half the variance of equity leg plus currency.
         // The paper earns the forward term premium at its duration over the foreign rate.
@@ -74,19 +75,19 @@ class SovereignFundSubsystemTest extends TestCase
         $equityLeg = SovereignFundSubsystem::FOREIGN_EQUITY_SHARE * SovereignFundSubsystem::FOREIGN_EQUITY_VOLATILITY;
         $variance = ($equityLeg * $equityLeg) + (SovereignFundSubsystem::EXCHANGE_RATE_VOLATILITY * SovereignFundSubsystem::EXCHANGE_RATE_VOLATILITY);
 
-        $this->assertEqualsWithDelta($arithmetic - (0.5 * $variance), $fund->policyCompoundRealReturn($state, 0.0), 1e-15);
+        $this->assertEqualsWithDelta($arithmetic - (0.5 * $variance), $policyReturn(0.0), 1e-15);
 
         // All on the board: the natural rate plus the premium, less half the market's variance.
         $boardVariance = MacroConstants::MACRO_VOL_BASE_ANCHOR * MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $this->assertEqualsWithDelta(
             $state->naturalRate + MacroConstants::BASE_EQUITY_RISK_PREMIUM - (0.5 * $boardVariance),
-            $fund->policyCompoundRealReturn($state, 1.0),
+            $policyReturn(1.0),
             1e-15,
         );
 
         // Diversification: a blend compounds faster than the weighted compound returns of its parts.
-        $blend = $fund->policyCompoundRealReturn($state, 0.3);
-        $parts = (0.3 * $fund->policyCompoundRealReturn($state, 1.0)) + (0.7 * $fund->policyCompoundRealReturn($state, 0.0));
+        $blend = $policyReturn(0.3);
+        $parts = (0.3 * $policyReturn(1.0)) + (0.7 * $policyReturn(0.0));
         $this->assertGreaterThan($parts, $blend);
     }
 

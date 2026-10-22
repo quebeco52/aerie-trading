@@ -91,10 +91,6 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     {
         return 2.5;
     }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 1.5;
-    }
     public function getDividendCrisisIcr(): float
     {
         return 2.0;
@@ -292,10 +288,6 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
             ModelParam::ThirdPartyWeight->value => self::THIRD_PARTY_WEIGHT,
             ModelParam::DigitalAdsWeight->value => self::DIGITAL_ADS_WEIGHT,
         ]);
-
-        $fpWeight  = $params[ModelParam::FirstPartyWeight];
-        $tpWeight  = $params[ModelParam::ThirdPartyWeight];
-        $adsWeight = $params[ModelParam::DigitalAdsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

@@ -22,7 +22,7 @@ final class SeasonStatistics
     }
 
     /** Observations per simulated year, from the time the recorded weeks span. */
-    public static function periodsPerYear(SeasonStatisticsInput $in): ?float
+    private static function periodsPerYear(SeasonStatisticsInput $in): ?float
     {
         return $in->periods > 0 && $in->sumDt > 0.0 ? $in->periods / $in->sumDt : null;
     }

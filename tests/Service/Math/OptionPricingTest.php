@@ -208,41 +208,6 @@ class OptionPricingTest extends TestCase
 
     // --- Implied Volatility ---
 
-    public function testImpliedVolatilityRecoversTheVolatilityAPriceWasStruckAt(): void
-    {
-        foreach ([0.08, 0.17, 0.42, 1.10] as $sigma) {
-            foreach ([80.0, 100.0, 125.0] as $strike) {
-                $price = OptionPricing::calculateBlackScholesPrice(100.0, $strike, $sigma, 0.035, 0.012, 0.6, true);
-                $recovered = OptionPricing::calculateImpliedVolatility($price, 100.0, $strike, 0.035, 0.012, 0.6, true);
-
-                $this->assertEqualsWithDelta($sigma, $recovered, 1e-4, "strike {$strike} at sigma {$sigma}");
-            }
-        }
-    }
-
-    public function testImpliedVolatilityRecoversAPutsVolatility(): void
-    {
-        $price = OptionPricing::calculateBlackScholesPrice(64.0, 70.0, 0.28, 0.04, 0.0, 0.25, false);
-
-        $this->assertEqualsWithDelta(0.28, OptionPricing::calculateImpliedVolatility($price, 64.0, 70.0, 0.04, 0.0, 0.25, false), 1e-4);
-    }
-
-    public function testAQuoteAtOrBelowIntrinsicValueReturnsTheVolatilityFloor(): void
-    {
-        $this->assertSame(
-            OptionPricing::MIN_OPTION_VOLATILITY,
-            OptionPricing::calculateImpliedVolatility(0.0, 100.0, 100.0, 0.04, 0.0, 1.0, true),
-        );
-    }
-
-    public function testAQuoteAboveTheQuotableRangeReturnsTheVolatilityCeiling(): void
-    {
-        $this->assertSame(
-            OptionPricing::MAX_OPTION_VOLATILITY,
-            OptionPricing::calculateImpliedVolatility(99.0, 100.0, 100.0, 0.04, 0.0, 1.0, true),
-        );
-    }
-
     // --- Kou Jump Moments ---
 
     public function testAPureUpJumpReturnsTheMomentsOfItsExponential(): void
@@ -279,7 +244,7 @@ class OptionPricingTest extends TestCase
     public function testTheMarketEnginesDownwardSkewedJumpProducesNegativeSkewness(): void
     {
         // The engine's own configuration: a 40/60 split with the down branch scaled wider than the up one.
-        $shape = OptionPricing::calculateJumpDiffusionShape(0.04, 2.0, 0.40, 1.0 / 0.10, 1.0 / 0.125, 0.25);
+        $shape = self::singleJumpShape(0.04, 2.0, 0.40, 1.0 / 0.10, 1.0 / 0.125, 0.25);
 
         $this->assertLessThan(0.0, $shape['skewness']);
         $this->assertGreaterThan(0.0, $shape['excess_kurtosis']);
@@ -287,8 +252,8 @@ class OptionPricingTest extends TestCase
 
     public function testShapeFlattensWithHorizonAtTheCentralLimitRates(): void
     {
-        $short = OptionPricing::calculateJumpDiffusionShape(0.04, 2.0, 0.40, 10.0, 8.0, 0.25);
-        $long = OptionPricing::calculateJumpDiffusionShape(0.04, 2.0, 0.40, 10.0, 8.0, 1.00);
+        $short = self::singleJumpShape(0.04, 2.0, 0.40, 10.0, 8.0, 0.25);
+        $long = self::singleJumpShape(0.04, 2.0, 0.40, 10.0, 8.0, 1.00);
 
         // Four times the horizon halves the skewness and quarters the excess kurtosis.
         $this->assertEqualsWithDelta($short['skewness'] / 2.0, $long['skewness'], 1e-9);
@@ -297,7 +262,7 @@ class OptionPricingTest extends TestCase
 
     public function testVarianceIsTheDiffusionPlusTheJumpSecondMoment(): void
     {
-        $shape = OptionPricing::calculateJumpDiffusionShape(0.09, 3.0, 0.40, 10.0, 8.0, 0.5);
+        $shape = self::singleJumpShape(0.09, 3.0, 0.40, 10.0, 8.0, 0.5);
 
         $expected = (0.09 * 0.5) + (3.0 * 0.5 * OptionPricing::calculateKouJumpMoment(2, 0.40, 10.0, 8.0));
 
@@ -306,7 +271,7 @@ class OptionPricingTest extends TestCase
 
     public function testAJumplessProcessHasNoShapeBeyondItsDiffusion(): void
     {
-        $shape = OptionPricing::calculateJumpDiffusionShape(0.04, 0.0, 0.40, 10.0, 8.0, 1.0);
+        $shape = self::singleJumpShape(0.04, 0.0, 0.40, 10.0, 8.0, 1.0);
 
         $this->assertEqualsWithDelta(0.04, $shape['variance'], 1e-12);
         $this->assertSame(0.0, $shape['skewness']);
@@ -352,71 +317,6 @@ class OptionPricingTest extends TestCase
     }
 
     // --- Model-Free Implied Variance ---
-
-    public function testAConstantVolatilityStripReturnsThatVolatility(): void
-    {
-        $spot = 100.0;
-        $rate = 0.04;
-        $tenor = 0.5;
-        $sigma = 0.25;
-        $forward = $spot * exp($rate * $tenor);
-
-        // A dense strip of out-of-the-money quotes generated at one volatility. The replication integral
-        // is exact in the limit, so a fine grid has to come back at the volatility it was built from.
-        $strip = [];
-        for ($strike = 20.0; $strike <= 260.0; $strike += 0.5) {
-            $isCall = $strike > $forward;
-            $strip[] = [
-                'strike' => $strike,
-                'price' => OptionPricing::calculateBlackScholesPrice($spot, $strike, $sigma, $rate, 0.0, $tenor, $isCall),
-            ];
-        }
-
-        $atmStrike = floor($forward * 2.0) / 2.0;
-        $variance = OptionPricing::calculateModelFreeImpliedVariance($strip, $forward, $atmStrike, $rate, $tenor);
-
-        $this->assertEqualsWithDelta($sigma, sqrt($variance), 1e-3);
-    }
-
-    public function testAFatterTailedStripPricesMoreVarianceThanItsAtTheMoneyVolatility(): void
-    {
-        $spot = 100.0;
-        $rate = 0.03;
-        $tenor = 0.25;
-        $atmVol = 0.30;
-        $forward = $spot * exp($rate * $tenor);
-
-        $shape = OptionPricing::calculateJumpDiffusionShape(0.09, 2.0, 0.40, 1.0 / 0.10, 1.0 / 0.125, $tenor);
-
-        $strip = [];
-        for ($strike = 20.0; $strike <= 260.0; $strike += 0.5) {
-            $isCall = $strike > $forward;
-            $deviates = OptionPricing::calculateBlackScholesDeviates($spot, $strike, $atmVol, $rate, 0.0, $tenor);
-            $this->assertNotNull($deviates, "K={$strike}");
-            $smileVol = OptionPricing::calculateGramCharlierImpliedVolatility(
-                $atmVol,
-                $deviates['d1'],
-                $shape['skewness'],
-                $shape['excess_kurtosis'],
-            );
-
-            $strip[] = [
-                'strike' => $strike,
-                'price' => OptionPricing::calculateBlackScholesPrice($spot, $strike, $smileVol, $rate, 0.0, $tenor, $isCall),
-            ];
-        }
-
-        $atmStrike = floor($forward * 2.0) / 2.0;
-        $variance = OptionPricing::calculateModelFreeImpliedVariance($strip, $forward, $atmStrike, $rate, $tenor);
-
-        // The index reads the whole surface, so a smiled strip prices above the single strike the spot sits on.
-        $this->assertGreaterThan($atmVol, sqrt($variance));
-    }
-
-    public function testAStripTooShortToIntegrateReturnsNoVariance(): void
-    {
-        $this->assertSame(0.0, OptionPricing::calculateModelFreeImpliedVariance([['strike' => 100.0, 'price' => 5.0]], 100.0, 100.0, 0.04, 0.5));
-    }
 
     // --- Short Option Margin (FINRA Rule 4210) ---
 
@@ -484,5 +384,11 @@ class OptionPricingTest extends TestCase
     {
         $this->assertGreaterThanOrEqual(0.0, OptionPricing::calculateShortOptionRequirement(0.0, 0.0, 0.0, true));
         $this->assertGreaterThanOrEqual(0.0, OptionPricing::calculateShortOptionRequirement(1.0, 1000.0, 0.0, true));
+    }
+
+    /** @return array{variance: float, skewness: float, excess_kurtosis: float} */
+    private static function singleJumpShape(float $diffusionVariance, float $lambda, float $pUp, float $etaUp, float $etaDown, float $horizonYears): array
+    {
+        return OptionPricing::calculateMultiJumpDiffusionShape($diffusionVariance, [['lambda' => $lambda, 'p_up' => $pUp, 'eta_up' => $etaUp, 'eta_down' => $etaDown]], $horizonYears);
     }
 }

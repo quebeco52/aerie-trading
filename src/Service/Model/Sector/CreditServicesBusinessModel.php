@@ -180,7 +180,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $grossYield = $interestYield + $this->resolveFranchisePricing($stock)['fee_yield'];
         $lendingWeight = $grossYield > 0.0 ? $interestYield / $grossYield : 1.0;
         $networkWeight = 1.0 - $lendingWeight;
-        $this->advanceBookYields($stock, $macroState, $streams, $mathUtility);
+        $this->advanceBookYields($stock, $macroState, $streams);
 
         // Independent stream Z-scores with AR(1) persistence
         $lendingZ = $streams->generateZ('lending', 0.25); // Revolving credit loan origination volume
@@ -215,7 +215,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // with the whole book consumer). They reach EBIT once, through the allowance roll-forward. The forward-looking
         // CECL reserve moves the allowance TARGET through getForwardCreditLossMultiplier(), where the per-ticker
         // CeclSpreadSensitivity sets how far this issuer's reserve travels with spreads.
-        $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams, $mathUtility);
+        $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams);
         $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveGrossEarningAssets($stock);
         $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
 
@@ -340,7 +340,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
      *
      * @return array{loss_rate: float, systematic_z: float}
      */
-    protected function resolveConditionalCreditLossRate(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\Service\Model\StreamContext $streams, MathUtility $mathUtility): array
+    protected function resolveConditionalCreditLossRate(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\Service\Model\StreamContext $streams): array
     {
         // Read against the household rate's measured trend, the long-run average year the book's charge-off rate
         // describes.

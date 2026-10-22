@@ -811,15 +811,4 @@ class DistrictMap
     {
         return self::PLOT_WIDTH_BY_IMPORTANCE[$systemicImportance ?? 'none'] ?? self::PLOT_WIDTH_BY_IMPORTANCE['none'];
     }
-
-    /**
-     * Returns the facade, stroke and lit-window colours for a macro sector, falling back for a
-     * sector with no palette entry rather than rendering an untinted hole in the street.
-     *
-     * @return array{facade: string, stroke: string, window: string}
-     */
-    public static function paletteForSector(?string $sector): array
-    {
-        return self::SECTOR_PALETTE[$sector ?? ''] ?? self::SECTOR_PALETTE_FALLBACK;
-    }
 }

@@ -88,5 +88,4 @@ class DivestitureContext
 
     // Results
     public float $eventShock = 0.0;
-    public array $eventData = [];
 }

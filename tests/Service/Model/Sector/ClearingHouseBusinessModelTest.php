@@ -54,17 +54,6 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertSame(500000000.0, $income);
     }
 
-    public function testCalculateEffectiveCustodySpreadScalesWithRate(): void
-    {
-        // 5% rate -> 15 bps base + (5% * 15% retention = 75 bps) = 90 bps (0.0090)
-        $macroState = new MacroStateDTO(
-            policyRateEma: 0.05,
-            yield2yEma: 0.06,
-        );
-        $spread = $this->model->calculateEffectiveCustodySpread($macroState);
-        $this->assertEqualsWithDelta(0.0090, $spread, 0.0001);
-    }
-
     public function testGetTargetMetricsUsesEffectiveEquityAsInvestedCapital(): void
     {
         $stockMock = new Stock();

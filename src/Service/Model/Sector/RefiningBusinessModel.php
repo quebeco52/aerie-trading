@@ -194,27 +194,9 @@ class RefiningBusinessModel extends StandardCorporateBusinessModel
     }
 
     /** Crude in $/bbl implied by the energy index. */
-    public function resolveCrudePrice(MacroStateDTO $macroState): float
+    private function resolveCrudePrice(MacroStateDTO $macroState): float
     {
         return max(0.0, $macroState->energyPriceIndexEma) * self::REFERENCE_CRUDE_PRICE / MacroConstants::ENERGY_BASELINE;
-    }
-
-    /**
-     * The two market drivers of the refining margin, each as a change in margin per barrel relative to the
-     * baseline barrel's revenue: the crack widening over its baseline, and crude moving the secondary barrel's
-     * discount.
-     *
-     * @return array{crack: float, crude: float}
-     */
-    public function describeMarginDrivers(MacroStateDTO $macroState): array
-    {
-        $baselineRealization = $this->calculateBarrelRealization(self::REFERENCE_CRUDE_PRICE, MacroConstants::CRACK_SPREAD_BASELINE);
-        $secondaryDiscount = 1.0 - self::LIGHT_PRODUCT_YIELD - (self::SECONDARY_PRODUCT_YIELD * self::SECONDARY_PRODUCT_REALIZATION);
-
-        return [
-            'crack' => self::LIGHT_PRODUCT_YIELD * self::REALIZED_CRACK_CAPTURE * ($macroState->refiningCrackSpreadEma - MacroConstants::CRACK_SPREAD_BASELINE) / $baselineRealization,
-            'crude' => -$secondaryDiscount * ($this->resolveCrudePrice($macroState) - self::REFERENCE_CRUDE_PRICE) / $baselineRealization,
-        ];
     }
 
     protected function calculateSectorPhysics(

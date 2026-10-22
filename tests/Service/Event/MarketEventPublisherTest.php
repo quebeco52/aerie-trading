@@ -22,23 +22,20 @@ class MarketEventPublisherTest extends TestCase
 {
     private EntityManagerInterface&MockObject $emMock;
     private LoggerInterface&Stub $loggerStub;
-    private \Redis&MockObject $redisMock;
     private MarketEventPublisher $publisher;
 
     protected function setUp(): void
     {
         $this->emMock = $this->createMock(EntityManagerInterface::class);
         $this->loggerStub = $this->createStub(LoggerInterface::class);
-        $this->redisMock = $this->createMock(\Redis::class);
 
         $this->publisher = new MarketEventPublisher(
             $this->emMock,
             $this->loggerStub,
-            $this->redisMock,
         );
     }
 
-    public function testPublishStockEventPersistsAndPushesToRedis(): void
+    public function testPublishStockEventPersists(): void
     {
         $stock = new Stock();
         $stock->setTicker('APEX');
@@ -53,19 +50,6 @@ class MarketEventPublisherTest extends TestCase
                     && $entity->getChangePercent() === '5.25';
             }));
 
-        $this->redisMock->expects($this->once())
-            ->method('lPush')
-            ->with('market_events_list', $this->callback(function (string $json) {
-                $data = json_decode($json, true);
-                return $data['type'] === 'EARNINGS'
-                    && $data['ticker'] === 'APEX'
-                    && $data['change_percent'] === 5.25;
-            }));
-
-        $this->redisMock->expects($this->once())
-            ->method('lTrim')
-            ->with('market_events_list', 0, 49);
-
         $result = $this->publisher->publish($stock, 'EARNINGS', 'Quarterly earnings beat expectations.', 5.25);
 
         $this->assertSame('EARNINGS', $result['type']);
@@ -74,7 +58,7 @@ class MarketEventPublisherTest extends TestCase
         $this->assertSame(5.25, $result['change_percent']);
     }
 
-    public function testPublishEtfEventPersistsAndPushesToRedis(): void
+    public function testPublishEtfEventPersists(): void
     {
         $etf = new Etf();
         $etf->setTicker('LBI');
@@ -88,9 +72,6 @@ class MarketEventPublisherTest extends TestCase
                     && $entity->getChangePercent() === '0';
             }));
 
-        $this->redisMock->expects($this->once())->method('lPush');
-        $this->redisMock->expects($this->once())->method('lTrim');
-
         $result = $this->publisher->publish($etf, 'SPLIT', '4-for-1 forward split.', 0.0);
 
         $this->assertSame('SPLIT', $result['type']);
@@ -103,8 +84,6 @@ class MarketEventPublisherTest extends TestCase
         $stock->setTicker('SHOCK_CORP');
 
         $this->emMock->expects($this->once())->method('persist');
-        $this->redisMock->expects($this->once())->method('lPush');
-        $this->redisMock->expects($this->once())->method('lTrim');
 
         ob_start();
         $result = $this->publisher->publish($stock, 'SHOCK', 'Market shock occurred.', -12.5);
@@ -171,7 +150,6 @@ class MarketEventPublisherTest extends TestCase
                 && $entity->getDesk() === DistrictNews::DESK_GOVERNMENT
                 && $entity->getTopic() === 'election_held'
                 && $entity->getChangePercent() === '-1.25'));
-        $this->redisMock->expects($this->once())->method('lPush');
 
         $result = $this->publisher->publishDistrict(DistrictNews::DESK_GOVERNMENT, 'election_held', 'The Diet has been elected.', -1.25);
 

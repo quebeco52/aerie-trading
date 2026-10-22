@@ -159,9 +159,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             ModelParam::AccessibleLuxuryWeight->value => self::ACCESSIBLE_LUXURY_WEIGHT,
         ]);
 
-        $hauteWeight      = $params[ModelParam::HauteCoutureWeight];
-        $accessibleWeight = $params[ModelParam::AccessibleLuxuryWeight];
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 

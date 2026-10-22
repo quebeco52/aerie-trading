@@ -58,30 +58,12 @@ class FailureSweep
         $generatedEvents = [];
         $this->anchorStakes->beginTick($stocks);
 
-        // Calculate the Total Market Cap of active companies in the district on the fly
-        $totalMarketCap = 0;
-        foreach ($stocks as $stock) {
-            if ($stock->isBankrupt()) {
-                continue;
-            }
-            $totalMarketCap += ((float) $stock->getPrice()) * ((int) $stock->getSharesOutstanding());
-        }
-        // Fallback to prevent division by zero in case of total economic collapse
-        if ($totalMarketCap <= 0) {
-            $totalMarketCap = 1;
-        }
-
         foreach ($stocks as $stock) {
             if ($stock->isBankrupt()) {
                 continue;
             }
 
-            $price = (float) $stock->getPrice();
-            $shares = (int) $stock->getSharesOutstanding();
-            $marketCap = $price * $shares;
-            $name = $stock->getName();
-
-            $restructureEvents = $this->applyRestructuringRule($stock, $marketCap, $name, $macroState);
+            $restructureEvents = $this->applyRestructuringRule($stock, $macroState);
             if ($restructureEvents !== null) {
                 $generatedEvents = array_merge($generatedEvents, $restructureEvents);
             }
@@ -102,8 +84,9 @@ class FailureSweep
      *
      * @return list<array<string, mixed>>|null Market events if the company failed this pass, otherwise null.
      */
-    private function applyRestructuringRule(Stock $stock, float $marketCap, string $name, MacroStateDTO $macroState): ?array
+    private function applyRestructuringRule(Stock $stock, MacroStateDTO $macroState): ?array
     {
+        $name = $stock->getName();
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
         $isAccelerated = $stock->isPaymentDefault()
             && $stock->getQuartersInDefault() > \App\Service\Math\FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS;

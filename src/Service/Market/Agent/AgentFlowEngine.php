@@ -258,7 +258,7 @@ final class AgentFlowEngine
         foreach ($this->strategies as $strategy) {
             $identifier = $strategy->identifier();
             $current = $positions[$identifier] ?? 0.0;
-            $signal = $strategy->signal($view, $positions);
+            $signal = $strategy->signal($view);
 
             if ($strategy->competesForCapital()) {
                 // What one agent of this belief holds, worked in at the same pace as the book itself, so
@@ -382,7 +382,7 @@ final class AgentFlowEngine
                 $fitness[$identifier] = 0.0;
                 $exposures[$identifier] = 0.0;
             } else {
-                $positions[$identifier] = $strategy->signal($view, []) * $capacity;
+                $positions[$identifier] = $strategy->signal($view) * $capacity;
             }
         }
 

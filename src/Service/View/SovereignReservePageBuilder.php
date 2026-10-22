@@ -48,7 +48,7 @@ class SovereignReservePageBuilder
      *     incepted: bool,
      *     head: array{name: string, age: int, sinceLabel: string, termEndsLabel: string, stance: string, equityShare: float, opening: bool}|null,
      *     summary: array{value: float, toGdp: float, annualDraw: float, drawToGdp: float, stampDutyToGdp: float, stampDutyYearToDate: float, ownership: float, grossDebtToGdp: float, netDebtToGdp: float},
-     *     returns: array{index: float, realIndex: float, assumedReal: float, bondYield: float},
+     *     returns: array{index: float, assumedReal: float, bondYield: float},
      *     programme: array{active: bool, buying: bool, share: float, monthsLeft: float, monthsSinceLast: float|null},
      *     sleeves: list<array{key: string, label: string, weight: float, policy: float, value: float}>,
      *     bands: list<array{key: string, label: string, weight: float, policy: float, band: float, breachingMove: float}>,
@@ -97,7 +97,6 @@ class SovereignReservePageBuilder
             // macro_report.
             'returns' => [
                 'index' => $macro->sovereignFundReturnIndex,
-                'realIndex' => $macro->sovereignFundRealReturnIndex,
                 'assumedReal' => $macro->sovereignFundExpectedRealReturn,
                 'bondYield' => $macro->foreignBondYield,
             ],

@@ -84,7 +84,6 @@ class TreasuryEngineTest extends TestCase
         $strategy = new InvestmentBankBusinessModel();
         $ctx->strategy = $strategy;
         $ctx->businessModel = 'investment_bank';
-        $ctx->isFinancial = true;
         $ctx->newTreasury = 50_000_000.0;
         $ctx->operatingBase = 1_000_000_000.0;
         $ctx->wholesaleDebt = 0.0;
@@ -193,7 +192,6 @@ class TreasuryEngineTest extends TestCase
         );
         $ctx->strategy = new InvestmentBankBusinessModel();
         $ctx->businessModel = 'investment_bank';
-        $ctx->isFinancial = true;
         $ctx->newTreasury = 562_500_000.0;
         $ctx->operatingBase = 1_000_000_000.0;
         $ctx->wholesaleDebt = 3_750_000_000.0;
@@ -257,7 +255,6 @@ class TreasuryEngineTest extends TestCase
 
         $ctx->strategy = new CommercialBankBusinessModel();
         $ctx->businessModel = 'commercial_bank';
-        $ctx->isFinancial = true;
         $ctx->newTreasury = 50_000_000.0;
         $ctx->operatingBase = 1_000_000_000.0;
         $ctx->wholesaleDebt = 0.0;
@@ -336,7 +333,6 @@ class TreasuryEngineTest extends TestCase
         );
         $ctx->strategy = new CommercialBankBusinessModel();
         $ctx->businessModel = 'commercial_bank';
-        $ctx->isFinancial = true;
         $ctx->newTreasury = $treasury;
         $ctx->operatingBase = 1_000_000_000.0;
         $ctx->wholesaleDebt = 0.0;
@@ -434,7 +430,6 @@ class TreasuryEngineTest extends TestCase
 
         $ctx->strategy = new InvestmentBankBusinessModel();
         $ctx->businessModel = 'investment_bank';
-        $ctx->isFinancial = true;
         $ctx->newTreasury = 1_000_000_000.0;
         $ctx->operatingBase = 1_000_000_000.0;
         $ctx->wholesaleDebt = 4_000_000_000.0;
@@ -507,7 +502,6 @@ class TreasuryEngineTest extends TestCase
 
         $ctx->strategy = new ShadowBankBusinessModel();
         $ctx->businessModel = 'shadow_bank';
-        $ctx->isFinancial = true;
         $ctx->newTreasury = 50_000_000.0;
         $ctx->operatingBase = 1_000_000_000.0;
         $ctx->wholesaleDebt = 0.0;
@@ -592,7 +586,6 @@ class TreasuryEngineTest extends TestCase
 
         $ctx->strategy = new StandardCorporateBusinessModel();
         $ctx->businessModel = 'standard_corporate';
-        $ctx->isFinancial = false;
         $ctx->newTreasury = 50_000_000.0;
         $ctx->operatingBase = 1_000_000_000.0;
         $ctx->wholesaleDebt = 0.0;
@@ -1647,7 +1640,6 @@ class TreasuryEngineTest extends TestCase
         $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
         $ctx->strategy = new CommercialBankBusinessModel();
         $ctx->businessModel = 'commercial_bank';
-        $ctx->isFinancial = true;
         $ctx->quarterlyNetIncome = 0.0;
         $ctx->wholesaleDebt = 0.0;
         $ctx->customerDeposits = 4_000_000_000.0;
@@ -1821,7 +1813,6 @@ class TreasuryEngineTest extends TestCase
         $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
         $ctx->strategy = new CommercialBankBusinessModel();
         $ctx->businessModel = 'commercial_bank';
-        $ctx->isFinancial = true;
         $ctx->wholesaleDebt = 0.0;
         $ctx->customerDeposits = 0.0;
         $ctx->newTreasury = 500_000_000.0;
@@ -1875,7 +1866,6 @@ class TreasuryEngineTest extends TestCase
         $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
         $ctx->strategy = new CommercialBankBusinessModel();
         $ctx->businessModel = 'commercial_bank';
-        $ctx->isFinancial = true;
         $ctx->wholesaleDebt = 0.0;
         $ctx->customerDeposits = 0.0;
         $ctx->newTreasury = 500_000_000.0;

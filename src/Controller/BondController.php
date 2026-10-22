@@ -18,7 +18,6 @@ use App\Service\User\CostBasisCalculator;
 use App\Service\User\CouponIncomeCalculator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -176,15 +175,6 @@ class BondController extends AbstractController
             'curve' => $this->sampleCurve($pricingEngine, $macro),
             'ticksPerYear' => $ticksPerYear,
         ]);
-    }
-
-    /**
-     * The fitted term structure sampled across tenors, for the curve chart.
-     */
-    #[Route('/api/bond-curve', name: 'api_bond_curve')]
-    public function curve(MacroStateProvider $macroStateProvider, BondPricingEngine $pricingEngine): JsonResponse
-    {
-        return $this->json($this->sampleCurve($pricingEngine, $macroStateProvider->liveState()));
     }
 
     /**

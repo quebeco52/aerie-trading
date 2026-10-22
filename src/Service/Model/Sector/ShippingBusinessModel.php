@@ -143,10 +143,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Negative z-score threshold required during trade gluts to trigger operating loss lore. */
     public const LORE_GLUT_Z_SCORE         = -1.50;
 
-    // --- Spot Rate Cycle & Output Gap Physics ---
-    /** Operating margin mean reversion speed: fast speed reflects rapid shipbuilding order responses. */
-    public const SPOT_REVERSION_SPEED      = 4.0;
-
     // --- Valuation ---
     /**
      * Book (fleet replacement value) weight in fair value through a freight trough, when normalised EPS is not
@@ -208,9 +204,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             ModelParam::SpotCharterWeight->value     => self::SPOT_CHARTER_WEIGHT,
             ModelParam::ContractCharterWeight->value => self::CONTRACT_CHARTER_WEIGHT,
         ]);
-
-        $spotWeight     = $params[ModelParam::SpotCharterWeight];
-        $contractWeight = $params[ModelParam::ContractCharterWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -288,13 +281,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             kpis: ['contract_book_to_bill' => $contractBook['book_to_bill'], 'contract_backlog_quarters' => $contractBook['backlog_quarters']],
             priceRevenue: $priceRevenue,
         );
-    }
-
-    public function getMarginReversionSpeed(): float
-    {
-        // Spot rate booms attract new shipbuilding orders, causing margins to mean-revert aggressively once new vessels
-        // launch
-        return self::SPOT_REVERSION_SPEED;
     }
 
     /** A fleet trades on its net asset value (replacement cost) through a freight trough and on earnings otherwise. */

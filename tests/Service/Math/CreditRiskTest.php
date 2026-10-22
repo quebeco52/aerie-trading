@@ -95,57 +95,6 @@ class CreditRiskTest extends TestCase
 
     // --- Spread ---
 
-    public function testASafeIssuerStillPaysTheNonDefaultComponent(): void
-    {
-        // A bond priced on default risk alone quotes through the market, and worst exactly here: at the safe
-        // end the default component is almost nothing and the residual is almost all of the spread.
-        $spread = CreditRisk::calculateCorporateSpread(8.0, 0.52, 5.0);
-
-        $this->assertGreaterThanOrEqual(CreditRisk::CORPORATE_ILLIQUIDITY_SPREAD, $spread);
-        $this->assertLessThan(0.01, $spread);
-    }
-
-    public function testAWeakerIssuerPaysMore(): void
-    {
-        $strong = CreditRisk::calculateCorporateSpread(5.0, 0.52, 5.0);
-        $weak = CreditRisk::calculateCorporateSpread(1.0, 0.52, 5.0);
-
-        $this->assertGreaterThan($strong, $weak);
-    }
-
-    public function testALowerRecoveryClaimPaysMoreOnTheSameIssuer(): void
-    {
-        $senior = CreditRisk::calculateCorporateSpread(2.0, 1.0 - CorporateDefaultService::RECOVERY_SENIOR_SECURED, 5.0);
-        $subordinated = CreditRisk::calculateCorporateSpread(2.0, 1.0 - CorporateDefaultService::RECOVERY_SUBORDINATED, 5.0);
-
-        // Same probability of default, different amount lost when it happens.
-        $this->assertGreaterThan($senior, $subordinated);
-    }
-
-    public function testTheSpreadCarriesATermStructureRatherThanBeingFlat(): void
-    {
-        // A distressed name is riskier over one year than over ten: it either survives the year or it does
-        // not, and the annualized cost of that is highest at the front.
-        $oneYear = CreditRisk::calculateCorporateSpread(0.5, 0.52, 1.0);
-        $tenYear = CreditRisk::calculateCorporateSpread(0.5, 0.52, 10.0);
-
-        $this->assertGreaterThan($tenYear, $oneYear);
-    }
-
-    public function testTheSpreadIsBoundedAndNeverNegative(): void
-    {
-        $this->assertLessThanOrEqual(CreditRisk::MAX_CORPORATE_SPREAD, CreditRisk::calculateCorporateSpread(-10.0, 0.95, 0.1));
-        $this->assertGreaterThanOrEqual(0.0, CreditRisk::calculateCorporateSpread(50.0, 0.0, 30.0, 0.0));
-    }
-
-    public function testAZeroMaturityDoesNotDivideByItself(): void
-    {
-        $spread = CreditRisk::calculateCorporateSpread(2.0, 0.52, 0.0);
-
-        $this->assertTrue(is_finite($spread));
-        $this->assertGreaterThanOrEqual(0.0, $spread);
-    }
-
     public function testCalculateVasicekExpectedLoss(): void
     {
         $pdLra = 0.015; // 1.5% through-the-cycle PD

@@ -416,7 +416,7 @@ class CommodityLogisticsSubsystem
      * The Schwartz theta that makes the jump-diffusion's base price average the equilibrium: the diffusion's
      * Jensen lift and the oil shocks' Merton (1976) level drift both netted out of the target.
      */
-    public static function resolveEnergyProcessTheta(float $equilibriumPrice): float
+    private static function resolveEnergyProcessTheta(float $equilibriumPrice): float
     {
         $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::ENERGY_JUMP_PROBABILITY, self::ENERGY_MEAN_REVERSION, self::ENERGY_JUMP_MEAN, self::ENERGY_JUMP_VOL);
 
@@ -438,7 +438,7 @@ class CommodityLogisticsSubsystem
     /**
      * The spot's lift over the base process from world demand: cyclical demand against short-run supply (Kilian 2009).
      */
-    public static function resolveEnergyDemandMultiplier(float $globalDemandGapEma): float
+    private static function resolveEnergyDemandMultiplier(float $globalDemandGapEma): float
     {
         return exp($globalDemandGapEma * self::ENERGY_DEMAND_ELASTICITY);
     }
@@ -508,7 +508,7 @@ class CommodityLogisticsSubsystem
      * @param float $ratio Today's ratio of the gas index to the oil index, each over its baseline.
      * @param float $years Time to delivery.
      */
-    public static function gasOilRatioForward(float $ratio, float $years): float
+    private static function gasOilRatioForward(float $ratio, float $years): float
     {
         return StochasticProcesses::calculateSchwartzForwardPrice(
             max(0.0001, $ratio),

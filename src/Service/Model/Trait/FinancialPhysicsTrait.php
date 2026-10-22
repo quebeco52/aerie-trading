@@ -108,11 +108,6 @@ trait FinancialPhysicsTrait
         return max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $blended));
     }
 
-    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float
-    {
-        return 1.0;
-    }
-
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float
     {
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
@@ -201,11 +196,6 @@ trait FinancialPhysicsTrait
     public function getRequiredIcrBuffer(): float
     {
         return 0.05; // Financials run on razor thin ICRs because debt is their raw material
-    }
-
-    public function getMaxFloatingDebtRatio(): float
-    {
-        return 0.80; // Financials heavily rely on floating rate wholesale debt/deposits
     }
 
     public function getDebtMaturityRolloverRate(): float
@@ -353,10 +343,6 @@ trait FinancialPhysicsTrait
     public function allowsPhysicalOrganicCapex(): bool
     {
         return false;
-    }
-    public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float
-    {
-        return $actualTotalNetIncome;
     }
     public function shouldForceDeleveragingOnJunkOrHoarding(): bool
     {

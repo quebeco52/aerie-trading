@@ -82,7 +82,6 @@ class RunawayFeedbackLoopTest extends TestCase
         $strategy = new LogisticsBusinessModel();
         $ctx->strategy = $strategy;
         $ctx->businessModel = 'logistics';
-        $ctx->isFinancial = false;
         $ctx->newTreasury = 0.0;
         $ctx->operatingBase = $this->corporateMetrics->calculateOperatingBase(50_000_000_000.0, 80_000_000_000.0);
         $ctx->wholesaleDebt = 65_000_000_000.0;

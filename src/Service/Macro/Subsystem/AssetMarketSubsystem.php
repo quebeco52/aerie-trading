@@ -699,7 +699,7 @@ class AssetMarketSubsystem
      * The present value of a premium shock that decays by phi a year, discounted at rho: 1 / (1 - rho * phi), where phi
      * is the mainland gap's own annual persistence, its AR(2) autocorrelation four quarters out.
      */
-    public static function foreignValuationDuration(): float
+    private static function foreignValuationDuration(): float
     {
         $annualPersistence = TimeSeries::calculateAr2Autocorrelation(self::MAINLAND_GAP_AR1, self::MAINLAND_GAP_AR2, self::MAINLAND_QUARTERS_PER_YEAR);
 
@@ -771,7 +771,7 @@ class AssetMarketSubsystem
      * return at MACRO_VOL_LEVERAGE_RHO: that leg carries 1 - MARKET_FACTOR_REGIME_VARIANCE_SHARE of the return
      * variance.
      */
-    public static function leverageLoading(): float
+    private static function leverageLoading(): float
     {
         return max(-1.0, min(1.0, self::MACRO_VOL_LEVERAGE_RHO / sqrt(1.0 - self::MARKET_FACTOR_REGIME_VARIANCE_SHARE)));
     }
@@ -952,7 +952,7 @@ class AssetMarketSubsystem
      * @param MacroState $state Current macroeconomic state.
      * @return float Mainland core inflation, year on year.
      */
-    public static function mainlandCoreYearOnYear(MacroState $state): float
+    private static function mainlandCoreYearOnYear(MacroState $state): float
     {
         return ($state->foreignCoreInflation + $state->foreignCoreInflationLag1 + $state->foreignCoreInflationLag2 + $state->foreignCoreInflationLag3) / 4.0;
     }
@@ -1271,7 +1271,7 @@ class AssetMarketSubsystem
      * one it expects at the turn, so the expected step is in the currency before it is taken and only the surprise
      * moves it on the day, as marketShortRate() reads the District's.
      */
-    public static function mainlandMarketRate(MacroState $state): float
+    private static function mainlandMarketRate(MacroState $state): float
     {
         $expected = self::mainlandNextQuarter($state, 0.0, 0.0, 0.0)['rate'];
 
@@ -1282,7 +1282,7 @@ class AssetMarketSubsystem
      * The mainland's year-on-year core inflation as the market reads it between releases: moving toward the print it
      * expects.
      */
-    public static function mainlandMarketCoreYearOnYear(MacroState $state): float
+    private static function mainlandMarketCoreYearOnYear(MacroState $state): float
     {
         $now = self::mainlandCoreYearOnYear($state);
         $expectedInflation = self::mainlandNextQuarter($state, 0.0, 0.0, 0.0)['inflation'];
@@ -1400,7 +1400,7 @@ class AssetMarketSubsystem
      * holds builds nothing extra. The change is read off the drift of the quarter's averages, which lag the rates by
      * their horizon.
      */
-    public static function householdFormationStarts(MacroState $state): float
+    private static function householdFormationStarts(MacroState $state): float
     {
         $gapChange = (($state->unemploymentRate - $state->unemploymentRateEma) - ($state->nairu - $state->nairuEma))
             / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS;

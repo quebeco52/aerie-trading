@@ -295,18 +295,6 @@ class MacroTransmissionTest extends TestCase
         $extremePmi = MacroTransmission::calculatePmiDemandShift(90.0, 50.0, 1.0);
         $this->assertLessThanOrEqual(0.30, $extremePmi);
 
-        // 2. calculatePpiCostDrag
-        // PPI <= target yields 0.0 drag
-        $this->assertEqualsWithDelta(0.0, MacroTransmission::calculatePpiCostDrag(0.02, 0.02), 0.0001);
-        $this->assertEqualsWithDelta(0.0, MacroTransmission::calculatePpiCostDrag(0.01, 0.02), 0.0001);
-
-        // High PPI (0.06 vs 0.02 target), pricing power 0.50, sensitivity 0.50 -> (0.06-0.02) * (1 - 0.5) * 0.5 = 0.01
-        $ppiDrag = MacroTransmission::calculatePpiCostDrag(0.06, 0.02, 0.50, 0.50);
-        $this->assertEqualsWithDelta(0.01, $ppiDrag, 0.0001);
-
-        // Perfect pricing power (1.0) eliminates PPI cost drag
-        $this->assertEqualsWithDelta(0.0, MacroTransmission::calculatePpiCostDrag(0.08, 0.02, 1.0), 0.0001);
-
         // 3. calculateHousingStartsShift
         // Neutral 100.0 -> 0.0 shift
         $this->assertEqualsWithDelta(0.0, MacroTransmission::calculateHousingStartsShift(100.0), 0.0001);

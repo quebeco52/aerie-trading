@@ -162,7 +162,7 @@ class AgentFlowEngineTest extends TestCase
 
         $result = $this->engine([$index], [])->trade($view);
 
-        $this->assertEqualsWithDelta($index->signal($view, []) * $capacity, $result['positions']['index_fund'], 1e-6);
+        $this->assertEqualsWithDelta($index->signal($view) * $capacity, $result['positions']['index_fund'], 1e-6);
         $this->assertSame(0.0, $result['flow'], 'Recognising a holding is not a trade.');
         $this->assertSame([], $this->orderFlow->drain());
     }
@@ -316,7 +316,7 @@ class AgentFlowEngineTest extends TestCase
 
         $result = $this->engine([$index], [])->trade($view);
 
-        $this->assertEqualsWithDelta($index->signal($view, []) * $capacity, $result['positions']['index_fund'], 1e-6);
+        $this->assertEqualsWithDelta($index->signal($view) * $capacity, $result['positions']['index_fund'], 1e-6);
         $this->assertSame(0.0, $result['flow']);
     }
 

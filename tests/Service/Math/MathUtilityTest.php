@@ -644,23 +644,6 @@ class MathUtilityTest extends TestCase
         $this->assertLessThan(0.0, $ddDistressed, 'Insolvent firm should have negative distance to default (< 0 SD).');
     }
 
-    public function testCalculateMertonCreditSpread(): void
-    {
-        // Safe firm (DD = 5.0) -> Spread near 0 bps
-        $spreadSafe = CreditRisk::calculateMertonCreditSpread(5.0, 0.40, 1.0);
-        $this->assertLessThan(0.0001, $spreadSafe, 'High DD must produce negligible credit spread.');
-
-        // Borderline firm (DD = 2.0) -> Moderate spread (~50-150 bps)
-        $spreadModerate = CreditRisk::calculateMertonCreditSpread(2.0, 0.40, 1.0);
-        $this->assertGreaterThan(0.005, $spreadModerate);
-        $this->assertLessThan(0.050, $spreadModerate);
-
-        // Distressed firm (DD = -1.0) -> Blown-out spread
-        $spreadDistressed = CreditRisk::calculateMertonCreditSpread(-1.0, 0.40, 1.0);
-        $this->assertGreaterThan(0.20, $spreadDistressed, 'Distressed firm must have high credit spread.');
-        $this->assertLessThanOrEqual(1.0, $spreadDistressed, 'Credit spread must be capped at 1.0 (10,000 bps).');
-    }
-
     // --- Contract coverage for formulas whose only other exercise is a higher suite ---
 
     // --- Shared valuation helpers ---

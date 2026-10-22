@@ -25,14 +25,6 @@ final class OptionPricing
      */
     public const MAX_OPTION_VOLATILITY = 5.00;
 
-    // --- Implied Volatility Solver ---
-    /**
-     * Newton-Raphson iteration cap for the implied-volatility root; a vega-bracketed quote converges in well under ten.
-     */
-    public const IMPLIED_VOL_MAX_ITERATIONS = 64;
-    /** Price convergence tolerance for the implied-volatility root, in currency units per share. */
-    public const IMPLIED_VOL_PRICE_TOLERANCE = 1.0e-8;
-
     // --- Gram-Charlier Smile (Backus, Foresi & Wu 2004) ---
     /**
      * Widest fractional departure from the at-the-money volatility the skewness and kurtosis terms may produce; the
@@ -223,81 +215,6 @@ final class OptionPricing
     }
 
     /**
-     * The volatility that reproduces an observed option premium.
-     *
-     * Newton-Raphson on vega, which is the exact derivative of the price with respect to volatility and is
-     * strictly positive wherever the contract has time value, so the root is unique. Falls back to
-     * bisection on the bracket whenever a step leaves it, which a near-intrinsic quote will do from any
-     * starting guess because vega there is numerically zero. Same structure as
-     * calculateYieldToMaturity(), for the same reason.
-     *
-     * @param float $optionPrice   Observed premium per share.
-     * @param float $spot          Underlying price.
-     * @param float $strike        Contract strike.
-     * @param float $riskFreeRate  Continuously compounded risk-free rate.
-     * @param float $dividendYield Continuous dividend yield on the underlying.
-     * @param float $timeToExpiry  Years to expiry.
-     * @param bool  $isCall        True for a call, false for a put.
-     * @param float $guess         Starting volatility.
-     * @return float The implied volatility, bounded by the quotable range.
-     */
-    public static function calculateImpliedVolatility(
-        float $optionPrice,
-        float $spot,
-        float $strike,
-        float $riskFreeRate,
-        float $dividendYield,
-        float $timeToExpiry,
-        bool $isCall,
-        float $guess = 0.25,
-    ): float {
-        if ($timeToExpiry < self::MIN_OPTION_TIME_TO_EXPIRY || $spot <= 0.0 || $strike <= 0.0) {
-            return self::MIN_OPTION_VOLATILITY;
-        }
-
-        $lowerBound = self::MIN_OPTION_VOLATILITY;
-        $upperBound = self::MAX_OPTION_VOLATILITY;
-
-        // A quote outside the no-arbitrage band has no root inside the bracket; return the bound it is
-        // pressed against rather than iterating toward an answer that does not exist.
-        if ($optionPrice <= self::calculateBlackScholesPrice($spot, $strike, $lowerBound, $riskFreeRate, $dividendYield, $timeToExpiry, $isCall)) {
-            return $lowerBound;
-        }
-        if ($optionPrice >= self::calculateBlackScholesPrice($spot, $strike, $upperBound, $riskFreeRate, $dividendYield, $timeToExpiry, $isCall)) {
-            return $upperBound;
-        }
-
-        $sigma = max($lowerBound, min($upperBound, $guess));
-
-        for ($iteration = 0; $iteration < self::IMPLIED_VOL_MAX_ITERATIONS; $iteration++) {
-            $modelPrice = self::calculateBlackScholesPrice($spot, $strike, $sigma, $riskFreeRate, $dividendYield, $timeToExpiry, $isCall);
-            $error = $modelPrice - $optionPrice;
-
-            if (abs($error) < self::IMPLIED_VOL_PRICE_TOLERANCE) {
-                return $sigma;
-            }
-
-            if ($error > 0.0) {
-                $upperBound = $sigma;
-            } else {
-                $lowerBound = $sigma;
-            }
-
-            $vega = self::calculateBlackScholesGreeks($spot, $strike, $sigma, $riskFreeRate, $dividendYield, $timeToExpiry, $isCall)['vega'];
-
-            $next = $vega > 0.0 ? $sigma - ($error / $vega) : ($lowerBound + $upperBound) / 2.0;
-
-            if ($next <= $lowerBound || $next >= $upperBound || !is_finite($next)) {
-                $next = ($lowerBound + $upperBound) / 2.0;
-            }
-
-            $sigma = $next;
-        }
-
-        return $sigma;
-    }
-
-    /**
      * Raw moment E[J^n] of Kou's (2002) double-exponential jump size.
      *
      * The jump is +X with probability p where X ~ Exp(etaUp), and -Y with probability 1 - p where
@@ -334,40 +251,18 @@ final class OptionPricing
     }
 
     /**
-     * Skewness and excess kurtosis of the horizon log return of a Kou jump-diffusion.
+     * Skewness and excess kurtosis of the horizon log return of a diffusion with several independent Kou jump
+     * processes, a name's own and the market's.
      *
      * Cumulants are additive over independent components and, for a compound Poisson, the n-th cumulant is
      * lambda * T * E[J^n]. The diffusion contributes only to the second:
      *
-     *     k2 = sigma^2 T + lambda T E[J^2],  k3 = lambda T E[J^3],  k4 = lambda T E[J^4]
+     *     k2 = sigma^2 T + sum lambda T E[J^2],  k3 = sum lambda T E[J^3],  k4 = sum lambda T E[J^4]
      *
      * so skewness is k3 / k2^(3/2) and excess kurtosis k4 / k2^2. Both shrink as T grows at the rates the
      * central limit theorem requires (1/sqrt(T) and 1/T), which is why a long-dated smile flattens out of
-     * the same parameters that make a weekly one steep.
-     *
-     * @param float $diffusionVariance Annualised variance of the diffusion leg, excluding jumps.
-     * @param float $lambda            Jump intensity, arrivals per year.
-     * @param float $pUp               Probability the jump is upwards.
-     * @param float $etaUp             Exponential rate of the up jump.
-     * @param float $etaDown           Exponential rate of the down jump.
-     * @param float $horizonYears      Years over which the return is measured.
-     * @return array{variance: float, skewness: float, excess_kurtosis: float} Horizon variance and shape.
-     */
-    public static function calculateJumpDiffusionShape(
-        float $diffusionVariance,
-        float $lambda,
-        float $pUp,
-        float $etaUp,
-        float $etaDown,
-        float $horizonYears,
-    ): array {
-        return self::calculateMultiJumpDiffusionShape($diffusionVariance, [['lambda' => $lambda, 'p_up' => $pUp, 'eta_up' => $etaUp, 'eta_down' => $etaDown]], $horizonYears);
-    }
-
-    /**
-     * The same shape for a diffusion with several independent Kou jump processes, a name's own and the market's:
-     * their cumulants add, each lambda T E[J^n]. A process given caps has its moments taken on the capped draws, as the
-     * tape delivers them.
+     * the same parameters that make a weekly one steep. A process given caps has its moments taken on the capped
+     * draws, as the tape delivers them.
      *
      * @param float                                                              $diffusionVariance Annualised variance of the diffusion leg, excluding jumps.
      * @param list<array{lambda: float, p_up: float, eta_up: float, eta_down: float, cap_up?: float, cap_down?: float}> $jumps The jump processes.
@@ -490,69 +385,5 @@ final class OptionPricing
         );
 
         return max(0.0, $premium) + max(0.0, $charge);
-    }
-
-    /**
-     * Model-free implied variance of an expiry, from its strip of out-of-the-money quotes.
-     *
-     * The CBOE VIX construction (Demeterfi, Derman, Kamal & Zou 1999): the fair strike of a variance swap
-     * is a portfolio of options weighted by the inverse square of their strikes,
-     *
-     *     sigma^2 = (2 e^(rT) / T) * sum_i (dK_i / K_i^2) Q(K_i) - (1/T) (F / K0 - 1)^2
-     *
-     * where Q(K_i) is the out-of-the-money quote at K_i and K0 the last strike at or below the forward.
-     * It reads the whole surface rather than one strike, so it measures the market's priced variance
-     * including the tails a single at-the-money volatility throws away. The correction term removes the
-     * error from striking the log contract at K0 instead of exactly at F.
-     *
-     * @param array<int, array{strike: float, price: float}> $strip Quotes in strictly increasing strike order.
-     * @param float                                          $forward Forward price of the underlying at expiry.
-     * @param float                                          $atmStrike Highest strike at or below the forward.
-     * @param float                                          $riskFreeRate Continuously compounded risk-free rate.
-     * @param float                                          $timeToExpiry Years to expiry.
-     * @return float Annualised implied variance; take the square root for a volatility index.
-     */
-    public static function calculateModelFreeImpliedVariance(
-        array $strip,
-        float $forward,
-        float $atmStrike,
-        float $riskFreeRate,
-        float $timeToExpiry,
-    ): float {
-        $count = count($strip);
-
-        if ($count < 2 || $timeToExpiry < self::MIN_OPTION_TIME_TO_EXPIRY || $atmStrike <= 0.0) {
-            return 0.0;
-        }
-
-        $strip = array_values($strip);
-        $contribution = 0.0;
-
-        foreach ($strip as $index => $quote) {
-            $strike = (float) $quote['strike'];
-
-            if ($strike <= 0.0) {
-                continue;
-            }
-
-            // The strike interval each quote stands for: half the distance to each neighbour, and the
-            // one-sided gap at the ends of the strip where there is no outer neighbour to split with.
-            if ($index === 0) {
-                $interval = (float) $strip[1]['strike'] - $strike;
-            } elseif ($index === $count - 1) {
-                $interval = $strike - (float) $strip[$count - 2]['strike'];
-            } else {
-                $interval = ((float) $strip[$index + 1]['strike'] - (float) $strip[$index - 1]['strike']) / 2.0;
-            }
-
-            $contribution += ($interval / ($strike * $strike)) * max(0.0, (float) $quote['price']);
-        }
-
-        $forwardError = ($forward / $atmStrike) - 1.0;
-
-        $variance = ((2.0 * exp($riskFreeRate * $timeToExpiry) * $contribution) / $timeToExpiry)
-            - (($forwardError * $forwardError) / $timeToExpiry);
-
-        return max(0.0, $variance);
     }
 }

@@ -161,11 +161,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      * (EIA). Nuclear, renewables, hydro and contracted coal make up the rest, whose fuel does not move with gas.
      */
     public const MERCHANT_GAS_FLEET_SHARE = 0.431;
-    /**
-     * Heat rate of the merchant gas fleet (MMBtu/MWh): the U.S. gas-fired operating average, 2017-2024 (EIA Electric
-     * Power Annual, Table 8.1).
-     */
-    public const MERCHANT_GAS_HEAT_RATE = MacroConstants::GAS_FLEET_HEAT_RATE;
 
     // --- Merchant Hedge Book ---
     /**
@@ -286,9 +281,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveRevenueMixParameters($stock);
-
-        $regulatedWeight   = $params[ModelParam::RegulatedBaseWeight];
-        $unregulatedWeight = $params[ModelParam::UnregulatedMerchantWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -501,7 +493,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     }
 
     /** The tariffed share of revenue at baseline prices: the regulated stream's target share of the mix. */
-    public function resolveRegulatedRevenueShare(Stock $stock): float
+    private function resolveRegulatedRevenueShare(Stock $stock): float
     {
         $params = $this->resolveRevenueMixParameters($stock);
         $regulated = max(0.0, $params[ModelParam::RegulatedBaseWeight]);

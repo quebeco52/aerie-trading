@@ -164,7 +164,7 @@ final class StockTrackerFactorWiringTest extends TestCase
                 return 'observer';
             }
 
-            public function signal(\App\DTO\AgentMarketViewDTO $view, array $positions): float
+            public function signal(\App\DTO\AgentMarketViewDTO $view): float
             {
                 ($this->record)($view);
 

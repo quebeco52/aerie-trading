@@ -160,9 +160,6 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
             ModelParam::TransactionRevenueWeight->value  => self::TRANSACTION_REVENUE_WEIGHT,
         ]);
 
-        $subscriptionWeight = $params[ModelParam::SubscriptionRevenueWeight];
-        $transactionWeight  = $params[ModelParam::TransactionRevenueWeight];
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 

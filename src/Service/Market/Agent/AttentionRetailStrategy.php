@@ -61,7 +61,7 @@ final class AttentionRetailStrategy implements AgentStrategyInterface
         return 'attention_retail';
     }
 
-    public function signal(AgentMarketViewDTO $view, array $positions): float
+    public function signal(AgentMarketViewDTO $view): float
     {
         return max(0.0, min(
             1.0,

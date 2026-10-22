@@ -102,10 +102,6 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
         $this->assertEquals(25000.0, $corp->getEvaluationCapital(10000.0, 25000.0));
         $this->assertEquals(10000.0, $fin->getEvaluationCapital(10000.0, 25000.0));
 
-        // Return Basis Income
-        $this->assertEquals(500.0, $corp->getReturnBasisIncome($this->corpStock, 500.0, 600.0));
-        $this->assertEquals(600.0, $fin->getReturnBasisIncome($this->finStock, 500.0, 600.0));
-
         // Deleveraging & Distress Flags
         $this->assertTrue($corp->shouldForceDeleveragingOnJunkOrHoarding());
         $this->assertFalse($fin->shouldForceDeleveragingOnJunkOrHoarding());

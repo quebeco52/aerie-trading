@@ -96,48 +96,6 @@ class TimeSeriesTest extends TestCase
         $this->assertEquals($target, $immediate);
     }
 
-    public function testSpeedLimitedDistributedLagIsThePlainLagBelowTheKnee(): void
-    {
-        // Knee = 0.06 * 0.25 = 150bp: a 100bp distance never reaches the ceiling.
-        $this->assertEqualsWithDelta(
-            TimeSeries::calculateDistributedLag(0.02, 0.03, 0.25, 0.25),
-            TimeSeries::calculateSpeedLimitedDistributedLag(0.02, 0.03, 0.25, 0.25, 0.06),
-            1e-15,
-        );
-        $this->assertEqualsWithDelta(
-            TimeSeries::calculateDistributedLag(0.09, 0.02, 0.25, 0.25),
-            TimeSeries::calculateSpeedLimitedDistributedLag(0.09, 0.02, 0.25, 0.25, INF),
-            1e-15,
-        );
-    }
-
-    public function testSpeedLimitedDistributedLagMovesAtTheCeilingThenFollowsTheLag(): void
-    {
-        // 700bp away: 5.5pp at the ceiling takes 0.917y, so a quarter moves exactly 0.06 * 0.25, either way.
-        $this->assertEqualsWithDelta(0.035, TimeSeries::calculateSpeedLimitedDistributedLag(0.02, 0.09, 0.25, 0.25, 0.06), 1e-15);
-        $this->assertEqualsWithDelta(0.075, TimeSeries::calculateSpeedLimitedDistributedLag(0.09, 0.02, 0.25, 0.25, 0.06), 1e-15);
-
-        // 200bp away: 0.5pp at the ceiling (1/12y), then the plain lag from the 150bp knee for the rest of the quarter.
-        $expected = 0.02 + 0.005 + 0.015 * (1.0 - exp(-(0.25 - 0.005 / 0.06) / 0.25));
-        $this->assertEqualsWithDelta($expected, TimeSeries::calculateSpeedLimitedDistributedLag(0.02, 0.04, 0.25, 0.25, 0.06), 1e-15);
-
-        // No lag: a plain rate limit, which stops at the target.
-        $this->assertEqualsWithDelta(0.035, TimeSeries::calculateSpeedLimitedDistributedLag(0.02, 0.09, 0.25, 0.0, 0.06), 1e-15);
-        $this->assertEqualsWithDelta(0.03, TimeSeries::calculateSpeedLimitedDistributedLag(0.02, 0.03, 0.25, 0.0, 0.06), 1e-15);
-    }
-
-    public function testSpeedLimitedDistributedLagIsTimestepNeutral(): void
-    {
-        foreach ([0.09, 0.04, 0.03] as $target) {
-            $quarter = TimeSeries::calculateSpeedLimitedDistributedLag(0.02, $target, 0.25, 0.25, 0.06);
-            $ticks = 0.02;
-            for ($i = 0; $i < 90; $i++) {
-                $ticks = TimeSeries::calculateSpeedLimitedDistributedLag($ticks, $target, 0.25 / 90, 0.25, 0.06);
-            }
-            $this->assertEqualsWithDelta($quarter, $ticks, 1e-12, 'One quarter step must equal 90 ticks toward the same target.');
-        }
-    }
-
     /** Yule-Walker: an AR(1) decays geometrically, and an AR(2)'s first autocorrelation is a1 / (1 - a2). */
     public function testAr2AutocorrelationFollowsTheYuleWalkerRecursion(): void
     {

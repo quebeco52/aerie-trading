@@ -365,34 +365,6 @@
         </div>
     </div>
 
-    <h4 class="mb-3">Live Sector Multiples (P/E)</h4>
-    <div class="card">
-        <div class="card-body p-0">
-            <table class="table table-striped table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Sector</th>
-                        <th>Live Target P/E</th>
-                        <th>Discount Rate Impact</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for sector, pe in live_sectors %}
-                        <tr>
-                            <td class="fw-bold">{{ sector }}</td>
-                            <td><span class="badge bg-primary fs-6">{{ pe|number_format(2) }}x</span></td>
-                            <td class="text-muted small">Adjusted dynamically by 10Y Yield</td>
-                        </tr>
-                    {% else %}
-                        <tr>
-                            <td colspan="3" class="text-center text-muted py-4">No sector data available. Start the Market Ticker.</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
 </div>
 
 {% include 'partials/_chart_libraries.html.twig' with { chartjs: true } %}

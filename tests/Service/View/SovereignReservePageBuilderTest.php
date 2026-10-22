@@ -101,7 +101,6 @@ class SovereignReservePageBuilderTest extends TestCase
         $page = $this->builder()->build($this->incepted());
 
         $this->assertSame(131.5, $page['returns']['index']);
-        $this->assertSame(112.25, $page['returns']['realIndex']);
         $this->assertSame(0.0324, $page['returns']['assumedReal'], 'The return the draw was set from, to read the realized one against.');
         $this->assertSame(0.0331, $page['returns']['bondYield']);
         $this->assertSame(0.81, $page['summary']['grossDebtToGdp']);

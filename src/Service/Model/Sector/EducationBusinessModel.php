@@ -87,10 +87,6 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     {
         return 2.5;
     }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.0;
-    }
     public function getDividendCrisisIcr(): float
     {
         return 1.75;
@@ -218,10 +214,6 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
             ModelParam::EnterpriseTrainingWeight->value => self::ENTERPRISE_TRAINING_WEIGHT,
             ModelParam::LmsLicensingWeight->value       => self::LMS_LICENSING_WEIGHT,
         ]);
-
-        $tuitionWeight    = $params[ModelParam::DegreeTuitionWeight];
-        $enterpriseWeight = $params[ModelParam::EnterpriseTrainingWeight];
-        $lmsWeight        = $params[ModelParam::LmsLicensingWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);

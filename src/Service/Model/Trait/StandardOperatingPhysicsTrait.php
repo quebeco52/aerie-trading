@@ -833,7 +833,6 @@ trait StandardOperatingPhysicsTrait
 
         foreach ($counterfactuals as $field => [$state, $expectedRevenue]) {
             $physics = $this->calculateSectorPhysics(clone $stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $state, MathUtility::replaying($draws));
-            $this->takeActiveStreamContext();
 
             foreach ($actualStreams as $stream => $revenue) {
                 $counterfactual = (float) ($physics->streamRevenue[$stream] ?? 0.0);
@@ -856,18 +855,14 @@ trait StandardOperatingPhysicsTrait
         // Zero rather than absent: every loading stays as it was, so only the sector's term leaves each stream's draw.
         $state = MacroStateDTO::fromArray(array_replace($macroState->toArray(), ['sector_demand_z' => [$sector => 0.0] + $macroState->sectorDemandZ]));
         $physics = $this->calculateSectorPhysics(clone $stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $state, MathUtility::replaying($draws));
-        $this->takeActiveStreamContext();
 
         return $physics->actualRevenue;
     }
 
     public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility, ?int $calendarQuarter = null): ActualFinancialsDTO
     {
-        // Discard any context a forecast built earlier; only the one this physics call builds is read.
-        $this->takeActiveStreamContext();
         $this->reportedCalendarQuarter = $calendarQuarter;
         $physics = $this->calculateSectorPhysics($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $mathUtility);
-        $this->takeActiveStreamContext();
 
         return $this->assembleActualFinancials($physics, $fixedCosts);
     }
@@ -895,7 +890,6 @@ trait StandardOperatingPhysicsTrait
             $draws->beginDrawLog();
             foreach ([$draws, null] as $source) {
                 $physics = $this->calculateSectorPhysics(clone $stock, $expectedRevenue, $expectedVariableMargin, $fixedCosts, $baselineVol, $state, $source ?? MathUtility::mirroring($draws->endDrawLog(), $seed + self::PUBLIC_QUARTER_SCENARIO_PAIRS + $pair));
-                $this->takeActiveStreamContext();
                 $scenario = $this->assembleActualFinancials($physics, $fixedCosts);
                 $sums['revenue'] += $scenario->actualRevenue;
                 $sums['price'] += $scenario->priceRevenue;
@@ -951,8 +945,6 @@ trait StandardOperatingPhysicsTrait
             specialCharge: max(0.0, $physics->specialCharge),
         );
     }
-
-    abstract protected function takeActiveStreamContext(): ?StreamContext;
 
     abstract protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult;
 
@@ -1049,10 +1041,5 @@ trait StandardOperatingPhysicsTrait
     public function allowsPhysicalOrganicCapex(): bool
     {
         return true;
-    }
-
-    public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float
-    {
-        return $quarterlyNopat;
     }
 }

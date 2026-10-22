@@ -187,10 +187,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     {
         return 2.5;
     }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.0;
-    }
     public function getDividendCrisisIcr(): float
     {
         return 1.75;
@@ -330,7 +326,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $dealActivityShift = $macroState->dealActivityDeviation();
         $divestitureAlpha = max(0.0, $dealActivityShift) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR;
 
-        $contrarianSurge = $this->resolveContrarianFloatSurge($macroState, $mathUtility, $outputGap, $spreadLevel, $spreadImpulse, $divestitureAlpha);
+        $contrarianSurge = $this->resolveContrarianFloatSurge($macroState, $outputGap, $spreadLevel, $spreadImpulse, $divestitureAlpha);
 
         // --- Tail Risk & Event Physics ---
         $eventType = null;
@@ -401,7 +397,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
      */
     protected function resolveContrarianFloatSurge(
         MacroStateDTO $macroState,
-        MathUtility $mathUtility,
         float $outputGap,
         float $spreadLevel,
         float $spreadImpulse,

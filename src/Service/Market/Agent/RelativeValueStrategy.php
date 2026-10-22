@@ -36,7 +36,7 @@ final class RelativeValueStrategy implements AgentStrategyInterface
         return 'relative_value';
     }
 
-    public function signal(AgentMarketViewDTO $view, array $positions): float
+    public function signal(AgentMarketViewDTO $view): float
     {
         $conviction = max(-1.0, min(1.0, self::AGENT_RELATIVE_VALUE_GAIN * $view->relativeLogMispricing()));
 

@@ -38,7 +38,7 @@ final class VolatilityTargetStrategy implements AgentStrategyInterface
         return 'vol_target';
     }
 
-    public function signal(AgentMarketViewDTO $view, array $positions): float
+    public function signal(AgentMarketViewDTO $view): float
     {
         $realized = $view->annualizedVolatility;
 

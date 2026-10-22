@@ -350,14 +350,6 @@ class CorporateMetrics
         $stock->setCreditLossAllowance((string) ($grossBook - $netBook));
     }
 
-    public function calculateInterestCoverageRatio(float $ebit, float $interestExpense): float
-    {
-        if ($interestExpense <= 0.0) {
-            return 999.0;
-        }
-        return $ebit / $interestExpense;
-    }
-
     /**
      * Calculates the severity of market saturation [0.0 to 1.0] by comparing the saturation penalty
      * to the theoretical baseline economic return.

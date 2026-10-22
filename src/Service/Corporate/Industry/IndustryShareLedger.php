@@ -280,18 +280,6 @@ class IndustryShareLedger
     }
 
     /**
-     * This firm's share of what its industry sells: its revenue over the roster's, the one figure that
-     * deserves the name "market share". Reads only; a firm with no record yet is counted at its current
-     * revenue. Null when the firm has no industry.
-     */
-    public function resolveRevenueShare(Stock $stock, int $tick, int $ticksPerYear): ?float
-    {
-        $description = $this->describeIndustry($stock, null, $tick, $ticksPerYear);
-
-        return $description === null ? null : $description['revenue_share'];
-    }
-
-    /**
      * The industry as the ledger sees it, for display: every firm's revenue and share, and — when the
      * caller supplies the trend inputs — the modelled roster's installed plant against what that plant
      * would be at trend, and the industry balance those imply. Reads only: it neither records this firm

@@ -387,7 +387,7 @@ class UtilityBusinessModelTest extends TestCase
         // gas-fired MWh burn 7.74 MMBtu each at spot, recovered only through the power price.
         $calm = $this->merchantQuarter('UTIL', 100.0, 100.0);
         $gas = $this->merchantQuarter('UTIL', 150.0, 100.0);
-        $baselineFuelShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * MacroConstants::REFERENCE_GAS_PRICE / MacroConstants::REFERENCE_POWER_PRICE;
+        $baselineFuelShare = MacroConstants::GAS_FLEET_HEAT_RATE * MacroConstants::REFERENCE_GAS_PRICE / MacroConstants::REFERENCE_POWER_PRICE;
         $merchantFuel = 100_000_000.0 * 0.15 * UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE * $baselineFuelShare * 0.50;
         $regulatedClauseLag = 100_000_000.0 * 0.40 * 0.85 * $clauseLagPerRegulatedCost;
 
@@ -511,7 +511,7 @@ class UtilityBusinessModelTest extends TestCase
     {
         $adderShare = CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37) / MacroConstants::REFERENCE_POWER_PRICE;
         $macro = new MacroStateDTO(carbonPrice: 70.37, wholesalePowerPriceIndexEma: MacroConstants::WHOLESALE_POWER_BASELINE * (1.0 + $adderShare));
-        $carbonShare = UtilityBusinessModel::MERCHANT_GAS_HEAT_RATE * MacroConstants::NATURAL_GAS_CO2_TONNES_PER_MMBTU * 70.37 / MacroConstants::REFERENCE_POWER_PRICE;
+        $carbonShare = MacroConstants::GAS_FLEET_HEAT_RATE * MacroConstants::NATURAL_GAS_CO2_TONNES_PER_MMBTU * 70.37 / MacroConstants::REFERENCE_POWER_PRICE;
 
         $renewables = new Stock();
         $renewables->setTicker('BIRD');

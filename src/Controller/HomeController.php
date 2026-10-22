@@ -10,7 +10,6 @@ use App\Repository\StockRepository;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Index\MarketIndex;
-use App\Twig\Extension\NumberFormatExtension;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -69,55 +68,6 @@ class HomeController extends AbstractController
     }
 
     /**
-     * API endpoint to retrieve the latest market data, often used for live client-side updates.
-     *
-     * @param StockRepository $stockRepository The listed companies shown on the board.
-     *
-     * @return Response Returns a JSON response containing ETF and stock overview data.
-     */
-    #[Route('/api/market', name: 'api_market')]
-    public function apiMarket(StockRepository $stockRepository, EtfRepository $etfs, PriceChangeFeed $priceChangeFeed, NumberFormatExtension $numberFormat): Response
-    {
-        $etf    = $etfs->findOneByTicker(MarketIndex::benchmark()->value);
-        $stocks = $stockRepository->findAll();
-
-        $marketData = [];
-        foreach ($this->buildBaseMarketData($stocks, $priceChangeFeed->changeByTicker($stocks)) as $row) {
-            $marketData[] = [
-                'ticker'       => $row['ticker'],
-                'name'         => $row['name'],
-                'sector'       => $row['sector'],
-                'price'        => number_format($row['price'], 2),
-                'marketCapRaw' => $row['marketCap'],
-                'marketCap'    => $numberFormat->formatLargeNumber($row['marketCap']),
-                'treasury'     => $numberFormat->formatLargeNumber($row['treasury']),
-                'equity'       => $numberFormat->formatLargeNumber($row['equity']),
-                'currentRoic'  => $row['currentRoic'],
-                'changePercent' => $row['changePercent'],
-                'is_bankrupt'  => $row['isBankrupt'],
-            ];
-        }
-
-        usort($marketData, function ($a, $b) {
-            if ($a['is_bankrupt'] !== $b['is_bankrupt']) {
-                return $a['is_bankrupt'] ? 1 : -1;
-            }
-            return $b['marketCapRaw'] <=> $a['marketCapRaw'];
-        });
-
-        $indices = [];
-        foreach ($this->indexTiles($etfs) as $tile) {
-            $indices[$tile['ticker']] = ['price' => number_format($tile['price'], 2)];
-        }
-
-        return $this->json([
-            'etf'     => ['price' => $etf ? number_format((float) $etf->getPrice(), 2) : '0.00'],
-            'indices' => $indices,
-            'stocks'  => $marketData,
-        ]);
-    }
-
-    /**
      * The published indices as the board quotes them, benchmark first, each with the fund it trades as.
      *
      * @return list<array{index: MarketIndex, ticker: string, name: string, price: float, label: string, isBenchmark: bool}>
@@ -149,7 +99,7 @@ class HomeController extends AbstractController
      *
      * @param Stock[] $stocks
      * @param array<string, float> $changes ticker => fractional change, absent when unbuffered
-     * @return array<int, array{ticker: string, name: string, sector: string, price: float, shares: float, marketCap: float, treasury: float, equity: float, currentRoic: float, isBankrupt: bool, changePercent: float|null}>
+     * @return array<int, array{ticker: string, name: string, sector: string, price: float, shares: float, marketCap: float, currentRoic: float, isBankrupt: bool, changePercent: float|null}>
      */
     private function buildBaseMarketData(array $stocks, array $changes = []): array
     {
@@ -172,8 +122,6 @@ class HomeController extends AbstractController
                 'price'       => $price,
                 'shares'      => $shares,
                 'marketCap'   => $marketCap,
-                'treasury'    => (float) $stock->getCorporateTreasury(),
-                'equity'      => (float) $stock->getTotalEquity(),
                 'currentRoic' => $effectiveRoic,
                 'isBankrupt'  => $stock->isBankrupt(),
                 // Null, not zero: "no history buffered yet" and "has not moved" are different

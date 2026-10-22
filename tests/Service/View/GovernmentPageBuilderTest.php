@@ -748,14 +748,13 @@ class GovernmentPageBuilderTest extends TestCase
      */
     public function testThePagesNameThePrimeMinisterAndThePartyLeaders(): void
     {
-        $math = new MathUtility();
         $state = new PoliticsState();
         $state->authoritySalt = 4242.0;
         $state->totalTime = 6.0;
-        PartyLeaders::advance($state, 0.0, $math);
+        PartyLeaders::advance($state, 0.0);
         $former = $state->leaderNames[Diet::VANGUARD];
         $state->leaderExitAt[Diet::VANGUARD] = 6.0;
-        PartyLeaders::advance($state, 0.0, $math);
+        PartyLeaders::advance($state, 0.0);
         $politics = PoliticsStateDTO::fromState($state);
         $macro = new MacroStateDTO(totalTime: 6.0);
 

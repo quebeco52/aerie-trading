@@ -96,5 +96,4 @@ class AcquisitionContext
     public float $newEquity = 0.0;
 
     public float $eventShock = 0.0;
-    public array $eventData = [];
 }

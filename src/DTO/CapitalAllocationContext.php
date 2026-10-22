@@ -37,7 +37,6 @@ class CapitalAllocationContext
     public string $industry = 'General';
     public string $businessModel = 'none';
     public BusinessModelInterface $strategy;
-    public bool $isFinancial = false;
 
     // Computed Operational Metrics
     public float $quarterlyEps = 0.0;
@@ -50,7 +49,6 @@ class CapitalAllocationContext
 
     // Profit & Health
     public DebtHealthDTO $health;
-    public float $quarterlyNopat = 0.0;
     public float $retainedEarningsThisQuarter = 0.0;
 
     // Cash Flow & Treasury Tracking

@@ -44,7 +44,7 @@ final class IndexFundStrategy implements AgentStrategyInterface
         return 'index_fund';
     }
 
-    public function signal(AgentMarketViewDTO $view, array $positions): float
+    public function signal(AgentMarketViewDTO $view): float
     {
         // Index tracking target: scale target position by relative passive index ownership multiple.
         if ($view->passiveOwnershipMultiple <= 0.0) {

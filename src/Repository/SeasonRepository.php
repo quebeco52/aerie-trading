@@ -27,11 +27,4 @@ class SeasonRepository extends ServiceEntityRepository
     {
         return $this->findOneBy([], ['number' => 'DESC']);
     }
-
-    /** @return list<Season> Newest first. */
-    public function findClosed(int $limit): array
-    {
-        /** @var list<Season> */
-        return $this->findBy(['status' => Season::STATUS_CLOSED], ['number' => 'DESC'], $limit);
-    }
 }

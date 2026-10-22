@@ -119,7 +119,7 @@ class SeasonService
      * @param array<int, float> $liveValues Net worth by account id, at live prices.
      * @return list<SeasonStanding> Qualified entries first, by return; then the rest, by return.
      */
-    public function standings(Season $season, array $liveValues): array
+    private function standings(Season $season, array $liveValues): array
     {
         $level = $this->benchmarkLevel($season, $this->benchmarkFund(), false);
 

@@ -319,25 +319,6 @@ class MarketEngine
      * Calculates the next stock price: diffusion on the market and sector factors, Kou jumps held to the variance
      * budget, stochastic variance, and a pull toward the multi-leg fair value.
      *
-     * @param float $currentPrice       The current price of the stock.
-     * @param float $currentVolatility  The current instantaneous volatility.
-     * @param float $longTermVolatility The long-run mean volatility.
-     * @param float $dt                 The time step for the simulation (in years).
-     * @param float $lambda             The jump intensity (average number of jumps per year).
-     * @param float $jumpVol            The volatility of the jump size.
-     * @param float $beta               The stock's beta (sensitivity to market movements).
-     * @param float $marketZ            The systemic market shock Z-score (standard normal).
-     * @param float $marketVol          The volatility of the broader market.
-     * @param float $reversionSpeed     The speed at which the price reverts to fair value.
-     * @param float $kappa              The rate at which volatility reverts to the long-run mean.
-     * @param float $volOfVol           The volatility of volatility (how much volatility fluctuates).
-     * @param MacroStateDTO|null $macroState The current macroeconomic state, which can influence the base drift.
-     * @param float $bookValuePerShare  The physical equity value per share.
-     * @param float $totalDebt          The total debt on the balance sheet.
-     * @param float $totalEquity        The total equity on the balance sheet.
-     * @param float $creditSpread       The company's baseline credit spread (borrowing premium).
-     * @param float $dividendPerShare   The absolute quarterly dividend per share.
-     *
      * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value, the reversion speed that was applied and the policy news multiplier the price took.
      */
     public function calculateNextPrice(\App\DTO\MarketPricingContext $ctx): array
@@ -347,7 +328,7 @@ class MarketEngine
         $longTermVolatility = $ctx->longTermVolatility;
         $dt = $ctx->dt;
         $lambda = $ctx->lambda;
-        $jump_vol = $ctx->jumpVol;
+        $jumpVol = $ctx->jumpVol;
         $beta = $ctx->beta;
         $marketZ = $ctx->marketZ;
         $sectorZ = $ctx->sectorZ;
@@ -355,25 +336,16 @@ class MarketEngine
         $marketVol = $ctx->marketVol;
         $kappa = $ctx->kappa;
         $volOfVol = $ctx->volOfVol;
-        $macroState = $ctx->macroState;
         $maShock = $ctx->maShock;
         $dividendPerShare = $ctx->dividendPerShare;
         $liveCostOfEquity = $ctx->liveCostOfEquity;
         $orderFlowVariance = $ctx->orderFlowVariance;
-
-        // CAPM & MACRO TRANSMISSION MECHANISM
-
-        $riskFreeRate = $macroState->policyRate ?? 0.04;
-        $outputGap = $macroState->outputGap ?? 0.0;
-        $inflation = $macroState->inflation ?? 0.02;
-        $erp = $macroState->equityRiskPremium ?? 0.045;
 
         $capUp = FinancialConstants::MAX_JUMP_LOG_RETURN;
         $capDown = abs(FinancialConstants::MIN_JUMP_LOG_RETURN);
 
         // State Variables
         $currentVar = $currentVolatility * $currentVolatility;
-        $longTermVar = $longTermVolatility * $longTermVolatility;
 
         // SYSTEMATIC / IDIOSYNCRATIC SPLIT
         // See longTermIdiosyncraticVariance() for why the loading is delivered outright rather than implied.
@@ -392,7 +364,7 @@ class MarketEngine
         $longTermIdiosyncraticVar = self::longTermIdiosyncraticVariance($longTermVolatility, $beta);
 
         // IDIOSYNCRATIC JUMP CALIBRATION
-        $jumpParameters = self::calibratedJumpParameters($longTermVolatility, $beta, $lambda, $jump_vol);
+        $jumpParameters = self::calibratedJumpParameters($longTermVolatility, $beta, $lambda, $jumpVol);
         $dynamicEtaUp = $jumpParameters['eta_up'];
         $dynamicEtaDown = $jumpParameters['eta_down'];
 
@@ -707,23 +679,23 @@ class MarketEngine
         float $riskFreeRate,
         float $bookValuePerShare,
         float $dividendPerShare,
-        float $baselineIndustryPE = 20.0,
-        float $revenuePerShare = 0.0,
-        string $businessModel = 'none',
-        float $liveCostOfEquity = 0.10,
-        float $netDebtPerShare = 0.0,
-        float $secularGrowth = 0.02,
-        float $baselineRoic = 0.10,
-        float $baselineMargin = 0.20,
-        float $accrualsRatio = 0.0,
-        float $investedCapitalPerShare = 0.0,
-        ?MacroStateDTO $macroState = null,
-        ?float $tangibleBookValuePerShare = null,
-        float $targetPayoutRatio = 0.0,
-        float $dividendAdjustmentSpeed = 1.0,
-        array $policyBasesPerShare = [],
-        ?float $longRunReturn = null,
-        float $excessCashPerShare = 0.0,
+        float $baselineIndustryPE,
+        float $revenuePerShare,
+        string $businessModel,
+        float $liveCostOfEquity,
+        float $netDebtPerShare,
+        float $secularGrowth,
+        float $baselineRoic,
+        float $baselineMargin,
+        float $accrualsRatio,
+        float $investedCapitalPerShare,
+        ?MacroStateDTO $macroState,
+        ?float $tangibleBookValuePerShare,
+        float $targetPayoutRatio,
+        float $dividendAdjustmentSpeed,
+        array $policyBasesPerShare,
+        ?float $longRunReturn,
+        float $excessCashPerShare,
     ): array {
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);

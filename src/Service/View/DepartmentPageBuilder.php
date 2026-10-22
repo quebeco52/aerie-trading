@@ -33,9 +33,8 @@ use App\Service\Politics\Policy\Platforms;
 final class DepartmentPageBuilder
 {
     /**
-     * The Sovereign Reserve Fund's head: who they are, their stance on the reserves and the equity share they set, whom
-     * the Council passed over for them with the share each would have set, and the fund's mix in force. Null before the
-     * fund has a head.
+     * The Sovereign Reserve Fund's head for the government hub: who they are, their stance on the reserves and the
+     * fund's equity mix in force. Null before the fund has a head.
      *
      * @return array<string, mixed>|null
      */
@@ -46,29 +45,11 @@ final class DepartmentPageBuilder
             return null;
         }
 
-        $time = $politics->totalTime;
-        $share = SovereignReserveFund::equityShare($head['stance']);
-
         return [
             'name' => $head['name'],
-            'age' => (int) floor($time - $head['birth']),
-            'sinceLabel' => $head['termStart'] < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($head['termStart']),
-            'termEndsLabel' => DistrictCalendar::quarter(Office::FundHead->termEnd($time)),
             'opening' => $head['termStart'] < 0.0,
-            'stance' => SovereignReserveFund::stanceName($share),
-            'equityShare' => $share,
+            'stance' => SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($head['stance'])),
             'inForce' => $macro->sovereignFundPolicyEquityShare > 0.0 ? $macro->sovereignFundPolicyEquityShare : null,
-            'passedOver' => array_map(static fn(array $candidate): array => [
-                'name' => $candidate['name'],
-                'age' => (int) floor($head['termStart'] - $candidate['birth']),
-                'equityShare' => SovereignReserveFund::equityShare($candidate['fund']),
-            ], $head['passedOver']),
-            'rules' => [
-                'termYears' => Office::FundHead->termYears(),
-                'shortlist' => CouncilAppointments::SHORTLIST,
-                'mostCautious' => SovereignReserveFund::mostCautious(),
-                'boldest' => SovereignReserveFund::boldest(),
-            ],
         ];
     }
 

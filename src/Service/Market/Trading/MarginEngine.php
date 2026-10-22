@@ -35,8 +35,6 @@ final class MarginEngine
      * next tick.
      */
     public const LIQUIDATION_EQUITY_BUFFER = 0.05;
-    /** Ceiling on the fraction of a position that one margin call may liquidate. */
-    public const MAX_LIQUIDATION_FRACTION = 1.00;
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -216,6 +214,6 @@ final class MarginEngine
             default => [$margins['long'] + $buffer, $status->longMarketValue],
         };
 
-        return min($held * self::MAX_LIQUIDATION_FRACTION, max(0.0, $shortfall / $rate));
+        return min($held, max(0.0, $shortfall / $rate));
     }
 }

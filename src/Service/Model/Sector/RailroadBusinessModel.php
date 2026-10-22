@@ -117,10 +117,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
      */
     public const FOREIGN_DEMAND_SENSITIVITY = 0.80;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.5;
-    }
     public function getReversionSpeed(): float
     {
         return 0.15;

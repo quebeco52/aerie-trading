@@ -244,16 +244,6 @@ class CorporateMetricsTest extends TestCase
         $this->assertSame(0.0, $this->metrics->calculateCournotPriceHaircut($utility, 0.30, $capital, $macro));
     }
 
-    public function testInterestCoverageRatioZeroHandling(): void
-    {
-        // Zero interest expense should return 999.0 safe maximum
-        $this->assertSame(999.0, $this->metrics->calculateInterestCoverageRatio(5000.0, 0.0));
-        $this->assertSame(999.0, $this->metrics->calculateInterestCoverageRatio(5000.0, -10.0));
-
-        // Normal ratio
-        $this->assertSame(5.0, $this->metrics->calculateInterestCoverageRatio(500.0, 100.0));
-    }
-
     public function testSaturationSeverityAndLifeCyclePayoutRatio(): void
     {
         // Zero penalty -> 0 severity

@@ -59,7 +59,6 @@ class IndustryPositionBuilder
      *     industry: array{
      *         tracked: bool,
      *         pricesCapacity: bool,
-     *         substitutability: float,
      *         addressableShare: float,
      *         saturation: array{threshold: float, penalty: float, severity: float, trueReturn: float, trailingReturn: ?float, marginalReturn: float, moatFactor: float},
      *         rosterShare: float|null,
@@ -131,7 +130,6 @@ class IndustryPositionBuilder
             'industry' => [
                 'tracked' => $description !== null,
                 'pricesCapacity' => $pricesCapacity,
-                'substitutability' => $substitutability,
                 'addressableShare' => $addressableShare,
                 'saturation' => [
                     'threshold' => FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD,
@@ -198,11 +196,5 @@ class IndustryPositionBuilder
             'reviewBinds' => $reviewCap < $market['fringe_share'],
             'screens' => $screens,
         ];
-    }
-
-    /** The widest move the balance can make in a firm's realized price, for the page to scale a gauge by. */
-    public static function maxPriceResponse(): float
-    {
-        return FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE;
     }
 }

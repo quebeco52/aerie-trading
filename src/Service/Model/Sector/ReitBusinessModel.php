@@ -110,10 +110,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         return self::COVENANT_UNDEPRECIATED_EQUITY_SHARE;
     }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.0;
-    }
     public function getDividendCrisisIcr(): float
     {
         return 1.05;
@@ -519,11 +515,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $incomeStatementCapacity = $newBorrowingRate > 0 ? ($availableInterestCapacity / $newBorrowingRate) : 0.0;
 
         return min($incomeStatementCapacity, $balanceSheetCapacity);
-    }
-
-    public function getMaxFloatingDebtRatio(): float
-    {
-        return 0.50;
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float

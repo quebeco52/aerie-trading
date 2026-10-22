@@ -454,7 +454,7 @@ final class CouncilAppointments
      * Why a councillor left early, at age $age: death with the share of the hazard mortality makes up at that age, else
      * resignation. Hashed from the seating, so it replays.
      */
-    public static function departureCause(int $salt, int $seat, float $seatedAt, float $age): string
+    private static function departureCause(int $salt, int $seat, float $seatedAt, float $age): string
     {
         $mortality = self::MORTALITY_LEVEL * exp(self::MORTALITY_SLOPE * $age);
 

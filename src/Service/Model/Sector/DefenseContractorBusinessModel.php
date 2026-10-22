@@ -162,10 +162,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Working capital intensity of the fixed-price book while FAR 32.503-6 withholds its progress payments. */
     public const WITHHOLDING_NWC_INTENSITY = 0.18;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.0;
-    }
     public function getReversionSpeed(): float
     {
         return 0.12;

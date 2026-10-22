@@ -120,7 +120,7 @@ final class IndexCommittee
      * so their sum is the trailing twelve-month figure and the last is the most recent quarter. A company with
      * no reported history yet cannot pass.
      */
-    public static function isEarningsViable(Stock $stock): bool
+    private static function isEarningsViable(Stock $stock): bool
     {
         $history = $stock->getQuarterlyNetIncomeHistory();
 
@@ -152,18 +152,6 @@ final class IndexCommittee
             'inner' => (int) round($constituentCount * (1.0 - $buffer)),
             'outer' => (int) round($constituentCount * (1.0 + $buffer)),
         ];
-    }
-
-    /**
-     * The standing membership of an index as a lookup, empty when none has been taken.
-     *
-     * @return array<string, true>
-     */
-    public function currentMembers(MarketIndex $index): array
-    {
-        $roster = $this->store->current($index);
-
-        return $roster === null ? [] : array_fill_keys($roster['tickers'], true);
     }
 
     /**

@@ -839,7 +839,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      * Carries the book one quarter forward: each fixed-rate part reprices toward today's market rate plus the loan
      * spread at the hazard its repricing maturity implies, and the franchise pricing is persisted with it.
      */
-    protected function advanceBookYields(Stock $stock, MacroStateDTO $macroState, StreamContext $streams, MathUtility $mathUtility): void
+    protected function advanceBookYields(Stock $stock, MacroStateDTO $macroState, StreamContext $streams): void
     {
         $pricing = $this->resolveFranchisePricing($stock);
         $rates = $this->resolveRepricingRates($stock, $macroState);
@@ -902,7 +902,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $nonInterestWeight = $rawFeeWeight + $rawProprietaryWeight;
         $feeWeight = $nonInterestWeight > 0.0 ? (1.0 - $niiWeight) * $rawFeeWeight / $nonInterestWeight : 0.0;
         $proprietaryDividendWeight = (1.0 - $niiWeight) - $feeWeight;
-        $this->advanceBookYields($stock, $macroState, $streams, $mathUtility);
+        $this->advanceBookYields($stock, $macroState, $streams);
 
         // Independent stream Z-scores with AR(1) persistence
         // NII loan origination volume
@@ -938,7 +938,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Charge-offs are the book's conditional loss this quarter, on the gross balances that default. They reach EBIT
         // once, through the allowance roll-forward, which replaces what they consumed (provision = charge-offs + change
         // in allowance).
-        $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams, $mathUtility);
+        $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams);
         $defaultZ = $credit['systematic_z'];
         $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveGrossEarningAssets($stock);
         $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
@@ -1057,7 +1057,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      *
      * @return array{loss_rate: float, systematic_z: float}
      */
-    protected function resolveConditionalCreditLossRate(Stock $stock, MacroStateDTO $macroState, StreamContext $streams, MathUtility $mathUtility): array
+    protected function resolveConditionalCreditLossRate(Stock $stock, MacroStateDTO $macroState, StreamContext $streams): array
     {
         ['residential' => $residentialShare, 'consumer' => $consumerShare, 'commercial_real_estate' => $creShare, 'business' => $businessShare] = $this->resolveLoanBookMix($stock);
 

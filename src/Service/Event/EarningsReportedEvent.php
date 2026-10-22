@@ -9,8 +9,6 @@ use Symfony\Contracts\EventDispatcher\Event;
 
 class EarningsReportedEvent extends Event
 {
-    public const NAME = 'corporate.earnings.reported';
-
     public function __construct(
         private readonly EarningsSimulationContext $context,
     ) {}

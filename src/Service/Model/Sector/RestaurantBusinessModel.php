@@ -179,9 +179,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             ModelParam::FranchiseLeaseWeight->value    => self::FRANCHISE_LEASE_WEIGHT,
         ]);
 
-        $corporateWeight = $params[ModelParam::CompanyStoresWeight];
-        $franchiseWeight = $params[ModelParam::FranchiseRoyaltiesWeight];
-        $leaseWeight     = $params[ModelParam::FranchiseLeaseWeight];
         $pricingPower    = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];

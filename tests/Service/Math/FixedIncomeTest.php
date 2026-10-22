@@ -237,18 +237,9 @@ class FixedIncomeTest extends TestCase
         $this->assertSame(0.0, FixedIncome::calculateAccruedInterest(25.0, -0.1, 0.5));
     }
 
-    public function testCalculateNelsonSiegelAndSvenssonYieldZeroTau(): void
+    public function testCalculateSvenssonYieldZeroTauIsTheShortRate(): void
     {
-        $level = 0.04;
-        $slope = -0.01;
-        $curv1 = 0.02;
-        $curv2 = 0.01;
-
-        $ns = FixedIncome::calculateNelsonSiegelYield($level, $slope, $curv1, 0.0);
-        $this->assertEquals($level + $slope, $ns, 'Zero maturity should return level + slope (short rate).');
-
-        $sv = FixedIncome::calculateSvenssonYield($level, $slope, $curv1, $curv2, 0.0);
-        $this->assertEquals($level + $slope, $sv, 'Svensson zero maturity should return level + slope.');
+        $this->assertEquals(0.03, FixedIncome::calculateSvenssonYield(0.04, -0.01, 0.02, 0.01, 0.0), 'Svensson zero maturity should return level + slope.');
     }
 
     public function testCalculateSvenssonYieldMatchesNelsonSiegelWhenCurvature2IsZero(): void
@@ -259,7 +250,8 @@ class FixedIncomeTest extends TestCase
         $lambda1 = 0.50;
 
         foreach ([1.0, 2.0, 5.0, 10.0, 30.0] as $tau) {
-            $nsYield = FixedIncome::calculateNelsonSiegelYield($level, $slope, $curvature1, $tau, $lambda1);
+            $loading = (1.0 - exp(-$lambda1 * $tau)) / ($lambda1 * $tau);
+            $nsYield = $level + ($slope * $loading) + ($curvature1 * ($loading - exp(-$lambda1 * $tau)));
             $svenssonYield = FixedIncome::calculateSvenssonYield(
                 level: $level,
                 slope: $slope,

@@ -64,7 +64,7 @@ final class AttentionRetailStrategyTest extends TestCase
     {
         self::assertEqualsWithDelta(
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
-            $this->strategy->signal($this->view(), []),
+            $this->strategy->signal($this->view()),
             1e-9,
         );
     }
@@ -77,8 +77,8 @@ final class AttentionRetailStrategyTest extends TestCase
     {
         $move = $this->tickSigma() * AttentionRetailStrategy::AGENT_RETAIL_RETURN_SIGMA;
 
-        $up = $this->strategy->signal($this->view(logReturn: $move), []);
-        $down = $this->strategy->signal($this->view(logReturn: -$move), []);
+        $up = $this->strategy->signal($this->view(logReturn: $move));
+        $down = $this->strategy->signal($this->view(logReturn: -$move));
 
         self::assertEqualsWithDelta($up, $down, 1e-9);
         self::assertGreaterThan(AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE, $down, 'A crash is attention too.');
@@ -88,8 +88,8 @@ final class AttentionRetailStrategyTest extends TestCase
     {
         $saturating = $this->tickSigma() * AttentionRetailStrategy::AGENT_RETAIL_RETURN_SIGMA;
 
-        $atSaturation = $this->strategy->signal($this->view(logReturn: $saturating), []);
-        $beyond = $this->strategy->signal($this->view(logReturn: $saturating * 4.0), []);
+        $atSaturation = $this->strategy->signal($this->view(logReturn: $saturating));
+        $beyond = $this->strategy->signal($this->view(logReturn: $saturating * 4.0));
 
         self::assertEqualsWithDelta($atSaturation, $beyond, 1e-9, 'Attention is bounded; a ten-sigma move is not ten times the story.');
         self::assertEqualsWithDelta(
@@ -107,16 +107,16 @@ final class AttentionRetailStrategyTest extends TestCase
     {
         $move = 0.02;
 
-        $volatile = $this->strategy->signal($this->view(logReturn: $move, annualizedVolatility: 0.80), []);
-        $quiet = $this->strategy->signal($this->view(logReturn: $move, annualizedVolatility: 0.10), []);
+        $volatile = $this->strategy->signal($this->view(logReturn: $move, annualizedVolatility: 0.80));
+        $quiet = $this->strategy->signal($this->view(logReturn: $move, annualizedVolatility: 0.10));
 
         self::assertGreaterThan($volatile, $quiet);
     }
 
     public function testAbnormalVolumeRaisesAttentionOnItsOwn(): void
     {
-        $quiet = $this->strategy->signal($this->view(), []);
-        $busy = $this->strategy->signal($this->view(abnormalVolume: AttentionRetailStrategy::AGENT_RETAIL_VOLUME_MULTIPLE), []);
+        $quiet = $this->strategy->signal($this->view());
+        $busy = $this->strategy->signal($this->view(abnormalVolume: AttentionRetailStrategy::AGENT_RETAIL_VOLUME_MULTIPLE));
 
         self::assertGreaterThan($quiet, $busy);
         self::assertEqualsWithDelta(
@@ -130,15 +130,15 @@ final class AttentionRetailStrategyTest extends TestCase
     {
         self::assertEqualsWithDelta(
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
-            $this->strategy->signal($this->view(abnormalVolume: 0.1), []),
+            $this->strategy->signal($this->view(abnormalVolume: 0.1)),
             1e-9,
         );
     }
 
     public function testNewsIsAttentionWithoutAnyMoveOrVolume(): void
     {
-        $silent = $this->strategy->signal($this->view(), []);
-        $reported = $this->strategy->signal($this->view(hasNews: true), []);
+        $silent = $this->strategy->signal($this->view());
+        $reported = $this->strategy->signal($this->view(hasNews: true));
 
         self::assertGreaterThan($silent, $reported);
     }
@@ -151,9 +151,9 @@ final class AttentionRetailStrategyTest extends TestCase
     {
         $sigma = $this->tickSigma();
 
-        $returnOnly = $this->strategy->signal($this->view(logReturn: $sigma * 1.25), []);
-        $volumeOnly = $this->strategy->signal($this->view(abnormalVolume: 2.0), []);
-        $both = $this->strategy->signal($this->view(logReturn: $sigma * 1.25, abnormalVolume: 2.0), []);
+        $returnOnly = $this->strategy->signal($this->view(logReturn: $sigma * 1.25));
+        $volumeOnly = $this->strategy->signal($this->view(abnormalVolume: 2.0));
+        $both = $this->strategy->signal($this->view(logReturn: $sigma * 1.25, abnormalVolume: 2.0));
 
         self::assertEqualsWithDelta(max($returnOnly, $volumeOnly), $both, 1e-9);
     }
@@ -162,7 +162,7 @@ final class AttentionRetailStrategyTest extends TestCase
     public function testTheBookIsNeverShort(): void
     {
         foreach ([-10.0, -1.0, 0.0, 1.0, 10.0] as $move) {
-            $signal = $this->strategy->signal($this->view(logReturn: $move, abnormalVolume: 50.0, hasNews: true), []);
+            $signal = $this->strategy->signal($this->view(logReturn: $move, abnormalVolume: 50.0, hasNews: true));
             self::assertGreaterThanOrEqual(0.0, $signal);
             self::assertLessThanOrEqual(1.0, $signal);
         }
@@ -181,13 +181,13 @@ final class AttentionRetailStrategyTest extends TestCase
     {
         self::assertEqualsWithDelta(
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
-            $this->strategy->signal($this->view(logReturn: 0.5, annualizedVolatility: 0.0), []),
+            $this->strategy->signal($this->view(logReturn: 0.5, annualizedVolatility: 0.0)),
             1e-9,
             'A name with no volatility measure yet has no scale to call a move extreme against.',
         );
         self::assertEqualsWithDelta(
             AttentionRetailStrategy::AGENT_RETAIL_BASE_SHARE,
-            $this->strategy->signal($this->view(logReturn: 0.5, dt: 0.0), []),
+            $this->strategy->signal($this->view(logReturn: 0.5, dt: 0.0)),
             1e-9,
         );
     }

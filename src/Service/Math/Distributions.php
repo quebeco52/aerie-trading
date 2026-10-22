@@ -11,40 +11,9 @@ namespace App\Service\Math;
  */
 final class Distributions
 {
-    // --- Robust Scale Estimation ---
-    /** Ratio of a zero-mean normal variable's mean absolute deviation to its sigma, sqrt(2 / pi). */
-    public const MEAN_ABSOLUTE_DEVIATION_TO_SIGMA = 0.7978845608028654;
-
     // --- Normal Density ---
     /** Standard normal density at zero, 1 / sqrt(2 pi); the peak every greek's density term is scaled from. */
     public const STANDARD_NORMAL_PEAK = 0.3989422804014327;
-
-    /**
-     * Estimates the normal-equivalent scale (sigma) of a zero-centred sample from its mean absolute value.
-     *
-     * For a zero-mean normal variable E|X| = sigma * sqrt(2 / pi), so dividing the realized mean absolute
-     * value by that constant recovers sigma. This is preferred to the sample standard deviation when the
-     * sample is fat tailed, as earnings surprises are: a single outlier quarter dominates a sum of squares
-     * and pushes the estimate far above the scale of a typical quarter, whereas the mean absolute value
-     * degrades gracefully.
-     *
-     * @param list<float> $samples Observations centred on zero (an unbiased forecast error has zero mean).
-     * @return float The estimated scale, or 0.0 when there is nothing to estimate from.
-     */
-    public static function calculateMeanAbsoluteScale(array $samples): float
-    {
-        $count = count($samples);
-        if ($count === 0) {
-            return 0.0;
-        }
-
-        $total = 0.0;
-        foreach ($samples as $sample) {
-            $total += abs((float) $sample);
-        }
-
-        return ($total / $count) / self::MEAN_ABSOLUTE_DEVIATION_TO_SIGMA;
-    }
 
     /**
      * Calculates the cumulative distribution function (CDF) for the standard normal distribution.
@@ -229,8 +198,7 @@ final class Distributions
 
     /**
      * First upper partial moment of a histogram, E[max(0, X - t)], with X uniform within each bin: the part of a
-     * binned distribution standing above a threshold. Its derivative in t is minus the share above it
-     * (histogramUpperTailShare()), and at a threshold below every bin it is the mean.
+     * binned distribution standing above a threshold. At a threshold below every bin it is the mean.
      *
      * @param list<float> $edges   Bin edges, ascending; one more than the weights.
      * @param list<float> $weights Each bin's mass; normalised by their sum.
@@ -251,28 +219,6 @@ final class Distributions
         }
 
         return $moment;
-    }
-
-    /**
-     * Share of a histogram above a threshold, with mass uniform within each bin.
-     *
-     * @param list<float> $edges   Bin edges, ascending; one more than the weights.
-     * @param list<float> $weights Each bin's mass; normalised by their sum.
-     * @param float       $threshold The level t.
-     */
-    public static function histogramUpperTailShare(array $edges, array $weights, float $threshold): float
-    {
-        $total = array_sum($weights);
-        $share = 0.0;
-        foreach ($weights as $bin => $weight) {
-            $low = max($edges[$bin], $threshold);
-            $high = $edges[$bin + 1];
-            if ($high > $low) {
-                $share += ($weight / $total) * ($high - $low) / ($high - $edges[$bin]);
-            }
-        }
-
-        return $share;
     }
 
     // --- Censored Pareto Severity ---

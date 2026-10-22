@@ -49,7 +49,6 @@ class ModelParametersTest extends TestCase
         $params = new ModelParameters([]);
 
         $this->assertSame(0.50, $params->get(ModelParam::PricingPowerIndex, 0.50));
-        $this->assertSame(0.00, $params->getFloat(ModelParam::PricingPowerIndex, 0.00));
     }
 
     public function testMissingKeyThrowsOutOfBoundsException(): void

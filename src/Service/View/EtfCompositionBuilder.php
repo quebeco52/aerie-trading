@@ -55,7 +55,6 @@ class EtfCompositionBuilder
 
     /**
      * @return array{
-     *     allAssets: list<Stock>,
      *     pieLabels: list<string>,
      *     pieData: list<float>,
      *     sharesMap: array<string, float>,
@@ -176,7 +175,6 @@ class EtfCompositionBuilder
         }
 
         return [
-            'allAssets' => $allAssets,
             'pieLabels' => $pieLabels,
             'pieData' => $pieData,
             'sharesMap' => $sharesMap,
@@ -242,8 +240,6 @@ class EtfCompositionBuilder
             return [
                 'expenseRatio' => null,
                 'distributionYield' => null,
-                'trailingDistribution' => null,
-                'lastDistributionAt' => null,
                 'accruedIncome' => null,
                 'feesPaidPerShare' => null,
                 'tradingCostsPerShare' => null,
@@ -251,7 +247,6 @@ class EtfCompositionBuilder
                 'navPremium' => null,
                 'arbitrageBand' => null,
                 'sharesOutstanding' => null,
-                'netAssets' => null,
             ];
         }
 
@@ -263,12 +258,7 @@ class EtfCompositionBuilder
             'navPremium' => $fund->getNavPremium() * 100.0,
             'arbitrageBand' => $fund->getArbitrageBand() * 100.0,
             'sharesOutstanding' => $fund->getSharesOutstanding(),
-            'netAssets' => $price > 0.0 && $fund->getNavPremium() > -1.0
-                ? ($price / (1.0 + $fund->getNavPremium())) * $fund->getSharesOutstanding()
-                : 0.0,
             'distributionYield' => $price > 0.0 ? ($fund->trailingDistribution() / $price) * 100.0 : 0.0,
-            'trailingDistribution' => $fund->trailingDistribution(),
-            'lastDistributionAt' => $fund->getLastDistributionAt(),
             // Undistributed accrued dividend income reflected in share price.
             'accruedIncome' => $fund->getAccruedIncome(),
             // Cumulative management fees paid per share.
@@ -310,7 +300,7 @@ class EtfCompositionBuilder
      * Where the index stands on its reconstitution calendar, in simulated days.
      *
      * @param array{tick: int, tickers: list<string>, added: list<string>, deleted: list<string>, weights: array<string, float>, factors: array<string, float>}|null $roster
-     * @return array{lastReconstitutionTick: int|null, daysSinceReconstitution: float|null, daysUntilReconstitution: float}
+     * @return array{daysSinceReconstitution: float|null, daysUntilReconstitution: float}
      */
     private function calendar(?array $roster): array
     {
@@ -321,7 +311,6 @@ class EtfCompositionBuilder
         $nextTick = (intdiv($tick, $interval) + 1) * $interval;
 
         return [
-            'lastReconstitutionTick' => $roster['tick'] ?? null,
             'daysSinceReconstitution' => $roster === null ? null : max(0, $tick - $roster['tick']) * $daysPerTick,
             'daysUntilReconstitution' => ($nextTick - $tick) * $daysPerTick,
         ];

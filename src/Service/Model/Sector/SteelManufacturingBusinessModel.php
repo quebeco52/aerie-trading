@@ -110,10 +110,6 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Book weight in fair value through the rest of the cycle. */
     public const MID_CYCLE_BOOK_WEIGHT = 0.40;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.5;
-    }
     public function getReversionSpeed(): float
     {
         return 0.1;

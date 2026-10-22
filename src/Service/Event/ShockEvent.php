@@ -124,7 +124,6 @@ class ShockEvent
     public const BIOTECH_TRIAL_SETBACK = 'biotech_trial_setback';
     public const BIOTECH_PATENT_CLIFF = 'biotech_patent_cliff';
     public const CLEARING_SYSTEMIC_DEFAULT = 'clearing_systemic_default';
-    public const CLEARING_PANIC_FEES = 'clearing_panic_fees';
     public const LUXURY_BRAND_DILUTION = 'luxury_brand_dilution';
     public const LUXURY_CULTURAL_DOMINANCE = 'luxury_cultural_dominance';
     public const PRODUCT_RECALL = 'product_recall';
@@ -165,7 +164,6 @@ class ShockEvent
     public const LITIGATION_SETTLEMENT_WIN = 'litigation_settlement_win';
     public const LITIGATION_SETTLEMENT_LOSS = 'litigation_settlement_loss';
 
-    public const AUTO_SUPPLY_CHAIN_DISRUPTION = 'auto_supply_chain_disruption';
     /** Suppliers' shortages of chips and parts held a maker's shipments back: a buyer's loss, not a foundry's gain. */
     public const COMPONENT_SHORTAGE = 'component_shortage';
     /** Factory customers stepped up tool and consumable orders as plants added shifts. */
@@ -174,12 +172,7 @@ class ShockEvent
     public const MAJOR_EQUIPMENT_ORDER = 'major_equipment_order';
     /** Server and storage orders surged as large customers expanded their data centres. */
     public const DATA_CENTRE_ORDER_SURGE = 'data_centre_order_surge';
-    public const AUTO_SUBPRIME_DEFAULT_SURGE = 'auto_subprime_default_surge';
-    public const AUTO_PRICING_POWER_SURGE = 'auto_pricing_power_surge';
 
-    public const CRISIS_MANAGEMENT_BOOM = 'crisis_management_boom';
-    public const TALENT_PLACEMENT_BOOM = 'talent_placement_boom';
-    public const SUBSIDY_CUT = 'subsidy_cut';
     public const LOGISTICS_SURGE_PRICING = 'logistics_surge_pricing';
 
     public const INFRASTRUCTURE_BILL_WIN = 'infrastructure_bill_win';
@@ -212,7 +205,6 @@ class ShockEvent
     public const APPAREL_VIRAL_PRODUCT = 'apparel_viral_product';
 
     public const CHEMICAL_CRACK_SPREAD_SQUEEZE = 'chemical_crack_spread_squeeze';
-    public const CHEMICAL_PLANT_TURNAROUND = 'chemical_plant_turnaround';
     public const CHEMICAL_AGRI_BOOM = 'chemical_agri_boom';
 
     /** Annual ASC 350 test wrote acquired goodwill down to its value in use (non-cash GAAP charge). */

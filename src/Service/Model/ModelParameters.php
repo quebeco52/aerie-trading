@@ -54,14 +54,6 @@ class ModelParameters implements \ArrayAccess, \Countable
     }
 
     /**
-     * Retrieves a parameter value as a float with a default fallback.
-     */
-    public function getFloat(ModelParam|string $param, float $default = 0.0): float
-    {
-        return $this->get($param, $default);
-    }
-
-    /**
      * Checks if a parameter key exists in this container.
      */
     public function has(ModelParam|string $param): bool

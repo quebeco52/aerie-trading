@@ -28,7 +28,7 @@ final class MomentumStrategy implements AgentStrategyInterface
         return 'momentum';
     }
 
-    public function signal(AgentMarketViewDTO $view, array $positions): float
+    public function signal(AgentMarketViewDTO $view): float
     {
         return max(-1.0, min(1.0, self::AGENT_MOMENTUM_GAIN * ($view->momentumTrend - $view->recentMonthTrend)));
     }

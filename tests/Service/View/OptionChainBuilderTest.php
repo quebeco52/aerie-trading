@@ -297,7 +297,6 @@ class OptionChainBuilderTest extends TestCase
 
         $payload = $this->builder([$this->contract($stock, 13, true, 120.0, 100)])->build($stock, null, $this->macro(1.0));
 
-        $this->assertEqualsWithDelta(5000.0, $payload['optionDealerGamma'], 1e-9);
         $this->assertEqualsWithDelta(5000.0 * 120.0 * 0.01, $payload['optionDealerGammaPerPercent'], 1e-9);
     }
 
@@ -305,7 +304,7 @@ class OptionChainBuilderTest extends TestCase
     {
         $stock = $this->stock();
 
-        $this->assertSame(0.0, $this->builder([$this->contract($stock, 13, true, 100.0)])->build($stock, null, $this->macro(1.0))['optionDealerGamma']);
+        $this->assertSame(0.0, $this->builder([$this->contract($stock, 13, true, 100.0)])->build($stock, null, $this->macro(1.0))['optionDealerGammaPerPercent']);
     }
 
     public function testTheContractMultiplierReachesTheTemplate(): void

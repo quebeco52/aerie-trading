@@ -177,7 +177,7 @@ final class ElectionForecast
                 $z[] = $draws->generateStandardNormal();
             }
             foreach ([1.0, -1.0] as $sign) {
-                $outcomes[] = self::outcome($state, $average, $years, $termLeft, $campaign, array_map(static fn(float $draw): float => $sign * $draw, $z), $draws);
+                $outcomes[] = self::outcome($state, $average, $years, $termLeft, $campaign, array_map(static fn(float $draw): float => $sign * $draw, $z));
             }
         }
 
@@ -308,7 +308,7 @@ final class ElectionForecast
      *                                      misreading and the normal vote's walk.
      * @return array<string, float>
      */
-    private static function outcome(PoliticsState $state, array $average, float $years, float $termLeft, float $campaign, array $z, MathUtility $math): array
+    private static function outcome(PoliticsState $state, array $average, float $years, float $termLeft, float $campaign, array $z): array
     {
         $parties = AerieDiet::PARTIES;
         $count = count($parties);
@@ -336,11 +336,11 @@ final class ElectionForecast
             $normalDraws[$party] = $z[(4 * $count) + 1 + $index];
         }
         [$normals, $start] = OpinionPolls::walkNormals($state->normalVoteShares, $start, $years, $normalDraws);
-        $lasting = OpinionPolls::driftLasting($start, OpinionPolls::driftYears($state, $state->totalTime, $state->totalTime + $years), $lastingDraws, $normals, $math);
+        $lasting = OpinionPolls::driftLasting($start, OpinionPolls::driftYears($state, $state->totalTime, $state->totalTime + $years), $lastingDraws, $normals);
         $swing = Election::economicVote(0.0, 0.0, $z[3 * $count], count(AerieDiet::governingParties($state->governingCoalition)) === 1, $termLeft);
         $moved = Election::applyIncumbentSwing($lasting, $state->governingCoalition, $swing, $state->supportParties);
 
-        return Election::applyShortTermShocks($moved, OpinionPolls::fadeShortTerm([], $years, $campaign, $shortTermDraws, $normals, $math));
+        return Election::applyShortTermShocks($moved, OpinionPolls::fadeShortTerm([], $years, $campaign, $shortTermDraws, $normals));
     }
 
     /**

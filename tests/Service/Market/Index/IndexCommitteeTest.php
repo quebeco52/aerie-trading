@@ -68,6 +68,16 @@ class IndexCommitteeTest extends TestCase
     }
 
     /**
+     * @return array<string, true>
+     */
+    private function members(IndexCommittee $committee, MarketIndex $index): array
+    {
+        $roster = $committee->currentRoster($index);
+
+        return $roster === null ? [] : array_fill_keys($roster['tickers'], true);
+    }
+
+    /**
      * The roster an index stands on once it has been reconstituted.
      *
      * @return array{
@@ -285,7 +295,7 @@ class IndexCommitteeTest extends TestCase
         $committee = $this->committee();
         $committee->reconstitute(MarketIndex::Headline, $this->rankedUniverse(60), 0);
 
-        $members = $committee->currentMembers(MarketIndex::Headline);
+        $members = $this->members($committee, MarketIndex::Headline);
 
         $this->assertCount(MarketIndex::INDEX_CONSTITUENT_COUNT, $members);
         $this->assertTrue($members['T000'] ?? false);
@@ -294,7 +304,7 @@ class IndexCommitteeTest extends TestCase
 
     public function testAFreshMarketHasNoMembershipUntilItIsTaken(): void
     {
-        $this->assertSame([], $this->committee()->currentMembers(MarketIndex::Headline));
+        $this->assertSame([], $this->members($this->committee(), MarketIndex::Headline));
     }
 
     public function testMemberCapitalisationSumsOnlyTheMembers(): void
@@ -374,13 +384,13 @@ class IndexCommitteeTest extends TestCase
 
         $committee->reconstitute(MarketIndex::Headline, $stocks, 0);
 
-        $this->assertSame([], $committee->currentMembers(MarketIndex::Composite), 'the composite has not been taken yet');
+        $this->assertSame([], $this->members($committee, MarketIndex::Composite), 'the composite has not been taken yet');
         $this->assertNull($this->etfTracker->currentDivisor('LBC'));
 
         $committee->reconstitute(MarketIndex::Composite, $stocks, 0);
 
-        $this->assertCount(30, $committee->currentMembers(MarketIndex::Headline));
-        $this->assertCount(60, $committee->currentMembers(MarketIndex::Composite));
+        $this->assertCount(30, $this->members($committee, MarketIndex::Headline));
+        $this->assertCount(60, $this->members($committee, MarketIndex::Composite));
         $this->assertNotEqualsWithDelta(
             (float) $this->etfTracker->currentDivisor('LBI'),
             (float) $this->etfTracker->currentDivisor('LBC'),

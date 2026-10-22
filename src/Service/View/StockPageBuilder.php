@@ -139,7 +139,6 @@ class StockPageBuilder
                 // clearinghouse.
                 'strategicStake' => StrategicHoldings::stake($stock->getTicker()),
                 'corporateBonds' => $corporateBonds,
-                'allAssets' => [],
                 'pieLabels' => [],
                 'pieData' => [],
                 'sharesMap' => [],
@@ -291,7 +290,6 @@ class StockPageBuilder
             'optionsListed' => false,
             'optionsReason' => 'Contracts are written on listed companies, not on the index fund.',
             'optionExpiries' => [],
-            'optionDealerGamma' => 0.0,
             'optionDealerGammaPerPercent' => 0.0,
             'optionOpenInterest' => 0,
             'optionMultiplier' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER,

@@ -158,10 +158,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Top-line multiplier boost from a landmark infrastructure contract win. */
     public const MEGA_PROJECT_MULT = 1.15;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.5;
-    }
     public function getReversionSpeed(): float
     {
         return 0.1;
@@ -265,9 +261,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             ModelParam::FacilitiesMaintenanceWeight->value  => self::FACILITIES_MAINTENANCE_WEIGHT,
         ]);
 
-        $civilWeight       = $params[ModelParam::CivilInfrastructureWeight];
-        $commercialWeight  = $params[ModelParam::CommercialEpcWeight];
-        $maintenanceWeight = $params[ModelParam::FacilitiesMaintenanceWeight];
         $pricingPower      = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];

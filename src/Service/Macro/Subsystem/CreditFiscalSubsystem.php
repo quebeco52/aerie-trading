@@ -918,7 +918,6 @@ class CreditFiscalSubsystem
             growthErosion: $state->nominalGdpGrowth * $state->sovereignDebtToGdp,
             grossDebt: $state->sovereignDebtToGdp,
             fundBonds: $state->sovereignFundBondsToGdp,
-            fundAssets: $state->sovereignFundToGdp,
         );
     }
 

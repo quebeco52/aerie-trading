@@ -147,10 +147,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     {
         return 1.8;
     }
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.0;
-    }
     public function getBuybackMinIcr(): float
     {
         return 1.8;
@@ -258,9 +254,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             ModelParam::InsuranceArbitrageWeight->value  => self::INSURANCE_ARBITRAGE_WEIGHT,
         ]);
 
-        $inpatientWeight  = $params[ModelParam::InpatientCareWeight];
-        $outpatientWeight = $params[ModelParam::ElectiveOutpatientWeight];
-        $arbitrageWeight  = $params[ModelParam::InsuranceArbitrageWeight];
         $pricingPower     = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];

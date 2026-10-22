@@ -94,11 +94,6 @@ class NarrativeEngine
                 "Emergency default fund drawdowns were triggered after a member firm insolvency.",
                 "Absorbed significant member settlement losses during a violent liquidation cascade.",
             ]),
-            ShockEvent::CLEARING_PANIC_FEES => $this->getRandomPhrase([
-                "Record transaction volume driven by market panic generated massive clearing fees.",
-                "Heightened derivative clearing and margin re-hypothecation drove outsized fee income.",
-                "Capitalized on surge in intraday margin settlement volume across institutional desks.",
-            ]),
             ShockEvent::LUXURY_BRAND_DILUTION => $this->getRandomPhrase([
                 "Suffered brand dilution and inventory write-downs following a poorly received creative direction.",
                 "High-end retail foot traffic declined sharply, forcing promotional markdowns.",
@@ -640,36 +635,6 @@ class NarrativeEngine
                 "Court ruling against the firm triggered substantial damage awards and settlement charges.",
                 "Unanticipated legal liability findings increased quarterly litigation reserves.",
             ]),
-            ShockEvent::AUTO_SUPPLY_CHAIN_DISRUPTION => $this->getRandomPhrase([
-                "Semiconductor and parts shortages disrupted assembly lines and delayed vehicle deliveries.",
-                "Critical component supply bottlenecks forced temporary factory idling and lower unit volumes.",
-                "Tier-1 supplier delivery delays reduced quarterly automotive production.",
-            ]),
-            ShockEvent::AUTO_SUBPRIME_DEFAULT_SURGE => $this->getRandomPhrase([
-                "Elevated subprime auto loan defaults pressured captive finance margins.",
-                "Surge in vehicle repossessions and credit delinquencies increased captive lending provisions.",
-                "Deteriorating consumer credit health reduced financing income across automotive desks.",
-            ]),
-            ShockEvent::AUTO_PRICING_POWER_SURGE => $this->getRandomPhrase([
-                "Strong vehicle pricing power and high-margin trim demand drove outsized auto operating margins.",
-                "Favorable vehicle model mix and lean dealer inventories supported record average selling prices.",
-                "Robust consumer demand for flagship models expanded gross automotive margins.",
-            ]),
-            ShockEvent::CRISIS_MANAGEMENT_BOOM => $this->getRandomPhrase([
-                "Corporate restructuring and crisis management consulting retainers surged amid corporate distress.",
-                "High-profile corporate turnarounds and turnaround advisory engagements drove record consulting billings.",
-                "Advisory practices captured strong demand for operational restructuring and debtor advisory.",
-            ]),
-            ShockEvent::TALENT_PLACEMENT_BOOM => $this->getRandomPhrase([
-                "Executive recruitment and specialized talent placement fees reached record highs.",
-                "Strong corporate demand for leadership recruitment expanded professional search revenues.",
-                "Surge in C-suite placements across growth sectors drove outsized placement retainers.",
-            ]),
-            ShockEvent::SUBSIDY_CUT => $this->getRandomPhrase([
-                "Government subsidy reductions and tariff phase-outs squeezed operating margins.",
-                "Regulatory policy shifts eliminated key tax credits and government incentive programs.",
-                "Reduced public grant allocations increased net operational expenses.",
-            ]),
             ShockEvent::LOGISTICS_SURGE_PRICING => $this->getRandomPhrase([
                 "Tight freight capacity enabled dynamic surge pricing across core shipping lanes.",
                 "Peak season carrier capacity constraints drove record contractual and spot freight yields.",
@@ -754,11 +719,6 @@ class NarrativeEngine
                 "Surging hydrocarbon feedstock costs squeezed petrochemical crack spreads.",
                 "Elevated natural gas and crude input pricing compressed chemical processing margins.",
                 "Upstream commodity inflation narrowed refining and cracking unit margins.",
-            ]),
-            ShockEvent::CHEMICAL_PLANT_TURNAROUND => $this->getRandomPhrase([
-                "Unplanned manufacturing outages and extended plant maintenance turnarounds curtailed chemical output.",
-                "Scheduled complex catalyst replacement and facility maintenance temporarily reduced production volumes.",
-                "Extended chemical refinery turnaround cycles resulted in temporary shipment deferrals.",
             ]),
             ShockEvent::CHEMICAL_AGRI_BOOM => $this->getRandomPhrase([
                 "Surging global fertilizer demand and agricultural commodity prices drove outsized specialty chemical margins.",

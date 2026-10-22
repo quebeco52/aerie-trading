@@ -329,13 +329,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // more as homes fall below the price they were lent against (the bank segment model). They reach EBIT once,
         // through the allowance roll-forward; the forward-looking CECL reserve moves the allowance TARGET through
         // getForwardCreditLossMultiplier(). Neither is a margin term.
-        $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams, $mathUtility);
+        $credit = $this->resolveConditionalCreditLossRate($stock, $macroState, $streams);
         $netChargeOffs = ($credit['loss_rate'] / FinancialConstants::QUARTERS_PER_YEAR) * $this->resolveGrossEarningAssets($stock);
         $lossMultiple = $credit['loss_rate'] / max(1e-9, $this->getThroughTheCycleCreditLossRate($stock));
 
         // Rate risk is the repricing gap itself: the mortgage book reprices over years while the repo funding resets
         // at once, so a flat or inverted curve reaches profit through interest income and expense, not the cost ratio.
-        $this->advanceBookYields($stock, $macroState, $streams, $mathUtility);
+        $this->advanceBookYields($stock, $macroState, $streams);
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $clampedMargin = $this->clampMargin($realizedVariableMargin, $minVariableMargin);
 

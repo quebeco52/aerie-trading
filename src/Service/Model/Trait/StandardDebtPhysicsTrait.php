@@ -17,11 +17,6 @@ use App\Service\Math\Valuation;
 
 trait StandardDebtPhysicsTrait
 {
-    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float
-    {
-        return 1.0;
-    }
-
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float
     {
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
@@ -112,11 +107,6 @@ trait StandardDebtPhysicsTrait
     public function getRequiredIcrBuffer(): float
     {
         return 1.5;
-    }
-
-    public function getMaxFloatingDebtRatio(): float
-    {
-        return 0.30;
     }
 
     public function getDebtMaturityRolloverRate(): float

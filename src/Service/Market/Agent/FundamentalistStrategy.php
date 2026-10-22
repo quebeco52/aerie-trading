@@ -27,7 +27,7 @@ final class FundamentalistStrategy implements AgentStrategyInterface
         return 'fundamentalist';
     }
 
-    public function signal(AgentMarketViewDTO $view, array $positions): float
+    public function signal(AgentMarketViewDTO $view): float
     {
         return max(-1.0, min(1.0, self::AGENT_FUNDAMENTALIST_GAIN * $view->logMispricing()));
     }

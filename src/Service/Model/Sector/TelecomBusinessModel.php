@@ -110,10 +110,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.50; // Subscription metrics are reported quarterly
     public const BASE_COVERAGE_ERROR = 0.05;
 
-    public function getWholesaleLeverageLimit(): float
-    {
-        return 2.0;
-    }
     public function getReversionSpeed(): float
     {
         return 0.15;
@@ -270,8 +266,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
             ModelParam::BaseQuarterlyChurn->value => self::BASE_QUARTERLY_CHURN,
         ]);
 
-        $subscriptionWeight = $params[ModelParam::SubscriptionWeight];
-        $equipmentWeight    = $params[ModelParam::EquipmentWeight];
         $baseChurn          = max(0.0, $params[ModelParam::BaseQuarterlyChurn]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];

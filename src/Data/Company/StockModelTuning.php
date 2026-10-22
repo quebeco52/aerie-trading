@@ -982,24 +982,6 @@ class StockModelTuning
     }
 
     /**
-     * Checks if a stock ticker has any model tuning overrides.
-     */
-    public static function hasOverrides(string $ticker): bool
-    {
-        return isset(self::OVERRIDES[$ticker]);
-    }
-
-    /**
-     * Returns all tuning overrides for a specific ticker.
-     *
-     * @return array<string, float>
-     */
-    public static function getOverridesForTicker(string $ticker): array
-    {
-        return self::OVERRIDES[$ticker] ?? [];
-    }
-
-    /**
      * Resolves a complete parameter DTO by merging baseline defaults with any company-specific tuning overrides.
      *
      * @param array<string, float> $defaults

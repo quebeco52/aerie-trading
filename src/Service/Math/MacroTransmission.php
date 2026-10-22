@@ -340,29 +340,6 @@ final class MacroTransmission
     }
 
     /**
-     * Stage-of-Processing Producer Price Index (PPI) variable cost drag (Clark 1995).
-     *
-     * Evaluates wholesale input material cost pressure on gross variable margins,
-     * mitigated by the firm's structural pricing power.
-     *
-     * @param float $ppi             Producer price wholesale inflation rate.
-     * @param float $targetInflation Central bank target inflation benchmark (~2%).
-     * @param float $pricingPower    Firm pricing power index [0.0, 1.0].
-     * @param float $sensitivity     Sector gross cost sensitivity multiplier.
-     * @return float Margin cost penalty bounded in [0.0, 0.25].
-     */
-    public static function calculatePpiCostDrag(
-        float $ppi,
-        float $targetInflation = MacroConstants::TARGET_INFLATION,
-        float $pricingPower = 0.50,
-        float $sensitivity = 0.50,
-    ): float {
-        $excessPpi = max(0.0, $ppi - $targetInflation);
-        $effectivePassThrough = 1.0 - min(1.0, max(0.0, $pricingPower));
-        return min(0.25, $excessPpi * $effectivePassThrough * $sensitivity);
-    }
-
-    /**
      * Calculates construction and building material volume shifts from residential housing starts (Tobin's q).
      *
      * Normalized as percentage deviation from neutral housing starts baseline (100.0).

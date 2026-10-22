@@ -512,7 +512,7 @@ class SystemicEventReporterTest extends TestCase
 
         return new SystemicEventReporter(
             new NarrativeEngine(),
-            new MarketEventPublisher($entityManager, $this->createStub(LoggerInterface::class), $redis),
+            new MarketEventPublisher($entityManager, $this->createStub(LoggerInterface::class)),
             new PriceChangeFeed($redis, $entityManager, 3600),
         );
     }

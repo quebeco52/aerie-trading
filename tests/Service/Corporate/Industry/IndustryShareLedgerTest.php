@@ -492,7 +492,6 @@ class IndustryShareLedgerTest extends TestCase
 
         $this->assertEqualsWithDelta(0.5, $description['revenue_share'], 1e-9);
         $this->assertNull($description['capacity_ratio']);
-        $this->assertEqualsWithDelta(0.5, $ledger->resolveRevenueShare($fresh, 20, 252), 1e-9);
     }
 
     /**

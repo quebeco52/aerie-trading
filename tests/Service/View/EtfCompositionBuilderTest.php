@@ -285,7 +285,6 @@ class EtfCompositionBuilderTest extends TestCase
 
         $daysPerTick = 365.0 / self::TICKS_PER_YEAR;
 
-        $this->assertSame($interval, $facts['lastReconstitutionTick']);
         $this->assertEqualsWithDelta(($interval - 1) * $daysPerTick, $facts['daysSinceReconstitution'], 1e-9);
         $this->assertEqualsWithDelta($daysPerTick, $facts['daysUntilReconstitution'], 1e-9);
     }
@@ -479,7 +478,6 @@ class EtfCompositionBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.85, $facts['accruedIncome'], 1e-9);
 
         // A trailing yield is the year of payments over the price, not the last one annualised.
-        $this->assertEqualsWithDelta(2.10, $facts['trailingDistribution'], 1e-9);
         $this->assertEqualsWithDelta((2.10 / 200.0) * 100.0, $facts['distributionYield'], 1e-9);
 
         // What following the index cost in spread, reported apart from the fee because it is a different
