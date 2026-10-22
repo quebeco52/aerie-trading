@@ -6,6 +6,8 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -73,7 +75,8 @@ class ShadowBankBusinessModelTest extends TestCase
     /**
      * The book opens priced as its two portfolios: mortgages at the 30-year plus their spread and direct loans at SOFR
      * plus theirs, on the funded book (equity + total debt - treasury with no ledger yet), and the excess cash earns
-     * the cash yield beside it.
+     * the cash yield beside it. The part matched to the fixed notes carries their coupon's gap to the coupon they would
+     * roll to.
      */
     public function testTheBookOpensPricedAsItsTwoPortfolios(): void
     {
@@ -83,9 +86,12 @@ class ShadowBankBusinessModelTest extends TestCase
         $bookYield = (0.60 * ($opening->yield30yEma + ShadowBankBusinessModel::MORTGAGE_PORTFOLIO_SPREAD))
             + (0.40 * ($opening->policyRateEma + ShadowBankBusinessModel::DIRECT_LENDING_PORTFOLIO_SPREAD));
         $excessCash = 27.5e9 - (55e9 * ShadowBankBusinessModel::TARGET_OPERATING_BUFFER);
+        $rolledCoupon = $opening->yield5yEma + DebtEngine::throughTheCycleCreditSpread($stock, $opening, $this->model->getLossGivenDefault());
+        $legacyIncome = 225e9 * 0.30 * (0.050 - $rolledCoupon);
 
+        $this->assertLessThan(0.0, $legacyIncome, 'fixture guard: the notes are cheaper than the market');
         $this->assertEqualsWithDelta(
-            ($book * $bookYield) + ($excessCash * $this->model->calculateCashYield($opening)),
+            ($book * $bookYield) + ($excessCash * $this->model->calculateCashYield($opening)) + $legacyIncome,
             $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility),
             1_000.0,
         );
@@ -93,7 +99,8 @@ class ShadowBankBusinessModelTest extends TestCase
 
     /**
      * Fees are struck once so that, at the opening macro, fees at the lore margin plus the book's interest less the
-     * wholesale funding cost the lender is charged and the steady-state credit provision earn its structural return.
+     * wholesale funding cost DebtEngine charges the lender and the steady-state credit provision earn its structural
+     * return.
      */
     public function testTheFranchiseEarnsItsStructuralReturnAtTheOpeningMacro(): void
     {
@@ -102,13 +109,42 @@ class ShadowBankBusinessModelTest extends TestCase
         $metrics = $this->model->getTargetMetrics($stock, $opening, $this->mathUtility);
         $tax = $opening->corporateTaxRate;
         $feeRevenue = $metrics['invested_capital'] * $metrics['baseline_roic'] / (0.50 * (1.0 - $tax));
-        $interestExpense = $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.050, $opening->policyRateEma + 0.019, 0.0, $opening->policyRateEma, 8.0, 55e9, 225e9, $opening)->interestExpense;
-        $this->assertEqualsWithDelta(225e9 * ((0.30 * 0.050) + (0.70 * ($opening->policyRateEma + $opening->interbankLiquiditySpreadEma + 0.019))), $interestExpense, 1.0, 'the floating repo resets to the interbank rate');
+        $charged = (new DebtEngine($this->mathUtility, CorporateMetrics::getInstance()))->calculateInterestExpense($stock, $opening);
+        $interestExpense = $charged->interestExpense;
+        $this->assertEqualsWithDelta(225e9 * ((0.30 * 0.050) + (0.70 * ($opening->floatingReferenceRate() + $charged->dynamicSpread))), $interestExpense, 1.0, 'the fixed notes at their coupon, the floating repo at the interbank rate');
         $provision = CreditRisk::calculateSteadyStateProvisionRate($this->model->getThroughTheCycleCreditLossRate($stock), $this->model->getCreditLossHorizonYears(), MacroConstants::TARGET_INFLATION + MacroConstants::TREND_REAL_GROWTH) * $metrics['invested_capital'];
 
         $netIncome = (($feeRevenue * 0.50) + $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility) - $interestExpense - $provision) * (1.0 - $tax);
 
         $this->assertEqualsWithDelta(0.29, $netIncome / 55e9, 1e-9);
+    }
+
+    /**
+     * Its notes roll from the legacy 5% to the coupon the market charges it, and the book matched to them runs off at
+     * the same pace, so at the opening macro the struck fees keep earning the structural return.
+     */
+    public function testTheFranchiseHoldsItsReturnAsTheLegacyNotesRoll(): void
+    {
+        $stock = $this->pool();
+        $opening = new MacroStateDTO();
+        $engine = new DebtEngine($this->mathUtility, CorporateMetrics::getInstance());
+        $roe = function () use ($stock, $opening, $engine): float {
+            $metrics = $this->model->getTargetMetrics($stock, $opening, $this->mathUtility);
+            $tax = $opening->corporateTaxRate;
+            $feeRevenue = $metrics['invested_capital'] * $metrics['baseline_roic'] / (0.50 * (1.0 - $tax));
+            $provision = CreditRisk::calculateSteadyStateProvisionRate($this->model->getThroughTheCycleCreditLossRate($stock), $this->model->getCreditLossHorizonYears(), MacroConstants::TARGET_INFLATION + MacroConstants::TREND_REAL_GROWTH) * $metrics['invested_capital'];
+
+            return (($feeRevenue * 0.50) + $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility) - $engine->calculateInterestExpense($stock, $opening)->interestExpense - $provision) * (1.0 - $tax) / 55e9;
+        };
+
+        $this->assertEqualsWithDelta(0.29, $roe(), 1e-9);
+        for ($quarter = 1; $quarter <= 20; $quarter++) {
+            $stock->setEarningsMomentumZ($this->model->computeActualFinancials($stock, 1e9, 0.50, 2e8, 0.0, $opening, $this->mathUtility)->streamZ);
+            $engine->rollMaturities($stock, $engine->analyzeDebtHealth($stock, $opening), 0.0);
+        }
+
+        $this->assertGreaterThan(0.050 + 0.005, (float) $stock->getHistoricalFixedRate(), 'the notes have rolled toward the dearer market coupon');
+        $this->assertEqualsWithDelta(0.29, $roe(), 1e-6);
     }
 
     /**
@@ -128,8 +164,9 @@ class ShadowBankBusinessModelTest extends TestCase
 
         $stock->setEarningsMomentumZ($this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $opening, $mathMock)->streamZ);
         $carried = $stock->getEarningsMomentumZ();
-        $before = $this->model->resolveInterestYield($stock, $opening);
         $base = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $opening, $mathMock);
+        $stock->setEarningsMomentumZ($base->streamZ);
+        $before = $this->model->resolveInterestYield($stock, $opening);
         $stock->setEarningsMomentumZ($carried);
         $after = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $raised, $mathMock);
         $stock->setEarningsMomentumZ($after->streamZ);
@@ -150,6 +187,7 @@ class ShadowBankBusinessModelTest extends TestCase
     private function pool(): Stock
     {
         $stock = (new Stock())->setTicker('POOL');
+        $stock->setIndustry('Mortgage Finance');
         $stock->setTotalEquity('55000000000');
         $stock->setWholesaleDebt('225000000000');
         $stock->setCustomerDeposits('0');
@@ -186,6 +224,12 @@ class ShadowBankBusinessModelTest extends TestCase
         $partlyOnTheRevolver->setWholesaleDebt('250000000000.0');
         $partlyOnTheRevolver->setRevolverDrawn('150000000000.0');
         $partlyOnTheRevolver->setCorporateTreasury('40000000000.0');
+
+        // Notes at the coupon they would roll to, so neither book carries legacy income matched to its fixed notes.
+        $opening = new MacroStateDTO();
+        foreach ([$allTermNotes, $partlyOnTheRevolver] as $lender) {
+            $lender->setHistoricalFixedRate((string) ($opening->yield5yEma + DebtEngine::throughTheCycleCreditSpread($lender, $opening, $this->model->getLossGivenDefault())));
+        }
 
         $this->assertSame(
             (float) $allTermNotes->getTotalDebt(),

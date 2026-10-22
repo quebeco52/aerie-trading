@@ -374,6 +374,7 @@ class CommercialBankBusinessModelTest extends TestCase
     /**
      * The franchise is priced once, at the opening macro, so the revenue its structural return requires is exactly
      * what its book and fees earn there: the opening board opens where it did, and the rate cycle moves it afterwards.
+     * The legacy income matched to the fixed notes runs off at the share of them that rolls each quarter.
      */
     public function testTheFranchiseReproducesTheOpeningRevenue(): void
     {
@@ -382,18 +383,25 @@ class CommercialBankBusinessModelTest extends TestCase
             {
                 return $this->resolveCalibrationYield($stock, new MacroStateDTO());
             }
+
+            public function legacyIncome(Stock $stock): float
+            {
+                return $this->resolveMatchedLegacyIncome($stock, new MacroStateDTO());
+            }
         };
         $stock = $this->creditTestBank('LAKE');
         $stock->setBaselineRoe('0.15');
         $stock->setOperatingMargin('0.40');
         $opening = new MacroStateDTO();
+        $grossYield = static fn(): float => $model->getTargetMetrics($stock, $opening, new MathUtility())['baseline_roic'] / (0.40 * (1.0 - $opening->corporateTaxRate));
 
-        $metrics = $model->getTargetMetrics($stock, $opening, $this->mathUtility);
-        $grossYield = $metrics['baseline_roic'] / (0.40 * (1.0 - $opening->corporateTaxRate));
-
-        $this->assertEqualsWithDelta($model->calibrationYield($stock), $grossYield, 1e-9);
+        $openingYield = $grossYield();
+        $legacyIncome = $model->legacyIncome($stock);
+        $this->assertEqualsWithDelta($model->calibrationYield($stock), $openingYield, 1e-9);
+        $this->assertLessThan(0.0, $legacyIncome, 'fixture guard: its notes are cheaper than the market');
         $this->carryBook($model, $stock, $opening, 4);
-        $this->assertEqualsWithDelta($grossYield, $model->getTargetMetrics($stock, $opening, $this->mathUtility)['baseline_roic'] / (0.40 * (1.0 - $opening->corporateTaxRate)), 1e-9, 'a book at its steady state stays there');
+        $runOff = $legacyIncome * ((1.0 - FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER) ** 4 - 1.0) / $model->resolveEarningAssets($stock);
+        $this->assertEqualsWithDelta($openingYield + $runOff, $grossYield(), 1e-9, 'a book at its steady state stays there but for the legacy run-off');
     }
 
     /**

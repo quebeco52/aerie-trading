@@ -244,7 +244,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     /**
      * The card book's calibration yield: the target EBIT plus the book's operating cost over the book, under the APR
-     * ceiling the funding cost sets, at a given macro state.
+     * ceiling the funding cost sets, at a given macro state, its funding charged as DebtEngine charges it.
      */
     protected function resolveCalibrationYield(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
@@ -258,18 +258,13 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $baselineRoe = $this->resolveCalibrationRoe($stock, $macroState);
 
         $taxRate = $macroState->corporateTaxRate;
-        $policyRate = $macroState->policyRateEma;
-        $yield5y = $macroState->yield5yEma;
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
 
         // Credit services require highly competitive APYs on their high-yield savings accounts
-        $depositRate = $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
-        // The floating wholesale at the interbank rate, as calculateInterestExpenseAndWholesaleRate() charges it.
-        $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        $depositRate = $this->resolveDepositRate($macroState->policyRateEma, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
+        $blendedWholesaleRate = $this->resolveChargedWholesaleRate($stock, $macroState);
 
         // The funding the lender carries: its leverage limit binds on the live balance sheet, not in the pricing.
         $optimalDebt = $totalDebt;
@@ -311,7 +306,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     /**
      * A card APR is a margin over the prime rate, which follows the policy rate and not the interbank market: an
-     * interbank freeze raises the issuer's floating wholesale funding cost (calculateInterestExpenseAndWholesaleRate())
+     * interbank freeze raises the issuer's floating wholesale funding cost (DebtEngine's floating rate)
      * without lifting what its book earns.
      *
      * @return array{floating: float, fixed: float, residential: float, securities: float}

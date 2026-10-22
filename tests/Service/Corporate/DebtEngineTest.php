@@ -16,6 +16,7 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\CreditRisk;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -935,6 +936,36 @@ class DebtEngineTest extends TestCase
         }
 
         $this->assertGreaterThan(5, count($seen), 'the sweep must actually cover the sector models');
+    }
+
+    /**
+     * Every firm's floating debt resets to the interbank rate, so an interbank freeze with nothing else moved raises an
+     * operating firm's interest by its floating term debt and its drawn revolver times the premium, and leaves its
+     * fixed notes and the coupon it would refinance at where they were.
+     */
+    public function testAFreezeRaisesAFirmsFloatingInterestByItsFloatingDebtTimesThePremium(): void
+    {
+        $premium = 0.0102;
+        $calm = new MacroStateDTO();
+        $freeze = new MacroStateDTO(interbankLiquiditySpread: MacroConstants::INTERBANK_BASELINE_SPREAD + $premium, interbankLiquiditySpreadEma: MacroConstants::INTERBANK_BASELINE_SPREAD + $premium);
+        $firm = $this->buildMaturityIssuer('BBB', 0.02);
+        $firm->setFloatingDebtRatio('0.40');
+        $firm->setRevolverCommitment('5000000000.00');
+        $firm->setRevolverDrawn('1000000000.00');
+
+        $atCalm = $this->engine->calculateInterestExpense($firm, $calm);
+        $atFreeze = $this->engine->calculateInterestExpense($firm, $freeze);
+
+        $this->assertFalse(\App\Data\Company\Sectors::strategyFor($firm->getIndustry())->isFinancial(), 'fixture guard: an operating firm');
+        $this->assertEqualsWithDelta(((10e9 * 0.40) + 1e9) * $premium, $atFreeze->interestExpense - $atCalm->interestExpense, 1.0);
+        $this->assertEqualsWithDelta($atCalm->currentMarketRate, $atFreeze->currentMarketRate, 1e-15, 'a fixed coupon is priced off the curve, not the interbank rate');
+        $this->assertEqualsWithDelta(
+            (10e9 * ((0.60 * (float) $firm->getHistoricalFixedRate()) + (0.40 * ($calm->floatingReferenceRate() + $atCalm->dynamicSpread))))
+                + (1e9 * ($calm->floatingReferenceRate() + $atCalm->dynamicSpread + DebtEngine::REVOLVER_DRAW_SPREAD_PENALTY)),
+            $atCalm->interestExpense,
+            1.0,
+            'the floating term debt and the revolver pay the reference rate plus the issuer spread',
+        );
     }
 
     /**
@@ -1869,7 +1900,7 @@ class DebtEngineTest extends TestCase
             new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.04, yield5yEma: 0.045, macroCreditSpreadEma: $ema, macroCreditSpreadTrend: $trend, corporateTaxRate: 0.21),
         );
 
-        $multiple = static fn(float $seeded): float => CreditRisk::calculateIssuerSpreadMultiple($seeded, \App\Service\Math\MacroConstants::BASE_CREDIT_SPREAD, \App\Service\Math\MacroConstants::BASE_CREDIT_SPREAD * \App\Service\Math\MacroConstants::HY_BASE_SPREAD_MULTIPLIER);
+        $multiple = static fn(float $seeded): float => CreditRisk::calculateIssuerSpreadMultiple($seeded, MacroConstants::BASE_CREDIT_SPREAD, MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER);
         $bbb = CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'] * $multiple(0.0163);
         $this->assertEqualsWithDelta($bbb * 0.019, $metrics(0.019, 0.015)->dynamicSpread, 1e-12, 'A firm seeded at the BBB spread trades at the BBB multiple of the index.');
         $this->assertEqualsWithDelta($bbb * 0.012, $metrics(0.012, 0.015)->dynamicSpread, 1e-12, 'A tight market lowers the cost of new debt.');

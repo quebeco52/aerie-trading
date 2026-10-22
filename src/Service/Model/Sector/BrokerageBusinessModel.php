@@ -265,8 +265,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Fallback blended wholesale funding rate: floating/fixed debt mix priced off the interbank rate (as
-     * calculateInterestExpenseAndWholesaleRate() charges it) and the 5-year yield curve, plus the firm's static
+     * Fallback blended wholesale funding rate: floating/fixed debt mix priced off the interbank rate (as DebtEngine
+     * charges it) and the 5-year yield curve, plus the firm's static
      * structural credit spread. Used only when no realized wholesale rate from DebtEngine is available (e.g. market
      * seed/reset bootstrapping, before any live debt calc has run).
      *
@@ -279,14 +279,11 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      */
     protected function calculateBlendedWholesaleRate(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $policyRate = $macroState->policyRateEma;
         $yield5y = $macroState->yield5yEma;
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        $floatingRate = $policyRate + $macroState->interbankLiquiditySpreadEma;
-
-        return ($floatingRatio * $floatingRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        return ($floatingRatio * $macroState->floatingReferenceRate()) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
     }
 
     public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
@@ -334,10 +331,9 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        // Brokerages fund operations and margin lending purely via wholesale debt markets. The floating part resets to
-        // the interbank rate, so it pays the interbank spread over the policy rate, and a freeze raises it.
-        $floatingWholesaleRate = $floatingInterestRate + ($macroState->interbankLiquiditySpreadEma ?? MacroConstants::INTERBANK_BASELINE_SPREAD);
-        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingWholesaleRate);
+        // Brokerages fund operations and margin lending purely via wholesale debt markets; the floating part resets to
+        // the interbank rate (DebtEngine's floating rate).
+        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
 
         return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);

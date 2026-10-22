@@ -10,6 +10,7 @@ use App\DTO\InterestExpenseDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\DebtEngine;
 
 use App\Service\Event\ShockEvent;
 use App\Service\Math\CreditRisk;
@@ -296,6 +297,11 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const STATE_SECURITIES_REPRICING_YEARS = 'state:securities_repricing_years';
     /** Persisted repricing maturity of the residential book the franchise was priced on. */
     public const STATE_RESIDENTIAL_REPRICING_YEARS = 'state:residential_repricing_years';
+    /**
+     * Persisted interest a year the book matched to the opening fixed wholesale earns over a book priced at market,
+     * running off as those notes roll (resolveMatchedLegacyIncome()).
+     */
+    public const STATE_MATCHED_LEGACY_INCOME   = 'state:matched_legacy_income';
 
     // --- Operating Cost Base ---
     /**
@@ -515,9 +521,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * The gross yield on earning assets that earns this lender its structural return at a given macro state: the
-     * target EBIT less the treasury income its cash earns, plus the operating cost of the book, over the book. Used
-     * once, at the opening macro, to strike the franchise's loan spread and fee yield (resolveFranchisePricing()).
+     * The gross yield on earning assets that earns this lender its structural return at a given macro state, its
+     * funding charged as DebtEngine charges it: the target EBIT less the treasury income its cash earns, plus the
+     * operating cost of the book, over the book. Used once, at the opening macro, to strike the franchise's loan spread
+     * and fee yield (resolveFranchisePricing()).
      */
     protected function resolveCalibrationYield(Stock $stock, MacroStateDTO $macroState): float
     {
@@ -528,15 +535,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $earningAssets = $this->resolveEarningAssets($stock);
         $targetRoe = $this->resolveCalibrationRoe($stock, $macroState);
 
-        $policyRate = $macroState->policyRateEma;
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $taxRate = $macroState->corporateTaxRate;
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
-        $depositRate = $this->resolveDepositRate($policyRate, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
-        // The floating wholesale at the interbank rate, as calculateInterestExpenseAndWholesaleRate() charges it.
-        $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $macroState->yield5yEma) + (float) $stock->getCreditSpread();
+        $depositRate = $this->resolveDepositRate($macroState->policyRateEma, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
+        $blendedWholesaleRate = $this->resolveChargedWholesaleRate($stock, $macroState);
 
         // The funding the lender carries: its leverage limit binds on the live balance sheet, and a calibration
         // that counted less funding than it pays for struck a spread that left it short of its return.
@@ -576,9 +580,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      * what is left of the revenue its structural return requires at the opening macro. After that the rate cycle
      * reaches the book through repricing alone. The pricing is struck on the book's repricing maturities and carried
      * with them (resolveBookTenors()); pricing carried without them was struck on the commercial bank's, and is struck
-     * again once where this lender's book reprices otherwise.
+     * again once where this lender's book reprices otherwise. The legacy income the book matched to the opening fixed
+     * wholesale earns is struck with it and runs off as those notes roll (advanceBookYields()).
      *
-     * @return array{floating_share: float, loan_spread: float, fee_yield: float}
+     * @return array{floating_share: float, loan_spread: float, fee_yield: float, legacy_income: float}
      */
     protected function resolveFranchisePricing(Stock $stock): array
     {
@@ -591,6 +596,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
                 'floating_share' => (float) $momentum[self::STATE_FLOATING_LOAN_SHARE],
                 'loan_spread' => (float) $momentum[self::STATE_LOAN_SPREAD],
                 'fee_yield' => (float) $momentum[self::STATE_FEE_YIELD],
+                'legacy_income' => (float) ($momentum[self::STATE_MATCHED_LEGACY_INCOME] ?? 0.0),
             ];
         }
 
@@ -598,22 +604,51 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * The franchise's pricing struck at the opening macro on this lender's own book.
+     * The franchise's pricing struck at the opening macro on this lender's own book. The revenue its return requires is
+     * struck on the coupon its fixed wholesale carries; the part of it that coupon's distance from the market coupon
+     * accounts for is the matched legacy income, and the loan spread takes the rest, so it holds once the notes have
+     * rolled.
      *
-     * @return array{floating_share: float, loan_spread: float, fee_yield: float}
+     * @return array{floating_share: float, loan_spread: float, fee_yield: float, legacy_income: float}
      */
     protected function strikeFranchisePricing(Stock $stock): array
     {
         $opening = new MacroStateDTO();
         $floatingShare = $this->resolveMatchedFloatingShare($stock, $opening);
         $feeYield = $this->resolveNonInterestIncomeToEarningAssets($stock);
-        $interestYield = $this->resolveCalibrationYield($stock, $opening) - $feeYield;
+        $legacyIncome = $this->resolveMatchedLegacyIncome($stock, $opening);
+        $interestYield = $this->resolveCalibrationYield($stock, $opening) - $feeYield - ($legacyIncome / max(1.0, $this->resolveEarningAssets($stock)));
 
         return [
             'floating_share' => $floatingShare,
             'loan_spread' => ($interestYield - $this->resolveMarketInterestYield($stock, $opening, $floatingShare)) / max(1e-9, $this->getLoanShareOfEarningAssets()),
             'fee_yield' => $feeYield,
+            'legacy_income' => $legacyIncome,
         ];
+    }
+
+    /**
+     * The rate DebtEngine charges this lender's wholesale book at a macro state: the floating part at the reference
+     * rate plus the lender's own spread through the cycle, the fixed part at the coupon the notes carry, or, rolled, at
+     * the coupon they would refinance at (the five-year plus that spread).
+     */
+    protected function resolveChargedWholesaleRate(Stock $stock, MacroStateDTO $macroState, bool $rolled = false): float
+    {
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+        $creditSpread = DebtEngine::throughTheCycleCreditSpread($stock, $macroState, $this->getLossGivenDefault());
+        $fixedRate = $rolled ? $macroState->yield5yEma + $creditSpread : (float) $stock->getHistoricalFixedRate();
+
+        return ($floatingRatio * ($macroState->floatingReferenceRate() + $creditSpread)) + ((1.0 - $floatingRatio) * $fixedRate);
+    }
+
+    /**
+     * Interest a year the book matched to the fixed wholesale earns over a book priced at the macro state's rates: a
+     * book and the notes that funded it were struck at the same past rates, so it carries the notes' coupon gap to the
+     * coupon they would refinance at, and runs off with them. Negative where the notes are cheaper than the market.
+     */
+    protected function resolveMatchedLegacyIncome(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return (float) $stock->getWholesaleDebt() * ($this->resolveChargedWholesaleRate($stock, $macroState) - $this->resolveChargedWholesaleRate($stock, $macroState, true));
     }
 
     /**
@@ -687,8 +722,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * Annual interest yield on earning assets as the book stands: residential loans, the floating and fixed parts of
-     * the other loans and the securities, each at the yield it last repriced to, less the return a saturated market
-     * takes off a lender grown past its optimal scale (Penrose).
+     * the other loans and the securities, each at the yield it last repriced to, and the matched legacy income not yet
+     * run off, less the return a saturated market takes off a lender grown past its optimal scale (Penrose).
      */
     public function resolveInterestYield(Stock $stock, MacroStateDTO $macroState): float
     {
@@ -706,6 +741,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         return ($loanShare * $loanYield)
             + ((1.0 - $loanShare) * $book(self::STATE_BOOK_YIELD_SECURITIES, $rates['securities']))
+            + ($pricing['legacy_income'] / max(1.0, $this->resolveEarningAssets($stock)))
             - $this->resolveSaturationYield($stock, $macroState);
     }
 
@@ -722,8 +758,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * The market rate each part of the book reprices at: a floating loan at the policy rate plus the interbank spread
-     * its index carries, a fixed loan, a mortgage or a security at the curve's rate for its repricing maturity.
+     * The market rate each part of the book reprices at: a floating loan at the floating reference rate, the interbank
+     * rate every firm's floating debt resets to, a fixed loan, a mortgage or a security at the curve's rate for its
+     * repricing maturity.
      *
      * @return array{floating: float, fixed: float, residential: float, securities: float}
      */
@@ -732,7 +769,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $tenors = $this->resolveBookTenors($stock);
 
         return [
-            'floating' => $macroState->policyRateEma + $macroState->interbankLiquiditySpreadEma,
+            'floating' => $macroState->floatingReferenceRate(),
             'fixed' => $this->resolveCurveRate($macroState, $this->resolveFixedLoanRepricingYears()),
             'residential' => $this->resolveCurveRate($macroState, $tenors['residential']),
             'securities' => $this->resolveCurveRate($macroState, $tenors['securities']),
@@ -836,6 +873,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $streams->registerState(self::STATE_FLOATING_LOAN_SHARE, $pricing['floating_share']);
         $streams->registerState(self::STATE_LOAN_SPREAD, $pricing['loan_spread']);
         $streams->registerState(self::STATE_FEE_YIELD, $pricing['fee_yield']);
+        // The matched legacy runs off at the share of the wholesale book that rolls each quarter.
+        $streams->registerState(self::STATE_MATCHED_LEGACY_INCOME, $pricing['legacy_income'] * (1.0 - $this->getDebtMaturityRolloverRate()));
         $streams->registerState(self::STATE_SECURITIES_REPRICING_YEARS, $tenors['securities']);
         $streams->registerState(self::STATE_RESIDENTIAL_REPRICING_YEARS, $tenors['residential']);
     }
@@ -1294,10 +1333,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
-        // The floating wholesale resets to the interbank rate, the index the floating loans reprice at, so it pays the
-        // interbank spread on top of the policy rate and the lender's own credit spread, and a freeze raises it.
-        $floatingWholesaleRate = $floatingInterestRate + ($macroState->interbankLiquiditySpreadEma ?? MacroConstants::INTERBANK_BASELINE_SPREAD);
-        $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingWholesaleRate);
+        // The floating wholesale resets to the interbank rate (DebtEngine's floating rate), the index the floating
+        // loans reprice at, so a freeze raises it.
+        $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
 
         // Deposits are cheap, but the bank must pay an APY to prevent capital flight; it pays the rate its

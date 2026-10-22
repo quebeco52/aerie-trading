@@ -192,6 +192,29 @@ class MerchantHouseBusinessModelTest extends TestCase
     }
 
     /**
+     * The cargo's trade credit resets over the floating reference rate, so an interbank freeze alone charges the
+     * premium on the quarter of turnover it carries, on the merchant desk's share of revenue, and moves no revenue.
+     */
+    public function testAnInterbankFreezeRaisesTheCargoFundingCost(): void
+    {
+        $premium = 0.0102;
+        $freeze = new MacroStateDTO(
+            outputGapEma: 0.0,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
+            policyRateEma: self::NEUTRAL_POLICY_RATE,
+            interbankLiquiditySpreadEma: MacroConstants::INTERBANK_BASELINE_SPREAD + $premium,
+        );
+
+        $calm = $this->model->computeActualFinancials($this->ravn(), 100_000_000.0, 0.80, 10_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath());
+        $frozen = $this->model->computeActualFinancials($this->ravn(), 100_000_000.0, 0.80, 10_000_000.0, 0.0, $freeze, $this->deterministicMath());
+        $merchantShare = $calm->streamRevenue['merchant_trading'] / array_sum($calm->streamRevenue);
+
+        $this->assertEqualsWithDelta($calm->actualRevenue, $frozen->actualRevenue, 1e-6);
+        $this->assertEqualsWithDelta($premium * MerchantHouseBusinessModel::MERCHANT_INVENTORY_HOLDING_YEARS * $merchantShare, $frozen->clampedMargin - $calm->clampedMargin, 1e-9);
+    }
+
+    /**
      * The trade-credit ledger is the parent's contrarian float book, not a variant of it, so it must still
      * earn the front rate. This is the inherited half of the sub-model and is worth pinning: an override
      * that stopped calling it would be silent.

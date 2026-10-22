@@ -68,10 +68,10 @@ class PrivateEquityBusinessModelTest extends TestCase
         $normalPhysics = $this->model->getMacroPhysics($stock, $normalMacro);
         $this->assertEqualsWithDelta(1.0, $normalPhysics['pricing_power_multiplier'], 0.001);
 
-        // High cost of debt macro: policy 100 bps above the freeze threshold, spread 100 bps above baseline -> CoD +200
-        // bps over baseline
+        // High cost of debt macro: the floating reference rate 100 bps above the freeze threshold, spread 100 bps above
+        // baseline -> CoD +200 bps over baseline
         $highCoDMacro = MacroStateDTO::fromArray([
-            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD + 0.010,
+            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD - MacroConstants::INTERBANK_BASELINE_SPREAD + 0.010,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.010,
         ]);
         $distressedPhysics = $this->model->getMacroPhysics($stock, $highCoDMacro);
@@ -94,15 +94,34 @@ class PrivateEquityBusinessModelTest extends TestCase
         ]);
         $this->assertEqualsWithDelta(1.0, $this->model->getMacroPhysics($stock, $igOnlyMacro)['pricing_power_multiplier'], 0.001);
 
-        // The same 150 bps on the HY tranche, above a policy rate already at the freeze threshold, compresses
+        // The same 150 bps on the HY tranche, above a reference rate already at the freeze threshold, compresses
         // multiples.
         $hyMacro = MacroStateDTO::fromArray([
-            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD,
+            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD - MacroConstants::INTERBANK_BASELINE_SPREAD,
             'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
             'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.015,
         ]);
         $expectedCarryMultiple = 1.0 - (0.015 * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY);
         $this->assertEqualsWithDelta(0.35 + (0.65 * $expectedCarryMultiple), $this->model->getMacroPhysics($stock, $hyMacro)['pricing_power_multiplier'], 0.001);
+    }
+
+    /**
+     * Buyout loans reset over the floating reference rate, so an interbank freeze with the policy rate and the HY
+     * tranche where they were raises their cost by the premium and compresses multiples by it.
+     */
+    public function testAnInterbankFreezeRaisesTheCostOfBuyoutDebt(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('PE_CORP');
+        $atThreshold = [
+            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD - MacroConstants::INTERBANK_BASELINE_SPREAD,
+            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
+        ];
+        $premium = 0.0102;
+
+        $this->assertEqualsWithDelta(1.0, $this->model->getMacroPhysics($stock, MacroStateDTO::fromArray($atThreshold))['pricing_power_multiplier'], 1e-9);
+        $freeze = MacroStateDTO::fromArray($atThreshold + ['interbank_liquidity_spread_ema' => MacroConstants::INTERBANK_BASELINE_SPREAD + $premium]);
+        $this->assertEqualsWithDelta(0.35 + (0.65 * (1.0 - ($premium * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY))), $this->model->getMacroPhysics($stock, $freeze)['pricing_power_multiplier'], 1e-9);
     }
 
     public function testCalculateSectorPhysicsCarriedInterestHurdleMiss(): void

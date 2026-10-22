@@ -225,7 +225,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
 
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        // The floating leg at the interbank rate DebtEngine charges it at.
+        $blendedWholesaleRate = ($floatingRatio * $macroState->floatingReferenceRate()) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
 

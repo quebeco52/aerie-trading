@@ -235,7 +235,8 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
 
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        // The floating leg at the interbank rate DebtEngine charges it at.
+        $blendedWholesaleRate = ($floatingRatio * $macroState->floatingReferenceRate()) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         // --- THE CLEAR BALANCE SHEET MATH ---
         // Asset managers scale EBIT from their active operating equity (AUM/Platform capacity).

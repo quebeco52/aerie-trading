@@ -75,8 +75,11 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
      * buyout target.
      */
     public const SPONSOR_CREDIT_SPREAD_BASELINE = MacroConstants::BASE_CREDIT_SPREAD;
-    /** Baseline policy rate (~4.5%) threshold above which LBO financing becomes distressed. */
-    public const LBO_RATE_FREEZE_THRESHOLD  = 0.045;
+    /**
+     * Floating reference rate (~4.65%: a 4.5% policy rate plus the calm interbank spread) above which LBO financing
+     * becomes distressed; buyout loans reset over it.
+     */
+    public const LBO_RATE_FREEZE_THRESHOLD  = 0.045 + MacroConstants::INTERBANK_BASELINE_SPREAD;
     /**
      * Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. Rescaled from 7.50
      * for high-yield spread moves (~3.3x IG).
@@ -203,7 +206,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
 
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        // The floating leg at the interbank rate DebtEngine charges it at.
+        $blendedWholesaleRate = ($floatingRatio * $macroState->floatingReferenceRate()) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         $baseEquityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
 
@@ -256,8 +260,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         ]);
 
         // Credit cycle pricing power: LBO multiples compress when the Cost of Debt spikes. Buyout debt is
-        // speculative grade, so the spread that prices it is the high-yield tranche.
-        $lboCostOfDebt = $macroState->policyRateEma + $macroState->highYieldCreditSpreadEma;
+        // speculative-grade floating loans, so it pays the high-yield tranche over the floating reference rate.
+        $lboCostOfDebt = $macroState->floatingReferenceRate() + $macroState->highYieldCreditSpreadEma;
         $baselineCostOfDebt = self::LBO_RATE_FREEZE_THRESHOLD + self::LBO_CREDIT_SPREAD_BASELINE;
         $debtCostDelta = max(0.0, $lboCostOfDebt - $baselineCostOfDebt);
         // Bank lending standards ration buyout debt when tight and lend more against the same cash flow when loose.
@@ -366,11 +370,12 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $outputGap = $macroState->outputGapEma;
         $dealFlowMultiplier = $this->resolveDealFlowMultiplier($macroState);
 
-        // 3. Cost of Debt LBO Elasticity (Multiple Compression): buyout debt is priced off the HY tranche.
+        // 3. Cost of Debt LBO Elasticity (Multiple Compression): buyout debt pays the HY tranche over the floating
+        // reference rate.
         $creditSpread = $macroState->highYieldCreditSpreadEma;
-        $policyRate   = $macroState->policyRateEma;
+        $referenceRate = $macroState->floatingReferenceRate();
 
-        $lboCostOfDebt = $policyRate + $creditSpread;
+        $lboCostOfDebt = $referenceRate + $creditSpread;
         $baselineCostOfDebt = self::LBO_RATE_FREEZE_THRESHOLD + self::LBO_CREDIT_SPREAD_BASELINE;
         $debtCostDelta = max(0.0, $lboCostOfDebt - $baselineCostOfDebt);
         $sloosLboDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_LBO_GATING_SCALAR;
@@ -424,9 +429,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // --- 7. Cost & Margin Physics --- Rescue Capital Drag: High policy rates choke highly levered portfolio
+        // --- 7. Cost & Margin Physics --- Rescue Capital Drag: a high floating rate chokes highly levered portfolio
         // companies, requiring costly capital injections.
-        $rescueCapitalDrag = max(0.0, ($policyRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::RESCUE_CAPITAL_COST_SCALAR) * $carryWeight;
+        $rescueCapitalDrag = max(0.0, ($referenceRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::RESCUE_CAPITAL_COST_SCALAR) * $carryWeight;
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
 
@@ -565,6 +570,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return [
             'deal_activity_index_ema',
             'high_yield_credit_spread_ema',
+            'interbank_liquidity_spread_ema',
             'output_gap_ema',
             'policy_rate_ema',
             'sloos_tightening_index_ema',

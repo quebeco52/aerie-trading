@@ -280,8 +280,8 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
      *     boom while its profits rise. Volume is deliberately excluded: shipping more tonnage scales revenue
      *     and cost of goods together, which leaves the ratio untouched.
      *  2. Dislocation rent (Kaldor-Working convenience yield plus corridor congestion).
-     *  3. Funding. Cargo carried on short wholesale credit for about a quarter, charged at the policy rate
-     *     plus the credit spread above where they sit at trend.
+     *  3. Funding. Cargo carried on short trade credit for about a quarter, charged at the floating reference
+     *     rate plus the credit spread above where they sit at trend.
      */
     private function resolveMerchantCostShift(
         MacroStateDTO $macroState,
@@ -297,8 +297,8 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         $dislocationRent = ($convenienceYield * self::MERCHANT_BACKWARDATION_SCALAR)
             + (($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE) * self::MERCHANT_DISRUPTION_SCALAR);
 
-        $fundingGap = ($macroState->policyRateEma + $macroState->macroCreditSpreadEma)
-            - ($macroState->perceivedNeutralRate + $macroState->macroCreditSpreadTrend);
+        $fundingGap = ($macroState->floatingReferenceRate() + $macroState->macroCreditSpreadEma)
+            - ($macroState->perceivedNeutralRate + MacroConstants::INTERBANK_BASELINE_SPREAD + $macroState->macroCreditSpreadTrend);
         $carryCost = $fundingGap * self::MERCHANT_INVENTORY_HOLDING_YEARS;
 
         $shift = $spreadDilution + $carryCost - $dislocationRent;
@@ -325,6 +325,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             'foreign_output_gap_ema',
             'import_price_level',
             'industrial_metals_index_ema',
+            'interbank_liquidity_spread_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
             'manufacturing_pmi_ema',

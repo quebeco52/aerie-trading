@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Math;
 
+use App\DTO\MacroStateDTO;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use PHPUnit\Framework\TestCase;
@@ -15,6 +16,24 @@ use PHPUnit\Framework\TestCase;
  */
 class FixedIncomeTest extends TestCase
 {
+    // --- Floating Reference Rate ---
+
+    /**
+     * Floating debt resets to the interbank rate: the smoothed policy rate plus the smoothed interbank spread, read off
+     * the macro state's EMAs and not their spot values. At the opening macro that is the policy rate plus the
+     * baseline spread.
+     */
+    public function testTheFloatingReferenceRateIsThePolicyRatePlusTheInterbankSpread(): void
+    {
+        $this->assertEqualsWithDelta(0.0417, FixedIncome::floatingReferenceRate(0.04, 0.0017), 1e-15);
+
+        $state = new MacroStateDTO(policyRate: 0.09, policyRateEma: 0.03, interbankLiquiditySpread: 0.05, interbankLiquiditySpreadEma: 0.0117);
+        $this->assertEqualsWithDelta(0.0417, $state->floatingReferenceRate(), 1e-15);
+
+        $opening = new MacroStateDTO();
+        $this->assertEqualsWithDelta($opening->policyRateEma + MacroConstants::INTERBANK_BASELINE_SPREAD, $opening->floatingReferenceRate(), 1e-15);
+    }
+
     // --- Present Value ---
 
     public function testPresentValueDiscountsAtTheCurveRateForEachFlowsOwnTenor(): void

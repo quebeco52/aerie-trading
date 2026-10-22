@@ -930,6 +930,15 @@ readonly class MacroStateDTO
         return FixedIncome::mortgageRate($this->policyRateEma);
     }
 
+    /**
+     * The rate floating debt resets to, on the smoothed policy rate and interbank spread
+     * (FixedIncome::floatingReferenceRate()).
+     */
+    public function floatingReferenceRate(): float
+    {
+        return FixedIncome::floatingReferenceRate($this->policyRateEma, $this->interbankLiquiditySpreadEma);
+    }
+
     /** The yield on cash and money-market paper at the smoothed policy rate (FixedIncome::moneyMarketYield()). */
     public function moneyMarketYield(): float
     {

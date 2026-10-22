@@ -268,8 +268,8 @@ class DebtEngine
         // (rollMaturities()), not on principal repaid in cash or left unpaid.
         $blendedFixedRate = (float) $stock->getHistoricalFixedRate();
 
-        // A lender's floating wholesale resets to the interbank rate: its own charge adds the interbank spread to this.
-        $floatingInterestRate = $policyRate + $dynamicSpread;
+        // Floating debt, the revolver included, resets to the interbank rate plus the issuer's own spread.
+        $floatingInterestRate = $macroState->floatingReferenceRate() + $dynamicSpread;
 
         // Customer Deposits & Leverage Physics
         // The strategies are handed the FUNDED book only — term debt and deposits — because the revolver is
@@ -331,6 +331,40 @@ class DebtEngine
      */
     public function resolveCreditSpread(Stock $stock, MacroStateDTO $macroState, ?string $rating = null, bool $throughTheCycle = false): float
     {
+        $lossGivenDefault = \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
+        // Read off inputs fixed at seeding, so it is worked out once per issuer rather than on every tick.
+        $seededSpread = (float) $stock->getCreditSpread();
+        $issuerMultiple = $this->issuerMultiples["{$seededSpread}:{$lossGivenDefault}"] ??= self::issuerSpreadMultiple($seededSpread, $lossGivenDefault);
+
+        return self::priceIssuerSpread($stock, $macroState, $rating ?? $stock->getCreditRating(), $throughTheCycle, $lossGivenDefault, $issuerMultiple);
+    }
+
+    /**
+     * The spread resolveCreditSpread() charges the firm at its rating, through the cycle, for a reader that strikes on
+     * the funding the engine charges: a lender pricing its franchise.
+     *
+     * @param float $lossGivenDefault The issuer's loss given default, its business model's.
+     */
+    public static function throughTheCycleCreditSpread(Stock $stock, MacroStateDTO $macroState, float $lossGivenDefault): float
+    {
+        return self::priceIssuerSpread($stock, $macroState, $stock->getCreditRating(), true, $lossGivenDefault, self::issuerSpreadMultiple((float) $stock->getCreditSpread(), $lossGivenDefault));
+    }
+
+    /** The issuer's own multiple of its rating class, read off the spread it was seeded at. */
+    private static function issuerSpreadMultiple(float $seededSpread, float $lossGivenDefault): float
+    {
+        return CreditRisk::calculateIssuerSpreadMultiple(
+            $seededSpread,
+            MacroConstants::BASE_CREDIT_SPREAD,
+            MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
+            $lossGivenDefault,
+            self::CLASS_CURVE_LOSS_GIVEN_DEFAULT,
+        );
+    }
+
+    /** The body of resolveCreditSpread(), on the issuer's loss given default and class multiple. */
+    private static function priceIssuerSpread(Stock $stock, MacroStateDTO $macroState, string $rating, bool $throughTheCycle, float $lossGivenDefault, float $issuerMultiple): float
+    {
         $igSpread = $macroState->macroCreditSpreadEma;
         $hySpread = $macroState->highYieldCreditSpreadEma;
         if ($throughTheCycle && $igSpread > 0.0) {
@@ -339,17 +373,7 @@ class DebtEngine
             $hySpread *= $cycle;
         }
 
-        $lossGivenDefault = \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
-        // Read off inputs fixed at seeding, so it is worked out once per issuer rather than on every tick.
-        $seededSpread = (float) $stock->getCreditSpread();
-        $issuerMultiple = $this->issuerMultiples["{$seededSpread}:{$lossGivenDefault}"] ??= CreditRisk::calculateIssuerSpreadMultiple(
-            $seededSpread,
-            MacroConstants::BASE_CREDIT_SPREAD,
-            MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
-            $lossGivenDefault,
-            self::CLASS_CURVE_LOSS_GIVEN_DEFAULT,
-        );
-        $classSpread = CreditRisk::calculateRatingClassSpread($rating ?? $stock->getCreditRating(), $igSpread, $hySpread);
+        $classSpread = CreditRisk::calculateRatingClassSpread($rating, $igSpread, $hySpread);
         $spread = CreditRisk::calculateRecoveryAdjustedSpread($classSpread, $lossGivenDefault, self::CLASS_CURVE_LOSS_GIVEN_DEFAULT) * $issuerMultiple;
 
         if (!$throughTheCycle) {

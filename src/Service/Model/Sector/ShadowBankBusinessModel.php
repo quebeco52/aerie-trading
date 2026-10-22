@@ -213,9 +213,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
      * line has no deposits here to match); the loan spread puts the
      * book's yield where its two portfolios are priced (mortgages over the 30-year, direct loans over SOFR); the fee
      * yield is the operating revenue the lender's structural return requires on top of that book at the opening
-     * funding cost and the through-the-cycle credit charge.
+     * funding cost, its fixed notes rolled, and the through-the-cycle credit charge. The matched legacy income carries
+     * the notes' coupon gap until they roll.
      *
-     * @return array{floating_share: float, loan_spread: float, fee_yield: float}
+     * @return array{floating_share: float, loan_spread: float, fee_yield: float, legacy_income: float}
      */
     protected function strikeFranchisePricing(Stock $stock): array
     {
@@ -230,6 +231,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'floating_share' => self::DIRECT_LENDING_FLOATING_SHARE,
             'loan_spread' => $loanSpread,
             'fee_yield' => $this->resolveCalibrationFeeYield($stock, $opening, $bookYield),
+            'legacy_income' => $this->resolveMatchedLegacyIncome($stock, $opening),
         ];
     }
 
@@ -241,20 +243,16 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
     /**
      * The operating revenue per unit of book that earns the structural return at a macro state, given the book's
-     * interest yield: target pre-tax profit plus wholesale funding cost and the through-the-cycle credit charge, less
-     * the book's and the cash's interest, grossed up by the operating margin.
+     * interest yield: target pre-tax profit plus wholesale funding cost, its fixed notes rolled, and the
+     * through-the-cycle credit charge, less the book's and the cash's interest, grossed up by the operating margin.
      */
     private function resolveCalibrationFeeYield(Stock $stock, MacroStateDTO $macroState, float $bookYield): float
     {
         $earningAssets = $this->resolveEarningAssets($stock);
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveCalibrationRoe($stock, $macroState) / max(0.01, 1.0 - $macroState->corporateTaxRate);
-        // The floating wholesale at the interbank rate, as calculateInterestExpenseAndWholesaleRate() charges it.
-        $interestExpense = ($wholesaleDebt * (1.0 - $floatingRatio) * (float) $stock->getHistoricalFixedRate())
-            + ($wholesaleDebt * $floatingRatio * ($macroState->policyRateEma + $macroState->interbankLiquiditySpreadEma + (float) $stock->getCreditSpread()));
+        $interestExpense = (float) $stock->getWholesaleDebt() * $this->resolveChargedWholesaleRate($stock, $macroState, true);
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($this->getOperatingBase($stock) * self::TARGET_OPERATING_BUFFER));
         $interestIncome = ($earningAssets * $bookYield) + ($excessCash * $this->calculateCashYield($macroState));
 
@@ -268,8 +266,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
     /**
      * A direct loan resets over SOFR, a secured overnight rate that follows the policy rate and not the unsecured
-     * interbank market: an interbank freeze raises the lender's floating wholesale funding cost
-     * (calculateInterestExpenseAndWholesaleRate()) without lifting what it earns.
+     * interbank market: an interbank freeze raises the lender's floating wholesale funding cost (DebtEngine's floating
+     * rate) without lifting what it earns.
      *
      * @return array{floating: float, fixed: float, residential: float, securities: float}
      */

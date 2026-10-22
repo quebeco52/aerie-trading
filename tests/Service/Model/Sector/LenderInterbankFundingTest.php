@@ -6,7 +6,10 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Math\MacroConstants;
+use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BrokerageBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\CreditServicesBusinessModel;
@@ -18,8 +21,10 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * A lender's floating wholesale funding resets to the interbank rate, so an interbank freeze costs it in proportion to
- * that funding, while deposits pay the rate they have repriced to. Its franchise is calibrated on the same rate.
+ * A lender's floating wholesale funding resets to the interbank rate, as every firm's floating debt does, so an
+ * interbank freeze costs it in proportion to that funding, while deposits pay the rate they have repriced to. Its
+ * franchise is struck on the funding DebtEngine charges it: the fixed notes at the coupon they carry, the floating at
+ * the reference rate plus its own spread.
  */
 final class LenderInterbankFundingTest extends TestCase
 {
@@ -31,33 +36,32 @@ final class LenderInterbankFundingTest extends TestCase
     private const DEPOSITS = 140e9;
     private const FLOATING_RATIO = 0.40;
     private const CREDIT_SPREAD = 0.012;
+    /** A legacy coupon well under what the notes would roll to at the opening macro (the five-year plus ~1.2%). */
+    private const LEGACY_COUPON = 0.030;
 
-    /** @return array<string, array{class-string<CommercialBankBusinessModel|BrokerageBusinessModel>, bool}> */
+    /** @return array<string, array{class-string<CommercialBankBusinessModel|BrokerageBusinessModel>, string, bool}> */
     public static function lenders(): array
     {
         return [
-            'commercial bank' => [CommercialBankBusinessModel::class, true],
-            'credit services' => [CreditServicesBusinessModel::class, true],
-            'shadow bank' => [ShadowBankBusinessModel::class, false],
-            'custody bank' => [CustodyBankBusinessModel::class, true],
-            'private bank' => [PrivateBankBusinessModel::class, true],
-            'brokerage' => [BrokerageBusinessModel::class, false],
-            'investment bank' => [InvestmentBankBusinessModel::class, false],
+            'commercial bank' => [CommercialBankBusinessModel::class, 'Banks - Regional', true],
+            'credit services' => [CreditServicesBusinessModel::class, 'Credit Services', true],
+            'shadow bank' => [ShadowBankBusinessModel::class, 'Mortgage Finance', false],
+            'custody bank' => [CustodyBankBusinessModel::class, 'Custody Banks', true],
+            'private bank' => [PrivateBankBusinessModel::class, 'Private Banks', true],
+            'brokerage' => [BrokerageBusinessModel::class, 'Brokerages', false],
+            'investment bank' => [InvestmentBankBusinessModel::class, 'Investment Banking', false],
         ];
     }
 
     /**
-     * The charge carries the interbank spread on the floating wholesale and on nothing else: at the baseline spread
-     * it is today's charge plus floating wholesale x 15bp, and a freeze adds floating wholesale x its premium.
-     *
-     * @param class-string<CommercialBankBusinessModel|BrokerageBusinessModel> $class
+     * DebtEngine charges the interbank spread on the floating wholesale and on nothing else: at the baseline spread it
+     * is the policy-rate charge plus floating wholesale x 15bp, and a freeze adds floating wholesale x its premium.
      */
     #[DataProvider('lenders')]
-    public function testFloatingWholesalePaysTheInterbankSpreadAndDepositsDoNot(string $class, bool $takesDeposits): void
+    public function testFloatingWholesalePaysTheInterbankSpreadAndDepositsDoNot(string $class, string $industry, bool $takesDeposits): void
     {
-        $model = new $class();
-        $stock = $this->lender($takesDeposits);
-        $charge = fn(float $interbankSpread): float => $this->charge($model, $stock, new MacroStateDTO(interbankLiquiditySpreadEma: $interbankSpread));
+        $stock = $this->lender($industry, $takesDeposits);
+        $charge = fn(float $interbankSpread): float => $this->engine()->calculateInterestExpense($stock, new MacroStateDTO(interbankLiquiditySpreadEma: $interbankSpread))->interestExpense;
         $floatingWholesale = self::WHOLESALE * self::FLOATING_RATIO;
 
         $this->assertEqualsWithDelta($floatingWholesale * MacroConstants::INTERBANK_BASELINE_SPREAD, $charge(MacroConstants::INTERBANK_BASELINE_SPREAD) - $charge(0.0), 1.0);
@@ -65,35 +69,78 @@ final class LenderInterbankFundingTest extends TestCase
     }
 
     /**
-     * Struck at the opening macro, the franchise earns its structural return when its funding is charged as the engine
-     * charges it: the calibration assumes the rate the lender pays, interbank spread included.
+     * Struck at the opening macro, the franchise earns its structural return when DebtEngine charges its funding there:
+     * the fixed notes at the legacy coupon they carry, the floating at the reference rate plus its own spread.
      *
      * @param class-string<CommercialBankBusinessModel> $class
      */
     #[DataProvider('depositLenders')]
-    public function testTheFranchiseIsCalibratedOnTheFundingItIsCharged(string $class): void
+    public function testTheFranchiseIsCalibratedOnTheFundingItIsCharged(string $class, string $industry): void
     {
         $model = new $class();
-        $opening = new MacroStateDTO();
-        $stock = $this->lender(true);
+        $stock = $this->lender($industry, true);
         $stock->setCorporateTreasury((string) $model->calculateTargetOperatingCash(self::EQUITY, self::DEPOSITS, self::WHOLESALE));
         $call = static fn(string $method, mixed ...$args): float => (float) (new \ReflectionMethod($model, $method))->invoke($model, ...$args);
+        $opening = new MacroStateDTO();
 
         $earningAssets = $model->resolveEarningAssets($stock);
         $pretax = ($earningAssets * ($call('resolveCalibrationYield', $stock, $opening) - $call('resolveOperatingCostToEarningAssets', $stock)))
             - $model->resolveThroughTheCycleCreditProvision($stock, $earningAssets)
-            - $this->charge($model, $stock, $opening)
+            - $this->engine()->calculateInterestExpense($stock, $opening)->interestExpense
             + $call('resolveTreasuryIncome', $stock, $opening);
 
         $this->assertEqualsWithDelta($call('resolveCalibrationRoe', $stock, $opening), $pretax * (1.0 - $opening->corporateTaxRate) / self::EQUITY, 1e-9);
     }
 
-    /** @return array<string, array{class-string<CommercialBankBusinessModel>}> */
+    /**
+     * The legacy notes roll to the market coupon and the book matched to them runs off at the same pace, so a lender
+     * that opens on its return target stays on it at the opening macro: struck on the legacy coupon alone, it would
+     * sink below target by the coupon gap as the notes rolled.
+     *
+     * @param class-string<CommercialBankBusinessModel> $class
+     */
+    #[DataProvider('depositLenders')]
+    public function testTheFranchiseHoldsItsReturnAsTheLegacyNotesRoll(string $class, string $industry): void
+    {
+        $model = new $class();
+        $engine = $this->engine();
+        $stock = $this->lender($industry, true);
+        $stock->setCorporateTreasury((string) $model->calculateTargetOperatingCash(self::EQUITY, self::DEPOSITS, self::WHOLESALE));
+        $opening = new MacroStateDTO();
+        $call = static fn(string $method, mixed ...$args): float => (float) (new \ReflectionMethod($model, $method))->invoke($model, ...$args);
+        $roe = function () use ($model, $engine, $stock, $opening, $call): float {
+            $earningAssets = $model->resolveEarningAssets($stock);
+            $feeYield = (new \ReflectionMethod($model, 'resolveFranchisePricing'))->invoke($model, $stock)['fee_yield'];
+            $grossYield = $model->resolveInterestYield($stock, $opening) + $feeYield;
+            $pretax = ($earningAssets * ($grossYield - $call('resolveOperatingCostToEarningAssets', $stock)))
+                - $model->resolveThroughTheCycleCreditProvision($stock, $earningAssets)
+                - $engine->calculateInterestExpense($stock, $opening)->interestExpense
+                + $call('resolveTreasuryIncome', $stock, $opening);
+
+            return $pretax * (1.0 - $opening->corporateTaxRate) / self::EQUITY;
+        };
+        $target = $call('resolveCalibrationRoe', $stock, $opening);
+        $marketCoupon = $engine->calculateInterestExpense($stock, $opening)->currentMarketRate;
+
+        $this->assertEqualsWithDelta($target, $roe(), 1e-9, 'opens on target');
+        for ($quarter = 1; $quarter <= 20; $quarter++) {
+            $result = $model->computeActualFinancials($stock, 1e9, 0.50, 2e8, 0.0, $opening, new MathUtility());
+            $stock->setEarningsMomentumZ($result->streamZ);
+            $engine->rollMaturities($stock, $engine->analyzeDebtHealth($stock, $opening), 0.0);
+        }
+
+        $this->assertLessThan(0.5 * ($marketCoupon - self::LEGACY_COUPON), $marketCoupon - (float) $stock->getHistoricalFixedRate(), 'most of the legacy gap has rolled');
+        $this->assertEqualsWithDelta($target, $roe(), 1e-6, 'and the return has held');
+    }
+
+    /** @return array<string, array{class-string<CommercialBankBusinessModel>, string}> */
     public static function depositLenders(): array
     {
         return [
-            'commercial bank' => [CommercialBankBusinessModel::class],
-            'credit services' => [CreditServicesBusinessModel::class],
+            'commercial bank' => [CommercialBankBusinessModel::class, 'Banks - Regional'],
+            'credit services' => [CreditServicesBusinessModel::class, 'Credit Services'],
+            'custody bank' => [CustodyBankBusinessModel::class, 'Custody Banks'],
+            'private bank' => [PrivateBankBusinessModel::class, 'Private Banks'],
         ];
     }
 
@@ -107,11 +154,11 @@ final class LenderInterbankFundingTest extends TestCase
         $calm = new MacroStateDTO();
         $freeze = new MacroStateDTO(interbankLiquiditySpread: self::FREEZE_SPREAD, interbankLiquiditySpreadEma: self::FREEZE_SPREAD);
         $premiumCost = self::WHOLESALE * self::FLOATING_RATIO * (self::FREEZE_SPREAD - MacroConstants::INTERBANK_BASELINE_SPREAD);
-        $netInterest = fn(CommercialBankBusinessModel $model, Stock $stock, MacroStateDTO $macro): float => ($model->resolveEarningAssets($stock) * $model->resolveInterestYield($stock, $macro)) - $this->charge($model, $stock, $macro);
+        $netInterest = fn(CommercialBankBusinessModel $model, Stock $stock, MacroStateDTO $macro): float => ($model->resolveEarningAssets($stock) * $model->resolveInterestYield($stock, $macro)) - $this->engine()->calculateInterestExpense($stock, $macro)->interestExpense;
         $freezeEffect = static fn(CommercialBankBusinessModel $model, Stock $stock): float => $netInterest($model, $stock, $freeze) - $netInterest($model, $stock, $calm);
 
-        $this->assertEqualsWithDelta(-$premiumCost, $freezeEffect(new ShadowBankBusinessModel(), $this->lender(false)), 1.0, 'a shadow bank pays the premium on its repo');
-        $this->assertEqualsWithDelta(-$premiumCost, $freezeEffect(new CreditServicesBusinessModel(), $this->lender(true)), 1.0, 'a card lender pays the premium on its wholesale');
+        $this->assertEqualsWithDelta(-$premiumCost, $freezeEffect(new ShadowBankBusinessModel(), $this->lender('Mortgage Finance', false)), 1.0, 'a shadow bank pays the premium on its repo');
+        $this->assertEqualsWithDelta(-$premiumCost, $freezeEffect(new CreditServicesBusinessModel(), $this->lender('Credit Services', true)), 1.0, 'a card lender pays the premium on its wholesale');
 
         $businessLender = new class extends CommercialBankBusinessModel {
             protected function resolveLoanBookMix(Stock $stock): array
@@ -119,13 +166,18 @@ final class LenderInterbankFundingTest extends TestCase
                 return ['residential' => 0.0, 'consumer' => 0.0, 'commercial_real_estate' => 0.0, 'business' => 1.0];
             }
         };
-        $this->assertGreaterThan(0.0, $freezeEffect($businessLender, $this->lender(true)), 'a deposit-funded bank lending at the interbank rate gains');
+        $this->assertGreaterThan(0.0, $freezeEffect($businessLender, $this->lender('Banks - Regional', true)), 'a deposit-funded bank lending at the interbank rate gains');
     }
 
-    /** A lender funded by deposits and wholesale notes, or by wholesale alone. */
-    private function lender(bool $takesDeposits): Stock
+    /**
+     * A lender funded by deposits and wholesale notes, or by wholesale alone, its fixed notes on a legacy coupon. It is
+     * rated a class below the one its seeded spread sits in, so DebtEngine charges it a spread other than the seeded
+     * one (1.79% against 1.20%), as the seed's re-rating does to BNTH.
+     */
+    private function lender(string $industry, bool $takesDeposits): Stock
     {
         $stock = (new Stock())->setTicker('LEND');
+        $stock->setIndustry($industry);
         $stock->setTotalEquity((string) self::EQUITY);
         $stock->setWholesaleDebt((string) self::WHOLESALE);
         $stock->setCustomerDeposits($takesDeposits ? (string) self::DEPOSITS : '0');
@@ -133,30 +185,16 @@ final class LenderInterbankFundingTest extends TestCase
         $stock->setBaselineRoe('0.15');
         $stock->setOperatingMargin('0.40');
         $stock->setFloatingDebtRatio((string) self::FLOATING_RATIO);
-        $stock->setHistoricalFixedRate('0.045');
+        $stock->setHistoricalFixedRate((string) self::LEGACY_COUPON);
         $stock->setCreditSpread((string) self::CREDIT_SPREAD);
+        $stock->setCreditRating('BBB');
+        $stock->setVolatility('0.20');
 
         return $stock;
     }
 
-    /**
-     * The interest the lender is charged at a macro state, as DebtEngine prices it: the fixed notes at the market
-     * coupon the calibration assumes, the floating at the policy rate plus the credit spread, on the funded book.
-     */
-    private function charge(CommercialBankBusinessModel|BrokerageBusinessModel $model, Stock $stock, MacroStateDTO $macro): float
+    private function engine(): DebtEngine
     {
-        $fundedDebt = (float) $stock->getWholesaleDebt() + (float) $stock->getCustomerDeposits();
-
-        return $model->calculateInterestExpenseAndWholesaleRate(
-            $stock,
-            $macro->yield5yEma + self::CREDIT_SPREAD,
-            $macro->policyRateEma + self::CREDIT_SPREAD,
-            $macro->yield5yEma + self::CREDIT_SPREAD,
-            $macro->policyRateEma,
-            15.0,
-            self::EQUITY,
-            $fundedDebt,
-            $macro,
-        )->interestExpense;
+        return new DebtEngine(new MathUtility(), CorporateMetrics::getInstance());
     }
 }

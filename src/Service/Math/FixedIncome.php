@@ -45,6 +45,16 @@ final class FixedIncome
     }
 
     /**
+     * The reference rate a firm's floating debt resets to, the District's interbank rate: the policy rate as a
+     * quarter's resets have passed it on, plus the interbank spread over it. A floating loan or note pays its issuer's
+     * credit spread over this, so an interbank freeze reaches every floating borrower.
+     */
+    public static function floatingReferenceRate(float $policyRateEma, float $interbankSpreadEma): float
+    {
+        return $policyRateEma + $interbankSpreadEma;
+    }
+
+    /**
      * Calculates the yield for a given maturity using the Nelson-Siegel curve model.
      *
      * @param float $level     The long-term yield level.

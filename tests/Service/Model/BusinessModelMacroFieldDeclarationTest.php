@@ -58,6 +58,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         'house_price_deviation' => ['residential_property_index_ema', 'residential_wealth_trend'],
         'mortgage_rate' => ['yield_10y_ema'],
         'money_market_yield' => ['policy_rate_ema'],
+        'floating_reference_rate' => ['policy_rate_ema', 'interbank_liquidity_spread_ema'],
         'market_cost_of_equity' => ['yield_10y_ema', 'equity_risk_premium'],
         'equity_wealth_deviation' => ['equity_wealth_ratio', 'equity_wealth_trend'],
         'corporate_default_deviation' => ['corporate_default_rate_ema'],
