@@ -29,7 +29,7 @@
     </php>
 
     <testsuites>
-        <!-- Default Fast Suite (< 1.5s): Excludes slow browser Panther E2E tests -->
+        <!-- Fast: everything but the browser tests and the Realism files, about a minute. -->
         <testsuite name="Fast">
             <directory>tests/DTO</directory>
             <directory>tests/Data</directory>
@@ -45,7 +45,7 @@
             <directory>tests/Repository</directory>
             <directory>tests/Controller</directory>
             <!-- Owned by the Realism suite. -->
-            <exclude>tests/Service/Politics/PoliticsEngineTest.php</exclude>
+            <exclude>tests/Service/Politics/PoliticsEngineRealismTest.php</exclude>
             <exclude>tests/Service/Politics/Diet/OpinionPollsTest.php</exclude>
             <exclude>tests/Service/Politics/Diet/ElectionForecastTest.php</exclude>
             <exclude>tests/Service/Macro/BusinessCycleRealismTest.php</exclude>
@@ -55,11 +55,13 @@
             <exclude>tests/Financial/PublicQuarterUnbiasedTest.php</exclude>
             <exclude>tests/Service/Macro/HouseholdCreditCycleTest.php</exclude>
             <exclude>tests/Service/Macro/CreditCycleOpeningRealismTest.php</exclude>
+            <exclude>tests/Service/Corporate/MultiQuarterCorporateSimulationTest.php</exclude>
+            <exclude>tests/Financial/CapitalSaturationInvariantTest.php</exclude>
         </testsuite>
 
         <!-- Realism: multi-seed long-run runs, 10-60 s each. The full bin/verify runs them one process per file. -->
         <testsuite name="Realism">
-            <file>tests/Service/Politics/PoliticsEngineTest.php</file>
+            <file>tests/Service/Politics/PoliticsEngineRealismTest.php</file>
             <file>tests/Service/Politics/Diet/OpinionPollsTest.php</file>
             <file>tests/Service/Politics/Diet/ElectionForecastTest.php</file>
             <file>tests/Service/Macro/BusinessCycleRealismTest.php</file>
@@ -69,6 +71,8 @@
             <file>tests/Financial/PublicQuarterUnbiasedTest.php</file>
             <file>tests/Service/Macro/HouseholdCreditCycleTest.php</file>
             <file>tests/Service/Macro/CreditCycleOpeningRealismTest.php</file>
+            <file>tests/Service/Corporate/MultiQuarterCorporateSimulationTest.php</file>
+            <file>tests/Financial/CapitalSaturationInvariantTest.php</file>
         </testsuite>
 
         <!-- Unit: no I/O, no kernel, no database. Pure collaborator-free logic. -->
@@ -141,6 +145,16 @@
             <directory>tests/Security</directory>
             <exclude>tests/Service/Model</exclude>
             <exclude>tests/Service/Math</exclude>
+            <!-- Owned by the Realism suite. -->
+            <exclude>tests/Service/Politics/PoliticsEngineRealismTest.php</exclude>
+            <exclude>tests/Service/Politics/Diet/OpinionPollsTest.php</exclude>
+            <exclude>tests/Service/Politics/Diet/ElectionForecastTest.php</exclude>
+            <exclude>tests/Service/Macro/BusinessCycleRealismTest.php</exclude>
+            <exclude>tests/Service/Macro/YieldCurveRealismTest.php</exclude>
+            <exclude>tests/Service/Macro/PlayedDistrictRealismTest.php</exclude>
+            <exclude>tests/Service/Macro/HouseholdCreditCycleTest.php</exclude>
+            <exclude>tests/Service/Macro/CreditCycleOpeningRealismTest.php</exclude>
+            <exclude>tests/Service/Corporate/MultiQuarterCorporateSimulationTest.php</exclude>
             <!-- Collaborator-free; owned by the Unit suite. Keep in step with its <file> list. -->
             <exclude>tests/Service/Corporate/CapExEngineTest.php</exclude>
             <exclude>tests/Service/Market/Pricing/MarketEngineTest.php</exclude>
@@ -199,6 +213,10 @@
 
         <testsuite name="Financial">
             <directory>tests/Financial</directory>
+            <!-- Owned by the Realism suite. -->
+            <exclude>tests/Financial/SovereignFundDynamicsTest.php</exclude>
+            <exclude>tests/Financial/PublicQuarterUnbiasedTest.php</exclude>
+            <exclude>tests/Financial/CapitalSaturationInvariantTest.php</exclude>
         </testsuite>
 
         <!-- Render: player pages rendered offline; bin/render-pages runs these and screenshots the output. -->
