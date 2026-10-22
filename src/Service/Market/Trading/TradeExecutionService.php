@@ -8,13 +8,11 @@ use App\DTO\ExecutionQuoteDTO;
 use App\DTO\PlacedOrderDTO;
 use App\DTO\ResolvedAssetDTO;
 use App\Entity\Bond;
+use App\Entity\Etf;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
 use App\Entity\User;
-use App\Entity\UserBond;
-use App\Entity\UserEtf;
-use App\Entity\UserStock;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Bond\BondTracker;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
@@ -90,6 +88,25 @@ class TradeExecutionService
     }
 
     /**
+     * The book's quote for an order of this size about a mid: what a placement, a resting fill and the cost preview all
+     * deal at. A fund is quoted off its own arbitrage band rather than a market-wide constant.
+     */
+    private function quote(ResolvedAssetDTO $asset, string $action, int $quantity, float $mid): ExecutionQuoteDTO
+    {
+        $stock = $asset->stock();
+
+        return $this->liquidityEngine->quoteAsset(
+            $asset->entity instanceof Etf ? $asset->entity : $stock,
+            $asset->type,
+            $action,
+            $quantity,
+            $mid,
+            $asset->entity instanceof Bond && !$asset->entity->isSovereign(),
+            $this->pendingFlow($stock),
+        );
+    }
+
+    /**
      * Re-marks a bond the desk has just dealt at the valuation it dealt off. The ladder is marked once a trading day
      * and net worth reads the row, so a holding bought off the live curve would otherwise be valued at the morning's
      * price until the next mark, a gain or loss nobody made.
@@ -132,16 +149,8 @@ class TradeExecutionService
             return null;
         }
 
-        $stock = $asset->entity instanceof Stock ? $asset->entity : null;
-        $quote = $this->liquidityEngine->quoteAsset(
-            $asset->entity instanceof \App\Entity\Etf ? $asset->entity : $stock,
-            $asset->type,
-            $action,
-            $quantity,
-            $mid,
-            $asset->entity instanceof Bond && !$asset->entity->isSovereign(),
-            $this->pendingFlow($stock),
-        );
+        $stock = $asset->stock();
+        $quote = $this->quote($asset, $action, $quantity, $mid);
         $consideration = $mid * $quantity;
 
         return [
@@ -161,8 +170,7 @@ class TradeExecutionService
     /**
      * Whether a fill at this price respects the order's limit.
      *
-     * A buy never pays more than its limit and a sell never accepts less. One place for it so the placement
-     * path and the resting path cannot drift apart.
+     * A buy never pays more than its limit and a sell never accepts less.
      */
     private static function limitAllowsFill(string $action, float $limitPrice, float $executionPrice): bool
     {
@@ -183,6 +191,54 @@ class TradeExecutionService
         return self::isBuySide($action)
             ? $currentPrice >= $stopPrice
             : $currentPrice <= $stopPrice;
+    }
+
+    /**
+     * Whether an order fills at this quote, on entry and off the book alike: a stop once the mid has gone through its
+     * trigger, and anything with a limit only if the price it would actually fill at respects it.
+     *
+     * A stop already on the wrong side of the market at entry is one the market has already moved through, so it fires
+     * there rather than resting behind a trigger that can never fire again. A limit is tested against the fill price,
+     * not the mid: crossing on mid would break the promise the moment the spread or the order's own impact pushed the
+     * fill through it.
+     */
+    private static function fillsAt(TradeOrder $order, ExecutionQuoteDTO $quote): bool
+    {
+        $action = $order->getAction();
+        if ($order->isStop() && !self::stopIsTriggered($action, (float) $order->getStopPrice(), $quote->midPrice)) {
+            return false;
+        }
+
+        return !$order->hasLimitCap() || self::limitAllowsFill($action, (float) $order->getLimitPrice(), $quote->executionPrice);
+    }
+
+    /**
+     * Runs one change to an account in a transaction of its own, the account row locked and read fresh first, so a
+     * placement, a cancel and a resting fill on the same account queue behind each other rather than write over each
+     * other. Anything thrown rolls the whole change back and is thrown on.
+     *
+     * @template T
+     * @param callable(): T $change
+     * @return T
+     */
+    private function inLockedAccount(User $user, callable $change): mixed
+    {
+        $connection = $this->em->getConnection();
+        $connection->beginTransaction();
+
+        try {
+            $this->em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
+            $this->em->refresh($user);
+            $result = $change();
+            $connection->commit();
+
+            return $result;
+        } catch (\Throwable $e) {
+            if ($connection->isTransactionActive()) {
+                $connection->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /**
@@ -223,12 +279,7 @@ class TradeExecutionService
             $stopPrice = null;
         }
 
-        $this->em->getConnection()->beginTransaction();
-
-        try {
-            $this->em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
-            $this->em->refresh($user);
-
+        $placed = $this->inLockedAccount($user, function () use ($user, $ticker, $action, $orderType, $quantity, $limitPrice, $stopPrice, $origin): PlacedOrderDTO {
             $asset = $this->assetResolver->resolve($ticker);
 
             if ($asset === null) {
@@ -254,7 +305,6 @@ class TradeExecutionService
                 $this->em->flush();
                 $this->portfolio->recordUserSnapshot($user);
                 $this->em->flush();
-                $this->em->getConnection()->commit();
 
                 return new PlacedOrderDTO('OPTION', $action, $quantity, $asset->ticker(), TradeOrder::TYPE_MARKET, null, null, false);
             }
@@ -263,16 +313,10 @@ class TradeExecutionService
                 throw new TradeRejectedException("{$action} is not an action on {$asset->ticker()}.");
             }
 
-            $assetType = $asset->type;
-            $livePrice = $this->dealingPrice($asset);
-            $quantityStr = (string) $quantity;
-            $currentCashStr = (string) $user->getCashBalance();
-
-            $stock = $asset->entity instanceof Stock ? $asset->entity : null;
-
             // Size has to be checked against depth before anything else: past a couple of days' volume the
             // square-root law is extrapolation, and quoting an extrapolated price would be a made-up number
             // presented as a fill.
+            $stock = $asset->stock();
             if ($stock !== null) {
                 $maximum = $this->liquidityEngine->maximumOrderSize($stock);
                 if ($quantity > $maximum) {
@@ -284,112 +328,29 @@ class TradeExecutionService
                 }
             }
 
-            $quote = $this->liquidityEngine->quoteAsset(
-                // The instrument itself, so a fund is quoted off its own arbitrage band rather than a
-                // market-wide constant.
-                $asset->entity instanceof \App\Entity\Etf ? $asset->entity : $stock,
-                $assetType,
-                $action,
-                $quantity,
-                $livePrice,
-                $asset->entity instanceof Bond && !$asset->entity->isSovereign(),
-                $this->pendingFlow($stock),
-            );
-            $livePriceStr = Decimal::format($quote->executionPrice, 4);
-            $totalValueStr = \bcmul($livePriceStr, $quantityStr, 4);
-            $stampDutyStr = $this->stampDuty($stock, $totalValueStr);
+            $order = (new TradeOrder())
+                ->setUser($user)
+                ->setTicker($ticker)
+                ->setAssetType($asset->type)
+                ->setAction($action)
+                ->setOrderType($orderType)
+                ->setQuantity($quantity)
+                ->setLimitPrice($limitPrice)
+                ->setStopPrice($stopPrice)
+                ->setOrigin($origin);
 
-            $userAsset = $this->assetResolver->findHolding($user, $asset);
-
-            $order = new TradeOrder();
-            $order->setUser($user);
-            $order->setTicker($ticker);
-            $order->setAssetType($assetType);
-            $order->setAction($action);
-            $order->setOrderType($orderType);
-            $order->setQuantity($quantity);
-            $order->setLimitPrice($limitPrice);
-            $order->setStopPrice($stopPrice);
-            $order->setOrigin($origin);
-
-            if ($orderType === TradeOrder::TYPE_MARKET) {
-                // Execute immediately at market price
-                $userAsset = $this->settlePosition($user, $asset, $userAsset, $action, $quantity, $totalValueStr, $stock, $stampDutyStr);
-
-                $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType, $stampDutyStr);
-                $this->em->persist($order);
-
+            // A marketable order fills at the live price, not at its limit, which is the better execution.
+            $quote = $this->quote($asset, $action, $quantity, $this->dealingPrice($asset));
+            if (self::fillsAt($order, $quote)) {
+                $refusal = $this->settle($user, $asset, $order, $quote, false);
+                if ($refusal !== null) {
+                    throw new TradeRejectedException($refusal);
+                }
             } else {
-                // Check if it crosses immediately
-                $shouldFillImmediately = false;
-
-                if ($order->isStop()) {
-                    // A stop is armed in the direction the market has to move to reach it, so a stop already
-                    // on the wrong side of the market is one the market has ALREADY moved through. Real
-                    // desks trigger it on entry rather than parking it, and parking it here would hide a
-                    // live order behind a trigger that can never fire again.
-                    $stopFloat = (float) $stopPrice;
-                    $triggered = self::isBuySide($action)
-                        ? $quote->midPrice >= $stopFloat
-                        : $quote->midPrice <= $stopFloat;
-
-                    // A triggered stop-limit is still bound by its limit; a triggered plain stop is not.
-                    $shouldFillImmediately = $triggered && (
-                        !$order->hasLimitCap() || $this->limitAllowsFill($action, (float) $limitPrice, $quote->executionPrice)
-                    );
-                } else {
-                    // Tested against the price the order would actually fill at, not against mid. A limit is
-                    // a promise about the worst price the trader will accept, and crossing on mid would break
-                    // it the moment the spread or the order's own impact pushed the fill through the limit.
-                    $shouldFillImmediately = $this->limitAllowsFill($action, (float) $limitPrice, $quote->executionPrice);
-                }
-
-                if ($shouldFillImmediately) {
-                    // Fill immediately at LIVE PRICE, not limit price (better execution)
-                    $userAsset = $this->settlePosition($user, $asset, $userAsset, $action, $quantity, $totalValueStr, $stock, $stampDutyStr);
-                    $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType, $stampDutyStr);
-                } else {
-                    // Escrow and save as OPEN
-                    if ($action === 'BUY' && !$order->isStop()) {
-                        $escrowCashStr = \bcmul($limitPrice ?? throw new \LogicException('A resting limit BUY carries its limit price.'), $quantityStr, 4);
-                        $this->requireFunding($user, (float) $escrowCashStr, $action);
-                        $this->cashLedger->debit($user, $escrowCashStr);
-                    } elseif ($action === 'BUY') {
-                        // A buy stop escrows nothing, for the same reason a resting short does not: it may
-                        // never trigger, and a stop has no fill price to reserve against anyway — it takes
-                        // what the book gives it. Buying power is checked when it actually fires.
-                        if ($stock === null && $assetType !== 'ETF') {
-                            throw new TradeRejectedException('Stop orders are for equities and funds.');
-                        }
-                    } elseif ($action === 'COVER') {
-                        // Resting COVER escrows nothing: closing leg of an already-collateralized position.
-                        $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
-                        if ($held >= 0 || abs($held) < $quantity) {
-                            throw new TradeRejectedException('No short position of that size to cover.');
-                        }
-                    } elseif ($action === 'SHORT') {
-                        // A resting short escrows nothing. Borrow is located and margin is checked when it
-                        // fills, not when it is placed: reserving stock against an order that may never
-                        // cross would let a trader take a name hard-to-borrow for everyone else with an
-                        // offer nobody can hit.
-                        if ($stock === null) {
-                            throw new TradeRejectedException('Only equities can be sold short.');
-                        }
-                        if (!$user->isMarginEnabled()) {
-                            throw new TradeRejectedException('Short selling requires a margin account.');
-                        }
-                    } else { // SELL
-                        if (!$userAsset || $userAsset->getQuantity() < $quantity) {
-                            throw new TradeRejectedException('Insufficient shares for a resting sell order.');
-                        }
-                        $this->assetResolver->removeFromHolding($userAsset, $quantity);
-                    }
-                    $order->setStatus(TradeOrder::STATUS_OPEN);
-                }
-
-                $this->em->persist($order);
+                $this->placeResting($user, $asset, $order);
             }
 
+            $this->em->persist($order);
             $this->em->persist($user);
             $this->em->flush();
             if ($asset->entity instanceof Bond && $order->getStatus() === TradeOrder::STATUS_FILLED) {
@@ -397,111 +358,164 @@ class TradeExecutionService
             }
             $this->portfolio->recordUserSnapshot($user);
             $this->em->flush();
-            $this->em->getConnection()->commit();
-
-            if ($order->getStatus() === TradeOrder::STATUS_OPEN) {
-                $this->refreshBoundsAfterCommit($ticker);
-            }
 
             return PlacedOrderDTO::fromOrder($order);
+        });
 
-        } catch (\Throwable $e) {
-            if ($this->em->getConnection()->isTransactionActive()) {
-                $this->em->getConnection()->rollBack();
-            }
-            throw $e;
+        if ($placed->resting) {
+            $this->refreshBoundsAfterCommit($ticker);
         }
+
+        return $placed;
     }
 
     /**
-     * Moves the stock and the cash for one fill, in whichever of the four directions the action names.
-     *
-     * One place for all of it, because the four actions differ in exactly two ways — which side of the
-     * position they move, and what has to be true beforehand — and spelling that out four times is how the
-     * pre-trade checks drift apart from each other.
-     *
-     * Stamp duty is paid on top whichever way the stock moves: a buyer needs the consideration and the duty, a
-     * seller receives the consideration and pays the duty out of it.
-     *
-     * @param numeric-string $totalValue Consideration for the fill, as a bcmath string.
-     * @param Stock|null $stock  The instrument when it is an equity; short selling exists only for equities.
-     * @param numeric-string $stampDuty Duty on the consideration, as a bcmath string; zero for anything but listed
-     *                                  shares.
+     * Rests an order on the book, taking into escrow what its fill will draw on: a limit BUY's cash at its limit and a
+     * SELL's units (TradeOrder::escrowedCash(), escrowsUnits()). Whatever escrows nothing is checked again when it
+     * fills, since the account can change while it rests.
      */
-    private function settlePosition(
-        User $user,
-        ResolvedAssetDTO $asset,
-        UserStock|UserEtf|UserBond|null $userAsset,
-        string $action,
-        int $quantity,
-        string $totalValue,
-        ?Stock $stock,
-        string $stampDuty = '0.0000',
-    ): UserStock|UserEtf|UserBond {
-        $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
+    private function placeResting(User $user, ResolvedAssetDTO $asset, TradeOrder $order): void
+    {
+        $action = $order->getAction();
+        $quantity = $order->getQuantity();
+        $escrow = $order->escrowedCash();
 
-        if (self::isBuySide($action)) {
-            if ($action === 'COVER') {
-                if ($held >= 0 || abs($held) < $quantity) {
-                    throw new TradeRejectedException('No short position of that size to cover.');
-                }
+        if ($escrow !== null) {
+            $refusal = $this->fundingRefusal($user, (float) $escrow, $action);
+            if ($refusal !== null) {
+                throw new TradeRejectedException($refusal);
             }
-
-            $this->requireFunding($user, (float) \bcadd($totalValue, $stampDuty, 4), $action);
-            $this->cashLedger->debit($user, $totalValue);
-            $this->payStampDuty($user, $stampDuty);
-
-            $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
-
-            if ($stock !== null) {
-                $this->adjustShortInterest($stock, $held, $held + $quantity);
+            $this->cashLedger->debit($user, $escrow);
+        } elseif ($action === 'BUY') {
+            // A buy stop escrows nothing, for the same reason a resting short does not: it may never trigger, and a
+            // stop has no fill price to reserve against anyway; it takes what the book gives it. Buying power is
+            // checked when it actually fires.
+            if (!$asset->entity instanceof Stock && !$asset->entity instanceof Etf) {
+                throw new TradeRejectedException('Stop orders are for equities and funds.');
             }
-
-            return $userAsset;
-        }
-
-        if ($action === 'SHORT') {
-            if ($stock === null) {
+        } elseif ($action === 'COVER') {
+            // Resting COVER escrows nothing: closing leg of an already-collateralized position.
+            $holding = $this->assetResolver->findHolding($user, $asset);
+            if (($holding !== null ? (int) $holding->getQuantity() : 0) > -$quantity) {
+                throw new TradeRejectedException('No short position of that size to cover.');
+            }
+        } elseif ($action === 'SHORT') {
+            // A resting short escrows nothing. Borrow is located and margin is checked when it fills, not when it is
+            // placed: reserving stock against an order that may never cross would let a trader take a name
+            // hard-to-borrow for everyone else with an offer nobody can hit.
+            if ($asset->stock() === null) {
                 throw new TradeRejectedException('Only equities can be sold short.');
             }
             if (!$user->isMarginEnabled()) {
                 throw new TradeRejectedException('Short selling requires a margin account.');
             }
-            if ($held < 0 && $userAsset === null) {
-                throw new TradeRejectedException('Position lookup failed.');
+        } else { // SELL
+            $holding = $this->assetResolver->findHolding($user, $asset);
+            if ($holding === null || (int) $holding->getQuantity() < $quantity) {
+                throw new TradeRejectedException('Insufficient shares for a resting sell order.');
+            }
+            $this->assetResolver->removeFromHolding($holding, $quantity);
+        }
+
+        $order->setStatus(TradeOrder::STATUS_OPEN);
+    }
+
+    /**
+     * Fills an order at a quote: moves the stock and the cash in whichever of the four directions the action names
+     * and stamps the fill on the order, or says why the account cannot take it and moves nothing.
+     *
+     * One place for a fill at placement and a fill off the book, because the four actions differ in exactly two ways
+     * (which side of the position they move, and what has to be true beforehand) and two copies of that rule drift
+     * apart. The two fills differ only in what placement already took: a resting limit BUY pays from the cash it
+     * escrowed at its limit and gets the difference back, and a resting SELL delivers the units it escrowed. A resting
+     * order is re-checked in full, since the account, the borrow and the margin can all have moved while it rested.
+     *
+     * Stamp duty is paid on top whichever way the stock moves: a buyer needs the consideration and the duty, a seller
+     * receives the consideration and pays the duty out of it.
+     *
+     * @param bool $fromBook Whether the order rested before it filled, so its escrow pays part of the fill.
+     * @return string|null Why the fill is refused, written for the player; null once it has settled.
+     */
+    private function settle(User $user, ResolvedAssetDTO $asset, TradeOrder $order, ExecutionQuoteDTO $quote, bool $fromBook): ?string
+    {
+        $action = $order->getAction();
+        $quantity = $order->getQuantity();
+        $stock = $asset->stock();
+        $consideration = \bcmul(Decimal::format($quote->executionPrice, 4), (string) $quantity, 4);
+        $duty = $this->stampDuty($stock, $consideration);
+        $escrowedCash = $fromBook ? $order->escrowedCash() : null;
+
+        $holding = $this->assetResolver->findHolding($user, $asset);
+        $held = $holding !== null ? (int) $holding->getQuantity() : 0;
+
+        if (self::isBuySide($action)) {
+            if ($action === 'COVER' && $held > -$quantity) {
+                return 'No short position of that size to cover.';
+            }
+
+            // What the account still has to find: the price and the duty, less any escrow already set against them.
+            $owed = \bcadd($consideration, $duty, 4);
+            if ($escrowedCash !== null) {
+                $owed = \bcsub($owed, $escrowedCash, 4);
+            }
+            if (\bccomp($owed, '0.0000', 4) > 0) {
+                $refusal = $this->fundingRefusal($user, (float) $owed, $action);
+                if ($refusal !== null) {
+                    return $refusal;
+                }
+            }
+
+            if ($escrowedCash === null) {
+                $this->cashLedger->debit($user, $consideration);
+            } elseif (\bccomp($refund = \bcsub($escrowedCash, $consideration, 4), '0.0000', 4) > 0) {
+                // A fill better than the limit refunds the difference, paying down any borrowing the escrow was drawn
+                // from before it reaches the settled balance.
+                $this->cashLedger->credit($user, $refund);
+            }
+            $this->payStampDuty($user, $duty);
+            $this->assetResolver->addToHolding($user, $asset, $holding, $quantity);
+            if ($stock !== null) {
+                $this->adjustShortInterest($stock, $held, $held + $quantity);
+            }
+        } elseif ($action === 'SHORT') {
+            if ($stock === null) {
+                return 'Only equities can be sold short.';
+            }
+            if (!$user->isMarginEnabled()) {
+                return 'Short selling requires a margin account.';
             }
 
             $available = $this->lendingDesk->availableToBorrow($stock);
             if (self::sharesBorrowed($held, $held - $quantity) > $available) {
-                throw new TradeRejectedException(sprintf(
-                    'Only %s shares of %s are available to borrow.',
-                    number_format(floor($available)),
-                    $stock->getTicker(),
-                ));
+                return sprintf('Only %s shares of %s are available to borrow.', number_format(floor($available)), $stock->getTicker());
             }
 
-            $this->requireFunding($user, (float) $totalValue, $action);
+            $refusal = $this->fundingRefusal($user, (float) $consideration, $action);
+            if ($refusal !== null) {
+                return $refusal;
+            }
 
             // Proceeds are credited, then immediately collateralize the borrowed stock. They are not free
             // cash: MarginEngine subtracts the position's market value straight back out of equity.
-            $this->cashLedger->credit($user, $totalValue);
-            $this->payStampDuty($user, $stampDuty);
-            $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
+            $this->cashLedger->credit($user, $consideration);
+            $this->payStampDuty($user, $duty);
+            $this->assetResolver->addToHolding($user, $asset, $holding, -$quantity);
             $this->adjustShortInterest($stock, $held, $held - $quantity);
+        } else { // SELL
+            if (!($fromBook && $order->escrowsUnits())) {
+                if ($holding === null || $held < $quantity) {
+                    return 'Insufficient shares.';
+                }
+                $this->assetResolver->removeFromHolding($holding, $quantity);
+            }
 
-            return $userAsset;
+            $this->cashLedger->credit($user, $consideration);
+            $this->payStampDuty($user, $duty);
         }
 
-        // SELL
-        if ($userAsset === null || $held < $quantity) {
-            throw new TradeRejectedException('Insufficient shares.');
-        }
+        $this->recordFill($order, $asset, $quote, $duty);
 
-        $this->cashLedger->credit($user, $totalValue);
-        $this->payStampDuty($user, $stampDuty);
-        $this->assetResolver->removeFromHolding($userAsset, $quantity);
-
-        return $userAsset;
+        return null;
     }
 
     /**
@@ -535,51 +549,23 @@ class TradeExecutionService
     }
 
     /**
-     * Rejects a trade the account cannot collateralize.
+     * Why the account cannot collateralize a trade of this size, or null when it can.
      *
      * A cash account is measured against settled cash; a margin account against buying power, which is what
      * is left once the existing book is collateralized, geared by the initial requirement.
      */
-    private function requireFunding(User $user, float $notional, string $action): void
+    private function fundingRefusal(User $user, float $notional, string $action): ?string
     {
         if (!$user->isMarginEnabled()) {
-            if ($action === 'SHORT') {
-                throw new TradeRejectedException('Short selling requires a margin account.');
-            }
-
-            if ($notional > (float) $user->getCashBalance() + 1e-6) {
-                throw new TradeRejectedException('Insufficient funds.');
-            }
-
-            return;
+            return $notional > (float) $user->getCashBalance() + 1e-6 ? 'Insufficient funds.' : null;
         }
 
         // Buying power gates new exposure only; COVER closes existing short exposure.
         if (!in_array($action, self::EXPOSURE_INCREASING_ACTIONS, true)) {
-            return;
+            return null;
         }
 
-        if (!$this->marginEngine->canOpen($user, $notional)) {
-            throw new TradeRejectedException('Insufficient buying power for this order.');
-        }
-    }
-
-    /**
-     * The same funding test as requireFunding(), asked rather than enforced.
-     *
-     * A resting order that fires into an account that can no longer pay for it is not an error to report to
-     * anybody — the trader placed it correctly and the world moved. It stays open and tries again, which is
-     * how the SHORT and COVER legs already behave when their own preconditions have gone against them.
-     */
-    private function hasFunding(User $user, float $notional): bool
-    {
-        try {
-            $this->requireFunding($user, $notional, 'BUY');
-
-            return true;
-        } catch (\Throwable) {
-            return false;
-        }
+        return $this->marginEngine->canOpen($user, $notional) ? null : 'Insufficient buying power for this order.';
     }
 
     /**
@@ -598,17 +584,6 @@ class TradeExecutionService
         $stock->setShortInterestShares(Decimal::format($updated, 2));
     }
 
-    /** Adds a resting buy's fill to the holding, returning to the lender whatever part of it closes a short. */
-    private function addToRestingHolding(User $user, ResolvedAssetDTO $asset, UserStock|UserEtf|UserBond|null $userAsset, ?Stock $stock, int $quantity): void
-    {
-        $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
-        $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
-
-        if ($stock !== null) {
-            $this->adjustShortInterest($stock, $held, $held + $quantity);
-        }
-    }
-
     /** Shares newly borrowed (positive) or returned (negative) when a position moves from one size to another. */
     public static function sharesBorrowed(int $heldBefore, int $heldAfter): int
     {
@@ -622,9 +597,12 @@ class TradeExecutionService
      * once per tick, on the ticker, against the net of everything that traded in that window. Applying it
      * per order would let a trader split a position into a hundred pieces and pay a hundred separate
      * square roots, which is cheaper than the one they should have paid.
+     *
+     * @param numeric-string $stampDuty
      */
-    private function recordFill(TradeOrder $order, ExecutionQuoteDTO $quote, int $quantity, string $action, string $ticker, string $assetType, string $stampDuty = '0.0000'): void
+    private function recordFill(TradeOrder $order, ResolvedAssetDTO $asset, ExecutionQuoteDTO $quote, string $stampDuty): void
     {
+        $quantity = $order->getQuantity();
         $order->setFilledQuantity($quantity);
         $order->setExecutionPrice(Decimal::format($quote->executionPrice, 4));
         $order->setSpreadCost(Decimal::format($quote->spreadCost, 4));
@@ -633,9 +611,9 @@ class TradeExecutionService
         $order->setStatus(TradeOrder::STATUS_FILLED);
         $order->setFilledAt(new \DateTime());
 
-        if ($assetType === 'STOCK' || $assetType === 'ETF') {
+        if ($asset->type === 'STOCK' || $asset->type === 'ETF') {
             // Record order flow by execution direction (buy/cover vs sell/short) for stocks and ETFs.
-            $this->orderFlow->record($ticker, self::isBuySide($action) ? (float) $quantity : -(float) $quantity);
+            $this->orderFlow->record($asset->ticker(), self::isBuySide($order->getAction()) ? (float) $quantity : -(float) $quantity);
         }
     }
 
@@ -668,71 +646,66 @@ class TradeExecutionService
         return $normalized;
     }
 
+    /** Withdraws a resting order and hands back what it escrowed: a limit BUY's cash, a SELL's units. */
     public function cancelOrder(User $user, int $orderId): void
     {
-        $this->em->getConnection()->beginTransaction();
-        try {
-            $this->em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
-            $this->em->refresh($user);
-
+        $ticker = $this->inLockedAccount($user, function () use ($user, $orderId): string {
             $order = $this->em->getRepository(TradeOrder::class)->findOpenForUserById($user, $orderId);
             if (!$order) {
                 throw new TradeRejectedException('Order not found or already processed.');
             }
 
-            $ticker = $order->getTicker();
-            $quantity = $order->getQuantity();
-
-            if ($order->getAction() === 'BUY' && !$order->isStop()) {
-                // Refund cash, paying down the borrowing it was drawn from first. A BUY STOP is excluded
-                // because it never escrowed any: refunding a limit price it does not carry would credit the
-                // account for an order it was never charged for, and on a plain stop that price is null.
-                $this->cashLedger->credit($user, \bcmul($order->getLimitPrice() ?? throw new \LogicException('A resting limit BUY carries its limit price.'), (string) $quantity, 4));
-            } elseif ($order->getAction() === 'SELL') {
-                // Refund the escrowed shares. A resting SHORT, a resting COVER and a buy stop escrowed
-                // nothing, so there is nothing to give back and no branch for any of them.
-                $asset = $this->assetResolver->resolve($ticker);
+            $escrow = $order->escrowedCash();
+            if ($escrow !== null) {
+                // Refund cash, paying down the borrowing it was drawn from first.
+                $this->cashLedger->credit($user, $escrow);
+            } elseif ($order->escrowsUnits()) {
+                $asset = $this->assetResolver->resolve($order->getTicker());
                 if ($asset === null) {
                     throw new TradeRejectedException('Asset not found.');
                 }
 
-                $userAsset = $this->assetResolver->findHolding($user, $asset);
-                $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
+                $this->assetResolver->addToHolding($user, $asset, $this->assetResolver->findHolding($user, $asset), $order->getQuantity());
             }
 
             $order->setStatus(TradeOrder::STATUS_CANCELLED);
             $this->em->persist($order);
             $this->em->persist($user);
             $this->em->flush();
-            $this->em->getConnection()->commit();
 
-            $this->refreshBoundsAfterCommit($ticker);
+            return $order->getTicker();
+        });
 
-        } catch (\Throwable $e) {
-            if ($this->em->getConnection()->isTransactionActive()) {
-                $this->em->getConnection()->rollBack();
-            }
-            throw $e;
-        }
+        $this->refreshBoundsAfterCommit($ticker);
     }
 
     public function processLimitOrders(string $ticker, float $currentPrice): void
     {
         // Runs on the messenger worker: ProcessLimitOrdersMessage is routed to the async transport, so the
         // ticker only enqueues and never carries these queries or row locks inside its tick transaction.
-        $openOrders = $this->em->getRepository(TradeOrder::class)->findOpenByTicker($ticker);
+        $asset = null;
 
-        foreach ($openOrders as $order) {
+        foreach ($this->em->getRepository(TradeOrder::class)->findOpenByTicker($ticker) as $order) {
             $action = $order->getAction();
 
+            // Tested on the tape first, so an order nowhere near its price takes no lock.
             $shouldFill = $order->isStop()
                 ? self::stopIsTriggered($action, (float) $order->getStopPrice(), $currentPrice)
                 : self::limitAllowsFill($action, (float) $order->getLimitPrice(), $currentPrice);
-
-            if ($shouldFill) {
-                $this->fillOpenOrder($order, $currentPrice);
+            if (!$shouldFill) {
+                continue;
             }
+
+            $asset ??= $this->assetResolver->resolve($ticker);
+            if ($asset === null) {
+                $this->logger->error('Resting orders on a ticker the desk cannot resolve; left open with escrow held.', ['ticker' => $ticker]);
+                break;
+            }
+
+            $this->fillOpenOrder($order, $asset, $currentPrice);
         }
+
+        $this->notifier?->publish();
 
         // Always leave the book's bounds in Redis, even when nothing filled and even when there is nothing
         // open. The ticker only checks a ticker whose bounds key exists, so a flushed or evicted Redis
@@ -741,176 +714,60 @@ class TradeExecutionService
         $this->updateRedisBounds($ticker);
     }
 
-    private function fillOpenOrder(TradeOrder $order, float $executionPrice): void
+    /**
+     * Fills one resting order the tape has reached. An order the account can no longer take (the cash spent, the
+     * borrow gone, the margin used) is not an error to report to anybody: the trader placed it correctly and the world
+     * moved, so it stays open and tries again.
+     */
+    private function fillOpenOrder(TradeOrder $order, ResolvedAssetDTO $asset, float $currentPrice): void
     {
-        $this->em->getConnection()->beginTransaction();
+        $user = $order->getUser();
+
         try {
-            $user = $order->getUser();
-            $this->em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
-            $this->em->refresh($user);
-
-            // Re-check status in case it was cancelled while in queue. The entity has to be refreshed to
-            // read it: $order came out of the identity map before the lock was taken, so a cancel committed
-            // by the web process in the meantime is invisible here and the order would fill a second time
-            // against escrow that has already been refunded.
-            $this->em->refresh($order);
-
-            if ($order->getStatus() !== TradeOrder::STATUS_OPEN) {
-                $this->em->getConnection()->rollBack();
-                return;
-            }
-
-            $ticker = $order->getTicker();
-            $quantity = $order->getQuantity();
-            $limitPrice = (float) $order->getLimitPrice();
-
-            $asset = $this->assetResolver->resolve($ticker);
-            if ($asset === null) {
-                throw new TradeRejectedException('Asset not found.');
-            }
-
-            $stock = $asset->entity instanceof Stock ? $asset->entity : null;
-            $quote = $this->liquidityEngine->quoteAsset(
-                $asset->entity instanceof \App\Entity\Etf ? $asset->entity : $stock,
-                $asset->type,
-                $order->getAction(),
-                $quantity,
-                $executionPrice,
-                $asset->entity instanceof Bond && !$asset->entity->isSovereign(),
-                $this->pendingFlow($stock),
-            );
-
-            // Enforce limit price cap on resting limit orders, while plain stop orders accept market quote.
-            if ($order->hasLimitCap() && !self::limitAllowsFill($order->getAction(), $limitPrice, $quote->executionPrice)) {
-                $this->em->getConnection()->rollBack();
-                return;
-            }
-
-            $fillPrice = $quote->executionPrice;
-            $userAsset = $this->assetResolver->findHolding($user, $asset);
-
-            $action = $order->getAction();
-            $considerationStr = \bcmul(Decimal::format($fillPrice, 4), (string) $quantity, 4);
-            $stampDutyStr = $this->stampDuty($stock, $considerationStr);
-
-            if ($action === 'COVER') {
-                // Process fill for resting COVER: settle consideration and verify existing short position.
-                $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
-                if ($held >= 0 || abs($held) < $quantity) {
-                    $this->em->getConnection()->rollBack();
-                    return;
+            $fill = $this->inLockedAccount($user, function () use ($order, $asset, $user, $currentPrice): ?ExecutionQuoteDTO {
+                // Re-check status in case it was cancelled while in queue. The entity has to be refreshed to
+                // read it: $order came out of the identity map before the lock was taken, so a cancel committed
+                // by the web process in the meantime is invisible here and the order would fill a second time
+                // against escrow that has already been refunded.
+                $this->em->refresh($order);
+                if ($order->getStatus() !== TradeOrder::STATUS_OPEN) {
+                    return null;
                 }
 
-                $this->cashLedger->debit($user, $considerationStr);
-                $this->payStampDuty($user, $stampDutyStr);
-
-                if ($stock !== null) {
-                    $this->adjustShortInterest($stock, $held, $held + $quantity);
+                $quote = $this->quote($asset, $order->getAction(), $order->getQuantity(), $currentPrice);
+                if (!self::fillsAt($order, $quote) || $this->settle($user, $asset, $order, $quote, true) !== null) {
+                    return null;
                 }
 
-                $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
+                $this->em->persist($order);
+                $this->em->persist($user);
+                $this->em->flush();
+                $this->portfolio->recordUserSnapshot($user);
+                $this->em->flush();
 
-            } elseif ($action === 'BUY' && $order->isStop()) {
-                // A buy stop escrowed nothing, so it is paid for now and buying power is checked now. The
-                // account can have spent the money while this rested, and a stop that fires into an
-                // unfunded account does not get to buy on credit: it stays open and tries again.
-                if (!$this->hasFunding($user, (float) \bcadd($considerationStr, $stampDutyStr, 4))) {
-                    $this->em->getConnection()->rollBack();
-                    return;
-                }
-
-                $this->cashLedger->debit($user, $considerationStr);
-                $this->payStampDuty($user, $stampDutyStr);
-                $this->addToRestingHolding($user, $asset, $userAsset, $stock, $quantity);
-
-            } elseif ($action === 'BUY') {
-                // Cash was escrowed at the limit. A better fill refunds the difference, paying down any
-                // borrowing the escrow was drawn from before it reaches the settled balance.
-                $refundStr = \bcsub(\bcmul((string) $limitPrice, (string) $quantity, 4), $considerationStr, 4);
-
-                // The escrow covered the price alone. Duty the refund does not cover is paid from the account
-                // now, and an account that cannot pay it stays open rather than borrowing it, as a buy stop does.
-                $dutyShortfallStr = \bcsub($stampDutyStr, $refundStr, 4);
-                if (\bccomp($dutyShortfallStr, '0.0000', 4) > 0 && !$this->hasFunding($user, (float) $dutyShortfallStr)) {
-                    $this->em->getConnection()->rollBack();
-                    return;
-                }
-
-                if (\bccomp($refundStr, '0.0000', 4) > 0) {
-                    $this->cashLedger->credit($user, $refundStr);
-                }
-                // The escrow was the limit price alone, so the duty is paid on top when the order fills.
-                $this->payStampDuty($user, $stampDutyStr);
-
-                $this->addToRestingHolding($user, $asset, $userAsset, $stock, $quantity);
-
-            } elseif ($action === 'SHORT') {
-                // Nothing was escrowed, so the borrow is located and the margin checked now. Either can
-                // have gone against the order while it rested, and a short opened without a locate is a
-                // position the desk cannot actually deliver. The account is checked too: a short is a margin
-                // position, and a cash account's funding test would pass it whenever cash covered the sale.
-                if (!$user->isMarginEnabled()) {
-                    $this->em->getConnection()->rollBack();
-                    return;
-                }
-
-                $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
-                if ($stock === null || self::sharesBorrowed($held, $held - $quantity) > $this->lendingDesk->availableToBorrow($stock)) {
-                    $this->em->getConnection()->rollBack();
-                    return;
-                }
-
-                if (!$this->marginEngine->canOpen($user, (float) $considerationStr)) {
-                    $this->em->getConnection()->rollBack();
-                    return;
-                }
-
-                $this->cashLedger->credit($user, $considerationStr);
-                $this->payStampDuty($user, $stampDutyStr);
-                $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
-                $this->adjustShortInterest($stock, $held, $held - $quantity);
-
-            } else { // SELL
-                // Shares were already escrowed. Just give them the cash from the sale, less the duty on it.
-                $this->cashLedger->credit($user, $considerationStr);
-                $this->payStampDuty($user, $stampDutyStr);
-            }
-
-            $this->recordFill($order, $quote, $quantity, $order->getAction(), $ticker, $asset->type, $stampDutyStr);
-
-            $this->em->persist($order);
-            $this->em->persist($user);
-            $this->em->flush();
-            $this->portfolio->recordUserSnapshot($user);
-            $this->em->flush();
-            $this->em->getConnection()->commit();
-
-            $this->refreshBoundsAfterCommit($ticker);
-
-            if ($this->notifier !== null && $user->getId() !== null) {
-                $this->notifier->queue(
-                    $user->getId(),
-                    \App\Entity\Notification::KIND_FILL,
-                    PlayerNotifier::fillLine($order->getAction(), $quantity, $ticker, $fillPrice),
-                    sprintf('Your %s order filled.', strtolower(str_replace('_', '-', (string) $order->getOrderType()))),
-                    $ticker,
-                    PlayerNotifier::assetLink($asset->type, $ticker),
-                );
-                $this->notifier->publish();
-            }
-
+                return $quote;
+            });
         } catch (\Throwable $e) {
-            if ($this->em->getConnection()->isTransactionActive()) {
-                $this->em->getConnection()->rollBack();
-            }
-
             // The order stays OPEN with its escrow still held, so the failure has to be visible.
             $this->logger->error('Limit order fill failed; order left open with escrow held.', [
                 'order_id' => $order->getId(),
                 'ticker' => $order->getTicker(),
-                'execution_price' => $executionPrice,
+                'execution_price' => $currentPrice,
                 'exception' => $e,
             ]);
+
+            return;
+        }
+
+        if ($fill !== null && $this->notifier !== null && $user->getId() !== null) {
+            $this->notifier->queue(
+                $user->getId(),
+                \App\Entity\Notification::KIND_FILL,
+                PlayerNotifier::fillLine($order->getAction(), $order->getQuantity(), $asset->ticker(), $fill->executionPrice),
+                sprintf('Your %s order filled.', strtolower(str_replace('_', '-', $order->getOrderType()))),
+                $asset->ticker(),
+                PlayerNotifier::assetLink($asset->type, $asset->ticker()),
+            );
         }
     }
 

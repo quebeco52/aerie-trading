@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Trading;
 
+use App\Entity\TradeOrder;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 
@@ -62,9 +63,9 @@ final class SplitOrderBook
             "UPDATE users u
              INNER JOIN (
                  SELECT o.user_id,
-                        SUM(CASE WHEN o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')
+                        SUM(CASE WHEN " . TradeOrder::ESCROWS_CASH_SQL . "
                                  THEN COALESCE(o.limit_price, 0) * (o.quantity % :factor)
-                                 WHEN o.action = 'SELL'
+                                 WHEN " . TradeOrder::ESCROWS_UNITS_SQL . "
                                  THEN (o.quantity % :factor) * :pre_split_price
                                  ELSE 0
                             END) AS remnant_value

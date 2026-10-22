@@ -6,8 +6,10 @@ namespace App\Tests\Service\Corporate;
 
 use App\Entity\Stock;
 use App\Entity\StockEvent;
+use App\Entity\TradeOrder;
 use App\Service\Corporate\CorporateLedgerService;
 use App\Service\News\EventPresenter;
+use App\Service\User\Portfolio;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -94,8 +96,9 @@ class CorporateLedgerServiceTest extends TestCase
         $this->service->processDividendPayment($stock, 1.25, new \DateTimeImmutable());
 
         $this->assertCount(1, $inserts);
-        $this->assertStringContainsString("status = 'OPEN' AND action = 'SELL'", $inserts[0]);
-        $this->assertStringNotContainsString("action = 'BUY'", $inserts[0]);
+        $this->assertStringContainsString(Portfolio::unitsHeldSql('STOCK'), $inserts[0]);
+        $this->assertStringContainsString("o.status = 'OPEN' AND " . TradeOrder::ESCROWS_UNITS_SQL, $inserts[0]);
+        $this->assertStringNotContainsString("'BUY'", $inserts[0]);
     }
 
     /**
@@ -124,7 +127,7 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->assertCount(1, $inserts, 'One ledger row per account, or a short with a resting SELL collides.');
         $this->assertStringContainsString('quantity <> 0', $inserts[0], 'Short positions are in the same union.');
-        $this->assertStringContainsString('GROUP BY user_id', $inserts[0]);
+        $this->assertStringContainsString('GROUP BY legs.user_id', $inserts[0]);
     }
 
     public function testProcessDividendPaymentSkipsPositionsRoundingToZero(): void
@@ -144,11 +147,11 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->service->processDividendPayment($stock, 0.0001, new \DateTimeImmutable());
 
-        // WHERE, not HAVING: net_shares is a plain column of the derived table by that point, and HAVING
+        // WHERE, not HAVING: units is a plain column of the derived table by that point, and HAVING
         // without a GROUP BY in the outer query would collapse every holder into one group. Both signs are
         // kept, since a short's row is negative.
         $this->assertNotNull($insertSql);
-        $this->assertStringContainsString('WHERE ROUND(positions.net_shares * :dividend, 2) <> 0', $insertSql);
+        $this->assertStringContainsString('WHERE ROUND(positions.units * :dividend, 2) <> 0', $insertSql);
         $this->assertStringNotContainsString('HAVING', $insertSql);
     }
 
@@ -262,7 +265,7 @@ class CorporateLedgerServiceTest extends TestCase
 
         $refund = array_values(array_filter($statements, static fn(array $s): bool => str_contains($s[0], 'remnant_value')));
         $this->assertCount(1, $refund);
-        $this->assertStringContainsString("o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')", $refund[0][0]);
+        $this->assertStringContainsString('WHEN ' . TradeOrder::ESCROWS_CASH_SQL, $refund[0][0]);
 
         $restate = array_values(array_filter($statements, static fn(array $s): bool => str_contains($s[0], "status = 'OPEN'") && str_contains($s[0], 'limit_price = ROUND(limit_price * :factor, 4)')));
         $this->assertCount(1, $restate);

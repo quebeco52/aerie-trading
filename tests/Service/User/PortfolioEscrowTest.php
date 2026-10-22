@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\User;
 
+use App\Entity\TradeOrder;
 use App\Service\User\Portfolio;
 use PHPUnit\Framework\TestCase;
 
@@ -222,28 +223,27 @@ final class PortfolioEscrowTest extends TestCase
     /**
      * A buy stop commits no cash until it fires (TradeExecutionService), so no valuation of the open book holds one at
      * its limit. Held there, a buy stop-limit that could never fire put its whole notional on the leaderboard, in the
-     * season record and in buying power; a split refunded escrow it never posted.
+     * season record and in buying power; a split refunded escrow it never posted. The rule is TradeOrder's, and every
+     * valuation of escrowed cash reads it rather than restating it.
      */
     public function testABuyStopIsHeldAtNothing(): void
     {
-        $sources = [
-            'src/Service/User/Portfolio.php',
-            'src/Service/Market/Trading/SplitOrderBook.php',
-        ];
+        foreach ([TradeOrder::TYPE_STOP, TradeOrder::TYPE_STOP_LIMIT] as $type) {
+            $stop = (new TradeOrder())->setAction('BUY')->setOrderType($type)->setQuantity(100)->setLimitPrice('50.0000')->setStopPrice('55.0000');
+            $this->assertNull($stop->escrowedCash(), "A resting {$type} BUY holds no cash.");
+        }
+        $limit = (new TradeOrder())->setAction('BUY')->setOrderType(TradeOrder::TYPE_LIMIT)->setQuantity(100)->setLimitPrice('50.0000');
+        $this->assertSame('5000.0000', $limit->escrowedCash(), 'A resting limit BUY holds its limit times its quantity.');
+        $this->assertStringContainsString("o.order_type = 'LIMIT'", TradeOrder::ESCROWS_CASH_SQL);
 
         $checked = 0;
-        foreach ($sources as $relativePath) {
-            preg_match_all("/WHEN\\s+o\\.action\\s*=\\s*'BUY'(.*?)THEN([^\\n]*)/s", $this->read($relativePath), $matches, PREG_SET_ORDER);
-
-            foreach ($matches as [, $condition, $then]) {
-                if (str_contains($then, 'limit_price')) {
-                    $checked++;
-                    $this->assertStringContainsString("o.order_type NOT IN ('STOP', 'STOP_LIMIT')", $condition, "{$relativePath} values a buy stop's cash at its limit.");
-                }
-            }
+        foreach (['src/Service/User/Portfolio.php', 'src/Service/Market/Trading/SplitOrderBook.php', 'src/Service/Market/Bond/BondLedgerService.php', 'src/Service/Corporate/FailureSweep.php'] as $relativePath) {
+            $source = $this->read($relativePath);
+            $this->assertStringNotContainsString("o.action = 'BUY'", $source, "{$relativePath} restates which orders hold cash; read TradeOrder::ESCROWS_CASH_SQL.");
+            $checked += substr_count($source, 'TradeOrder::ESCROWS_CASH_SQL');
         }
 
-        $this->assertGreaterThanOrEqual(2, $checked, 'The buy-side valuations have moved; this guard is no longer reaching them.');
+        $this->assertGreaterThanOrEqual(4, $checked, 'The escrowed-cash readers have moved; this guard is no longer reaching them.');
         $this->assertStringContainsString(
             '$this->portfolio->openOrderEscrow(',
             $this->read('src/Service/View/DashboardPageBuilder.php'),
@@ -254,6 +254,31 @@ final class PortfolioEscrowTest extends TestCase
             $this->read('src/Service/User/Portfolio.php'),
             'Portfolio::openOrderEscrow() reads the shared fragment.',
         );
+    }
+
+    /**
+     * Every payout counts what an account holds on one definition: the holding plus the units escrowed behind its open
+     * SELLs, never an open BUY, which holds cash. The dividend, the fund distribution and the bond payments each wrote
+     * the query out, and the bond copies had drifted from the other two.
+     */
+    public function testEveryPayoutCountsHoldingsOnOneDefinition(): void
+    {
+        foreach (['STOCK', 'ETF', 'BOND'] as $assetType) {
+            $sql = Portfolio::unitsHeldSql($assetType);
+            $this->assertStringContainsString(TradeOrder::ESCROWS_UNITS_SQL, $sql);
+            $this->assertStringContainsString("o.asset_type = '{$assetType}'", $sql);
+            $this->assertStringNotContainsString("'BUY'", $sql, 'An open BUY holds cash, not units.');
+        }
+
+        foreach ([
+            'src/Service/Corporate/CorporateLedgerService.php' => "Portfolio::unitsHeldSql('STOCK')",
+            'src/Service/Market/Index/IndexFundAccountant.php' => "Portfolio::unitsHeldSql('ETF')",
+            'src/Service/Market/Bond/BondLedgerService.php' => "Portfolio::unitsHeldSql('BOND')",
+        ] as $relativePath => $call) {
+            $source = $this->read($relativePath);
+            $this->assertStringContainsString($call, $source);
+            $this->assertStringNotContainsString("action = 'SELL'", $source, "{$relativePath} writes its own holdings query.");
+        }
     }
 
     /**
@@ -284,7 +309,7 @@ final class PortfolioEscrowTest extends TestCase
             $source = $this->read($relativePath);
 
             // Every CASE block that switches on the order side, from the WHEN to its END.
-            preg_match_all('/CASE\s+WHEN\s+o\.action.*?END/s', $source, $matches);
+            preg_match_all('/CASE\s+WHEN\s+(?:o\.action|" \. TradeOrder::ESCROWS_).*?END/s', $source, $matches);
 
             foreach ($matches[0] as $case) {
                 $checked++;

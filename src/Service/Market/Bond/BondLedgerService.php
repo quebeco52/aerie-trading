@@ -8,6 +8,7 @@ use App\Entity\Bond;
 use App\Entity\CouponPayment;
 use App\Entity\TradeOrder;
 use App\Service\Notification\PlayerNotifier;
+use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -122,17 +123,10 @@ class BondLedgerService
             "INSERT INTO trade_orders
                  (user_id, asset_type, ticker, action, order_type, quantity, filled_quantity, execution_price,
                   spread_cost, impact_cost, stamp_duty, status, created_at, filled_at, origin)
-             SELECT held.user_id, 'BOND', :ticker, 'SELL', :order_type, SUM(held.qty), SUM(held.qty), :price,
+             SELECT held.user_id, 'BOND', :ticker, 'SELL', :order_type, held.units, held.units, :price,
                     0, 0, 0, 'FILLED', :paid_at, :paid_at, :origin
-             FROM (
-                 SELECT user_id, quantity AS qty FROM user_bonds WHERE bond_id = :bond_id AND quantity > 0
-                 UNION ALL
-                 SELECT user_id, (quantity - filled_quantity) AS qty
-                 FROM trade_orders
-                 WHERE ticker = :ticker AND asset_type = 'BOND' AND status = 'OPEN' AND action = 'SELL'
-             ) held
-             GROUP BY held.user_id
-             HAVING SUM(held.qty) > 0",
+             FROM (" . Portfolio::unitsHeldSql('BOND') . ") held
+             WHERE held.units > 0",
             [
                 'ticker' => $bond->getTicker(),
                 'bond_id' => $bond->getId(),
@@ -149,12 +143,12 @@ class BondLedgerService
         $conn->executeStatement(
             "UPDATE users u
              INNER JOIN (
-                 SELECT o.user_id, SUM(o.limit_price * (o.quantity - o.filled_quantity)) AS escrow
+                 SELECT o.user_id, SUM(o.limit_price * o.quantity) AS escrow
                  FROM trade_orders o
                  WHERE o.ticker = :ticker
                    AND o.asset_type = 'BOND'
                    AND o.status = 'OPEN'
-                   AND o.action = 'BUY'
+                   AND " . TradeOrder::ESCROWS_CASH_SQL . "
                  GROUP BY o.user_id
              ) refunds ON refunds.user_id = u.id
              SET u.cash_balance = u.cash_balance + refunds.escrow",
@@ -184,15 +178,7 @@ class BondLedgerService
         }
 
         $rows = $this->entityManager->getConnection()->fetchAllAssociative(
-            "SELECT user_id, SUM(qty) AS quantity
-             FROM (
-                 SELECT user_id, quantity AS qty FROM user_bonds WHERE bond_id = :bond_id AND quantity > 0
-                 UNION ALL
-                 SELECT user_id, (quantity - filled_quantity) AS qty
-                 FROM trade_orders
-                 WHERE ticker = :ticker AND asset_type = 'BOND' AND status = 'OPEN' AND action = 'SELL'
-             ) held
-             GROUP BY user_id",
+            'SELECT held.user_id, held.units AS quantity FROM (' . Portfolio::unitsHeldSql('BOND') . ') held',
             ['bond_id' => $bond->getId(), 'ticker' => $bond->getTicker()],
         );
         $ticker = $bond->getTicker();
@@ -237,25 +223,13 @@ class BondLedgerService
              SELECT holdings.user_id,
                     :ticker,
                     :payment_type,
-                    holdings.total_bonds,
+                    holdings.units,
                     :per_bond,
-                    ROUND(holdings.total_bonds * :per_bond, 2),
+                    ROUND(holdings.units * :per_bond, 2),
                     :simulation_time,
                     :paid_at
-             FROM (
-                 SELECT user_id, SUM(total_qty) AS total_bonds
-                 FROM (
-                     SELECT user_id, quantity AS total_qty
-                     FROM user_bonds
-                     WHERE bond_id = :bond_id AND quantity > 0
-                     UNION ALL
-                     SELECT user_id, (quantity - filled_quantity) AS total_qty
-                     FROM trade_orders
-                     WHERE ticker = :ticker AND asset_type = 'BOND' AND status = 'OPEN' AND action = 'SELL'
-                 ) combined_bonds
-                 GROUP BY user_id
-             ) holdings
-             WHERE ROUND(holdings.total_bonds * :per_bond, 2) > 0",
+             FROM (" . Portfolio::unitsHeldSql('BOND') . ") holdings
+             WHERE ROUND(holdings.units * :per_bond, 2) > 0",
             [
                 'ticker' => $bond->getTicker(),
                 'payment_type' => $paymentType,

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Index;
 
 use App\Entity\Etf;
+use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -179,24 +180,12 @@ final class IndexFundAccountant
              SELECT holdings.user_id,
                     'ETF',
                     :ticker,
-                    holdings.total_units,
+                    holdings.units,
                     :rate,
-                    ROUND(holdings.total_units * :rate, 2),
+                    ROUND(holdings.units * :rate, 2),
                     :paid_at
-             FROM (
-                 SELECT user_id, SUM(total_qty) AS total_units
-                 FROM (
-                     SELECT user_id, quantity AS total_qty
-                     FROM user_etfs
-                     WHERE etf_id = :etf_id AND quantity > 0
-                     UNION ALL
-                     SELECT user_id, quantity AS total_qty
-                     FROM trade_orders
-                     WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'
-                 ) combined_units
-                 GROUP BY user_id
-             ) holdings
-             WHERE ROUND(holdings.total_units * :rate, 2) > 0",
+             FROM (" . Portfolio::unitsHeldSql('ETF') . ") holdings
+             WHERE ROUND(holdings.units * :rate, 2) > 0",
             [
                 'ticker' => $fund->getTicker(),
                 'rate' => $perShare,

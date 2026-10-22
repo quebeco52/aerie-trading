@@ -29,6 +29,12 @@ final readonly class ResolvedAssetDTO
         return $this->entity->getTicker();
     }
 
+    /** The instrument when it is an equity: the only class with a borrow, a depth limit and stamp duty. */
+    public function stock(): ?Stock
+    {
+        return $this->entity instanceof Stock ? $this->entity : null;
+    }
+
     /**
      * The price one unit trades at.
      *

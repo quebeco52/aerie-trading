@@ -282,7 +282,7 @@ class FailureSweep
     private function readAccountsFresh(Stock $stock): void
     {
         $ids = $this->entityManager->getConnection()->fetchFirstColumn(
-            "SELECT o.user_id FROM trade_orders o WHERE o.ticker = :ticker AND o.status = 'OPEN' AND o.action = 'BUY'
+            "SELECT o.user_id FROM trade_orders o WHERE o.ticker = :ticker AND o.status = 'OPEN' AND " . \App\Entity\TradeOrder::ESCROWS_CASH_SQL . "
              UNION
              SELECT uo.user_id FROM user_options uo JOIN option_contracts oc ON oc.id = uo.option_contract_id
              WHERE oc.stock_id = :stock_id AND oc.status = :active AND uo.quantity <> 0",
@@ -317,15 +317,13 @@ class FailureSweep
 
         foreach ($openOrders as $order) {
             $user = $order->getUser();
-            // A buy stop (plain or stop-limit) escrowed nothing, so only a resting limit buy has cash to return.
-            if ($order->getAction() === 'BUY' && !$order->isStop() && $order->getLimitPrice()) {
-                if ($user) {
-                    $this->cashLedger->credit($user, \bcmul($order->getLimitPrice() ?? throw new \LogicException('A resting limit BUY carries its limit price.'), (string) $order->getQuantity(), 4));
-                    $this->entityManager->persist($user);
-                }
+            $escrow = $order->escrowedCash();
+            if ($escrow !== null) {
+                $this->cashLedger->credit($user, $escrow);
+                $this->entityManager->persist($user);
             }
             // Shares escrowed behind a resting sell are still the seller's, and are cancelled with the rest.
-            if ($order->getAction() === 'SELL' && $user?->getId() !== null) {
+            if ($order->escrowsUnits() && $user->getId() !== null) {
                 $positions[$user->getId()] = ($positions[$user->getId()] ?? 0) + (int) $order->getQuantity() - (int) $order->getFilledQuantity();
             }
             $order->setStatus(\App\Entity\TradeOrder::STATUS_CANCELLED);

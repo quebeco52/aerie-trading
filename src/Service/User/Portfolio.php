@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\User;
 
 use App\Entity\PortfolioHistory;
+use App\Entity\TradeOrder;
 use App\Entity\User;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
@@ -34,11 +35,11 @@ class Portfolio
      */
     public const OPEN_ORDER_ESCROW_DETAIL_SQL = "
         SELECT o.user_id,
-               SUM(CASE WHEN o.action = 'BUY' AND o.order_type NOT IN ('STOP', 'STOP_LIMIT')
+               SUM(CASE WHEN " . TradeOrder::ESCROWS_CASH_SQL . "
                         THEN COALESCE(o.limit_price, 0) * o.quantity
                         ELSE 0
                    END) AS escrow_cash,
-               SUM(CASE WHEN o.action = 'SELL'
+               SUM(CASE WHEN " . TradeOrder::ESCROWS_UNITS_SQL . "
                         THEN o.quantity * COALESCE(s.price, e.price, b.price, 0)
                         ELSE 0
                    END) AS escrow_long
@@ -49,6 +50,33 @@ class Portfolio
         WHERE o.status = 'OPEN'
         GROUP BY o.user_id
     ";
+
+    /**
+     * Units each account holds in one instrument as a payout counts them, one row (user_id, units) per account: the
+     * holding, a short negative, plus the units escrowed behind its open SELLs, which leave the holding while they
+     * rest but are still the seller's. An open BUY escrowed cash and holds nothing. Binds :ticker and the holding's key
+     * (:stock_id, :etf_id or :bond_id).
+     *
+     * @param 'STOCK'|'ETF'|'BOND' $assetType
+     */
+    public static function unitsHeldSql(string $assetType): string
+    {
+        [$holdings, $key] = match ($assetType) {
+            'STOCK' => ['user_stocks', 'stock_id'],
+            'ETF' => ['user_etfs', 'etf_id'],
+            'BOND' => ['user_bonds', 'bond_id'],
+        };
+
+        return "SELECT legs.user_id, SUM(legs.qty) AS units
+            FROM (
+                SELECT user_id, quantity AS qty FROM {$holdings} WHERE {$key} = :{$key} AND quantity <> 0
+                UNION ALL
+                SELECT o.user_id, o.quantity AS qty
+                FROM trade_orders o
+                WHERE o.ticker = :ticker AND o.asset_type = '{$assetType}' AND o.status = 'OPEN' AND " . TradeOrder::ESCROWS_UNITS_SQL . "
+            ) legs
+            GROUP BY legs.user_id";
+    }
 
     /**
      * The same book as one number, for the surfaces that only need net worth.

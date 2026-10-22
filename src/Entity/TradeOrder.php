@@ -45,6 +45,13 @@ class TradeOrder
     /** The order type of an issuer's closing settlement; never one a player can place. */
     public const TYPE_SETTLEMENT = 'SETTLEMENT';
 
+    // --- Escrow ---
+    /** SQL test, on trade_orders aliased o, for a resting order that holds cash in escrow: see escrowedCash(). */
+    public const ESCROWS_CASH_SQL = "o.action = 'BUY' AND o.order_type = 'LIMIT'";
+
+    /** SQL test, on trade_orders aliased o, for a resting order that holds units in escrow: see escrowsUnits(). */
+    public const ESCROWS_UNITS_SQL = "o.action = 'SELL'";
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -178,6 +185,30 @@ class TradeOrder
     public function hasLimitCap(): bool
     {
         return $this->orderType === self::TYPE_LIMIT || $this->orderType === self::TYPE_STOP_LIMIT;
+    }
+
+    /**
+     * The cash this order holds in escrow while it rests: a limit BUY reserves its limit times its quantity. Null for
+     * any other order. A buy stop has no fill price to reserve against and is paid for when it fires; a SELL escrows
+     * units instead, and a SHORT or a COVER escrows nothing.
+     *
+     * @return numeric-string|null
+     */
+    public function escrowedCash(): ?string
+    {
+        if ($this->action !== 'BUY' || $this->orderType !== self::TYPE_LIMIT) {
+            return null;
+        }
+
+        return \bcmul($this->limitPrice ?? throw new \LogicException('A resting limit BUY carries its limit price.'), (string) $this->quantity, 4);
+    }
+
+    /**
+     * Whether this order holds units in escrow while it rests: a SELL's leave the holding but are still the seller's.
+     */
+    public function escrowsUnits(): bool
+    {
+        return $this->action === 'SELL';
     }
 
     public function getUser(): User

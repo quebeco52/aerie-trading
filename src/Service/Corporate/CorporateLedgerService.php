@@ -13,6 +13,7 @@ use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
+use App\Service\User\Portfolio;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
@@ -57,31 +58,18 @@ class CorporateLedgerService
         $conn = $this->entityManager->getConnection();
         $paidAtStr = $paidAt->format('Y-m-d H:i:s');
 
-        // Open BUY orders escrow cash, not shares, so they earn nothing.
         $conn->executeStatement(
             "INSERT INTO dividend_payment
                  (user_id, asset_type, ticker, shares_held, dividend_per_share, amount, paid_at)
              SELECT positions.user_id,
                     'STOCK',
                     :ticker,
-                    positions.net_shares,
+                    positions.units,
                     :dividend,
-                    ROUND(positions.net_shares * :dividend, 2),
+                    ROUND(positions.units * :dividend, 2),
                     :paid_at
-             FROM (
-                 SELECT user_id, SUM(qty) AS net_shares
-                 FROM (
-                     SELECT user_id, quantity AS qty
-                     FROM user_stocks
-                     WHERE stock_id = :stock_id AND quantity <> 0
-                     UNION ALL
-                     SELECT user_id, quantity AS qty
-                     FROM trade_orders
-                     WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'
-                 ) legs
-                 GROUP BY user_id
-             ) positions
-             WHERE ROUND(positions.net_shares * :dividend, 2) <> 0",
+             FROM (" . Portfolio::unitsHeldSql('STOCK') . ") positions
+             WHERE ROUND(positions.units * :dividend, 2) <> 0",
             [
                 'ticker' => $stock->getTicker(),
                 'dividend' => $dividendPerShare,
