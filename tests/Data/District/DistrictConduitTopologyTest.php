@@ -260,7 +260,8 @@ class DistrictConduitTopologyTest extends TestCase
      * distressed debt gained the rate and exchange edges its float income reads, and the two
      * insurers lost a land-registry edge their physics never read. Re-baselined again when inflation_ema left
      * UBIQUITOUS_MACRO_FIELDS (the input cost basket moved most producers off headline CPI): the five
-     * balance-sheet financials whose float and pool growth still read CPI now draw a statistical-office edge.
+     * balance-sheet financials whose float and pool growth still read CPI now draw a statistical-office edge. And
+     * once more when the broker's funding rate moved into DebtEngine: the interbank spread was its only registry read.
      */
     public static function financialModelConduitProvider(): array
     {
@@ -269,7 +270,7 @@ class DistrictConduitTopologyTest extends TestCase
             'credit_services' => ['credit_services', ['rate-council', 'credit-registry', 'statistical-office']],
             'shadow_bank' => ['shadow_bank', ['rate-council', 'credit-registry', 'land-registry', 'statistical-office']],
             'investment_bank' => ['investment_bank', ['rate-council', 'credit-registry', 'exchange-floor']],
-            'brokerage' => ['brokerage', ['rate-council', 'credit-registry', 'exchange-floor']],
+            'brokerage' => ['brokerage', ['rate-council', 'exchange-floor']],
             'clearing_house' => ['clearing_house', ['rate-council', 'credit-registry', 'exchange-floor', 'statistical-office']],
             'asset_manager' => ['asset_manager', ['rate-council']],
             'private_equity' => ['private_equity', ['rate-council', 'credit-registry', 'exchange-floor']],

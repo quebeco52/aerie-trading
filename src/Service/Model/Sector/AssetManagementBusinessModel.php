@@ -9,14 +9,15 @@ use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Asset Managers.
@@ -109,11 +110,15 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     /** Floor on visibility in an announced-event quarter (40%). */
     public const EVENT_MIN_VISIBILITY = 0.40;
 
-    // --- Structural Yield Rails ---
-    /** Minimum structural operating EBIT floor as a fraction of operating equity. */
+    // --- Struck Operating Yield ---
+    /** Floor on the struck operating profit per unit of book (5%): the fees a platform earns whatever its funding. */
     public const MIN_OPERATING_EBIT_YIELD = 0.05;
-    /** Hard ceiling on gross asset turnover to prevent reverse-engineered revenue hyperinflation. */
+    /**
+     * Ceiling on the struck revenue per unit of book (2.0x a year), where a thin margin would gross it up past reach.
+     */
     public const MAX_TURNOVER_CAP         = 2.00;
+    /** Persisted fee revenue per unit of book, struck once at the opening macro (resolveOperatingYield()). */
+    public const STATE_OPERATING_YIELD    = 'state:operating_yield';
 
     // --- Macro & Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in sticky fee models. */
@@ -216,82 +221,58 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const DEBT_CAPEX_DEPLOYMENT    = 0.90;
 
     /**
-     * Asset Managers scale EBIT to cover their target ROE and any operational wholesale debt.
-     * They do not use fractional customer deposits or float to generate leverage.
+     * Fees are a yield on the book struck once, at the opening macro (resolveOperatingYield()). Fees are charged on
+     * client assets, not on the manager's own borrowing, so a dearer funding market reaches profit through the interest
+     * DebtEngine charges, not through a revenue target re-solved every quarter to hold the return.
+     *
+     * @return array{invested_capital: float, baseline_roic: float}
      */
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
-        // Capital is tangible: goodwill absorbs no loss, so it neither sizes the book nor earns the return target.
-        $equity = $stock->getTangibleEquity();
-        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
-
-        $policyRate = $macroState->policyRateEma;
-        $yield5y = $macroState->yield5yEma;
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-
-        $taxRate = $macroState->corporateTaxRate;
-
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $treasury = (float) $stock->getCorporateTreasury();
-
-        // The floating leg at the interbank rate DebtEngine charges it at.
-        $blendedWholesaleRate = ($floatingRatio * $macroState->floatingReferenceRate()) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
-
-        // --- THE CLEAR BALANCE SHEET MATH ---
-        // Asset managers scale EBIT from their active operating equity (AUM/Platform capacity).
-        // Excess cash beyond target operating cash is considered idle and stripped from the ROE target.
-        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
-
-        $effectiveEquity = max(1.0, $equity);
-
-        // We use ACTUAL deployed leverage (capped at limits) to prevent the "Phantom Debt" exploit,
-        // where low-leverage brokers pocket theoretical interest expense as massive ROE.
-        $actualLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
-        $allowedLeverage = min($actualLeverage, max(0.0, $equityLimit));
-        $optimalDebt = $effectiveEquity * $allowedLeverage;
-
-        $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
-
-        $optimalOperatingNetIncome = $effectiveEquity * $baselineRoe;
-        $optimalEbt = $optimalOperatingNetIncome / (1.0 - $taxRate);
-
-        $operatingBase = $this->getOperatingBase($stock);
-        $optimalOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $optimalDebt);
-        $minOperatingCash = $this->calculateMinOperatingCash($operatingBase, 0.0, $optimalDebt);
-        $optimalYieldingCash = max(0.0, $optimalOperatingCash - $minOperatingCash);
-        $optimalInterestIncome = $optimalYieldingCash * FixedIncome::moneyMarketYield($policyRate);
-
-        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
-        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $optimalOperatingCash;
-        $structuralOperatingYield = $optimalEbit / max(1.0, $optimalEarningAssets);
-
-        $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
-
-        $targetEbit = $earningAssets * $structuralOperatingYield;
-        // ------------------------------------
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        // The Fee Revenue Floor:
-        // Asset-light financials don't have massive balance sheets, but they must maintain
-        // structural fee revenue (AUM / Advisory) to survive.
-        $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
-
-        $targetEbit = max($minOperatingEbit, $targetEbit);
-
-        // We derive revenue from target EBIT to hit ROE expectations,
-        // but we MUST cap the turnover. If margins compress due to market saturation,
-        // uncapped reverse-engineering will cause top-line revenue hyperinflation!
-        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        // Hard cap turnover at 2.0x annually
-        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_TURNOVER_CAP);
-
-        $impliedTurnover = $targetRevenue / max(1.0, $earningAssets);
-
         return [
-            'invested_capital' => $earningAssets,
-            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate),
+            'invested_capital' => $this->resolveEarningAssets($stock),
+            'baseline_roic' => $this->resolveOperatingYield($stock, $mathUtility) * $stableMargin * (1.0 - $macroState->corporateTaxRate),
         ];
+    }
+
+    /**
+     * Operating revenue per unit of book, as struck, or struck now at the opening macro: the operating profit the
+     * structural return requires once the treasury's income (calculateInterestIncome(), the function the books are
+     * kept with) and the wholesale interest are netted, grossed up by the margin, between the operating-profit floor
+     * and the turnover ceiling. The interest is charged at the coupon the notes would refinance at, so the yield holds
+     * once they have rolled; until then a manager whose notes pay under the market earns above its target.
+     */
+    protected function resolveOperatingYield(Stock $stock, MathUtility $mathUtility): float
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        if (isset($momentum[self::STATE_OPERATING_YIELD])) {
+            return (float) $momentum[self::STATE_OPERATING_YIELD];
+        }
+
+        $opening = new \App\DTO\MacroStateDTO();
+        $earningAssets = max(1.0, $this->resolveEarningAssets($stock));
+        $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveStructuralTargetRoe($stock, $opening) / (1.0 - $opening->corporateTaxRate);
+        $interestExpense = (float) $stock->getTotalDebt() * DebtEngine::chargedWholesaleRate($stock, $opening, $this->getLossGivenDefault(), true);
+        $targetEbit = max($earningAssets * static::MIN_OPERATING_EBIT_YIELD, $targetEbt + $interestExpense - $this->calculateInterestIncome($stock, $opening, $mathUtility));
+
+        return min($targetEbit / max(0.01, (float) $stock->getOperatingMargin()), $earningAssets * static::MAX_TURNOVER_CAP) / $earningAssets;
+    }
+
+    /**
+     * Every fee manager's quarter carries its struck operating yield forward.
+     *
+     * @param array<string, float> $momentum Previous quarter stream map ($stock->getEarningsMomentumZ()).
+     */
+    protected function createStreamContext(array $momentum, MathUtility $mathUtility, ?\App\DTO\MacroStateDTO $macroState = null, ?Stock $stock = null): StreamContext
+    {
+        $streams = parent::createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        if ($stock !== null) {
+            $streams->registerState(self::STATE_OPERATING_YIELD, $this->resolveOperatingYield($stock, $mathUtility));
+        }
+
+        return $streams;
     }
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array

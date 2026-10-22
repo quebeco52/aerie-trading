@@ -351,6 +351,23 @@ class DebtEngine
         return self::priceIssuerSpread($stock, $macroState, $stock->getCreditRating(), true, $lossGivenDefault, self::issuerSpreadMultiple((float) $stock->getCreditSpread(), $lossGivenDefault));
     }
 
+    /**
+     * The rate priceDebt() charges the firm's wholesale book at a macro state, its spread through the cycle: the
+     * floating part at the reference rate plus the spread, the fixed part at the coupon the notes carry or, rolled, at
+     * the coupon they would refinance at (the five-year plus the spread). For a reader that strikes its pricing on the
+     * funding it pays.
+     *
+     * @param float $lossGivenDefault The issuer's loss given default, its business model's.
+     */
+    public static function chargedWholesaleRate(Stock $stock, MacroStateDTO $macroState, float $lossGivenDefault, bool $rolled = false): float
+    {
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+        $creditSpread = self::throughTheCycleCreditSpread($stock, $macroState, $lossGivenDefault);
+        $fixedRate = $rolled ? $macroState->yield5yEma + $creditSpread : (float) $stock->getHistoricalFixedRate();
+
+        return ($floatingRatio * ($macroState->floatingReferenceRate() + $creditSpread)) + ((1.0 - $floatingRatio) * $fixedRate);
+    }
+
     /** The issuer's own multiple of its rating class, read off the spread it was seeded at. */
     private static function issuerSpreadMultiple(float $seededSpread, float $lossGivenDefault): float
     {

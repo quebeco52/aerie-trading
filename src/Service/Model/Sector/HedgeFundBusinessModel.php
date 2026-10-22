@@ -12,7 +12,6 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\Distributions;
-use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -208,64 +207,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const EVENT_BASE_VISIBILITY = 0.60;
     /** Floor on visibility in an announced-event quarter (30%). */
     public const EVENT_MIN_VISIBILITY = 0.30;
-
-    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
-    {
-        // Capital is tangible: goodwill absorbs no loss, so it neither sizes the book nor earns the return target.
-        $equity = $stock->getTangibleEquity();
-        $baselineRoe = $this->resolveStructuralTargetRoe($stock, $macroState);
-
-        $policyRate = $macroState->policyRateEma;
-        $yield5y = $macroState->yield5yEma;
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-
-        $taxRate = $macroState->corporateTaxRate;
-
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $treasury = (float) $stock->getCorporateTreasury();
-
-        // The floating leg at the interbank rate DebtEngine charges it at.
-        $blendedWholesaleRate = ($floatingRatio * $macroState->floatingReferenceRate()) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
-
-        $equityLimit = \App\Data\Company\Sectors::equityLimit($stock->getIndustry());
-
-        $effectiveEquity = max(1.0, $equity);
-        $actualLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
-        $allowedLeverage = min($actualLeverage, max(0.0, $equityLimit));
-        $optimalDebt = $effectiveEquity * $allowedLeverage;
-
-        $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
-        $optimalOperatingNetIncome = $effectiveEquity * $baselineRoe;
-        $optimalEbt = $optimalOperatingNetIncome / (1.0 - $taxRate);
-
-        $operatingBase = $this->getOperatingBase($stock);
-        $optimalOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $optimalDebt);
-        $minOperatingCash = $this->calculateMinOperatingCash($operatingBase, 0.0, $optimalDebt);
-        $optimalYieldingCash = max(0.0, $optimalOperatingCash - $minOperatingCash);
-        $optimalInterestIncome = $optimalYieldingCash * FixedIncome::moneyMarketYield($policyRate);
-
-        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
-        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $optimalOperatingCash;
-        $structuralOperatingYield = $optimalEbit / max(1.0, $optimalEarningAssets);
-
-        $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
-        $targetEbit = $earningAssets * $structuralOperatingYield;
-        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
-
-        $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
-        $targetEbit = max($minOperatingEbit, $targetEbit);
-
-        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_TURNOVER_CAP);
-
-        $impliedTurnover = $targetRevenue / max(1.0, $earningAssets);
-
-        return [
-            'invested_capital' => $earningAssets,
-            'baseline_roic'    => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate),
-        ];
-    }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {

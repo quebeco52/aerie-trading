@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
@@ -252,7 +253,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveCalibrationRoe($stock, $macroState) / max(0.01, 1.0 - $macroState->corporateTaxRate);
-        $interestExpense = (float) $stock->getWholesaleDebt() * $this->resolveChargedWholesaleRate($stock, $macroState, true);
+        $interestExpense = (float) $stock->getWholesaleDebt() * DebtEngine::chargedWholesaleRate($stock, $macroState, $this->getLossGivenDefault(), true);
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($this->getOperatingBase($stock) * self::TARGET_OPERATING_BUFFER));
         $interestIncome = ($earningAssets * $bookYield) + ($excessCash * $this->calculateCashYield($macroState));
 

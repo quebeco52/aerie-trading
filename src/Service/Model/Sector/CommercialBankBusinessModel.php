@@ -538,7 +538,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
         $depositRate = $this->resolveDepositRate($macroState->policyRateEma, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
-        $blendedWholesaleRate = $this->resolveChargedWholesaleRate($stock, $macroState);
+        $blendedWholesaleRate = DebtEngine::chargedWholesaleRate($stock, $macroState, $this->getLossGivenDefault());
 
         // The funding the lender carries: its leverage limit binds on the live balance sheet, and a calibration
         // that counted less funding than it pays for struck a spread that left it short of its return.
@@ -626,27 +626,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * The rate DebtEngine charges this lender's wholesale book at a macro state: the floating part at the reference
-     * rate plus the lender's own spread through the cycle, the fixed part at the coupon the notes carry, or, rolled, at
-     * the coupon they would refinance at (the five-year plus that spread).
-     */
-    protected function resolveChargedWholesaleRate(Stock $stock, MacroStateDTO $macroState, bool $rolled = false): float
-    {
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        $creditSpread = DebtEngine::throughTheCycleCreditSpread($stock, $macroState, $this->getLossGivenDefault());
-        $fixedRate = $rolled ? $macroState->yield5yEma + $creditSpread : (float) $stock->getHistoricalFixedRate();
-
-        return ($floatingRatio * ($macroState->floatingReferenceRate() + $creditSpread)) + ((1.0 - $floatingRatio) * $fixedRate);
-    }
-
-    /**
      * Interest a year the book matched to the fixed wholesale earns over a book priced at the macro state's rates: a
      * book and the notes that funded it were struck at the same past rates, so it carries the notes' coupon gap to the
      * coupon they would refinance at, and runs off with them. Negative where the notes are cheaper than the market.
      */
     protected function resolveMatchedLegacyIncome(Stock $stock, MacroStateDTO $macroState): float
     {
-        return (float) $stock->getWholesaleDebt() * ($this->resolveChargedWholesaleRate($stock, $macroState) - $this->resolveChargedWholesaleRate($stock, $macroState, true));
+        $lossGivenDefault = $this->getLossGivenDefault();
+
+        return (float) $stock->getWholesaleDebt() * (DebtEngine::chargedWholesaleRate($stock, $macroState, $lossGivenDefault) - DebtEngine::chargedWholesaleRate($stock, $macroState, $lossGivenDefault, true));
     }
 
     /**

@@ -553,7 +553,7 @@ final class LenderQuarterHarnessTest extends KernelTestCase
                 'mom_keys' => array_keys($s->getEarningsMomentumZ() ?? [])];
             if ($m instanceof \App\Service\Model\Sector\CommercialBankBusinessModel) {
                 $row += ['roe_tgt' => self::lqCall($m, 'resolveCalibrationRoe', $s, $open), 'cal_yield' => self::lqCall($m, 'resolveCalibrationYield', $s, $open),
-                    'pricing' => self::lqCall($m, 'resolveFranchisePricing', $s), 'opcost' => self::lqCall($m, 'resolveOperatingCostToEarningAssets', $s),
+                    'pricing' => self::lqCall($m, 'resolveFranchisePricing', $s), 'opcost' => $m->getOperatingCostToEarningAssets($s),
                     'ttc_rate' => $m->getThroughTheCycleCreditLossRate($s), 'ttc_prov_rate' => $m->resolveThroughTheCycleCreditProvision($s, 1.0),
                     'treas_inc' => self::lqCall($m, 'resolveTreasuryIncome', $s, $open), 'int_yield' => $m->resolveInterestYield($s, $open),
                     'fwd' => $m->getForwardCreditLossMultiplier($s, $open), 'loan_share' => $m->getLoanShareOfEarningAssets(),
@@ -612,7 +612,7 @@ final class LenderQuarterHarnessTest extends KernelTestCase
                 $row['mdl'] = ['ttc' => $strat->getThroughTheCycleCreditLossRate($c), 'fwd' => $strat->getForwardCreditLossMultiplier($c, $m),
                     'ivs' => self::lqCall($strat, 'resolveInterestVolumeShift', $m), 'fvs' => self::lqCall($strat, 'resolveFeeVolumeShift', $c, $m),
                     'mp' => $strat->getMacroPhysics($c, $m), 'iy' => $strat->resolveInterestYield($c, $m), 'ea' => $strat->resolveEarningAssets($c),
-                    'opcost' => self::lqCall($strat, 'resolveOperatingCostToEarningAssets', $c), 'treas' => self::lqCall($strat, 'resolveTreasuryIncome', $c, $m)];
+                    'opcost' => $strat->getOperatingCostToEarningAssets($c), 'treas' => self::lqCall($strat, 'resolveTreasuryIncome', $c, $m)];
             }
         }
         $this->lqRows[] = $row;

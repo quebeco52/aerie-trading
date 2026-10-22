@@ -9,11 +9,16 @@ use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class AssetManagementBusinessModelTest extends TestCase
@@ -322,5 +327,97 @@ class AssetManagementBusinessModelTest extends TestCase
             $this->assertLessThanOrEqual(AssetManagementBusinessModel::DEFAULT_CAPACITY_SHARE, $capacity, $row['ticker']);
         }
         $this->assertSame(4, $managers, 'SWAN, TIER, CROW and VULT');
+    }
+
+    /** @return array<string, array{array<string, mixed>}> Every seeded fee manager's row, by ticker. */
+    public static function feeManagerProvider(): array
+    {
+        $managers = [];
+        foreach (InitialMarket::STOCKS as $row) {
+            if (Sectors::strategyFor($row['industry']) instanceof AssetManagementBusinessModel) {
+                $managers[$row['ticker']] = [$row];
+            }
+        }
+
+        return $managers;
+    }
+
+    /**
+     * The fee yield is struck once, at the opening macro, and held: neither an interbank freeze nor a point on the
+     * policy rate and the curve re-solves it, before the first report or after it has persisted the strike.
+     *
+     * @param array<string, mixed> $row
+     */
+    #[DataProvider('feeManagerProvider')]
+    public function testTheFeeYieldIsStruckOnceAndHeld(array $row): void
+    {
+        [$stock, $model, $math] = $this->openFeeManager($row);
+        $opening = new MacroStateDTO();
+        $shocked = [
+            'freeze' => new MacroStateDTO(interbankLiquiditySpreadEma: $opening->interbankLiquiditySpreadEma + 0.01),
+            'hike' => new MacroStateDTO(policyRateEma: $opening->policyRateEma + 0.01, yield5yEma: $opening->yield5yEma + 0.01, yield10yEma: $opening->yield10yEma + 0.01),
+        ];
+        $struck = $model->getTargetMetrics($stock, $opening, $math)['baseline_roic'];
+        foreach ($shocked as $name => $macro) {
+            $this->assertEqualsWithDelta($struck, $model->getTargetMetrics($stock, $macro, $math)['baseline_roic'], 1e-12, "{$row['ticker']} re-solved its fees on a {$name}.");
+        }
+
+        $stock->setEarningsMomentumZ($model->computeActualFinancials($stock, (float) $stock->getTotalRevenue() / 4.0, 0.50, 0.0, 0.0, $shocked['freeze'], $math)->streamZ);
+        $this->assertArrayHasKey(AssetManagementBusinessModel::STATE_OPERATING_YIELD, $stock->getEarningsMomentumZ() ?? []);
+        foreach ($shocked as $name => $macro) {
+            $this->assertEqualsWithDelta($struck, $model->getTargetMetrics($stock, $macro, $math)['baseline_roic'], 1e-12, "{$row['ticker']} re-struck its fees on a {$name} after its first report.");
+        }
+    }
+
+    /**
+     * A dearer funding market falls on the manager's profit: a point on the interbank spread lifts the interest
+     * DebtEngine charges its floating debt by a point, and its return falls by D/E x floating share x 1% after tax.
+     *
+     * @param array<string, mixed> $row
+     */
+    #[DataProvider('feeManagerProvider')]
+    public function testAFundingFreezeFallsOnTheManagersProfit(array $row): void
+    {
+        [$stock, $model, $math] = $this->openFeeManager($row);
+        $opening = new MacroStateDTO();
+        $freeze = new MacroStateDTO(interbankLiquiditySpreadEma: $opening->interbankLiquiditySpreadEma + 0.01);
+        $equity = $stock->getTangibleEquity();
+        $expectedFall = ((float) $stock->getTotalDebt() / $equity) * (float) $stock->getFloatingDebtRatio() * 0.01 * (1.0 - $opening->corporateTaxRate);
+
+        $this->assertGreaterThan(0.0, $expectedFall);
+        $this->assertEqualsWithDelta(-$expectedFall, $this->bookedReturn($stock, $model, $math, $freeze) - $this->bookedReturn($stock, $model, $math, $opening), 1e-9, $row['ticker']);
+    }
+
+    /**
+     * The fee manager as the seed opens it.
+     *
+     * @param array<string, mixed> $row
+     * @return array{Stock, AssetManagementBusinessModel, MathUtility}
+     */
+    private function openFeeManager(array $row): array
+    {
+        mt_srand(20261022);
+        $math = new MathUtility();
+        $model = Sectors::strategyFor($row['industry']);
+        $this->assertInstanceOf(AssetManagementBusinessModel::class, $model);
+        $stock = (new Stock())->setTicker($row['ticker']);
+        (new OpeningBoardBuilder($math, new DebtEngine($math, CorporateMetrics::getInstance()), new MarketEngine($math), new AnchorStakeLedger()))
+            ->open($stock, $row, new MacroStateDTO());
+
+        return [$stock, $model, $math];
+    }
+
+    /**
+     * The return the manager books on a macro: operating profit on its fee yield, less the interest DebtEngine
+     * charges, plus what its treasury earns, after tax.
+     */
+    private function bookedReturn(Stock $stock, AssetManagementBusinessModel $model, MathUtility $math, MacroStateDTO $macro): float
+    {
+        $target = $model->getTargetMetrics($stock, $macro, $math);
+        $debt = (new DebtEngine($math, CorporateMetrics::getInstance()))->calculateInterestExpense($stock, $macro);
+        $operatingProfit = $target['invested_capital'] * $target['baseline_roic'] / (1.0 - $macro->corporateTaxRate);
+        $income = $model->calculateInterestIncome($stock, $macro, $math, $debt->wholesaleRate);
+
+        return ($operatingProfit - $debt->interestExpense + $income) * (1.0 - $macro->corporateTaxRate) / $stock->getTangibleEquity();
     }
 }

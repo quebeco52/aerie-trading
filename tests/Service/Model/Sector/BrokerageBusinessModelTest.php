@@ -8,6 +8,11 @@ use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -426,6 +431,39 @@ class BrokerageBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($this->model->getTargetMetrics($stock, $opening, $this->mathUtility)['baseline_roic'], $this->model->getTargetMetrics($stock, $raised, $this->mathUtility)['baseline_roic'], 1e-12);
         $this->assertGreaterThan($this->bookedReturn($this->model, $stock, $opening), $this->bookedReturn($this->model, $stock, $raised));
+    }
+
+    /**
+     * The operating yield is struck on the coupon the broker pays, as DebtEngine charges it, so a broker whose notes
+     * carry a coupon far from the five-year still books its structural return at the opening macro: struck on the
+     * five-year plus the seeded spread, ROOK opened 5% under target.
+     */
+    public function testABrokerWhoseCouponIsOffTheFiveYearOpensOnTarget(): void
+    {
+        $seed = null;
+        foreach (InitialMarket::STOCKS as $row) {
+            if ($row['ticker'] === 'ROOK') {
+                $seed = $row;
+            }
+        }
+        $this->assertNotNull($seed);
+        $opening = new MacroStateDTO();
+        $debtEngine = new DebtEngine($this->mathUtility, CorporateMetrics::getInstance());
+        $builder = new OpeningBoardBuilder($this->mathUtility, $debtEngine, new MarketEngine($this->mathUtility), new AnchorStakeLedger());
+
+        foreach ([0.02, 0.08] as $coupon) {
+            $stock = (new Stock())->setTicker('ROOK');
+            $builder->open($stock, ['historical_fixed_rate' => $coupon] + $seed, $opening);
+            $target = $this->model->getTargetMetrics($stock, $opening, $this->mathUtility);
+            $debt = $debtEngine->calculateInterestExpense($stock, $opening);
+            $operatingProfit = $target['invested_capital'] * $target['baseline_roic'] / (1.0 - $opening->corporateTaxRate);
+            $netInterest = $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility, $debt->wholesaleRate) - $debt->interestExpense;
+            $booked = ($operatingProfit + $netInterest) * (1.0 - $opening->corporateTaxRate) / $stock->getTangibleEquity();
+            $structural = (new \ReflectionMethod($this->model, 'resolveStructuralTargetRoe'))->invoke($this->model, $stock, $opening);
+
+            $this->assertNotEqualsWithDelta($opening->yield5yEma, $coupon, 0.01);
+            $this->assertEqualsWithDelta($structural, $booked, 1e-9, sprintf('A %.0f%% coupon', 100 * $coupon));
+        }
     }
 
     /** The floor and the ceiling still bind: interest alone past a low target, and an absurd target. */

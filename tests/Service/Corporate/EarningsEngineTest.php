@@ -33,6 +33,7 @@ use App\Service\Math\ResponseCurves;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HomebuilderBusinessModel;
+use App\Service\Model\Sector\TechBusinessModel;
 use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -609,6 +610,61 @@ class EarningsEngineTest extends TestCase
             1e-12,
             'the drag split by input sums to the drag filed',
         );
+    }
+
+    /**
+     * Stock compensation is a memo of pay already inside operating costs: a firm paying a tenth of its revenue in
+     * shares reports the same costs, EBIT and pretax income as the same firm paying none.
+     */
+    public function testStockCompensationChangesNoMarginOrPretaxIncome(): void
+    {
+        $quarter = function (bool $paysInShares): EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($dispatcher);
+
+            // The software model, or the same model paying nothing in shares, swapped into the strategy cache.
+            $cache = new \ReflectionProperty(Sectors::class, 'strategyInstances');
+            $strategies = $cache->getValue();
+            $strategies['tech'] = $paysInShares ? new TechBusinessModel() : new class extends TechBusinessModel {
+                public function getStockCompensationIntensity(Stock $stock): float
+                {
+                    return 0.0;
+                }
+            };
+            $cache->setValue(null, $strategies);
+            mt_srand(7);
+
+            try {
+                $stock = $this->buildMatureIndustrial('SAAS');
+                $stock->setIndustry('Software - Application');
+                $stock->setSector('Information Technology');
+                $stock->setPrice('300.00');
+                $stock->setOperatingMargin('0.25');
+                $stock->setLifecycleStage(LifecycleStage::Mature);
+                $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('SAAS', 252));
+            } finally {
+                unset($strategies['tech']);
+                $cache->setValue(null, $strategies);
+            }
+
+            $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+
+            return $captured;
+        };
+
+        $paying = $quarter(true);
+        $none = $quarter(false);
+
+        $this->assertGreaterThan(0.0, $paying->kpis['stock_compensation']);
+        $this->assertSame(0.0, (float) $none->kpis['stock_compensation']);
+        $this->assertEqualsWithDelta($none->operatingCosts, $paying->operatingCosts, 1e-6);
+        $this->assertEqualsWithDelta($none->ebit, $paying->ebit, 1e-6);
+        $this->assertEqualsWithDelta($none->preTaxIncome, $paying->preTaxIncome, 1e-6);
     }
 
     /**

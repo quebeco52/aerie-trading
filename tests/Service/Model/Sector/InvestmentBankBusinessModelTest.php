@@ -8,6 +8,7 @@ use App\Data\Company\InitialMarket;
 use App\Data\Company\StockInfo;
 use App\Data\Company\StockModelTuning;
 use App\Entity\Stock;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InvestmentBankBusinessModel;
@@ -336,6 +337,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock->setWholesaleDebt('100000000000.0'); // $100B debt
         $stock->setTotalEquity('12500000000.0'); // $12.5B equity: the 8x wholesale limit, so the sheet balances
         $stock->setCorporateTreasury('10000000000.0'); // $10B treasury (equal to min cash)
+        $stock->setFloatingDebtRatio('1.0');
 
         $mathMock = $this->createStub(MathUtility::class);
         $macroState = \App\DTO\MacroStateDTO::fromArray([
@@ -348,13 +350,15 @@ class InvestmentBankBusinessModelTest extends TestCase
 
         $income = $this->model->calculateInterestIncome($stock, $macroState, $mathMock);
 
-        // Funding benchmark = max(0.0, 0.04 + 0.0150) = 0.0550
-        // Funded book = equity + total debt - treasury = 12.5B + 100B - 10B = $102.5B
-        // Prime financing = $102.5B * 0.70 * (0.0550 + 0.0150) = $71.75B * 0.0700 = $5.0225B
-        // Repo inventory = $102.5B * 0.30 * max(0, 0.0550 - 0.0025) = $30.75B * 0.0525 = $1.614375B
-        // Excess cash = 0 (minCash = 100B * 0.10 = 10B)
-        // Total interest income = 5.0225B + 1.614375B = $6.636875B
-        $this->assertEqualsWithDelta(6_636_875_000.0, $income, 1_000.0);
+        // With no realized rate the benchmark is the rate DebtEngine charges the firm: all floating, the policy rate
+        // plus its own spread through the cycle.
+        $benchmark = DebtEngine::chargedWholesaleRate($stock, $macroState, $this->model->getLossGivenDefault());
+        $this->assertGreaterThan(0.04, $benchmark, 'The benchmark carries the firm\'s own credit spread.');
+
+        // Funded book = equity + total debt - treasury = 12.5B + 100B - 10B = $102.5B: 70% prime financing at the
+        // benchmark plus 150bps, 30% repo inventory 25bps under it; no excess cash (minCash = 100B * 0.10 = 10B).
+        $expected = (102_500_000_000.0 * 0.70 * ($benchmark + 0.0150)) + (102_500_000_000.0 * 0.30 * ($benchmark - 0.0025));
+        $this->assertEqualsWithDelta($expected, $income, 1_000.0);
     }
 
     /**
@@ -810,7 +814,8 @@ class InvestmentBankBusinessModelTest extends TestCase
             'interbank_liquidity_spread_ema' => 0.0,
         ]);
 
-        $interestIncome = $this->model->calculateInterestIncome($stock, $macroState, $mathMock);
+        // Funded at the policy rate flat, so the book's own structure is all that moves the income.
+        $interestIncome = $this->model->calculateInterestIncome($stock, $macroState, $mathMock, 0.04);
 
         // Funded book = equity + total debt - treasury = $50B + $100B - $25B = $125B
         // 1. Prime financing: $125B * 70% * (0.04 + 0.0150) = $87.5B * 0.055 = $4.8125B
@@ -975,6 +980,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock->setWholesaleDebt('10000000000.0'); // $10B debt
         $stock->setCorporateTreasury('1000000000.0');
         $stock->setFloatingDebtRatio('0.0'); // 100% fixed debt
+        $stock->setHistoricalFixedRate('0.025'); // the coupon the notes carry
 
         $mathMock = $this->createStub(MathUtility::class);
 
@@ -985,10 +991,10 @@ class InvestmentBankBusinessModelTest extends TestCase
             'yield_5y_ema'    => 0.02,
         ]);
 
-        // Blended wholesale rate = (0 * 0.06) + (1 * 0.02) + 0.0050 = 0.0250 (2.5%)
+        // Funding rate DebtEngine charges = the fixed coupon, 0.0250 (2.5%)
         // Because policy rate is 6.0%, if max($policyRate, ...) were used, fundingBenchmark would be 6.0%,
         // generating 6.0% + 1.5% = 7.5% prime financing income on a book funded at 2.5% (phantom NII).
-        // With max(0.0, blendedWholesaleRate), fundingBenchmark = 0.0250, primeRate = 0.0400.
+        // On the charged rate, fundingBenchmark = 0.0250, primeRate = 0.0400.
         $income = $this->model->calculateInterestIncome($stock, $macroInverted, $mathMock);
 
         // Funded book = equity + total debt - treasury = $0B + $10B - $1B = $9B
@@ -1227,12 +1233,10 @@ class InvestmentBankBusinessModelTest extends TestCase
 
         $income = $this->model->calculateInterestIncome($stock, $macroStressedRepo, $mathMock);
 
-        // Floating rate = 0.04 + 0.0215 = 0.0615
-        // Blended wholesale rate = 0.0615 + 0.0100 = 0.0715
-        // Prime rate = 0.0715 + 0.0150 = 0.0865 -> 7B * 0.0865 = 0.6055B
-        // Repo yield = 0.0715 - 0.0025 = 0.0690 -> 3B * 0.0690 = 0.2070B
-        // Total = 0.8125B ($812,500,000.0)
-        $this->assertEqualsWithDelta(812_500_000.0, $income, 1000.0);
+        // Floating rate = 0.04 + 0.0215 = 0.0615, plus the firm's spread through the cycle as DebtEngine charges it.
+        $wholesaleRate = 0.0615 + DebtEngine::throughTheCycleCreditSpread($stock, $macroStressedRepo, $this->model->getLossGivenDefault());
+        // Prime at the wholesale rate plus 150bps on 7B, repo 25bps under it on 3B.
+        $this->assertEqualsWithDelta((7_000_000_000.0 * ($wholesaleRate + 0.0150)) + (3_000_000_000.0 * ($wholesaleRate - 0.0025)), $income, 1000.0);
     }
 
     public function testEachDeskIsWeightedByItsShareOfTrading(): void

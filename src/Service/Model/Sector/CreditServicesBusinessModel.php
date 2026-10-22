@@ -7,6 +7,7 @@ namespace App\Service\Model\Sector;
 use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
@@ -264,7 +265,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         // Credit services require highly competitive APYs on their high-yield savings accounts
         $depositRate = $this->resolveDepositRate($macroState->policyRateEma, MacroConstants::SYSTEM_DEPOSIT_BETA_BASE);
-        $blendedWholesaleRate = $this->resolveChargedWholesaleRate($stock, $macroState);
+        $blendedWholesaleRate = DebtEngine::chargedWholesaleRate($stock, $macroState, $this->getLossGivenDefault());
 
         // The funding the lender carries: its leverage limit binds on the live balance sheet, not in the pricing.
         $optimalDebt = $totalDebt;

@@ -9,6 +9,7 @@ use App\DTO\InterestExpenseDTO;
 use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
@@ -265,25 +266,16 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * Fallback blended wholesale funding rate: floating/fixed debt mix priced off the interbank rate (as DebtEngine
-     * charges it) and the 5-year yield curve, plus the firm's static
-     * structural credit spread. Used only when no realized wholesale rate from DebtEngine is available (e.g. market
-     * seed/reset bootstrapping, before any live debt calc has run).
+     * The wholesale rate the operating yield is struck on, and the fallback where no realized rate from DebtEngine
+     * exists yet: the coupon the firm pays, as DebtEngine charges it (DebtEngine::chargedWholesaleRate()), so the
+     * equity-funded margin book earns at the strike what it earns in the books.
      *
-     * IMPORTANT: this deliberately omits the dynamic Merton/BGG spread widening that
-     * DebtEngine::calculateInterestExpenseAndWholesaleRate layers on, because that widening depends on the
-     * firm's live market cap and distance-to-default. Do not use this as the benchmark once a realized rate
-     * exists — pricing client margin assets off this static approximation while the expense side pays the
-     * live distressed rate is exactly the negative-carry bug this indirection guards against; see
-     * calculateInterestIncome().
+     * It is the spread through the cycle, without the widening DebtEngine prices off the firm's live distance to
+     * default; once a realized rate exists, client margin assets are priced off that (calculateInterestIncome()).
      */
     protected function calculateBlendedWholesaleRate(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $yield5y = $macroState->yield5yEma;
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-
-        return ($floatingRatio * $macroState->floatingReferenceRate()) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        return DebtEngine::chargedWholesaleRate($stock, $macroState, $this->getLossGivenDefault());
     }
 
     public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
@@ -385,14 +377,12 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     {
         return [
             'deal_activity_index_ema',
-            'interbank_liquidity_spread_ema',
             'market_volatility_ema',
             'money_supply_growth_ema',
             'money_supply_growth_trend',
             'output_gap_ema',
             'policy_rate_ema',
             'stamp_duty_rate',
-            'yield_5y_ema',
         ];
     }
 }
