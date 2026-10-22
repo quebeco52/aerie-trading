@@ -13,7 +13,6 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\FormField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\NumberField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\PercentField;
-use EasyCorp\Bundle\EasyAdminBundle\Field\TextareaField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 
 /**
@@ -113,12 +112,7 @@ class StockCrudController extends AbstractCrudController
             NumberField::new('jumpIntensity', 'Intensity')->hideOnIndex(),
             NumberField::new('jumpVol', 'Volatility')->hideOnIndex(),
 
-            // --- SECTION 5: LORE (EDITABLE) ---
-            FormField::addFieldset('Lore & Description')->setIcon('fas fa-book'),
-
-            TextareaField::new('description')
-                ->hideOnIndex()
-                ->renderAsHtml(),
+            // No description field: the stock page reads the lore in StockInfo, so an edit here would never show.
         ];
     }
 }

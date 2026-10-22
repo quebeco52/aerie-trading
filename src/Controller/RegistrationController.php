@@ -8,11 +8,14 @@ use App\Entity\User;
 use App\Repository\UserRepository;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Address;
 use Symfony\Component\Mime\Email;
+use Symfony\Component\Mime\Exception\ExceptionInterface as AddressException;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use SymfonyCasts\Bundle\VerifyEmail\Exception\VerifyEmailExceptionInterface;
@@ -29,6 +32,8 @@ class RegistrationController extends AbstractController
         MailerInterface $mailer,
         \App\Service\Macro\MacroStateProvider $macroStates,
         \App\Service\Season\SeasonService $seasons,
+        UserRepository $users,
+        LoggerInterface $logger,
     ): Response {
         if ($this->getUser()) {
             return $this->redirectToRoute('app_dashboard');
@@ -47,6 +52,18 @@ class RegistrationController extends AbstractController
 
             if (empty($email) || empty($username) || empty($plainPassword)) {
                 $this->addFlash('error', 'Please fill out all required fields, including your password.');
+                return $this->redirectToRoute('app_register');
+            }
+
+            $problem = self::problemWith($email, $username);
+            if ($problem === null && $users->findOneBy(['email' => $email]) !== null) {
+                $problem = 'An account with that email already exists.';
+            }
+            if ($problem === null && $users->findOneBy(['username' => $username]) !== null) {
+                $problem = 'That username is taken.';
+            }
+            if ($problem !== null) {
+                $this->addFlash('error', $problem);
                 return $this->redirectToRoute('app_register');
             }
 
@@ -85,15 +102,40 @@ class RegistrationController extends AbstractController
                 $this->addFlash('success', 'Account created! Please check your email to verify your account.');
                 return $this->redirectToRoute('app_login');
             } catch (UniqueConstraintViolationException $e) {
-                $this->addFlash('error', 'An account with that email already exists.');
+                // Someone registered the same email or username since the checks above.
+                $this->addFlash('error', 'That email or username was just taken. Please choose another.');
                 return $this->redirectToRoute('app_register');
             } catch (\Exception $e) {
-                $this->addFlash('error', 'An error occurred during registration: ' . $e->getMessage());
+                $logger->error('Registration failed.', ['exception' => $e]);
+                $this->addFlash('error', 'Registration failed. Please try again.');
                 return $this->redirectToRoute('app_register');
             }
         }
 
         return $this->render('registration/register.html.twig');
+    }
+
+    /**
+     * What is wrong with a sign-up's email or username before it reaches the database, or null. The mailer refuses an
+     * address it cannot send to, and the columns refuse a value longer than they hold.
+     */
+    public static function problemWith(string $email, string $username): ?string
+    {
+        try {
+            new Address($email);
+        } catch (AddressException) {
+            return 'That email address is not valid.';
+        }
+
+        if (mb_strlen($email) > User::EMAIL_MAX_LENGTH) {
+            return sprintf('Email addresses can be at most %d characters.', User::EMAIL_MAX_LENGTH);
+        }
+
+        if (mb_strlen($username) > User::USERNAME_MAX_LENGTH) {
+            return sprintf('Usernames can be at most %d characters.', User::USERNAME_MAX_LENGTH);
+        }
+
+        return null;
     }
 
     #[Route('/verify/email', name: 'app_verify_email')]

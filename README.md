@@ -16,7 +16,8 @@ To run Aerie Trading locally, you will need to have [Docker](https://www.docker.
    ```
 
 3. **Access the platform:**
-   Open your browser and navigate to `http://localhost` and login with email test.test@test.se and password test
+   Open your browser and navigate to `http://localhost` and login with email test.test@test.se and password test. Seed and reset create this administrator in development
+   and test only, never in production.
 
 **Useful Commands:**
 - `make down` - Stop the Docker containers.

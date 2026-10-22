@@ -233,4 +233,36 @@ class PruneHistoryCommandTest extends TestCase
             $this->assertSame(1 + ($index + 1) * self::BATCH, $params['hi']);
         }
     }
+
+    /** A bare --years once read as zero years kept, and thinned every series in one irreversible pass. */
+    public function testABareYearsOptionIsRefusedBeforeAnythingIsDeleted(): void
+    {
+        $tester = new CommandTester(new PruneHistoryCommand(new HistoryPruner($this->untouchedEntityManager())));
+
+        $this->expectException(\Symfony\Component\Console\Exception\InvalidOptionException::class);
+        $tester->execute(['--years' => null]);
+    }
+
+    public function testAYearsValueThatIsNotAPositiveNumberDeletesNothing(): void
+    {
+        foreach (['0', '-2', 'all'] as $years) {
+            $tester = new CommandTester(new PruneHistoryCommand(new HistoryPruner($this->untouchedEntityManager())));
+
+            $this->assertSame(Command::INVALID, $tester->execute(['--years' => $years]), "--years={$years}");
+        }
+
+        $tester = new CommandTester(new PruneHistoryCommand(new HistoryPruner($this->untouchedEntityManager())));
+        $this->assertSame(Command::INVALID, $tester->execute(['--per-year' => '0']));
+    }
+
+    private function untouchedEntityManager(): EntityManagerInterface
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->expects($this->never())->method('executeStatement');
+        $connection->expects($this->never())->method('transactional');
+        $em = $this->createStub(EntityManagerInterface::class);
+        $em->method('getConnection')->willReturn($connection);
+
+        return $em;
+    }
 }

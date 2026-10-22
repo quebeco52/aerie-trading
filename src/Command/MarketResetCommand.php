@@ -7,17 +7,16 @@ namespace App\Command;
 use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Entity\User;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Market\Ticker\StockTickColumns;
 use App\Service\Math\FinancialConstants;
+use App\Service\User\DevAdminAccount;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 #[AsCommand(
     name: 'app:market-reset',
@@ -28,7 +27,7 @@ class MarketResetCommand extends Command
     public function __construct(
         private EntityManagerInterface $entityManager,
         private \Redis $redis,
-        private UserPasswordHasherInterface $passwordHasher,
+        private DevAdminAccount $devAdmin,
         private \App\Service\Market\Bond\TreasuryAuctionService $treasuryAuction,
         private OpeningBoardBuilder $openingBoard,
     ) {
@@ -94,21 +93,7 @@ class MarketResetCommand extends Command
             $initialTickers,
         );
 
-        // Ensure the test user exists
-        $testUser = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'test.test@test.se']);
-        if (!$testUser) {
-            $testUser = new User();
-            $testUser->setEmail('test.test@test.se');
-            $testUser->setRoles(['ROLE_ADMIN']);
-            $testUser->setUsername('Test');
-            $testUser->setIsVerified(true);
-            $testUser->setCashBalance('10000.00');
-            $testUser->setPassword($this->passwordHasher->hashPassword($testUser, 'test'));
-            $this->entityManager->persist($testUser);
-        }
-
-        $testUser->setUsername('Test');
-        $testUser->setIsVerified(true);
+        $this->devAdmin->ensure();
         $this->entityManager->flush();
 
         $conn->executeStatement('UPDATE users SET cash_balance = 10000.00, margin_debit = 0');

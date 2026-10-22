@@ -12,6 +12,7 @@ use App\Entity\UserOption;
 use App\Entity\UserStock;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Trading\MarginEngine;
+use App\Service\Market\Trading\TradeRejectedException;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\OptionPricing;
@@ -67,11 +68,11 @@ final class OptionTradeService
     public function execute(User $user, OptionContract $contract, string $action, int $contracts): void
     {
         if ($contracts <= 0) {
-            throw new \Exception('Invalid quantity.');
+            throw new TradeRejectedException('Invalid quantity.');
         }
 
         if (!in_array($action, self::VALID_ACTIONS, true)) {
-            throw new \Exception('Invalid option order action.');
+            throw new TradeRejectedException('Invalid option order action.');
         }
 
         $macroState = $this->macroStateProvider->liveState();
@@ -82,7 +83,7 @@ final class OptionTradeService
         );
 
         if ($quote->timeToExpiry < OptionPricing::MIN_OPTION_TIME_TO_EXPIRY) {
-            throw new \Exception("{$contract->getTicker()} has expired and is awaiting settlement.");
+            throw new TradeRejectedException("{$contract->getTicker()} has expired and is awaiting settlement.");
         }
 
         // The contract is now held, so it carries a stored mark. Stamping it here rather than waiting for
@@ -151,17 +152,17 @@ final class OptionTradeService
         match ($action) {
             'BUY' => $held >= 0
                 ? null
-                : throw new \Exception("You are short {$symbol}. Cover the position before buying it."),
+                : throw new TradeRejectedException("You are short {$symbol}. Cover the position before buying it."),
             'WRITE' => $held <= 0
                 ? null
-                : throw new \Exception("You are long {$symbol}. Sell the position before writing it."),
+                : throw new TradeRejectedException("You are long {$symbol}. Sell the position before writing it."),
             'SELL' => $held >= $contracts
                 ? null
-                : throw new \Exception("You do not hold {$contracts} contracts of {$symbol} to sell."),
+                : throw new TradeRejectedException("You do not hold {$contracts} contracts of {$symbol} to sell."),
             'COVER' => $held <= -$contracts
                 ? null
-                : throw new \Exception("You are not short {$contracts} contracts of {$symbol} to cover."),
-            default => throw new \Exception('Invalid option order action.'),
+                : throw new TradeRejectedException("You are not short {$contracts} contracts of {$symbol} to cover."),
+            default => throw new TradeRejectedException('Invalid option order action.'),
         };
     }
 
@@ -175,7 +176,7 @@ final class OptionTradeService
     private function requireCollateral(User $user, OptionContract $contract, OptionQuoteDTO $quote, int $contracts): void
     {
         if (!$user->isMarginEnabled()) {
-            throw new \Exception('Writing options requires a margin account.');
+            throw new TradeRejectedException('Writing options requires a margin account.');
         }
 
         $naked = $contracts - $this->coveredContracts($user, $contract, $contracts);
@@ -199,7 +200,7 @@ final class OptionTradeService
         $positionEquivalent = $requirement / $this->marginEngine->margins()['initial'];
 
         if (!$this->marginEngine->canOpen($user, $positionEquivalent)) {
-            throw new \Exception('Insufficient buying power to collateralize this position.');
+            throw new TradeRejectedException('Insufficient buying power to collateralize this position.');
         }
     }
 
@@ -280,7 +281,7 @@ final class OptionTradeService
     private function payPremium(User $user, string $action, string $consideration): void
     {
         if ($action === 'BUY' && \bccomp((string) $user->getCashBalance(), $consideration, 4) < 0) {
-            throw new \Exception('Insufficient funds. Long options are paid for in full.');
+            throw new TradeRejectedException('Insufficient funds. Long options are paid for in full.');
         }
 
         $this->cashLedger->debit($user, $consideration);

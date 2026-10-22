@@ -27,6 +27,7 @@ use App\Service\Market\Trading\AssetResolver;
 use App\Service\Market\Trading\MarginEngine;
 use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Market\Trading\TradeExecutionService;
+use App\Service\Market\Trading\TradeRejectedException;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\User\Portfolio;
@@ -334,6 +335,56 @@ class TradeExecutionServiceTest extends TestCase
         $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 5, '80.00');
 
         $this->assertEquals('600.0000', $user->getCashBalance());
+    }
+
+    public function testARestingLimitIsReportedAsPlacedAndAMarketOrderAsFilled(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('100.00');
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+
+        $resting = $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 5, '80.00');
+        $filled = $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 1);
+
+        $this->assertTrue($resting->resting);
+        $this->assertSame('Placed a limit order to buy 5 shares of APEX at $80.00.', $resting->confirmation());
+        $this->assertFalse($filled->resting);
+        $this->assertSame('Bought 1 shares of APEX.', $filled->confirmation());
+    }
+
+    /** The order is committed before the bounds are written, so a Redis failure must not report it as failed. */
+    public function testARedisFailureAfterTheCommitDoesNotFailAPlacedOrder(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('100.00');
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+        // RuntimeException stands in for RedisException, which only the phpredis extension defines.
+        $this->redisStub->method('set')->willThrowException(new \RuntimeException('Connection lost'));
+
+        $placed = $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 5, '80.00');
+
+        $this->assertTrue($placed->resting);
+        $this->assertEquals('600.0000', $user->getCashBalance(), 'the escrow stands with the order');
+    }
+
+    public function testARefusalIsARejectionThePlayerCanBeShown(): void
+    {
+        $user = new User();
+        $user->setCashBalance('10.00');
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('100.00');
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+
+        $this->expectException(TradeRejectedException::class);
+
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 5);
     }
 
     public function testCancelOpenBuyOrderRefundsEscrowCash(): void

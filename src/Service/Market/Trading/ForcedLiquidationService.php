@@ -454,7 +454,7 @@ final class ForcedLiquidationService
     private function forceOrder(User $user, string $ticker, string $action, int $quantity, string $reason): bool
     {
         try {
-            $assetType = $this->tradeExecution->executeOrder($user, $ticker, $action, 'MARKET', $quantity, null, null, $reason);
+            $assetType = $this->tradeExecution->executeOrder($user, $ticker, $action, 'MARKET', $quantity, null, null, $reason)->assetType;
 
             if ($user->getId() !== null) {
                 $unit = $assetType === 'OPTION' ? ($quantity === 1 ? ' contract' : ' contracts') : '';

@@ -38,6 +38,8 @@ security:
             # 4. Enable Logout
             logout:
                 path: app_logout
+                # Sign-out is a POST carrying a token, so another site cannot sign a player out.
+                enable_csrf: true
                 # where to redirect after logout
                 # target: app_any_route
 

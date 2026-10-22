@@ -45,8 +45,8 @@ abstract class BasePantherTestCase extends PantherTestCase
             $client->findElement(WebDriverBy::name('_username'))->sendKeys($email);
             $client->findElement(WebDriverBy::name('_password'))->sendKeys($password);
             $client->findElement(WebDriverBy::cssSelector('button[type="submit"]'))->click();
-            // Wait for redirect to finish and navigation/logout link to appear
-            $client->waitFor('a[href="/logout"], a[href="/logout"] span, body', 4);
+            // Wait for redirect to finish and the sign-out form to appear
+            $client->waitFor('form[action="/logout"], body', 4);
             usleep(500000); // 500ms safety for session propagation
         }
     }

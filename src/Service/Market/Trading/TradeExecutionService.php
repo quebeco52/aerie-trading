@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Trading;
 
 use App\DTO\ExecutionQuoteDTO;
+use App\DTO\PlacedOrderDTO;
 use App\DTO\ResolvedAssetDTO;
 use App\Entity\Bond;
 use App\Entity\OptionContract;
@@ -186,29 +187,27 @@ class TradeExecutionService
     }
 
     /**
-     * Places one order and reports which asset class it was filled in.
+     * Places one order and reports how the desk took it: its asset class, whose units differ (an option order is
+     * counted in contracts of a hundred shares, and a bond symbol such as G02-001 defeats inferring the class from
+     * the ticker), and whether it filled or rests on the book.
      *
-     * The class comes back because the units differ by it — an option order is counted in contracts of a
-     * hundred shares — and the caller that has to say what just happened would otherwise be left inferring
-     * it from the ticker's shape, which a bond symbol such as G02-001 defeats.
-     *
-     * @return string The asset class filled: STOCK, ETF, BOND or OPTION.
+     * @throws TradeRejectedException The desk refused the order; the message is written for the player.
      */
-    public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null, ?string $stopPrice = null, ?string $origin = null): string
+    public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null, ?string $stopPrice = null, ?string $origin = null): PlacedOrderDTO
     {
         if ($quantity <= 0) {
-            throw new \Exception('Invalid quantity.');
+            throw new TradeRejectedException('Invalid quantity.');
         }
 
         // Loose here, strict once the instrument is known. The two desks share BUY, SELL and COVER but
         // differ on the fourth — an equity is SHORTed and a contract is WRITTEN — and which one is legal is
         // a property of what is being traded, so it cannot be decided before the ticker has been resolved.
         if (!in_array($action, self::VALID_ACTIONS, true) && !in_array($action, OptionTradeService::VALID_ACTIONS, true)) {
-            throw new \Exception('Invalid order action.');
+            throw new TradeRejectedException('Invalid order action.');
         }
 
         if (!in_array($orderType, TradeOrder::VALID_TYPES, true)) {
-            throw new \Exception('Invalid order type.');
+            throw new TradeRejectedException('Invalid order type.');
         }
 
         // A stop needs the price that wakes it; a stop-limit needs that AND the worst price it will accept
@@ -234,12 +233,12 @@ class TradeExecutionService
             $asset = $this->assetResolver->resolve($ticker);
 
             if ($asset === null) {
-                throw new \Exception('Asset not found.');
+                throw new TradeRejectedException('Asset not found.');
             }
 
             $haltReason = $asset->haltReason();
             if ($haltReason !== null) {
-                throw new \Exception($haltReason);
+                throw new TradeRejectedException($haltReason);
             }
 
             // An option settles in contracts, is paid for in full, and is collateralized against its
@@ -248,7 +247,7 @@ class TradeExecutionService
             // a property of the symbol.
             if ($asset->entity instanceof OptionContract) {
                 if ($orderType !== TradeOrder::TYPE_MARKET) {
-                    throw new \Exception('Listed options trade at market. A resting option order is not supported yet.');
+                    throw new TradeRejectedException('Listed options trade at market. A resting option order is not supported yet.');
                 }
 
                 $this->optionTradeService->execute($user, $asset->entity, $action, $quantity);
@@ -258,11 +257,11 @@ class TradeExecutionService
                 $this->em->flush();
                 $this->em->getConnection()->commit();
 
-                return 'OPTION';
+                return new PlacedOrderDTO('OPTION', $action, $quantity, $asset->ticker(), TradeOrder::TYPE_MARKET, null, null, false);
             }
 
             if (!in_array($action, self::VALID_ACTIONS, true)) {
-                throw new \Exception("{$action} is not an action on {$asset->ticker()}.");
+                throw new TradeRejectedException("{$action} is not an action on {$asset->ticker()}.");
             }
 
             $assetType = $asset->type;
@@ -278,7 +277,7 @@ class TradeExecutionService
             if ($stock !== null) {
                 $maximum = $this->liquidityEngine->maximumOrderSize($stock);
                 if ($quantity > $maximum) {
-                    throw new \Exception(sprintf(
+                    throw new TradeRejectedException(sprintf(
                         'Order exceeds available liquidity in %s. The desk will take up to %s shares at once; work larger positions in pieces.',
                         $asset->ticker(),
                         number_format(floor($maximum)),
@@ -361,13 +360,13 @@ class TradeExecutionService
                         // never trigger, and a stop has no fill price to reserve against anyway — it takes
                         // what the book gives it. Buying power is checked when it actually fires.
                         if ($stock === null && $assetType !== 'ETF') {
-                            throw new \Exception('Stop orders are for equities and funds.');
+                            throw new TradeRejectedException('Stop orders are for equities and funds.');
                         }
                     } elseif ($action === 'COVER') {
                         // Resting COVER escrows nothing: closing leg of an already-collateralized position.
                         $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
                         if ($held >= 0 || abs($held) < $quantity) {
-                            throw new \Exception('No short position of that size to cover.');
+                            throw new TradeRejectedException('No short position of that size to cover.');
                         }
                     } elseif ($action === 'SHORT') {
                         // A resting short escrows nothing. Borrow is located and margin is checked when it
@@ -375,14 +374,14 @@ class TradeExecutionService
                         // cross would let a trader take a name hard-to-borrow for everyone else with an
                         // offer nobody can hit.
                         if ($stock === null) {
-                            throw new \Exception('Only equities can be sold short.');
+                            throw new TradeRejectedException('Only equities can be sold short.');
                         }
                         if (!$user->isMarginEnabled()) {
-                            throw new \Exception('Short selling requires a margin account.');
+                            throw new TradeRejectedException('Short selling requires a margin account.');
                         }
                     } else { // SELL
                         if (!$userAsset || $userAsset->getQuantity() < $quantity) {
-                            throw new \Exception('Insufficient shares for a resting sell order.');
+                            throw new TradeRejectedException('Insufficient shares for a resting sell order.');
                         }
                         $this->assetResolver->removeFromHolding($userAsset, $quantity);
                     }
@@ -402,10 +401,10 @@ class TradeExecutionService
             $this->em->getConnection()->commit();
 
             if ($order->getStatus() === TradeOrder::STATUS_OPEN) {
-                $this->updateRedisBounds($ticker);
+                $this->refreshBoundsAfterCommit($ticker);
             }
 
-            return $assetType;
+            return PlacedOrderDTO::fromOrder($order);
 
         } catch (\Throwable $e) {
             if ($this->em->getConnection()->isTransactionActive()) {
@@ -445,7 +444,7 @@ class TradeExecutionService
         if (self::isBuySide($action)) {
             if ($action === 'COVER') {
                 if ($held >= 0 || abs($held) < $quantity) {
-                    throw new \Exception('No short position of that size to cover.');
+                    throw new TradeRejectedException('No short position of that size to cover.');
                 }
             }
 
@@ -464,18 +463,18 @@ class TradeExecutionService
 
         if ($action === 'SHORT') {
             if ($stock === null) {
-                throw new \Exception('Only equities can be sold short.');
+                throw new TradeRejectedException('Only equities can be sold short.');
             }
             if (!$user->isMarginEnabled()) {
-                throw new \Exception('Short selling requires a margin account.');
+                throw new TradeRejectedException('Short selling requires a margin account.');
             }
             if ($held < 0 && $userAsset === null) {
-                throw new \Exception('Position lookup failed.');
+                throw new TradeRejectedException('Position lookup failed.');
             }
 
             $available = $this->lendingDesk->availableToBorrow($stock);
             if (self::sharesBorrowed($held, $held - $quantity) > $available) {
-                throw new \Exception(sprintf(
+                throw new TradeRejectedException(sprintf(
                     'Only %s shares of %s are available to borrow.',
                     number_format(floor($available)),
                     $stock->getTicker(),
@@ -496,7 +495,7 @@ class TradeExecutionService
 
         // SELL
         if ($userAsset === null || $held < $quantity) {
-            throw new \Exception('Insufficient shares.');
+            throw new TradeRejectedException('Insufficient shares.');
         }
 
         $this->cashLedger->credit($user, $totalValue);
@@ -546,11 +545,11 @@ class TradeExecutionService
     {
         if (!$user->isMarginEnabled()) {
             if ($action === 'SHORT') {
-                throw new \Exception('Short selling requires a margin account.');
+                throw new TradeRejectedException('Short selling requires a margin account.');
             }
 
             if ($notional > (float) $user->getCashBalance() + 1e-6) {
-                throw new \Exception('Insufficient funds.');
+                throw new TradeRejectedException('Insufficient funds.');
             }
 
             return;
@@ -562,7 +561,7 @@ class TradeExecutionService
         }
 
         if (!$this->marginEngine->canOpen($user, $notional)) {
-            throw new \Exception('Insufficient buying power for this order.');
+            throw new TradeRejectedException('Insufficient buying power for this order.');
         }
     }
 
@@ -654,7 +653,7 @@ class TradeExecutionService
     private function validateLimitPrice(?string $limitPrice): string
     {
         if ($limitPrice === null || !is_numeric(trim($limitPrice))) {
-            throw new \Exception('A limit order requires a numeric limit price.');
+            throw new TradeRejectedException('A limit order requires a numeric limit price.');
         }
 
         // Rendered rather than passed through: is_numeric accepts "1e5", and bcmath rejects exponent
@@ -662,11 +661,11 @@ class TradeExecutionService
         $normalized = Decimal::format((float) trim($limitPrice), 4);
 
         if (\bccomp($normalized, self::MIN_LIMIT_PRICE, 4) < 0) {
-            throw new \Exception('Limit price must be at least $' . self::MIN_LIMIT_PRICE . '.');
+            throw new TradeRejectedException('Limit price must be at least $' . self::MIN_LIMIT_PRICE . '.');
         }
 
         if (\bccomp($normalized, self::MAX_LIMIT_PRICE, 4) > 0) {
-            throw new \Exception('Limit price is above the maximum accepted value.');
+            throw new TradeRejectedException('Limit price is above the maximum accepted value.');
         }
 
         return $normalized;
@@ -681,7 +680,7 @@ class TradeExecutionService
 
             $order = $this->em->getRepository(TradeOrder::class)->findOpenForUserById($user, $orderId);
             if (!$order) {
-                throw new \Exception('Order not found or already processed.');
+                throw new TradeRejectedException('Order not found or already processed.');
             }
 
             $ticker = $order->getTicker();
@@ -697,7 +696,7 @@ class TradeExecutionService
                 // nothing, so there is nothing to give back and no branch for any of them.
                 $asset = $this->assetResolver->resolve($ticker);
                 if ($asset === null) {
-                    throw new \Exception('Asset not found.');
+                    throw new TradeRejectedException('Asset not found.');
                 }
 
                 $userAsset = $this->assetResolver->findHolding($user, $asset);
@@ -710,7 +709,7 @@ class TradeExecutionService
             $this->em->flush();
             $this->em->getConnection()->commit();
 
-            $this->updateRedisBounds($ticker);
+            $this->refreshBoundsAfterCommit($ticker);
 
         } catch (\Throwable $e) {
             if ($this->em->getConnection()->isTransactionActive()) {
@@ -770,7 +769,7 @@ class TradeExecutionService
 
             $asset = $this->assetResolver->resolve($ticker);
             if ($asset === null) {
-                throw new \Exception('Asset not found.');
+                throw new TradeRejectedException('Asset not found.');
             }
 
             $stock = $asset->entity instanceof Stock ? $asset->entity : null;
@@ -889,7 +888,7 @@ class TradeExecutionService
             $this->em->flush();
             $this->em->getConnection()->commit();
 
-            $this->updateRedisBounds($ticker);
+            $this->refreshBoundsAfterCommit($ticker);
 
             if ($this->notifier !== null && $user->getId() !== null) {
                 $this->notifier->queue(
@@ -916,6 +915,28 @@ class TradeExecutionService
                 'execution_price' => $executionPrice,
                 'exception' => $e,
             ]);
+        }
+    }
+
+    /**
+     * Rewrites the book's bounds once an order change is committed. A failure is logged, not thrown: the change
+     * stands, and an error would tell the player it failed and invite a duplicate. The stale key is dropped if
+     * Redis still answers, since the ticker checks a ticker with no key once and the check rewrites it.
+     */
+    private function refreshBoundsAfterCommit(string $ticker): void
+    {
+        try {
+            $this->updateRedisBounds($ticker);
+        } catch (\Throwable $e) {
+            $this->logger->error('Order change committed, but the resting-order bounds were not refreshed.', [
+                'ticker' => $ticker,
+                'exception' => $e,
+            ]);
+            try {
+                $this->redis->del("limit_bounds:{$ticker}");
+            } catch (\RedisException) {
+                // Redis is unreachable; the error logged above is the record.
+            }
         }
     }
 

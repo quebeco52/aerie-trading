@@ -8,6 +8,7 @@ use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
+use EasyCorp\Bundle\EasyAdminBundle\Field\BooleanField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\EmailField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\NumberField;
@@ -32,10 +33,21 @@ class UserCrudController extends AbstractCrudController
         return User::class;
     }
 
+    /** An account an administrator creates starts verified: there is no email link for it to have followed. */
+    public function createEntity(string $entityFqcn): User
+    {
+        return (new User())->setIsVerified(true);
+    }
+
     public function configureFields(string $pageName): iterable
     {
         return [
             EmailField::new('email'),
+
+            TextField::new('username'),
+
+            // The login refuses an unverified account, so an administrator needs this to let one in.
+            BooleanField::new('isVerified', 'Email verified'),
 
             TextField::new('plainPassword', 'New Password')
                 ->onlyOnForms()

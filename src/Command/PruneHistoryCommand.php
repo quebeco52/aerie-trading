@@ -32,15 +32,24 @@ class PruneHistoryCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('years', 'y', InputOption::VALUE_OPTIONAL, 'Simulated years of full-resolution history to keep?', (string) HistoryPruner::DEFAULT_YEARS_KEPT);
-        $this->addOption('per-year', 'p', InputOption::VALUE_OPTIONAL, 'Rows each series keeps per simulated year beyond that?', (string) HistoryPruner::THINNED_ROWS_PER_YEAR);
+        // Required values: a bare --years read as zero years kept, and thinned every series.
+        $this->addOption('years', 'y', InputOption::VALUE_REQUIRED, 'Simulated years of full-resolution history to keep?', (string) HistoryPruner::DEFAULT_YEARS_KEPT);
+        $this->addOption('per-year', 'p', InputOption::VALUE_REQUIRED, 'Rows each series keeps per simulated year beyond that?', (string) HistoryPruner::THINNED_ROWS_PER_YEAR);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
-        $years = (float) $input->getOption('years');
-        $rowsPerYear = (int) $input->getOption('per-year');
+        $years = $input->getOption('years');
+        $rowsPerYear = $input->getOption('per-year');
+
+        if (!is_numeric($years) || (float) $years <= 0.0 || !is_numeric($rowsPerYear) || (int) $rowsPerYear < 1) {
+            $io->error('--years must be a positive number of years and --per-year at least 1. Nothing was pruned.');
+
+            return Command::INVALID;
+        }
+        $years = (float) $years;
+        $rowsPerYear = (int) $rowsPerYear;
 
         $io->title("Downsampling Market History (Older than $years simulated years | Keeping $rowsPerYear a simulated year per series)");
 

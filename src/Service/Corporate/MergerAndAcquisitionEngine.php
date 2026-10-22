@@ -1141,9 +1141,7 @@ class MergerAndAcquisitionEngine
         $this->restateOperatingHistory($stock, 1.0 - $ctx->divestedFraction, 0.0, 0.0);
         $this->industryShareLedger?->recordDivestedFraction($stock, $ctx->divestedFraction, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
 
-        if ($stock->hasBalanceSheetLedger()) {
-            $this->retireDivestedLedgers($stock, $ctx->divestedFraction);
-        }
+        $markSold = $stock->hasBalanceSheetLedger() ? $this->retireDivestedLedgers($stock, $ctx->divestedFraction) : 0.0;
 
         // A gain on selling a business is taxable income (ASC 740), struck under the same carryforward rules as a
         // quarter's (EarningsEngine::resolveIncomeTax()): it uses the carried loss up to its cap, and a loss adds to
@@ -1159,10 +1157,11 @@ class MergerAndAcquisitionEngine
         $stock->setDeferredTaxAsset($tax['dta']);
         $stock->setCorporateTreasury((string) ((float) $stock->getCorporateTreasury() - $tax['current']));
 
-        // Equity moves by the gain or loss on sale after its tax and nothing else: proceeds in, book value and tax out.
-        // No floor, because a floor would invent equity with no asset behind it and unbalance the sheet.
+        // Equity moves by the gain or loss on sale after its tax, struck on amortized cost, and by the slice's
+        // securities mark leaving other comprehensive income: proceeds in, book value and tax out. No floor, because a
+        // floor would invent equity with no asset behind it and unbalance the sheet.
         $afterTaxGain = $ctx->gainOnSale - $ctx->taxOnSale;
-        $stock->setTotalEquity((string) ($ctx->currentEquity + $afterTaxGain));
+        $stock->setTotalEquity((string) ($ctx->currentEquity + $afterTaxGain - $markSold));
         $currentRetained = (float) $stock->getRetainedEarnings();
         $stock->setRetainedEarnings((string) ($currentRetained + $afterTaxGain));
         // The division sold is a pro rata slice of the firm, so the business kept earns the same margin and
@@ -1202,14 +1201,23 @@ class MergerAndAcquisitionEngine
      * same average age: selling a division tells you nothing about how worn the plant you kept is. The tax
      * basis and deferred tax go with the plant, goodwill with the business, and the trade balances with the
      * customers and suppliers who move to the buyer. Cash stays: the proceeds are already in treasury.
+     *
+     * @return float The slice's securities mark net of its deferred tax, which leaves other comprehensive income now
+     *               rather than at the next quarter's mark (ASC 320 recycling).
      */
-    private function retireDivestedLedgers(Stock $stock, float $fraction): void
+    private function retireDivestedLedgers(Stock $stock, float $fraction): float
     {
         $retained = max(0.0, 1.0 - $fraction);
+        $markSold = 0.0;
 
         if ($stock->hasEarningAssetLedger()) {
             $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() * $retained));
             $stock->setCreditLossAllowance((string) ((float) $stock->getCreditLossAllowance() * $retained));
+
+            // The securities sold take their recognised mark and its deferred tax with them.
+            $markSold = (1.0 - $retained) * ($stock->getRecognizedSecuritiesMark() - $stock->getSecuritiesDeferredTax());
+            $stock->setUnrealizedSecuritiesMark((string) ((float) $stock->getUnrealizedSecuritiesMark() * $retained));
+            $stock->setSecuritiesDeferredTax($stock->getSecuritiesDeferredTax() * $retained);
         }
         if ($stock->getGrossPpe() !== null) {
             $stock->setGrossPpe((string) ((float) $stock->getGrossPpe() * $retained));
@@ -1234,6 +1242,8 @@ class MergerAndAcquisitionEngine
             $stock->setInventoryAllowance((string) ((float) $stock->getInventoryAllowance() * $retained));
             $stock->setPayables((string) ((float) $stock->getPayables() * $retained));
         }
+
+        return $markSold;
     }
 
     private function finalizeDivestitureEvent(DivestitureContext $ctx): array

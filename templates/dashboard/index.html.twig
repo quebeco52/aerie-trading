@@ -687,7 +687,8 @@
             holdings: holdings|reduce((carry, h) => carry|merge({ (h.ticker): {
                 quantity: h.quantity,
                 avgCost: h.avgCost,
-                price: h.price
+                price: h.price,
+                multiplier: h.type == 'OPTION' ? optionMultiplier : 1
             } }), {}),
             cash: cashBalance|default(0),
             initialPortfolioValue: portfolioValue|default(0),

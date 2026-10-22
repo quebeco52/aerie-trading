@@ -1821,25 +1821,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
      */
     public function testLenderDivestitureShedsBookDepositsAndCashProRataAndBalances(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('DIVB');
-        $stock->setName('Divesting Bank');
-        $stock->setIndustry('Banks - Diversified');
-        $stock->setPrice('20.00');
-        $stock->setSharesOutstanding('1000000000');
-        $stock->setTotalRevenue('4000000000');
-        $stock->setOperatingMargin('-0.05');
-        $stock->setEarningsPerShare('-0.10');
-        $stock->setTotalNetIncome('-1000000000');
-        $stock->setRetainedEarnings('2000000000');
-        $stock->setRoeTtm('0.00');
-        $stock->setBaselineRoe('0.08');
-        $stock->setCorporateTreasury('3000000000');
-        $stock->setCustomerDeposits('40000000000');
-        $stock->setWholesaleDebt('5000000000');
-        $stock->setEarningAssets('50000000000');
-        $stock->setCreditLossAllowance('1000000000');
-        $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+        $stock = $this->divestingBank();
         $this->assertBalanced($stock, 'the fixture must open balanced');
 
         $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0);
@@ -1866,5 +1848,62 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertEqualsWithDelta($equityBefore + $expectedGain, (float) $stock->getTotalEquity(), 1.0, 'equity moves by the gain or loss on the book value sold');
 
         $this->assertBalanced($stock, 'a lender divestiture');
+    }
+
+    /**
+     * The securities a divested bank division holds take their available-for-sale mark and its deferred tax with them,
+     * so the seller's equity sheds the slice's other comprehensive income at the sale, not at the next quarter's mark.
+     */
+    public function testALenderDivestitureTakesTheSlicesSecuritiesMarkWithIt(): void
+    {
+        $stock = $this->divestingBank();
+        $stock->setUnrealizedSecuritiesMark('-2000000000');
+        $stock->setSecuritiesDeferredTax(0.20 * $stock->getRecognizedSecuritiesMark());
+        $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+        $this->assertBalanced($stock, 'the fixture must open balanced');
+
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0);
+        $this->primeDistressedDivestiture(operatingBase: 40_000_000_000.0, fraction: 0.25);
+
+        $equityBefore = (float) $stock->getTotalEquity();
+        $treasuryBefore = (float) $stock->getCorporateTreasury();
+        $markNetOfTax = $stock->getRecognizedSecuritiesMark() - $stock->getSecuritiesDeferredTax();
+        $deferredTaxBefore = $stock->getSecuritiesDeferredTax();
+        $bookValueDisposed = 0.25 * ($stock->getNetEarningAssets() + $treasuryBefore - 40_000_000_000.0);
+
+        $this->assertIsArray($this->engine->evaluateCorporateDivestiture($stock, $macroState, 1.0));
+
+        $this->assertEqualsWithDelta(-2_000_000_000.0 * 0.75, (float) $stock->getUnrealizedSecuritiesMark(), 1.0, 'the slice takes its mark');
+        $this->assertEqualsWithDelta($deferredTaxBefore * 0.75, $stock->getSecuritiesDeferredTax(), 1.0, 'and the deferred tax on it');
+        $proceeds = (float) $stock->getCorporateTreasury() - ($treasuryBefore * 0.75);
+        $expectedGain = $proceeds - ($bookValueDisposed - 5_000_000_000.0 * 0.25);
+        $this->assertEqualsWithDelta($equityBefore + $expectedGain - 0.25 * $markNetOfTax, (float) $stock->getTotalEquity(), 1.0, 'the slice leaves other comprehensive income at the sale');
+        $this->assertBalanced($stock, 'a lender divestiture with a securities mark');
+    }
+
+    /** A bank about to sell a quarter of itself: 50B of loans funded by 40B of deposits and 5B of wholesale debt. */
+    private function divestingBank(): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIVB');
+        $stock->setName('Divesting Bank');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setPrice('20.00');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setTotalRevenue('4000000000');
+        $stock->setOperatingMargin('-0.05');
+        $stock->setEarningsPerShare('-0.10');
+        $stock->setTotalNetIncome('-1000000000');
+        $stock->setRetainedEarnings('2000000000');
+        $stock->setRoeTtm('0.00');
+        $stock->setBaselineRoe('0.08');
+        $stock->setCorporateTreasury('3000000000');
+        $stock->setCustomerDeposits('40000000000');
+        $stock->setWholesaleDebt('5000000000');
+        $stock->setEarningAssets('50000000000');
+        $stock->setCreditLossAllowance('1000000000');
+        $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+
+        return $stock;
     }
 }

@@ -8,15 +8,14 @@ use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
 use App\Entity\Stock;
-use App\Entity\User;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
+use App\Service\User\DevAdminAccount;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 #[AsCommand(
     name: 'app:market-seed',
@@ -26,7 +25,7 @@ class MarketSeedCommand extends Command
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private UserPasswordHasherInterface $passwordHasher,
+        private DevAdminAccount $devAdmin,
         private \App\Service\Market\Bond\TreasuryAuctionService $treasuryAuction,
         private OpeningBoardBuilder $openingBoard,
     ) {
@@ -94,20 +93,7 @@ class MarketSeedCommand extends Command
             return Command::FAILURE;
         }
 
-        // Test User
-        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'test.test@test.se']);
-        if (!$user) {
-            $user = new User();
-            $user->setEmail('test.test@test.se');
-            $user->setRoles(['ROLE_ADMIN']);
-            $user->setCashBalance('10000.00');
-            $user->setPassword($this->passwordHasher->hashPassword($user, 'test'));
-            $this->entityManager->persist($user);
-        }
-
-        $user->setUsername('Test');
-        $user->setIsVerified(true);
-
+        $this->devAdmin->ensure();
         $this->entityManager->flush();
 
         // Open the bond desk with one on-the-run at each tenor. Only the benchmarks are sold here; the rest

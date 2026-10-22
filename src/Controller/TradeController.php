@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Service\Market\Trading\TradeExecutionService;
+use App\Service\Market\Trading\TradeRejectedException;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -41,7 +43,7 @@ class TradeController extends AbstractController
      * Executes a trade order (BUY or SELL) for a specific stock.
      */
     #[Route('/trade/execute', name: 'app_trade_execute', methods: ['POST'])]
-    public function execute(Request $request, TradeExecutionService $tradeExecutionService): Response
+    public function execute(Request $request, TradeExecutionService $tradeExecutionService, LoggerInterface $logger): Response
     {
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
@@ -67,26 +69,14 @@ class TradeController extends AbstractController
         }
 
         try {
-            $assetType = $tradeExecutionService->executeOrder($user, $ticker, $action, $orderType, $quantity, $limitPrice, $stopPrice);
-            $verb = match ($action) {
-                'SHORT' => 'Sold short',
-                'COVER' => 'Covered',
-                'SELL' => 'Sold',
-                'WRITE' => 'Wrote',
-                default => 'Bought',
-            };
-
-            // An option order is counted in contracts of a hundred shares, and saying "shares" would
-            // understate the position by the multiplier in the one message confirming what was just done.
-            $unit = match ($assetType) {
-                'OPTION' => 'contracts',
-                'BOND' => 'bonds',
-                default => 'shares',
-            };
-
-            $this->addFlash('success', "{$verb} {$quantity} {$unit} of {$ticker}.");
-        } catch (\Exception $e) {
+            $placed = $tradeExecutionService->executeOrder($user, $ticker, $action, $orderType, $quantity, $limitPrice, $stopPrice);
+            $this->addFlash('success', $placed->confirmation());
+        } catch (TradeRejectedException $e) {
             $this->addFlash('error', $e->getMessage());
+        } catch (\Exception $e) {
+            // Every other failure rolls the order back, so saying it was not placed is true; its text is for the log.
+            $logger->error('Order failed.', ['ticker' => $ticker, 'action' => $action, 'exception' => $e]);
+            $this->addFlash('error', 'The order was not placed. Please try again.');
         }
 
         return $this->redirect($request->headers->get('referer') ?? '/');
@@ -157,7 +147,7 @@ class TradeController extends AbstractController
     }
 
     #[Route('/trade/cancel/{id}', name: 'app_trade_cancel', methods: ['POST'])]
-    public function cancel(int $id, Request $request, TradeExecutionService $tradeExecutionService): Response
+    public function cancel(int $id, Request $request, TradeExecutionService $tradeExecutionService, LoggerInterface $logger): Response
     {
         $user = $this->getUser();
         if (!$user instanceof \App\Entity\User) {
@@ -174,8 +164,11 @@ class TradeController extends AbstractController
         try {
             $tradeExecutionService->cancelOrder($user, $id);
             $this->addFlash('success', "Order cancelled successfully and funds/shares refunded.");
-        } catch (\Exception $e) {
+        } catch (TradeRejectedException $e) {
             $this->addFlash('error', $e->getMessage());
+        } catch (\Exception $e) {
+            $logger->error('Order cancellation failed.', ['order' => $id, 'exception' => $e]);
+            $this->addFlash('error', 'The order was not cancelled. Please try again.');
         }
 
         return $this->redirect($request->headers->get('referer') ?? '/');

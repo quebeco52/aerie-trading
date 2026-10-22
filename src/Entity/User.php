@@ -20,10 +20,16 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column(length: 180)]
+    /** The longest email address the column holds. */
+    public const EMAIL_MAX_LENGTH = 180;
+
+    /** The longest username the column holds. */
+    public const USERNAME_MAX_LENGTH = 255;
+
+    #[ORM\Column(length: self::EMAIL_MAX_LENGTH)]
     private string $email;
 
-    #[ORM\Column(length: 255, unique: true, nullable: true)]
+    #[ORM\Column(length: self::USERNAME_MAX_LENGTH, unique: true, nullable: true)]
     private ?string $username = null;
 
     /** @var numeric-string */

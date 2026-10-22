@@ -27,7 +27,10 @@
 							<span class="material-symbols-outlined text-base leading-none shrink-0">info</span>
 							<span>
 								Signed in as <span class="font-mono font-semibold">{{ app.user.userIdentifier }}</span>.
-								<a href="{{ path('app_logout') }}" class="underline underline-offset-2 hover:text-on-surface">Sign out</a>
+								<form method="post" action="{{ path('app_logout') }}" class="inline">
+									<input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('logout') }}">
+									<button type="submit" class="underline underline-offset-2 hover:text-on-surface cursor-pointer">Sign out</button>
+								</form>
 							</span>
 						</div>
 					{% endif %}

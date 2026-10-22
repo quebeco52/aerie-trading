@@ -15,6 +15,7 @@ use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Market\Ticker\StockTickColumns;
 use App\Service\Math\MathUtility;
+use App\Service\User\DevAdminAccount;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -134,7 +135,7 @@ final class MarketResetCommandTest extends TestCase
                     return true;
                 }
             },
-            $hasher,
+            new DevAdminAccount($entityManager, $hasher, 'test'),
             $auctions,
             new OpeningBoardBuilder($math, new DebtEngine($math, CorporateMetrics::getInstance()), new MarketEngine($math), new AnchorStakeLedger()),
         );

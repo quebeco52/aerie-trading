@@ -10,7 +10,6 @@ class AuthFlowPantherTest extends BasePantherTestCase
     {
         $client = static::createPantherClient();
         $client->getCookieJar()->clear();
-        $client->request('GET', '/logout');
 
         $client->request('GET', '/login');
 
@@ -23,7 +22,6 @@ class AuthFlowPantherTest extends BasePantherTestCase
     {
         $client = static::createPantherClient();
         $client->getCookieJar()->clear();
-        $client->request('GET', '/logout');
 
         $client->request('GET', '/dashboard');
 

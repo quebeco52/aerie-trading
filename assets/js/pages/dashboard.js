@@ -10,7 +10,7 @@ const previousPrices = {};
 let previousPortfolioValue = null;
 
 /**
- * Server-rendered portfolio state: `holdings` maps ticker to { quantity, avgCost, price }, and
+ * Server-rendered portfolio state: `holdings` maps ticker to { quantity, avgCost, price, multiplier }, and
  * `cash` is the settled balance. Re-read on every page init, since Turbo keeps this module
  * loaded across navigations while the payload underneath it changes.
  */
@@ -225,7 +225,8 @@ function initDashboard() {
 
             const quantity = holdings[stock.ticker]?.quantity ?? null;
 
-            if (quantity && quantity > 0) {
+            // Shorts too: their cells are rendered for these updates, and the gain is measured on what they tie up.
+            if (quantity) {
                 hasHoldingsUpdates = true;
                 const newPrice = parseFloat(stock.price);
                 const oldPrice = previousPrices[stock.ticker] || newPrice;
@@ -233,7 +234,7 @@ function initDashboard() {
                 const avgCost = Number(holdings[stock.ticker]?.avgCost) || newPrice;
                 const totalCost = avgCost * quantity;
                 const unrealizedPnL = holdingValue - totalCost;
-                const unrealizedPnLPct = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0.0;
+                const unrealizedPnLPct = totalCost !== 0 ? (unrealizedPnL / Math.abs(totalCost)) * 100 : 0.0;
 
                 const priceEl = document.getElementById(`price-${stock.ticker}`);
                 if (priceEl) {
@@ -271,7 +272,8 @@ function initDashboard() {
             let grossCost = 0;
 
             for (const [ticker, holding] of Object.entries(holdings)) {
-                const quantity = holding.quantity;
+                // An option is quoted per share and held in contracts, so its units are contracts times the multiplier.
+                const quantity = holding.quantity * (Number(holding.multiplier) || 1);
                 const currentPrice = livePrices[ticker] || 0;
                 const avgCost = Number(holding.avgCost) || currentPrice;
 

@@ -18,11 +18,20 @@ class SecurityControllerTest extends WebTestCase
         $this->assertSelectorExists('form');
     }
 
-    public function testLogoutRouteRedirects(): void
+    /** Sign-out is a POST, so a link another site sends a player to signs nobody out. */
+    public function testAGetToTheSignOutAddressSignsNobodyOut(): void
     {
         $client = static::createClient();
         $client->request('GET', '/logout');
 
-        $this->assertResponseRedirects();
+        $this->assertResponseStatusCodeSame(405);
+    }
+
+    public function testASignOutWithoutItsTokenIsRefused(): void
+    {
+        $client = static::createClient();
+        $client->request('POST', '/logout');
+
+        $this->assertResponseStatusCodeSame(403);
     }
 }

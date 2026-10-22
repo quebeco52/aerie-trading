@@ -11,7 +11,6 @@ class RegistrationPantherTest extends BasePantherTestCase
         $client = static::createPantherClient();
 
         $client->getCookieJar()->clear();
-        $client->request('GET', '/logout');
 
         $client->request('GET', '/register');
         $client->waitFor('#email', 3);
@@ -28,7 +27,6 @@ class RegistrationPantherTest extends BasePantherTestCase
         $client = static::createPantherClient();
 
         $client->getCookieJar()->clear();
-        $client->request('GET', '/logout');
 
         $client->request('GET', '/register');
         $client->waitFor('#email', 3);

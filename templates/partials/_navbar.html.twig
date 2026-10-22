@@ -103,7 +103,10 @@
                             <a href="/dashboard" class="block px-3 py-2 rounded text-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors">Portfolio</a>
                             <a href="{{ path('app_notifications') }}" class="block px-3 py-2 rounded text-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors">Notifications</a>
                             <a href="{{ path('app_guide') }}" class="block px-3 py-2 rounded text-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors">Investor guide</a>
-                            <a href="{{ path('app_logout') }}" class="block px-3 py-2 rounded text-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors">Sign out</a>
+                            <form method="post" action="{{ path('app_logout') }}">
+                                <input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('logout') }}">
+                                <button type="submit" class="block w-full text-left px-3 py-2 rounded text-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-bright transition-colors cursor-pointer">Sign out</button>
+                            </form>
                         </div>
                     </details>
                 {% else %}
