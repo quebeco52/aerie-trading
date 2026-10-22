@@ -13,9 +13,7 @@ use Symfony\Component\Routing\Attribute\Route;
 /**
  * The macroeconomic page: the live state of the District's economy and twenty-five years of its history.
  *
- * This used to be a tab on the index fund's page, where it was the least discoverable thing on the site:
- * the economy is not a property of one fund, it is what every listed company is priced against. The series
- * themselves come from /api/macro-reports; this renders the vitals for the first paint, and the live frame
+ * The series themselves come from /api/macro-reports; this renders the vitals for the first paint, and the live frame
  * takes over from there. Below the history, the listed firms each driver moves most.
  */
 class EconomyController extends AbstractController

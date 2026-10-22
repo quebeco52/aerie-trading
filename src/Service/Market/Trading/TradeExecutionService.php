@@ -39,8 +39,7 @@ class TradeExecutionService
     public const MAX_LIMIT_PRICE = '100000000.0000';
 
     /**
-     * The sides an order may be placed on. Anything not listed here fell through to the SELL branch and
-     * escrowed shares against an order nothing would ever fill.
+     * The sides an order may be placed on.
      *
      * SHORT and COVER are their own actions rather than a SELL that happens to exceed the position. Opening
      * a short by overselling would turn every fat-fingered sale into a borrowed position with unbounded
@@ -162,8 +161,8 @@ class TradeExecutionService
     /**
      * Whether a fill at this price respects the order's limit.
      *
-     * A buy never pays more than its limit and a sell never accepts less. One place for it because the
-     * placement path and the resting path were each spelling it out, and they must not drift apart.
+     * A buy never pays more than its limit and a sell never accepts less. One place for it so the placement
+     * path and the resting path cannot drift apart.
      */
     private static function limitAllowsFill(string $action, float $limitPrice, float $executionPrice): bool
     {
@@ -586,8 +585,7 @@ class TradeExecutionService
     /**
      * Moves a name's total short interest, which is what prices its borrow for everyone, by the change in one account's
      * short position, whatever action moved it: a buy against a short returns the stock as a cover does, and a short
-     * sale against shares held borrows only what it sells beyond them. Counted by action instead, round trips through
-     * zero left short interest standing on stock nobody had borrowed.
+     * sale against shares held borrows only what it sells beyond them.
      */
     private function adjustShortInterest(Stock $stock, int $heldBefore, int $heldAfter): void
     {
@@ -644,12 +642,11 @@ class TradeExecutionService
     /**
      * Normalizes a limit price, rejecting anything the escrow arithmetic cannot safely hold.
      *
-     * The price arrives straight off the request. Unvalidated, a NEGATIVE limit inverted the escrow: the
-     * funds check passed against a negative requirement and the debit became a credit, so placing a BUY at
-     * -5 minted cash. A non-numeric one reached bcmath, which throws a ValueError — an Error, not an
-     * Exception, so neither this class nor the controller caught it and the open transaction leaked.
+     * The price arrives straight off the request. A negative limit would invert the escrow, and a non-numeric one
+     * reaches bcmath, which throws a ValueError (an Error, not an Exception).
+     *
+     * @return numeric-string
      */
-    /** @return numeric-string */
     private function validateLimitPrice(?string $limitPrice): string
     {
         if ($limitPrice === null || !is_numeric(trim($limitPrice))) {
@@ -907,8 +904,7 @@ class TradeExecutionService
                 $this->em->getConnection()->rollBack();
             }
 
-            // The order stays OPEN with its escrow still held, so this has to be visible: silently swallowing
-            // it left a user's money committed to an order that would never be reported as having failed.
+            // The order stays OPEN with its escrow still held, so the failure has to be visible.
             $this->logger->error('Limit order fill failed; order left open with escrow held.', [
                 'order_id' => $order->getId(),
                 'ticker' => $order->getTicker(),

@@ -342,8 +342,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * The launched book scales what the firm's capital earns and the cost base with it: a launched drug is
-     * new capacity, not overtime on the old one. Before the state exists the franchise rode in the demand shift,
-     * so the neutral 1.0 keeps that quarter's expected revenue consistent with the shift it was persisted with.
+     * new capacity, not overtime on the old one. Before the state exists the multiplier is a neutral 1.0.
      */
     public function getStructuralRevenueMultiplier(Stock $stock): float
     {
@@ -520,8 +519,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
      * Translates the lore into a ledger: the lead franchise holds the exposure share and expires on the lore clock,
      * the rest of the protected book follows in equal cohorts on expiries staggered out to a new approval's life,
      * and the unprotected remainder is mature established product. All of it is at plateau. A firm that already
-     * reported keeps the size of book it carried, so the switch does not move revenue; the split is the lore's,
-     * since a share drained under the old single-clock physics would be held as established product for good.
+     * reported keeps the size of book it carried, so the switch does not move revenue; the split is the lore's.
      *
      * @return array{cohorts: list<array{peak: float, adoption: float, exclusivity: float}>, biologic: float, smallMolecule: float, established: float}
      */

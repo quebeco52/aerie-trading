@@ -9,12 +9,10 @@ use App\Data\District\DistrictMap;
 /**
  * Coalesces ticks into the frames the websocket wire carries.
  *
- * The ticker used to publish every tick: at a 10 ms tick that is a hundred messages a second to every
- * browser tab, each carrying the full quote for every instrument and every macro field, when the page
- * writes the DOM from a 250 ms frame anyway. A frame holds the LATEST quote per instrument, which is all
- * the page reads, and beside it the per-tick POINTS the live chart needs: the chart extends its bar tick
- * by tick so the bar's high and low accumulate the way the server's do, and it advances its clock one
- * tick per point, so thinning the ticks would thin the chart. Events are appended, never replaced.
+ * The page writes the DOM from a 250 ms frame, so the ticker does not publish every tick. A frame holds the LATEST
+ * quote per instrument, which is all the page reads, and beside it the per-tick POINTS the live chart needs: the chart
+ * extends its bar tick by tick so the bar's high and low accumulate the way the server's do, and it advances its clock
+ * one tick per point, so thinning the ticks would thin the chart. Events are appended, never replaced.
  */
 final class WireFrame
 {

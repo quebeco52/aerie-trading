@@ -297,8 +297,6 @@ class OilGasProducerBusinessModel extends StandardCorporateBusinessModel
 
         $hedgeGain = $expectedRevenue * $liquidsShare * $oilVolume * $hedgeRatio * ($hedgedStrike - $oilSpot) * (1.0 + $basisShift);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $disasterPenalty * $volumeRevenue;
 
         return new SectorPhysicsResult(

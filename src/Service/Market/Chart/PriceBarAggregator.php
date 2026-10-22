@@ -7,15 +7,13 @@ namespace App\Service\Market\Chart;
 /**
  * Reduces a price history series to the OHLCV bars a chart range actually renders.
  *
- * A stored history row is not a candle. At tick rates at or below TARGET_HISTORY_POINTS_PER_YEAR the
- * sampler writes one row per tick, so the row's open, high, low and close are all the same number and
- * every candle drawn from it is a doji — a chart of disconnected dashes where the line chart over the
- * same rows is continuous. ETF and bond history never carried a bar at all.
+ * A stored history row is not a candle: at tick rates at or below TARGET_HISTORY_POINTS_PER_YEAR the sampler
+ * writes one row per tick, so open, high, low and close are the same number. ETF and bond history carry no bar.
  *
- * The bar interval therefore belongs to the RANGE BEING VIEWED, not to the rate history was sampled at,
- * which is how a real charting backend works: a year is drawn as daily bars whatever resolution the ticks
- * arrived at. Rows are bucketed and aggregated — open of the oldest row, the extremes of every row in
- * between, close of the newest, volume summed — so no observation is discarded and consecutive bars meet.
+ * The bar interval therefore belongs to the RANGE BEING VIEWED, not to the rate history was sampled at, as a real
+ * charting backend does: a year is drawn as daily bars whatever resolution the ticks arrived at. Rows are bucketed and
+ * aggregated — open of the oldest row, the extremes of every row in between, close of the newest, volume summed — so no
+ * observation is discarded and consecutive bars meet.
  */
 class PriceBarAggregator
 {
@@ -29,12 +27,10 @@ class PriceBarAggregator
     /**
      * Bars a LINE range is reduced to: roughly one slot per pixel on a wide chart.
      *
-     * A line has no minimum legible width the way a candle does, and the bar grid is also the grid the LIVE
-     * tail advances on: the chart holds its last point still until simulated time crosses a whole slot, then
-     * steps the whole series left by one. At the candle target that step is 90 ms of wall clock on a one-year
-     * range and 1.8 s on the longest, which reads as a freeze and a lurch rather than a moving price. Four
-     * times the slots makes each step four times shorter AND four times narrower; past about one slot per
-     * pixel a finer grid moves nothing the eye can resolve, so this is where the gain stops.
+     * A line has no minimum legible width the way a candle does, and the bar grid is also the grid the LIVE tail
+     * advances on: the chart holds its last point still until simulated time crosses a whole slot, then steps
+     * the series left by one. Finer slots make each step shorter and narrower; past about one slot per pixel
+     * nothing more is resolvable.
      */
     public const LINE_TARGET_BARS = 1600;
 

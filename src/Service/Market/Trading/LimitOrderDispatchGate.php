@@ -10,9 +10,7 @@ namespace App\Service\Market\Trading;
  * The ticker dispatches a ProcessLimitOrdersMessage when an instrument's bounds key is missing from Redis
  * or its price has crossed a resting order, and the handler on the worker rewrites the key when it is done.
  * Between the dispatch and that rewrite the condition still holds, so without a gate every tick in the
- * window dispatched again: a newly issued bond produced two dozen identical messages, and an order the
- * handler could not fill (a COVER against no short, say) kept the queue busy at the tick rate for as long
- * as the price stayed through it. One dispatch per instrument per retry window is what the handler needs.
+ * window would dispatch again. One dispatch per instrument per retry window is what the handler needs.
  */
 final class LimitOrderDispatchGate
 {

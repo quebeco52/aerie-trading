@@ -16,10 +16,6 @@ use Symfony\Contracts\Service\ResetInterface;
 /**
  * How much liquidity a name has, what it costs to cross the spread, and how far an order moves the price.
  *
- * Before this existed, any order of any size filled instantly at the last published price. A player with
- * enough cash could buy an entire float at mid and leave the quote untouched, which made size free and made
- * every other market mechanic — a squeeze, a liquidation, a fund unwinding — impossible to express.
- *
  * Three published relations, none of them invented here:
  *
  *  - Volume is structural. Annual turnover as a share of the float is a property of a name, modulated by a
@@ -225,8 +221,7 @@ final class LiquidityEngine implements ResetInterface
      * is right now.
      *
      * This is what a book should be sized against. The activity-scaled figure above is the depth an order
-     * meets today; sizing standing capital on it made every agent book grow into a stressed tape — the
-     * passive money bought a volatility spike — and shrink out of a quiet one.
+     * meets today; sizing standing capital on it would grow a book into a stressed tape.
      */
     public function structuralDailyVolume(Stock $stock): float
     {
@@ -301,17 +296,11 @@ final class LiquidityEngine implements ResetInterface
      * The log return a net signed quantity moves the price by at once; PERMANENT_IMPACT_SHARE of it stays and
      * the rest relaxes away (see transientImpactAfter()).
      *
-     * Linear in participation, signed by direction. This used to be the square-root law, which is the
-     * right shape for the TOTAL cost of a metaorder but the wrong one for a mark that is applied every
-     * tick and kept: a square root is concave, so the same daily flow sliced into N ticks left sqrt(N)
-     * times the mark of the same flow in one tick. At forty ticks a day the NPC agents' steady buying
-     * moved a name six times further than the calibration said, out-muscled fair-value reversion, and
-     * blew momentum bubbles to nearly twice fair value that the tick rate alone had manufactured.
-     *
-     * Linear is what the literature has for the permanent leg (Almgren, Thum, Hauptmann & Li 2005 estimate
-     * an exponent indistinguishable from one; Huberman & Stanzl 2004 prove it must be linear or a round
-     * trip manipulates the price). Its practical property here is additivity: a flow leaves the same mark
-     * whether it arrives in one tick or a thousand, so the result no longer depends on SIM_TICKS_PER_YEAR.
+     * Linear in participation, signed by direction. A square root is the right shape for the TOTAL cost of a
+     * metaorder but not for a mark applied every tick and kept: it is concave, so flow sliced into N ticks would
+     * leave sqrt(N) times the mark. Linear is what the literature has for the permanent leg (Almgren, Thum,
+     * Hauptmann & Li 2005; Huberman & Stanzl 2004 prove it must be linear or a round trip manipulates the price),
+     * and it is additive: a flow leaves the same mark whether it arrives in one tick or a thousand.
      *
      * @param Stock $stock          The name traded.
      * @param float $signedQuantity Positive for net buying, negative for net selling.

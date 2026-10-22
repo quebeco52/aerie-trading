@@ -36,8 +36,7 @@ use App\Service\Politics\Diet\Election;
  */
 final class PolicyCapitalization
 {
-    // --- Past the Next Term (the Diet's own long runs: 16 games of 200 years on the macro loop beside the politics,
-    // var/harness/polls/lever_means_an.php, lever_means_rework.out) ---
+    // --- Past the Next Term (the Diet's own long-run means) ---
     /** The corporate tax shift in force on average over the long run: -0.13 points (se 0.08). */
     public const LONG_RUN_CORPORATE_TAX_SHIFT = -0.0013;
     /**
@@ -186,8 +185,7 @@ final class PolicyCapitalization
      * what its trailing earnings carry. Purchases close on a budget, less the cuts the debt calls for, at the speed
      * they revert to it, and those still closing count for the part of the firm's value accruing before they arrive.
      * Each government's budget is measured as the purchases it would set, its appropriation less the cuts its own debt
-     * plank calls for: measured on the appropriation alone, a cabinet repairing debt by cuts was priced as spending
-     * more than it would, and half of each swing between cabinets went unpriced.
+     * plank calls for.
      *
      * @param bool $previous Whether to read the forecast as it stood the tick before.
      */

@@ -234,8 +234,7 @@ class MacroState
 
     // Capitalisation over nominal GDP. Both legs compound with the economy, so unlike the capitalisation
     // above this is STATIONARY, and it is the one of the two that gets written to macro_report: a raw
-    // nominal quantity outgrows any fixed-width decimal column eventually, and at this board's size
-    // DECIMAL(24,2) would have bought about sixteen hours of continuous running.
+    // nominal quantity outgrows any fixed-width decimal column eventually.
     public float $equityWealthRatio;
 
     // What the households have got used to: the wealth ratio's own slow trend, which is what the effect is
@@ -418,8 +417,6 @@ class MacroState
     public float $creditCrisisHazard;
     public float $creditCrisisDrag;
     public float $lastCreditCrisisAt;
-    // What the state paid to stand behind the banks in the last crisis, and the stakes and bad loans it still holds
-    // from its rescues, to be sold back; both as shares of GDP.
     // Losses the Monetary Authority carries as a deferred asset, paid down from its profits before any reach the
     // Exchequer; a share of GDP.
     public float $centralBankDeferredAssetToGdp;
@@ -473,7 +470,7 @@ class MacroState
     public float $electionPulse;
 
     // The levers the government has in force (App\DTO\GovernmentPolicyDTO): the corporate rate's shift from the neutral
-    // 21%, the average tariff on imports and the net export response building toward it, labour force growth with the
+    // rate, the average tariff on imports and the net export response building toward it, labour force growth with the
     // immigration regime in it and the population that regime has added against the structural path (log), where merger
     // review stands between the 2023 guidelines (0) and the 2010 guidelines (1), how far the green belt and the rules
     // on extraction stand between the founding regime (0) and the strictest (1), the carbon price ($/t CO2), and the
@@ -498,8 +495,7 @@ class MacroState
     public float $dividendTaxRate;
     public float $debtTarget;
     public float $debtPace;
-    // The debt anchor the budget in force plans against, phased down toward a lower legislated one; below zero before
-    // any plan has run. The Monetary Authority's rate committee: its supermajority, and whether politics hands one over
+    // The Monetary Authority's rate committee: its supermajority, and whether politics hands one over
     // at all.
     public float $authorityMajority;
     public float $authorityCommitteeSeated;
@@ -573,9 +569,6 @@ class MacroState
     public float $sovereignFundEquityShare;
     public float $sovereignFundOwnershipShare;
     public float $sovereignFundDrawToGdp;
-    // Fund-financed stabilisation spending above the rule draw, over GDP (negative: saved into the fund), set at the
-    // budget rounds and answered by demand at that rate; and the budget year's opening level and last year's change,
-    // which the rule steps from. The budget's long-run average of the output gap, the level its cycle is measured from.
     // The District's stamp duty on share trading, paid into the fund: this budget year so far, and last year's over
     // GDP.
     public float $sovereignFundStampDutyYearToDate;
@@ -614,9 +607,9 @@ class MacroState
     // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced
     // again.
     public float $boardBankLevy;
-    // What the board's deposit-taking banks have lent at home, in currency; kept until the board is priced again. Cash
-    // the District's strategic stakes (App\Data\Company\StrategicHoldings) paid it on the previous tick, a flow like
-    // the board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid into it.
+    // Cash the District's strategic stakes (App\Data\Company\StrategicHoldings) paid it on the previous tick, a flow
+    // like the board's: dividends, plus its share of buybacks less its share of issues. Held outside the fund, paid
+    // into it.
     public float $strategicStakeCash;
     // Currency the budget paid into the fund on the last tick: the surplus below the sovereign debt floor, with no debt
     // left to retire. Set by the fiscal accounts after the fund's update, so the fund takes it in on the next tick.
@@ -644,9 +637,7 @@ class MacroState
      * engine and every snapshot open the same economy from the same payload.
      *
      * The field list comes from App\Data\Macro\MacroFieldRegistry, so a newly declared observable is read
-     * back off the wire the moment it exists. It used to be named here a second time, and a field
-     * left out of this method was reset to its opening value on every load without anything failing
-     * — the caller still received a plausible number.
+     * back off the wire the moment it exists.
      *
      * Three passes, in order: the values the payload carries, the openings that are computed from
      * those values, then the series that start level with the series they smooth.

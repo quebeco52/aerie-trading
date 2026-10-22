@@ -81,8 +81,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const INVESTMENT_ACCELERATOR_MULTIPLIER = 1.50;
     /**
      * Orders per unit of the manufacturing PMI's relative deviation, at any cyclicality (0.25): the accelerator on
-     * output growth (Clark 1917), which a diffusion index measures. Scaled by cyclicality as well, it carried five
-     * points of the mill's revenue beta on its own.
+     * output growth (Clark 1917), which a diffusion index measures. Not scaled by cyclicality.
      */
     public const PMI_ACCELERATOR_SENSITIVITY = 0.25;
     /**

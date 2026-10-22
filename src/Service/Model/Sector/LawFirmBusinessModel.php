@@ -24,11 +24,9 @@ use App\Service\Model\ModelParam;
  * - Asset Light & Human Capital Driven: Ultra-low CapEx, very high cash flow conversion.
  * - Tri-Stream Legal Architecture:
  *   1. Corporate Retainers & Governance: Sticky recurring retainer fees for corporate governance, regulatory
- *      compliance,
- *      and M&A transactions (pro-cyclical with corporate boardroom activity).
+ *      compliance, and M&A transactions (pro-cyclical with corporate boardroom activity).
  *   2. High-Stakes Litigation & Contingency Fees: Extremely volatile, high-variance corporate warfare, antitrust
- *      battles,
- *      and patent infringement contingency windfalls.
+ *      battles, and patent infringement contingency windfalls.
  *   3. Restructuring & Bankruptcy Workouts: **Counter-cyclical legal surge**—when credit spreads blow out and corporate
  *      defaults surge during recessions, Chapter 11 and restructuring billing explodes.
  * - Inflation Dynamics: Immune to physical supply chains, but exposed to top-tier associate wage inflation (mitigated

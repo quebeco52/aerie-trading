@@ -25,11 +25,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * The hedge runs on its own, faster cadence: a desk re-hedges when the price moves, not when its analytics
  * are refreshed.
  *
- * COST. A full sweep hydrates and rewrites every listed contract in the market — five thousand of them at
- * the default roster — and it was first wired to the history tick, which at the shipped tick rate fires
- * roughly eight times a second. That is forty-five thousand option UPDATEs a second for a table nothing
- * reads at that resolution, and it made the whole ticker crawl. Two things fix it and neither costs any
- * fidelity:
+ * COST. A full sweep rewrites every listed contract in the market, thousands of them, so:
  *
  *   - The sweep runs on its own slow interval and processes a SLICE of the market each pass, so the whole
  *     market is remarked about once a simulated week and no single pass stalls the tick. Nothing downstream
@@ -70,14 +66,8 @@ final class OptionDeskService
     /**
      * Tick offset of a pass within its interval.
      *
-     * One rather than zero, so a pass does not land on a history tick. The sweep interval and the history
-     * interval are both derived from the tick rate and share a factor at the shipped one, which means at an
-     * offset of zero they coincide on every seventeenth pass and that single tick pays for the sweep AND the
-     * bar — the twenty-five-millisecond outliers in the ticker's log were all of them this collision.
-     *
-     * Shifting by one removes it outright whenever the two intervals share a factor: a solution to
-     * sweep·k + 1 ≡ 0 (mod history) exists only if the two are coprime. At 14,400 ticks a year that is
-     * 34 and 6, so they never meet again.
+     * One rather than zero, so a pass does not land on a history tick and one tick pay for the sweep AND the bar.
+     * When the two intervals share a factor, sweep·k + 1 ≡ 0 (mod history) has no solution, so they never meet.
      */
     public const SWEEP_TICK_OFFSET = 1;
 
@@ -108,10 +98,7 @@ final class OptionDeskService
     /**
      * Settles the market, then lists, marks and re-measures one slice of it.
      *
-     * A pass reports its own WALL TIME PER STAGE. Measured on the bench, the whole model side of a full
-     * slice — pricing eight hundred contracts, evolving the public's demand and re-measuring the desk's
-     * gamma — is under two milliseconds, so when a sweep runs long it is a statement that ran long, and
-     * which one is not guessable from outside. The ticker folds these into its lag warning.
+     * A pass reports its own wall time per stage; the ticker folds these into its lag warning.
      *
      * @param array<int, Stock> $stocks The ticker's working set.
      * @param float             $dt     Years since THIS SLICE was last swept, not since the last pass.
@@ -302,8 +289,7 @@ final class OptionDeskService
     /**
      * One held contract's mark, laid out for MARK_COLUMNS.
      *
-     * Few contracts are held, but "few" is a property of who is playing rather than of the market, and a
-     * statement each meant the sweep's cost grew with the size of the book. They go out together.
+     * Written together in one bulk statement, so the sweep's cost does not grow with the size of the book.
      *
      * @return array<int, mixed>
      */
@@ -347,13 +333,10 @@ final class OptionDeskService
     /**
      * The live chain of every name in the working set, grouped by underlying.
      *
-     * One query for the whole slice rather than one per name, and rows rather than entities. A sweep touches
-     * every listed contract, and hydrating them through the ORM meant two things the tick could not afford:
-     * the hydration itself, and — worse — that every contract the public's book had nudged became a dirty
-     * entity, and the next flush sent an UPDATE for each one. The contracts here are plain objects built
-     * from the rows, so the engines see exactly what they always saw and the unit of work sees nothing.
-     * What changed is written back as data, in bulk, by the caller; the row's identity rides alongside so
-     * it can be.
+     * One query for the whole slice rather than one per name, and rows rather than entities: the contracts are
+     * plain objects built from the rows, so the unit of work sees nothing and no contract the public's book nudged
+     * becomes a dirty entity. What changed is written back as data, in bulk, by the caller; the row's identity
+     * rides alongside so it can be.
      *
      * @param array<int, Stock> $stocks
      * @return array<int, array{stock: Stock, contracts: array<int, OptionContract>, ids: array<string, int>}>

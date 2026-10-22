@@ -223,8 +223,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     /** Quarterly share of the fixed-rate bond stock that matures and reprices (~8-year average tenor). */
     public const DEBT_MATURITY_ROLLOVER_RATE = 0.03;
 
-    // --- Analyst Read of the Quarter ---
-
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);

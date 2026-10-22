@@ -54,8 +54,7 @@ final class IndexFundStrategy implements AgentStrategyInterface
         // A tightening in conditions withdraws money from passive vehicles and an easing sends it back.
         // The index carries no other opinion, so this is the whole of its signal. The tilt is a fraction
         // of the passive book and it is bounded: fund flows are a few percent of assets a year even in a
-        // crisis, and passive money was a net buyer through 2008 and 2020. An additive tilt on a z-score
-        // index liquidated the whole book at a moderately tight reading and nearly tripled it at an easy one.
+        // crisis.
         $tilt = 1.0 - (self::AGENT_INDEX_FLOW_SENSITIVITY * $view->financialConditions);
         $bound = self::AGENT_INDEX_MAX_FLOW_TILT;
         $tilt = max(1.0 - $bound, min(1.0 + $bound, $tilt));

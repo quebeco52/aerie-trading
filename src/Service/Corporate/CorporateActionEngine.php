@@ -57,9 +57,8 @@ class CorporateActionEngine
      * if the price falls below $2. Ensures the stock remains highly liquid and
      * tradeable without altering the underlying corporate value.
      *
-     * At most one split a year: without it a name whose value had collapsed split every few ticks, and each
-     * cycle of a price chasing its target through the threshold compounded the share count (TIER: 93 splits
-     * in eight minutes, a board capitalisation ~1e23).
+     * At most one split a year, so a price chasing its target through the threshold does not compound the share
+     * count.
      *
      * @param Stock $stock             The stock entity to evaluate.
      * @param float $newPrice          The proposed new price.
@@ -114,8 +113,7 @@ class CorporateActionEngine
      * Executes a recursive forward split (e.g., 4-for-1) to bring the price back below $400.
      *
      * Price and shares move by the same factor, so the company is worth exactly what it was. A split that would
-     * take the share count past what an integer can hold is not done at all: clamping the count while still
-     * dividing the price destroyed value.
+     * take the share count past what an integer can hold is not done at all.
      *
      * @param Stock $stock The stock entity.
      * @param float $newPrice The price that breached the upper threshold.
@@ -167,8 +165,7 @@ class CorporateActionEngine
      * Executes a recursive reverse split (e.g., 1-for-10) to bring the price back above $2.
      * Cashes out fractional shares directly to user accounts to prevent loss of wealth.
      *
-     * The consolidation stops at the listing's share minimum even if the price is still under $2. Flooring
-     * the count at one share while multiplying the price by the full factor minted value from nothing.
+     * The consolidation stops at the listing's share minimum even if the price is still under $2.
      *
      * @param Stock $stock The stock entity.
      * @param float $newPrice The price that breached the lower threshold.

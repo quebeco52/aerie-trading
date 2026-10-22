@@ -61,7 +61,7 @@ class CommodityLogisticsSubsystem
     public const ENERGY_CAPACITY_INELASTICITY = 2.5;
     /**
      * Oil spot per unit of world demand gap, in logs: fitted with the diffusion so oil yoy correlates with world demand
-     * yoy as WTI does with G6 industrial production, 0.55 (1993-2019; var/harness/world_factor).
+     * yoy as WTI does with G6 industrial production, 0.55 (1993-2019).
      */
     public const ENERGY_DEMAND_ELASTICITY = 15.0;
     /**
@@ -191,8 +191,6 @@ class CommodityLogisticsSubsystem
     /** @var array<string, float> Series and time of year => the smoothed season there, already integrated. */
     private static array $smoothedSeasonMemo = [];
 
-    // --- Carbon in Wholesale Power (EPA emission factors; Fabra & Reguant 2014) ---
-
     // --- Gold (Barsky, Epstein, Lafont-Mueller & Yoo 2021, Chicago Fed Letter 464) ---
     /**
      * Log change in the real gold price per unit of real ten-year yield: -0.131 per percentage point (annual levels
@@ -216,11 +214,11 @@ class CommodityLogisticsSubsystem
      */
     public const PESSIMISM_PER_SENTIMENT_POINT = 0.53;
     /**
-     * Real ten-year yield the engine rests at (measured mean over a 49-year run), so the index centres on its baseline
+     * Real ten-year yield the engine rests at, so the index centres on its baseline
      * rather than on a level the engine never visits.
      */
     public const GOLD_REAL_RATE_ANCHOR = 0.028;
-    /** Ten-year expected inflation the engine rests at (measured mean over the same run). */
+    /** Ten-year expected inflation the engine rests at. */
     public const GOLD_INFLATION_EXPECTATION_ANCHOR = 0.022;
     /**
      * Annual reversion toward the equilibrium: the levels regression's Durbin-Watson of 0.98 is a residual
@@ -252,7 +250,7 @@ class CommodityLogisticsSubsystem
     public const METALS_LONG_TERM_KAPPA = 0.20;
     /**
      * Volatility of short-term supply disruption shocks, fitted with the demand elasticity to the World Bank metals
-     * index's yoy log sd, 0.231 (1993-2019): 0.228 over 4 seeds.
+     * index's yoy log sd, 0.231 (1993-2019).
      */
     public const METALS_SHORT_TERM_SIGMA = 0.24;
     /** Volatility of long-term supercycle equilibrium shifts. */
@@ -261,8 +259,7 @@ class CommodityLogisticsSubsystem
     public const METALS_RHO = -0.30;
     /**
      * Metals spot per unit of world demand gap, in logs: fitted so metals yoy correlates with world demand yoy as the
-     * World Bank metals index does with G6 industrial production, 0.58 (1993-2019): 0.63 over 4 seeds
-     * (var/harness/world_factor).
+     * World Bank metals index does with G6 industrial production, 0.58 (1993-2019).
      */
     public const METALS_DEMAND_ELASTICITY = 12.0;
 
@@ -303,7 +300,7 @@ class CommodityLogisticsSubsystem
     // --- Suppliers' Delivery Times (ISM Supplier Deliveries; Kingman 1961) ---
     /**
      * Delivery-index points per log unit of factory congestion rho / (1 - rho) in capacity utilization: factory and
-     * shipping congestion carry equal variance in the simulation (16 seeds x 30 years).
+     * shipping congestion carry equal variance in the simulation.
      */
     public const DELIVERY_FACTORY_LOADING = 12.55;
     /**

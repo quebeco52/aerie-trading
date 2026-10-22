@@ -23,7 +23,7 @@ class ShockEvent
     public const PERFORMANCE_FEE_SURGE = 'performance_fee_surge';
     public const FUND_OUTFLOWS = 'fund_outflows';
 
-    // --- Systemic Macroeconomic Events (Published against the LBI index) ---
+    // --- Systemic Macroeconomic Events ---
     /** Central bank emergency Quantitative Easing and asset purchases during contraction near zero lower bound. */
     public const TITAN_INTERVENTION = 'titan_intervention';
 
@@ -67,7 +67,7 @@ class ShockEvent
     public const GOVERNMENT_FELL = 'government_fell';
     /** A cabinet has taken office after the talks that followed a vote or a fall. */
     public const GOVERNMENT_FORMED = 'government_formed';
-    /** A budget round changed the government's levers; the headline says what the Council held back, if anything. */
+    /** A budget round changed the government's levers; the headline says what was enacted. */
     public const BUDGET_ENACTED = 'budget_enacted';
     /**
      * The Council has named a new governor of the Monetary Authority, who will fill the rate committee with people of

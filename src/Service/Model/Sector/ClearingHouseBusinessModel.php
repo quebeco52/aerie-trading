@@ -135,9 +135,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     /** Extreme default z-score threshold triggering apocalyptic clearinghouse bailout lore. */
     public const LORE_DEFAULT_Z_THRESHOLD = -3.00;
 
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
-
     // --- Clearing Pool & Margin Physics ---
     /** Required cash backing fraction for customer margin liabilities. */
     public const LIABILITY_CASH_BACKING  = 1.00;

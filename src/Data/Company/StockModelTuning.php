@@ -250,7 +250,7 @@ class StockModelTuning
         // --- Owl Capital Partners (OWLS) ---
         // Permanent-capital value holding company. Earns the operating cash flow of wholly-owned
         // subsidiaries, not a management fee on third-party assets, so it runs the conglomerate physics
-        // alongside BRKW and TRIV rather than the asset-manager fee model it used to be priced on.
+        // alongside BRKW and TRIV rather than the asset-manager fee model.
         'OWLS' => [
             ModelParam::IndustrialConglomerateWeight->value => 0.45, // Heavy rail and industrial manufacturing
             ModelParam::DefensiveStaplesWeight->value       => 0.35, // Utility infrastructure and consumer goods

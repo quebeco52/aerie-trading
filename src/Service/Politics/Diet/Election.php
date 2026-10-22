@@ -74,7 +74,7 @@ final class Election
     public const CABINET_FALL_GAP_SLIDE_RESPONSE = 6.0;
 
     // --- Election Uncertainty ---
-    /** Days a term that talks after a fall hold the election pulse above its ramp, as measured in simulated terms. */
+    /** Days a term that talks after a fall hold the election pulse above its ramp. */
     public const FALL_TALK_DAYS_PER_TERM = 19.5;
     /** Long-run mean nearness to the vote: the final-year ramp's half year a term, plus the talks held at the peak. */
     public const MEAN_ELECTION_PROXIMITY = (0.5 + ((CoalitionFormation::FORMATION_MEAN_DAYS + self::FALL_TALK_DAYS_PER_TERM) / FinancialConstants::DAYS_PER_YEAR)) / self::TERM_YEARS;

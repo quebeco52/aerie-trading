@@ -91,10 +91,8 @@ class EtfTracker
      *
      *     price = level x basket per share + accrued income
      *
-     * Publishing the level as the price, as this did, made every fund a claim on a price index: it lagged
-     * the basket it claimed to hold by the market's whole dividend yield every year, and it charged nothing
-     * to run, so a clever expensive fund and a cheap plain one tracked their indices equally perfectly.
-     * See IndexFundAccountant for the books being carried here.
+     * Publishing the level as the price would make every fund a claim on a price index: it would lag the basket
+     * by the dividend yield and charge nothing to run. See IndexFundAccountant for the books being carried here.
      *
      * @param float  $totalMarketCap The float-adjusted, factor-adjusted capitalisation of the index's members.
      * @param bool   $recordHistory  Whether to persist the new price to the history table.
@@ -234,9 +232,8 @@ class EtfTracker
                 $this->pendingHistory[] = [
                     'etf_id' => $etf->getId(),
                     'price' => (string) $price,
-                    // The premium is the difference between these two and it has to be archived as two
-                    // numbers: the basket has moved on by the next tick, and the fee ratchet means the fund
-                    // no longer owns the basket it owned when this row was written.
+                    // The premium is the difference between these two, archived as two numbers: the basket has
+                    // moved on by the next tick.
                     'nav' => (string) round($navPerShare, 4),
                     // Null when the caller is not the ticker: an honest "written outside the simulation
                     // clock" rather than a zero that would sort the row before the beginning of time.
@@ -396,12 +393,7 @@ class EtfTracker
     /**
      * Writes the bar's history rows in one statement, matching the stock and bond history inserts.
      *
-     * THE ROW IS DATA, NOT AN ENTITY. A fund's history used to be persisted as a managed EtfHistory, which
-     * is four objects a bar that the unit of work then had to walk on every flush and hold in the identity
-     * map until the next working-set reload threw it away. Four rows is nothing to write and a great deal to
-     * track: the flush was computing changesets over a map that grew all bar for the sake of four inserts it
-     * could have sent itself. Bonds and stocks already wrote theirs this way; this is the last of the three
-     * to stop going through Doctrine.
+     * The row is data, not an entity, so the unit of work has nothing to track.
      */
     public function recordHistory(): void
     {

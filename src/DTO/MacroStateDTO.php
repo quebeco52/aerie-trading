@@ -56,15 +56,14 @@ readonly class MacroStateDTO
     /**
      * The macro vector's fields, and the one place their opening values are declared.
      *
-     * The opening is the economy at trend, so a fresh engine, a snapshot read before the ticker has
-     * published, the seeded market and a test fixture all start from one state that the first tick does
-     * not jolt. The slow states that carry the cycle -- the policy rate, sovereign debt and its premium --
-     * open where the engine holds them with output at trend (median over quarters with |gap| and its EMA
-     * under 0.6%, off the lower bound, no credit crisis, inflation within 0.6pp of target; 32 seeds x
-     * 100y), and the curve is the engine's own curve at that state. Cyclical gaps and shocks open at zero.
-     * Everything firms read as a deviation from a named reference -- unemployment, spreads, default rates,
-     * money growth, the real wage gap, prices and indices -- opens at that reference, so the opening reads
-     * neutral to every model. App\Service\Macro\MacroState takes its openings from here.
+     * The opening is the economy at trend, so a fresh engine, a snapshot read before the ticker has published, the
+     * seeded market and a test fixture all start from one state that the first tick does not jolt. The slow states that
+     * carry the cycle -- the policy rate, sovereign debt and its premium -- open where the engine holds them with
+     * output at trend (median over quarters with |gap| and its EMA under 0.6%, off the lower bound, no credit crisis,
+     * inflation within 0.6pp of target), and the curve is the engine's own curve at that state. Cyclical gaps and
+     * shocks open at zero. Everything firms read as a deviation from a named reference -- unemployment, spreads,
+     * default rates, money growth, the real wage gap, prices and indices -- opens at that reference, so the opening
+     * reads neutral to every model. App\Service\Macro\MacroState takes its openings from here.
      */
     public function __construct(
         public float $totalTime = 0.0,
@@ -81,14 +80,10 @@ readonly class MacroStateDTO
         public float $unemploymentRate = MacroConstants::NATURAL_UNEMPLOYMENT,
         public float $unemploymentRateEma = MacroConstants::NATURAL_UNEMPLOYMENT,
         /**
-         * @var list<float> The unemployment rate at each of the last month ends, oldest first, as many as the Sahm rule
-         *                  reads.
+         * @var list<float> The unemployment rate at each of the last month ends, oldest first, a year's worth
+         *                  for the year-on-year change.
          */
         public array $unemploymentMonthly = [],
-        /**
-         * The Sahm rule's reading: the three-month average unemployment rate above its lowest of the twelve months
-         * before (App\Service\Macro\Subsystem\LaborMarketSubsystem::recordSahmIndicator()).
-         */
         /**
          * Real GDP summed over the quarter so far, and the years it covers: the statistics office's quarterly average
          * (MacroAggregateSubsystem::recordQuarterlyRealGdp()).
@@ -368,10 +363,6 @@ readonly class MacroStateDTO
          *                           once its condition does (MacroEngine::evaluateSystemicEvent()).
          */
         public array $systemicAlarmLatches = [],
-        /**
-         * Highest three-month average unemployment rate since the recession headline last reported; the episode ends
-         * RECESSION_RECOVERY_MARGIN below it (MacroEngine::evaluateSystemicEvent()).
-         */
         public float $supercoreInflation = MacroConstants::TARGET_INFLATION,
         public float $supercoreInflationEma = MacroConstants::TARGET_INFLATION,
         public float $servicesPriceShock = 0.0,
@@ -823,9 +814,7 @@ readonly class MacroStateDTO
      * The economy's phase as the interface names it.
      *
      * Defined once because it is read in two places that must agree: the ticker publishes it on every
-     * live update, and the stock page renders it on load. The page used to read a Redis key
-     * (`economy_state`) that nothing has ever written, so it fell back to a hardcoded "Expansion" — a
-     * label the live feed does not even use — until the first WebSocket tick replaced it.
+     * live update, and the stock page renders it on load.
      */
     public function economicCycleLabel(): string
     {

@@ -125,9 +125,6 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** Volatility multiplier for top-line revenue shocks in subscription data models. */
     public const REVENUE_VARIANCE_SCALAR   = 0.05;
 
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
-
     // --- Subscription & Transaction Revenue Streams ---
     /** Operating margin mean reversion speed: slower speed reflects high switching costs and data monopoly moat. */
     public const MONOPOLY_REVERSION_SPEED  = 2.0;

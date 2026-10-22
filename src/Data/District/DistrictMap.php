@@ -54,11 +54,7 @@ class DistrictMap
      *
      * This is the authored layer: qualification is ranked (largest by market cap hold frontage),
      * but WHERE a house stands is composed. A district is a block of the street, not a GICS
-     * sector — the two do not nest, and the kerb brackets used to be drawn on sector while the
-     * order was drawn on business model, which left the row reading a lie: a data house sat
-     * inside the banking run and split it into two brackets, the oil houses straddled a row wrap
-     * and appeared twice, and five sectors held frontage under no name at all because a one-plot
-     * run is too narrow to print one. Bracketing on the same list that does the ordering makes
+     * sector — the two do not nest. Bracketing on the same list that does the ordering makes
      * every block contiguous by construction. Sector still reaches the street where a viewer
      * actually reads it: the facade colour, the kerb plate and the legend filter.
      *
@@ -90,11 +86,8 @@ class DistrictMap
             'consumer_staples', 'restaurant', 'apparel_manufacturing', 'auto_manufacturer',
             'internet_retail', 'resorts_casinos', 'luxury', 'advertising_agency', 'education',
         ],
-        // The extraction and generation end. The price takers used to sit inside the materials block,
-        // which stood the oil houses between the machine shops and the chemical works. Named for
-        // extraction rather than energy because the block holds the mines as well as the wells:
-        // CNDR digs copper beside SINK's wells and CASC's refinery, and a copper miner under a
-        // bracket reading ENERGY is the same kind of lie this pass set out to remove.
+        // The extraction and generation end. Named for extraction rather than energy because the block holds the
+        // mines as well as the wells.
         'Extraction & Power' => ['oil_gas_producer', 'refining', 'mining', 'utility', 'independent_power'],
         'Technology & Telecoms' => ['tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom'],
         'Property & Health' => ['reit', 'homebuilder', 'medical_care_facility', 'health_insurer', 'biotech'],
@@ -151,10 +144,8 @@ class DistrictMap
      * unit, at which every label and stroke on the page falls under its legibility floor. Each
      * stave divides the width by roughly its own count and multiplies that scale by the same.
      *
-     * The third stave buys frontage, not scale: STREET_ROSTER_SIZE was raised alongside it so a
-     * row still carries about the same rendered width it did on two, leaving pixels-per-unit
-     * where it was and spending the extra row on more of the listed universe. Adding a row
-     * without adding tenants would instead have magnified the same thirty houses.
+     * An extra stave buys frontage, not scale: STREET_ROSTER_SIZE grows with it so a row keeps about the same
+     * rendered width.
      *
      * Deliberately *not* framed as near/far terraces: this is an orthographic elevation with no
      * perspective cue, and conduits render behind the upper rows' buildings, so any depth claim
@@ -257,8 +248,7 @@ class DistrictMap
     public const MARKET_CAP_LOG_EMPTY_FLOOR = 11.0;
     /**
      * Vertical spacing in user units between rendered window bands on a facade. The template lays
-     * window rows out at exactly this pitch — they previously disagreed (52 here, 46 there),
-     * which left every facade with a blank lower band growing with its height.
+     * window rows out at exactly this pitch.
      */
     public const FLOOR_HEIGHT = 52.0;
     /** Inset from a facade's top edge to its first window band. */
@@ -297,8 +287,7 @@ class DistrictMap
      * Share of a facade's lit windows drawn a step brighter than the rest (`data-twinkle`). A
      * uniform grid of lit windows reads as a diagram; a few uneven ones read as a city. Which
      * windows is a second stable hash of the window's address, so the street never changes its
-     * mind between renders. They were once animated; the flicker was dropped because a few
-     * hundred infinitely-animating SVG rects re-rasterised the street at the display's frame rate.
+     * mind between renders.
      */
     public const WINDOW_TWINKLE_SHARE = 0.12;
 
@@ -455,8 +444,7 @@ class DistrictMap
      * The building mass stays dark — these are silhouettes at night against a #060e20-#131b2e
      * sky — and it is the *lit windows* that carry the sector hue. Colouring the whole facade
      * would turn the skyline into a bar chart; lighting the windows keeps it a street while still
-     * making sector legible at a glance, and it rescues windows that previously rendered as a
-     * uniform #adc6ff at 0.30 opacity, i.e. barely visible at all.
+     * making sector legible at a glance.
      *
      * Condition (see determineCondition()) layers on top and takes priority: a distressed or
      * ruined tenant loses its sector hue, because solvency is the more urgent fact.
@@ -488,8 +476,7 @@ class DistrictMap
     /**
      * Span of simulated time, in years, a building's event badge counts over (one simulated
      * month — the same window the kerb's change figure is measured across, see
-     * App\Service\Market\Chart\PriceChangeFeed). The badge used to print the whole capped backfill,
-     * so once a tenant had six lifetime events it read "6" for good and carried nothing.
+     * App\Service\Market\Chart\PriceChangeFeed).
      */
     public const EVENT_BADGE_WINDOW_YEARS = 1.0 / 12.0;
 
@@ -597,10 +584,8 @@ class DistrictMap
      * principle CONDUITS already applied by hand to equityRiskPremium/corporateTaxRate/policyRate
      * feeding WACC alone.
      *
-     * Energy and wholesale goods left the list when the input-cost baskets were measured from the BEA
-     * input-output accounts (App\Data\Macro\InputOutputExposures): oil is now material to fewer than half the
-     * models and the wholesale-goods channel was retired, so an oil conduit marks a real fuel dependency.
-     * See App\Service\District\DistrictConduitResolver.
+     * Energy is not on the list: oil is material to fewer than half the models (App\Data\Macro\InputOutputExposures),
+     * so an oil conduit marks a real fuel dependency. See App\Service\District\DistrictConduitResolver.
      */
     public const UBIQUITOUS_MACRO_FIELDS = [
         'output_gap_ema',
@@ -611,7 +596,7 @@ class DistrictMap
     // --- Institution Registry ---
     /**
      * Abstract macro-publishing institutions — councils, registries and exchanges, not rival
-     * sovereigns to Lakebird. Each names the real `MacroStateDTO` fields (see App\DTO\MacroStateDTO)
+     * sovereigns. Each names the real `MacroStateDTO` fields (see App\DTO\MacroStateDTO)
      * it publishes. An institution renders on a ward only where at least one of that ward's
      * tenants draws a conduit from it (App\Service\District\DistrictConduitResolver), so no
      * institution exists as pure decoration and none needs a `ward` key of its own.

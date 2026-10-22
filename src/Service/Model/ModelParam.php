@@ -249,8 +249,8 @@ enum ModelParam: string
 
     // --- Investment Companies ---
     // A sphere declares NO portfolio composition: treasury off the balance sheet, stakes off the board via
-    // AnchorHoldings, subsidiaries the residual. Three sleeves make a whole book, so any dial here is a
-    // second opinion about a number the other two settle — and both that used to live here went stale.
+    // AnchorHoldings, subsidiaries the residual. Three sleeves make a whole book, so a dial here would only
+    // second-guess a number the other two settle.
 
     // --- Legal Services ---
     case CorporateRetainerWeight = 'corporate_retainer_weight';

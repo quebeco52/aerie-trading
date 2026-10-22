@@ -10,7 +10,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Represents a publicly traded stock on the Aerie Exchange.
- * * Uses Absolute Values (Total Net Income, Total Equity) to maintain
+ * Uses Absolute Values (Total Net Income, Total Equity) to maintain
  * mathematically flawless accounting during splits, buyouts, and buybacks.
  */
 #[ORM\Entity(repositoryClass: \App\Repository\StockRepository::class)]
@@ -361,7 +361,7 @@ class Stock
     private string $volatility = '0.02';
 
     /**
-     * @var string|null The current, dynamic instantaneous volatility (used in Heston/GARCH models).
+     * @var string|null The current instantaneous volatility.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true, updatable: false)]
     private ?string $currentVolatility = null;
@@ -2012,11 +2012,6 @@ class Stock
         return $this;
     }
 
-    /**
-     * Derives Absolute Total Revenue mathematically using Total Net Income and Operating Margin.
-     *
-     * @return string The computed Total Revenue.
-     */
     public function getTotalRevenue(): string
     {
         return $this->totalRevenue;
@@ -2153,12 +2148,8 @@ class Stock
     /**
      * Whether a complete working capital ledger exists.
      *
-     * All three balances are written together every quarter, so a partial set is not a ledger — it is a
-     * leftover. That distinction matters because the schema migration that introduced these columns was
-     * generated as a RENAME of the old single net-working-capital column onto `receivables`, which leaves
-     * a net figure (negative for float businesses) sitting in a gross balance with no matching inventory
-     * or payables. Requiring the full trio makes such a row read as unseeded, so the engine rebuilds it
-     * from the cash conversion cycle instead of differencing against a number that never meant this.
+     * All three balances are written together every quarter, so a partial set is not a ledger. Requiring the full
+     * trio makes such a row read as unseeded, and the engine rebuilds it from the cash conversion cycle.
      */
     public function hasWorkingCapitalLedger(): bool
     {
@@ -2190,10 +2181,6 @@ class Stock
         return \bcdiv((string) $this->getTotalRevenue(), $sharesStr, 4);
     }
 
-    /**
-     * Calculates the True Size of the Operating Business (Invested Capital).
-     * Core Business Floor: Assumes at least 50% of Equity is driving operations, even for mega-hoarders.
-     */
     /**
      * Capital actually at work in the business: equity plus debt, less the cash sitting idle beside it.
      *

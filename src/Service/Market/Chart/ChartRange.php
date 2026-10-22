@@ -10,8 +10,7 @@ namespace App\Service\Market\Chart;
  * A range is a span of time, never a row count. The series behind a chart are written at different rates —
  * stock and fund history once a bar, bond history once a mark, the Redis buffers once a tick or once a mark —
  * and the bar rate is itself a tuning constant, so a row count is right for one table at one configuration
- * and silently wrong for the rest: the bond page drew about nine and a half years under "1Y" because the
- * endpoint counted bond rows at the equity bar rate. History is therefore selected by its own sim_time, and
+ * and wrong for the rest. History is therefore selected by its own sim_time, and
  * the Redis buffers, which carry no simulated time, are counted in their own entries per year.
  */
 final class ChartRange

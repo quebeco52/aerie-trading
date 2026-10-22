@@ -67,8 +67,8 @@ final class CoalitionFormation
      */
     public const FORMATION_ATTEMPT_DAYS = 22.6;
     /**
-     * Mean days from a vote to its government, single-party majorities included, as the talks run in the full game
-     * (var/harness/polls/enp_an.py): what the election pulse is centred on.
+     * Mean days from a vote to its government, single-party majorities included, as the talks run in the full game:
+     * what the election pulse is centred on.
      */
     public const FORMATION_MEAN_DAYS = 29.3;
 

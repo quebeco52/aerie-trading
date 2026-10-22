@@ -16,8 +16,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * Applies the retention policy by hand.
  *
  * The rules and the SQL live in HistoryPruner, because the ticker triggers the same pass on a simulated
- * cadence — the only clock the cutoffs are measured against. This command remains the way to run a backlog
- * off, and the nightly schedule remains as a backstop for an installation whose ticker is not running.
+ * cadence — the only clock the cutoffs are measured against. This command runs a backlog
+ * off, and the nightly schedule is a backstop for an installation whose ticker is not running.
  */
 #[AsCommand(
     name: 'app:prune-history',

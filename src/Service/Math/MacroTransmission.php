@@ -6,8 +6,9 @@ namespace App\Service\Math;
 
 /**
  * How macro aggregates and policy levers reach firms: demand shifts from the PMI, housing starts, foreign demand,
- * the trade balance, broad money and capacity utilisation; PPI stages and cost drag; supply-chain, deal-flow and
- * diffusion indices; GDP share drift; and the bank levy and stamp duty. Pure functions of their arguments.
+ * broad money and capacity utilisation; PPI stages and cost drag; queueing congestion, deal-flow and diffusion
+ * indices; the convex Phillips curve; GDP share drift; and the bank levy and stamp duty. Pure functions of their
+ * arguments.
  */
 final class MacroTransmission
 {
@@ -28,12 +29,6 @@ final class MacroTransmission
      * short-term funding: half (the UK's long-term rate, 0.105% against 0.21% in 2015).
      */
     public const BANK_LEVY_LONG_TERM_RATE_SHARE = 0.5;
-
-    /**
-     * A sector's demand drift relative to the economy: the annual log change in its share of nominal GDP between
-     * two benchmark years. Added to trend real growth it is the sector's secular real growth, and shares that sum
-     * to GDP drift to zero on average, so the sectors together grow with the economy.
-     */
 
     // --- Jovanovic-Rousseau (2002) Capital Markets & M&A Deal Flow ---
     /** Log-elasticity of deal flow to one cycle-standard-deviation (150bps) of equity risk premium. */
@@ -56,6 +51,11 @@ final class MacroTransmission
      * single-digit percents per sd (Bonaime, Gulen & Ion 2018).
      */
     public const DEAL_ACTIVITY_EPU_BETA = 0.10;
+    /**
+     * A sector's demand drift relative to the economy: the annual log change in its share of nominal GDP between
+     * two benchmark years. Added to trend real growth it is the sector's secular real growth, and shares that sum
+     * to GDP drift to zero on average, so the sectors together grow with the economy.
+     */
     public static function gdpShareDrift(float $shareStart, float $shareEnd, float $years): float
     {
         if ($shareStart <= 0.0 || $shareEnd <= 0.0 || $years <= 0.0) {
@@ -446,7 +446,7 @@ final class MacroTransmission
      * downward nominal wage and price rigidity flattens the curve toward a sticky minimum slope.
      *
      * Formula:
-     *   For y >= 0: f(y) = kappa * (y / max(0.001, y_max - y))
+     *   For y >= 0: f(y) = kappa * (y / max(0.005, y_max - y))
      *   For y < 0:  f(y) = kappa * downwardRigidityFactor * y
      *
      * @param float $outputGap              Current macroeconomic output gap (e.g., 0.02 for +2%).

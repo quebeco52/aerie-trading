@@ -31,10 +31,8 @@ final class BondPricingEngine
     /**
      * Years between pillars of the sampled discount curve.
      *
-     * Measured worst case across inverted, humped, lower-bound and QE curves is 0.033 basis points, at the
-     * very short end where the curvature terms are steepest; BondDiscountGridTest holds it under one. The
-     * spacing is set by that error budget rather than by the pillar count — six hundred evaluations a tick
-     * against five thousand lookups leaves plenty of room to be conservative.
+     * Interpolation error stays well under a basis point, worst at the short end where the curvature terms are
+     * steepest; BondDiscountGridTest holds it under one.
      */
     public const PILLAR_SPACING_YEARS = 0.05;
 
@@ -53,11 +51,8 @@ final class BondPricingEngine
     /**
      * The sovereign curve sampled onto a tenor grid, BEFORE the effective lower bound, for $pillarCurve.
      *
-     * A mark evaluates the curve once per remaining cash flow of every issue on the ladder — three hundred
-     * bonds times sixteen flows is five thousand evaluations a tick, and a profile put that one call chain at
-     * thirteen percent of the whole ticker. Keying a memo on the tenor barely helped: a cash flow's tenor is
-     * measured from NOW, so it moves every tick and only ever collides with issues sold at the same auction.
-     * Measured reuse was 1.6x against the 3x it was built for.
+     * A mark evaluates the curve once per remaining cash flow of every issue on the ladder, thousands of
+     * evaluations a tick. A cash flow's tenor is measured from NOW, so a memo keyed on it rarely hits.
      *
      * A curve is pillars and an interpolation everywhere else — that is how a desk stores one, and it is what
      * the quoted benchmark points already are. Sampling it once per curve object costs six hundred
@@ -133,11 +128,7 @@ final class BondPricingEngine
     /**
      * The unfloored curve at one pillar, evaluated the first time that pillar is asked for.
      *
-     * ON DEMAND, NOT UP FRONT. Filling the whole grid eagerly costs the same six hundred evaluations whether
-     * the ladder is three hundred issues or thirty, which turns a five-fold saving on a mature ladder into a
-     * loss on a young one — a profile taken against an 86-issue ladder caught exactly that, 610 evaluations
-     * spent serving 729 cash flows. Lazily the cost is the pillars actually touched, so it falls with the
-     * ladder and still tops out at the grid, never at the flow count.
+     * On demand, so the cost is the pillars actually touched: it falls with the ladder and tops out at the grid.
      */
     private function pillarAt(SovereignCurveDTO $curve, int $index): float
     {

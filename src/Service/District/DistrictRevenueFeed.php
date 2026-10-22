@@ -23,8 +23,8 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  *  - Growth rates are quoted both sequentially and year-on-year, so a seasonal stream is not
  *    mistaken for a trending one. Both are `null`, not zero, where the comparison quarter does
- *    not exist — a stream with no prior period has no growth rate, and printing 0.0% there said
- *    "flat" about something brand new.
+ *    not exist — a stream with no prior period has no growth rate, and 0.0% would read as
+ *    "flat".
  *  - Segment growth is separated from segment importance. `contribution` is the stream's share of
  *    the *firm's* growth (FirmEconomics::calculateGrowthContributions()), and those contributions
  *    sum to `totalQoq`; a small stream doubling moves the header far less than its own rate reads.

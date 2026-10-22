@@ -13,9 +13,8 @@ use Doctrine\DBAL\Connection;
  * Ten fields change on every name on every tick: the price, the instantaneous volatility, the impact variance, the
  * realized variance, the momentum trend, the credit spread, the corporate flow backlog, the equity the fundamentals
  * support, the levered beta struck on it, and the incumbent CEO's tenure — that last because the succession hazard ages
- * every board on every tick. Because they always change, every stock was a dirty entity at every flush, and Doctrine
- * sends one UPDATE per dirty entity — sixty-odd synchronous round trips inside the tick transaction, several times a
- * second, for the same ten numbers on every row. That was the history tick's whole overrun.
+ * every board on every tick. Because they always change, every stock would be a dirty entity at every flush and
+ * Doctrine would send one UPDATE per stock inside the tick transaction.
  *
  * So these columns are mapped `updatable: false` on the entity (see Stock): the unit of work still tracks
  * them, the setters still keep the in-process entity current, but an UPDATE never carries them, and a stock

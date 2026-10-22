@@ -10,9 +10,8 @@ namespace App\Data\Politics;
  * Each party is defined by one question -- the size of the state, how open the District is, how far the Council's
  * technocrats should be trusted, or whether the environment comes before growth -- or, for New Horizon, by the first
  * two together, and holds a fixed position on it; on the others it strays between elections and is pulled back toward
- * its home
- * (App\Service\Politics\PoliticsEngine). The Diet seated at the founding is the lore's. Every
- * party-keyed map in the macro state is keyed and ordered by PARTIES.
+ * its home (Election::movePosition). The Diet seated at the founding is the lore's. PARTIES fixes the order the
+ * parties are keyed and listed in.
  */
 final class AerieDiet
 {

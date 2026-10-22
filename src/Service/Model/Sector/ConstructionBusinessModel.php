@@ -370,8 +370,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         // Awards are recognized as the backlog burns, so a steady change in purchases reaches revenue at its full size.
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $civilWeight * self::CIVIL_GOVERNMENT_SPENDING_SENSITIVITY * $dealMultiplier, $clampedMargin, $actualRevenue);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $overrunWriteDown * $actualRevenue;
 
         return new SectorPhysicsResult(

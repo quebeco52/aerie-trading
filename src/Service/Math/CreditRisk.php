@@ -35,7 +35,7 @@ final class CreditRisk
     // --- Corporate Credit: Spread Composition (Longstaff, Mithal & Neis 2005) ---
     /**
      * Non-default component of a corporate spread: what a buyer charges for holding a claim they cannot sell as readily
-     * as a sovereign. Measured to be a material minority of an investment-grade spread, so a bond priced on default
+     * as a sovereign. A material minority of an investment-grade spread, so a bond priced on default
      * risk alone quotes through the market.
      */
     public const CORPORATE_ILLIQUIDITY_SPREAD = 0.0040;
@@ -66,18 +66,6 @@ final class CreditRisk
     public const CORPORATE_DEFAULT_RHO = 0.10;
     /** Basel II/III consumer asset correlation factor for retail exposures. */
     public const RETAIL_ASRF_RHO = 0.12;
-
-    /**
-     * A leverage (debt-to-equity) limit with a capital buffer added to the equity it implies.
-     *
-     * A debt-to-equity cap L is a minimum equity share of assets 1/(1+L). Basel III's countercyclical buffer
-     * is an add-on to that minimum, so the buffered cap is the leverage that the raised share allows:
-     * L' = 1 / (1/(1+L) + b) - 1. At L = 10 the full 2.5% buffer takes the cap to 7.6.
-     *
-     * @param float $leverageLimit Debt-to-equity cap without the buffer.
-     * @param float $capitalBuffer Buffer as a share of assets (0 to 0.025 under Basel III).
-     * @return float Debt-to-equity cap with the buffer, never above the unbuffered cap.
-     */
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
     /**
@@ -111,6 +99,17 @@ final class CreditRisk
      * not widen IG.
      */
     public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
+    /**
+     * A leverage (debt-to-equity) limit with a capital buffer added to the equity it implies.
+     *
+     * A debt-to-equity cap L is a minimum equity share of assets 1/(1+L). Basel III's countercyclical buffer
+     * is an add-on to that minimum, so the buffered cap is the leverage that the raised share allows:
+     * L' = 1 / (1/(1+L) + b) - 1. At L = 10 the full 2.5% buffer takes the cap to 7.6.
+     *
+     * @param float $leverageLimit Debt-to-equity cap without the buffer.
+     * @param float $capitalBuffer Buffer as a share of assets (0 to 0.025 under Basel III).
+     * @return float Debt-to-equity cap with the buffer, never above the unbuffered cap.
+     */
     public static function calculateBufferedLeverageLimit(float $leverageLimit, float $capitalBuffer): float
     {
         $equityShare = 1.0 / (1.0 + max(0.0, $leverageLimit));

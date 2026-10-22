@@ -23,9 +23,8 @@ interface IndexMembershipStoreInterface
     /**
      * The standing membership of an index, or null when none has been taken since the last reset.
      *
-     * A roster written before weights were stored comes back with empty maps rather than a missing key, and
-     * every reader treats an absent factor as one — which is the cap-weighted index the store used to
-     * assume every index was.
+     * A roster without stored weights comes back with empty maps rather than a missing key, and every
+     * reader treats an absent factor as one (cap-weighted).
      *
      * @return array{tick: int, tickers: list<string>, added: list<string>, deleted: list<string>, weights: array<string, float>, factors: array<string, float>}|null
      */

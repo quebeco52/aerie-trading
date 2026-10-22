@@ -120,9 +120,9 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const MACRO_DEMAND_SCALAR       = 1.50;
 
     // --- Fab Utilization Leverage & Cycle Thresholds ---
-    /** Volatility multiplier for top-line revenue shocks reflecting chip inventory cycles. */
     /** Fraction of the wafer-start order book shipped and recognized each quarter (~1 quarter of lead time). */
     public const FOUNDRY_BACKLOG_BURN_RATE = 0.50;
+    /** Volatility multiplier for top-line revenue shocks reflecting chip inventory cycles. */
     public const REVENUE_VARIANCE_SCALAR   = 0.22;
     /** Positive output gap threshold triggering tech super-cycle fab utilization booms. */
     public const BOOM_GAP_THRESHOLD        = 0.01;
@@ -155,9 +155,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const EXPORT_BAN_DESIGN_HAIRCUT = 0.45;
     /** Revenue boost fraction applied to domestic foundry production from supply chain onshoring and subsidies. */
     public const EXPORT_BAN_FOUNDRY_BOOST = 0.20;
-
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- Capital Intensity Moat & Capital Structure ---
     /** Operating margin mean reversion speed: slower speed reflects massive capital barriers to entry. */
@@ -206,7 +203,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $designZ  = $streams->generateZ('design', 0.45); // IP architecture licensing & AI design mandates
         $cycleZ   = $streams->generateExogenousZ('cycle', 0.10);
 
-        // Fab Utilization Leverage & Tech Super-Cycles
         // Fab Utilization Leverage & Tech Super-Cycles
         // Crucially, capacity utilization leverage applies to physical fab manufacturing ($foundryWeight),
         // while fabless IP licensing scales independently with tech demand.

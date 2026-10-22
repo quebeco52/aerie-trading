@@ -89,9 +89,8 @@ class MonetaryPolicySubsystem
      */
     public const EXPECTED_PATH_SHOCK_KAPPA = 1.2;
     /**
-     * Annual volatility of that innovation, in curvature units: the 2Y carries 0.29 of it, the 10Y 0.14. Measured over
-     * 8 seeds x 60y it takes the 2Y's quarterly change from 24 to 48bps (real ~50) and the 10Y's from 35 to 40, so the
-     * vol term structure slopes down past the belly as every real curve does.
+     * Annual volatility of that innovation, in curvature units: the 2Y carries 0.29 of it, the 10Y 0.14, so the vol
+     * term structure slopes down past the belly as every real curve does.
      */
     public const EXPECTED_PATH_SHOCK_SIGMA = 0.030;
     /**
@@ -142,9 +141,8 @@ class MonetaryPolicySubsystem
 
     // --- Forward-Looking Policy Horizon (Clarida, Gali & Gertler 2000; Batini & Haldane 1999) ---
     /**
-     * Quarters of gap momentum the rule projects forward. One quarter is what a staff projection actually carries; the
-     * longer horizons swept here read as foresight but act as gain, buying a broader spectrum with the left tail (0.75y
-     * halves the share of quarters below -3%).
+     * Quarters of gap momentum the rule projects forward. One quarter is what a staff projection actually carries; a
+     * longer horizon reads as foresight but acts as gain, buying a broader spectrum with the left tail.
      */
     public const TAYLOR_GAP_FORECAST_YEARS = 0.25;
     /**
@@ -325,11 +323,7 @@ class MonetaryPolicySubsystem
      * CGG's rule responds to E_t[y_{t+k}] rather than to a trailing measure, and the difference is phase,
      * not gain. Decompose a delayed response -k*y(t-tau) at frequency w: it splits into a spring
      * -k*cos(w*tau)*y and a term +k*sin(w*tau)/w * dy/dt that subtracts from the loop's damping, so a lag
-     * spends restoring force on anti-damping, and at w*tau = 90 degrees spends all of it. Measured over 45
-     * simulated years the delivered stance lagged the gap by 6 of the cycle's 24 quarters -- exactly 90
-     * degrees -- and the gap rang at that frequency: 90% of its variance inside the 4-9y band against a real
-     * ~50%, autocorrelation -0.79 at lag 13q against a real ~-0.15. The loop stayed net stable (AR(2) zeta
-     * +0.38); it was a lightly damped resonance, not a self-exciting one.
+     * spends restoring force on anti-damping, and at w*tau = 90 degrees spends all of it.
      *
      * Projecting the gap forward is the lead compensation, and is what a staff forecast is for. The trend
      * term is exact rather than estimated: the EMA's own ODE gives d(ema)/dt = (y - ema) / horizon, and
@@ -338,11 +332,9 @@ class MonetaryPolicySubsystem
      *
      * The part of the gap a productivity gain opens (output catching up with new technology before potential
      * does) is seen through: the rule answers spending, and meets supply only through the inflation it brings.
-     * That is how the late-1990s productivity boom was run (Blinder & Yellen 2001), and it is what US data
-     * shows: the gap still stands +0.5% two years after a TFP gain. Leaning on it instead pulled the engine's
-     * gap below zero within ten quarters. A productivity shortfall is not seen through: the Authority eases into a
-     * supply slump as into any other and lets the inflation it brings run, where holding the rate up through it
-     * deepened the District's slumps. With the forecast horizon equal to the EMA horizon, the total gap's
+     * That is how the late-1990s productivity boom was run (Blinder & Yellen 2001). A productivity shortfall is not
+     * seen through: the Authority eases into a supply slump as into any other and lets the inflation it brings run.
+     * With the forecast horizon equal to the EMA horizon, the total gap's
      * level-plus-trend forecast less today's supply gain is exactly the demand gap's own forecast.
      *
      * Inventory investment and spending moved between quarters are seen through the same way: a restocking, a sell-down
@@ -383,15 +375,14 @@ class MonetaryPolicySubsystem
      * where, while the District's politics hands the macro a rate committee, committee is its supermajority's lean
      * (committeeMajorityTerm()).
      *
+     * QE is not subtracted from the rule. Its effect on yields (about 100bp on the ten-year, Gagnon et al. 2011)
+     * already reaches demand through the balance sheet's term-premium channel in the curve, and the Wu & Xia (2016)
+     * shadow rate is a summary of that curve which equals the policy rate once the floor stops binding. Subtracting
+     * the held stock here would count QE twice.
+     *
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation Statutory central bank target inflation.
      * @param float      $naturalRate     Dynamic natural real rate of interest (r*).
-     * QE is not subtracted from the rule. Its measured effect on yields (about 100bp on the ten-year, Gagnon et al.
-     * 2011) already reaches demand through the balance sheet's term-premium channel in the curve, and the Wu & Xia
-     * (2016) shadow rate is a summary of that curve which equals the policy rate once the floor stops binding.
-     * Subtracting the held stock here counted QE twice and, through the reinvestment hold after liftoff, kept the
-     * rate about 3pp under the rule into the following boom.
-     *
      * @param float      $dt              Time increment in years.
      * @return float Unclamped rule rate; below the lower bound it reads the cuts the floor forbids.
      */
@@ -473,8 +464,7 @@ class MonetaryPolicySubsystem
     /**
      * How far a camp would set the rate from the published rule (Bordo & Istrefi 2023): doves answer inflation over
      * target less, hawks cut less into a slump. Each leans only on its own side and follows the rule on the other: a
-     * hawk tightens with a boom as the rule does, and a dove eases with inflation under target. Leaning both ways, a
-     * hawkish majority set the rate below the rule in every boom and its hawks dissented for cuts.
+     * hawk tightens with a boom as the rule does, and a dove eases with inflation under target.
      *
      * @param float $camp         Above zero hawkish, below zero dovish, zero neither.
      * @param float $inflationGap The rule's inflation over target.
@@ -626,10 +616,8 @@ class MonetaryPolicySubsystem
      * shortfall a shadow rate measures; the US bought only at the floor (2008, 2020). Runoff follows a reinvestment
      * hold, sooner when the economy overheats. Manages the hold timer and the exponential adjustment toward target.
      *
-     * The intensity is a STOCK of duration extraction and is floored at zero. Letting it go negative made the
-     * bank net short duration whenever the economy ran hot -- measured over 480 simulated years it was negative
-     * in 53% of quarters and past -20bp in 18%, lifting the thirty-year by 60bp and more out of a portfolio that
-     * in four of eight seeds had never been bought. Duration SUPPLY is already priced through the sovereign debt
+     * The intensity is a STOCK of duration extraction and is floored at zero: a negative one would make the bank net
+     * short duration out of a portfolio it never bought. Duration SUPPLY is already priced through the sovereign debt
      * curvature in beta3; this channel is the central bank's own holdings and can only ever compress.
      *
      * @param MacroState $state Current macroeconomic state.
@@ -958,14 +946,12 @@ class MonetaryPolicySubsystem
      * @param float      $nsBeta2 Medium-term curvature / belly hump parameter (beta2).
      * @param float      $nsBeta3 Long-term secondary curvature / fiscal hump parameter (beta3).
      * @param MacroState $state   Current macroeconomic state.
-     * @return float Nominal sovereign yield for the specified tenor.
-     */
-    /**
      * @param float $termPremium10y The ten-year term premium; each tenor up to ten years carries the share of it
      *                              its duration earns (ACM 2013), from nothing at zero maturity to all of it at ten.
      *                              Beyond ten years it lands one-for-one, so the long end moves with the ten-year.
      * @param float $longEndPremium The structural share of that premium which keeps rising with duration past
      *                              ten years: a thirty-year bond carries half again as much of it.
+     * @return float Nominal sovereign yield for the specified tenor.
      */
     public function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $termPremium10y = 0.0, float $longEndPremium = 0.0): float
     {
@@ -1062,7 +1048,7 @@ class MonetaryPolicySubsystem
             authorityPurchasesToGdp: $purchasesFlow,
             broadMoneyToGdp: self::BROAD_MONEY_TO_GDP,
         );
-        // The level its cyclical readers measure a liquidity surge against, measured rather than assumed.
+        // The level its cyclical readers measure a liquidity surge against.
         $state->moneySupplyGrowthTrend += (1.0 - exp(-$dt / self::M2_TREND_YEARS)) * ($state->moneySupplyGrowth - $state->moneySupplyGrowthTrend);
     }
 }

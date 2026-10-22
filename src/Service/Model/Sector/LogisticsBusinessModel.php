@@ -149,8 +149,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
      */
     public const SPOT_SURGE_Z_SCORE = 1.75;
 
-    // --- Fuel Surcharge & Energy Physics ---
-
     // --- Manufacturing PMI, Trade & Supply Chain Transmission ---
     /** Sensitivity of contract freight and 3PL warehousing volumes to manufacturing PMI shifts. */
     public const PMI_FREIGHT_SENSITIVITY = 0.45;

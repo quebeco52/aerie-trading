@@ -26,7 +26,8 @@ class ElectionRecorder
     /**
      * Persists the vote when this snapshot is the tick it was held on.
      *
-     * @return DietElection|null The recorded vote, or null on any other tick.
+     * @return DietElection|null The recorded vote, or the vote a fall is added to on a fall tick; null on any other
+     *                           tick.
      */
     public function record(PoliticsStateDTO $politics): ?DietElection
     {

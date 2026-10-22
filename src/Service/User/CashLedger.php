@@ -13,10 +13,8 @@ use App\Entity\User;
  * the settled balance to zero before it borrows, and a receipt pays the loan down before it credits. Nobody
  * pays margin interest while holding idle cash, and nobody holds a debit they have the cash to clear.
  *
- * It lives here rather than inside any one desk because three of them need it — the equity path, the option
- * path and option settlement — and each had its own copy. They agreed when they were written, which is
- * exactly the condition under which the next correction gets applied to two of the three and an option
- * trade quietly starts funding itself differently from a stock trade.
+ * It lives here rather than inside any one desk because the equity path, the option path and option settlement all
+ * need it, and a stock trade and an option trade must fund themselves the same way.
  *
  * The scales are not arbitrary and not interchangeable: cash carries four decimal places because a fill can
  * be struck at a fraction of a cent, while the margin loan carries the two its column stores, so rounding

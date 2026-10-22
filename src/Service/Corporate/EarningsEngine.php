@@ -341,13 +341,6 @@ class EarningsEngine
      */
     public const LONG_RUN_RETURN_EMA_YEARS = 5.0;
 
-    /**
-     * Constructor.
-     *
-     * @param MarketEventPublisher $marketEvent Publisher for all market events, news headlines, and shocks.
-     * @param MathUtility $mathUtility Utility for advanced mathematical operations (e.g., generating standard normal
-     *                                 distribution).
-     */
     public function __construct(
         private EventDispatcherInterface $eventDispatcher,
         private MarketEventPublisher $marketEvent,
@@ -629,10 +622,9 @@ class EarningsEngine
     }
 
     /**
-     * Opens the earning-asset ledger for a balance-sheet business on its first report. Until now a bank's
-     * loan book was a plug, equity plus funding less cash, that nothing could impair and no statement could
-     * show. From here it is a balance: originations grow it, charge-offs and fire sales shrink it, and an
-     * allowance for the losses already expected sits against it.
+     * Opens the earning-asset ledger for a balance-sheet business on its first report. The loan book is a balance:
+     * originations grow it, charge-offs and fire sales shrink it, and an allowance for the losses already expected
+     * sits against it.
      */
     private function seedEarningAssetLedgerIfNeeded(EarningsSimulationContext $ctx): void
     {
@@ -952,8 +944,7 @@ class EarningsEngine
 
         // The firm's addressable market in the unit its capacity is measured in: its own structural revenue
         // scaled up to a full addressable share, on the base every share reading uses (equity for a lender,
-        // whose book turns over a leveraged multiple of it; invested capital otherwise). The cap used to
-        // compare quarterly revenue against the CAPITAL figure of the market, six times too loose to bind.
+        // whose book turns over a leveraged multiple of it; invested capital otherwise).
         $fullMarketRevenue = $ctx->addressableShare > 0.0 ? $structuralRevenue / $ctx->addressableShare : INF;
         $maxCapacity = $fullMarketRevenue * ($ctx->strategy->isFinancial()
             ? self::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO
@@ -1076,8 +1067,7 @@ class EarningsEngine
      * it on the output the quarter would have run at before its own shocks.
      *
      * The base is net PP&E, not invested capital. Goodwill is never depreciated — it is impairment-tested
-     * annually, which the engine already does — and working capital does not wear out, so the old base
-     * overstated the charge for every acquisitive or inventory-heavy firm. Construction in progress is
+     * annually, which the engine already does — and working capital does not wear out. Construction in progress is
      * likewise excluded: an asset not yet placed in service earns nothing and depreciates nothing.
      */
     private function calculateDepreciation(EarningsSimulationContext $ctx): void
@@ -1096,10 +1086,9 @@ class EarningsEngine
      *
      * For physical businesses turnover is a technology parameter, so it is seeded once from the identity using the
      * structural baseline ROIC and margin, persisted on the stock, and then held. Deriving it every quarter from
-     * the trailing-return blend let a margin squeeze lower trailing ROIC, which cut the target return and with it
-     * the firm's revenue capacity on top of the margin loss; the shortfall lowered ROIC again, a feedback loop with
-     * no physical counterpart (a plant does not shrink because last quarter was unprofitable). Growth in capacity
-     * now flows only through invested capital (Damodaran: g = reinvestment x ROIC) and the sector TAM cap.
+     * the trailing-return blend would let a margin squeeze cut revenue capacity, a feedback loop with no
+     * physical counterpart (a plant does not shrink because last quarter was unprofitable). Growth in capacity
+     * flows only through invested capital (Damodaran: g = reinvestment x ROIC) and the sector TAM cap.
      *
      * Financial intermediaries keep the dynamic derivation: their target return carries net interest margin and
      * cost-of-funds physics that genuinely move the yield on earning assets.
@@ -1142,9 +1131,7 @@ class EarningsEngine
             $currentVariableMargin = max(0.01, min(0.99, (float) $stock->getStructuralVariableMargin()));
         } else {
             // With no prior state the process starts at its own long-run mean, which is the structural
-            // variable cost ratio computed above. Deriving it independently from margin and fixed-cost
-            // ratio instead would ignore the depreciation carve-out and open every first report with a
-            // cost base that no longer matches the one the firm is actually reverting toward.
+            // variable cost ratio computed above, which carries the depreciation carve-out.
             $currentVariableMargin = max(0.01, min(0.99, $ctx->baselineVariableMargin));
         }
 
@@ -1458,7 +1445,6 @@ class EarningsEngine
 
         $annualInterestExpense = $ctx->debtMetrics->interestExpense;
         $ctx->quarterlyInterestExpense = $annualInterestExpense / 4.0;
-        // Note: we can't mutate debtMetrics since it's readonly. The DB will store $ctx->quarterlyInterestExpense.
 
         $stock->setHistoricalFixedRate((string) $ctx->debtMetrics->historicalFixedRate);
 
@@ -1834,8 +1820,7 @@ class EarningsEngine
             // A firm in breach of its maintenance covenants (coverage under the minimum, or leverage over the limit)
             // gets no new money from its lenders, so it builds only what the quarter's cash and its spare cash pay
             // for: the scheduled outlays it is committed to first, then upkeep down to the least that keeps the plant
-            // running, then growth. Spent regardless, the plan was paid with emergency debt at penalty rates until a
-            // maturity could not be met.
+            // running, then growth.
             $isFundingConstrained = !$ctx->strategy->isFinancial()
                 && (!$ctx->health->hasLeverageHeadroom || $ctx->health->interestCoverage < $ctx->strategy->getMinIcr());
             if ($isFundingConstrained) {
@@ -1858,8 +1843,7 @@ class EarningsEngine
             }
 
             // A lender's growth spend is loans made, not plant built: it lands on the earning-asset ledger
-            // the day the cash leaves, with no construction lag. Before the ledger existed this cash simply
-            // vanished from the balance sheet.
+            // the day the cash leaves, with no construction lag.
             if ($deploysIntoEarningAssets && ($growthCapEx + $ctx->scheduledCapex) > 0.0) {
                 $deployed = $growthCapEx + $ctx->scheduledCapex;
                 $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() + $deployed));
@@ -1932,10 +1916,8 @@ class EarningsEngine
         $ctx->investingCashFlow += $assetSaleProceeds;
         $ctx->netLoanOriginations += (float) ($ctx->allocation['loan_originations'] ?? 0.0) - $assetSaleProceeds;
         $ctx->assetSaleLoss = (float) ($ctx->allocation['asset_sale_loss'] ?? 0.0);
-        // Every financing flow is booked at the cash that actually moved. Valuing the share count change at
-        // the screen price overstated an emergency raise by its discount (shares go out at 90 cents on the
-        // dollar) and would have left the cash flow statement failing to reconcile in exactly the quarters
-        // a reader most needs it to.
+        // Every financing flow is booked at the cash that actually moved, not the share count change at the screen
+        // price (an emergency raise goes out at a discount).
         // Deposits taken or withdrawn are financing for a bank (ASC 230), the same as notes issued or repaid, and
         // so is a draw on the committed line or its sweep (ASC 230-10-45-14): a maturity the revolver took out
         // nets to zero across the two balances rather than reading as a repayment.
@@ -2023,8 +2005,7 @@ class EarningsEngine
      * The tax basis a going concern's plant opens at. A firm investing steadily at nominal growth g, writing its plant
      * off at book rate d and tax rate 2d, carries a tax basis of (g + d)/(g + 2d) of book value, so a listing opens
      * mid-life on the tax books as on the book ones, with the deferred tax on the gap booked against retained earnings
-     * (ASC 250 cumulative effect). Opening the basis at book value instead started every firm with no deferral and a
-     * cash tax rate a decade below its steady state.
+     * (ASC 250 cumulative effect).
      */
     private function openSteadyStateTaxBasis(EarningsSimulationContext $ctx): float
     {
@@ -2084,10 +2065,9 @@ class EarningsEngine
     /**
      * Rebuilds the working capital balances from the cash conversion cycle and returns the new net figure.
      *
-     * Working capital used to be a single scalar, which meant nothing inside it could ever go wrong. Carried
-     * as real balances, receivables and inventory become things that can be impaired: a customer stops
-     * paying, or goods sit unsold until they are worth less than they cost. Both are ordinary recession
-     * charges and neither is forecastable, which is why they show up as misses.
+     * Carried as real balances, receivables and inventory can be impaired: a customer stops paying, or goods sit
+     * unsold until they are worth less than they cost. Both are ordinary recession charges and neither is
+     * forecastable, which is why they show up as misses.
      *
      * Receivables scale with revenue (they are billed sales); inventory and payables scale with the cost
      * base (they are carried at cost, not at what the firm hopes to sell them for).
@@ -2224,8 +2204,7 @@ class EarningsEngine
      * Marks the equity the treasury holds to the board's realised return since the last report (FVOCI, IFRS 9 5.7.5):
      * the price move goes to book value and the treasury the sleeve sits in, net of the tax its quarterly rebalance
      * realises, and never through earnings; the dividends it was paid are booked as income instead of the expected
-     * return (calculateInterestAndRunRates()). Booked at a formula return instead, the sleeve earned the cost of
-     * equity through every crash. A first report has no earlier reading, so it marks nothing.
+     * return (calculateInterestAndRunRates()). A first report has no earlier reading, so it marks nothing.
      */
     private function markEquitySleeve(EarningsSimulationContext $ctx): void
     {
@@ -2331,14 +2310,6 @@ class EarningsEngine
      * charge-offs forward fixes the point exactly on target, and at steady state the provision equals the
      * losses — which is the whole content of "a bank earns its credit spread and pays it back out".
      *
-     * There used to be a third term: a through-the-cycle charge on the gross book, justified as already
-     * sitting inside the stable cost base. It was not. The cost base is the operating-margin complement of
-     * revenue and contains no term that scales with the loan book, so nothing in earnings moved with it —
-     * yet the full sum was added back to operating cash flow as non-cash. The result was a bank converting
-     * roughly 20bps of its book into cash every quarter with no charge against profit anywhere, measured at
-     * up to 12.8x quarterly net income. It is gone; the replenishment term does the job it was reaching for,
-     * and does it inside EBIT.
-     *
      * Every part is non-cash. The full provision is added back to operating cash flow below, which is what
      * keeps cash out of the picture: the book falls by the provision and equity falls by the same amount.
      */
@@ -2415,9 +2386,8 @@ class EarningsEngine
      * Lower-of-cost-or-net-realizable-value writedown on inventory the firm cannot move (ASC 330).
      *
      * Charged against the carrying value, so stock already written down is not written down again, and held
-     * as an allowance against the gross balance rather than cut from it: the gross figure is rebuilt from
-     * the trade cycle every quarter, so a cut was restored in the same quarter and the restoration booked as
-     * a working capital build the firm paid cash for. The allowance unwinds in the roll-forward as the
+     * as an allowance against the gross balance rather than cut from it, since the gross figure is rebuilt from the
+     * trade cycle every quarter. The allowance unwinds in the roll-forward as the
      * impaired stock turns, which is when the replacement cash actually leaves.
      */
     private function resolveInventoryWriteDown(EarningsSimulationContext $ctx): float
@@ -2772,8 +2742,7 @@ class EarningsEngine
 
         $ctx->totalShockPct = max(-self::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, min(self::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, $ctx->totalShockPct));
 
-        // A firm with no shares outstanding never reaches the capital allocator, so the allocation array can
-        // legitimately be empty here — every other read of it is already guarded, and this one was not.
+        // A firm with no shares outstanding never reaches the capital allocator, so the allocation array can be empty.
         $exDivPrice = ($currentPrice * (1.0 + $ctx->totalShockPct)) - (float) ($ctx->allocation['dividend_paid'] ?? 0.0);
         $newPrice = max(0.01, $exDivPrice);
         $stock->setPrice(number_format($newPrice, 8, '.', ''));

@@ -29,9 +29,7 @@ namespace App\Service\Macro\Recorder;
  *
  * Only the window currently OPEN goes over Redis. A window this object closes is handed to
  * App\Service\Macro\Recorder\MacroSnapshotRecorder and lands in the quarter's own macro_report row, beside
- * the state vector it explains. The closed history used to be a second copy in a capped Redis list, which
- * made the panel disagree with the table after any restart — Redis has no volume here — and gave the same
- * series two owners.
+ * the state vector it explains, so the series has one owner.
  */
 final class OutputGapProbe
 {

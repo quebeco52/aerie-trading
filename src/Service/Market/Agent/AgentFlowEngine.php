@@ -37,8 +37,7 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
  *
  * The volatility the agents see is their own: a realized measure built from the returns they have
  * observed, carried in the book. The value handed in with the view only seeds a book that has no history
- * yet. Reading the price process's instantaneous variance instead let the vol-control books and the maker
- * react to a shock in the tick it happened, ahead of anyone who could only watch the tape.
+ * yet, so no agent reacts to a shock ahead of anyone who could only watch the tape.
  */
 final class AgentFlowEngine
 {
@@ -150,7 +149,7 @@ final class AgentFlowEngine
 
         $this->stateStore->commitBatch();
 
-        // Drained at the top of the next tick, exactly as each trade's own write used to be.
+        // Drained at the top of the next tick.
         $this->orderFlow->commitBatch();
     }
 
@@ -192,9 +191,7 @@ final class AgentFlowEngine
 
         // The intensity dial scales the book, not the speed it is worked at. Agent flow is proportional
         // to the book and the variance it supplies to the price goes as its square, so this is the one
-        // number that hands variance from the diffusion to the agents. Multiplying the step instead, as
-        // the first version did, changed only how fast the same book was reached — and past 1/adjustment
-        // it overshot the target, at a threshold that moved with the tick rate.
+        // number that hands variance from the diffusion to the agents.
         $capacity = $view->averageDailyVolume
             * self::AGENT_CAPITAL_ADV_MULTIPLE
             * self::AGENT_FLOW_INTENSITY;

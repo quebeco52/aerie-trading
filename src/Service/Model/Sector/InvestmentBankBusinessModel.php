@@ -401,8 +401,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             }
         }
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = ($regulatoryPenalty + $counterpartyDefaultPenalty) * $actualRevenue;
 
         return new SectorPhysicsResult(

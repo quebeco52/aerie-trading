@@ -22,8 +22,6 @@ class AssetMarketSubsystem
     // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
     /** Structural property tax, insurance, and maintenance depreciation rate. */
     public const RESIDENTIAL_DEPRECIATION_TAX_RATE = 0.025;
-
-    // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
     /**
      * Equilibrium user cost of housing: neutral 10Y (r* + target + base premium) + mortgage spread + carry costs -
      * target inflation.
@@ -87,7 +85,7 @@ class AssetMarketSubsystem
      */
     public const GREEN_BELT_BUST_ELASTICITY_PER_SD = 0.152;
 
-    // --- Sector Demand Factor ---
+    // --- Habit Equity Risk Premium ---
     /** Campbell-Cochrane (1999) habit formation risk aversion sensitivity to output gap deviations. */
     public const HABIT_RISK_AVERSION_COEFF = 9.0;
     /** Structural floor: equities must logically yield more than risk-free T-bills. */
@@ -294,9 +292,7 @@ class AssetMarketSubsystem
      *
      * The NOMINAL anchor targetFx is built on, not the level the index settles at: the safe-haven bid is
      * rectified and the sovereign risk discount is one-sided, so a run at rest sits near 97.3. A consumer
-     * wanting "is the currency strong" reads MacroState::exchangeRateTrend instead — reading this constant
-     * for that cost App\Service\Macro\Subsystem\MacroAggregateSubsystem 0.11 pp/yr of standing net-export
-     * demand until 2026-09-21.
+     * wanting "is the currency strong" reads MacroState::exchangeRateTrend instead.
      */
     public const EXCHANGE_RATE_BASELINE = 100.0;
     /** UIP sensitivity: exchange rate response to domestic-foreign interest rate differential. */
@@ -365,18 +361,14 @@ class AssetMarketSubsystem
      *
      * The NOMINAL anchor the fundamental price is built on, not the level the index settles at: the
      * affordability, damage and credit factors multiplying it average below 1, so a run at rest sits near
-     * 98. A consumer wanting "have prices moved" reads MacroState::residentialWealthTrend instead — reading
-     * this constant for that cost App\Service\Macro\Subsystem\CreditFiscalSubsystem 0.56%/yr of standing
-     * deleveraging until 2026-09-21.
+     * 98. A consumer wanting "have prices moved" reads MacroState::residentialWealthTrend instead.
      */
     public const RESIDENTIAL_BASELINE = 100.0;
 
     /**
      * Fundamental price per point of unemployment above NAIRU (foreclosure and affordability drag), fitted with the
-     * income elasticity below and the dynamics further down: at 5.0 and 2.0 a -5% gap took a fifth off the fundamental,
-     * household credit followed through the collateral term and new borrowing returned it to demand one for one, and at
-     * the lower bound slumps sustained themselves (var/harness/boom_score.py: clamp traps in 3% of 35-year windows,
-     * 5-year slumps below -4% in 7%, against none in the US record).
+     * income elasticity below and the dynamics further down, low enough that household credit following the fall
+     * through the collateral term does not sustain a slump at the lower bound.
      */
     public const RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 2.5;
     /** Elasticity of the fundamental price to the output gap, a transitory income shock; the same fit. */
@@ -388,14 +380,13 @@ class AssetMarketSubsystem
     /**
      * Elasticity of the fundamental house price to the user cost: Glaeser, Gottlieb & Gyourko (2010) measure about 7-8%
      * per 100bp fall in real rates, half the ~17% a unit elasticity gives at the 6.85% neutral user cost, so collapsing
-     * long rates at the floor no longer inflate prices in a slump.
+     * long rates at the floor do not inflate prices in a slump.
      */
     public const RESIDENTIAL_USER_COST_ELASTICITY = 0.5;
     /**
      * Yearly reversion of real house prices toward their fundamental, fitted with the momentum and volatility below to
      * US real house prices (FHFA / CPI, 1977-2019): annual growth sd 3.86%, autocorrelation 0.71 / 0.33 / 0.00 at one
-     * to three years, worst year -9.0%; the engine gives 3.65%, 0.67 / 0.26 / -0.06 and -10.1% at its 0.5th percentile
-     * (var/harness/boom_score.py).
+     * to three years, worst year -9.0%.
      */
     public const RESIDENTIAL_MEAN_REVERSION = 0.25;
     /**
@@ -413,7 +404,7 @@ class AssetMarketSubsystem
     /**
      * Share of the past year's real growth carried into this year's (Case & Shiller 1989; Capozza, Hendershott, Mack &
      * Mayer 2002 serial correlation), the same fit; household credit follows house prices, so it also carries the
-     * persistence of new borrowing toward the US's (0.45 against 0.58, from 0.23).
+     * persistence of new borrowing toward the US's.
      */
     public const RESIDENTIAL_PRICE_MOMENTUM = 0.85;
     /**
@@ -791,16 +782,13 @@ class AssetMarketSubsystem
      * The jumps are additive: for dv = kappa*(theta_adj - v)dt + sigma*sqrt(v)dW + dJ with arrivals at
      * lambda and mean size m, the stationary mean is theta_adj + lambda*m/kappa. So a process that is to
      * revert to MACRO_VOL_BASE_ANCHOR has to be handed an anchor lower by exactly lambda*m/kappa, and the
-     * divisor is the mean-reversion speed and nothing else. A bare 3.0 stood here, leaving a third of the
-     * jump variance uncompensated: the series reverted to 16.8% against a 15% anchor, and nothing measured
-     * it because the MACRO_VOL_FLOOR clamp absorbed the rest.
+     * divisor is the mean-reversion speed and nothing else.
      *
      * The mean size is the jump's own asymmetry -- a crash spikes variance harder than a rally, at the share
      * MathUtility applies when it draws one -- so the two must be read off the same constant or the
      * compensation silently desynchronizes from the thing it compensates for.
      *
-     * Exposed because App\Tests\Financial\MacroVolatilityAnchorTest asserts the round trip against it.
-     * A test that recomputed this from the constants would prove only that it agrees with itself.
+     * Public so App\Tests\Financial\MacroVolatilityAnchorTest can assert the round trip against it.
      *
      * @return float Variance per unit time the jump process contributes in the long run.
      */
@@ -862,10 +850,6 @@ class AssetMarketSubsystem
      * panic bids its currency the way it already bids its bonds. The index is that fundamental times a Schwartz (1997)
      * deviation reverting to one. A higher index is a STRONGER currency throughout, which is why net exports and the
      * trade balance both read it negatively.
-     *
-     * The fundamental used to be the level a single slow reversion headed toward, so a rate move reached the
-     * currency over a year and trade the year after, landing on demand once the rate channel had already closed the
-     * gap and ringing the policy loop past zero.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -1098,7 +1082,7 @@ class AssetMarketSubsystem
      * A compact model rather than a second engine: the Rudebusch & Svensson (1999) backward-looking gap and Phillips
      * curve re-estimated on US data 1985-2019, and the Fed's Clarida, Gali & Gertler (2000) smoothed rule fitted over
      * Greenspan and Bernanke. Simulated together they give the CBO gap's persistence, core PCE's level and spread and
-     * the funds rate's (var/harness/mainland_fit.py). The equations are quarterly and are stepped at each quarter's
+     * the funds rate's. The equations are quarterly and are stepped at each quarter's
      * turn, which is also how the district sees them: a statistical release and a rate decision. The district's own
      * spending moves the mainland gap's mean a little (two-country Mundell-Fleming, Obstfeld & Rogoff 1996), and
      * everything else -- the currency through the rate differential, the trade balance and exports through the
@@ -1440,8 +1424,7 @@ class AssetMarketSubsystem
         $residentialPriceRatio = $state->residentialPropertyIndex / $state->residentialWealthTrend;
         $metalsCostRatio = $state->industrialMetalsIndexTrend > 0.0 ? $state->industrialMetalsIndex / $state->industrialMetalsIndexTrend : 1.0;
         // Building labour priced as a LEVEL in the same real terms as the home price index: the real wage against its
-        // trend-productivity path. Read as 1 + wage growth, it charged a standing 1.75% premium in a calm economy and
-        // saw only the acceleration of pay, never a real wage that stayed high.
+        // trend-productivity path.
         $laborCostRatio = exp($state->realWageGap);
         $replacementCostRatio = (self::REPLACEMENT_COST_METALS_SHARE * $metalsCostRatio)
             + (self::REPLACEMENT_COST_MATERIALS_SHARE - self::REPLACEMENT_COST_METALS_SHARE)

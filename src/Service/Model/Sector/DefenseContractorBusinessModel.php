@@ -99,8 +99,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Volatility multiplier for international defense sales and export authorizations. */
     public const FMS_VARIANCE_SCALAR = 0.35;
 
-    // --- Sovereign Procurement & Cost-Plus Physics ---
-
     // --- Fixed-Price ASC 606 & Production Physics ---
     /**
      * Quarterly chance a fixed-price development programme goes into overrun: 0.067, one every ~3.7 years, whatever
@@ -395,8 +393,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = (($forwardLossProvision * $fixedPriceWeight) + ($flagshipPenalty * $costPlusWeight)) * $actualRevenue;
 
         return new SectorPhysicsResult(

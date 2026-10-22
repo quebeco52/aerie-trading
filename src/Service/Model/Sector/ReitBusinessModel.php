@@ -449,9 +449,9 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0, float $afterTaxSpecialCharges = 0.0): float
     {
-        // Net Operating Income is property income before depreciation, and it is the numerator of the cap
-        // rate this return reverts toward below. EBIT is now struck after depreciation like every other
-        // model, so the charge is added back here to recover NOI.
+        // Net Operating Income is property income before depreciation, and it is the numerator of the cap rate this
+        // return reverts toward below. EBIT is struck after depreciation, so the charge is added back here to recover
+        // NOI.
         $effectiveCapital = max(1.0, abs($investedCapital));
         $truePostTaxReturn = (($ebit + $depreciation) / $effectiveCapital) * FinancialConstants::QUARTERS_PER_YEAR;
 
@@ -491,7 +491,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0, float $interestIncome = 0.0): float
     {
-        // Funds From Operations (NAREIT): EBIT now sits below the depreciation line like every other model,
+        // Funds From Operations (NAREIT): EBIT sits below the depreciation line,
         // so real estate depreciation is added back here. A building's book depreciation is famously
         // disconnected from its economic wear, which is exactly why the industry covenants on FFO.
         $ffo = $ebit + $depreciation + $interestIncome;

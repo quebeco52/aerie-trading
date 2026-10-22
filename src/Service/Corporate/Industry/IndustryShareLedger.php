@@ -14,10 +14,7 @@ use App\Service\Model\Strategy\OperatingStrategyInterface;
 /**
  * Zero-sum market share inside an industry, and the industry's capacity balance.
  *
- * CAPACITY. Every firm used to sell into a private market: its revenue capacity was its own capital times
- * its own turnover, and a rival doubling its plant cost it nothing. That is the non-rivalry behind every
- * "compounds forever" trace — there was no oversupply, no price collapse, no capex cycle. The ledger now
- * also records each firm's installed capacity, anchored the first time it is priced: its plant then is
+ * CAPACITY. The ledger records each firm's installed capacity, anchored the first time it is priced: its plant then is
  * trend plant, and that plant over its addressable share is the market it sells into. The modelled roster
  * is not the whole industry, so the balance is struck as dominant firms against a competitive fringe that
  * supplies at trend: each firm's build beyond its trend plant is excess supply weighted by its share of
@@ -586,8 +583,7 @@ class IndustryShareLedger
     /**
      * A failed firm's plant leaves the industry; its demand does not. Its record stays, at no capacity
      * and no revenue but with its anchor, so survivors sell into a market short by its share until the
-     * record ages out and the fringe is taken to have filled the gap. This is the consolidation effect
-     * the exit-recapture rule used to approximate with a share transfer.
+     * record ages out and the fringe is taken to have filled the gap. This is the consolidation effect.
      */
     public function retireFirm(Stock $stock): void
     {
@@ -619,7 +615,6 @@ class IndustryShareLedger
      * An acquired off-board company was already selling into this market: the deal changes who owns the
      * plant, not how much the industry supplies. The acquirer's trend plant rises with the capacity it
      * bought and its market stays where it was, so its share of that market rises and the fringe's falls.
-     * Booked as a build, every deal priced the acquirer's whole industry down with plant it had merely bought.
      */
     public function recordAcquiredCapacity(Stock $stock, float $annualCapacity, MacroStateDTO $macroState, float $secularExcessGrowth): void
     {

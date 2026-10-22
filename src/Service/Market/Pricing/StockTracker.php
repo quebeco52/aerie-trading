@@ -53,8 +53,7 @@ class StockTracker
     // --- Market Index Membership (Shleifer 1986) ---
     /**
      * Window the realized volatility an index ranks and weights on is measured over, as the mean life of its
-     * exponential weighting. A year, which is what S&P's low-volatility index uses; ranking on the instantaneous
-     * variance state instead turned every volatility spike into a reconstitution.
+     * exponential weighting. A year, which is what S&P's low-volatility index uses.
      */
     public const INDEX_TRAILING_VOLATILITY_YEARS = 1.0;
 
@@ -336,8 +335,7 @@ class StockTracker
 
         // The company's own program — a repurchase still being executed, or issued stock still being
         // distributed — is worked off at the 10b-18 pace and joins the tick's flow here. It is a buyer
-        // or seller like any other and is charged the same peak impact; the invented per-report shock it
-        // replaces charged the price for a quarter's buying in a single tick with no slippage.
+        // or seller like any other and is charged the same peak impact.
         $corporateSlice = 0.0;
         $corporateBacklog = $stock->getCorporateFlowBacklog();
         if ($corporateBacklog !== 0.0) {

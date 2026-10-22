@@ -193,11 +193,8 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
      * Incomplete and lagged pass-through of expected inflation into selling prices (Gopinath & Itskhoki 2010).
      *
      * The share of inflation a firm recovers in price is its pricing power, not its beta. Beta measures
-     * systematic risk and already scales the demand shift above; keying pass-through off it as well made a
-     * cyclical commodity producer look like a price setter and a defensive branded staple like a price taker,
-     * and double-counted beta inside one quarter's revenue. The elasticity is centred so the median firm
-     * (pricing power 0.5) keeps the unit elasticity the old beta term produced on average, mirroring the
-     * 0.5 + p form the demand multiplier already uses.
+     * systematic risk and already scales the demand shift above. The elasticity is centred so the median firm
+     * (pricing power 0.5) has unit elasticity, mirroring the 0.5 + p form the demand multiplier uses.
      *
      * Pass-through is then distributed over time rather than landing whole in the quarter expectations move:
      * menu costs and contract repricing mean posted prices reach the new level over several quarters. The

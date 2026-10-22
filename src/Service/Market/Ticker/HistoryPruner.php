@@ -13,9 +13,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * Enforces the simulation's data retention, measured in SIMULATED years against the simulation clock.
  *
  * Every cutoff here is a span of simulated time, so the only cadence that can enforce them is the simulated
- * clock. Hung on a wall-clock cron instead, a one-simulated-year retention was being applied once per
- * thousand-odd simulated years — which is not a retention policy, and left option_contracts at 97% settled
- * rows carrying three secondary indexes that every expiry's UPDATE and every sweep's dedupe read paid for.
+ * clock, not a wall-clock cron.
  *
  * Idempotent by construction: it deletes what is already older than a cutoff, so a run missed while the
  * ticker was down and a run repeated after it restarts are both harmless. That is what lets the caller
@@ -41,11 +39,8 @@ final class HistoryPruner
     /**
      * Quarterly macro snapshots kept: 120 simulated years, matching App\Service\Macro\Recorder\OutputGapProbe.
      *
-     * Was 100 rows — 25 years — which is shorter than the thing the table is used to study. A business
-     * cycle runs about six years here, so 25 years is four episodes: too few to say whether a bust's depth
-     * distribution moved, which is the question every calibration pass on this table asks. At ~1.5 KB a row
-     * the whole 120 years is under a megabyte, so the retention is set by the horizon of the analysis
-     * rather than by the cost of the rows.
+     * Set by the horizon of the analysis (a business cycle runs about six years here) rather than by the cost of
+     * the rows: ~1.5 KB a row puts the whole 120 years under a megabyte.
      */
     public const MACRO_QUARTERS_KEPT = 480;
 
@@ -119,19 +114,15 @@ final class HistoryPruner
      * Downsamples one history table below the cutoff to the last row of each series in each slice of simulated
      * time, walking the primary key in batches.
      *
-     * Thinning by slice of each series' own time is what keeps every series charted. The rule it replaced kept
-     * rows whose id was a multiple of the ratio, and every bar writes one row per stock in the same order, so the
-     * kept ids fell on the same one or two stocks every time and every other stock lost all its old history.
-     * A bar table first folds each slice's bar into the row it keeps (the first open, the extremes, the volume
-     * summed), in the same transaction as the delete, so a thinned week still charts as the week it was and a
-     * retry cannot count a volume twice.
+     * Thinning by slice of each series' own time keeps every series charted. A bar table first folds each slice's bar
+     * into the row it keeps (the first open, the extremes, the volume summed), in the same transaction as the delete,
+     * so a thinned week still charts as the week it was and a retry cannot count a volume twice.
      *
-     * A single DELETE over the whole table was one transaction the size of the history: hours of row locks
-     * and undo log against a ticker inserting thousands of rows a second, and the sim_time predicate has no
-     * index of its own (every history index leads with the asset id). Ids are assigned in insertion order,
-     * so simulated time is monotonic in id: the walk starts at the lowest id and stops at the first batch
-     * that holds rows and none of them older than the cutoff. A slice split across two batches keeps a row in
-     * each until a later run's batches put it in one.
+     * Batched, because a single DELETE would be one transaction the size of the history, and the sim_time predicate has
+     * no index of its own (every history index leads with the asset id). Ids are assigned in insertion order, so
+     * simulated time is monotonic in id: the walk starts at the lowest id and stops at the first batch that holds rows
+     * and none of them older than the cutoff. A slice split across two batches keeps a row in each until a later run's
+     * batches put it in one.
      */
     private function downsampleTable(Connection $conn, string $table, string $seriesColumn, float $cutoff, int $rowsPerYear): int
     {
@@ -212,9 +203,7 @@ final class HistoryPruner
     /**
      * Removes settled contracts past the option cutoff, in primary-key batches.
      *
-     * Batched for the same reason the history tables are — this now runs against a live ticker rather than
-     * an idle nightly database, and unbatched it was a single DELETE across the whole table with a
-     * correlated subquery evaluated per candidate row.
+     * Batched for the same reason the history tables are: it runs against a live ticker.
      *
      * NO EARLY BREAK, unlike the history walk. A listing pass opens several serials at once and the furthest
      * of them expires half a year beyond the nearest, so expiry is only broadly monotonic in id: a batch

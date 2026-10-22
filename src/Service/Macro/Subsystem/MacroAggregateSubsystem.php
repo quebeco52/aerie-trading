@@ -164,7 +164,7 @@ class MacroAggregateSubsystem
     public const DISTRICT_DOMESTIC_IMPORT_SHARE = self::DISTRICT_IMPORT_SHARE - (self::DISTRICT_EXPORT_SHARE * self::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS);
     /**
      * The seeded Aerospace & Defense makers' first-year revenue (GRIP, PTAR), all of it sold to allied governments
-     * (full-market harness).
+     * (full-market opening).
      */
     public const DISTRICT_DEFENSE_EXPORTS_USD = 170.0e9;
     /** Arms exports over GDP, part of the exports above (1.4%). */
@@ -260,9 +260,8 @@ class MacroAggregateSubsystem
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /**
-     * Linear self-reinforcement of demand; at 0.12 zero was an unstable point and the gap swept through it on a
-     * clockwork limit cycle, at 0.06 it rests inside ±1% 44% of quarters (Frisch-Slutsky shock-driven cycle) while
-     * keeping the left skew.
+     * Linear self-reinforcement of demand, kept low enough that zero is a stable point and the cycle is
+     * shock-driven (Frisch-Slutsky) rather than a clockwork limit cycle, while keeping the left skew.
      */
     public const KALDOR_MOMENTUM = 0.06;
     /**
@@ -285,8 +284,7 @@ class MacroAggregateSubsystem
     public const MONETARY_TRANSMISSION_LAG_YEARS = 0.3;
     /**
      * Demand per unit of an ADVERSE excess bond premium over its decade trend, the one price of credit supply
-     * (Gilchrist & Zakrajsek 2012): 3.5, the sum of the spread, premium and lending-standards drags it replaced, so a
-     * 2008-sized 2pp spike costs 7pp of demand a year while it lasts.
+     * (Gilchrist & Zakrajsek 2012): a 2008-sized 2pp spike costs 7pp of demand a year while it lasts.
      */
     public const KALDOR_CREDIT_PREMIUM_DRAG = 3.5;
     /**
@@ -311,8 +309,7 @@ class MacroAggregateSubsystem
     /**
      * The demand gap's own pull back to trend on the CURRENT gap: automatic stabilisers (Blanchard & Perotti 2002) and
      * the permanent-income smoothing of transitory income (Friedman 1957), the level forces no channel here carries;
-     * the same fit. At 0.15 the gap had no pull of its own, a rate move integrated into it without limit, and a policy
-     * loop acting 3-4 quarters late did all the restoring and rang at 6-7 years.
+     * the same fit. Without it a rate move would integrate into the gap without limit.
      */
     public const KALDOR_AUTOMATIC_STABILISER = 1.5;
     /**
@@ -343,8 +340,8 @@ class MacroAggregateSubsystem
     /**
      * Demand per unit of new household borrowing, in debt to income a year: borrowed income is spent as it is borrowed.
      * Fitted by running Drehmann, Juselius & Korinek's (2018) local projection on the engine: GDP growth +0.128 the
-     * year after a point of new borrowing to GDP (their Table 8 base, +0.126); the US lead of credit on the gap follows
-     * (var/harness/djk_an.py).
+     * year after a point of new borrowing to GDP (their Table 8 base, +0.126); the US lead of credit on the gap
+     * follows.
      */
     public const KALDOR_HOUSEHOLD_NEW_BORROWING = 1.0;
     /**
@@ -393,7 +390,7 @@ class MacroAggregateSubsystem
     // --- Rare Demand Disasters (Barro 2006, Gourio 2012; Kou 2002 jump) ---
     /**
      * Disaster arrivals per year in either direction: the one-sided cause a slump needs, since the Gaussian innovation
-     * above is symmetric. One in 25 years: most busts now reach the district from the mainland's cycle and its
+     * above is symmetric. One in 25 years: most busts reach the district from the mainland's cycle and its
      * crashes, so the local ones are rare.
      */
     public const DEMAND_DISASTER_INTENSITY = 0.04;
@@ -522,13 +519,13 @@ class MacroAggregateSubsystem
 
     // --- New Keynesian Phillips Curve Dynamics ---
     /**
-     * Output gap at which supply bottlenecks bind (Benigno & Eggertsson 2023, the v/u = 1 kink); at 11% the convexity
-     * sat outside the ±4% the gap lives in and inflation was flat across the cycle.
+     * Output gap at which supply bottlenecks bind (Benigno & Eggertsson 2023, the v/u = 1 kink), inside the ±4% the gap
+     * lives in so the convexity bites across the cycle.
      */
     public const PHILLIPS_MAX_CAPACITY = 0.035;
     /**
      * Convex Phillips slope scale; kappa / PHILLIPS_MAX_CAPACITY is the near-zero slope (~0.11 of inflation per unit
-     * gap), held constant when the ceiling moved.
+     * gap).
      */
     public const PHILLIPS_CONVEX_KAPPA = 0.0038;
     /** Downward nominal rigidity factor dampening deflationary pressure during recessions (Bewley 1999). */
@@ -587,7 +584,7 @@ class MacroAggregateSubsystem
     /**
      * Rate at which actual output absorbs a TFP level shock through a second-order Pascal lag (Solow 1960); fitted with
      * the potential speed to the CBO gap's response to Fernald TFP shocks over 20 quarters, holding the supply-driven
-     * gap to the ~1.2pp sd that response implies (var/harness/tfp_real.py, tfp_grid_an.py).
+     * gap to the ~1.2pp sd that response implies.
      */
     public const TFP_OUTPUT_ABSORPTION_SPEED = 1.65;
     /**
@@ -597,8 +594,7 @@ class MacroAggregateSubsystem
     public const CRISIS_SCAR_ABSORPTION_YEARS = 3.0;
     /**
      * Rate at which potential absorbs the same shock, also through a second-order Pascal lag, as capital and
-     * organisation adjust; a slower single lag fit the response only by leaving policy to fight a 2.3pp supply gap,
-     * which drove the whole gap's sd from 2.2 to 3.5%.
+     * organisation adjust.
      */
     public const TFP_POTENTIAL_ABSORPTION_SPEED = 0.75;
 
@@ -618,8 +614,7 @@ class MacroAggregateSubsystem
     public const PMI_INVENTORY_SENSITIVITY = 20.0;
     /**
      * Mean-reversion speed (kappa) of manufacturing PMI toward fundamental business conditions (half-life ~6 weeks): a
-     * monthly survey reprices within a month or two, so the index is coincident with quarterly growth; at a four-month
-     * half-life it trailed growth by two quarters.
+     * monthly survey reprices within a month or two, so the index is coincident with quarterly growth.
      */
     public const PMI_KAPPA = 6.0;
     /** Stochastic diffusion volatility of manufacturing PMI survey sentiment. */
@@ -667,8 +662,6 @@ class MacroAggregateSubsystem
      * reports.
      */
     public const CPI_MONTHS_KEPT = 13;
-
-    /** The premium's stationary means depend on constants only; computed once. */
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -1591,7 +1584,7 @@ class MacroAggregateSubsystem
      * over core, so a commodity shock is priced as passing. The output gap adds nothing once inflation is held (CBO gap
      * 0.02, se 0.02). The fit also holds the excess bond premium, whose liquidity squeeze on TIPS moves the quote but
      * not the inflation the market expects (D'Amico, Kim & Wei 2018); quotedTipsBreakeven() adds it for the quote
-     * alone, so the rule, wages and yields read expected inflation. Fit: var/harness/breakeven_fit.py.
+     * alone, so the rule, wages and yields read expected inflation.
      *
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation The Authority's inflation target.

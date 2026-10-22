@@ -73,16 +73,11 @@ final class OptionSettlementEngine
      *
      * SET-BASED, because expiries arrive in a herd. A serial rolls off for the whole market at once, so this
      * is called with nothing to do on almost every sweep and with several hundred contracts on the one that
-     * catches a roll. Settling them one at a time meant a position lookup per contract and a dirty entity per
-     * contract — several hundred round trips plus several hundred UPDATEs inside a single twenty-millisecond
-     * tick, which is exactly the hundred-millisecond spike the ticker logged whenever a serial expired.
+     * catches a roll.
      *
-     * So: one query for the expiring batch and its settlement prices, one query for every open position
+     * One query for the expiring batch and its settlement prices, one query for every open position
      * across all of them, and one bulk write for the expiry stamp. The contracts are read as rows and rebuilt
-     * as transient objects — the engines see the same model, the unit of work sees nothing. That matters
-     * beyond this method: a settled contract left in the identity map was re-examined by every flush for the
-     * rest of the simulated day, and the ticker's flush grew from six milliseconds to twenty as the map
-     * filled up with them.
+     * as transient objects, so the unit of work sees nothing and no settled contract lingers in the identity map.
      *
      * @return array<int, array{ticker: string, underlying: string, settlement: float, exercised: bool, positions: int}>
      *         One record per contract settled, for the tick's event feed.
@@ -226,9 +221,7 @@ final class OptionSettlementEngine
      * Every column but the settlement price is IDENTICAL across the batch — expired, no open interest, no
      * greeks, stamped now — so they are set once per statement instead of carried on every row, and the batch
      * is addressed by its primary key so the server seeks the rows rather than joining a derived table to
-     * them. This is not a micro-optimisation at this size: the expiry grid is shared, so the front month of
-     * the whole market retires on a single pass, and at nine values a row that was the better part of two
-     * thousand rows sent as eighteen of the widest statements the codebase has.
+     * them. The expiry grid is shared, so the front month of the whole market retires on a single pass.
      *
      * @param array<int, string> $prices Contract id => settlement price.
      */

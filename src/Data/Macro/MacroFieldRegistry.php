@@ -11,13 +11,9 @@ use Doctrine\ORM\Mapping as ORM;
 /**
  * Single source of truth for the macro state vector's field names.
  *
- * The macro vector used to be spelled out by hand in six places — App\Service\Macro\MacroState's
- * properties and its fromArray/toArray, App\DTO\MacroStateDTO's constructor and its
- * fromArray/fromMacroState/toArray, App\Entity\MacroReport's columns, and the positional INSERT in
- * App\Service\Macro\Recorder\MacroSnapshotRecorder. Adding one observable meant ten hand edits, and
- * two of them failed silently: a key missing from a fromArray hydrates a default instead of the
- * recorded value, and a misordered argument in a 107-placeholder positional INSERT writes every
- * later column into the wrong field.
+ * The macro vector is declared once and drives App\Service\Macro\MacroState, App\DTO\MacroStateDTO,
+ * App\Entity\MacroReport and the INSERT in App\Service\Macro\Recorder\MacroSnapshotRecorder, so a key
+ * cannot be missing from one reader or misordered in the statement.
  *
  * This registry derives all of it from the two declarations that are already authoritative:
  *

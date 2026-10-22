@@ -17,9 +17,8 @@ use Psr\Log\LoggerInterface;
  * it lands in the next window instead.
  *
  * Inside a batch, records are netted per ticker in process and sent as one pipeline at the commit. The
- * ticker's own flow — every agent-traded name every tick, every hedged name every bar — was one synchronous
- * HINCRBYFLOAT each, ~130 round trips a tick; a profile put them at ~13 µs apiece, more than any single
- * pricing engine. The web process never opens a batch, so a player's fill still writes through.
+ * ticker's own flow (every agent-traded name every tick) would otherwise be one HINCRBYFLOAT round trip each.
+ * The web process never opens a batch, so a player's fill still writes through.
  */
 final class RedisOrderFlowStore implements OrderFlowStoreInterface
 {

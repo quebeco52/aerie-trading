@@ -14,10 +14,8 @@ use App\Service\Math\StochasticProcesses;
 use App\Service\Math\Valuation;
 
 /**
- * Service responsible for calculating stock price movements based on various market factors.
- *
- * This engine uses a hybrid model incorporating Geometric Brownian Motion (GBM),
- * Jump Diffusion processes, and Mean Reversion to simulate realistic stock price behavior.
+ * Stock price step: a Kou double-exponential jump process with stochastic variance (SVJJ), a systematic loading on
+ * the market factor, and a pull toward a multi-leg fair value.
  */
 class MarketEngine
 {
@@ -139,15 +137,8 @@ class MarketEngine
      * the stochastic volatility process carries only what is left. The market-wide jump reaches the name through
      * the same beta, so it is systematic variance too and is paid for here, not out of the name's own budget.
      *
-     * Deriving the loading the other way round — from an implied correlation clamped below one — truncated the beta of
-     * any name whose volatility fell short of what its beta demanded: measured against the market factor a configured
-     * 1.3 realized 1.19 and a 2.8 realized 2.30, and in a crisis, when market volatility triples and the truncation
-     * binds on everything at once, a 1.3 realized 0.45. The CAPM drift and the systemic jump were paid on the full beta
-     * throughout, so high-beta names were handed the premium without the risk.
-     *
      * The target is struck against the market's BASELINE volatility, so the configured figure is the name's
-     * total volatility in normal conditions and total volatility then rises with the market's through beta,
-     * rather than being inert to it as it was before.
+     * total volatility in normal conditions and total volatility then rises with the market's through beta.
      *
      * A configuration whose beta already consumes the whole of its stated volatility is infeasible; the name
      * keeps a guaranteed idiosyncratic share and ends up more volatile than its configured figure, which is
@@ -219,13 +210,9 @@ class MarketEngine
     /**
      * The Kou jump rates a name actually gaps at, after its jump is held to its variance budget.
      *
-     * The jump scale is held to the share of the name's variance a jump process is entitled to. Left at
-     * whatever the seed configured, the arrival rate and jump size together supplied a median 29% of a
-     * name's variance and up to 148% of it — the jump was not an overlay on the diffusion, it WAS the
-     * diffusion for several names, and since none of it was budgeted every name realized more volatility
-     * than it was configured with. Scaling the size rather than the arrival rate keeps the seed's statement
-     * about how OFTEN a name gaps, which is a property of its business, and only calibrates how FAR, which
-     * has to be consistent with how risky the name is overall.
+     * The jump scale is held to the share of the name's variance a jump process is entitled to, so the jump is an
+     * overlay on the diffusion and not the whole of it. Scaling the size rather than the arrival rate keeps the
+     * seed's statement about how OFTEN a name gaps, which is a property of its business.
      *
      * Public and shared rather than inline in the price step, because the option desk writes contracts on
      * exactly this jump: the smile it quotes is the skewness and kurtosis these two rates imply, and a desk
@@ -272,7 +259,6 @@ class MarketEngine
         ];
     }
 
-    /** Probability that a single-name jump is upwards; the behavioural skew the price process carries. */
     /**
      * The scale on a name's long-run residual variance from the common idiosyncratic factor: market variance over its
      * measured trend, at the firm loading, so residual volatility rises in a turbulent market and falls in a calm one
@@ -288,6 +274,7 @@ class MarketEngine
         return max(0.0, 1.0 + (self::IDIOSYNCRATIC_COMMON_FACTOR_LOADING * ($marketVarianceRatio - 1.0)));
     }
 
+    /** Probability that a single-name jump is upwards; the behavioural skew the price process carries. */
     public static function jumpProbabilityUp(): float
     {
         return self::SVJJ_P_UP;
@@ -329,13 +316,8 @@ class MarketEngine
     }
 
     /**
-     * Calculates the next stock price using a hybrid model.
-     *
-     * This method combines:
-     * 1. Geometric Brownian Motion (GBM) for standard drift and volatility.
-     * 2. Jump Diffusion for sudden market shocks (Merton Model).
-     * 3. Mean Reversion to pull the price towards a fundamental fair value based on PE.
-     * 4. Heston Stochastic Volatility Model for dynamic volatility.
+     * Calculates the next stock price: diffusion on the market and sector factors, Kou jumps held to the variance
+     * budget, stochastic variance, and a pull toward the multi-leg fair value.
      *
      * @param float $currentPrice       The current price of the stock.
      * @param float $currentVolatility  The current instantaneous volatility.
@@ -748,9 +730,7 @@ class MarketEngine
         $macro = $macroState ?? new MacroStateDTO();
 
         // Cash beyond what the business needs is worth its face: every leg below values the business on the book it
-        // runs on, and the surplus is added back after. Capitalised through the interest it saved, a surplus dollar was
-        // worth the after-tax rate times the multiple, about forty cents, and nothing at all to a firm already net of
-        // debt.
+        // runs on, and the surplus is added back after at face.
         $bookValuePerShare = max(0.0, $bookValuePerShare - $excessCashPerShare);
 
         // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, the dividends its policy
@@ -813,7 +793,7 @@ class MarketEngine
             $dividendAdjustmentSpeed
         ): array {
             // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
-            // The growth transmission and the Sloan accruals discount live in MathUtility because the corporate
+            // The growth transmission and the Sloan accruals discount live in Valuation because the corporate
             // engines strike the same multiple when management decides on a buyback, an offering or a deal.
             // Perpetual growth carries the inflation the hurdle does: the ten-year breakeven inside the CAPM's 10Y,
             // not this quarter's print, so an oil spike does not read as faster growth forever.

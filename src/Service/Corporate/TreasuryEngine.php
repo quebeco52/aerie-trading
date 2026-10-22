@@ -94,12 +94,6 @@ class TreasuryEngine
     ) {}
 
     /**
-     * Phase 1 of Balance Sheet Update: Execute Corporate Strategy
-     * Handles M2 growth, debt issuance (recapitalization/expansion), and organic CapEx.
-     * This must run BEFORE buybacks so that newly issued debt cash can fund Leveraged Buybacks,
-     * and Growth CapEx takes priority over share repurchases.
-     */
-    /**
      * Whether a financing action is material enough to the firm to make its news: measured against its total
      * assets, so a revolver draw that is routine for a bank still reads as news for a mid-size retailer. Before
      * the first ledger, equity plus funding stands in for total assets by identity.
@@ -113,6 +107,12 @@ class TreasuryEngine
         return $amount > self::FINANCING_NEWS_MATERIALITY * max(FinancialConstants::MIN_OPERATING_BASE_CASH, $totalAssets);
     }
 
+    /**
+     * Phase 1 of Balance Sheet Update: Execute Corporate Strategy
+     * Handles M2 growth, debt issuance (recapitalization/expansion), and organic CapEx.
+     * This must run BEFORE buybacks so that newly issued debt cash can fund Leveraged Buybacks,
+     * and Growth CapEx takes priority over share repurchases.
+     */
     public function executeCorporateStrategy(CapitalAllocationContext $ctx): void
     {
         // SYSTEMIC M2 MONEY SUPPLY GROWTH
@@ -295,9 +295,7 @@ class TreasuryEngine
         $trueReturn = $ctx->strategy->getTrueReturn($stock);
         // The hurdle a capital-deployment gate tests against is the one MANAGEMENT applies, not the firm's
         // true cost of capital — the same hurdle the earnings engine's growth-capex gate uses. Borrowing to
-        // build is the same decision as building from cash, so one manager has to bring one hurdle to both;
-        // reading the raw rate here left an empire builder disciplined about debt-funded plant and reckless
-        // about cash-funded plant, which is not a persistent style but an accident of funding source.
+        // build is the same decision as building from cash, so one manager brings one hurdle to both.
         $manager = $stock->getManagementProfile();
         $hurdleRate = $manager->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
 
@@ -517,9 +515,7 @@ class TreasuryEngine
      * operating cash target goes into loans and securities, with two exceptions. The earnings retained this
      * quarter stay in cash, because capital return is funded from earnings and not from the deposit base;
      * and an institution its regulator has already stopped from distributing (capital ratio below the
-     * conservation buffer, or leverage past its limit) cannot add risk-weighted assets either. Before this
-     * the deposit inflow ran through the physical capex path, fired in about half the quarters and then
-     * lent only half the excess, so cash ratcheted up quarter after quarter while the book stood still.
+     * conservation buffer, or leverage past its limit) cannot add risk-weighted assets either.
      *
      * Deliberately the ONE cash target the management style does not bend. A conservative lender expresses
      * itself in capital held, wholesale funding refused and distributions withheld — not in deposits left
@@ -571,9 +567,8 @@ class TreasuryEngine
 
     /**
      * The cash a firm measures its spare cash and liquidity shortfall against before it borrows. A lender uses the
-     * target it deploys down to: measured against a style-biased one, a fortress lender's deployment left it short
-     * every quarter, and it borrowed wholesale to refill a buffer the next deployment drained. Any other firm keeps
-     * its manager's target, the dry powder that is its style.
+     * target it deploys down to; a style-biased one would leave a fortress lender short every quarter. Any other firm
+     * keeps its manager's target, the dry powder that is its style.
      */
     private function fundingCashTarget(CapitalAllocationContext $ctx, ManagementProfile $manager): float
     {
@@ -659,8 +654,7 @@ class TreasuryEngine
         }
 
         // A buyback this quarter bars the OPPORTUNISTIC raise — a board does not buy its own stock and sell
-        // it in the same breath. It must not bar the rescue: a firm that repurchased shares before the
-        // maturity landed was left unable to raise the money to fund it, which is backwards.
+        // it in the same breath. It must not bar the rescue of a maturity that landed after the repurchase.
         $isRescue = $ctx->failedEmergencyBorrow || $ctx->unfundedMaturity > 0.0;
         if ($ctx->totalCashSpent > 0.0 && !$isRescue) {
             return;
@@ -690,9 +684,7 @@ class TreasuryEngine
             || $ctx->strategy->getCapacityShare($stock) !== null;
 
         $isBubble = !$holdsItsCapitalTarget && $normalizedEps > 0.0 && $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
-        // Principal the firm cannot fund is the reason to go to the equity market, and it used to be the one
-        // shortfall this path could not see: the raise was sized on operating cash alone, so a solvent firm
-        // facing a maturity it could not roll never even tried to sell stock to cover it.
+        // Principal the firm cannot fund is a reason to go to the equity market.
         $isDeathSpiral = $isRescue;
 
         $executeIssuance = false;
@@ -700,8 +692,7 @@ class TreasuryEngine
         if ($isDeathSpiral) {
             // Debt overhang (Myers 1977): once the business and its cash no longer cover the debt ahead of
             // them, a dollar of new equity goes to the creditors, and under absolute priority the shares are
-            // already out of the money. Nobody subscribes; the firm restructures instead. Selling stock into
-            // that every quarter diluted a failing firm hundreds of times over without ever curing it.
+            // already out of the money. Nobody subscribes; the firm restructures instead.
             $executeIssuance = $this->debtEngine->assessGoingConcern($stock, $ctx->macroState, $ctx->health)->isSolvent()
                 && $this->mathUtility->generateUniform() < 0.80;
         } elseif ($isBubble) {
@@ -977,9 +968,7 @@ class TreasuryEngine
      *
      * A missed payment is an event, not a state of nature. Real indentures give a borrower a grace period,
      * and a firm that finds the money — from the next quarter's cash, an asset sale, the committed line or a
-     * rescue raise — is current again and is not liquidated for having once been late. This flag used to be
-     * set and never cleared anywhere in the codebase, which made a single dollar of shortfall a permanent
-     * death sentence for an otherwise solvent company.
+     * rescue raise — is current again and is not liquidated for having once been late.
      */
     private function curePaymentDefault(CapitalAllocationContext $ctx): void
     {
@@ -1002,10 +991,7 @@ class TreasuryEngine
 
         // The revolver is swept first, and down to the operating FLOOR rather than the target. It is the
         // expensive balance and it is repayable on demand, so a treasury rebuilding a cash cushion while the
-        // line is still drawn is paying a distress spread to hold its own money. Sweeping only above the
-        // target left the facility a one-way ratchet for any firm whose target sits above its actual
-        // balance — every lender, whose target is struck on its deposits — so the line could only ever be
-        // drawn down and never repaid, and a run of closed quarters exhausted it for good.
+        // line is still drawn is paying a distress spread to hold its own money.
         $this->sweepRevolver(
             $ctx,
             $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt),

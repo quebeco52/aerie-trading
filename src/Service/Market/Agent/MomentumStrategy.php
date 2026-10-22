@@ -15,9 +15,7 @@ use App\DTO\AgentMarketViewDTO;
  * that a pure diffusion cannot generate.
  *
  * Forms the trend the way Jegadeesh & Titman (1993) do: over the half-year the price engine already keeps,
- * skipping the most recent month, whose winners reverse rather than continue (Jegadeesh 1990). Chasing the
- * last tick as hard as the last half-year made every move feed the next one at the shortest horizon, where
- * the data show reversal.
+ * skipping the most recent month, whose winners reverse rather than continue (Jegadeesh 1990).
  */
 final class MomentumStrategy implements AgentStrategyInterface
 {

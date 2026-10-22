@@ -49,7 +49,7 @@ class DistrictPlotDTO
         /**
          * Non-null for each window drawn a step brighter while lit (`data-twinkle`), null where it burns steady,
          * indexed [floor][column] — see DistrictMap::WINDOW_TWINKLE_SHARE. The value is a stable hash in [0, 1); only
-         * its presence is rendered now that the flicker animation is gone.
+         * its presence is rendered.
          *
          * @var list<list<float|null>>
          */

@@ -9,11 +9,9 @@ use Doctrine\DBAL\Connection;
 /**
  * Writes the same columns on many rows of one table in a handful of statements instead of one per row.
  *
- * Doctrine flushes one UPDATE per dirty entity, and a working set that is remarked wholesale every tick —
- * the bond ladder, an option chain — turns that into hundreds of synchronous round trips inside the tick
- * transaction, which was more wall time than the whole tick budget. A mark is not an entity change in any
- * interesting sense: it is the same seven numbers on every row, so it is written as data, the way the
- * price-history INSERT already is.
+ * Doctrine flushes one UPDATE per dirty entity, and a working set that is remarked wholesale (the bond ladder, an
+ * option chain) would turn that into hundreds of round trips inside the tick transaction. A mark is the same
+ * numbers on every row, so it is written as data.
  *
  * The statement joins the table to an inline row set on its primary key:
  *

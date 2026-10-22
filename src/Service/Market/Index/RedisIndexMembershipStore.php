@@ -63,8 +63,7 @@ final class RedisIndexMembershipStore implements IndexMembershipStoreInterface, 
 
         $list = static fn(mixed $value): array => is_array($value) ? array_values(array_map('strval', $value)) : [];
 
-        // A weight map written by an older build is simply absent; every reader reads a missing factor as
-        // one, which is the cap-weighted index this store used to assume every index was.
+        // An absent weight map is read as a missing factor, which every reader treats as one (cap-weighted).
         $map = static function (mixed $value): array {
             if (!is_array($value)) {
                 return [];

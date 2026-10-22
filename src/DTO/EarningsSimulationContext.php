@@ -236,16 +236,16 @@ class EarningsSimulationContext
     /** Loss realized on earning assets sold below carrying value, booked to equity as other comprehensive loss. */
     public float $assetSaleLoss = 0.0;
     /**
-     * Mark carried on the investment securities book after this quarter's roll (ASC 320); negative is a loss. Not
-     * income.
-     */
-    /**
      * The board's dividend return a year since the last report on the treasury's equity sleeve, booked in place of its
      * expected return; null on a first report, which has no earlier reading.
      */
     public ?float $equitySleeveDividendReturn = null;
     /** The price mark the equity sleeve took to book value at this report, net of tax. */
     public float $equitySleeveMark = 0.0;
+    /**
+     * Mark carried on the investment securities book after this quarter's roll (ASC 320); negative is a loss. Not
+     * income.
+     */
     public float $unrealizedSecuritiesMark = 0.0;
     /** Quarterly net cash from operations (net income + D&A - working capital build). */
     public float $operatingCashFlow = 0.0;
@@ -255,7 +255,6 @@ class EarningsSimulationContext
     public float $financingCashFlow = 0.0;
     /** Dickinson life-cycle stage classified from this quarter's cash-flow signs. */
     public ?\App\Data\Company\LifecycleStage $lifecycleStage = null;
-    /** @var array<string, float> Reported operating KPIs emitted by the sector physics. */
     /**
      * Net accrual booked this quarter to steer reported earnings toward consensus; negative when a prior quarter's
      * borrowing unwinds.
@@ -267,6 +266,7 @@ class EarningsSimulationContext
      */
     public float $managedAccrualPretax = 0.0;
 
+    /** @var array<string, float> Reported operating KPIs emitted by the sector physics. */
     public array $kpis = [];
 
     // Interest & Depreciation

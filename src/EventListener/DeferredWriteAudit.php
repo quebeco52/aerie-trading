@@ -13,7 +13,7 @@ use Doctrine\ORM\Events;
  *
  * An entity mapped DEFERRED_EXPLICIT is examined by the unit of work only if it was handed to persist()
  * since the last flush. That is what spares the flush a comparison of every mapped field of every managed
- * entity — 96 of them on a Stock, over a map of several hundred, on two ticks in three — and its price is a
+ * entity, and its price is a
  * contract no compiler enforces: a setter called without a matching persist() is silently not written, and
  * the symptom arrives later as a company whose report never landed rather than as an error.
  *

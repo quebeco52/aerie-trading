@@ -329,8 +329,7 @@ class MergerAndAcquisitionEngine
         $ctx->policyRate = $ctx->macroState->policyRate;
         $ctx->yield5y = $ctx->macroState->yield5yEma;
 
-        // Underwritten on the margin the firm last reported, as the treasury's own lender test is: the
-        // structural margin kept a firm that was losing money looking fit to borrow for the next deal.
+        // Underwritten on the margin the firm last reported, as the treasury's own lender test is.
         $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
 
         $ctx->industry = $stock->getIndustry() ?: 'General';
@@ -363,8 +362,7 @@ class MergerAndAcquisitionEngine
         $equityLimit = \App\Data\Company\Sectors::equityLimit($ctx->industry);
 
         // A lender sizes acquisition debt the way it sizes any other: the balance sheet AND the interest the
-        // firm can cover. Testing only book leverage let a thin-margin acquirer borrow to its equity limit on
-        // every deal while coverage collapsed, so the treasury's own capacity test is the one applied here.
+        // firm can cover, so the treasury's own capacity test is the one applied here.
         $ctx->borrowingCapacity = max(0.0, $ctx->strategy->calculateDebtExpansionCapacity(
             $ctx->equity,
             $ctx->currentDebt,
@@ -389,8 +387,7 @@ class MergerAndAcquisitionEngine
         $ctx->economicSpread = $ctx->trueReturn - $ctx->hurdleRate;
 
         $ctx->fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $ctx->trueReturn, $ctx->health, $ctx->macroState);
-        // Overvalued on the earnings the multiple is struck on: on trailing earnings, a loss year made any price rich
-        // enough to pay for a deal in stock.
+        // Overvalued on the earnings the multiple is struck on.
         $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $ctx->trueReturn, $ctx->health, $ctx->macroState);
         $ctx->currentPE = $normalizedEps > 0.0 ? $ctx->price / $normalizedEps : 0.0;
         $ctx->bookValuePerShare = max(0.01, $ctx->equity / max(1.0, $ctx->shares));
@@ -429,8 +426,7 @@ class MergerAndAcquisitionEngine
 
         // These hazards are annual and $dt is a fraction of a year. The empire builder's own branch already
         // carries its elevated rate in MA_EMPIRE_BUILDER_PROB, so the style bias must NOT be laid on top of
-        // it — that counted the same behaviour twice and put a $1B+ transformative deal on the tape nearly
-        // twice a year. Everywhere else the bias is the only thing the style says about deal frequency.
+        // it. Everywhere else the bias is the only thing the style says about deal frequency.
         $hazardBias = ($config['style_priced'] ?? false) ? 1.0 : $manager->acquisitionBias();
 
         // Second stage of the gate in evaluatePrivateAcquisition(): one uniform on [0, ceiling * dt),
@@ -485,8 +481,7 @@ class MergerAndAcquisitionEngine
         $this->drawTargetEconomics($ctx);
 
         // The target is a private firm in the acquirer's own market, so the deal is sized to the largest
-        // one there is to buy and that clears merger review. Sized by the acquirer's buying power alone, a
-        // firm that already owned its market kept buying more of it than exists.
+        // one there is to buy and that clears merger review.
         $market = $this->resolveLargestAvailableTarget($ctx);
         $this->capPurchasePrice($ctx, $market['price'], $market['review_binds'] ? self::LIMIT_MERGER_REVIEW : self::LIMIT_AVAILABLE_MARKET);
         $this->capPurchasePrice($ctx, $this->resolveLargestCapitalClearedDeal($ctx), self::LIMIT_CAPITAL_TEST);
@@ -674,8 +669,7 @@ class MergerAndAcquisitionEngine
             $newNetDebt = max(0.0, $ctx->currentDebt - $ctx->treasury + $ctx->purchasePrice);
 
             $newAssetValue = $marketCap + $currentNetDebt + $ctx->purchasePrice;
-            // The acquired business is priced at the acquirer's own asset risk; de-levering equity volatility
-            // across the pro-forma balance sheet instead made a debt-funded deal look SAFER the more it borrowed.
+            // The acquired business is priced at the acquirer's own asset risk.
             $newAssetVolatility = $this->debtEngine->resolveAssetVolatility($stock, $marketCap, max(0.01, $newNetDebt), $ctx->policyRate);
 
             $distanceToDefault = CreditRisk::calculateDistanceToDefault(
@@ -808,8 +802,7 @@ class MergerAndAcquisitionEngine
      *
      * Every dollar of net assets has to land on an asset account: that is what keeps the cash (or debt, or
      * shares) that paid for them equal to the goodwill and net assets that came in, so the balance sheet
-     * still balances after the deal. Computing the working-capital share and then not booking it anywhere
-     * shrank the asset side by that share on every cash deal with no claim moving to match.
+     * still balances after the deal.
      */
     private function bookAcquiredNetAssets(Stock $stock, BusinessModelInterface $strategy, float $netAssetsAcquired): void
     {
@@ -870,7 +863,7 @@ class MergerAndAcquisitionEngine
     /**
      * The terms a deal announcement states: how it was paid for, what went to goodwill, and, when a rule
      * rather than the buyer's appetite set its size, which rule. The first sentence of the announcement is
-     * left as it was, since the replay harness and the district parse the price and type out of it.
+     * parsed for the price and type, so it is left alone.
      */
     private function describeDealTerms(AcquisitionContext $ctx): string
     {

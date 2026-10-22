@@ -40,22 +40,20 @@ final class TickCadence
     /**
      * Times per simulated year the whole bond ladder is revalued and written: once a trading day, end of day.
      *
-     * A bond's price is a function of a curve that moves in basis points over weeks, and the market convention
-     * for fixed income is an end-of-day mark. Riding the equity bar instead revalued ~290 issues 2,400 times a
-     * simulated year for a series recorded 252 times; a profile put the ladder at 24% of the ticker. Every
-     * mark is also the day's bond_history row, so a row always carries the mark struck on its own tick.
-     * Between marks an issue quotes its last mark; one that pays a coupon or is newly issued is struck at once
-     * (see BondTracker). The Redis chart buffer takes the mark too, and nothing between: see bondMarksPerYear().
+     * A bond's price is a function of a curve that moves in basis points over weeks, and the market convention for
+     * fixed income is an end-of-day mark. Every mark is also the day's bond_history row, so a row always carries the
+     * mark struck on its own tick. Between marks an issue quotes its last mark; one that pays a coupon or is newly
+     * issued is struck at once (see BondTracker). The Redis chart buffer takes the mark too, and nothing between: see
+     * bondMarksPerYear().
      */
     public const BOND_MARKS_PER_YEAR = 252;
 
     /**
      * History bars between working-set reloads.
      *
-     * A reload has to follow a flush, so it is counted in bars rather than ticks. Reloading on every bar
-     * re-hydrated sixty companies and a couple of hundred bonds eight times a second, which was a quarter
-     * of the history tick; the only thing a reload brings in that the ticker cannot see otherwise is a
-     * short-interest figure the web process writes, and nothing on the pricing path reads that.
+     * A reload has to follow a flush, so it is counted in bars rather than ticks. The only thing a reload brings
+     * in that the ticker cannot see otherwise is a short-interest figure the web process writes, and nothing on
+     * the pricing path reads that.
      */
     public static function reloadIntervalBars(int $ticksPerYear): int
     {
@@ -149,15 +147,8 @@ final class TickCadence
     /**
      * Whether a TICK re-reads the working set: the bar-counted job, addressed the way the ticker loop has it.
      *
-     * The loop holds a tick count, not a bar index, and asking it to carry one was a mistake that cost a
-     * crash loop: `$bar` is a natural name for the open/high/low accumulator too, the history-row insert
-     * reassigned it four hundred lines further down, and the reload below then received an array. Nothing
-     * caught it — PHPStan reads the loop body as too complex to track a local through, and the loop itself
-     * has no test, so the first thing to notice was the ticker restarting in production.
-     *
-     * Deriving the bar inside these wrappers is a multiply and an integer division against a job that
-     * clears the identity map and re-hydrates four hundred entities. The name cannot collide with anything
-     * because it no longer exists.
+     * The loop holds a tick count, not a bar index; the bar is derived inside this wrapper, which costs a multiply
+     * and an integer division against a job that clears the identity map and re-hydrates the working set.
      */
     public static function isReloadTick(int $tickCount, int $ticksPerYear): bool
     {
@@ -168,10 +159,7 @@ final class TickCadence
     /**
      * Whether a history bar marks the bond ladder, and samples that mark into bond_history.
      *
-     * Offset half an interval from the reload bar. Both are once-a-day jobs counted in the same bars, and
-     * at the same offset every ladder mark would land on the tick that had just thrown its working set away
-     * and re-read it — one tick paying for both, which is the shape of an outlier rather than of a cost.
-     * Away from each other they are two ordinary bars.
+     * Offset half an interval from the reload bar, so the two once-a-day jobs do not land on one tick.
      */
     public static function isBondMarkBar(int $bar, int $ticksPerYear): bool
     {
@@ -191,12 +179,9 @@ final class TickCadence
      * Price history rows written per simulated year at a given tick rate.
      *
      * The target, or the tick rate itself when that is the coarser of the two — a bar cannot be finer than
-     * a tick. This is the whole of the sampling rule; the grid below is derived from it rather than the
-     * other way round.
+     * a tick. This is the whole of the sampling rule; the grid below is derived from it.
      *
-     * Anything converting a chart range into a row LIMIT has to ask this rather than assume a tick rate:
-     * the range buttons used to carry hardcoded row counts that only matched a 4,800-tick year, so every
-     * span on the stock page was wrong by whatever ratio the configured rate differed by.
+     * Anything converting a chart range into a row LIMIT has to ask this rather than assume a tick rate.
      */
     public static function historyPointsPerYear(int $ticksPerYear): int
     {
@@ -206,14 +191,9 @@ final class TickCadence
     /**
      * History bars closed by a given tick.
      *
-     * THE BAR GRID IS RATIONAL, NOT A WHOLE NUMBER OF TICKS. Spacing bars by dividing the tick rate by the
-     * target and truncating only lands on the target when one divides the other, and truncation is biased
-     * toward writing too many at every rate where it does not: against the then target of 2,400, 7,000 ticks
-     * a year wanted a bar every 2.9 ticks and got one every 2, which is 3,500 rows. At 3,600 the quotient was
-     * 1.5, truncation reached the floor of 1, and a bar closed on EVERY tick — with the flush, the bond
-     * mark, the tick-column write and the working-set reload all riding a flag that is never meant to be
-     * true every tick. The tick rate is a resolution knob and nothing more; it must not decide which jobs
-     * the ticker does.
+     * THE BAR GRID IS RATIONAL, NOT A WHOLE NUMBER OF TICKS. Spacing bars by truncating the tick rate over the
+     * target only lands on the target when one divides the other, and is biased toward too many bars elsewhere
+     * (down to a bar on every tick). The tick rate is a resolution knob and must not decide which jobs run.
      *
      * Counting bars rather than spacing them spreads the remainder evenly and closes exactly
      * historyPointsPerYear() of them per simulated year at any tick rate. It is a pure function of the tick

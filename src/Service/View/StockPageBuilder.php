@@ -25,10 +25,7 @@ use App\Service\Math\FinancialConstants;
 /**
  * Assembles everything the instrument page renders, for a listed company or for the index fund.
  *
- * This was a controller action of some three hundred lines with eleven services injected into it,
- * which meant the page's composition could only be read by reading the whole of it, and none of it
- * could be exercised without a request. Each block now has a builder that states what it is for;
- * this one decides which blocks a given instrument has.
+ * Each block has a builder that states what it is for; this one decides which blocks a given instrument has.
  */
 class StockPageBuilder
 {

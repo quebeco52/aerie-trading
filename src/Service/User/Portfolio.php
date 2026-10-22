@@ -19,19 +19,18 @@ class Portfolio
      * Per-user value sitting in open limit orders, which net asset value has to include.
      *
      * Placing a limit order moves the assets out of the balances a naive NAV sums: a BUY debits the cash to
-     * escrow and a SELL removes the shares from user_stocks (see TradeExecutionService). Without this join
-     * placing an order destroyed net worth on the chart and on the leaderboard, and cancelling it created
-     * net worth back — so every ranking was really a ranking of who had no orders working. A BUY is held at
+     * escrow and a SELL removes the shares from user_stocks (see TradeExecutionService). Without this join, placing an
+     * order would cut net worth and cancelling it would restore it. A BUY is held at
      * the price the cash was committed at; a SELL is held at the asset's live price, exactly as the shares
      * would have been valued had they still been in the holdings table. A buy stop commits no cash until it
-     * fires, so it is held at nothing: valued at its limit, one that could never fire was free net worth.
+     * fires, so it is held at nothing.
      *
      * The price joins are keyed on asset_type, not on the ticker alone: a ticker present in both tables
      * would otherwise match twice and count its escrow twice over.
      *
      * Only BUY and SELL appear. A resting SHORT escrows nothing — the borrow is located at the fill — and
      * neither does a resting COVER, which is the closing leg of a position already collateralized. Valuing
-     * either of them added an asset the account does not have, so working an offer inflated net worth.
+     * either would add an asset the account does not have.
      */
     public const OPEN_ORDER_ESCROW_DETAIL_SQL = "
         SELECT o.user_id,

@@ -11,9 +11,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * Keeps the books of an index fund, which are not the same thing as the index it tracks.
  *
  * An index is a number. A fund is a portfolio, and a portfolio has two things a number does not: it RECEIVES
- * the dividends its constituents pay, and it COSTS something to run. Without both, a share of the fund was a
- * claim on a price index — it lagged the basket it claimed to hold by the market's entire dividend yield,
- * every year, forever, and it did so silently because the chart still looked exactly like the index.
+ * the dividends its constituents pay, and it COSTS something to run.
  *
  * One identity governs everything here:
  *
@@ -21,22 +19,15 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * BASKET PER SHARE is how many index units one fund share owns. It opens at one and falls only when the fund
  * has to sell something to meet a fee it could not pay out of income. Over time it drifts down by roughly
- * the expense ratio a year, which is the tracking difference a real factsheet reports and the reason a cheap
- * broad fund beats an expensive clever one at the same index.
+ * the expense ratio a year, the tracking difference a factsheet reports.
  *
  * ACCRUED INCOME is dividend cash the fund has received and not yet passed on. It sits in the price until
  * the quarterly distribution, at which point it leaves as cash and the price drops by exactly what left.
- * Nobody gains or loses at that moment — which is the point, and is why the drop is not a return.
+ * Nobody gains or loses at that moment, so the drop is not a return.
  *
- * The fee is charged the way a real fund charges it: against net assets, met out of income first and out of
- * the basket only where income falls short. That ordering is not cosmetic. It is what makes a distribution
- * NET of costs, as a real one is, rather than the fund paying out its gross income and quietly selling
- * holdings to cover its own fee.
- *
- * The fee is not the only thing that costs. A fund that REBALANCES has to trade to do it, and the spread it
- * crosses comes out of the basket as well — see chargeRebalance(). That is the difference between a fund
- * whose weights maintain themselves and one that restrikes them every quarter, and it is the reason a real
- * factsheet reports transaction costs next to the expense ratio instead of folding them into it.
+ * The fee is charged against net assets, met out of income first and out of the basket only where income falls
+ * short, so a distribution is NET of costs. A fund that REBALANCES also pays the spread it crosses out of the
+ * basket (see chargeRebalance()).
  */
 final class IndexFundAccountant
 {
@@ -101,19 +92,13 @@ final class IndexFundAccountant
     /**
      * Charges the fund for the rebalance its index has just decided on.
      *
-     * An index restrikes its weights by arithmetic. A FUND has to trade to get there, and what it trades
-     * costs it: the reconstitution is a real order in every name whose weight moved, crossing a real spread.
-     * Without this the index level and the fund tracking it both harvested a quarterly rebalance for free —
-     * selling whatever had drifted up and buying whatever had drifted down, at mid, in unlimited size — and
-     * the only index that could do so was the one that rebalances, which is why the low-volatility fund beat
-     * a cap-weighted benchmark by a steady margin no cost ever touched. A cap-weighted index pays almost
-     * nothing here, and that is not an exemption: its weights maintain themselves, so there is nothing to
-     * trade but the membership changes.
+     * An index restrikes its weights by arithmetic. A FUND has to trade to get there: the reconstitution is a
+     * real order in every name whose weight moved, crossing a real spread. A cap-weighted index maintains its
+     * own weights, so there is nothing to trade but the membership changes.
      *
-     * It comes out of the BASKET rather than out of income, because a transaction cost is paid inside the
-     * trade — the fund really does end the day owning fewer index units — where a management fee is a claim
-     * against the fund that income can meet. That also makes it show up where it belongs: in the tracking
-     * difference, which is what a factsheet reports and what a holder actually experiences.
+     * It comes out of the BASKET rather than out of income, because a transaction cost is paid inside the trade
+     * (the fund ends owning fewer index units) where a management fee is a claim income can meet. It shows up in
+     * the tracking difference.
      *
      * @param float $costFraction What the rebalance cost, as a fraction of the portfolio traded.
      * @param float $indexLevel   The level the charge is recorded against, so the running total is in the

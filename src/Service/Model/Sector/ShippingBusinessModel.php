@@ -143,9 +143,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Negative z-score threshold required during trade gluts to trigger operating loss lore. */
     public const LORE_GLUT_Z_SCORE         = -1.50;
 
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
-
     // --- Spot Rate Cycle & Output Gap Physics ---
     /** Operating margin mean reversion speed: fast speed reflects rapid shipbuilding order responses. */
     public const SPOT_REVERSION_SPEED      = 4.0;

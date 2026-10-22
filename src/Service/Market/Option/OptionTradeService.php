@@ -194,9 +194,7 @@ final class OptionTradeService
 
         // canOpen() measures a POSITION VALUE, which Reg T backs with half of itself in equity. The Rule
         // 4210 figure is not a position value — it is the equity itself, already net of the collateral the
-        // contract provides. Handing it over unconverted asked the account for half of what the contract
-        // actually needs, and the write would then fill and call the account on the very same tick. Grossing
-        // it up by the initial requirement expresses it in the units canOpen speaks.
+        // contract provides. Grossing it up by the initial requirement expresses it in the units canOpen speaks.
         $positionEquivalent = $requirement / $this->marginEngine->margins()['initial'];
 
         if (!$this->marginEngine->canOpen($user, $positionEquivalent)) {
@@ -210,11 +208,8 @@ final class OptionTradeService
      * Only a call can be covered this way. A put is covered by cash, which the buying-power check already
      * measures, so counting stock against it would credit the same collateral twice.
      *
-     * Shares ALREADY standing behind written calls on the same name are deducted first. Without that, one
-     * hundred shares covered the first contract written against them and then covered the next one too, and
-     * the one after that: every write past the first skipped the margin gate entirely, and the account then
-     * met the whole naked requirement on the next sweep — when OptionMarginCalculator, which does consume
-     * the shares as it goes, counted the same contracts as naked and called it.
+     * Shares ALREADY standing behind written calls on the same name are deducted first, so the same hundred
+     * shares do not cover every contract written against them (OptionMarginCalculator consumes them as it goes).
      */
     private function coveredContracts(User $user, OptionContract $contract, int $contracts): int
     {

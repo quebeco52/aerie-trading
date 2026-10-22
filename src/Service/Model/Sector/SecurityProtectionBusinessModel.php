@@ -26,7 +26,7 @@ use App\Service\Model\ModelParam;
  *      3. Expeditionary / Black-Ops: Counter-cyclical, high-margin conflict & extraction services (VIX & Credit Spread
  *         driven).
  * - Macro Differentiators:
- *      - Government Stream -> Pulls from Inflation (Cost-Plus escalators).
+ *      - Government Stream -> Pulls from appropriations (the budget the state sets for security contracts).
  *      - Corporate Stream -> Pulls from Output Gap (Corporate HQ expansion).
  *      - Expeditionary Stream -> Pulls from VIX & Credit Spreads (Panic & Geopolitical Stress).
  * - Tail Risk: A high-profile tactical failure or assassination causes immediate contract cancellations and legal
@@ -182,7 +182,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * The guard posts and deployments the firm is staffed to cover: the target-mix weighted macro shift of each
-     * stream's volume. The cost-plus inflation escalator on government work is a price and stays out; the
+     * stream's volume. Price effects stay out; the
      * expeditionary surge on fear and credit stress is counter-cyclical and keeps its sign.
      */
     public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
@@ -233,8 +233,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        // Resolve company-specific tuned parameters (e.g. GRIP = 80% Gov, WATCH = 60% Retainer, OSPR = 80%
-        // Expeditionary)
+        // Resolve company-specific tuned parameters (stream weights per firm)
         $params = $this->resolveModelParameters($stock, [
             ModelParam::GovernmentContractWeight->value => self::GOVERNMENT_CONTRACT_WEIGHT,
             ModelParam::RetainerWeight->value           => self::RETAINER_WEIGHT,
@@ -312,13 +311,10 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // --- Cost & Margin Physics --- Guard payroll follows wage growth; contract rates recover most of it (cost-plus
         // government work, annual retainer resets).
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
-        // Apply the tactical failure legal penalty directly to the baseline variable margin
         $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $govWeight * self::APPROPRIATIONS_VOLUME_SCALAR, $clampedMargin, $actualRevenue);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $tacticalFailurePenalty * $actualRevenue;
 
         return new SectorPhysicsResult(

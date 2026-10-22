@@ -102,7 +102,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Base coverage forecasting error given diversification across unlisted subsidiaries. */
     public const BASE_COVERAGE_ERROR = 0.05;
 
-    // --- Portfolio Composition (Five-Stream Architecture) ---
+    // --- Portfolio Composition (Three-Stream Architecture) ---
     /** Baseline fraction of revenue derived from cyclical industrial manufacturing subsidiaries. */
     public const INDUSTRIAL_CONGLOMERATE_WEIGHT = 0.40;
 
@@ -182,8 +182,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     public const PMI_INDUSTRIAL_SENSITIVITY = 0.40;
     /** Sensitivity of subsidiary divestiture proceeds and advisory alpha to capital markets deal activity. */
     public const DEAL_ACTIVITY_DIVESTITURE_SCALAR = 0.15;
-
-    // --- Analyst Observability ---
 
     public function getMinIcr(): float
     {
@@ -343,7 +341,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::CONGLOMERATE_SUBSIDIARY_WRITEDOWN;
         }
 
-        // --- Five-Stream Revenue Calculation ---
+        // --- Three-Stream Revenue Calculation ---
         $industrialShock = $industrialZ * ($baselineVol * self::INDUSTRIAL_VARIANCE_SCALAR);
         $defensiveShock  = $defensiveZ  * ($baselineVol * self::DEFENSIVE_VARIANCE_SCALAR);
         $floatShock      = $floatZ      * ($baselineVol * self::FLOAT_VARIANCE_SCALAR);
@@ -376,8 +374,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             + $ppiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
 
         return new SectorPhysicsResult(

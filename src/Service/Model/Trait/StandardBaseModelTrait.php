@@ -23,10 +23,7 @@ trait StandardBaseModelTrait
     }
 
     /**
-     * Default: no declared macro coupling. Composed by both business-model roots
-     * (StandardCorporateBusinessModel and, via BaseFinancialBusinessModel, every financial
-     * model), so every model that does not override this reads no macro field at all — a
-     * genuine signal (see BiotechBusinessModel), not an oversight.
+     * Default: no declared macro coupling. A model that does not override this reads no macro field.
      *
      * @return list<string>
      */

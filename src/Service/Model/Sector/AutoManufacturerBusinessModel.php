@@ -450,8 +450,6 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $effectiveMargin = $actualRevenue > 0 ? ($totalVariableCosts / $volumeRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $recallPenalty * $salesRevenue;
 
         return new SectorPhysicsResult(

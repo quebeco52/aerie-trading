@@ -15,9 +15,8 @@ use App\Service\Math\FixedIncome;
  *
  * The models already hold long-duration paper: an insurer puts three quarters of its investable float into
  * a long bond tranche and a bank runs a four-and-a-half year asset book against one-and-a-half year
- * funding. Until now both earned the coupon and neither owned the price. The curve was a flow and never a
- * stock, so a hiking cycle was unambiguously good for every financial in the market and no lender could be
- * made insolvent by rates — only by credit.
+ * funding. Both own the price as well as the coupon, so a hiking cycle marks the book down and a lender can be
+ * made insolvent by rates as well as by credit.
  *
  * What comes out of here is a valuation, not income. The mark reaches equity through other comprehensive
  * income and never through EBIT, EPS or the consensus surprise; see SecuritiesMarkDTO. The one place it
@@ -41,9 +40,8 @@ final class SecuritiesBookService
      * Mark a book against the curve after reinvesting the quarter's maturities.
      *
      * The book is a ladder of maturing paper, repriced exactly at the move (FixedIncome::calculateLadderPriceChange).
-     * Its convexity is not decoration: without it a rally and a selloff of the same size are worth the same in
-     * opposite directions, and the asymmetry that makes a bond a bond disappears. A second-order expansion at the
-     * ladder's real convexity turns back up past a move of 0.75/D, so a long book showed a gain on a large selloff.
+     * Its convexity matters: a rally and a selloff of the same size are not worth the same in
+     * opposite directions, and a second-order expansion turns back up past a move of 0.75/D.
      *
      * Note on the book's size: it is re-read from the balance sheet each quarter rather than carried, so
      * net new money is treated as part of the same roll-down that maturities are, instead of being tracked

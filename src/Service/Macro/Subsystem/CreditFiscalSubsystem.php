@@ -23,7 +23,7 @@ use App\Service\Math\Valuation;
 
 /**
  * Handles corporate and retail credit spreads, interbank liquidity (TED spread),
- * government spending appropriations, and countercyclical corporate tax policy.
+ * government spending appropriations and the tax rates.
  */
 class CreditFiscalSubsystem
 {
@@ -171,8 +171,7 @@ class CreditFiscalSubsystem
      */
     public const GOVT_SPENDING_TREND_YEARS = self::TAX_RATE_TREND_YEARS;
 
-    // --- VASICEK ASRF RETAIL DEFAULT RATE (fitted on US household delinquency 1991-2019,
-    // var/harness/retail_default_fit) ---
+    // --- VASICEK ASRF RETAIL DEFAULT RATE (fitted on US household delinquency 1991-2019) ---
     /**
      * Long-run household PD the factor is struck at (2.5%, the US delinquency mean the fit read); the District's
      * channels settle the rate lower (MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN).
@@ -326,7 +325,7 @@ class CreditFiscalSubsystem
     public const MAX_HOUSEHOLD_DEBT_TO_INCOME = 2.50;
     /**
      * Steady-state Kalman level gain of the Basel III one-sided HP filter (lambda 400,000 on quarterly data) in its
-     * state-space form; a 30-year EMA stood in for it and, on the engine's own paths, correlated 0.17 with it.
+     * state-space form.
      */
     public const CREDIT_GAP_HP_LEVEL_GAIN = 0.054686;
     /** Steady-state Kalman slope gain of the same filter. */
@@ -377,8 +376,7 @@ class CreditFiscalSubsystem
      * Extra drag per unit of credit gap at the crisis ("credit bites back", JST 2013), fitted with the decay below so
      * the US boom at the end of 2007 (+10pp of debt to income on the engine's Basel filter) costs the gap what 2008
      * cost the CBO gap beyond a normal recession, -3.2 -3.2 -3.6 -3.4 -2.5 -2.0 -1.2 -0.9 over years 1-8
-     * (var/harness/crisis_irf.sh: -3.7 -4.8 -3.5 -2.5 -1.9 -1.7 -1.4 -1.1); a typical +3pp boom costs half that. At
-     * 0.15 a crisis cost almost nothing beyond a normal recession (JRST 2021 replication, var/harness/jrst_an.py).
+     * (-3.7 -4.8 -3.5 -2.5 -1.9 -1.7 -1.4 -1.1 on the CBO series); a typical +3pp boom costs half that.
      */
     public const CREDIT_CRISIS_DRAG_PER_GAP = 0.765;
     /**
@@ -658,7 +656,7 @@ class CreditFiscalSubsystem
 
     /**
      * Government purchases: a Schwartz (1997) log-OU fitted to US civilian purchases (federal non-defence plus state
-     * and local) over potential, 1985-2019 (var/harness/gov_fit.py), reverting to the share of GDP the Diet's budget
+     * and local) over potential, 1985-2019, reverting to the share of GDP the Diet's budget
      * sets less the cuts the debt calls for (purchasesTarget()), so an appropriation phases in at the fit's own speed.
      * The District fields no army, so the wartime surges that fatten the US total are its customers'
      * (AssetMarketSubsystem::calculateAlliedDefenseSpending). Purchases do not lean against the cycle (Auerbach 2002;
@@ -962,10 +960,8 @@ class CreditFiscalSubsystem
         $revolvingRate = max(0.0, $state->policyRateEma) + self::CONSUMER_CREDIT_SPREAD;
         $effectiveRate = (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * $mortgageRate) + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * $revolvingRate);
 
-        // Against the persistent trend, not the nominal baseline. Mian & Sufi's home-equity channel is a
-        // response to prices moving away from trend; read off a fixed 100 it becomes a permanent level
-        // signal, and the index's own equilibrium sits at ~94, so the term carried -0.56%/yr of standing
-        // deleveraging and the credit stock could never build. Same fix as the housing wealth effect.
+        // Against the persistent trend, not the nominal baseline: Mian & Sufi's home-equity channel is a response to
+        // prices moving away from trend.
         $housePriceLift = $state->residentialWealthTrend > 0.0
             ? ($state->residentialPropertyIndexEma / $state->residentialWealthTrend) - 1.0
             : 0.0;

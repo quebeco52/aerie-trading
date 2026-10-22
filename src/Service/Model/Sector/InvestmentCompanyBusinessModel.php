@@ -263,8 +263,6 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $ppiCostDrag);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $restructuringPenalty * $actualRevenue;
 
         return new SectorPhysicsResult(
@@ -406,10 +404,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
      * Both inputs are exogenous to any one listing, deliberately: a discount driven by the firm's own
      * realised volatility would raise the volatility that widened it, with no damping in the loop.
      *
-     * Confidence enters as the RESIDUAL, not the level. Read against the index's construction constant it
-     * delivered a further 2.3 of widening per unit of gap on top of the 4.0 declared above, and a standing
-     * 0.07 on the base: the discount sat on MAX_NAV_DISCOUNT through every ordinary downturn and BRKW
-     * quoted at a flat half of net asset value. The cycle is priced once, by the term that says so.
+     * Confidence enters as the RESIDUAL, not the level: the cycle is priced once, by the term that says so.
      */
     public function getStructuralValuationDiscount(MacroStateDTO $macroState): float
     {

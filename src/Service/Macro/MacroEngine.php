@@ -190,8 +190,7 @@ class MacroEngine
      *
      * Capitalisation, not an index level. A level is a tradable instrument's scale: the district's funds
      * split themselves whenever their price runs away, and the index divisor is restated to match, so a
-     * level re-bases on a share-count cosmetic. Household wealth does not. Reading the level once cost this
-     * engine a 73% phantom crash and years of demand drag behind it.
+     * level re-bases on a share-count cosmetic. Household wealth does not.
      *
      * A null level leaves the last observation standing, and a caller that never reports a market (the headless
      * harness, the unit tests) leaves the capitalisation at zero, which the wealth channel reads as "no market" and
@@ -201,7 +200,7 @@ class MacroEngine
      * level, which stands when not reported) and the float-weighted price return, dividend cash and net issuance of
      * that tick (flows, which are zero when not reported, so a missing observation never replays the last one).
      *
-     * The government is outside the economy too (App\Service\Politics\PoliticsEngine): what it hands over, the levers
+     * The government is outside the economy too (PoliticsStateDTO::policy()): what it hands over, the levers
      * in force and the election calendar's pull on policy uncertainty, comes in through $policy as of the previous
      * tick, and null leaves both where they stand, so a caller with no politics runs on the opening levers and no
      * calendar.

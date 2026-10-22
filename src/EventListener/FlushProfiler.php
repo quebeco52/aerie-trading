@@ -25,9 +25,8 @@ use Doctrine\Persistence\ObjectManager;
  * WHAT IS COUNTED IS STATEMENTS, NOT INTENTIONS. An entity whose every changed column is mapped
  * `updatable: false` — as the six per-tick columns of a Stock are, see StockTickColumns — is scheduled for
  * update like any other and then written by nobody: the persister prepares its data, finds it empty and
- * returns before it reaches the database. Counting the schedule would report sixty-seven stocks written on a
- * tick that wrote no stock at all, and a diagnostic that reads like the bug it is meant to rule out is worse
- * than none. So the same question the persister asks is asked here first.
+ * returns before it reaches the database. Counting the schedule would report stocks written on a
+ * tick that wrote none. So the same question the persister asks is asked here first.
  */
 #[AsDoctrineListener(event: Events::onFlush)]
 final class FlushProfiler

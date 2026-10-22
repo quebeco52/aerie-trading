@@ -102,13 +102,13 @@ class SovereignFundSubsystem
 
     // --- The Opening Mix ---
     /**
-     * Policy equity share the fund opens at, measured on the fund harness (var/harness/FundHarnessTest.php, seeds 1-3):
+     * Policy equity share the fund opens at:
      * a 16.25% board weight (5.8% of the $14.5T opening float in a $5.2T fund) plus GIC's 65% on the rest.
      */
     public const OPENING_POLICY_EQUITY_SHARE = 0.7069;
     /**
-     * Share of the fund's equities held on the board at its opening, the home share the Diet founds it with: the same
-     * harness's 16.25% board weight over that equity share.
+     * Share of the fund's equities held on the board at its opening, the home share the Diet founds it with: the
+     * 16.25% board weight over that equity share.
      */
     public const OPENING_HOME_EQUITY_SHARE = 0.1625 / self::OPENING_POLICY_EQUITY_SHARE;
 
@@ -139,8 +139,7 @@ class SovereignFundSubsystem
 
     // --- Currency Bridge (World Bank) ---
     /**
-     * The seeded board's value at the opening: its first-quarter mean on the full-market harness, $20.3T (se 0.22T)
-     * over seeds 1-16 (var/harness/opening_cap).
+     * The seeded board's value at the opening: its first-quarter mean on the full market, $20.3T.
      */
     public const BOARD_OPENING_CAP_USD = 20.3e12;
     /**

@@ -125,9 +125,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin bonus applied during viral luxury collection sell-outs. */
     public const BRAND_BOOM_MARGIN_BONUS   = -0.04;
 
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
-
     // --- Brand Equity Moat ---
     /** Operating margin mean reversion speed: slower speed reflects sticky multi-decade brand equity. */
     public const LUXURY_REVERSION_SPEED    = 2.0;

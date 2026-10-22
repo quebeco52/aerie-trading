@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Service\Math;
 
 /**
- * Shapes that map a driver to a response: the logistic on the unit interval, the excess over a baseline, and the
- * kinked asymmetric response. Pure functions of their arguments.
+ * Shapes that map a driver to a response: the logistic on the unit interval, the kinked asymmetric response, simplex
+ * weight normalisation and the convex penalty. Pure functions of their arguments.
  */
 final class ResponseCurves
 {

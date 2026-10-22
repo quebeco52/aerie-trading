@@ -43,7 +43,6 @@ class SystemicEventReporter
     // --- Stances in Prose ---
     /** How each stance on money reads of one person. */
     private const STANCE_PHRASES = ['hawk' => 'a hawk', 'swing' => 'a swing vote', 'dove' => 'a dove'];
-    /** How each stance reads counted, one and many. */
     /** A head of the Sovereign Reserve Fund's stance on the reserves, as a headline puts it. */
     private const FUND_PHRASES = ['cautious' => 'a cautious investor', 'balanced' => 'a balanced investor', 'bold' => 'a bold investor'];
     /** A head of the Exchequer's stance on the debt, as a headline puts it. */
@@ -54,6 +53,7 @@ class SystemicEventReporter
     private const MARKETS_PHRASES = ['light' => 'a light-touch overseer of the markets', 'balanced' => 'a moderate', 'strict' => 'a strict overseer of the markets'];
     /** A head of the Financial Regulator's stance on the banks, as a headline puts it. */
     private const REGULATION_PHRASES = ['light' => 'a light-touch regulator', 'middle' => 'a moderate', 'strict' => 'a strict regulator'];
+    /** How each stance reads counted, one and many. */
     private const STANCE_PLURALS = ['hawk' => ['hawk', 'hawks'], 'swing' => ['swing vote', 'swing votes'], 'dove' => ['dove', 'doves']];
 
     public function __construct(
@@ -141,7 +141,7 @@ class SystemicEventReporter
     }
 
     /**
-     * What a budget round enacted, for the budget headline, and whether the Council's debt brake held part of it back.
+     * What a budget round enacted, for the budget headline.
      *
      * @return array<string, string>
      */

@@ -286,8 +286,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         $perTonneCostRatio = $this->underExtractionRules($streams, $macroState, $realizedVariableMargin + $inputCostDrag, $priceRelative, $fixedCosts, $actualRevenue);
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perTonneCostRatio, $priceRelative));
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $disasterPenalty * $volumeRevenue;
 
         return new SectorPhysicsResult(
@@ -314,10 +312,6 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more
-     * per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs).
-     */
-    /**
      * A miner pays a share of each year's underlying earnings rather than holding a dividend its prices cannot: BHP and
      * Rio Tinto dropped their progressive dividends in February 2016 for minimum payout ratios (BHP's interim fell from
      * 62c to 16c).
@@ -327,6 +321,10 @@ class MiningBusinessModel extends StandardCorporateBusinessModel
         return false;
     }
 
+    /**
+     * Stricter rules on extraction cost the whole operation productivity, so the committed base costs that much more
+     * per unit of capacity too (Greenstone, List & Syverson 2012 measure the loss on all inputs).
+     */
     public function getFixedCostFactor(MacroStateDTO $macroState): float
     {
         return FirmEconomics::calculateExtractionCostFactor($macroState->extractionStringency);

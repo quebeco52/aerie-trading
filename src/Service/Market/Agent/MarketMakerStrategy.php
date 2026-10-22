@@ -13,9 +13,7 @@ use App\DTO\AgentMarketViewDTO;
  * to them now and carries the short until it can pass it on, so only part of their demand reaches the
  * price in the tick it arrives and the rest reaches it as the maker unwinds. Over the life of the
  * inventory the maker is flat again and the whole of the flow has been paid for — a maker smooths price
- * pressure across time, it does not make it disappear. A maker that permanently offset a share of the
- * others' positions, as the first version of this did, was a discount on the impact function rather than
- * an intermediary.
+ * pressure across time, it does not make it disappear.
  *
  * Two things limit it. Ho & Stoll (1981): the cost of immediacy is proportional to the variance of what
  * is being carried, so above a reference volatility the absorbed share falls with 1/variance and a

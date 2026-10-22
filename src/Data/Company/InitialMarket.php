@@ -183,8 +183,7 @@ class InitialMarket
             'historical_fixed_rate' => 0.060,
             'credit_spread' => 0.0200,
             'depreciation_rate' => 0.02,
-            // 15% of the wholesale book, the prime-brokerage target cash backing. The old 75bn sat exactly
-            // on the model's minimum, leaving a 2.5x-covered dealer with no buffer against a funding squeeze.
+            // 15% of the wholesale book, the prime-brokerage target cash backing.
             'corporate_treasury' => 56_250_000_000.00,
             'total_equity' => 100_000_000_000.00,
             'customer_deposits' => 0.00,
@@ -244,9 +243,7 @@ class InitialMarket
             'historical_fixed_rate' => 0.035,
             'credit_spread' => 0.0200,
             'depreciation_rate' => 0.02,
-            // 10% of deposits, the commercial-bank target cash reserve. The old 8bn was a quarter of the
-            // model's MINIMUM, which opened the bank in permanent critical-cash distress: no dividend, no
-            // growth lending, from the first quarter.
+            // 10% of deposits, the commercial-bank target cash reserve.
             'corporate_treasury' => 122_500_000_000.00,
             'total_equity'      => 142_500_000_000.00,
             'customer_deposits' => 1_225_000_000_000.00,
@@ -294,13 +291,12 @@ class InitialMarket
             'industry' => 'Insurance - Reinsurance',
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.22, // a reinsurer: RenaissanceRe's 180-day realized vol is 23.2% (AlphaQuery, 2026-10-07)
+            'volatility' => 0.22, // a reinsurer, ~23% realized vol
             'beta_tilt' => -0.25, // losses follow catastrophes, not the business cycle
             'jump_intensity' => 0.15,
             'jump_vol' => 0.06,
             // What its earnings return at the opening: 1.5% on its premium, its fees, and above all its float, less its
-            // bond's coupon; its equity holdings' price gains go to book value, not earnings
-            // (var/harness/insurers/steady_float.php).
+            // bond's coupon; its equity holdings' price gains go to book value, not earnings.
             'baseline_roe' => 0.175,
             'capex_ratio' => 0.02,
             'target_payout_ratio' => 0.30,
@@ -333,21 +329,20 @@ class InitialMarket
             'industry' => 'Insurance - Diversified',
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.22, // a diversified insurer: AIG's 180-day realized vol is 21.6% (AlphaQuery, 2026-10-07)
+            'volatility' => 0.22, // a diversified insurer, ~22% realized vol
             'beta_tilt' => 0.00,
             'jump_intensity' => 0.50,
             'jump_vol' => 0.08,
             // What its earnings return at the opening: 4.5% on premium less its cover's cost, the spread its float
             // keeps after the life reserves are credited, and its equity holdings' dividends, their price gains going
-            // to book value (var/harness/insurers/steady_float.php).
+            // to book value.
             'baseline_roe' => 0.14,
             'capex_ratio' => 0.05,
             'target_payout_ratio' => 0.30,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'dividend_aristocrat' => true,
             'fixed_cost_ratio' => 0.35,
-            // 95.5% combined ratio: 0.09 was a 91% ratio held through every cycle, which is top-decile for a carrier
-            // writing both P&C and life; European composites' P&C books run about 93-95%.
+            // 95.5% combined ratio; European composites' P&C books run about 93-95%.
             'operating_margin' => 0.045,
             'public_float' => 0.90,
             'sam_ratio' => 0.25,
@@ -377,7 +372,7 @@ class InitialMarket
             'industry' => 'Financial Data & Stock Exchanges',
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.25, // a ratings house: Moody's 180-day realized vol is 25.6% (AlphaQuery, 2026-10-07)
+            'volatility' => 0.25, // a ratings house, ~26% realized vol
             'beta_tilt' => 0.00,
             'jump_intensity' => 0.40,
             'jump_vol' => 0.08,
@@ -735,7 +730,7 @@ class InitialMarket
             // Exchanges & Data for the same reason — the terminal is sold to the market it reports
             // on, and its revenue moves with that market, not with the technology cycle. The sector
             // is not cosmetic: it picks which demand factor the stream draws on and which cohort
-            // the P/E anchor shrinks toward, so the twins used to load on different economies.
+            // the P/E anchor shrinks toward.
             'sector' => 'Financials',
             'industry' => 'Financial Data & Stock Exchanges',
             'systemic_importance' => 'systemic',
@@ -1347,7 +1342,7 @@ class InitialMarket
             // and a closed-end trust is filed under Financials for the same reason a fund is. It stays
             // an INDUSTRIAL holding in every way that touches the physics: the business model is
             // investment_company, not a financial one, so it keeps its subsidiaries' plant and its
-            // NAV-anchored valuation. Two things do move with the label — its streams now load on the
+            // NAV-anchored valuation. Two things do move with the label — its streams load on the
             // financial demand factor at the 0.25 sector loading its model declares, and its P/E shrinks
             // toward the Financials anchor of 14 rather than the Industrials 20, which pulls with the
             // holding-company discount this trust's lore claims rather than against it.
@@ -1359,17 +1354,16 @@ class InitialMarket
             'beta_tilt' => 0.06, // follows the District economy through its holdings
             'jump_intensity' => 0.30,
             'jump_vol' => 0.08,
-            // The INCOME return alone: appreciation arrives as OCI through AnchorStakeLedger, so pricing
-            // it into the P&L too would count the portfolio's return twice, which 0.080 was doing before
-            // the stakes could be marked. = margin x (1 - tax) x the turnover the portfolio implies.
+            // The INCOME return alone: appreciation arrives as OCI through AnchorStakeLedger, so pricing it into the
+            // P&L too would count the portfolio's return twice. = margin x (1 - tax) x the turnover the portfolio
+            // implies.
             'baseline_roic' => 0.048,
             'capex_ratio' => 0.12,
             'target_payout_ratio' => 0.40,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'fixed_cost_ratio' => 0.03,
             // Blended across a revenue line that is ~77% consolidated subsidiaries at ~35% and ~23%
-            // dividends and interest at no cost of goods. 0.92 was the smaller half's margin applied to
-            // the whole line, leaving a cost base too thin to hold the group's own depreciation.
+            // dividends and interest at no cost of goods.
             'operating_margin' => 0.50,
             'public_float' => 0.75,
             'sam_ratio' => 1.62,

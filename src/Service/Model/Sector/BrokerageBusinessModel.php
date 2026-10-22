@@ -245,8 +245,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      * Operating revenue per unit of book, as struck, or struck now at the opening macro: the operating profit the
      * structural return requires once the interest the firm books (calculateInterestIncome(), the same function the
      * books are kept with) has paid its funding, grossed up by the margin, between the operating-profit floor and the
-     * gross-yield ceiling. Netted against margin interest on its debt alone at the policy rate, the target missed
-     * the margin interest on the equity-funded book, the funding spread and the sweep, and ROOK earned 31% against 20%.
+     * gross-yield ceiling.
      */
     protected function resolveOperatingYield(Stock $stock, MathUtility $mathUtility): float
     {
@@ -285,8 +284,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         // Client margin loans are funded one-for-one out of the firm's own wholesale book, so the asset yield
         // must be built on the same realized rate DebtEngine charges on the liability side
         // (DebtMetricsDTO::$wholesaleRate), dynamic credit-spread widening included. Pricing the asset leg off
-        // the bare policy rate while the liability leg paid the live distressed rate left the brokerage booking
-        // a matched-book carry that evaporated -- and then inverted -- exactly when spreads blew out.
+        // the bare policy rate while the liability leg paid the live distressed rate would book a
+        // matched-book carry that vanishes exactly when spreads blow out.
         $fundingBenchmark = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
 
         // 1. Margin Loan Yield

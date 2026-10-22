@@ -58,7 +58,7 @@ final class Distributions
         return self::standardNormalCdf($z);
     }
 
-    /** Standard normal CDF (Abramowitz & Stegun 26.2.17), static so model code reads it without the sampler. */
+    /** Standard normal CDF (Abramowitz & Stegun 26.2.17). */
     public static function standardNormalCdf(float $z): float
     {
         $b1 = 0.319381530;
@@ -148,7 +148,7 @@ final class Distributions
     }
 
     /**
-     * Standard normal quantile (Acklam's rational approximation), static so model code reads it without the sampler.
+     * Standard normal quantile (Acklam's rational approximation).
      */
     public static function standardNormalQuantile(float $p): float
     {

@@ -138,9 +138,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
      */
     public const MORTGAGE_RATE_ORIGINATION_SENSITIVITY = 4.0;
 
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
-
     /**
      * The book is the two portfolios the revenue streams earn on: mortgages, secured on homes, and direct loans to
      * middle-market firms, charged off at the bank segment rates.

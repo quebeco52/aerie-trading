@@ -81,7 +81,7 @@ final class MacroConstants
     /** Long-run equilibrium baseline volatility during neutral economic conditions. */
     public const MACRO_VOL_BASE_ANCHOR            = 0.15;
 
-    // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
+    // --- Taylor Rule and the Policy Floor ---
     /**
      * Policy rate that counts as at the floor, the top of the 0-0.25% target range the FOMC held from 2008 to 2015 and
      * in 2020-22.
@@ -170,7 +170,7 @@ final class MacroConstants
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
     /**
      * The mainland Fed's neutral policy rate: its smoothed rule, fitted 1987-2008, rests at 3.43% with core inflation
-     * at 2% and the gap closed (var/harness/mainland_fit.py), the district's r* plus target.
+     * at 2% and the gap closed, the district's r* plus target.
      */
     public const MAINLAND_NEUTRAL_RATE = self::BASE_NATURAL_RATE + self::TARGET_INFLATION;
 
@@ -208,7 +208,7 @@ final class MacroConstants
     /**
      * Reversion speed of log real civilian purchases / potential (half-life 2.3y): US federal non-defence plus state
      * and local, 1985-2019 AR(1) on a trend, corrected for NIPA quarterly averaging (Working 1960); the District fields
-     * no army, so its purchases are civilian (var/harness/gov_fit.py).
+     * no army, so its purchases are civilian.
      */
     public const GOVT_SPENDING_MEAN_REVERSION = 0.298;
     /**

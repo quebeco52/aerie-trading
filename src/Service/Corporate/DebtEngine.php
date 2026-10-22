@@ -565,8 +565,7 @@ class DebtEngine
 
     /**
      * Revenue and operating margin over the last twelve months: the basis a lender measures coverage and
-     * leverage on, where a firm's seasons and one quarter's charges wash out. Annualizing a single quarter
-     * instead let creditworthiness flip with the calendar.
+     * leverage on, where a firm's seasons and one quarter's charges wash out.
      *
      * @return array{revenue: float, margin: float}|null Null until a window is recorded, or with no revenue in it.
      */
@@ -626,8 +625,7 @@ class DebtEngine
         );
 
         // The claims are the debt the asset value was struck against. A deposit-taker's value is struck on its
-        // wholesale funding, net of the deposits its assets back; testing it against the deposits as well found
-        // every bank insolvent, whatever its capital.
+        // wholesale funding, net of the deposits its assets back.
         return new \App\DTO\GoingConcernDTO(
             trailingEbit: $health->rawMetrics->ebit,
             trailingEbitda: $health->rawMetrics->ebitda,
@@ -892,9 +890,7 @@ class DebtEngine
      * prompt corrective action measure, tangible equity over total assets (12 USC 1831o). Goodwill leaves
      * both sides, as every regulator deducts it, so a write-off moves neither. The assets are the balance
      * sheet the firm carries once its ledger is open, not the funding proxy. Client money held in custody
-     * leaves them too: it is bankruptcy-remote and matched by a liability to the client, and leaving it in
-     * measured a clearinghouse against a margin pool that grows with volatility, so the score fell hardest
-     * in exactly the conditions it was meant to survive.
+     * leaves them too: it is bankruptcy-remote and matched by a liability to the client.
      *
      * @return array{capital: float, assets: float}
      */
@@ -1019,10 +1015,8 @@ class DebtEngine
      * Rolls the quarter's maturing principal down the maturity ladder.
      *
      * The rollover rate a business model declares already implies an average tenor of 1 / (4 x rate) years,
-     * so the same fraction of the debt stock comes due each quarter. Until now that only ever repriced the
-     * coupon: principal was immortal and no firm could ever be refused a refinancing. That removed the most
-     * common way real companies actually fail — not a slow slide into insolvency, but a maturity landing in
-     * a quarter when nobody will lend (commercial paper in 2008, high yield in March 2020).
+     * so the same fraction of the debt stock comes due each quarter. A maturity can land in a quarter when nobody
+     * will lend (commercial paper in 2008, high yield in March 2020).
      *
      * Market access is deliberately looser than the test for taking on NEW leverage: an investment-grade
      * issuer refinances straight through a recession. It closes only when spreads have blown out to crisis
@@ -1032,8 +1026,7 @@ class DebtEngine
      *
      * Only cash above the operating floor can be handed to a bondholder. A firm does not pay its last dollar
      * of working capital against principal and then fail to make payroll; it defaults on the bond with cash
-     * still in the bank, and that cash is what funds the restructuring. Sweeping the treasury to zero instead
-     * both destroyed the going concern and removed the means to cure the default.
+     * still in the bank, and that cash is what funds the restructuring.
      *
      * @param float $availableCash Cash on hand before the repayment.
      * @param float $cashFloor     Operating cash that cannot be spent on principal.

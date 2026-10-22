@@ -20,8 +20,6 @@ class LaborMarketSubsystem
      * Asymptotic frictional lower bound on unemployment (3.2%): search friction keeps even a red-hot economy above ~3%.
      */
     public const MIN_FRICTIONAL_UNEMPLOYMENT = 0.032;
-
-    // --- Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve ---
     /** Structural Beveridge curve equilibrium constant (k = Natural Unemployment * Natural Vacancies). */
     public const BEVERIDGE_CURVE_CONSTANT = 0.0018;
     /** Sensitivity of wage growth to labor market tightness deviations from equilibrium. */
@@ -31,7 +29,7 @@ class LaborMarketSubsystem
     /**
      * Okun's beta on the level gap, set for a steadier labour market than the US: the engine's Ball-Leigh-Loungani
      * (2017) slope (HP 1600, both sides) then reads -0.37, Canada's and the Netherlands' 1996-2019, against the US
-     * -0.59 and the UK -0.26 (var/harness/okun_real.py).
+     * -0.59 and the UK -0.26.
      */
     public const OKUNS_COEFFICIENT = 0.7;
     /** Annual adjustment speed of employment expansion during economic recoveries (search & matching friction). */
@@ -64,7 +62,7 @@ class LaborMarketSubsystem
     // --- Wage Error Correction (Blanchard & Katz 1999) ---
     /**
      * Annual pull of wage growth against the real wage's gap to trend productivity: US nonfarm business 1960-1999,
-     * wages on the lagged labor share (se 0.10; var/harness/labor_real.py).
+     * wages on the lagged labor share (se 0.10).
      */
     public const WAGE_ERROR_CORRECTION_SPEED = 0.12;
 
@@ -103,7 +101,7 @@ class LaborMarketSubsystem
         $state->nairu += $scarring;
 
         // Ball (2009) partial hysteresis: scarring heals toward the natural rate throughout, not only once unemployment
-        // has fallen below the NAIRU. Gated on that, it froze at its peak through every recovery from above.
+        // has fallen below the NAIRU.
         $healing = max(0.0, $state->nairu - MacroConstants::NATURAL_UNEMPLOYMENT) * self::NAIRU_REABSORPTION_SPEED * $dt;
         $state->nairu -= $healing;
 
@@ -180,10 +178,8 @@ class LaborMarketSubsystem
      *
      * Wage demands are indexed to EXPECTED inflation rather than to the target, at the unit coefficient
      * Friedman (1968) and Phelps (1967) require: anything less prices permanent money illusion into the
-     * long run and tilts the long-run Phillips curve. Anchored against the fixed target instead, a cost
-     * shock could raise prices but never the wages paid out of them, so the second round never happened
-     * and no supply shock could outlive its own impulse -- the spiral had only its downstream half, wages
-     * pushing the supercore basket through SUPERCORE_WAGE_TRANSMISSION and unit labour cost into the PPI.
+     * long run and tilts the long-run Phillips curve, and lets a cost shock raise prices but never the wages paid
+     * out of them, so no supply shock could outlive its own impulse.
      *
      * The anchoring lives in the expectation itself, not here: calculateTipsBreakeven() is the US ten-year
      * breakeven, which moves 0.08 per point of core inflation, so a credible regime damps the pass-through at
@@ -192,10 +188,9 @@ class LaborMarketSubsystem
      *
      * Wages also error-correct on their LEVEL (Sargan 1964; Blanchard & Katz 1999): a real wage above its
      * potential-productivity path slows wage growth until the labor share returns. Growth equations alone leave the
-     * level a random walk, and downward rigidity ratchets it up, so every history carried its own permanent
-     * labour-cost wedge. The gap integrates wage growth less realized inflation and potential productivity
-     * growth, the same growth the target indexes, so a gap that stops moving is one where wages grow exactly
-     * with prices times productivity.
+     * level a random walk, and downward rigidity ratchets it up. The gap integrates wage growth less realized inflation
+     * and potential productivity growth, the same growth the target indexes, so a gap that stops moving is one where
+     * wages grow exactly with prices times productivity.
      *
      * Read one tick stale: expectations are formed at step 4 and the labour market runs at step 3. That is
      * the right direction for a bargain struck against expectations that already existed, and the smoothed

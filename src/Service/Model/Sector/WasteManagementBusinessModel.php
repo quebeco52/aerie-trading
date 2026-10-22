@@ -137,8 +137,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     public const COMMERCIAL_VARIANCE_SCALAR  = 0.25; // Cyclical, tied to business closures/starts
     public const RECYCLING_VARIANCE_SCALAR   = 0.60; // Highly volatile commodity exposure
 
-    // --- Margin Squeeze & Inflation Physics ---
-
     // --- Housing & Construction Waste Transmission ---
     /** Sensitivity of commercial roll-off construction and demolition (C&D) waste volume to housing starts. */
     public const HOUSING_STARTS_WASTE_SENSITIVITY = 0.30;
@@ -259,8 +257,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $disasterPenalty * max(0.0, $actualRevenue);
 
         return new SectorPhysicsResult(

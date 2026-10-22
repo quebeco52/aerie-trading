@@ -12,12 +12,6 @@ namespace App\Service\Corporate;
  * and then the CASH the firm has to spend widens again, because capital expenditure, dividends and
  * buybacks are funded by earnings plus the non-cash charges added back to them, and by outside money when
  * that is not enough.
- *
- * Treating those three as an appropriation of reported profit — draining each from net income and capping
- * it by whatever was left — truncated the capex of every firm that outspends its earnings, which is most
- * capital-intensive ones, and blanked the dividend and buyback bars entirely in any quarter that reported
- * a loss, leaving a negative retained figure that made the diagram fail to balance in exactly the quarters
- * a reader most wants to look at.
  */
 final readonly class EarningsFlowStatement
 {
@@ -48,8 +42,7 @@ final readonly class EarningsFlowStatement
     public static function fromReport(array $report): self
     {
         // Interest earned on cash joins revenue at the top, so the interest line below is the gross expense. The stored
-        // EBITDA, EBIT and pre-tax lines leave it out until pre-tax (pre-tax = EBIT - expense + income); netting it
-        // from the expense as well counted it twice and pushed the same sum into operating costs.
+        // EBITDA, EBIT and pre-tax lines leave it out until pre-tax (pre-tax = EBIT - expense + income).
         $sales = (float) ($report['revenue'] ?? 0);
         $interestIncome = max(0.0, (float) ($report['interest_income'] ?? 0));
         $totalRevenue = $sales + $interestIncome;

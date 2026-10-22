@@ -400,8 +400,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $perUnitCostRatio = $realizedVariableMargin + $inputCostDrag + $merchantFuelDrag + $disasterPenalty - $capitalChargeShift;
         $clampedMargin = $this->clampMargin(FirmEconomics::calculatePerUnitCostRatio($perUnitCostRatio, $priceRelative));
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $gridFailureCharge * $volumeRevenue;
 
         return new SectorPhysicsResult(
@@ -542,12 +540,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
-     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
-     *
-     * @return list<string>
-     */
-    /**
      * Advances the rate-case cycle: accumulate what the frozen tariff is not recovering, file when it is
      * material, and step the authorized tariff and its allowed return when the commission rules.
      *
@@ -573,8 +565,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             // The order lands and closes part of the gap. The disallowed remainder is a cost the utility is
             // still incurring, so it stays in the books and is in the next filing's ask — what regulatory lag
             // permanently costs a utility is the revenue it went without while the case ran, not the price
-            // level forever. Clearing the whole request on every order instead let the tariff catch its cost
-            // base completely, which is the one thing a lagging regulated tariff never does.
+            // level forever.
             $shortfall -= $shortfall * $macroState->utilityRateCaseGrantShare;
             // The order also resets the return, granting the same share of the move as of the request.
             $authorisedRoe += ($allowedRoe - $authorisedRoe) * $macroState->utilityRateCaseGrantShare;
@@ -608,6 +599,12 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         return max(0.0, min(FirmEconomics::MAX_TARIFF_SHORTFALL, (float) ($momentum[self::STATE_TARIFF_SHORTFALL] ?? 0.0)));
     }
 
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
     public function getOperatingMacroFields(): array
     {
         return [

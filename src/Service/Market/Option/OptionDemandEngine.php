@@ -19,8 +19,8 @@ use App\Service\Math\FinancialConstants;
  *
  * The model is Bollen & Whaley's (2004) net buying pressure: public order flow in listed options is
  * persistently one-sided, the desk absorbs it, and the resulting inventory is what moves implied volatility
- * and forces the hedge. Three facts shape where that position sits, each of them measured rather than
- * assumed:
+ * and forces the hedge. Three facts shape where that position sits, each of them an empirical
+ * regularity:
  *
  *   - It is a NET LONG. The public buys optionality and the desk sells it. That sign is the reason dealers
  *     are structurally short gamma and the reason selling options is a business at all.
@@ -159,19 +159,13 @@ final class OptionDemandEngine
      *
      * THE DEMAND PROFILE IS A DENSITY, and a listed ladder is a sampling of it. Reading demandWeight() as a
      * point weight and normalising across however many contracts happen to be listed makes the book depend
-     * on the SAMPLING rather than on the profile, in two ways that both bite:
-     *
-     *   - A uniform strike ladder is not uniform in delta. Wing strikes bunch up near zero delta while the
-     *     rungs around the money are spread far apart, so counting each rung once over-weights the wings by
-     *     however many of them the grid happened to put there.
-     *   - Any change to the ladder then moves the physics. Thinning the wings — which costs nothing to list
-     *     and nothing to trade — concentrated the same book nearer the money and lifted the desk's gamma by
-     *     a fifth, so the listing grid could not be tuned without retuning the hedge behind it.
+     * on the SAMPLING rather than on the profile: a uniform strike ladder is not uniform in delta (wing strikes
+     * bunch up near zero delta), so counting each rung once over-weights the wings, and any change to the ladder
+     * would move the desk's gamma.
      *
      * Weighting each rung by the delta interval it stands for is the ordinary discretisation of that
      * density: a rung covering two increments carries the interest of two. The book is then a property of
-     * the profile and the range listed, and the spacing inside that range is free. Measured: thinning the
-     * wings to every second strike moves total dealer gamma by 0.7% this way against 21% as point weights.
+     * the profile and the range listed, and the spacing inside that range is free.
      *
      * @param array<int, array{ticker: string, side: string, delta: float, weight: float}> $rungs
      * @return array<int, array{ticker: string, side: string, delta: float, weight: float}>

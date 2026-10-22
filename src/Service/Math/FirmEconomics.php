@@ -7,7 +7,8 @@ namespace App\Service\Math;
 /**
  * Industrial organisation and the cost side of a firm: Cournot and fringe price levels, concentration, segment
  * counts, per-unit and productivity-loss cost factors, the REIT lease ladder, the inventory cycle, capacity
- * utilisation, the refining crack spread, and growth contributions. Pure functions of their arguments.
+ * utilisation, the refining crack spread, power-price and hedge-ladder terms, working-capital days, and growth
+ * contributions. Pure functions of their arguments.
  */
 final class FirmEconomics
 {

@@ -174,10 +174,7 @@ final class AgentPopulation
      * exposure ONE agent of type h was carrying into the return that followed, as a fraction of a full
      * commitment. The population share n_h does not enter: in BH it only appears in market clearing, and
      * the switching is on what an agent of each type made, not on what the type made in aggregate.
-     * Scoring the aggregate book instead — which is what this did at first — handed every belief a
-     * score proportional to its own share: the minority's fitness was compressed toward zero whatever it
-     * believed, the majority gained share when both were right and lost it when both were wrong, and the
-     * floor on the population share became the only thing keeping a starved belief alive.
+     * Scoring the aggregate book instead would hand every belief a score proportional to its own share.
      *
      * Two things about the profit term matter:
      *
@@ -188,12 +185,8 @@ final class AgentPopulation
      *     chartist signal saturates at full commitment far more often than the fundamentalist one does, so
      *     without the penalty the chartists hold a structural fitness edge unrelated to being right.
      *
-     * Expressed per year rather than per tick. That matters more than it looks: a raw per-tick profit at a
-     * 14,400-tick year is on the order of 1e-5, and no intensity of choice that is not itself absurd can
-     * tell two such numbers apart. The population would sit at its initial split forever and the model's
-     * entire mechanism would be inert while appearing to run. Annualizing also makes the score independent
-     * of the configured tick rate, so the same intensity of choice means the same thing whatever the
-     * simulation is stepping at.
+     * Expressed per year rather than per tick: a raw per-tick profit is of order 1e-5, which no sane intensity of
+     * choice can tell apart, and annualizing makes the score independent of the tick rate.
      *
      * @param array<string, float> $fitness      Accumulated scores.
      * @param array<string, float> $exposures    Exposure one agent of each belief held into the return, in [-1, 1].
@@ -241,8 +234,7 @@ final class AgentPopulation
      * length of simulated time so the same window means the same thing at any tick rate. This is the
      * volatility the agents are allowed to see. It is built from the returns they have already observed,
      * so a jump raises it in the tick it prints and it decays over the window afterwards — which is how a
-     * vol-control book or a maker's risk desk actually experiences a shock, rather than by reading the
-     * process's own instantaneous variance the way an earlier version did.
+     * vol-control book or a maker's risk desk actually experiences a shock.
      *
      * @param float $variance  Last estimate.
      * @param float $logReturn The return just observed, measured before any split.

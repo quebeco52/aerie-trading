@@ -156,11 +156,8 @@ class ManagementSuccessionEngine
     /**
      * Whether a departure reads as a dismissal.
      *
-     * Two hazards compete for the same seat, so which one actually took it is settled the way competing
-     * risks always are: in proportion to the two intensities at the moment the exit fired. An earlier
-     * version asked instead whether the spread was negative, which is not the same question — a firm can
-     * be earning its cost of capital and still lose its manager to a board that wanted someone else, and
-     * the sign of a spread is a cliff where the hazard is a slope. At the cost of capital this puts roughly
+     * Two hazards compete for the same seat, so which one actually took it is settled the way competing risks always
+     * are: in proportion to the two intensities at the moment the exit fired. At the cost of capital this puts roughly
      * a third of departures in the forced column, which is where the turnover literature puts them.
      *
      * A manager in post long enough for the exit to read as a retirement leaves on their own terms.

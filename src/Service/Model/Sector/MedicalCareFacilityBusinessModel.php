@@ -26,7 +26,6 @@ use App\Service\Model\ModelParam;
  *   2. Elective Outpatient Procedures: High-margin ambulatory and elective surgeries. Pro-cyclical with
  *      consumer discretionary wealth and macro output gap.
  *   3. Insurance Arbitrage & Billing: Algorithmic DRG coding optimization and insurer arbitration fee extraction.
- *      Expands top-line revenue and margins during medical CPI / healthcare inflation acceleration.
  * - Wage Inflation vs. Pricing Power: Severe clinical labor shortages are dynamically mitigated by the firm's
  *   PricingPowerIndex (exclusive regional hospital network leverage over commercial payers).
  */
@@ -332,8 +331,6 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
         $this->registerPublicSpendingExposure($streams, $expectedRevenue * $inpatientWeight * self::INPATIENT_GOVERNMENT_SPENDING_SENSITIVITY * $spendingMultiplier, $clampedMargin, $actualRevenue);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $auditPenalty * max(0.0, $actualRevenue);
 
         return new SectorPhysicsResult(

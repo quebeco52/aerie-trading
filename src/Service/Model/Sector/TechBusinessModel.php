@@ -202,9 +202,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     /** Top-line revenue multiplier applied during breakthrough viral user growth. */
     public const VIRAL_GROWTH_REV_MULT     = 1.10;
 
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
-
     // --- Innovation Competition Moat & Capital Structure ---
     /** Operating margin mean reversion speed: fast speed reflects rapid technological disruption and competition. */
     public const TECH_REVERSION_SPEED      = 5.0;
@@ -288,8 +285,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         }
 
         // Blended dual-stream revenue (SaaS Subscription vs. Digital Advertising & Platform Usage) Subscription ARR has
-        // lower baseline volatility (0.6x scalar), whereas Ads take the full swing plus cyclicality Subscriptions are
-        // BOOKED as annual contracts and recognized ratably from deferred revenue, so an ARR shock reaches the income
+        // lower baseline volatility (0.6x scalar), whereas Ads take the full swing plus cyclicality. Subscriptions are
+        // booked as annual contracts and recognized ratably from deferred revenue, so an ARR shock reaches the income
         // statement over the contract term rather than in one quarter.
         $subscriptionBook = $streams->recognizeBacklog(
             'subscription',
@@ -332,8 +329,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $inputCostDrag + $adCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $regulatoryFine * $adWeight * $actualRevenue;
 
         return new SectorPhysicsResult(

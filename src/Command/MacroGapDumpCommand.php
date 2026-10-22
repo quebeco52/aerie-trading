@@ -18,10 +18,8 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 /**
  * Writes the recorded macro run out as newline-delimited JSON, one object per simulated quarter.
  *
- * The table this reads is the reason the headless harnesses can be retired for shape work. A harness
- * reproduces the engine's arithmetic but not its couplings — a run that passes no equity market cap
- * silently removes the wealth channel, and the numbers it produces look fine and describe a different
- * economy. macro_report is the economy that actually ran, at production dt, with every subsystem wired.
+ * macro_report is the economy that actually ran, at production dt, with every subsystem wired; a headless harness
+ * reproduces the arithmetic but not every coupling.
  *
  * NDJSON rather than one JSON array or a CSV: a quarter is a self-contained record, so the file streams,
  * `wc -l` counts quarters, and a nested decomposition needs no column explosion to survive the format.

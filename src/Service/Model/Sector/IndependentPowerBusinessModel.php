@@ -197,12 +197,6 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         return $this->resolveRevenueMix($stock)['wholesale'];
     }
 
-    /**
-     * Revenue mix, fleet and hedge ratio for this firm, ticker override first; the two streams are normalised to a
-     * whole.
-     *
-     * @return array{wholesale: float, capacity: float, gas_fleet: float, hedge_ratio: float}
-     */
     /** @return array<int, float> */
     public function getSeasonalityFactors(): array
     {
@@ -240,6 +234,12 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         return array_map(static fn(float $factor): float => $factor / $mean, $raw);
     }
 
+    /**
+     * Revenue mix, fleet and hedge ratio for this firm, ticker override first; the two streams are normalised to a
+     * whole.
+     *
+     * @return array{wholesale: float, capacity: float, gas_fleet: float, hedge_ratio: float}
+     */
     public function resolveRevenueMix(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
@@ -360,8 +360,6 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
                 'hedge_gain'          => $actualRevenue > 0.0 ? $hedgeGain / $actualRevenue : 0.0,
                 'availability'        => $availability,
             ],
-            // The repair is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-            // ratio.
             specialCharge: $repairCost * $baseRevenue,
         );
     }

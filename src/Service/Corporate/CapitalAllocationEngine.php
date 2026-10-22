@@ -130,9 +130,8 @@ class CapitalAllocationEngine
         $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
 
         // Coverage, cost of capital and the hurdle that gate distributions and borrowing are read off what the
-        // firm actually earned over the last twelve months, as its lenders measure it. The structural margin
-        // only moves through reinvestment decay, so on it a firm in a margin collapse kept paying a dividend on
-        // coverage it no longer had; one annualized quarter instead flipped the verdict with the seasons.
+        // firm actually earned over the last twelve months, as its lenders measure it; the structural margin
+        // moves only through reinvestment decay, and one annualized quarter flips with the seasons.
         $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
 
         $ebit = $ctx->health->rawMetrics->ebit ?? 0.0;
@@ -473,8 +472,7 @@ class CapitalAllocationEngine
             $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
 
             // Borrowed only for the part of the repurchase the firm can make that its excess cash cannot pay for. A
-            // treasury below its operating floor is refilled before any recapitalization: borrowing into it only
-            // plugged the hole, and the repurchase it was raised for never happened.
+            // treasury below its operating floor is refilled before any recapitalization.
             $recapitalization = $recapitalization > 0.0 && $ctx->newTreasury >= $minOperatingCash
                 ? $this->fundRecapitalization($ctx, min($recapitalization, $absoluteMaxSpend), $excessCash)
                 : 0.0;
@@ -505,9 +503,7 @@ class CapitalAllocationEngine
                 $ctx->newShares = $newSharesVal;
 
                 // The repurchase reaches the price as what it is — shares bought in the market — through the
-                // order-flow channel and the 10b-18 pacing in StockTracker, not as a shock struck here. The
-                // old "half the percentage retired" was invented, and it charged the price for a quarter's
-                // buying in one tick with no slippage while a player buying the same notional paid both.
+                // order-flow channel and the 10b-18 pacing in StockTracker, not as a shock struck here.
                 $stock->addCorporateFlowBacklog((float) $sharesRepurchased);
 
                 $ctx->events[] = [

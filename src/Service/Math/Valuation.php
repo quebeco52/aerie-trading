@@ -104,14 +104,13 @@ final class Valuation
      * weight x multiple = spread x payout / (spread^2 + tau^2), which tends to zero as the spread does, so a
      * firm whose cost of equity approaches its growth rate lands on its sector multiple instead of infinity.
      *
+     * The sector's multiple is quoted at the founding discount rate, so before it serves as the prior it is re-struck
+     * at today's: its earnings yield moves with the firm's real hurdle (sectorHurdleShift()). A fixed prior would
+     * dilute every firm's response to rates by its weight on it, most for the long-duration firms.
+     *
      * @param float      $costOfEquity   The required rate of return for equity investors (Hurdle Rate).
      * @param float      $roic           The Return on Invested Capital.
      * @param float      $growthRate     The expected perpetual growth rate.
-     * The sector's multiple is quoted at the founding discount rate, so before it serves as the prior it is re-struck
-     * at today's: its earnings yield moves with the firm's real hurdle (sectorHurdleShift()). A fixed prior diluted
-     * every firm's response to rates by its weight on it, and diluted most the long-duration firms, whose narrow spread
-     * gives the prior the most weight, so a staple repriced less on a rate move than a cyclical did.
-     *
      * @param float|null $sectorMultiple The sector's baseline trading multiple used as the cross-sectional
      *                                   prior. Null skips shrinkage and returns the raw Gordon multiple.
      * @param float      $sectorHurdleShift How far the firm's real hurdle has moved from the one the sector multiple
@@ -168,10 +167,8 @@ final class Valuation
      * Investment Valuation, ch. 12): the sector's secular excess over trend fades, and is priced at its perpetual
      * equivalent. The cycle is transitory and passes both ways.
      *
-     * Management and the market MUST read the same figure. The corporate engines used to strike their
-     * buyback, issuance and M&A multiples on a flat 2% while the pricing engine read the cycle, which made
-     * repurchases countercyclical by accident: in a boom the market's anchor rose above management's and
-     * buybacks stopped, in a bust management's sat above the market's and buybacks ran into the downturn.
+     * Management and the market MUST read the same figure, or buybacks, issuance and M&A are struck against a
+     * different multiple from the one the market prices.
      */
     public static function calculateExpectedNominalGrowth(
         float $secularGrowth,
@@ -430,9 +427,9 @@ final class Valuation
     }
 
     /**
-     * The fair-value P/E management strikes its own capital decisions on: the market's anchor, exactly.
-     * Takes the firm's inputs as primitives so every corporate engine can call it through the MathUtility it
-     * already holds; the growth transmission and the accruals discount are the two functions above.
+     * The fair-value P/E management strikes its own capital decisions on: the market's anchor, exactly. Takes the
+     * firm's inputs as primitives so every corporate engine can call it; the growth transmission and the accruals
+     * discount are the two functions above.
      */
     public static function calculateManagementFairValuePE(
         float $hurdleRate,

@@ -69,8 +69,8 @@ final class OptionChainService
      */
     public const OPTION_STRIKE_DENSE_BAND = 0.10;
     /**
-     * Increments between strikes outside the dense band, the ends of the ladder always listed. Three: measured across a
-     * $8-$1400 price range at 30% fewer rows for 1.2% of dealer gamma, against 19% fewer for 0.1% at two.
+     * Increments between strikes outside the dense band, the ends of the ladder always listed. Three: about 30% fewer
+     * rows for ~1% of dealer gamma.
      */
     public const OPTION_STRIKE_WING_INCREMENT_MULTIPLE = 3;
 
@@ -159,13 +159,12 @@ final class OptionChainService
      * DENSE AT THE MONEY, SPARSE IN THE WINGS, which is how a chain is actually listed: the strikes anyone
      * asks for sit near the money, and a uniform grid all the way to the edge of the ladder spends most of
      * its rows where nobody trades. Every row costs a quote on each sweep and an INSERT when its serial
-     * rolls, so the uniform version was paying full price for the thinnest part of the book.
+     * rolls.
      *
      * The thinning is safe for the physics only because the public's book is allocated as a DENSITY over
      * the ladder (OptionDemandEngine::evolve): a rung standing in for three increments carries the open
-     * interest of three, so the desk's gamma is what it was and only the row count moved. It is NOT safe
-     * against a point-weighted allocation, where dropping wing rungs concentrates the same book nearer the
-     * money and lifts dealer gamma by a fifth or more. Measured both ways before this was changed.
+     * interest of three, so the desk's gamma is unchanged and only the row count moves. A point-weighted
+     * allocation would concentrate the same book nearer the money and lift dealer gamma.
      *
      * The coarse grid is anchored to absolute multiples of the increment rather than to spot, so a name
      * drifting through its ladder does not shuffle which wing strikes exist underneath it.
@@ -250,10 +249,8 @@ final class OptionChainService
      *
      * WRITTEN AS DATA, and for the whole slice at once, because listing is bursty. The expiry grid is monthly
      * and shared, so when a serial rolls, every name in the market wants a fresh expiry on the same pass —
-     * a couple of hundred contracts for one slice. Persisting those through the unit of work sent one INSERT
-     * each and put the sweep thirty milliseconds over a twenty-millisecond tick every simulated month. One
-     * query to see what exists and one INSERT per hundred contracts costs the same whether the slice is
-     * quiet or a serial has just rolled.
+     * a couple of hundred contracts for one slice. One query to see what exists and one INSERT per hundred
+     * contracts costs the same whether the slice is quiet or a serial has just rolled.
      *
      * @param array<int, Stock> $stocks The slice being swept.
      * @return int Contracts newly listed.
@@ -331,26 +328,15 @@ final class OptionChainService
     /**
      * The symbols already taken on a set of names, whatever became of them.
      *
-     * Symbols only, and one query for the slice rather than one per name. Listing needs to know which
-     * contracts exist, not what they are worth, and hydrating a hundred entities to read one string off each
-     * of them meant every sweep loaded the whole chain twice — once here and once to mark it.
+     * Symbols only, and one query for the slice rather than one per name: listing needs to know which contracts
+     * exist, not what they are worth.
      *
      * EVERY status, not just the live ones. A symbol is unique across the whole table, so a settled contract
-     * still owns its name and re-listing it is not a duplicate chain but a failed INSERT that takes the whole
-     * tick down with it. It is tempting to argue that cannot happen — the expiry grid only ever looks
-     * forward, so a serial that has settled is behind us forever — but that argument rests on the clock never
-     * going backwards, and the clock does not live here. Simulation time is accumulated in REDIS while the
-     * chain is in the database, so anything that loses or rewinds the Redis state (a flush, a restore, a
-     * ticker restarted against a half-old stack) puts the grid back over serials whose contracts are still
-     * sitting in the table, settled. Asking whether the name is taken costs the same query and does not care.
+     * still owns its name and re-listing it would be a failed INSERT. The clock lives in Redis while the chain
+     * is in the database, so a lost or rewound Redis state can put the grid back over settled serials.
      *
-     * SCOPED TO THE SERIALS BEING LISTED, which is not the same compromise. Filtering on status would give up
-     * the guard above outright; filtering on the serials the caller is about to write cannot, because every
-     * candidate symbol carries one of them by construction, so a settled contract on a rewound serial is
-     * still in the answer. What it drops is the twelve years of retired months that share nothing with this
-     * pass — the table keeps every contract it ever listed, so an unscoped read was pulling tens of thousands
-     * of dead symbols through PDO and into a hash map, every sweep, to compare them against the few hundred
-     * the front months actually contain.
+     * SCOPED TO THE SERIALS BEING LISTED: every candidate symbol carries one of them, so the guard above holds,
+     * while the retired months that share nothing with this pass stay out of the read.
      *
      * @param array<int, int> $stockIds
      * @param array<int, int> $serials  The expiry serials this pass may write.

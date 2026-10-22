@@ -262,7 +262,7 @@ class EventPresenter
     private function presentShock(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
     {
         $isPositive = $changePct !== null ? $changePct >= 0 : true;
-        // Shocks were once published as a bare log line; read with their move, they say what the shares did.
+        // Read with their move, a shock says what the shares did.
         $headline = match (true) {
             $rawDesc !== '' && $rawDesc !== self::LEGACY_SHOCK_TEXT => $rawDesc,
             $changePct !== null => self::shockHeadline('Shares', $changePct),

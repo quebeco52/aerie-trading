@@ -18,8 +18,7 @@ use App\Service\Math\MacroConstants;
  * Encapsulates the core financial physics overrides for financial institutions
  * (Banks, Insurers, Clearing Houses, etc.).
  *
- * This implements the "God Object Refactor", offloading the `isFinancial` branching
- * into native Strategy implementations.
+ * Return state, structural target return and capacity overrides for lenders, insurers and other balance-sheet firms.
  */
 trait FinancialPhysicsTrait
 {
@@ -42,9 +41,8 @@ trait FinancialPhysicsTrait
 
     /**
      * The return a balance-sheet firm's revenue capacity is struck at: its structural ROE less the saturation
-     * of its market, never below what its equity would earn idle. Trailing results are not an input. A book does not
-     * yield less because last year lost money, and reading them here made every loss a lower revenue target
-     * and a larger loss — the same spiral structural asset turnover removed from operating companies.
+     * of its market, never below what its equity would earn idle. Trailing results are not an input: a book does not
+     * yield less because last year lost money.
      */
     protected function resolveStructuralTargetRoe(Stock $stock, MacroStateDTO $macroState): float
     {
@@ -97,9 +95,9 @@ trait FinancialPhysicsTrait
     }
 
     /**
-     * A financial's revenue is struck on its structural ROE, its franchise less the saturation of its market, never on
-     * this state, so the state is the return it is measured to earn: the quarter blended in at the shared weight. A
-     * pull toward the cost of equity plus moat here priced a fade its profits never make.
+     * The return state a financial is measured on: the quarter's underlying return blended into the trailing state at
+     * the shared weight, with no pull toward the cost of equity. Revenue is struck on the structural ROE, never on
+     * this state.
      */
     protected function resolveReturnState(Stock $stock, float $trailing, float $realised, float $costOfEquity, float $equity, ?MacroStateDTO $macroState): float
     {

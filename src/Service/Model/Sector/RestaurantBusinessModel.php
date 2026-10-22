@@ -24,9 +24,8 @@ use App\Service\Model\ModelParam;
  * - Tri-Stream Franchisor Architecture:
  *      1. Company-Operated Stores: High variable food/labor/energy costs, low margin, traffic volatility.
  *      2. Franchise Royalties & Ad Pool Fees: Pure royalty (% of franchisee gross sales) with near 100% margin.
- *      3. Franchise Real Estate Leases: Captive real estate rental income with CPI escalation clauses.
- * - Inflation Sensitivity: Food commodities and kitchen labor compress company-operated margins,
- *   while franchise real estate leases provide a reliable inflation hedge.
+ *      3. Franchise Real Estate Leases: Captive real estate rental income.
+ * - Inflation Sensitivity: Food commodities and kitchen labor compress company-operated margins.
  */
 class RestaurantBusinessModel extends StandardCorporateBusinessModel
 {
@@ -263,8 +262,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // The one-off charge is booked as a special item: in EBIT, out of the run rate, the Street figure and the cost
-        // ratio.
         $specialCharge = $scandalWriteOff * max(0.0, $actualRevenue);
 
         return new SectorPhysicsResult(

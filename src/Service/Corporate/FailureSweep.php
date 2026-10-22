@@ -93,14 +93,12 @@ class FailureSweep
     /**
      * Decides whether a company fails this pass, and if it does, which way.
      *
-     * A lender, an insurer or a REIT is closed on its capital ratio, as a regulator closes a bank whose equity
-     * has fallen through the statutory floor; that path is unchanged. An operating company is different: it
-     * files when it cannot pay what it owes, not when a credit score turns negative. Altman's Z'' predicts
-     * failure, it does not adjudicate it, and liquidating on it wound up firms that were current on every
-     * obligation — WEAV with $433B of equity, on a trailing EBIT that had counted a goodwill write-off. So the
-     * trigger is the cash-flow test of insolvency: a payment default still uncured once the grace period has
-     * lapsed, when the lenders accelerate. What follows is Chapter 11 for a business worth more alive than
-     * broken up, and Chapter 7 for one that no longer covers its cash operating costs.
+     * A lender, an insurer or a REIT is closed on its capital ratio, as a regulator closes a bank whose equity has
+     * fallen through the statutory floor. An operating company is different: it files when it cannot pay what it owes,
+     * not when a credit score turns negative (Altman's Z'' predicts failure, it does not adjudicate it). So the trigger
+     * is the cash-flow test of insolvency: a payment default still uncured once the grace period has lapsed, when the
+     * lenders accelerate. What follows is Chapter 11 for a business worth more alive than broken up, and Chapter 7 for
+     * one that no longer covers its cash operating costs.
      *
      * @return list<array<string, mixed>>|null Market events if the company failed this pass, otherwise null.
      */

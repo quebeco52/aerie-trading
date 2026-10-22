@@ -11,46 +11,23 @@ use App\Service\Math\FinancialConstants;
 /**
  * Decides who is in each index and in what weight, and keeps its level continuous when that changes.
  *
- * The index was a number: every listed company's capitalisation over a divisor. That is a market
- * capitalisation, not an index — it had no membership, so nothing could join it or be dropped from it, and
- * the passive money that is supposed to track it was allocated to names that were not in anything.
+ *   - MEMBERSHIP, drawn from the index's own eligible universe and ranked best-first on the index's own criterion
+ *     (size for a broad index, quiet for a low-volatility one, a sector for a sector fund), so one banding rule
+ *     serves every index.
+ *   - FLOAT ADJUSTMENT: what a passive fund can buy is the part of a company that trades.
+ *   - WEIGHTS and the adjusted-weight FACTOR that carries them. A non-cap-weighted index is run as a modified
+ *     capitalisation index: a factor per constituent is set at the review so the weights come out right that day,
+ *     then DRIFT with prices until the next one, as S&P's non-cap-weighted indices do.
+ *   - THE DIVISOR, restated whenever composition or weights change, so the level moves only on prices: the index
+ *     measures the market's return, not the arithmetic of its own composition.
  *
- * Four pieces of real index mechanics make the difference:
+ * Membership is BANDED: a sitting member is not evicted the first time a marginal name edges past it, because
+ * ranking noise at the boundary would churn the passive book. A whole-board composite has no seats to contest (its
+ * membership is everyone alive) but reconstitutes on the same calendar so its divisor absorbs deaths.
  *
- *   - MEMBERSHIP, drawn from the index's own eligible universe and ranked on the index's own criterion.
- *     Size for a broad index, quiet for a low-volatility one, a sector for a sector fund. Ranking is always
- *     stated best-first, so one banding rule serves every index whatever it is measuring.
- *
- *   - FLOAT ADJUSTMENT. What a passive fund can actually buy is the part of a company that trades; a firm
- *     that is nine tenths closely held is a smaller position than its market capitalisation says, and
- *     weighting it on the whole would have index funds trying to buy stock that is not for sale.
- *
- *   - WEIGHTS, and the adjusted-weight FACTOR that carries them. A non-cap-weighted index is not computed
- *     from its weights each tick; it is run as a modified capitalisation index, with a factor per
- *     constituent chosen at the review so that the weights come out right on that day and then DRIFT with
- *     prices until the next one. That is how every non-cap-weighted index S&P publishes is computed, and it
- *     is what stops a low-volatility fund silently rebalancing itself for free on every tick.
- *
- *   - THE DIVISOR, restated whenever composition or weights change. This is the whole reason a divisor
- *     exists: an index has to measure the market's return, not the arithmetic of its own composition. Add a
- *     company worth a tenth of the index without restating, and the index jumps ten percent on a day when
- *     nobody made any money. The restatement pins the level across the change and lets it move only on
- *     prices afterwards.
- *
- * Membership is BANDED. A sitting member is not evicted the first time a marginal name edges past it,
- * because ranking noise at the boundary would otherwise churn the entire passive book twice a year to no
- * purpose. Real indices band for exactly that reason.
- *
- * The same committee runs every index in MarketIndex. A whole-board composite has no seats to contest, so
- * its membership is simply everyone alive — but it still reconstitutes on the same calendar, because the
- * board changes when a name dies and its divisor has to absorb that like any other change in composition.
- *
- * What this class deliberately does NOT do is push the inclusion trade. It does not have to: the passive
- * book is held by IndexFundStrategy, which holds each name in proportion to how much indexed money is
- * pointed at it, and the agent population works every position toward its target on its own. So an addition
- * is bought and a deletion is sold by the same machinery that trades everything else, charged the same
- * impact and already inside the variance budget — which is what makes the downward-sloping demand curve of
- * Shleifer (1986) an EMERGENT property here rather than a scripted one.
+ * The committee does not push the inclusion trade: the passive book is held by IndexFundStrategy, so an addition is
+ * bought and a deletion sold by the same machinery that trades everything else, which makes the downward-sloping
+ * demand curve of Shleifer (1986) emergent.
  */
 final class IndexCommittee
 {
@@ -122,20 +99,11 @@ final class IndexCommittee
     /**
      * The volatility an index selects and weights on: what the name has REALIZED over the trailing window.
      *
-     * A volatility screen is a trailing measurement, and that is not a detail of how it is computed — it is
-     * what the screen means. S&P's low-volatility index ranks on a year of daily returns, and a year is
-     * what `realizedVarianceEma` carries. What it used to read instead was `currentVolatility`, which is
-     * the instantaneous state of the variance process: the number the diffusion is about to draw from,
-     * which a single jump moves outright and which the QE step re-draws every tick. Ranking on it meant the
-     * index reconstituted itself on volatility spikes rather than on volatility, and since the fund trades
-     * every reconstitution, each spike was another round trip — a name was sold for having jumped and
-     * bought back a quarter later for having settled down.
+     * A volatility screen is a trailing measurement: S&P's low-volatility index ranks on a year of daily
+     * returns, and a year is what `realizedVarianceEma` carries, not the instantaneous variance state.
      *
      * The state is the fallback, and the structural figure the fallback's fallback, for the market's first
-     * year before there is a window to measure. Floored, because an inverse-volatility weight divides by
-     * this: a name that has gone briefly quiet enough to divide by almost nothing would otherwise take
-     * almost the whole fund, which is the standard failure of risk-weighted portfolios built on an
-     * unfloored estimate.
+     * year before there is a window to measure. Floored, because an inverse-volatility weight divides by this.
      */
     public static function trailingVolatility(Stock $stock): float
     {
@@ -148,13 +116,9 @@ final class IndexCommittee
     /**
      * Whether a company is profitable enough to be ADMITTED to an index that screens on it.
      *
-     * Both halves of the S&P 500's viability test, and both exact here rather than approximated: the
-     * quarterly history holds the last four reported quarters, so their sum is the trailing twelve-month
-     * figure and the last of them is the most recent quarter. Requiring both to be positive is what stops a
-     * large company that has never earned anything buying its way into the market's scoreboard on size.
-     *
-     * A company with no reported history yet cannot pass, because there is nothing to pass with. That is
-     * the same answer real indices give a company that has not reported: wait.
+     * Both halves of the S&P 500's viability test: the quarterly history holds the last four reported quarters,
+     * so their sum is the trailing twelve-month figure and the last is the most recent quarter. A company with
+     * no reported history yet cannot pass.
      */
     public static function isEarningsViable(Stock $stock): bool
     {
@@ -219,7 +183,7 @@ final class IndexCommittee
      * Each constituent's float-adjusted capitalisation carries the factor fixed at the last review, so a
      * cap-weighted index sums exactly what it always did — every factor there is one — and a weighted index
      * sums the portfolio the committee actually decided on. A constituent with no factor on record is
-     * carried at one, which is the cap-weighted index every roster written before weights existed was.
+     * carried at one.
      *
      * @param array<string, float> $capByTicker Float-adjusted capitalisation per ticker.
      */
@@ -233,8 +197,7 @@ final class IndexCommittee
      *
      * A fund holding the index receives this; the index itself does not show it, because a price index
      * measures prices. Divided by the same divisor the level is struck on, it is the index dividend in index
-     * points — which is exactly how a total-return index is built from a price one, and it is the figure
-     * that makes the difference between a fund that pays its holders and one that quietly keeps the money.
+     * points, which is how a total-return index is built from a price one.
      *
      * @param array<string, float> $pointsByTicker Dividend rate x float-adjusted shares, per ticker.
      */
@@ -247,11 +210,8 @@ final class IndexCommittee
      * What one index unit of this basket costs to get into and out of: the members' half-spreads, weighted
      * the way the fund actually holds them.
      *
-     * This is what sets how far the fund tracking it may drift before an authorized participant bothers to
-     * close the gap. It is read off the live book rather than assumed, which is why a fund whose
-     * constituents have seized up is allowed to trade at a discount and a fund of liquid mega-caps is not —
-     * the difference between an equity fund and a credit fund in a stressed week, with neither written down
-     * anywhere.
+     * This sets how far the fund tracking it may drift before an authorized participant closes the gap. It is
+     * read off the live book, so a fund whose constituents have seized up may trade at a discount.
      *
      * @param array<string, float> $capByTicker        Float-adjusted capitalisation per ticker, the weights.
      * @param array<string, float> $halfSpreadByTicker Half-spread per ticker, as a fraction.
@@ -332,25 +292,20 @@ final class IndexCommittee
     /**
      * How much passive money each name carries, relative to how much of the market that name is.
      *
-     * Passive assets are not one pool behind one benchmark. They sit in the vehicles that exist, and those
-     * vehicles disagree: a quiet staple inside the headline index is held by four funds at once, and a
-     * volatile mid-cap outside it by one. The multiple returned here is the ratio of the two —
+     * Passive assets are not one pool behind one benchmark: they sit in the vehicles that exist, and those
+     * disagree on what to hold. The multiple returned here is the ratio of the two —
      *
      *     sum over indices of (that index's share of indexed money x the name's weight in it)
      *     -------------------------------------------------------------------------------------
      *                          the name's weight in the market itself
      *
      * — so it reads 1.0 for a name held exactly in line with its size, above 1.0 for one several funds
-     * overweight, and 0.0 for one no published index holds. Because the index shares sum to one and each
-     * index's weights sum to one, the capitalisation-weighted average of the multiple is exactly one: the
-     * indexed book as a whole holds the market as a whole, however it is split between vehicles. That is
-     * what makes this a REALLOCATION of passive money across names rather than a way to quietly inflate it.
+     * overweight, and 0.0 for one no published index holds. The index shares and each index's weights sum to
+     * one, so the capitalisation-weighted average of the multiple is exactly one: a REALLOCATION of passive money
+     * across names, not an inflation of it.
      *
-     * Struck from the frozen rosters rather than from live prices, because that is what a passive fund's
-     * target actually is: a weight fixed at the last rebalance, not one recomputed every tick.
-     *
-     * An empty return means the market's own roster has not been taken yet, and the caller should treat
-     * every name as held — which is what the market was before there was a membership at all.
+     * Struck from the frozen rosters, a weight fixed at the last rebalance. An empty return means the market's own
+     * roster has not been taken yet, and the caller should treat every name as held.
      *
      * @return array<string, float>
      */
@@ -404,10 +359,7 @@ final class IndexCommittee
      *
      * @param array<int, Stock> $stocks         The listed universe.
      * @param float|null        $lastKnownLevel The level the index's fund last printed, when one is on
-     *                                          record. Read only when the committee's own state is missing
-     *                                          — a Redis that has been emptied under a market that has
-     *                                          not — so that the level survives that rather than reopening
-     *                                          at the base.
+     *                                          record. Read only when the committee's own state is missing.
      * @return array{tickers: list<string>, added: list<string>, deleted: list<string>, weights: array<string, float>, factors: array<string, float>, divisor: float, level: float, turnover: float, trading_cost: float}
      */
     public function reconstitute(MarketIndex $index, array $stocks, int $tick, ?float $lastKnownLevel = null): array
@@ -421,11 +373,9 @@ final class IndexCommittee
         // to a fund that can only buy the float, and how much it has been moving.
         $sector = $index->sector();
 
-        // Two maps, because the level before a review and the membership after it are asked of different
-        // populations. ELIGIBLE is what the index may hold — its sector, or the whole board — and the new
-        // membership is selected and weighted out of it. The wider map also carries a standing member that
-        // has left the universe since the last review, because the level being preserved across the review
-        // was struck on it and dropping it from the arithmetic would move the level by its weight.
+        // Two maps: ELIGIBLE is what the index may hold (its sector, or the whole board) and the new membership is
+        // selected out of it; the wider map also carries a standing member that has left the universe, since the
+        // level being preserved was struck on it.
         $eligible = [];
         $admissible = [];
         $capByTicker = [];
@@ -458,9 +408,8 @@ final class IndexCommittee
             if ($isEligible) {
                 $eligible[$ticker] = $cap;
 
-                // Screened on ADMISSION only, so it is collected separately from the ranking rather than
-                // filtered out of it. An incumbent that has fallen into losses still appears in the ranking
-                // and still holds its seat until the bands take it; it simply could not get back in.
+                // Screened on ADMISSION only: an incumbent that has fallen into losses still holds its seat
+                // until the bands take it; it simply could not get back in.
                 if (!$screensEarnings || self::isEarningsViable($stock)) {
                     $admissible[$ticker] = true;
                 }
@@ -523,11 +472,8 @@ final class IndexCommittee
     /**
      * The index level immediately before a reconstitution.
      *
-     * Struck from the previous membership, its factors and its divisor when all are on record, which is
-     * exact. When they are not — the committee's state lives in Redis and can be emptied under a market
-     * whose database has not been — the fund's last printed level is the next best statement of where the
-     * index stands, one tick stale. Only a market with neither has no level to preserve, and it opens at
-     * the base.
+     * Struck from the previous membership, its factors and its divisor when all are on record. Otherwise the
+     * fund's last printed level stands in, one tick stale; a market with neither opens at the base.
      *
      * @param list<string>         $previousMembers
      * @param array<string, float> $previousFactors
@@ -555,34 +501,18 @@ final class IndexCommittee
     /**
      * What the review costs the fund that has to follow it.
      *
-     * An index changes its weights by arithmetic and pays nothing. A fund holding the index has to TRADE to
-     * get from the portfolio it is carrying into the review to the one the committee just decided, and the
-     * two are not the same portfolio: weights drift with prices between reviews, so even a membership that
-     * did not change has to be traded back to its targets. That trade crosses the spread in every name it
-     * touches, and the spread is the one execution cost that is knowable here — see the note on impact
-     * below.
+     * An index changes its weights by arithmetic and pays nothing. A fund holding the index has to TRADE from
+     * the drifted portfolio it carries into the review to the one the committee just decided, crossing the
+     * spread in every name it touches. A rebalance sells what has drifted up and buys what has drifted down, so
+     * at mid it would be free money on mean-reverting prices. A cap-weighted index maintains its own weights and
+     * only trades the names that joined or left.
      *
-     * Without this the quarterly restrike was free money and the index arithmetic said so: a rebalance sells
-     * whatever has drifted up and buys whatever has drifted down, which on mean-reverting prices is a
-     * profitable trade in its own right, repeated four times a year, at mid, in unlimited size. It is the
-     * reason a low-volatility fund could beat a cap-weighted benchmark by a steady margin that had nothing
-     * to do with holding quiet companies. A CAP-WEIGHTED index pays almost nothing here and that is not an
-     * exemption granted to it: its weights maintain themselves as prices move, so there is nothing to trade
-     * except the names that actually joined or left.
+     * TURNOVER is stated one-way (half the sum of the weight changes, the factsheet convention). The COST is not
+     * halved: both sides are real and each crossing pays its own half-spread at its own name's liquidity.
      *
-     * TURNOVER is stated one-way, which is the convention a factsheet reports and half the sum of the weight
-     * changes. The COST is not halved, because both sides are real: the fund sells one name and buys another,
-     * and each crossing pays its own half-spread at its own name's liquidity.
-     *
-     * What is charged here is the spread and nothing else. A real rebalance also pays market impact, and
-     * this deliberately does not estimate it: impact is a function of how much of a name's daily volume the
-     * order is, and the fund's assets are not modelled in shares anywhere in this system, so any impact
-     * figure would be a number invented to look like one. The charge is therefore a FLOOR on what following
-     * the index costs, not the whole of it.
-     *
-     * The first review of a fresh market is free, because a fund is created in kind: the authorised
-     * participant delivers the basket and receives shares, and no spread is crossed doing it.
-     *
+     * Only the spread is charged, not market impact (the fund's assets are not modelled in shares), so the charge
+     * is a FLOOR on what following the index costs. The first review of a fresh market is free: a fund is created
+     * in kind.
      * @param list<string>          $previousMembers The roster the fund is holding as the review opens.
      * @param array<string, float>  $previousFactors The factors those holdings were struck with.
      * @param array<string, float>  $capByTicker     Float-adjusted capitalisation, now.
@@ -682,26 +612,17 @@ final class IndexCommittee
      * With no seat count the index takes its whole eligible universe — the composite's whole board, the
      * sector fund's whole sector. Nothing else applies; there is no boundary to band.
      *
-     * With one, banding is TWO thresholds, not one, and that is the whole of it. A sitting member keeps its
-     * place until it falls past the outer band, so ranking noise at the boundary cannot churn the passive
-     * book. A name that is not in gets in only once it has risen inside the INNER band — clearly into the
-     * body of the index rather than merely level with its weakest member — and when it does, it displaces
-     * that weakest member.
+     * With one, banding is TWO thresholds. A sitting member keeps its place until it falls past the outer band,
+     * so ranking noise at the boundary cannot churn the passive book. A name that is not in gets in only once it
+     * has risen inside the INNER band, and when it does it displaces the weakest member. One threshold is not
+     * enough: with only the outer band, incumbents fill every slot; with only the inner, the boundary flaps.
      *
-     * One threshold is not enough in either direction. With only the outer band, incumbents fill every slot
-     * and a company that has plainly overtaken half the index can never join it. With only the inner one,
-     * the boundary flaps every quarter, which is the cost banding exists to avoid.
+     * A bankrupt shell is not ranked at all (no float-adjusted capitalisation), so it leaves at the first
+     * reconstitution after it dies. So does a name that has left the index's universe.
      *
-     * A bankrupt shell is not ranked at all — it has no float-adjusted capitalisation — so it leaves at the
-     * first reconstitution after it dies, whatever the bands say. So does a name that has left the index's
-     * universe, which for a sector fund is how a reclassified company is dropped.
-     *
-     * ADMISSIBILITY is a third thing again, and it applies in one direction only. An index may require more
-     * of a name than a good rank to let it IN — the headline index requires it to be profitable — and
-     * nothing of it to let it stay. So the screen gates the two places a name can enter and is never
-     * consulted about an incumbent: a member that stops earning keeps its seat until the bands take it,
-     * because an index that ejected every company having a bad year would be a momentum strategy wearing a
-     * benchmark's name.
+     * ADMISSIBILITY applies in one direction only: the screen (the headline index requires profitability) gates
+     * the two places a name can enter and is never consulted about an incumbent, which keeps its seat until the
+     * bands take it.
      *
      * @param list<string>        $ranked
      * @param list<string>        $previousMembers
@@ -815,16 +736,12 @@ final class IndexCommittee
      * concentration threshold limited to the budget in combination — the regulated-investment-company test
      * that exists because a fund can satisfy a per-name cap and still be a bet on one industry.
      *
-     * Both are worked REPEATEDLY, and that is not belt and braces. Redistributing the largest name's excess
-     * pro rata raises everyone else, and on a concentrated set it raises the second name straight through
-     * the cap it was just under; relieving the budget does the same thing in the other direction. A single
-     * pass leaves the cap breached by whoever caught the redistribution, which is a cap that does not hold.
+     * Both are worked REPEATEDLY: redistributing the largest name's excess pro rata can push the second name
+     * through the cap it was just under, and relieving the budget does the same in the other direction.
      *
-     * A rule that CANNOT be satisfied is not applied, rather than applied until the weights stop summing to
-     * one. A six-company sector cannot put only 45% of itself in the names above 4.5% — the remaining five
-     * would have to hold 55% between them at 4.5% each — and a fund of four cannot respect a 22.5% cap at
-     * all. This is not a fudge: it is why real capped indices need a reasonable number of constituents, and
-     * the honest thing for a narrow one to do is cap what it can and say so.
+     * A rule that CANNOT be satisfied (a six-company sector cannot put only 45% of itself in the names above 4.5%;
+     * a fund of four cannot respect a 22.5% cap) is not applied, rather than applied until the weights stop
+     * summing to one.
      *
      * @param array<string, float> $weights
      * @param float                $maxWeight   Most any one constituent may weigh.

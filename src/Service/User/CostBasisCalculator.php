@@ -9,10 +9,8 @@ use App\Entity\TradeOrder;
 /**
  * Weighted-average cost basis per ticker, derived from a user's filled orders.
  *
- * One implementation for every surface that prints an average cost or an unrealized P&L. The stock page
- * used to average every BUY the user had ever placed and ignore SELLs entirely while the dashboard ran the
- * moving average below, so the same position showed two different cost bases, and two different P&L
- * figures, depending on which page it was read from.
+ * One implementation for every surface that prints an average cost or an unrealized P&L, so a position shows the same
+ * cost basis on every page.
  *
  * Weighted average is the convention the schema can actually support: a purchase adds its consideration to
  * the pool, a sale removes shares at the running average and therefore leaves the average per share
