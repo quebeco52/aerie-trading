@@ -320,6 +320,9 @@ final class PagesRenderTest extends KernelTestCase
             ],
         ])];
 
+        // A listed fund manager quoted against its net assets: the NAV premium chart beside the multiples.
+        $pages['stock-fund'] = ['/stock/SWAN', 'stock/index.html.twig', array_replace($pages['stock'][2], ['netAssetValue' => ['premium' => -0.042]])];
+
         self::bootKernel();
         $container = static::getContainer();
         $stack = $container->get('request_stack');

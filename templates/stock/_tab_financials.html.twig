@@ -1,0 +1,236 @@
+{# The financials tab of the stock page (stock/index.html.twig). #}
+
+{# A chart card in the financials grid (partials/_chart_card.html.twig). #}
+{% macro chart(id, category, title, lede, options = {}) %}
+	{{ include('partials/_chart_card.html.twig', {id: id, category: category, title: title, lede: lede, family: 'financial', hud: 'latest', wideAt: 'md'}|merge(options), with_context = false) }}
+{% endmacro %}
+
+<div id="stock-tab-content-financials" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="financials">
+{# Whether any of the business-model charts in the Industry section below applies to this company. #}
+{% set has_industry_charts = isFinancial|default(false) or isInsurer|default(false) or kpiSeries|default([])|length > 0 or businessModel|default('none') in [
+	'commercial_bank', 'credit_services', 'shadow_bank', 'reit',
+	'tech', 'semiconductor', 'biotech', 'defense_contractor',
+	'mining', 'oil_gas_producer', 'refining', 'shipping'
+] %}
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+	<div>
+		<h2 class="text-lg font-semibold text-on-surface">Financial statements</h2>
+		<p class="text-sm text-on-surface-variant mt-0.5">Reported results, balance sheet, cash flow and valuation.</p>
+	</div>
+	<div class="flex items-center gap-3">
+		{% if businessMap|default(null) %}
+			<button type="button" onclick="document.dispatchEvent(new CustomEvent('business-map:open'))" class="px-3 py-1.5 text-xs font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">How the business works</button>
+		{% endif %}
+		<button type="button" onclick="document.dispatchEvent(new CustomEvent('sankey:open'))" class="px-3 py-1.5 text-xs font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">Earnings flow</button>
+		<div class="inline-flex gap-0.5 rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5" role="group" aria-label="Reporting period">
+			<button type="button" data-financial-timeframe="12Q" id="btn-global-12Q" class="seg-btn" aria-pressed="false">Quarterly</button>
+			<button type="button" data-financial-timeframe="12Y" id="btn-global-12Y" class="seg-btn" aria-pressed="true">Annual</button>
+		</div>
+	</div>
+</div>
+
+{# Summary strip: the numbers an analyst reads first off the last report (FinancialSummaryBuilder). #}
+{% if financialSummary|default([])|length > 0 %}
+	<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3" id="financial-summary">
+		{% for tile in financialSummary %}
+			<div class="p-4 rounded-lg bg-surface-container-low border border-outline-variant/20">
+				<span class="block text-xs text-on-surface-variant truncate">{{ tile.label }}</span>
+				<span class="block mt-0.5 text-base font-semibold font-mono tabular-nums {{ tile.format.signed ? tile.value|signed_class : 'text-on-surface' }}">{{ tile.value|figure(tile.format) }}</span>
+			</div>
+		{% endfor %}
+	</div>
+{% endif %}
+
+<div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+	<div class="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-1 sm:pb-0" id="financialCategoryPills" role="group" aria-label="Filter by topic">
+		<button type="button" class="financial-cat-btn seg-btn" aria-pressed="true" data-category="all">All</button>
+		<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="income">Income and cash flow</button>
+		<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="balance">Balance sheet</button>
+		<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="valuation">Valuation and returns</button>
+		{% if has_industry_charts %}
+			<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="sector">Industry</button>
+		{% endif %}
+	</div>
+
+	<div class="relative w-full sm:w-64">
+		<label for="financialIndicatorSearch" class="sr-only">Filter charts</label>
+		<input type="search" id="financialIndicatorSearch" placeholder="Filter charts" class="w-full px-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant/25 rounded text-on-surface placeholder:text-on-surface-faint focus:outline-none focus:border-primary/60 transition-colors">
+	</div>
+</div>
+
+{# Fetch status for the fundamentals below. #}
+<div id="financialChartsStatus" class="hidden mb-4 rounded-lg border px-4 py-3 text-sm flex items-center gap-3" role="status" aria-live="polite">
+	<span class="material-symbols-outlined text-base shrink-0" data-status-icon aria-hidden="true">hourglass_empty</span>
+	<span class="grow" data-status-message></span>
+	<button type="button" data-status-retry class="hidden px-3 py-1 rounded text-xs font-bold bg-surface-container-high text-on-surface hover:bg-surface-bright transition-colors cursor-pointer">Retry</button>
+</div>
+
+<div id="financialChartsGrid" class="space-y-10" data-chart-grid>
+	<section class="space-y-4" data-chart-section aria-labelledby="financial-section-income">
+		<h3 id="financial-section-income" class="text-base font-semibold text-on-surface">Income and cash flow</h3>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+			{{ _self.chart('netIncomeChart', 'income', "Revenue, net income and operating margin",
+				"Revenue and net income by period, with the operating margin", {wide: true}) }}
+
+			{# The last four quarters as filed and their trailing-year sum (assets/js/stock/income-statement.js). #}
+			<div id="income-statement-panel" data-unavailable class="chart-card hidden md:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-financial-category="income">
+				<div class="min-w-0 mb-3">
+					<h4 class="text-sm font-semibold text-on-surface">Income statement</h4>
+					<p class="text-xs text-on-surface-variant mt-0.5">The last four quarterly reports, from revenue down to what was left for shareholders</p>
+				</div>
+				<div class="overflow-x-auto">
+					<table id="income-statement-table" class="w-full text-left border-collapse min-w-140"></table>
+				</div>
+			</div>
+
+			{{ _self.chart('revenueStreamsChart', 'income', "Revenue by segment",
+				"How revenue splits across the company's business lines") }}
+
+			{{ _self.chart('cashFlowSummaryChart', 'income', "Free cash flow",
+				"Operating cash flow less capital spending, retained cash and cash conversion") }}
+		</div>
+	</section>
+
+	<section class="space-y-4" data-chart-section aria-labelledby="financial-section-balance">
+		<h3 id="financial-section-balance" class="text-base font-semibold text-on-surface">Balance sheet</h3>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+			<div id="financial-statements-panel" data-unavailable class="chart-card hidden md:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-financial-category="balance">
+				<div class="flex items-start justify-between gap-4 mb-3">
+					<div class="min-w-0">
+						<h4 class="text-sm font-semibold text-on-surface">Balance sheet and cash flow</h4>
+						<p class="text-xs text-on-surface-variant mt-0.5">Assets, the claims against them, and the cash the period actually produced</p>
+					</div>
+					<div class="flex items-start gap-3 shrink-0">
+						<div class="hidden sm:flex flex-col items-end text-right max-w-64">
+							<span class="text-2xs text-on-surface-variant" id="asset-age-label">Plant age</span>
+							<span class="text-xs font-mono font-bold text-on-surface" id="asset-age-badge">—</span>
+						</div>
+						<div class="hidden sm:flex flex-col items-end text-right max-w-64">
+							<span class="text-2xs text-on-surface-variant">Life cycle</span>
+							<span class="text-xs font-mono font-bold text-on-surface capitalize" id="lifecycle-stage-badge">—</span>
+						</div>
+					</div>
+				</div>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-5">
+					<div id="balance-sheet-column">
+						<h5 class="text-xs font-semibold text-on-surface-variant mb-2">Balance sheet</h5>
+						<div id="balance-sheet-rows"></div>
+					</div>
+					<div id="balance-sheet-unavailable" class="hidden">
+						<h5 class="text-xs font-semibold text-on-surface-variant mb-2">Balance sheet</h5>
+						<p class="text-xs text-on-surface-variant leading-relaxed">The balance sheet is published with the company's next quarterly report.</p>
+					</div>
+					<div>
+						<h5 class="text-xs font-semibold text-on-surface-variant mb-2">Cash flow</h5>
+						<div id="cash-flow-rows"></div>
+					</div>
+				</div>
+			</div>
+
+			{{ _self.chart('debtEquityChart', 'balance', "Capital structure",
+				"Total debt against book equity and cash") }}
+
+			{{ _self.chart('creditHealthChart', 'balance', "Borrowing cost and interest cover",
+				"Blended borrowing rate, its spread over the risk-free rate, and interest coverage") }}
+		</div>
+	</section>
+
+	<section class="space-y-4" data-chart-section aria-labelledby="financial-section-valuation">
+		<h3 id="financial-section-valuation" class="text-base font-semibold text-on-surface">Valuation and returns</h3>
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+			{{ _self.chart('valuationMultiplesChart', 'valuation', "Valuation multiples",
+				"Price to earnings, price to book and price to sales", {wide: not netAssetValue}) }}
+
+			{% if netAssetValue %}
+				{# Premium / discount to NAV: the chart every closed-end factsheet leads with. #}
+				{% embed 'partials/_chart_card.html.twig' with {id: 'navDiscountChart', category: 'valuation', title: "Premium or discount to NAV",
+					lede: "Where the market prices the shares against the assets behind them", premium: netAssetValue.premium,
+					family: 'financial', hud: 'latest', wideAt: 'md'} only %}
+					{% block hud %}
+						<div class="hidden sm:flex flex-col items-end text-right max-w-64">
+							<span class="text-2xs text-on-surface-variant">Latest</span>
+							<span class="text-xs font-mono font-bold tabular-nums {{ premium|signed_class }}">{{ premium|pct(1) }}</span>
+						</div>
+					{% endblock %}
+				{% endembed %}
+			{% endif %}
+
+			{{ _self.chart('shareholderValueChart', 'valuation', "Per-share figures",
+				"Earnings and tangible book value per share, and the share count") }}
+
+			{{ _self.chart('earningsSurpriseChart', 'valuation', "Earnings against forecasts",
+				"Reported earnings per share against the analysts' consensus going into each report") }}
+
+			{{ _self.chart('capitalEfficiencyChart', 'valuation', "Return on capital against its cost",
+				"Return on invested capital, the cost of capital, and the economic profit between them") }}
+
+			{{ _self.chart('capitalReturnChart', 'valuation', "Dividends and buybacks",
+				"Dividends paid, share repurchases and total shareholder yield") }}
+
+			{{ _self.chart('payoutRatioChart', 'valuation', "Payout and retention",
+				"The share of earnings paid out against the share reinvested") }}
+		</div>
+	</section>
+
+	{# Charts shown only for the matching sector or business model. #}
+	{% if has_industry_charts %}
+		<section class="space-y-4" data-chart-section aria-labelledby="financial-section-sector">
+			<h3 id="financial-section-sector" class="text-base font-semibold text-on-surface">Industry</h3>
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+				{# The operating figures the company reports each quarter (FinancialSummaryBuilder::KPI_LABELS), one at a time. #}
+				{% if kpiSeries|default([])|length > 0 %}
+					{% embed 'partials/_chart_card.html.twig' with {id: 'kpiHistoryChart', category: 'sector', title: "Operating figures",
+						lede: "What the company reports on its business each quarter, as filed", kpiSeries: kpiSeries,
+						family: 'financial', hud: 'latest', wide: true, wideAt: 'md'} only %}
+						{% block controls %}
+							<div class="inline-flex flex-wrap gap-0.5 self-start rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5 mb-3" role="group" aria-label="Operating figure">
+								{% for key, series in kpiSeries %}
+									<button type="button" class="seg-btn" data-kpi-key="{{ key }}" aria-pressed="{{ loop.first ? 'true' : 'false' }}">{{ series.label }}</button>
+								{% endfor %}
+							</div>
+						{% endblock %}
+					{% endembed %}
+				{% endif %}
+
+				{# Banking / Credit Services: Net Interest Margin #}
+				{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
+					{{ _self.chart('netInterestEngineChart', 'sector', "Net interest margin",
+						"Interest income against interest expense, and the margin between them") }}
+				{% endif %}
+
+				{# Financials: Regulatory Capital Ratios #}
+				{% if isFinancial|default(false) %}
+					{{ _self.chart('regulatoryRatiosChart', 'sector', "Regulatory capital",
+						"Tangible equity over tangible assets, against the lines the regulator acts on") }}
+				{% endif %}
+
+				{# Insurance: Dual Engine Underwriting vs Float #}
+				{% if isInsurer|default(false) %}
+					{{ _self.chart('insuranceDualEngineChart', 'sector', "Underwriting and investment income",
+						"The combined ratio, and the yield earned on policyholder float") }}
+				{% endif %}
+
+				{# REITs: AFFO Coverage & LTV #}
+				{% if businessModel|default('none') == 'reit' %}
+					{{ _self.chart('reitCoverageChart', 'sector', "REIT coverage and leverage",
+						"Dividend cover from AFFO, loan-to-value, and the cap rate's spread over funding") }}
+				{% endif %}
+
+				{# Tech / Semi / Biotech / Defense: R&D & Reinvestment Intensity #}
+				{% if businessModel|default('none') in ['tech', 'semiconductor', 'biotech', 'defense_contractor'] %}
+					{{ _self.chart('reinvestmentIntensityChart', 'sector', "Reinvestment",
+						"Capital spending as a share of revenue, against operating margin and ROIC") }}
+				{% endif %}
+
+				{# Commodities / Shipping: Cyclical Dynamics & Deleveraging #}
+				{% if businessModel|default('none') in ['mining', 'oil_gas_producer', 'refining', 'shipping'] %}
+					{{ _self.chart('cyclicalDynamicsChart', 'sector', "Cyclical margins and liquidity",
+						"Operating margin swings against debt service and cash reserves") }}
+				{% endif %}
+			</div>
+		</section>
+	{% endif %}
+
+	<p class="hidden py-12 text-center text-sm text-on-surface-variant" data-chart-empty>No charts match the filter.</p>
+</div>
+				</div>

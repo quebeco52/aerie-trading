@@ -9,6 +9,11 @@
 	<meta property="og:type" content="website">
 {% endblock %}
 
+{# A chart card in the economy grid (partials/_chart_card.html.twig). #}
+{% macro chart(id, category, title, lede, source, options = {}) %}
+	{{ include('partials/_chart_card.html.twig', {id: id, category: category, title: title, lede: lede, source: source, family: 'macro', hud: 'plain', wideAt: 'lg'}|merge(options), with_context = false) }}
+{% endmacro %}
+
 {% block body %}
 	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-8">
 
@@ -102,647 +107,171 @@
 				<section class="space-y-4" data-chart-section aria-labelledby="macro-section-monetary">
 					<h3 id="macro-section-monetary" class="text-base font-semibold text-on-surface">Rates and yields</h3>
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-						<div class="chart-card lg:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-macro-category="monetary">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Policy rate and the yield curve</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">The policy rate, 2-, 5- and 10-year sovereign yields, the 2s10s spread and the rule's target rate</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroRatesChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroRatesChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('monetary-authority', 'exchequer') }}</p>
-						</div>
+						{{ _self.chart('macroRatesChart', 'monetary', "Policy rate and the yield curve",
+							"The policy rate, 2-, 5- and 10-year sovereign yields, the 2s10s spread and the rule's target rate",
+							source_line('monetary-authority', 'exchequer'), {wide: true}) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Policy rate against the rule</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">The rate the Monetary Authority's published rule calls for, the policy rate, and the gap between them</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroPolicyRuleChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroPolicyRuleChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('monetary-authority') }}</p>
-						</div>
+						{{ _self.chart('macroPolicyRuleChart', 'monetary', "Policy rate against the rule",
+							"The rate the Monetary Authority's published rule calls for, the policy rate, and the gap between them",
+							source_line('monetary-authority')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">What is in the 10-year yield</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">The 10-year yield split into the expected path of the policy rate and the term premium, beside the neutral real rate</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroTermPremiumChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroTermPremiumChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('monetary-authority') }}</p>
-						</div>
+						{{ _self.chart('macroTermPremiumChart', 'monetary', "What is in the 10-year yield",
+							"The 10-year yield split into the expected path of the policy rate and the term premium, beside the neutral real rate",
+							source_line('monetary-authority')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Mortgage rates</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">The 30-year fixed mortgage rate and its spread over the policy rate</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroMortgageChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroMortgageChart" data-mortgage-spread="{{ constant('App\\Service\\Math\\MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD') }}"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('credit-registry') }}</p>
-						</div>
+						{{ _self.chart('macroMortgageChart', 'monetary', "Mortgage rates",
+							"The 30-year fixed mortgage rate and its spread over the policy rate",
+							source_line('credit-registry'), {canvas: {'data-mortgage-spread': constant('App\\Service\\Math\\MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD')}}) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="monetary">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Central bank balance sheet</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">The Monetary Authority's bond holdings, as the basis points they hold the 10-year yield down, and each quarter's purchases (QE) or run-off (QT)</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroBalanceSheetChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroBalanceSheetChart"></canvas>
+						{% embed 'partials/_chart_card.html.twig' with {id: 'macroBalanceSheetChart', category: 'monetary', title: "Central bank balance sheet",
+							lede: "The Monetary Authority's bond holdings, as the basis points they hold the 10-year yield down, and each quarter's purchases (QE) or run-off (QT)",
+							source: source_line('monetary-authority'), family: 'macro', hud: 'plain', wideAt: 'lg'} only %}
+							{% block canvas_extra %}
 								<p id="macroBalanceSheetEmpty" class="absolute inset-0 grid place-items-center text-sm text-on-surface-variant" hidden>The Monetary Authority has held no bonds over this period.</p>
-							</div>
-							<p class="source-note">{{ source_line('monetary-authority') }}</p>
-						</div>
+							{% endblock %}
+						{% endembed %}
 					</div>
 				</section>
 
 				<section class="space-y-4" data-chart-section aria-labelledby="macro-section-inflation">
 					<h3 id="macro-section-inflation" class="text-base font-semibold text-on-surface">Inflation and output</h3>
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Inflation and the output gap</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Consumer prices, 10-year breakeven inflation, the output gap and excess capital stock</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroEconomyChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroEconomyChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroEconomyChart', 'inflation', "Inflation and the output gap",
+							"Consumer prices, 10-year breakeven inflation, the output gap and excess capital stock",
+							source_line('statistical-office')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Inflation by component</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Headline consumer and producer prices, with core services and core goods</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroSectoralInflationChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroSectoralInflationChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroSectoralInflationChart', 'inflation', "Inflation by component",
+							"Headline consumer and producer prices, with core services and core goods",
+							source_line('statistical-office')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Supply-side cost pressures</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">What food and energy prices add to headline inflation each quarter, in basis points a year. A price that stays high adds once, then nothing more</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroCostPushChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroCostPushChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroCostPushChart', 'inflation', "Supply-side cost pressures",
+							"What food and energy prices add to headline inflation each quarter, in basis points a year. A price that stays high adds once, then nothing more",
+							source_line('statistical-office')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="inflation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Inventories and capacity</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Inventory overhang against the output gap, factory capacity utilisation and strategic energy stocks</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroInventoryCycleChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroInventoryCycleChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('manufactory-board') }}</p>
-						</div>
+						{{ _self.chart('macroInventoryCycleChart', 'inflation', "Inventories and capacity",
+							"Inventory overhang against the output gap, factory capacity utilisation and strategic energy stocks",
+							source_line('manufactory-board')) }}
 
-						<div class="chart-card lg:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-macro-category="inflation">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">What moved the output gap</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Each quarter's change in the output gap, split by what drove it: rates, credit, the government and the Fund, wealth, supply, the mainland, and the economy's own pull back to trend</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGapBreakdownChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroGapBreakdownChart" data-groups="{{ constant('App\\Service\\View\\MacroHistoryPresenter::GAP_GROUP_LABELS')|json_encode }}"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroGapBreakdownChart', 'inflation', "What moved the output gap",
+							"Each quarter's change in the output gap, split by what drove it: rates, credit, the government and the Fund, wealth, supply, the mainland, and the economy's own pull back to trend",
+							source_line('statistical-office'), {wide: true, canvas: {'data-groups': constant('App\\Service\\View\\MacroHistoryPresenter::GAP_GROUP_LABELS')|json_encode}}) }}
 					</div>
 				</section>
 
 				<section class="space-y-4" data-chart-section aria-labelledby="macro-section-growth">
 					<h3 id="macro-section-growth" class="text-base font-semibold text-on-surface">Growth and labour</h3>
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-						<div class="chart-card lg:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-macro-category="growth">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Growth and recession risk</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Real and nominal GDP growth, potential growth and the productivity behind it, and the chance of a recession within a year</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGdpGrowthChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroGdpGrowthChart" data-structural-labor-growth="{{ constant('App\\Service\\Math\\MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE') }}"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroGdpGrowthChart', 'growth', "Growth and recession risk",
+							"Real and nominal GDP growth, potential growth and the productivity behind it, and the chance of a recession within a year",
+							source_line('statistical-office'), {wide: true, canvas: {'data-structural-labor-growth': constant('App\\Service\\Math\\MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE')}}) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Output, quarter on quarter</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Real output's change on the quarter before; two falling quarters in a row and the statistical office declares a recession, marked here until two quarters of growth end it</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGdpChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroGdpChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroGdpChart', 'growth', "Output, quarter on quarter",
+							"Real output's change on the quarter before; two falling quarters in a row and the statistical office declares a recession, marked here until two quarters of growth end it",
+							source_line('statistical-office')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Leading indicators</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Manufacturing PMI, housing starts, money-supply growth, the trade balance and producer prices</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroLeadingIndicatorsChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroLeadingIndicatorsChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('manufactory-board', 'statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroLeadingIndicatorsChart', 'growth', "Leading indicators",
+							"Manufacturing PMI, housing starts, money-supply growth, the trade balance and producer prices",
+							source_line('manufactory-board', 'statistical-office')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Unemployment and vacancies</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Unemployment against its structural rate, and job vacancies as a share of the labour force</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroLaborChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroLaborChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroLaborChart', 'growth', "Unemployment and vacancies",
+							"Unemployment against its structural rate, and job vacancies as a share of the labour force",
+							source_line('statistical-office')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Wages</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Wage growth against the inflation workers expect and after consumer prices, and the real wage against productivity</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroWagesChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroWagesChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroWagesChart', 'growth', "Wages",
+							"Wage growth against the inflation workers expect and after consumer prices, and the real wage against productivity",
+							source_line('statistical-office')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Household wealth and demand</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Stock-market wealth against income and its three-year trend, housing wealth, and the output gap they feed</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroWealthEffectChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroWealthEffectChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office', 'land-registry') }}</p>
-						</div>
+						{{ _self.chart('macroWealthEffectChart', 'growth', "Household wealth and demand",
+							"Stock-market wealth against income and its three-year trend, housing wealth, and the output gap they feed",
+							source_line('statistical-office', 'land-registry')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="growth">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Sentiment, deal flow and defaults</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Consumer sentiment and merger activity, against household and corporate default rates</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroSentimentChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroSentimentChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office', 'credit-registry') }}</p>
-						</div>
+						{{ _self.chart('macroSentimentChart', 'growth', "Sentiment, deal flow and defaults",
+							"Consumer sentiment and merger activity, against household and corporate default rates",
+							source_line('statistical-office', 'credit-registry')) }}
 					</div>
 				</section>
 
 				<section class="space-y-4" data-chart-section aria-labelledby="macro-section-credit">
 					<h3 id="macro-section-credit" class="text-base font-semibold text-on-surface">Credit and liquidity</h3>
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Financial conditions and bank lending</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">A financial conditions index across credit, equities, the currency and rates, and the net share of banks tightening lending standards</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroFciChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroFciChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('monetary-authority', 'financial-regulator') }}</p>
-						</div>
+						{{ _self.chart('macroFciChart', 'credit', "Financial conditions and bank lending",
+							"A financial conditions index across credit, equities, the currency and rates, and the net share of banks tightening lending standards",
+							source_line('monetary-authority', 'financial-regulator')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Corporate credit spreads and defaults</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Investment-grade and high-yield spreads, the ratio between them, the corporate default rate, and the excess bond premium: what lenders charge beyond expected defaults</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroCreditCliffChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroCreditCliffChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('credit-registry') }}</p>
-						</div>
+						{{ _self.chart('macroCreditCliffChart', 'credit', "Corporate credit spreads and defaults",
+							"Investment-grade and high-yield spreads, the ratio between them, the corporate default rate, and the excess bond premium: what lenders charge beyond expected defaults",
+							source_line('credit-registry')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Risk premia and volatility</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">The equity risk premium, implied market volatility and what companies pay to borrow</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroRiskChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroRiskChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('aerie-exchange', 'credit-registry') }}</p>
-						</div>
+						{{ _self.chart('macroRiskChart', 'credit', "Risk premia and volatility",
+							"The equity risk premium, implied market volatility and what companies pay to borrow",
+							source_line('aerie-exchange', 'credit-registry')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Household credit and bank buffers</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Household debt service and debt-to-income ratios, the credit-to-GDP gap and the countercyclical capital buffer</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroHouseholdCreditChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroHouseholdCreditChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('financial-regulator') }}</p>
-						</div>
+						{{ _self.chart('macroHouseholdCreditChart', 'credit', "Household credit and bank buffers",
+							"Household debt service and debt-to-income ratios, the credit-to-GDP gap and the countercyclical capital buffer",
+							source_line('financial-regulator')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Interbank funding stress</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">The interbank lending spread against the corporate credit spread, in basis points</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroInterbankLiquidityChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroInterbankLiquidityChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('monetary-authority', 'credit-registry') }}</p>
-						</div>
+						{{ _self.chart('macroInterbankLiquidityChart', 'credit', "Interbank funding stress",
+							"The interbank lending spread against the corporate credit spread, in basis points",
+							source_line('monetary-authority', 'credit-registry')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="credit">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Deposits and money-market funds</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Money-market funds' share of deposits and the interbank spread. Banks pass on {{ constant('App\\Service\\Math\\MacroConstants::SYSTEM_DEPOSIT_BETA_BASE')|pct(0) }} of a rate change to depositors, so funds gain share as rates rise</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroBankingLiquidityChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroBankingLiquidityChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('financial-regulator', 'monetary-authority') }}</p>
-						</div>
+						{{ _self.chart('macroBankingLiquidityChart', 'credit', "Deposits and money-market funds",
+							"Money-market funds' share of deposits and the interbank spread. Banks pass on " ~ constant('App\\Service\\Math\\MacroConstants::SYSTEM_DEPOSIT_BETA_BASE')|pct(0) ~ " of a rate change to depositors, so funds gain share as rates rise",
+							source_line('financial-regulator', 'monetary-authority')) }}
 					</div>
 				</section>
 
 				<section class="space-y-4" data-chart-section aria-labelledby="macro-section-assets">
 					<h3 id="macro-section-assets" class="text-base font-semibold text-on-surface">Property and commodities</h3>
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-						<div class="chart-card lg:col-span-2 bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-wide data-macro-category="assets">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Property prices and housing starts</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Commercial and residential property indices, and new housing starts</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroPropertyChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroPropertyChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('land-registry') }}</p>
-						</div>
+						{{ _self.chart('macroPropertyChart', 'assets', "Property prices and housing starts",
+							"Commercial and residential property indices, and new housing starts",
+							source_line('land-registry'), {wide: true}) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Commodity prices</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Energy, metals, agriculture, gold and natural gas, indexed to 100</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroCommoditiesChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroCommoditiesChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('commodity-exchange') }}</p>
-						</div>
+						{{ _self.chart('macroCommoditiesChart', 'assets', "Commodity prices",
+							"Energy, metals, agriculture, gold and natural gas, indexed to 100",
+							source_line('commodity-exchange')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="assets">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Refining and power margins</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">What refiners earn turning crude into fuels ($/bbl), and generators turning gas into power ($/MWh)</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroEnergySpreadsChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroEnergySpreadsChart"
-									data-power-reference="{{ constant('App\\Service\\Math\\MacroConstants::REFERENCE_POWER_PRICE') }}"
-									data-gas-reference="{{ constant('App\\Service\\Math\\MacroConstants::REFERENCE_GAS_PRICE') }}"
-									data-spark-heat-rate="{{ constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::SPARK_SPREAD_BENCHMARK_HEAT_RATE') }}"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('commodity-exchange') }}</p>
-						</div>
+						{{ _self.chart('macroEnergySpreadsChart', 'assets', "Refining and power margins",
+							"What refiners earn turning crude into fuels ($/bbl), and generators turning gas into power ($/MWh)",
+							source_line('commodity-exchange'), {canvas: {'data-power-reference': constant('App\\Service\\Math\\MacroConstants::REFERENCE_POWER_PRICE'), 'data-gas-reference': constant('App\\Service\\Math\\MacroConstants::REFERENCE_GAS_PRICE'), 'data-spark-heat-rate': constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::SPARK_SPREAD_BENCHMARK_HEAT_RATE')}}) }}
 					</div>
 				</section>
 
 				<section class="space-y-4" data-chart-section aria-labelledby="macro-section-public">
 					<h3 id="macro-section-public" class="text-base font-semibold text-on-surface">Trade and public finance</h3>
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Trade, freight and supply chains</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">The trade-weighted exchange rate, container freight rates and supply-chain pressure in standard deviations from normal</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroTradeLogisticsChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroTradeLogisticsChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('freight-authority', 'monetary-authority') }}</p>
-						</div>
+						{{ _self.chart('macroTradeLogisticsChart', 'public', "Trade, freight and supply chains",
+							"The trade-weighted exchange rate, container freight rates and supply-chain pressure in standard deviations from normal",
+							source_line('freight-authority', 'monetary-authority')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">The District and the mainland</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">District and mainland output gaps, the global demand gap and the mainland policy rate</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGlobalCycleChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroGlobalCycleChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroGlobalCycleChart', 'public', "The District and the mainland",
+							"District and mainland output gaps, the global demand gap and the mainland policy rate",
+							source_line('statistical-office')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Public debt</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Public debt as a share of GDP, and the risk premium lenders add to the District's bond yields for holding it</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroPublicDebtChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroPublicDebtChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('exchequer') }}</p>
-						</div>
+						{{ _self.chart('macroPublicDebtChart', 'public', "Public debt",
+							"Public debt as a share of GDP, and the risk premium lenders add to the District's bond yields for holding it",
+							source_line('exchequer')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">The budget</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">Government spending, the corporate tax rate, and the primary deficit: the budget before interest, as a share of GDP</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroGovtSpendingChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroGovtSpendingChart"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('exchequer') }}</p>
-						</div>
+						{{ _self.chart('macroGovtSpendingChart', 'public', "The budget",
+							"Government spending, the corporate tax rate, and the primary deficit: the budget before interest, as a share of GDP",
+							source_line('exchequer')) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Policy uncertainty</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">How unsettled the outlook for taxes, spending and rates is, against its long-run average of {{ constant('App\\Service\\Math\\MacroConstants::EPU_BASELINE')|number_format(0) }}. It rises into an election and in a downturn, and holds back investment</p>
-								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroPolicyUncertaintyChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroPolicyUncertaintyChart" data-baseline="{{ constant('App\\Service\\Math\\MacroConstants::EPU_BASELINE') }}"></canvas>
-							</div>
-							<p class="source-note">{{ source_line('statistical-office') }}</p>
-						</div>
+						{{ _self.chart('macroPolicyUncertaintyChart', 'public', "Policy uncertainty",
+							"How unsettled the outlook for taxes, spending and rates is, against its long-run average of " ~ constant('App\\Service\\Math\\MacroConstants::EPU_BASELINE')|number_format(0) ~ ". It rises into an election and in a downturn, and holds back investment",
+							source_line('statistical-office'), {canvas: {'data-baseline': constant('App\\Service\\Math\\MacroConstants::EPU_BASELINE')}}) }}
 
-						<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-macro-category="public">
-							<div class="flex items-start justify-between gap-4 mb-3">
-								<div class="min-w-0">
-									<h4 class="text-sm font-semibold text-on-surface">Sovereign Reserve Fund</h4>
-									<p class="text-xs text-on-surface-variant mt-0.5">District equity weight against the policy weight, and the fund's share of the listed float</p>
+						{% embed 'partials/_chart_card.html.twig' with {id: 'macroSovereignFundChart', category: 'public', title: "Sovereign Reserve Fund",
+							lede: "District equity weight against the policy weight, and the fund's share of the listed float",
+							family: 'macro', hud: 'plain', wideAt: 'lg'} only %}
+							{% block footer %}
+								{# The fund's size, draw, equity share and stamp duty: scales the chart's single axis cannot carry. #}
+								<p class="mt-3 text-2xs font-mono tabular-nums text-on-surface-variant" id="stats-macroSovereignFundChart"></p>
+								<div class="mt-1 flex items-baseline justify-between gap-3">
+									<p class="source-note mt-0">{{ source_line('sovereign-reserve-fund') }}</p>
+									<a href="/reserve" class="shrink-0 text-2xs font-medium text-primary hover:underline">Fund page →</a>
 								</div>
-								<div class="flex items-start gap-3 shrink-0">
-									<p class="hidden sm:block max-w-64 text-right text-xs font-mono font-semibold text-on-surface tabular-nums" id="hud-macroSovereignFundChart">-</p>
-									<button type="button" class="expand-chart-btn p-1 -m-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer" title="Expand chart" aria-label="Expand chart">
-										<span class="material-symbols-outlined text-base leading-none expand-icon" aria-hidden="true">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
-								<canvas id="macroSovereignFundChart"></canvas>
-							</div>
-							{# The fund's size, draw, equity share and stamp duty: scales the chart's single axis cannot carry. #}
-							<p class="mt-3 text-2xs font-mono tabular-nums text-on-surface-variant" id="stats-macroSovereignFundChart"></p>
-							<div class="mt-1 flex items-baseline justify-between gap-3">
-								<p class="source-note mt-0">{{ source_line('sovereign-reserve-fund') }}</p>
-								<a href="/reserve" class="shrink-0 text-2xs font-medium text-primary hover:underline">Fund page →</a>
-							</div>
-						</div>
+							{% endblock %}
+						{% endembed %}
 					</div>
 				</section>
 

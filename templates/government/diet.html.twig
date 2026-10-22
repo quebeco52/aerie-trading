@@ -63,13 +63,7 @@
 				<p class="text-2xs text-on-surface-variant mt-0.5">{{ rules.seats }} seats, grouped by bloc. Within each bloc, the parties that want the largest state sit on the left. The cabinet's seats are solid, its supporters' half-filled.
 					The blocs: {% for bloc in rules.blocSeats %}<span class="inline-block w-1.5 h-1.5 rounded-full mx-0.5 align-middle" style="background-color: {{ bloc.color }}" aria-hidden="true"></span>{{ bloc.name }}'s {{ bloc.seats }}{{ not loop.last ? ', ' : '.' }}{% endfor %}</p>
 
-				<svg viewBox="-108 -106 216 114" class="w-full mt-4 max-h-72" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
-					{% for seat in hemicycle %}
-						<circle cx="{{ seat.x * 100 }}" cy="{{ -seat.y * 100 }}" r="2.5" fill="{{ seat.color }}" fill-opacity="{{ seat.governing ? 1 : (seat.supporting ? 0.6 : 0.3) }}"{% if seat.supporting %} stroke="{{ seat.color }}" stroke-width="0.6"{% endif %}></circle>
-					{% endfor %}
-					<text x="0" y="-13" text-anchor="middle" class="fill-on-surface font-semibold" font-size="15">{{ government.supportedSeats }}</text>
-					<text x="0" y="-4" text-anchor="middle" class="fill-on-surface-variant" font-size="5.5">of {{ rules.majority }} needed</text>
-				</svg>
+				{{ gov.hemicycle(hemicycle, parties, government.supportedSeats, rules.majority, 'mt-4 max-h-72') }}
 
 				<table class="w-full mt-4 text-xs">
 					<thead>

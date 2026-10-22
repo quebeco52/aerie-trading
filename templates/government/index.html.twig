@@ -79,13 +79,7 @@
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-5 mt-3">
 				<section class="bg-surface-container-low rounded-lg p-5 border {{ talks and talks.underWay ? 'border-primary/40' : 'border-outline-variant/20' }} flex flex-col" aria-labelledby="hub-diet-heading">
 					<h3 id="hub-diet-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_government_diet') }}" class="hover:underline">The Diet</a></h3>
-					<svg viewBox="-108 -106 216 114" class="w-full mt-3 max-h-40" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
-						{% for seat in hemicycle %}
-							<circle cx="{{ seat.x * 100 }}" cy="{{ -seat.y * 100 }}" r="2.5" fill="{{ seat.color }}" fill-opacity="{{ seat.governing ? 1 : (seat.supporting ? 0.6 : 0.3) }}"{% if seat.supporting %} stroke="{{ seat.color }}" stroke-width="0.6"{% endif %}></circle>
-						{% endfor %}
-						<text x="0" y="-13" text-anchor="middle" class="fill-on-surface font-semibold" font-size="15">{{ government.supportedSeats }}</text>
-						<text x="0" y="-4" text-anchor="middle" class="fill-on-surface-variant" font-size="5.5">of {{ rules.majority }} needed</text>
-					</svg>
+					{{ gov.hemicycle(hemicycle, parties, government.supportedSeats, rules.majority, 'mt-3 max-h-40') }}
 					<p class="text-xs text-on-surface mt-3">
 						{% if talks and talks.underWay %}
 							<span class="font-semibold text-primary">{{ talks.afterFall ? 'The cabinet has fallen' : 'Coalition talks under way' }}</span>, day <span class="font-mono tabular-nums">{{ talks.day|number_format(0) }}</span>{% if talks.leading %}: {{ talks.leading.name }} is trying to form a government{% endif %}.

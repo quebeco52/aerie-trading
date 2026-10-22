@@ -1,0 +1,240 @@
+{# The constituents tab of the stock page (stock/index.html.twig). #}
+{% import 'partials/_ui.html.twig' as ui %}
+
+<div id="stock-tab-content-constituents" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="constituents">
+{# Header: what the index is for #}
+<div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+	<div>
+		<h2 class="text-lg font-semibold text-on-surface">{{ indexFacts.indexName }} constituents</h2>
+		<p class="text-sm text-on-surface-variant mt-0.5">{{ asset.name }} tracks the {{ indexFacts.indexName }}, published by <a href="/stock/{{ indexFacts.indexProviderTicker }}" class="text-primary hover:underline">{{ indexFacts.indexProvider }}</a>.</p>
+		<p class="text-sm text-on-surface-variant mt-1 max-w-3xl">{{ indexFacts.mandate }}</p>
+	</div>
+	<dl class="grid grid-cols-3 gap-x-8 shrink-0">
+		<div>
+			<dt class="text-xs text-on-surface-variant">Members</dt>
+			<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ indexFacts.memberCount }}</dd>
+		</div>
+		<div>
+			<dt class="text-xs text-on-surface-variant">Listed</dt>
+			<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ indexFacts.listedCount }}</dd>
+		</div>
+		<div>
+			<dt class="text-xs text-on-surface-variant">Next review</dt>
+			<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ indexFacts.daysUntilReconstitution|round }}d</dd>
+		</div>
+	</dl>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+	{# Left: the full constituent table #}
+	<div class="lg:col-span-8 space-y-6">
+		<div class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden">
+			<div class="px-5 py-4 border-b border-outline-variant/15 flex items-center justify-between">
+				<div>
+					<h3 class="text-sm font-semibold text-on-surface">Constituents</h3>
+					<p class="text-xs text-on-surface-variant mt-0.5">Ranked on {{ indexFacts.rankingLabel|lower }} across {{ indexFacts.universe }}, weighted by {{ indexFacts.weightingLabel|lower }}. Weights repaint live and drift with prices between reviews.</p>
+				</div>
+			</div>
+			<div class="overflow-x-auto">
+				<table class="w-full text-left border-collapse">
+					<thead>
+						<tr class="table-head bg-surface-container-highest/20">
+							<th scope="col" class="px-4 py-3 text-right w-12">#</th>
+							<th scope="col" class="px-4 py-3">Company</th>
+							<th scope="col" class="px-4 py-3 hidden md:table-cell">Sector</th>
+							<th scope="col" class="px-4 py-3 text-right">Price</th>
+							<th scope="col" class="px-4 py-3 text-right hidden sm:table-cell" title="Change over the trailing one-month buffered window">1M</th>
+							<th scope="col" class="px-4 py-3 text-right hidden sm:table-cell">Float cap</th>
+							<th scope="col" class="px-5 py-3 text-right w-40">Weight</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10 text-sm">
+						{% for comp in components %}
+							<tr id="idx-row-{{ comp.ticker }}" data-float-cap="{{ comp.adjustedCap }}" class="hover:bg-surface-container-high/30 transition-colors group relative">
+								<td class="px-4 py-3 text-right font-mono text-xs text-on-surface-variant tabular-nums">{{ comp.rank }}</td>
+								<th scope="row" class="px-4 py-3 text-left font-normal">
+									<div class="flex items-center gap-2">
+										<a href="/stock/{{ comp.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ comp.name }}</a>
+										{% if comp.isNew %}<span class="badge badge-up relative z-10">New</span>{% endif %}
+									</div>
+									<div class="text-on-surface-variant text-xs font-mono mt-0.5">{{ comp.ticker }}</div>
+								</th>
+								<td class="px-4 py-3 hidden md:table-cell text-on-surface-variant text-xs">{{ comp.sector }}</td>
+								<td class="px-4 py-3 text-right font-bold font-mono tabular-nums text-xs sm:text-sm text-on-surface" id="idx-price-{{ comp.ticker }}">{{ comp.price|money(2) }}</td>
+								<td class="px-4 py-3 text-right font-semibold font-mono tabular-nums text-xs sm:text-sm hidden sm:table-cell {{ comp.changePercent|signed_class }}">
+									{%- if comp.changePercent is null -%}&mdash;{%- else -%}{{ comp.changePercent|pct(2, true) }}{%- endif -%}
+								</td>
+								<td class="px-4 py-3 text-right font-mono tabular-nums text-xs sm:text-sm text-on-surface-variant hidden sm:table-cell">{{ comp.floatCap|format_large('$') }}</td>
+								<td class="px-5 py-3 text-right">
+									<div class="flex items-center justify-end gap-3">
+										<div class="h-1.5 w-20 bg-surface-container-highest rounded overflow-hidden hidden sm:block" aria-hidden="true">
+											<div id="idx-bar-{{ comp.ticker }}" class="h-1.5 bg-primary rounded" style="width: {{ (comp.weight * 100)|number_format(2, '.', '') }}%"></div>
+										</div>
+										<div class="w-16 text-right">
+							<span class="font-bold font-mono tabular-nums text-xs sm:text-sm text-on-surface block" id="idx-weight-{{ comp.ticker }}">{{ comp.weight|pct(2) }}</span>
+							{# Where the review set it, shown only once the live weight has drifted off it. A capped name
+							   above its cap is the commonest case and the one most likely to read as a broken cap: the
+							   fund holds the shares it bought at the review and does not trade again until the next one. #}
+							{% if comp.targetWeight is not null and (comp.weight - comp.targetWeight)|abs >= 0.0005 %}
+								<span class="group relative cursor-help text-4xs font-mono text-on-surface-faint block" tabindex="0">
+									{{ comp.targetWeight|pct(2) }} set
+									{{ ui.tooltip('The weight the last review set. Weights drift with prices between reviews because the fund holds a fixed number of shares: it does not trade again until the next review pulls it back to target.', 'left', 'w-64') }}
+								</span>
+							{% endif %}
+						</div>
+									</div>
+								</td>
+							</tr>
+						{% else %}
+							<tr>
+								<td colspan="7" class="px-5 py-8 text-center text-xs text-on-surface-variant">The index committee has not held its first review yet.</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	{# Right: sectors, the last review, the boundary, the method #}
+	<div class="lg:col-span-4 space-y-6">
+		{# Sector weights #}
+		<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+			<h3 class="text-sm font-semibold text-on-surface mb-3">Sector weights</h3>
+			<div class="space-y-2.5">
+				{% for row in indexFacts.sectorWeights %}
+					<div>
+						<div class="flex justify-between items-center text-xs mb-1">
+							<span class="text-on-surface-variant">{{ row.sector }} <span class="text-3xs font-mono text-on-surface-faint">({{ row.count }})</span></span>
+							<span class="font-bold font-mono tabular-nums text-on-surface">{{ row.weight|pct(1) }}</span>
+						</div>
+						<div class="h-1.5 bg-surface-container-highest rounded overflow-hidden" aria-hidden="true">
+							<div class="h-1.5 bg-primary/70 rounded" style="width: {{ (row.weight * 100)|number_format(2, '.', '') }}%"></div>
+						</div>
+					</div>
+				{% else %}
+					<p class="text-xs text-on-surface-variant">No constituents.</p>
+				{% endfor %}
+			</div>
+		</div>
+
+		{# Last review #}
+		<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+			<div class="flex items-center justify-between mb-3">
+				<h3 class="text-sm font-semibold text-on-surface">Last review</h3>
+				{% if indexFacts.daysSinceReconstitution is not null %}
+					<span class="text-3xs font-mono text-on-surface-variant">{{ indexFacts.daysSinceReconstitution|round }} days ago</span>
+				{% endif %}
+			</div>
+			{% if not indexFacts.hasRoster %}
+				<p class="text-xs text-on-surface-variant">No review has been held yet.</p>
+			{% elseif indexFacts.added|length == 0 and indexFacts.deleted|length == 0 %}
+				<p class="text-xs text-on-surface-variant">The membership was confirmed unchanged.</p>
+			{% else %}
+				<div class="space-y-3 text-xs">
+					{% if indexFacts.added|length > 0 %}
+						<div>
+							<div class="text-xs font-semibold text-secondary mb-1.5">Admitted</div>
+							<div class="flex flex-wrap gap-1.5">
+								{% for t in indexFacts.added %}<a href="/stock/{{ t }}" class="inline-flex items-center rounded bg-secondary/10 px-2 py-0.5 font-mono font-bold text-secondary border border-secondary/25 hover:bg-secondary/20">{{ t }}</a>{% endfor %}
+							</div>
+						</div>
+					{% endif %}
+					{% if indexFacts.deleted|length > 0 %}
+						<div>
+							<div class="text-xs font-semibold text-tertiary mb-1.5">Dropped</div>
+							<div class="flex flex-wrap gap-1.5">
+								{% for t in indexFacts.deleted %}<a href="/stock/{{ t }}" class="inline-flex items-center rounded bg-tertiary/10 px-2 py-0.5 font-mono font-bold text-tertiary border border-tertiary/25 hover:bg-tertiary/20">{{ t }}</a>{% endfor %}
+							</div>
+						</div>
+					{% endif %}
+				</div>
+			{% endif %}
+		</div>
+
+		{# The boundary, for a selective index #}
+		{% if indexFacts.isSelective %}
+			<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+				<div class="flex items-center justify-between mb-1">
+					<h3 class="text-sm font-semibold text-on-surface">The boundary</h3>
+					{% if indexFacts.bands %}
+						<span class="text-3xs font-mono text-on-surface-variant">bands #{{ indexFacts.bands.inner }} / #{{ indexFacts.bands.outer }}</span>
+					{% endif %}
+				</div>
+				<p class="text-xs text-on-surface-variant leading-relaxed mb-4">
+					A member keeps its seat until it ranks past #{{ indexFacts.bands ? indexFacts.bands.outer : '?' }}; an outsider is admitted once it ranks inside #{{ indexFacts.bands ? indexFacts.bands.inner : '?' }}, displacing the weakest member. Between the two nothing happens, which is what stops the boundary churning every quarter.
+				</p>
+				<div class="space-y-4 text-xs">
+					<div>
+						<div class="text-xs font-semibold text-tertiary mb-1.5">Exposed members</div>
+						{% for row in indexFacts.atRisk %}
+							<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 last:border-0">
+								<div class="flex items-center gap-2 min-w-0">
+									<span class="font-mono text-on-surface-faint w-8 text-right shrink-0">#{{ row.rank }}</span>
+									<a href="/stock/{{ row.ticker }}" class="font-bold font-mono text-primary hover:underline">{{ row.ticker }}</a>
+									<span class="text-on-surface-variant truncate">{{ row.name }}</span>
+								</div>
+								{% if row.exits %}<span class="badge badge-down shrink-0">Drops next review</span>{% endif %}
+							</div>
+						{% else %}
+							<p class="text-on-surface-variant">None. Every member ranks inside the inner band.</p>
+						{% endfor %}
+					</div>
+					<div>
+						<div class="text-xs font-semibold text-secondary mb-1.5">In contention</div>
+						{% for row in indexFacts.contenders %}
+							<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 last:border-0">
+								<div class="flex items-center gap-2 min-w-0">
+									<span class="font-mono text-on-surface-faint w-8 text-right shrink-0">#{{ row.rank }}</span>
+									<a href="/stock/{{ row.ticker }}" class="font-bold font-mono text-primary hover:underline">{{ row.ticker }}</a>
+									<span class="text-on-surface-variant truncate">{{ row.name }}</span>
+								</div>
+								{% if row.qualifies %}<span class="badge badge-up shrink-0">Joins next review</span>{% endif %}
+							</div>
+						{% else %}
+							<p class="text-on-surface-variant">None. No outsider ranks inside the outer band.</p>
+						{% endfor %}
+					</div>
+				</div>
+			</div>
+		{% endif %}
+
+		{# Method #}
+		<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+			<h3 class="text-sm font-semibold text-on-surface mb-3">Methodology</h3>
+			<dl class="space-y-3 text-xs">
+				<div>
+					<dt class="font-semibold text-on-surface">Index</dt>
+					<dd class="text-on-surface-variant leading-relaxed">{{ asset.name }} is the fund; the {{ indexFacts.indexName }} is the index it tracks, published by <a href="/stock/{{ indexFacts.indexProviderTicker }}" class="text-primary hover:underline">{{ indexFacts.indexProvider }}</a>. They are separate things and the fund does not decide the index &mdash; it licenses it, out of the fee below.{% if indexFacts.providerIsConstituent %} The publisher is also the largest company in the index it publishes, which is a conflict the methodology discloses rather than resolves.{% endif %}</dd>
+				</div>
+				<div>
+					<dt class="font-semibold text-on-surface">Universe</dt>
+					<dd class="text-on-surface-variant leading-relaxed">{{ indexFacts.universe }}, ranked on: {{ indexFacts.rankingLabel|lower }}. Everything below applies to that universe and nothing outside it.{% if indexFacts.screensEarnings %} Admission additionally requires profitability &mdash; trailing twelve-month earnings and the most recent quarter both positive &mdash; and that test governs joining, never staying: a member that falls into losses keeps its seat until the bands take it.{% endif %}</dd>
+				</div>
+				<div>
+					<dt class="font-semibold text-on-surface">Weighting</dt>
+					<dd class="text-on-surface-variant leading-relaxed">{{ indexFacts.weightingLabel }}. {{ indexFacts.weightingDescription }}{% if indexFacts.isCapped %} Capped at each review at {{ indexFacts.maxConstituentWeight|pct(1) }} per constituent, with the excess redistributed across the rest &mdash; between reviews a constituent that outruns the index carries more than the cap, because the fund holds the shares it bought and does not trade until the next review{% if indexFacts.appliesConcentrationBudget %} &mdash; a sector this narrow cannot be sold as a diversified fund otherwise{% endif %}.{% endif %}</dd>
+				</div>
+				<div>
+					<dt class="font-semibold text-on-surface">Level</dt>
+					<dd class="text-on-surface-variant leading-relaxed">Members' float-adjusted cap, each carrying the weight factor fixed at the last review, divided by a divisor. The divisor is restated at every review and every fund split, so composition and re-weighting never move the level; only prices do. Between reviews the weights drift with prices, as a real fund's holdings do. A fresh market opens at {{ constant('App\\Service\\Math\\FinancialConstants::INDEX_BASE_LEVEL')|number_format(0) }}.</dd>
+				</div>
+				<div>
+					<dt class="font-semibold text-on-surface">Review</dt>
+					<dd class="text-on-surface-variant leading-relaxed">{{ indexFacts.reconstitutionsPerYear }} times a year. {% if indexFacts.isSelective %}Membership is banded: a &plusmn;{{ constant('App\\Service\\Market\\Index\\IndexCommittee::INDEX_MEMBERSHIP_BUFFER')|pct(0) }} buffer around the cut, so a marginal overtake buys nothing and a clear one gets in.{% else %}Every name in the universe is a member; the review only removes what has been delisted or has left it.{% endif %} A bankrupt shell leaves at the first review after it dies.</dd>
+				</div>
+				{% if indexFacts.expenseRatio is not null %}
+					<div>
+						<dt class="font-semibold text-on-surface">Fees and income</dt>
+						<dd class="text-on-surface-variant leading-relaxed">The fund holds the basket, so it receives the dividends its constituents pay and passes them on {{ constant('App\\Service\\Math\\FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR') }} times a year; the level above is a price index and shows none of that. Its {{ indexFacts.expenseRatio|pct(2) }} fee is charged against net assets and met out of that income first, so a distribution is net of what the fund costs to run. Only where income falls short does the fund sell holdings, which is why its price can track the index exactly while its holders are still paying for it: the cost is the {{ indexFacts.feesPaidPerShare|money(2) }} a share that never reached a distribution.{% if indexFacts.tradingCostsPerShare > 0.005 %} The fee is not the only cost. This index restrikes its weights at every review, and the fund has to trade to follow it: {{ indexFacts.tradingCostsPerShare|money(2) }} a share has gone in spread doing so, out of the basket rather than out of income, because a spread is paid inside the trade.{% endif %}</dd>
+					</div>
+				{% endif %}
+				<div>
+					<dt class="font-semibold text-on-surface">Passive flow</dt>
+					<dd class="text-on-surface-variant leading-relaxed">{% if indexFacts.carriesPassiveBook %}{{ indexFacts.passiveShare|pct(0) }} of the market's indexed money tracks this index. Index funds hold each name in proportion to how much indexed money points at it across every published index, so an admitted name is bought and a dropped name is sold by the same flow that trades everything else.{% else %}No passive book tracks this index; it is a benchmark, read against the headline index.{% endif %}</dd>
+				</div>
+			</dl>
+		</div>
+	</div>
+</div>
+				</div>

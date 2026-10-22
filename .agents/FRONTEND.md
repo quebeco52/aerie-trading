@@ -122,6 +122,10 @@ same before and after the feed repaints it.
 - `.term` on a label that explains itself on hover, with `ui.tooltip(text)` beside it:
   `{% import 'partials/_ui.html.twig' as ui %}`.
 - `.seg-btn` for range and filter buttons; state lives in `aria-pressed`.
+- A chart is a `partials/_chart_card.html.twig`: each grid page wraps it in a `chart()` macro with its own defaults
+  (economy page, `stock/_tab_financials`). Embed the partial for a card that needs a custom `hud`, `controls` above
+  the canvas, `canvas_extra` inside it, or its own `footer`.
+- The stock page is a shell (`stock/index.html.twig`) over one `stock/_tab_<name>.html.twig` per tab.
 - `<p class="source-note">{{ source_line('statistical-office') }}</p>` under a chart. Never name a Twig function
   `source`: it would replace Twig's own, which the web profiler uses.
 

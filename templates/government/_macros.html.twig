@@ -1,6 +1,18 @@
 {# Macros the government pages share. #}
 {% macro lever_value(lever, value) %}{% set unit = lever.unit ?? '' %}{{ unit == 'hhi' ? value|hhi ~ ' HHI' : (unit == 'usd_t' ? value|money(2) ~ '/t' : value|pct(2)) }}{% endmacro %}
 
+{# The Diet's seats as a hemicycle, shaded governing, supporting or opposition, with the seats the government can count
+   on against the majority it needs. #}
+{% macro hemicycle(seats, parties, supported, majority, class) %}
+	<svg viewBox="-108 -106 216 114" class="w-full {{ class }}" role="img" aria-label="Diet seats by party: {% for party in parties %}{{ party.name }} {{ party.seats }}{{ not loop.last ? ', ' : '' }}{% endfor %}">
+		{% for seat in seats %}
+			<circle cx="{{ seat.x * 100 }}" cy="{{ -seat.y * 100 }}" r="2.5" fill="{{ seat.color }}" fill-opacity="{{ seat.governing ? 1 : (seat.supporting ? 0.6 : 0.3) }}"{% if seat.supporting %} stroke="{{ seat.color }}" stroke-width="0.6"{% endif %}></circle>
+		{% endfor %}
+		<text x="0" y="-13" text-anchor="middle" class="fill-on-surface font-semibold" font-size="15">{{ supported }}</text>
+		<text x="0" y="-4" text-anchor="middle" class="fill-on-surface-variant" font-size="5.5">of {{ majority }} needed</text>
+	</svg>
+{% endmacro %}
+
 {# One question's line at one width. #}
 {% macro compass_row(row, compass, layout) %}
 	{% set f = compass.fontSize %}

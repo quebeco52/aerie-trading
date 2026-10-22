@@ -35,8 +35,6 @@ final class TemplateStyleTest extends TestCase
     private const HAND_PERCENT_CEILING = 2;
     /** Dollar figures still formatted by hand, `${{ ... }}`, where |money does not fit yet. */
     private const HAND_MONEY_CEILING = 7;
-    /** Missing figures still printed as a hyphen, `: '-' }}` or `>-<`, rather than the dash. */
-    private const HYPHEN_PLACEHOLDER_CEILING = 50;
 
     /** Utilities whose suffix is not a colour, by prefix. */
     private const NON_COLOUR_SUFFIXES = [
@@ -226,22 +224,21 @@ final class TemplateStyleTest extends TestCase
 
     public function testHandFormattedFiguresOnlyShrink(): void
     {
-        $percent = $money = $hyphen = 0;
+        $percent = $money = 0;
         foreach ($this->templates() as $source) {
             // A bar's CSS width is a length, not a figure the reader sees.
             $percent += preg_match_all('/\*\s*100\s*\)\|number_format/', (string) preg_replace('/style="[^"]*"/', '', $source));
             $money += preg_match_all('/\$\{\{/', $source);
-            $hyphen += preg_match_all("/'-'\s*\}\}|>-</", $source);
         }
 
         $this->assertLessThanOrEqual(self::HAND_PERCENT_CEILING, $percent, 'New percentages use |pct(n); move old ones over and lower HAND_PERCENT_CEILING.');
         $this->assertLessThanOrEqual(self::HAND_MONEY_CEILING, $money, 'New dollar figures use |money(n); move old ones over and lower HAND_MONEY_CEILING.');
-        $this->assertLessThanOrEqual(self::HYPHEN_PLACEHOLDER_CEILING, $hyphen, 'A missing figure prints "—" (the filters do it on null); lower HYPHEN_PLACEHOLDER_CEILING.');
     }
 
     /**
      * Each kind of figure has one filter, so a spread, a P/E or a change prints alike on every page: basis points, the
-     * HHI and multiples by hand, a rate handed over as a percent (`x|number_format(2) }}%`) and a hand-signed rise.
+     * HHI and multiples by hand, a rate handed over as a percent (`x|number_format(2) }}%`), a hand-signed rise, and a
+     * missing figure printed as a hyphen rather than "—".
      */
     public function testFiguresUseTheirFilters(): void
     {
@@ -250,6 +247,7 @@ final class TemplateStyleTest extends TestCase
             "/number_format\(\d\)\s*(~\s*'[x×]'|\}\}[x×])/u",
             '/number_format\(\d+\)\s*\}\}%/',
             "/>\s*0\s*\?\s*'\+'/",
+            "/'-'\s*\}\}|>-</",
         ];
         $hits = [];
         foreach ($this->templates() as $path => $source) {
@@ -258,7 +256,7 @@ final class TemplateStyleTest extends TestCase
             }
         }
 
-        $this->assertSame([], $hits, 'Use |bps, |hhi, |multiple, and |pct on a fraction with its own sign flag (|pct(2, true)).');
+        $this->assertSame([], $hits, 'Use |bps, |hhi, |multiple, |pct on a fraction with its own sign flag (|pct(2, true)), and "—" for a missing figure.');
     }
 
     /** A stray closing tag ends the page container early, and everything after it renders outside the layout. */
