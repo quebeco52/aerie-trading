@@ -79,7 +79,6 @@ final class FundMandateTest extends KernelTestCase
         $lastDuty = null;
         $lastStake = null;
         $lastLevy = null;
-        $lastCredit = null;
         $boardIndex = 1.0;
         $board = [];
         $quarters = [];
@@ -93,13 +92,17 @@ final class FundMandateTest extends KernelTestCase
             $policy = null;
             if (getenv('MANDATE') && isset($m) && $m->totalTime >= (float) (getenv('MANDATE_AT') ?: 5.0)) {
                 $policy = new \App\DTO\GovernmentPolicyDTO(
+                    publicSpendingShare: $m->publicSpendingShare, foreignBuyerTaxRate: $m->foreignBuyerTaxRate, reserveDrawShare: $m->reserveDrawShare,
+                    consolidationTaxShare: $m->consolidationTaxShare, reserveHomeEquityShare: $m->reserveHomeEquityShare,
+                    utilityRateCaseGrantShare: $m->utilityRateCaseGrantShare, dividendTaxRate: $m->dividendTaxRate,
+                    debtTarget: $m->debtTarget, debtPace: $m->debtPace,
                     corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate,
                     mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
                     extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
                     reserveFundEquityShare: (float) getenv('MANDATE'),
                 );
             }
-            $m = $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy, boardBankCredit: $lastCredit);
+            $m = $macro->updateMacroState($dt, new \App\DTO\BoardReadingDTO($lastCap, $lastFloat, $lastReturn ?? 0.0, $lastDividends ?? 0.0, $lastIssuance ?? 0.0, $lastDuty ?? 0.0, $lastStake ?? 0.0, $lastLevy), $policy);
             $lastReturn = null;
             $lastDividends = null;
             $lastIssuance = null;
@@ -128,7 +131,6 @@ final class FundMandateTest extends KernelTestCase
             $lastDuty = (float) $result['board_stamp_duty'];
             $lastStake = (float) $result['strategic_stake_cash'];
             $lastLevy = (float) $result['board_bank_levy'];
-            $lastCredit = (float) $result['board_bank_credit'];
 
             if ($tick === 3 && getenv('SIZEPROBE')) {
                 $gdpDollars = $m->sovereignFundDollarsPerGdp * $m->nominalGdpIndex;
@@ -154,7 +156,7 @@ final class FundMandateTest extends KernelTestCase
                     'y10' => $m->yield10y,
                     'debt' => $m->sovereignDebtToGdp,
                     'deficit' => $m->primaryDeficitToGdp,
-                    'stab' => $m->sovereignFundStabilisationToGdp,
+                    'stab' => 0.0, // fund-financed stabilisation removed in 215c39f9
                     'tax' => $m->corporateTaxRate,
                     'gov' => $m->governmentSpendingIndex,
                     'erp' => $m->equityRiskPremium,

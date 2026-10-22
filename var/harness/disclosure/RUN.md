@@ -14,6 +14,8 @@ own `bootstrap.php` copy so the kernel cache is `cache/` here (delete it after a
   With DISC_OUT set, `captureReport` skips the usual quarter rows (smaller, faster).
 
 Arms (`run.sh <arm> <seed>`, env YEARS (30), TPY (360)): `light` 0.30/1.5, `founding` 0.20/1.0, `strict` 0.10/0.5.
+Since the 10-19 rework the warning threshold is the constant `EarningsEngine::PREANNOUNCEMENT_WARNING_THRESHOLD`:
+on the current tree PWT is ignored and the arms differ only in EMS.
 ~2 s per sim-year per run at 360 tpy.
 
 Run:

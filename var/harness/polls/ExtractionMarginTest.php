@@ -72,7 +72,7 @@ final class ExtractionMarginTest extends KernelTestCase
                 $health = $c->get(\App\Service\Corporate\DebtEngine::class)->analyzeDebtHealth($stock, $macro);
                 $ctx = \App\DTO\MarketPricingContext::forStock($stock, $macro, $health, $c->get(\App\Service\Corporate\Holdings\AnchorStakeLedger::class));
 
-                return $c->get(\App\Service\Market\MarketEngine::class)->calculateNextPrice($ctx)['perceived_fair_value'];
+                return $c->get(\App\Service\Market\Pricing\MarketEngine::class)->calculateNextPrice($ctx)['perceived_fair_value'];
             };
             $noneMacro = new MacroStateDTO();
             $certainMacro = new MacroStateDTO(expectedLevers: $law, expectedPolicyFrom: 0.5, previousExpectedLevers: $law, previousExpectedPolicyFrom: 0.5);
@@ -82,7 +82,7 @@ final class ExtractionMarginTest extends KernelTestCase
             // values differ by what the fair values do (the tax law is the same in both, so the tax ratio cancels).
             $bases = \App\DTO\MarketPricingContext::forStock($stock, $noneMacro, $c->get(\App\Service\Corporate\DebtEngine::class)->analyzeDebtHealth($stock, $noneMacro), $c->get(\App\Service\Corporate\Holdings\AnchorStakeLedger::class))->policyBasesPerShare;
             $tax = $stock->getIndustry() !== null ? \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getEffectiveTaxRate($noneMacro->corporateTaxRate) : 0.21;
-            $diff = static fn (float $cap): float => (\App\Service\Market\PolicyCapitalization::earningsGap($certainMacro, $bases, $tax, $cap) - \App\Service\Market\PolicyCapitalization::earningsGap($noneMacro, $bases, $tax, $cap)) / $cap;
+            $diff = static fn (float $cap): float => (\App\Service\Market\Pricing\PolicyCapitalization::earningsGap($certainMacro, $bases, $tax, $cap) - \App\Service\Market\Pricing\PolicyCapitalization::earningsGap($noneMacro, $bases, $tax, $cap)) / $cap;
             $lo = 0.005;
             $hi = 1.0;
             for ($i = 0; $i < 80; ++$i) {

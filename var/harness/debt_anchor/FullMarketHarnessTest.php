@@ -112,7 +112,7 @@ final class FullMarketHarnessTest extends KernelTestCase
         $operatorInterval = getenv('SIMCMD') ? 100 : (int) max(1, $tpy / 24);
         $replay = $replayPath !== null ? unserialize((string) gzuncompress((string) file_get_contents($replayPath))) : null;
         $recorded = [];
-        $lastCap = $lastFloat = $lastReturn = $lastDividends = $lastIssuance = $lastDuty = $lastStake = $lastLevy = $lastCredit = null;
+        $reading = new \App\DTO\BoardReadingDTO();
         $dead = [];
         $reorgs = [];
         $defaults = [];
@@ -132,7 +132,7 @@ final class FullMarketHarnessTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt)
-                : $macro->updateMacroState($dt, $lastCap, $lastFloat, $lastReturn, $lastDividends, $lastIssuance, $lastDuty, $lastStake, $policy, boardBankLevy: $lastLevy, boardBankCredit: $lastCredit);
+                : $macro->updateMacroState($dt, $reading, $policy);
             if ($politicsEngine !== null) {
                 $pstate = $politicsEngine->updatePolitics($m, $dt);
                 $policy = $pstate->policy();
@@ -141,7 +141,7 @@ final class FullMarketHarnessTest extends KernelTestCase
             // the budget inflow is this tick's currency, credited next tick; stamp duty from its year-to-date sum).
             $gdpD = $m->sovereignFundDollarsPerGdp * $m->nominalGdpIndex;
             $fq['draw'] = ($fq['draw'] ?? 0.0) + $m->sovereignFundDrawToGdp * $dt;
-            $fq['stab'] = ($fq['stab'] ?? 0.0) + $m->sovereignFundStabilisationToGdp * $dt;
+            $fq['stab'] = 0.0; // fund-financed stabilisation removed in 215c39f9
             $fq['inflow'] = ($fq['inflow'] ?? 0.0) + ($gdpD > 0.0 ? $m->sovereignFundBudgetInflow / $gdpD : 0.0);
             $ytd = $m->sovereignFundStampDutyYearToDate;
             $fq['stamp'] = ($fq['stamp'] ?? 0.0) + ($gdpD > 0.0 ? ($ytd < ($ytdPrev ?? 0.0) ? $ytd : $ytd - ($ytdPrev ?? 0.0)) / $gdpD : 0.0);
@@ -198,21 +198,13 @@ final class FullMarketHarnessTest extends KernelTestCase
             // SIMCMD mirrors app:market-simulate, which feeds the macro no board at all. Levels stand when not
             // reported (as the ticker keeps the last); flows are this tick's.
             if (!getenv('SIMCMD')) {
-                $lastCap = (float) $result['total_cap'] > 0.0 ? (float) $result['total_cap'] : $lastCap;
-                $lastFloat = (float) $result['board_float_cap'] > 0.0 ? (float) $result['board_float_cap'] : $lastFloat;
-                $lastReturn = (float) $result['board_price_return'];
-                $lastDividends = (float) $result['board_dividend_cash'];
-                $lastIssuance = (float) $result['board_net_issuance'];
-                $lastDuty = (float) $result['board_stamp_duty'];
-                $lastStake = (float) $result['strategic_stake_cash'];
-                $lastLevy = (float) $result['board_bank_levy'];
-                $lastCredit = (float) $result['board_bank_credit'];
+                $reading = $reading->after($result);
             }
             // MACRO_OUT: one macro row a quarter, for the macro-market loop.
             // FISCAL=1 adds the primary deficit and the net-tax rate, and a founding row at tick 1.
             if (getenv('MACRO_OUT') && ($tick % max(1, intdiv($tpy, 4)) === 0 || ($tick === 1 && getenv('FISCAL')))) {
                 file_put_contents((string) getenv('MACRO_OUT'), json_encode([
-                    'seed' => $seed, 't' => round($tick / $tpy, 3), 'gap' => $m->outputGap, 'cap' => $lastCap,
+                    'seed' => $seed, 't' => round($tick / $tpy, 3), 'gap' => $m->outputGap, 'cap' => $reading->equityMarketCap,
                     'nominal_gdp' => $m->nominalGdpIndex, 'ewr' => $m->equityWealthRatio, 'ewt' => $m->equityWealthTrend,
                     'fin' => $m->financeOutputGap ?? 0.0, 'nx' => $m->netExportGap ?? 0.0, 'supply' => $m->productivitySupplyGap,
                     'credit_gap' => $m->creditToGdpGap, 'policy' => $m->policyRate, 'infl' => $m->inflation, 'u' => $m->unemploymentRate,
@@ -222,8 +214,8 @@ final class FullMarketHarnessTest extends KernelTestCase
                     'float' => $m->boardFloatCap, 'fund_own' => $m->sovereignFundOwnershipShare,
                     'corp_tax_shift' => $m->corporateTaxPolicyShift, 'div_tax' => $m->dividendTaxRate, 'home_law' => $m->reserveHomeEquityShare,
                     'debt' => $m->sovereignDebtToGdp, 'spend_law' => $m->publicSpendingShare,
-                    'net_debt' => $m->sovereignNetDebtToGdp, 'bank_credit' => \App\Service\Macro\Subsystem\CreditFiscalSubsystem::bankCreditToGdp($m->boardBankCredit, $m->sovereignFundDollarsPerGdp, $m->nominalGdpIndex),
-                    'rescue_cost' => $m->bankRescueCostToGdp, 'rescue_assets' => $m->bankRescueAssetsToGdp, 'crisis_at' => $m->lastCreditCrisisAt,
+                    'net_debt' => $m->sovereignNetDebtToGdp, 
+                    'crisis_at' => $m->lastCreditCrisisAt,
                     'spread' => $m->sovereignRiskSpread, 'tax_rate' => $m->corporateTaxRate,
                 ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])
                     + (getenv('FISCAL') ? ['primary' => $m->primaryDeficitToGdp, 'net_tax' => $m->netTaxRate, 'spend_idx' => $m->governmentSpendingIndex,
@@ -233,10 +225,10 @@ final class FullMarketHarnessTest extends KernelTestCase
                         'f_ret_idx' => $m->sovereignFundReturnIndex, 'f_draw' => $fq['draw'] ?? 0.0, 'f_stab' => $fq['stab'] ?? 0.0,
                         'f_inflow' => $fq['inflow'] ?? 0.0, 'f_stamp' => $fq['stamp'] ?? 0.0,
                         'draw_law' => $m->reserveDrawShare, 'draw_share' => $m->sovereignFundDrawShare,
-                        'council_line' => isset($pstate) ? \App\Service\Politics\DebtBrake::councilLine($pstate) : null,
+                        'council_line' => null, // DebtBrake (Council line) removed in 215c39f9
                         'debt_target' => property_exists($m, 'debtTarget') ? $m->debtTarget : null,
-                        'council_debt_line' => property_exists($m, 'councilDebtLine') ? $m->councilDebtLine : null,
-                        'anchor' => property_exists($m, 'debtTarget') ? min($m->debtTarget, $m->councilDebtLine) : null,
+                        'council_debt_line' => null,
+                        'anchor' => $m->debtTarget,
                         'tp10' => $m->termPremium10y, 'y2' => $m->yield2y, 'ig' => $m->macroCreditSpread, 'hy' => $m->highYieldCreditSpread,
                         'house' => $m->residentialPropertyIndexEma, 'house_dev' => $m->housePriceDeviation(),
                         'coal_state' => isset($pstate) ? \App\Service\Politics\Policy\Platforms::coalitionPosition($pstate->governingCoalition, $pstate->dietSeats, $pstate->partyPositions)[\App\Data\Politics\AerieDiet::AXIS_STATE] : null] : [])) . "\n", FILE_APPEND);
@@ -418,7 +410,7 @@ final class FullMarketHarnessTest extends KernelTestCase
         $hurdle = $strategy->isFinancial() ? $ctx->liveCostOfEquity : $ctx->liveWacc;
         $sroic = $strategy->calculateStructuralRoic($ctx->roicTtm, $ctx->baselineRoic, $ctx->revenuePerShare, $ctx->bookValuePerShare, $ctx->baselineMargin);
         $gNom = Valuation::calculateExpectedNominalGrowth($ctx->secularGrowth, $gap, $ctx->beta, $infl, $strategy->getMoatSpread());
-        $gFund = Valuation::calculateFundableGrowth($gNom, $sroic, $ctx->targetPayoutRatio);
+        $gFund = Valuation::calculateFundableGrowth($gNom, $sroic, $ctx->targetPayoutRatio, $infl);
         $peRaw = Valuation::calculateIntrinsicFairValuePE($hurdle, $sroic, $gFund, null);
         $peShrunk = Valuation::calculateIntrinsicFairValuePE($hurdle, $sroic, $gFund, $ctx->baselineIndustryPE);
         $fvpe = Valuation::calculateQualityAdjustedFairValuePE($hurdle, $sroic, $gFund, $ctx->baselineIndustryPE, $ctx->accrualsRatio);

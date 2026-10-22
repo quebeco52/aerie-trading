@@ -53,7 +53,9 @@ final class DisclosureHarnessTest extends KernelTestCase
             return $m;
         }
         $vars = (fn (): array => get_object_vars($this))->call($m);
-        if ($pwt !== false) {
+        // The threshold is EarningsEngine::PREANNOUNCEMENT_WARNING_THRESHOLD on trees after the 10-19 politics rework, not
+        // a DTO field: PWT is then ignored and only EMS is forced.
+        if ($pwt !== false && property_exists(MacroStateDTO::class, 'profitWarningThreshold')) {
             $vars['profitWarningThreshold'] = (float) $pwt;
         }
         if ($ems !== false) {
@@ -442,7 +444,7 @@ final class DisclosureHarnessTest extends KernelTestCase
         $hurdle = $strategy->isFinancial() ? $ctx->liveCostOfEquity : $ctx->liveWacc;
         $sroic = $strategy->calculateStructuralRoic($ctx->roicTtm, $ctx->baselineRoic, $ctx->revenuePerShare, $ctx->bookValuePerShare, $ctx->baselineMargin);
         $gNom = Valuation::calculateExpectedNominalGrowth($ctx->secularGrowth, $gap, $ctx->beta, $infl, $strategy->getMoatSpread());
-        $gFund = Valuation::calculateFundableGrowth($gNom, $sroic, $ctx->targetPayoutRatio);
+        $gFund = Valuation::calculateFundableGrowth($gNom, $sroic, $ctx->targetPayoutRatio, $infl);
         $peRaw = Valuation::calculateIntrinsicFairValuePE($hurdle, $sroic, $gFund, null);
         $peShrunk = Valuation::calculateIntrinsicFairValuePE($hurdle, $sroic, $gFund, $ctx->baselineIndustryPE);
         $fvpe = Valuation::calculateQualityAdjustedFairValuePE($hurdle, $sroic, $gFund, $ctx->baselineIndustryPE, $ctx->accrualsRatio);

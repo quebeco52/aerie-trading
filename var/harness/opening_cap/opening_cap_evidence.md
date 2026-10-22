@@ -105,3 +105,6 @@ LOON 151.4 (seed 156.8). Tick-1 gain net of the three firms: +0.05T (0.03). HEAD
 (table `opening_cap_1016b.out`; HEAD arm `head1016` reused). Board tick 1 20.176T (0.024), Q1 mean 20.332T (0.215);
 vs HEAD +0.175T (0.040) and +0.327T (0.307); vs r3_1016 +0.03T. Q1 end ($B): SKUA 22.4 (0.6, seed 23.4), DIPR 35.8 (1.2,
 seed 33.0), KTWK 43.3 (1.4), LOON 153.2. Recommend 20.3e12 (unchanged from (a)).
+
+The OVR seed copies (`ovr_newfirms/`, `ovr_noplvr/`) were deleted 2026-10-22: they froze InitialMarket as of 10-18.
+`git checkout 2f8bc547 -- var/harness/opening_cap/ovr_newfirms var/harness/opening_cap/ovr_noplvr` restores them.

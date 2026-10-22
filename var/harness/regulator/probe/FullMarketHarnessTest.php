@@ -6,8 +6,8 @@ use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
-use App\Service\Market\MarketOperator;
-use App\Service\Market\StockTracker;
+use App\Service\Corporate\FailureSweep;
+use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
 use Doctrine\DBAL\Connection;
@@ -34,7 +34,7 @@ final class FullMarketHarnessTest extends KernelTestCase
     private float $currentTime = 0.0;
     private ?\App\Service\Corporate\DebtEngine $debtEngine = null;
     private ?StockTracker $fvTracker = null;
-    private ?\App\Service\Market\MarketEngine $fvEngine = null;
+    private ?\App\Service\Market\Pricing\MarketEngine $fvEngine = null;
     /** @var array<string, list<array{t: float, d: string}>> */
     private array $events = [];
 
@@ -95,8 +95,8 @@ final class FullMarketHarnessTest extends KernelTestCase
         $this->debtEngine = $c->get(\App\Service\Corporate\DebtEngine::class);
         $tracker = $c->get(StockTracker::class);
         $this->fvTracker = $tracker;
-        $this->fvEngine = $c->get(\App\Service\Market\MarketEngine::class);
-        $operator = $c->get(MarketOperator::class);
+        $this->fvEngine = $c->get(\App\Service\Market\Pricing\MarketEngine::class);
+        $sweep = $c->get(FailureSweep::class);
 
         $list = array_values($stocks);
         $dt = 1.0 / $tpy;
@@ -141,7 +141,7 @@ final class FullMarketHarnessTest extends KernelTestCase
                         $defaults[$s->getTicker()] = ($defaults[$s->getTicker()] ?? 0) + 1;
                     }
                 }
-                foreach ($operator->enforceMarketStability($list, $m) as $ev) {
+                foreach ($sweep->sweep($list, $m) as $ev) {
                     $t = (string) ($ev['ticker'] ?? '');
                     if (!isset($stocks[$t])) {
                         continue;
@@ -228,7 +228,7 @@ final class FullMarketHarnessTest extends KernelTestCase
 
         // RESET_PROBE: reopen the traded board exactly as app:market-reset does, one row at a time in seed order.
         if (getenv('RESET_PROBE')) {
-            $builder = $c->get(\App\Service\Market\OpeningBoardBuilder::class);
+            $builder = $c->get(\App\Service\Market\Pricing\OpeningBoardBuilder::class);
             $openingMacro = new MacroStateDTO();
             $spheres = [];
             foreach (\App\Data\Company\InitialMarket::STOCKS as $row) {
@@ -368,7 +368,7 @@ final class FullMarketHarnessTest extends KernelTestCase
         $hurdle = $strategy->isFinancial() ? $ctx->liveCostOfEquity : $ctx->liveWacc;
         $sroic = $strategy->calculateStructuralRoic($ctx->roicTtm, $ctx->baselineRoic, $ctx->revenuePerShare, $ctx->bookValuePerShare, $ctx->baselineMargin);
         $gNom = Valuation::calculateExpectedNominalGrowth($ctx->secularGrowth, $gap, $ctx->beta, $infl, $strategy->getMoatSpread());
-        $gFund = Valuation::calculateFundableGrowth($gNom, $sroic, $ctx->targetPayoutRatio);
+        $gFund = Valuation::calculateFundableGrowth($gNom, $sroic, $ctx->targetPayoutRatio, $infl);
         $peRaw = Valuation::calculateIntrinsicFairValuePE($hurdle, $sroic, $gFund, null);
         $peShrunk = Valuation::calculateIntrinsicFairValuePE($hurdle, $sroic, $gFund, $ctx->baselineIndustryPE);
         $fvpe = Valuation::calculateQualityAdjustedFairValuePE($hurdle, $sroic, $gFund, $ctx->baselineIndustryPE, $ctx->accrualsRatio);

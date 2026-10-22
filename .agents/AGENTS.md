@@ -75,7 +75,8 @@ spend them where the answer is emergent.
 - **A small effect next to seed noise:** paired arms on the same seeds, reporting n, mean and standard error of the
   paired difference (t = Δ / SE_Δ). Harnesses live in `var/harness/<topic>/`; their code is tracked, their runs are
   not (read `<topic>/RUN.md` first; do not scan the whole directory). Stage 8, 16, then at most 48 seeds per arm;
-  stop once the answer is clear. Ask before a sweep over 100 runs.
+  stop once the answer is clear. Ask before a sweep over 100 runs. `bin/verify` checks changed harness files at
+  PHPStan level 0, and `bin/verify --harness` checks them all; a settled topic is deleted (git history keeps it).
 - **What the live game is doing:** tell the user to run `make macro-dump` first; a harness only for the counterfactual.
 
 All PHP processes on the machine share 12 slots through `bin/php-slot`, at most 8 per session.

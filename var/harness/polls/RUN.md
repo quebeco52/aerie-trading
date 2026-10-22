@@ -31,3 +31,6 @@ Evidence: `polls_evidence.md`.
 `bin/harness-batch var/harness/polls/form.sh 1-16 levers` (200y per seed, ~5 min wall), then
 `php var/harness/polls/lever_means_an.php var/harness/polls/runs_form/levers_*.jsonl`. Measures come from
 `PolicyCapitalization::measure()`, so a new priced lever needs no change here. Last: `lever_means_rework.out` (2026-10).
+
+Deleted 2026-10-22: the `pricing_probe*.php` scripts the evidence file cites called `PolicyCapitalization::reprice()`,
+which MarketEngine no longer runs. `git show e204348b:var/harness/polls/pricing_probe.php` recovers them.

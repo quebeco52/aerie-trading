@@ -44,3 +44,7 @@ Paired follow-up: does the change move debt, fund/GDP and the primary balance in
   tp10, 2s10s, inversion share, house, IG/HY, debt on coalition position. Debt-target runs in `runs_debttarget/`.
 - `runs_old0.93/`: the first 4 after runs, opened at debt 0.93 (before INITIAL_DEBT_TO_GDP = 0.72).
 - Evidence: `debt_anchor_evidence.md`.
+- 2026-10-22 repair to the current API (215c39f9 removed the brake, rescues and fund stabilisation): the macro reads
+  a `BoardReadingDTO`; rows drop `bank_credit`, `rescue_cost`, `rescue_assets`; `council_line` and
+  `council_debt_line` are null, `f_stab` is 0, `anchor` is the Diet's `debtTarget`. `target.py`/`payout.py` columns
+  on the Council line are therefore empty on new runs.

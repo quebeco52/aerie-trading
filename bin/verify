@@ -4,9 +4,13 @@
 #
 #   bin/verify            PHPStan, then every test file that ran under a second in the last full run, plus the slow
 #                         ones written for a changed class (FooTest.php for Foo.php) or changed themselves
-#   bin/verify --full     PHPStan, then the Fast suite with each Realism file in its own process beside it (~1 min),
-#                         and records each file's time for the quick run
+#   bin/verify --full     PHPStan (every live harness file included), then the Fast suite with each Realism file in
+#                         its own process beside it (~1 min), and records each file's time for the quick run
 #   bin/verify --phpstan  PHPStan on the changed files only
+#   bin/verify --harness  PHPStan level 0 on every live harness file, after an engine API change
+#
+# Harness code is outside PHPStan's paths, so a changed harness file is checked at level 0 (unknown classes, methods
+# and arguments: the drift that broke them unseen).
 #
 # Controller tests need MySQL and are left out of both runs. The quick run skips the long-run realism tests unless
 # their own class changed; run --full before committing. Every PHP process waits for a machine-wide bin/php-slot.
@@ -23,7 +27,30 @@ mapfile -t changed < <({
     git ls-files --others --exclude-standard -- 'src/*.php' 'tests/*.php'
 } | sort -u)
 
+# The full run checks every live harness file, since an engine change breaks harnesses it never touched.
+if [[ $mode == --harness || $mode == --full ]]; then
+    mapfile -t harness < <(git ls-files -- 'var/harness/*.php' | grep -vxF -f <(git ls-files --deleted -- 'var/harness/*.php'))
+else
+    mapfile -t harness < <({
+        git diff --name-only --diff-filter=d HEAD -- 'var/harness/*.php'
+        git ls-files --others --exclude-standard -- 'var/harness/*.php'
+    } | sort -u)
+fi
+
 status=0
+if (( ${#harness[@]} > 0 )); then
+    # The shared bootstrap declares HarnessKernel, which the harness tests boot; analysed beside them so it is known.
+    [[ " ${harness[*]} " == *" var/harness/bootstrap.php "* ]] || harness+=(var/harness/bootstrap.php)
+    if out=$(bin/php-slot php vendor/bin/phpstan analyse --level 0 --memory-limit=2G --no-progress --error-format=raw "${harness[@]}" 2>&1); then
+        echo "Harness: ${#harness[@]} files clean at PHPStan level 0"
+    else
+        echo "Harness: errors at PHPStan level 0"
+        grep -v '^Note: Using configuration' <<< "$out"
+        status=1
+    fi
+fi
+[[ $mode == --harness ]] && exit $status
+
 if (( ${#changed[@]} == 0 )); then
     echo "PHPStan: no changed PHP files"
 elif out=$(bin/php-slot php vendor/bin/phpstan analyse --memory-limit=1G --no-progress --error-format=raw "${changed[@]}" 2>&1); then
