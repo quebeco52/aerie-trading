@@ -144,16 +144,20 @@ class BondLedgerService
         );
 
         // Refund the cash escrowed behind open BUYs before the orders are dropped, otherwise the escrow is
-        // simply destroyed along with the row.
+        // simply destroyed along with the row. Summed per account first: a multi-table UPDATE changes each users
+        // row once however many orders it joins, so an account with several bids would get one of them back.
         $conn->executeStatement(
             "UPDATE users u
-             INNER JOIN trade_orders o
-                     ON o.user_id = u.id
-                    AND o.ticker = :ticker
-                    AND o.asset_type = 'BOND'
-                    AND o.status = 'OPEN'
-                    AND o.action = 'BUY'
-             SET u.cash_balance = u.cash_balance + (o.limit_price * (o.quantity - o.filled_quantity))",
+             INNER JOIN (
+                 SELECT o.user_id, SUM(o.limit_price * (o.quantity - o.filled_quantity)) AS escrow
+                 FROM trade_orders o
+                 WHERE o.ticker = :ticker
+                   AND o.asset_type = 'BOND'
+                   AND o.status = 'OPEN'
+                   AND o.action = 'BUY'
+                 GROUP BY o.user_id
+             ) refunds ON refunds.user_id = u.id
+             SET u.cash_balance = u.cash_balance + refunds.escrow",
             ['ticker' => $bond->getTicker()],
         );
 

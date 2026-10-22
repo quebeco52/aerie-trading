@@ -54,6 +54,17 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE bond_history');
         $conn->executeStatement('TRUNCATE TABLE coupon_payment');
         $conn->executeStatement('TRUNCATE TABLE user_options');
+        $conn->executeStatement('TRUNCATE TABLE dividend_payment');
+
+        // Resting orders go with the holdings they escrow. Left behind, a cancelled BUY refunds its escrow on top
+        // of the new starting cash, a cancelled SELL hands back shares the truncate above destroyed, and the first
+        // tick fills old orders against the reopened board.
+        $conn->executeStatement('TRUNCATE TABLE trade_orders');
+
+        // Seasons are measured in simulation years, so an open one would run until the new clock reaches the old
+        // timeline's end date. The season service opens a fresh one on the first week.
+        $conn->executeStatement('TRUNCATE TABLE season_entries');
+        $conn->executeStatement('TRUNCATE TABLE seasons');
 
         // The chain goes with the ladder, and for the same reason: a contract's expiry is a point in
         // simulation time, so every one of them is either already expired or decades out the moment the
@@ -100,7 +111,7 @@ class MarketResetCommand extends Command
         $testUser->setIsVerified(true);
         $this->entityManager->flush();
 
-        $conn->executeStatement('UPDATE users SET cash_balance = 10000.00');
+        $conn->executeStatement('UPDATE users SET cash_balance = 10000.00, margin_debit = 0');
         $conn->executeStatement('SET FOREIGN_KEY_CHECKS = 1');
 
         $io->text('2. Flushing Redis cache...');

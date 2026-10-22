@@ -832,6 +832,14 @@ class TradeExecutionService
                 // borrowing the escrow was drawn from before it reaches the settled balance.
                 $refundStr = \bcsub(\bcmul((string) $limitPrice, (string) $quantity, 4), $considerationStr, 4);
 
+                // The escrow covered the price alone. Duty the refund does not cover is paid from the account
+                // now, and an account that cannot pay it stays open rather than borrowing it, as a buy stop does.
+                $dutyShortfallStr = \bcsub($stampDutyStr, $refundStr, 4);
+                if (\bccomp($dutyShortfallStr, '0.0000', 4) > 0 && !$this->hasFunding($user, (float) $dutyShortfallStr)) {
+                    $this->em->getConnection()->rollBack();
+                    return;
+                }
+
                 if (\bccomp($refundStr, '0.0000', 4) > 0) {
                     $this->cashLedger->credit($user, $refundStr);
                 }
@@ -843,7 +851,13 @@ class TradeExecutionService
             } elseif ($action === 'SHORT') {
                 // Nothing was escrowed, so the borrow is located and the margin checked now. Either can
                 // have gone against the order while it rested, and a short opened without a locate is a
-                // position the desk cannot actually deliver.
+                // position the desk cannot actually deliver. The account is checked too: a short is a margin
+                // position, and a cash account's funding test would pass it whenever cash covered the sale.
+                if (!$user->isMarginEnabled()) {
+                    $this->em->getConnection()->rollBack();
+                    return;
+                }
+
                 $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
                 if ($stock === null || self::sharesBorrowed($held, $held - $quantity) > $this->lendingDesk->availableToBorrow($stock)) {
                     $this->em->getConnection()->rollBack();

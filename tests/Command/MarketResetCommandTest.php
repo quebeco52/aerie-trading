@@ -50,6 +50,52 @@ final class MarketResetCommandTest extends TestCase
             $existing[$row['ticker']] = $stock;
         }
 
+        $sent = $this->reset($existing);
+
+        // The per-tick columns go out as id-keyed rows, each laid out as the id then COLUMNS in order.
+        $pricePosition = array_search('price', StockTickColumns::COLUMNS, true);
+        $this->assertIsInt($pricePosition);
+        $width = count(StockTickColumns::COLUMNS) + 1;
+        $written = [];
+        foreach ($sent as [$sql, $params]) {
+            if (!str_starts_with($sql, 'UPDATE stocks t JOIN')) {
+                continue;
+            }
+            foreach (array_chunk(array_values($params), $width) as $row) {
+                $written[(int) $row[0]] = (string) $row[1 + $pricePosition];
+            }
+        }
+
+        foreach ($existing as $ticker => $stock) {
+            $this->assertArrayHasKey((int) $stock->getId(), $written, "{$ticker}'s opening price never reached the database.");
+            $this->assertNotSame(self::OLD_MARKET_PRICE, $stock->getPrice(), "{$ticker} was not reopened.");
+            $this->assertSame($stock->getPrice(), $written[(int) $stock->getId()], "{$ticker} reached the database at a price other than its opening.");
+        }
+    }
+
+    /**
+     * A reset clears every account's book with the holdings it opens on: resting orders, which escrow cash or
+     * shares, margin debt, the dividend ledger and the seasons measured on the old timeline. Resting orders left
+     * behind refunded their escrow on cancel and filled against the reopened board.
+     */
+    public function testAResetClearsRestingOrdersMarginDebtAndSeasons(): void
+    {
+        $statements = array_column($this->reset([]), 0);
+
+        foreach (['trade_orders', 'dividend_payment', 'season_entries', 'seasons', 'user_stocks'] as $table) {
+            $this->assertContains("TRUNCATE TABLE {$table}", $statements, "{$table} survives the reset.");
+        }
+        $this->assertContains('UPDATE users SET cash_balance = 10000.00, margin_debit = 0', $statements);
+    }
+
+    /**
+     * Runs the reset against mocks, the given rows standing in for the stocks table.
+     *
+     * @param array<string, Stock> $existing ticker => row
+     * @return list<array{0: string, 1: array<int|string, mixed>}> every statement sent, in order
+     */
+    private function reset(array $existing): array
+    {
         /** @var list<array{0: string, 1: array<int|string, mixed>}> $sent */
         $sent = [];
         $connection = $this->createMock(Connection::class);
@@ -95,24 +141,6 @@ final class MarketResetCommandTest extends TestCase
 
         $this->assertSame(Command::SUCCESS, (new CommandTester($command))->execute([]));
 
-        // The per-tick columns go out as id-keyed rows, each laid out as the id then COLUMNS in order.
-        $pricePosition = array_search('price', StockTickColumns::COLUMNS, true);
-        $this->assertIsInt($pricePosition);
-        $width = count(StockTickColumns::COLUMNS) + 1;
-        $written = [];
-        foreach ($sent as [$sql, $params]) {
-            if (!str_starts_with($sql, 'UPDATE stocks t JOIN')) {
-                continue;
-            }
-            foreach (array_chunk(array_values($params), $width) as $row) {
-                $written[(int) $row[0]] = (string) $row[1 + $pricePosition];
-            }
-        }
-
-        foreach ($existing as $ticker => $stock) {
-            $this->assertArrayHasKey((int) $stock->getId(), $written, "{$ticker}'s opening price never reached the database.");
-            $this->assertNotSame(self::OLD_MARKET_PRICE, $stock->getPrice(), "{$ticker} was not reopened.");
-            $this->assertSame($stock->getPrice(), $written[(int) $stock->getId()], "{$ticker} reached the database at a price other than its opening.");
-        }
+        return $sent;
     }
 }

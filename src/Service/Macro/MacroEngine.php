@@ -44,6 +44,9 @@ class MacroEngine
      */
     public const SYSTEMIC_EVENT_COOLDOWN_YEARS = 0.25;
 
+    /** Whether this process has saved a state, after which a missing one is lost rather than not yet opened. */
+    private bool $statePersisted = false;
+
     public function __construct(
         private readonly MathUtility $mathUtility,
         private readonly \Redis $redis,
@@ -64,9 +67,32 @@ class MacroEngine
         private readonly ?SovereignFundSubsystem $sovereignFundSubsystem = null,
     ) {}
 
+    /**
+     * The state Redis holds, or the opening state when there is none yet.
+     *
+     * A process that has saved a state and then finds none has lost it to a flush, an eviction or a corrupt
+     * write. Opening a fresh economy there would run Year-1 prices under the current board and carry that clock
+     * into the database, so it stops instead; on restart, alignClock() refuses the missing state against the
+     * database clock.
+     *
+     * @throws \RuntimeException When the state this process saved is gone.
+     */
     private function loadState(): MacroState
     {
-        return $this->readPersistedState() ?? new MacroState();
+        $state = $this->readPersistedState();
+        if ($state !== null) {
+            return $state;
+        }
+
+        if ($this->statePersisted) {
+            throw new \RuntimeException(sprintf(
+                'The macroeconomic state saved under Redis key "%s" is gone. Stop the ticker and restore the key, or '
+                . 'start over with app:market-reset.',
+                self::REDIS_MACRO_STATE,
+            ));
+        }
+
+        return new MacroState();
     }
 
     /** The state Redis holds, or null when it holds none that decodes. */
@@ -95,7 +121,9 @@ class MacroEngine
         try {
             $payload = $state->toArray();
             $encoded = json_encode($payload, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
-            $this->redis->set(self::REDIS_MACRO_STATE, $encoded);
+            if ($this->redis->set(self::REDIS_MACRO_STATE, $encoded) === true) {
+                $this->statePersisted = true;
+            }
         } catch (\Throwable $e) {
             $this->logger?->critical('Failed to persist macroeconomic state to Redis: ' . $e->getMessage());
         }

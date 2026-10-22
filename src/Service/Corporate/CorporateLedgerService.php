@@ -30,7 +30,8 @@ class CorporateLedgerService
     ) {}
 
     /**
-     * Distributes a cash dividend to every user holding the stock, and records what each one received.
+     * Distributes a cash dividend to every account with a position in the stock, and records what each one
+     * received or paid.
      *
      * Runs inside the tick transaction opened by MarketTickerCommand, so the ledger write and the cash
      * credit are already atomic together; opening another one here would only nest.
@@ -39,6 +40,12 @@ class CorporateLedgerService
      * happens once, at write time, and the sum of dividend_payment.amount equals the cash actually paid
      * by construction. Running the holdings subquery twice and rounding independently lets the two drift
      * apart at the third decimal on every payment, with nothing to detect it.
+     *
+     * A short seller borrowed the shares from someone still entitled to the distribution, so a short position
+     * pays the dividend: its row carries a negative amount and the same addition debits it. Each account gets one
+     * row, on its net position: shares held, plus shares escrowed behind open SELLs (removed from user_stocks
+     * while they rest), less shares sold short. An account can rest a SELL and then go short the same stock, and
+     * the unique (user, ticker, paid_at) key admits only one row for it.
      *
      * @param Stock              $stock            The paying company.
      * @param float              $dividendPerShare Cash rate per share for this ex-date.
@@ -50,32 +57,31 @@ class CorporateLedgerService
         $conn = $this->entityManager->getConnection();
         $paidAtStr = $paidAt->format('Y-m-d H:i:s');
 
-        // Holdings include user_stocks plus escrowed shares from open SELL orders (open BUY orders escrow cash, not
-        // shares).
+        // Open BUY orders escrow cash, not shares, so they earn nothing.
         $conn->executeStatement(
             "INSERT INTO dividend_payment
                  (user_id, asset_type, ticker, shares_held, dividend_per_share, amount, paid_at)
-             SELECT holdings.user_id,
+             SELECT positions.user_id,
                     'STOCK',
                     :ticker,
-                    holdings.total_shares,
+                    positions.net_shares,
                     :dividend,
-                    ROUND(holdings.total_shares * :dividend, 2),
+                    ROUND(positions.net_shares * :dividend, 2),
                     :paid_at
              FROM (
-                 SELECT user_id, SUM(total_qty) AS total_shares
+                 SELECT user_id, SUM(qty) AS net_shares
                  FROM (
-                     SELECT user_id, quantity AS total_qty
+                     SELECT user_id, quantity AS qty
                      FROM user_stocks
-                     WHERE stock_id = :stock_id AND quantity > 0
+                     WHERE stock_id = :stock_id AND quantity <> 0
                      UNION ALL
-                     SELECT user_id, quantity AS total_qty
+                     SELECT user_id, quantity AS qty
                      FROM trade_orders
                      WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'
-                 ) combined_shares
+                 ) legs
                  GROUP BY user_id
-             ) holdings
-             WHERE ROUND(holdings.total_shares * :dividend, 2) > 0",
+             ) positions
+             WHERE ROUND(positions.net_shares * :dividend, 2) <> 0",
             [
                 'ticker' => $stock->getTicker(),
                 'dividend' => $dividendPerShare,
@@ -93,62 +99,6 @@ class CorporateLedgerService
                      ON d.user_id = u.id
                     AND d.ticker  = :ticker
                     AND d.paid_at = :paid_at
-             SET u.cash_balance = u.cash_balance + d.amount",
-            ['ticker' => $stock->getTicker(), 'paid_at' => $paidAtStr],
-        );
-
-        $this->chargeShortDividends($stock, $dividendPerShare, $paidAtStr);
-    }
-
-    /**
-     * Debits the dividend from anyone short the stock.
-     *
-     * A short seller borrowed the shares from someone who is still entitled to the distribution, so the
-     * short makes them whole out of their own pocket. It is a real and sometimes decisive cost of holding
-     * a short through an ex-date, and silently skipping it would make a high-yield name free to be short.
-     *
-     * Written as its own negative ledger row rather than folded into the payment statement above, so the
-     * income feed can show it for what it is: cash that left the account because of a position, not a
-     * distribution that failed to arrive.
-     *
-     * @param float  $dividendPerShare Cash rate per share for this ex-date.
-     * @param string $paidAtStr        Ex-date, matching the credit leg exactly.
-     */
-    private function chargeShortDividends(Stock $stock, float $dividendPerShare, string $paidAtStr): void
-    {
-        $conn = $this->entityManager->getConnection();
-
-        $conn->executeStatement(
-            "INSERT INTO dividend_payment
-                 (user_id, asset_type, ticker, shares_held, dividend_per_share, amount, paid_at)
-             SELECT us.user_id,
-                    'STOCK',
-                    :ticker,
-                    us.quantity,
-                    :dividend,
-                    ROUND(us.quantity * :dividend, 2),
-                    :paid_at
-             FROM user_stocks us
-             WHERE us.stock_id = :stock_id
-               AND us.quantity < 0
-               AND ROUND(us.quantity * :dividend, 2) < 0",
-            [
-                'ticker' => $stock->getTicker(),
-                'dividend' => $dividendPerShare,
-                'stock_id' => $stock->getId(),
-                'paid_at' => $paidAtStr,
-            ],
-        );
-
-        // The rows just written carry a negative amount, so the same addition that credits a holder debits
-        // a short. Restricted to negative rows so a replay cannot re-apply the credit leg.
-        $conn->executeStatement(
-            "UPDATE users u
-             INNER JOIN dividend_payment d
-                     ON d.user_id = u.id
-                    AND d.ticker  = :ticker
-                    AND d.paid_at = :paid_at
-                    AND d.amount < 0
              SET u.cash_balance = u.cash_balance + d.amount",
             ['ticker' => $stock->getTicker(), 'paid_at' => $paidAtStr],
         );

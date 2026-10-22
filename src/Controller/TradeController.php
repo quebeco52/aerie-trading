@@ -133,8 +133,14 @@ class TradeController extends AbstractController
                 ['user_id' => $user->getId()],
             ) > 0;
 
-            if ($hasDebit || $hasShorts || $hasWrittenOptions) {
-                $this->addFlash('error', 'Close every short position and written contract, and repay the margin loan, before disabling margin.');
+            // A resting short sale would open a short on the cash account the moment it filled.
+            $hasShortOrders = (int) $entityManager->getConnection()->fetchOne(
+                "SELECT COUNT(*) FROM trade_orders WHERE user_id = :user_id AND status = 'OPEN' AND action = 'SHORT'",
+                ['user_id' => $user->getId()],
+            ) > 0;
+
+            if ($hasDebit || $hasShorts || $hasWrittenOptions || $hasShortOrders) {
+                $this->addFlash('error', 'Close every short position and written contract, cancel any open short sale, and repay the margin loan, before disabling margin.');
 
                 return $this->redirect($request->headers->get('referer') ?? '/dashboard');
             }

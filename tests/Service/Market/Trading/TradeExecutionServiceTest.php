@@ -992,6 +992,90 @@ class TradeExecutionServiceTest extends TestCase
         $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 500);
     }
 
+    /**
+     * A resting limit BUY escrows the price alone, so the stamp duty a fill near the limit owes beyond its refund is
+     * paid from the account. A cash account that cannot pay it waits, as a buy stop does, rather than borrowing the
+     * duty on a margin loan it never opened.
+     */
+    public function testARestingLimitBuyNeverBorrowsItsDutyOnACashAccount(): void
+    {
+        $stock = $this->shortableStock();
+        $stock->setPrice('100.00');
+
+        $resultStatementMock = $this->createStub(\Doctrine\DBAL\Result::class);
+        $resultStatementMock->method('fetchOne')->willReturn(null);
+        $this->connectionMock->method('executeQuery')->willReturn($resultStatementMock);
+
+        $current = null;
+        $this->tradeOrderRepoStub->method('findOpenByTicker')->willReturnCallback(static function () use (&$current): array {
+            return [$current];
+        });
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        $fills = 0;
+        for ($cents = 9900; $cents <= 10000; $cents++) {
+            // The escrow has already taken the whole balance.
+            $buyer = new User();
+            $buyer->setCashBalance('0.00');
+
+            $current = new TradeOrder();
+            $current->setUser($buyer);
+            $current->setTicker('APEX');
+            $current->setAction('BUY');
+            $current->setOrderType('LIMIT');
+            $current->setQuantity(100);
+            $current->setLimitPrice('100.00');
+            $current->setStatus('OPEN');
+
+            $this->service->processLimitOrders('APEX', $cents / 100.0);
+
+            if ($current->getStatus() !== 'FILLED') {
+                continue;
+            }
+            $fills++;
+            $this->assertSame('0.00', $buyer->getMarginDebit(), sprintf('A fill with the market at %.2f borrowed its duty.', $cents / 100.0));
+            $this->assertGreaterThanOrEqual(0.0, (float) $buyer->getCashBalance());
+        }
+
+        $this->assertGreaterThan(0, $fills, 'Fills well inside the limit, whose refund covers the duty, still go through.');
+    }
+
+    /**
+     * A short is a margin position. A resting short sale whose account has since become a cash account waits
+     * rather than filling: the cash account's funding test, cash against the sale, would otherwise pass it.
+     */
+    public function testARestingShortDoesNotFillOnACashAccount(): void
+    {
+        $user = new User();
+        $user->setCashBalance('100000.00');
+        $stock = $this->shortableStock();
+
+        $order = new TradeOrder();
+        $order->setUser($user);
+        $order->setTicker('APEX');
+        $order->setAction('SHORT');
+        $order->setOrderType('LIMIT');
+        $order->setQuantity(100);
+        $order->setLimitPrice('40.00');
+        $order->setStatus('OPEN');
+
+        $resultStatementMock = $this->createStub(\Doctrine\DBAL\Result::class);
+        $resultStatementMock->method('fetchOne')->willReturn(null);
+        $this->connectionMock->method('executeQuery')->willReturn($resultStatementMock);
+
+        $this->bookIs(longValue: 0.0, shortValue: 0.0);
+        $this->tradeOrderRepoStub->method('findOpenByTicker')->willReturn([$order]);
+        $this->stockRepoStub->method('findOneByTicker')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        $this->service->processLimitOrders('APEX', 50.0);
+
+        $this->assertSame('OPEN', $order->getStatus());
+        $this->assertSame('100000.00', $user->getCashBalance());
+        $this->assertSame(0.0, (float) $stock->getShortInterestShares());
+    }
+
     public function testAShortCreditsProceedsAndOpensANegativePosition(): void
     {
         $user = $this->marginUser();

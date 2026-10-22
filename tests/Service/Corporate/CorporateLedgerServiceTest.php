@@ -37,9 +37,9 @@ class CorporateLedgerServiceTest extends TestCase
         $stock->setTicker('DIV_CORP');
         $paidAt = new \DateTimeImmutable('2026-09-10 14:30:00');
 
-        // Four statements: the holder ledger, the holder credit, then the short ledger and the short debit.
+        // Two statements: the ledger, then the cash movement derived from it.
         $captured = [];
-        $this->connectionMock->expects($this->exactly(4))
+        $this->connectionMock->expects($this->exactly(2))
             ->method('executeStatement')
             ->willReturnCallback(function (string $sql, array $params) use (&$captured): int {
                 $captured[] = ['sql' => $sql, 'params' => $params];
@@ -49,7 +49,7 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->service->processDividendPayment($stock, 1.25, $paidAt);
 
-        [$insert, $update, $shortInsert, $shortUpdate] = $captured;
+        [$insert, $update] = $captured;
 
         // The ledger is written first, from the holdings snapshot.
         $this->assertStringContainsString('INSERT INTO dividend_payment', $insert['sql']);
@@ -60,10 +60,12 @@ class CorporateLedgerServiceTest extends TestCase
         $this->assertSame('2026-09-10 14:30:00', $insert['params']['paid_at']);
 
         // Cash is then credited FROM those rows, not from a second copy of the subquery. If this join ever
-        // becomes an independent recomputation the ledger stops reconciling to the cash it explains.
+        // becomes an independent recomputation the ledger stops reconciling to the cash it explains. The
+        // addition is signed, so the same statement debits a short's negative row.
         $this->assertStringContainsString('UPDATE users u', $update['sql']);
         $this->assertStringContainsString('INNER JOIN dividend_payment d', $update['sql']);
         $this->assertStringContainsString('u.cash_balance + d.amount', $update['sql']);
+        $this->assertStringNotContainsString('d.amount <', $update['sql']);
         $this->assertSame($insert['params']['paid_at'], $update['params']['paid_at']);
         $this->assertSame($insert['params']['ticker'], $update['params']['ticker']);
     }
@@ -79,7 +81,6 @@ class CorporateLedgerServiceTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('DIV_CORP');
 
-        // Two inserts now: the holder ledger, then the short ledger. The escrow rule belongs to the first.
         $inserts = [];
         $this->connectionMock->method('executeStatement')
             ->willReturnCallback(function (string $sql) use (&$inserts): int {
@@ -92,24 +93,45 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->service->processDividendPayment($stock, 1.25, new \DateTimeImmutable());
 
-        $this->assertCount(2, $inserts);
-
-        [$holders, $shorts] = $inserts;
-
-        $this->assertStringContainsString("status = 'OPEN' AND action = 'SELL'", $holders);
-        $this->assertStringNotContainsString("action = 'BUY'", $holders);
-
-        // A short borrowed the shares from someone still entitled to the distribution, so it pays rather
-        // than receives. Anything else makes a high-yield name free to be short.
-        $this->assertStringContainsString('us.quantity < 0', $shorts);
+        $this->assertCount(1, $inserts);
+        $this->assertStringContainsString("status = 'OPEN' AND action = 'SELL'", $inserts[0]);
+        $this->assertStringNotContainsString("action = 'BUY'", $inserts[0]);
     }
 
-    public function testProcessDividendPaymentSkipsHoldingsRoundingToZero(): void
+    /**
+     * A short borrowed the shares from someone still entitled to the distribution, so it pays rather than
+     * receives; anything else makes a high-yield name free to be short. It is netted in the same row as any
+     * shares the account has escrowed behind a resting SELL: an account can rest a SELL and then go short, and
+     * a second row for it on the same ex-date breaks the unique (user, ticker, paid_at) key, which rolled back
+     * the whole tick at every payment.
+     */
+    public function testProcessDividendPaymentNetsAShortAgainstEscrowedSharesInOneRow(): void
     {
         $stock = new Stock();
         $stock->setTicker('DIV_CORP');
 
-        // The holder ledger is the first of the two inserts; the short ledger has its own zero guard.
+        $inserts = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql) use (&$inserts): int {
+                if (str_contains($sql, 'INSERT INTO dividend_payment')) {
+                    $inserts[] = $sql;
+                }
+
+                return 1;
+            });
+
+        $this->service->processDividendPayment($stock, 1.25, new \DateTimeImmutable());
+
+        $this->assertCount(1, $inserts, 'One ledger row per account, or a short with a resting SELL collides.');
+        $this->assertStringContainsString('quantity <> 0', $inserts[0], 'Short positions are in the same union.');
+        $this->assertStringContainsString('GROUP BY user_id', $inserts[0]);
+    }
+
+    public function testProcessDividendPaymentSkipsPositionsRoundingToZero(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIV_CORP');
+
         $insertSql = null;
         $this->connectionMock->method('executeStatement')
             ->willReturnCallback(function (string $sql) use (&$insertSql): int {
@@ -122,10 +144,11 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->service->processDividendPayment($stock, 0.0001, new \DateTimeImmutable());
 
-        // WHERE, not HAVING: total_shares is a plain column of the derived table by that point, and HAVING
-        // without a GROUP BY in the outer query would collapse every holder into one group.
+        // WHERE, not HAVING: net_shares is a plain column of the derived table by that point, and HAVING
+        // without a GROUP BY in the outer query would collapse every holder into one group. Both signs are
+        // kept, since a short's row is negative.
         $this->assertNotNull($insertSql);
-        $this->assertStringContainsString('WHERE ROUND(holdings.total_shares * :dividend, 2) > 0', $insertSql);
+        $this->assertStringContainsString('WHERE ROUND(positions.net_shares * :dividend, 2) <> 0', $insertSql);
         $this->assertStringNotContainsString('HAVING', $insertSql);
     }
 

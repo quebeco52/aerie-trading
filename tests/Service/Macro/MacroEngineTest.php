@@ -133,6 +133,32 @@ class MacroEngineTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
+    /**
+     * A state lost mid-run (a flush, an eviction) used to be replaced by the opening state on the next tick, and the
+     * ticker then wrote that Year-1 clock into the database. The engine that saved it stops instead.
+     */
+    public function testAStateLostAfterTheEngineSavedItStopsTheEngine(): void
+    {
+        $saved = false;
+        $this->redisMock->method('get')->willReturnCallback(static function () use (&$saved) {
+            return $saved;
+        });
+        $this->redisMock->method('set')->willReturnCallback(static function (string $key, string $value) use (&$saved): bool {
+            $saved = $value;
+
+            return true;
+        });
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        // No state yet is a world not opened: the first tick opens it.
+        $this->engine->updateMacroState(1.0 / 360.0);
+        $this->assertIsString($saved);
+
+        $saved = false;
+        $this->expectException(\RuntimeException::class);
+        $this->engine->updateMacroState(1.0 / 360.0);
+    }
+
     public function testAKeptStateIsRealignedNotReplaced(): void
     {
         $state = new \App\Service\Macro\MacroState();
