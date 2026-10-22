@@ -26,7 +26,7 @@
 			<div class="text-xs text-on-surface-variant mb-1">Dealer gamma</div>
 			<div class="flex items-baseline gap-2">
 				<span class="font-mono tabular-nums text-xl font-semibold {{ optionDealerGammaPerPercent > 0 ? 'text-tertiary' : (optionDealerGammaPerPercent < 0 ? 'text-secondary' : 'text-on-surface') }}">
-					{{ optionDealerGammaPerPercent > 0 ? '+' : '' }}{{ optionDealerGammaPerPercent|format_large }}
+					{{ optionDealerGammaPerPercent|format_large('', true) }}
 				</span>
 				<span class="text-2xs text-on-surface-variant">shares per 1% move</span>
 			</div>
@@ -86,7 +86,7 @@
 								{# ---- Call side ---- #}
 								{% if row.call %}
 									<td class="px-3 py-1.5 font-mono tabular-nums {{ row.call.position != 0 ? (row.call.position > 0 ? 'text-secondary font-bold' : 'text-tertiary font-bold') : 'text-on-surface-faint' }}">
-										{{ row.call.position != 0 ? (row.call.position > 0 ? '+' ~ row.call.position : row.call.position) : '—' }}
+										{{ row.call.position != 0 ? row.call.position|figure('signed_index', 0) : '—' }}
 									</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ row.call.openInterest|number_format(0) }}</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-right text-on-surface-variant">{{ row.call.delta|number_format(2) }}</td>
@@ -132,7 +132,7 @@
 									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ row.put.delta|number_format(2) }}</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-left text-on-surface-variant">{{ row.put.openInterest|number_format(0) }}</td>
 									<td class="px-3 py-1.5 font-mono tabular-nums text-right {{ row.put.position != 0 ? (row.put.position > 0 ? 'text-secondary font-bold' : 'text-tertiary font-bold') : 'text-on-surface-faint' }}">
-										{{ row.put.position != 0 ? (row.put.position > 0 ? '+' ~ row.put.position : row.put.position) : '—' }}
+										{{ row.put.position != 0 ? row.put.position|figure('signed_index', 0) : '—' }}
 									</td>
 								{% else %}
 									<td colspan="5" class="px-3 py-1.5 text-center text-on-surface-faint">—</td>

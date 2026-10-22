@@ -1,5 +1,5 @@
 {# Macros the government pages share. #}
-{% macro lever_value(lever, value) %}{% set unit = lever.unit ?? '' %}{{ unit == 'hhi' ? (value * 10000)|number_format(0) ~ ' HHI' : (unit == 'usd_t' ? '$' ~ value|number_format(2) ~ '/t' : value|pct(2)) }}{% endmacro %}
+{% macro lever_value(lever, value) %}{% set unit = lever.unit ?? '' %}{{ unit == 'hhi' ? value|hhi ~ ' HHI' : (unit == 'usd_t' ? value|money(2) ~ '/t' : value|pct(2)) }}{% endmacro %}
 
 {# One question's line at one width. #}
 {% macro compass_row(row, compass, layout) %}

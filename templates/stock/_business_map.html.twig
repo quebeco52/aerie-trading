@@ -1,24 +1,9 @@
 {# "How the business works" modal: what moved the firm last quarter, from the economy outside to the revenue and
    cost of sale that the earnings flow takes over (BusinessMapBuilder; lines drawn by business_map_controller.js). #}
 
+{# A card prints levels and shares to one place; changes keep their format's own precision. #}
 {% macro figure(value, format) -%}
-	{%- if value is null -%}
-		—
-	{%- elseif format == 'pct' -%}
-		{{ value|pct(1) }}
-	{%- elseif format == 'signed_pct' -%}
-		{{ value|pct(2, true) }}
-	{%- elseif format == 'bps' -%}
-		{{ (value * 10000)|round }} bps
-	{%- elseif format == 'money' -%}
-		{{ value|format_large('$') }}
-	{%- elseif format == 'multiple' -%}
-		{{ value|number_format(2) }}x
-	{%- elseif format == 'signed_points' -%}
-		{{ value > 0 ? '+' }}{{ value|number_format(2) }} pt
-	{%- else -%}
-		{{ value|number_format(1) }}
-	{%- endif -%}
+	{{- value|figure(format, format.value in ['percent', 'index'] ? 1 : null) -}}
 {%- endmacro %}
 
 {% macro chip(chip) %}

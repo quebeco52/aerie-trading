@@ -17,6 +17,7 @@ use App\Service\Model\Sector\HealthInsurerBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\StreamContext;
+use App\Twig\Extension\UiExtension;
 
 /**
  * The company page's "How the business works" map: what outside the firm moved it last quarter, how its operations
@@ -191,21 +192,21 @@ final class BusinessMapBuilder
         foreach (array_slice($drivers, 0, self::MAX_DEMAND_CARDS, true) as $id => $driver) {
             $chips = [];
             foreach ($driver['effects'] as $key => $effect) {
-                $chips[] = ['text' => 'on ' . mb_strtolower(RevenueStreams::label($key)), 'figure' => $effect, 'format' => 'signed_pct', 'tone' => $effect > 0.0 ? 'up' : 'down'];
+                $chips[] = ['text' => 'on ' . mb_strtolower(RevenueStreams::label($key)), 'figure' => $effect, 'format' => FigureFormat::SignedPercent, 'tone' => $effect > 0.0 ? 'up' : 'down'];
                 $map['edges'][] = [$id, 'ops:' . $key, $effect <=> 0.0, abs($effect)];
             }
             $reading = $driver['reading'];
             [$label, $value] = $reading !== null && isset($reading['field'])
                 ? MacroFieldCatalog::signedReading((string) $reading['field'], (float) $reading['value'])
                 : [$driver['label'], $reading !== null ? (float) $reading['value'] : null];
-            $format = $reading !== null ? self::readingFormat((string) $reading['unit']) : 'text';
+            $format = $reading !== null ? self::readingFormat((string) $reading['unit']) : null;
             $map['outside'][] = [
                 'id' => $id,
                 'label' => $label,
                 'value' => $value,
                 'format' => $format,
                 // A bare index level means nothing without its name; a label that carries its own unit says it already.
-                'unit' => $format === 'index' && !str_contains($label, '(') ? 'index' : null,
+                'unit' => $format === FigureFormat::Index && !str_contains($label, '(') ? 'index' : null,
                 'note' => null,
                 'chips' => $chips,
             ];
@@ -220,7 +221,7 @@ final class BusinessMapBuilder
                 'id' => 'rev:' . $key,
                 'label' => RevenueStreams::label($key),
                 'value' => (float) $streamRevenue,
-                'format' => 'money',
+                'format' => FigureFormat::LargeMoney,
                 'share' => $share,
                 'change' => is_numeric($detail['qoq_delta'] ?? null) ? (float) $detail['qoq_delta'] : null,
                 'note' => null,
@@ -267,7 +268,7 @@ final class BusinessMapBuilder
                 'id' => 'ops:' . $key,
                 'label' => 'Order book, ' . mb_strtolower(RevenueStreams::label($key)),
                 'value' => $bookToBill,
-                'format' => 'multiple',
+                'format' => FigureFormat::Multiple,
                 'unit' => 'book-to-bill',
                 'note' => sprintf(
                     'Orders ran %s%% %s shipments. The backlog holds %s quarters of sales.',
@@ -283,7 +284,7 @@ final class BusinessMapBuilder
             'id' => 'ops:' . $key,
             'label' => RevenueStreams::label($key),
             'value' => null,
-            'format' => 'text',
+            'format' => null,
             'unit' => null,
             'note' => null,
             'chips' => $chips,
@@ -323,7 +324,7 @@ final class BusinessMapBuilder
                     'id' => 'input:' . $channel,
                     'label' => $label,
                     'value' => $gap,
-                    'format' => 'signed_pct',
+                    'format' => FigureFormat::SignedPercent,
                     'unit' => 'against normal',
                     'note' => sprintf('%s%% of production costs.', number_format($exposure * 100.0, 1)),
                     'chips' => [is_numeric($measured) ? self::dragChip((float) $measured) : self::chip($gap > 0.0 ? 'Costs up' : 'Costs down', $gap > 0.0 ? 'down' : 'up')],
@@ -340,7 +341,7 @@ final class BusinessMapBuilder
                     'id' => 'input:earlier',
                     'label' => 'Earlier input price moves',
                     'value' => null,
-                    'format' => 'text',
+                    'format' => null,
                     'unit' => null,
                     'note' => 'Cost changes from past quarters still working through.',
                     'chips' => [self::dragChip((float) $earlier)],
@@ -356,7 +357,7 @@ final class BusinessMapBuilder
                 'id' => 'recover',
                 'label' => 'Passing on costs',
                 'value' => is_numeric($kpis['input_cost_recovered_share'] ?? null) ? (float) $kpis['input_cost_recovered_share'] : null,
-                'format' => 'pct',
+                'format' => FigureFormat::Percent,
                 'unit' => 'recovered in prices',
                 'note' => sprintf(
                     'Input costs run %s%% %s normal; prices have caught up %s%%.',
@@ -364,7 +365,7 @@ final class BusinessMapBuilder
                     $level >= 0.0 ? 'above' : 'below',
                     number_format(abs($recovery) * 100.0, 1),
                 ),
-                'chips' => [['text' => 'on margin', 'figure' => -$drag * 100.0, 'format' => 'signed_points', 'tone' => $drag > 0.0 ? 'down' : 'up']],
+                'chips' => [['text' => 'on margin', 'figure' => -$drag, 'format' => FigureFormat::SignedPoints, 'tone' => $drag > 0.0 ? 'down' : 'up']],
             ];
             $map['edges'][] = ['recover', 'cost', -($drag <=> 0.0), abs($drag)];
         }
@@ -376,7 +377,7 @@ final class BusinessMapBuilder
                 'id' => 'structure',
                 'label' => 'Cost structure',
                 'value' => $fixedCosts / ($fixedCosts + $variableCosts),
-                'format' => 'pct',
+                'format' => FigureFormat::Percent,
                 'unit' => 'of costs fixed',
                 'note' => 'Plant, staff and overhead hold still when sales move, so a change in sales moves the margin faster.',
                 'chips' => [],
@@ -387,10 +388,10 @@ final class BusinessMapBuilder
             'id' => 'cost',
             'label' => 'Cost of each sale',
             'value' => $costRatio,
-            'format' => 'pct',
+            'format' => FigureFormat::Percent,
             'unit' => 'of revenue',
             'note' => $hasRecovery && abs($drag) >= self::DRAG_NOTE_FLOOR
-                ? sprintf($drag > 0.0 ? 'Including %s pt of input costs not yet passed on.' : 'Helped by %s pt of input-cost savings not yet passed on to customers.', number_format(abs($drag) * 100.0, 1))
+                ? sprintf($drag > 0.0 ? 'Including %spp of input costs not yet passed on.' : 'Helped by %spp of input-cost savings not yet passed on to customers.', number_format(abs($drag) * 100.0, 1))
                 : null,
             'chips' => [],
         ];
@@ -403,10 +404,10 @@ final class BusinessMapBuilder
                 'id' => 'margin',
                 'label' => 'Operating margin',
                 'value' => (float) $margin,
-                'format' => 'pct',
+                'format' => FigureFormat::Percent,
                 'unit' => null,
                 'note' => $previousMargin !== null ? sprintf('%s%% last quarter.', number_format((float) $previousMargin * 100.0, 1)) : null,
-                'chips' => $change !== null ? [['text' => 'on the quarter', 'figure' => $change * 100.0, 'format' => 'signed_points', 'tone' => $change >= 0.0 ? 'up' : 'down']] : [],
+                'chips' => $change !== null ? [['text' => 'on the quarter', 'figure' => $change, 'format' => FigureFormat::SignedPoints, 'tone' => $change >= 0.0 ? 'up' : 'down']] : [],
             ];
             $map['edges'][] = ['cost', 'margin', 0, $costRatio];
             if ($fixedCosts > 0.0) {
@@ -451,7 +452,7 @@ final class BusinessMapBuilder
             $note .= sprintf(' %s%% of loans float with the policy rate.', number_format((float) $state[CommercialBankBusinessModel::STATE_FLOATING_LOAN_SHARE] * 100.0, 0));
         }
         $this->replaceCard($map['inside'], 'ops:' . $interestStream, [
-            'label' => 'Loans and securities', 'value' => $book, 'format' => 'money', 'unit' => null, 'note' => $note === null ? null : ucfirst(ltrim($note)),
+            'label' => 'Loans and securities', 'value' => $book, 'format' => FigureFormat::LargeMoney, 'unit' => null, 'note' => $note === null ? null : ucfirst(ltrim($note)),
         ]);
 
         $deposits = (float) $report->getCustomerDeposits();
@@ -460,7 +461,7 @@ final class BusinessMapBuilder
             'id' => 'funding',
             'label' => $deposits > 0.0 ? 'Deposits and borrowing' : 'Borrowing',
             'value' => $deposits > 0.0 ? $deposits : null,
-            'format' => 'money',
+            'format' => FigureFormat::LargeMoney,
             'unit' => $deposits > 0.0 ? 'in deposits' : null,
             'note' => $depositRate !== null ? sprintf('Deposits pay %s%%.', number_format((float) $depositRate * 100.0, 2)) : 'Funded in the wholesale market.',
             'chips' => [],
@@ -470,9 +471,9 @@ final class BusinessMapBuilder
             'id' => 'reserve',
             'label' => 'Loss reserve',
             'value' => $allowance,
-            'format' => 'money',
+            'format' => FigureFormat::LargeMoney,
             'unit' => null,
-            'note' => sprintf('%s%% of the book. %s written off this quarter.', number_format($allowance / $book * 100.0, 2), self::large((float) $report->getNetChargeOffs())),
+            'note' => sprintf('%s%% of the book. %s written off this quarter.', number_format($allowance / $book * 100.0, 2), UiExtension::large((float) $report->getNetChargeOffs(), '$')),
             'chips' => [],
         ];
         $cet1 = $report->getCet1Ratio();
@@ -482,15 +483,15 @@ final class BusinessMapBuilder
                 'id' => 'capital',
                 'label' => 'Capital',
                 'value' => (float) $cet1,
-                'format' => 'pct',
+                'format' => FigureFormat::Percent,
                 'unit' => 'CET1',
                 'note' => 'Common equity against risk-weighted assets.',
-                'chips' => $mark !== 0.0 ? [self::chip(sprintf('%s bond book %s', self::large(abs($mark)), $mark < 0.0 ? 'unrealised loss' : 'unrealised gain'), $mark < 0.0 ? 'down' : 'up')] : [],
+                'chips' => $mark !== 0.0 ? [self::chip(sprintf('%s bond book %s', UiExtension::large(abs($mark), '$'), $mark < 0.0 ? 'unrealised loss' : 'unrealised gain'), $mark < 0.0 ? 'down' : 'up')] : [],
             ];
         }
 
-        $map['produced'][] = ['id' => 'paid', 'label' => 'Interest paid', 'value' => (float) $report->getInterestExpense(), 'format' => 'money', 'unit' => null, 'note' => 'On deposits and borrowing.', 'chips' => []];
-        $map['produced'][] = ['id' => 'losses', 'label' => 'Credit losses', 'value' => (float) $report->getCreditLossProvision(), 'format' => 'money', 'unit' => null, 'note' => 'Set aside this quarter.', 'chips' => []];
+        $map['produced'][] = ['id' => 'paid', 'label' => 'Interest paid', 'value' => (float) $report->getInterestExpense(), 'format' => FigureFormat::LargeMoney, 'unit' => null, 'note' => 'On deposits and borrowing.', 'chips' => []];
+        $map['produced'][] = ['id' => 'losses', 'label' => 'Credit losses', 'value' => (float) $report->getCreditLossProvision(), 'format' => FigureFormat::LargeMoney, 'unit' => null, 'note' => 'Set aside this quarter.', 'chips' => []];
         $map['edges'][] = ['funding', 'paid', 0, 0.3];
         $map['edges'][] = ['reserve', 'losses', 0, 0.1];
 
@@ -501,10 +502,10 @@ final class BusinessMapBuilder
                 'id' => 'nim',
                 'label' => 'Net interest margin',
                 'value' => (float) $margin,
-                'format' => 'pct',
+                'format' => FigureFormat::Percent,
                 'unit' => null,
                 'note' => 'Interest earned less interest paid, on the book.',
-                'chips' => $previousMargin !== null ? [self::pointsChip(((float) $margin - (float) $previousMargin) * 100.0, 'on the quarter')] : [],
+                'chips' => $previousMargin !== null ? [self::pointsChip((float) $margin - (float) $previousMargin, 'on the quarter')] : [],
             ];
             $map['edges'][] = ['ops:' . $interestStream, 'nim', 0, 0.3];
             $map['edges'][] = ['funding', 'nim', 0, 0.3];
@@ -532,7 +533,7 @@ final class BusinessMapBuilder
                 'id' => 'capacity',
                 'label' => 'Underwriting capacity',
                 'value' => (float) $observed,
-                'format' => 'multiple',
+                'format' => FigureFormat::Multiple,
                 'unit' => 'capital against demand',
                 'note' => 'Above 1 the market has more capital than business and rates soften; below 1 they harden.'
                     . (is_numeric($written) ? sprintf(' Writes %s%% of the business on offer.', number_format((float) $written * 100.0, 0)) : ''),
@@ -548,7 +549,7 @@ final class BusinessMapBuilder
             'id' => 'cycle',
             'label' => 'Pricing cycle',
             'value' => null,
-            'format' => 'text',
+            'format' => null,
             'unit' => null,
             'note' => $hardQuarters > 0
                 ? sprintf('A hard market, %d %s in: after heavy losses, rates rise while capital rebuilds.', $hardQuarters, $hardQuarters === 1 ? 'quarter' : 'quarters')
@@ -558,8 +559,8 @@ final class BusinessMapBuilder
 
         $float = (float) $report->getCustomerDeposits();
         if ($float > 0.0) {
-            $map['inside'][] = ['id' => 'float', 'label' => 'Float', 'value' => $float, 'format' => 'money', 'unit' => null, 'note' => 'Premiums held as reserves and invested until claims are paid.', 'chips' => []];
-            $map['produced'][] = ['id' => 'investment', 'label' => 'Investment income', 'value' => (float) $report->getInterestIncome(), 'format' => 'money', 'unit' => null, 'note' => 'Earned on the float this quarter.', 'chips' => []];
+            $map['inside'][] = ['id' => 'float', 'label' => 'Float', 'value' => $float, 'format' => FigureFormat::LargeMoney, 'unit' => null, 'note' => 'Premiums held as reserves and invested until claims are paid.', 'chips' => []];
+            $map['produced'][] = ['id' => 'investment', 'label' => 'Investment income', 'value' => (float) $report->getInterestIncome(), 'format' => FigureFormat::LargeMoney, 'unit' => null, 'note' => 'Earned on the float this quarter.', 'chips' => []];
             $map['edges'][] = ['float', 'investment', 0, 0.2];
         }
 
@@ -572,11 +573,11 @@ final class BusinessMapBuilder
                 'id' => 'combined',
                 'label' => 'Combined ratio',
                 'value' => $combined,
-                'format' => 'pct',
+                'format' => FigureFormat::Percent,
                 'unit' => 'of premiums',
                 'note' => sprintf('Claims %s%% and expenses %s%%. Under 100%% the book makes an underwriting profit.', number_format((float) $kpis['loss_ratio'] * 100.0, 1), number_format((float) $kpis['expense_ratio'] * 100.0, 1)),
                 // A lower ratio is the better quarter, so a fall carries the up tone.
-                'chips' => $previousCombined !== null ? [self::pointsChip(($combined - $previousCombined) * 100.0, 'on the quarter', invert: true)] : [],
+                'chips' => $previousCombined !== null ? [self::pointsChip($combined - $previousCombined, 'on the quarter', invert: true)] : [],
             ];
             $map['edges'][] = ['cycle', 'combined', 0, 0.2];
         }
@@ -600,7 +601,7 @@ final class BusinessMapBuilder
         $this->replaceCard($map['inside'], 'ops:lease', [
             'label' => 'Lease book',
             'value' => (float) $kpis['walt_years'],
-            'format' => 'index',
+            'format' => FigureFormat::Index,
             'unit' => 'years left on the average lease',
             'note' => sprintf(
                 'Rents in place run %s%% %s normal. Expiring space re-lets %s%% %s what it paid.',
@@ -631,7 +632,7 @@ final class BusinessMapBuilder
             'id' => 'pricing',
             'label' => 'Premium pricing',
             'value' => (float) $trend,
-            'format' => 'pct',
+            'format' => FigureFormat::Percent,
             'unit' => 'medical cost trend priced in',
             'note' => sprintf('Premiums reprice once a year. Medical costs run %s%% %s what the book was priced for.', number_format(abs($excess) * 100.0, 1), $excess >= 0.0 ? 'above' : 'below'),
             'chips' => [],
@@ -671,7 +672,7 @@ final class BusinessMapBuilder
             'id' => 'other_interest',
             'label' => 'Other interest income',
             'value' => $interest,
-            'format' => 'money',
+            'format' => FigureFormat::LargeMoney,
             'unit' => null,
             'note' => 'On cash and holdings outside the main business.',
             'chips' => [],
@@ -811,23 +812,23 @@ final class BusinessMapBuilder
     }
 
     /**
-     * A change in percentage points; $invert for a ratio where lower is better.
+     * A change in a ratio, printed in percentage points; $invert for a ratio where lower is better.
      *
-     * @return array{text: string, figure: float, format: string, tone: string}
+     * @return array{text: string, figure: float, format: FigureFormat, tone: string}
      */
-    private static function pointsChip(float $points, string $text, bool $invert = false): array
+    private static function pointsChip(float $change, string $text, bool $invert = false): array
     {
-        $good = $invert ? $points <= 0.0 : $points >= 0.0;
+        $good = $invert ? $change <= 0.0 : $change >= 0.0;
 
-        return ['text' => $text, 'figure' => $points, 'format' => 'signed_points', 'tone' => $good ? 'up' : 'down'];
+        return ['text' => $text, 'figure' => $change, 'format' => FigureFormat::SignedPoints, 'tone' => $good ? 'up' : 'down'];
     }
 
     /** The margin effect of one input's part of the drag: a drag on the cost ratio is a loss of margin. */
     private static function dragChip(float $drag): array
     {
         return abs($drag) < self::DRAG_NOTE_FLOOR
-            ? self::chip('Under 0.05 pt on margin', 'neutral')
-            : self::pointsChip(-$drag * 100.0, 'on margin');
+            ? self::chip('Under 0.05pp on margin', 'neutral')
+            : self::pointsChip(-$drag, 'on margin');
     }
 
     /** @return array{0: string, 1: string, 2: int, 3: float} */
@@ -867,20 +868,14 @@ final class BusinessMapBuilder
         $cards = $placed ? $result : [...$result, ...$moved];
     }
 
-    /** A compact dollar figure for a note ("$1.54T"), as the template's format_large prints a card value. */
-    private static function large(float $amount): string
-    {
-        return (new \App\Twig\Extension\NumberFormatExtension())->formatLargeNumber($amount, '$');
-    }
-
-    /** The template format for a MacroFieldCatalog reading unit. */
-    private static function readingFormat(string $unit): string
+    /** How a MacroFieldCatalog reading unit prints. */
+    private static function readingFormat(string $unit): FigureFormat
     {
         return match ($unit) {
-            'pct' => 'pct',
-            'bps' => 'bps',
-            'level' => 'money',
-            default => 'index',
+            'pct' => FigureFormat::Percent,
+            'bps' => FigureFormat::Bps,
+            'level' => FigureFormat::LargeMoney,
+            default => FigureFormat::Index,
         };
     }
 }

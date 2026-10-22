@@ -41,7 +41,7 @@
 							<span>Issued by <a href="/stock/{{ issuer.ticker }}" class="text-primary hover:underline underline-offset-2">{{ issuer.name }}</a></span>
 							{% if bond.seniority %}<span>{{ bond.seniority|replace({'_': ' '})|lower|capitalize }}</span>{% endif %}
 							<span>Rated <span class="font-mono font-medium text-on-surface">{{ issuer.creditRating }}</span></span>
-							<span>Issuer spread <span class="font-mono tabular-nums font-medium text-on-surface">{{ (issuer.dynamicCreditSpread * 10000)|number_format(0) }} bps</span></span>
+							<span>Issuer spread <span class="font-mono tabular-nums font-medium text-on-surface">{{ issuer.dynamicCreditSpread|bps }}</span></span>
 						</p>
 					{% endif %}
 				</div>
@@ -308,11 +308,10 @@
 					</p>
 
 					<dl class="divide-y divide-outline-variant/15 text-xs">
-						{% for shiftBps in [-100, -50, 50, 100] %}
-							{% set dy = shiftBps / 10000 %}
+						{% for dy in [-0.01, -0.005, 0.005, 0.01] %}
 							{% set move = (-bond.modifiedDuration * dy) + (0.5 * bond.convexity * dy * dy) %}
 							<div class="py-2 flex justify-between items-center">
-								<dt class="text-sm font-semibold text-on-surface-variant">{{ shiftBps > 0 ? '+' : '' }}{{ shiftBps }} bps</dt>
+								<dt class="text-sm font-semibold text-on-surface-variant">{{ dy|bps(0, true) }}</dt>
 								<dd class="font-medium font-mono tabular-nums {{ move|signed_class }}">
 									{{ move|pct(2, true) }}
 								</dd>

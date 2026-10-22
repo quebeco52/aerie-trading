@@ -94,15 +94,15 @@
 					</div>
 					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
 						<dt class="text-xs text-on-surface-variant">Inflation</dt>
-						<dd class="mt-1 text-xl font-semibold font-mono tabular-nums text-on-surface">{{ (macro.inflation|default(0) * 100)|number_format(2) }}%</dd>
+						<dd class="mt-1 text-xl font-semibold font-mono tabular-nums text-on-surface">{{ (macro.inflation ?? null)|pct(2) }}</dd>
 					</div>
 					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
 						<dt class="text-xs text-on-surface-variant">Policy rate</dt>
-						<dd class="mt-1 text-xl font-semibold font-mono tabular-nums text-on-surface">{{ (macro.policy_rate|default(0) * 100)|number_format(2) }}%</dd>
+						<dd class="mt-1 text-xl font-semibold font-mono tabular-nums text-on-surface">{{ (macro.policy_rate ?? null)|pct(2) }}</dd>
 					</div>
 					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
 						<dt class="text-xs text-on-surface-variant">10Y yield</dt>
-						<dd class="mt-1 text-xl font-semibold font-mono tabular-nums text-on-surface">{{ (macro.yield_10y|default(0) * 100)|number_format(2) }}%</dd>
+						<dd class="mt-1 text-xl font-semibold font-mono tabular-nums text-on-surface">{{ (macro.yield_10y ?? null)|pct(2) }}</dd>
 					</div>
 				</dl>
 			</section>

@@ -65,7 +65,7 @@
 										<th scope="row" class="py-1.5 text-left font-normal"><span class="inline-flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ party.color }}" aria-hidden="true"></span><span class="font-semibold text-on-surface">{{ party.name }}</span></span></th>
 										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface" title="Latest poll {{ party.poll|pct(1) }}">{{ party.average|pct(1) }}</td>
 										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">±{{ party.margin|pct(1) }}</td>
-										<td class="py-1.5 text-right font-mono tabular-nums {{ party.change|signed_class }}">{{ (party.change > 0 ? '+' : '') ~ (party.change * 100)|number_format(1) }}pp</td>
+										<td class="py-1.5 text-right font-mono tabular-nums {{ party.change|signed_class }}">{{ party.change|pp(1, true) }}</td>
 										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
 									</tr>
 								{% endfor %}

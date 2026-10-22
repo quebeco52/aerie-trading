@@ -1,4 +1,4 @@
-import { formatCurrency, formatLarge, formatPercent, formatShares, signedClass } from '../utils/formatters.js';
+import { formatBps, formatCurrency, formatLarge, formatMultiple, formatPercent, formatShares, signedClass } from '../utils/formatters.js';
 import { flashTick } from '../utils/tick-flash.js';
 
 let previousPrice = null;
@@ -59,20 +59,20 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
 
         const peEl = document.getElementById('stat-pe');
         if (peEl) {
-            peEl.textContent = currentEps > 0 ? (newPrice / currentEps).toFixed(2) + 'x' : '-';
+            peEl.textContent = formatMultiple(currentEps > 0 ? newPrice / currentEps : null);
         }
 
         // Price over tangible book moves with the price; the tangible book itself only moves on a report.
         const ptbvEl = document.getElementById('stat-ptbv');
         if (ptbvEl) {
             const tbvps = parseFloat(ptbvEl.dataset.tbvps);
-            ptbvEl.textContent = tbvps > 0 ? (newPrice / tbvps).toFixed(2) + 'x' : '-';
+            ptbvEl.textContent = formatMultiple(tbvps > 0 ? newPrice / tbvps : null);
         }
 
         const debtRatioEl = document.getElementById('stat-debt-ratio');
         if (debtRatioEl && stockUpdate.debt_ratio !== undefined) {
-            // Null on negative equity, where the server renders "—" too.
-            debtRatioEl.textContent = stockUpdate.debt_ratio === null ? '—' : stockUpdate.debt_ratio.toFixed(2) + 'x';
+            // Null on negative equity, which prints the dash on both sides.
+            debtRatioEl.textContent = formatMultiple(stockUpdate.debt_ratio);
         }
 
         // The rating and the spread its credit trades at are separate nodes, so repainting one leaves the other.
@@ -83,7 +83,7 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
 
         const creditSpreadEl = document.getElementById('stat-credit-spread');
         if (creditSpreadEl && Number.isFinite(stockUpdate.credit_spread)) {
-            creditSpreadEl.textContent = `+${Math.round(stockUpdate.credit_spread * 10000)} bps`;
+            creditSpreadEl.textContent = formatBps(stockUpdate.credit_spread, 0, true);
         }
 
         const mktShareEl = document.getElementById('stat-market-share');

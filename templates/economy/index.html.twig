@@ -54,7 +54,7 @@
 					<dt class="text-xs text-on-surface-variant">Asset purchases</dt>
 					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-qe-status">
 						{%- if macro.qeActive -%}
-							&minus;{{ (macro.balanceSheetIntensity * 10000)|number_format(0) }} bps
+							&minus;{{ macro.balanceSheetIntensity|bps }}
 						{%- endif -%}
 					</dd>
 				</div>
@@ -782,13 +782,7 @@
 												</td>
 												<td class="py-1.5 text-right whitespace-nowrap">
 													<span class="font-mono tabular-nums text-on-surface">
-														{%- if list.format == 'money' -%}
-															{{ row.value|format_large('$') }}
-														{%- elseif list.format == 'multiple' -%}
-															{{ row.value|number_format(1) }}×
-														{%- else -%}
-															{{ row.value|pct(0) }}
-														{%- endif -%}
+														{{- row.value|figure(list.format, list.decimals) -}}
 													</span>
 													<span class="text-on-surface-variant">{{ list.unit }}</span>
 												</td>

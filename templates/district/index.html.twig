@@ -658,7 +658,7 @@
 									text-anchor="middle">{%- for readout in institution.readouts -%}
 										{%- set raw = macroSnapshot[readout.field] ?? 0 -%}
 										<tspan x="{{ centreX }}" y="{{ structureBottom + institutionBand.readoutTopOffset + loop.index0 * institutionBand.readoutPitch }}"
-											><tspan class="readout-label">{{ readout.label }}</tspan> <tspan class="readout-value" data-readout-field="{{ readout.field }}">{% if readout.unit == 'pct' %}{{ raw|pct(2) }}{% elseif readout.unit == 'bps' %}{{ (raw * 10000)|number_format(0, '.', '') }} bps{% else %}{{ raw|number_format(1) }}{% endif %}</tspan></tspan>
+											><tspan class="readout-label">{{ readout.label }}</tspan> <tspan class="readout-value" data-readout-field="{{ readout.field }}">{% if readout.unit == 'pct' %}{{ raw|pct(2) }}{% elseif readout.unit == 'bps' %}{{ raw|bps }}{% else %}{{ raw|number_format(1) }}{% endif %}</tspan></tspan>
 									{%- endfor -%}</text>
 
 								{# One sparkline strip under each readout — the reading's recent path, drawn by

@@ -8,6 +8,7 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\View\FigureFormat;
 use App\Service\View\FinancialSummaryBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -89,7 +90,7 @@ class FinancialSummaryBuilderTest extends TestCase
 
         $this->assertSame(['Operating margin', 'ROIC − WACC', 'FCF / net income', 'Book-to-bill', 'Backlog', 'WALT', 'Quarterly churn'], array_column($tiles, 'label'), 'unknown and industry keys skipped');
         $this->assertEqualsWithDelta(0.05, $tiles[1]['value'], 1e-12);
-        $this->assertSame('signed_percent', $tiles[1]['format']);
+        $this->assertSame(FigureFormat::SignedPercent, $tiles[1]['format']);
         $this->assertEqualsWithDelta(0.75, $tiles[2]['value'], 1e-12);
     }
 
@@ -117,7 +118,7 @@ class FinancialSummaryBuilderTest extends TestCase
         $this->assertCount(7, $built['financialSummary']);
         $this->assertSame('ARPU index', $built['financialSummary'][6]['label']);
         $this->assertSame(['subscriber_index', 'quarterly_churn', 'net_adds', 'arpu_index'], array_keys($built['kpiSeries']), 'only labelled KPIs are charted');
-        $this->assertSame(['label' => 'Quarterly churn', 'format' => 'percent'], $built['kpiSeries']['quarterly_churn']);
+        $this->assertSame(['label' => 'Quarterly churn', 'format' => FigureFormat::Percent], $built['kpiSeries']['quarterly_churn']);
     }
 
     public function testNoReportMeansNoStrip(): void
@@ -125,7 +126,7 @@ class FinancialSummaryBuilderTest extends TestCase
         $this->assertSame([], $this->tiles($this->stock('Tools & Accessories'), null));
     }
 
-    /** @return list<array{label: string, value: float, format: string}> */
+    /** @return list<array{label: string, value: float, format: FigureFormat}> */
     private function tiles(Stock $stock, ?CorporateReport $report): array
     {
         $reports = $this->createStub(CorporateReportRepository::class);

@@ -31,17 +31,17 @@
 			{# Policy Rate #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/20">
 				<p class="text-xs text-on-surface-variant mb-1">Policy rate</p>
-				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ (macro.policy_rate|default(0) * 100)|number_format(2) }}%</p>
+				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ (macro.policy_rate ?? null)|pct(2) }}</p>
 				<p class="text-xs text-on-surface-variant mt-1">Overnight target</p>
 			</div>
 
 			{# 10Y Yield #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/20">
 				<p class="text-xs text-on-surface-variant mb-1">10Y yield</p>
-				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ (macro.yield_10y|default(0) * 100)|number_format(2) }}%</p>
-				{% set spread = (macro.yield_10y|default(0) - macro.policy_rate|default(0)) * 10000 %}
+				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ (macro.yield_10y ?? null)|pct(2) }}</p>
+				{% set spread = macro.yield_10y|default(0) - macro.policy_rate|default(0) %}
 				<p class="text-xs mt-1 {{ spread < 0 ? 'text-warning' : 'text-on-surface-variant' }}">
-					Curve <span class="font-mono">{{ spread > 0 ? '+' : '' }}{{ spread|number_format(0) }} bps</span>{{ spread < 0 ? ', inverted' : '' }}
+					Curve <span class="font-mono">{{ spread|bps(0, true) }}</span>{{ spread < 0 ? ', inverted' : '' }}
 				</p>
 			</div>
 		</div>

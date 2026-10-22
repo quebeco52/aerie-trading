@@ -8,7 +8,7 @@
 	<meta property="og:type" content="website">
 {% endblock %}
 
-{% macro hhi(value) %}<span class="font-mono tabular-nums">{{ (value * 10000)|number_format(0) }}</span>{% endmacro %}
+{% macro hhi(value) %}<span class="font-mono tabular-nums">{{ value|hhi }}</span>{% endmacro %}
 
 {% block body %}
 {% import _self as fmt %}

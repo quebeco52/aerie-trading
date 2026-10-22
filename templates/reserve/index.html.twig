@@ -30,31 +30,31 @@
 				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-5">
 					<div>
 						<dt class="text-xs text-on-surface-variant">Fund value</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-value">{{ incepted ? summary.value|format_large('$') : '-' }}</dd>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-value">{{ incepted ? summary.value|format_large('$') : '—' }}</dd>
 					</div>
 					<div>
 						<dt class="text-xs text-on-surface-variant">Size</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-to-gdp">{{ incepted ? summary.toGdp|pct(0) ~ ' of GDP' : '-' }}</dd>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-to-gdp">{{ incepted ? summary.toGdp|pct(0) ~ ' of GDP' : '—' }}</dd>
 					</div>
 					{# Needs the recorded history a year back, so pages/reserve.js fills it once the history loads. #}
 					<div>
 						<dt class="text-xs text-on-surface-variant">Real return</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-year">-</dd>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-year">—</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-return-year-detail">Last 12 months</p>
 					</div>
 					<div>
 						<dt class="text-xs text-on-surface-variant">Budget draw</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-draw">{{ incepted ? summary.drawToGdp|pct(2) ~ ' of GDP' : '-' }}</dd>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-draw">{{ incepted ? summary.drawToGdp|pct(2) ~ ' of GDP' : '—' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-draw-value">{{ incepted ? summary.annualDraw|format_large('$') ~ ' this year' : '' }}</p>
 					</div>
 					<div>
 						<dt class="text-xs text-on-surface-variant">Stamp duty inflow</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-duty">{{ incepted and summary.stampDutyToGdp > 0 ? summary.stampDutyToGdp|pct(2) ~ ' of GDP' : '-' }}</dd>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-duty">{{ incepted and summary.stampDutyToGdp > 0 ? summary.stampDutyToGdp|pct(2) ~ ' of GDP' : '—' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-duty-ytd">{{ incepted ? (summary.stampDutyToGdp > 0 ? 'Last year · ' : 'First year open · ') ~ summary.stampDutyYearToDate|format_large('$') ~ ' so far' : '' }}</p>
 					</div>
 					<div>
 						<dt class="text-xs text-on-surface-variant">Board ownership</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-ownership">{{ incepted ? summary.ownership|pct(2) ~ ' of float' : '-' }}</dd>
+						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-ownership">{{ incepted ? summary.ownership|pct(2) ~ ' of float' : '—' }}</dd>
 						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Ceiling {{ mandate.ownershipCeiling|pct(0) }}</p>
 					</div>
 					<div>
@@ -165,10 +165,10 @@
 								<div data-gauge-marker class="absolute top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface-container-low {{ gauge.key == 'district' ? 'bg-series-blue' : 'bg-series-orange' }}"></div>
 							</div>
 							<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-1">
-								Policy {{ gauge.policy|pct(2) }} · band {{ ((gauge.policy - gauge.band) * 100)|number_format(2) }}% to {{ ((gauge.policy + gauge.band) * 100)|number_format(2) }}%
+								Policy {{ gauge.policy|pct(2) }} · band {{ (gauge.policy - gauge.band)|pct(2) }} to {{ (gauge.policy + gauge.band)|pct(2) }}
 							</p>
 							<p class="text-3xs text-on-surface-variant mt-2" data-gauge-status>
-								{{ (gap|abs * 100)|number_format(2) }}pp {{ gap < 0 ? 'under' : 'over' }} policy, {{ gap|abs <= gauge.band ? 'inside' : 'outside' }} the ±{{ (gauge.band * 100)|number_format(2) }}pp band.
+								{{ gap|abs|pp(2) }} {{ gap < 0 ? 'under' : 'over' }} policy, {{ gap|abs <= gauge.band ? 'inside' : 'outside' }} the ±{{ gauge.band|pp(2) }} band.
 							</p>
 							<p class="text-3xs text-on-surface-faint mt-0.5">
 								{% if gauge.key == 'district' %}
@@ -194,17 +194,17 @@
 			<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-5 mt-4" id="reserveReturns" data-index-base="{{ mandate.returnIndexBase }}">
 				<div>
 					<dt class="text-xs text-on-surface-variant">Real, 10 years</dt>
-					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-decade">-</dd>
+					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-decade">—</dd>
 					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">A year</p>
 				</div>
 				<div>
 					<dt class="text-xs text-on-surface-variant">Real, all recorded</dt>
-					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-real">-</dd>
+					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-real">—</dd>
 					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-return-span">A year</p>
 				</div>
 				<div>
 					<dt class="text-xs text-on-surface-variant">Nominal, all recorded</dt>
-					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-nominal">-</dd>
+					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-nominal">—</dd>
 					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">A year, in District dollars</p>
 				</div>
 				<div>
@@ -257,7 +257,7 @@
 										<span class="ml-2 text-on-surface">{{ holding.name }}</span>
 									</th>
 									<td class="px-4 py-2 text-right font-mono tabular-nums font-bold text-on-surface">{{ holding.stake|pct(2) }}</td>
-									<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell" title="The District's stake plus the fund's share of the float">{{ ((holding.stake + holding.fundStake) * 100)|number_format(2) }}%</td>
+									<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell" title="The District's stake plus the fund's share of the float">{{ (holding.stake + holding.fundStake)|pct(2) }}</td>
 									<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden md:table-cell">{{ holding.shares|format_large }}</td>
 									<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface">{{ holding.value|format_large('$') }}</td>
 									<td class="px-5 py-2 text-right font-mono tabular-nums text-on-surface">{{ holding.annualDividend|format_large('$') }} a year</td>
@@ -379,15 +379,15 @@
 				},
 				{
 					name: 'Reference portfolio',
-					text: 'Money off the board is held ' ~ mandate.foreignEquityShare|pct(0) ~ ' in global equities and ' ~ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) ~ '% in foreign government bonds. The bonds are held at a constant duration of ' ~ mandate.foreignBondDuration|number_format(1) ~ ' years, so they earn their yield and roll-down and gain when foreign rates fall.'
+					text: 'Money off the board is held ' ~ mandate.foreignEquityShare|pct(0) ~ ' in global equities and ' ~ (1 - mandate.foreignEquityShare)|pct(0) ~ ' in foreign government bonds. The bonds are held at a constant duration of ' ~ mandate.foreignBondDuration|number_format(1) ~ ' years, so they earn their yield and roll-down and gain when foreign rates fall.'
 				},
 				{
 					name: 'District equity band',
-					text: 'The Diet sets how much of the fund\'s equities are held in the District: ' ~ mandate.homeShare|pct(0) ~ ' under the law in force. Policy weight ' ~ (bands[0].policy * 100)|number_format(2) ~ '%, band ±' ~ (bands[0].band * 100)|number_format(2) ~ 'pp, so it trips on a relative move of about ' ~ (bands[0].breachingMove * 100)|number_format(0) ~ '%.'
+					text: 'The Diet sets how much of the fund\'s equities are held in the District: ' ~ mandate.homeShare|pct(0) ~ ' under the law in force. Policy weight ' ~ bands[0].policy|pct(2) ~ ', band ±' ~ bands[0].band|pp(2) ~ ', so it trips on a relative move of about ' ~ bands[0].breachingMove|pct(0) ~ '.'
 				},
 				{
 					name: 'Equity band',
-					text: 'Policy equity share ' ~ (bands[1].policy * 100)|number_format(2) ~ '%, band ±' ~ (bands[1].band * 100)|number_format(2) ~ 'pp. This is the band a global crash breaches.'
+					text: 'Policy equity share ' ~ bands[1].policy|pct(2) ~ ', band ±' ~ bands[1].band|pp(2) ~ '. This is the band a global crash breaches.'
 				},
 				{
 					name: 'Rebalancing',

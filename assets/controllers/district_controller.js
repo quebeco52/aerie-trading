@@ -1,5 +1,5 @@
 import { Controller } from '@hotwired/stimulus';
-import { formatLarge, formatCurrency, formatPercent, sentenceCase, signedClass } from '../js/utils/formatters.js';
+import { formatBps, formatLarge, formatCurrency, formatPercent, sentenceCase, signedClass, NOT_AVAILABLE } from '../js/utils/formatters.js';
 import { setText } from '../js/utils/set-text.js';
 import { THEME_COLORS, SERIES, withAlpha } from '../js/utils/colors.js';
 
@@ -40,9 +40,9 @@ function formatGrowth(value) {
  */
 function formatReading(reading) {
     const value = Number(reading.value);
-    if (!Number.isFinite(value)) return '—';
-    if (reading.unit === 'bps') return `${Math.round(value * 10000)} bps`;
-    if (reading.unit === 'pct') return `${(value * 100).toFixed(2)}%`;
+    if (!Number.isFinite(value)) return NOT_AVAILABLE;
+    if (reading.unit === 'bps') return formatBps(value);
+    if (reading.unit === 'pct') return formatPercent(value, 2);
     return value.toFixed(1);
 }
 

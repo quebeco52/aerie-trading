@@ -100,11 +100,18 @@ same before and after the feed repaints it.
 | --- | --- | --- |
 | Up/down colour | `x\|signed_class` | `signedClass(x)` |
 | Percentage of a fraction | `x\|pct(2)`, signed `x\|pct(1, true)` | `formatPercent(x, 2, false, true)` |
+| Change in percentage points | `x\|pp(1, true)` ("+1.2pp") | `formatPoints(x, 1, true)` |
+| Spread in basis points | `x\|bps`, signed `x\|bps(0, true)` ("+12 bps") | `formatBps(x, 0, true)` |
+| Multiple | `x\|multiple` ("1.23x") | `formatMultiple(x)` |
+| Herfindahl index | `x\|hhi` ("1,800") | |
 | Dollars | `x\|money(2)`, signed `x\|money(2, true)` | `formatCurrency(x)` |
-| Large dollars | `x\|format_large('$')` | `formatLarge(x, '$')` |
+| Large dollars | `x\|format_large('$')`, signed `x\|format_large('$', true)` | `formatLarge(x, '$', true)` |
+| A builder's figure | `x\|figure(format)`, `FigureFormat` | `formatFigure(x, format)` |
 | Event badge text | `x\|lower\|capitalize` | `sentenceCase(x)` |
 
-- Rates and changes arrive as fractions (`PriceChangeFeed` returns 0.0342 for 3.42%); `|pct` scales them.
+- Rates and changes arrive as fractions (`PriceChangeFeed` returns 0.0342 for 3.42%); the filters scale them.
+- A builder that lists figures of several kinds tags each with a `FigureFormat`, and the template prints it with
+  `|figure`; it does not keep its own switch of formats.
 - A missing figure prints "—", never a false 0.00%. An unchanged figure is neutral and carries no "+".
 - The sign goes outside the symbol: "-$12.00", not "$-12.00".
 
@@ -119,7 +126,7 @@ same before and after the feed repaints it.
   `source`: it would replace Twig's own, which the web profiler uses.
 
 ## Checking a change
-- `php vendor/bin/phpunit tests/Twig` runs the style test (0.03 s). Two ratchets cap the percentages and dollar
-  figures still formatted by hand; lower them when you move pages over, never raise them.
+- `php vendor/bin/phpunit tests/Twig` runs the style test (0.03 s). Ratchets cap the percentages, dollar figures,
+  signs and hyphen placeholders still formatted by hand; lower them when you move pages over, never raise them.
 - `bin/render-pages [page ...]` renders the pages from stubs and a headless politics run into `var/render` and
   screenshots them in headless Firefox. Look at the PNG before reporting a UI change.

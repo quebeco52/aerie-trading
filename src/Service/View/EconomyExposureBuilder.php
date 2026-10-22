@@ -37,15 +37,13 @@ final class EconomyExposureBuilder
     /** Firms listed under each heading. */
     public const FIRMS_PER_LIST = 5;
 
-    /** Figure formats the template knows: a share of a whole, a multiple of the average firm, a dollar amount. */
-    public const FORMAT_SHARE = 'share';
-    public const FORMAT_MULTIPLE = 'multiple';
-    public const FORMAT_MONEY = 'money';
+    /** Decimals a list prints: whole percentages, multiples to one place; dollars print abbreviated. */
+    private const DECIMALS = [FigureFormat::Percent->value => 0, FigureFormat::Multiple->value => 1];
 
     public function __construct(private readonly StockRepository $stocks) {}
 
     /**
-     * @return list<array{key: string, title: string, intro: string, lists: list<array{label: string, unit: string, format: string, detail_unit: ?string, rows: list<array{ticker: string, name: string, value: float, detail: ?float}>}>}>
+     * @return list<array{key: string, title: string, intro: string, lists: list<array{label: string, unit: string, format: FigureFormat, decimals: ?int, detail_unit: ?string, rows: list<array{ticker: string, name: string, value: float, detail: ?float}>}>}>
      */
     public function build(): array
     {
@@ -55,7 +53,7 @@ final class EconomyExposureBuilder
     /**
      * @param iterable<Stock> $stocks
      *
-     * @return list<array{key: string, title: string, intro: string, lists: list<array{label: string, unit: string, format: string, detail_unit: ?string, rows: list<array{ticker: string, name: string, value: float, detail: ?float}>}>}>
+     * @return list<array{key: string, title: string, intro: string, lists: list<array{label: string, unit: string, format: FigureFormat, decimals: ?int, detail_unit: ?string, rows: list<array{ticker: string, name: string, value: float, detail: ?float}>}>}>
      */
     public function buildFromStocks(iterable $stocks): array
     {
@@ -155,10 +153,11 @@ final class EconomyExposureBuilder
             }
         }
 
-        $list = static fn(string $key, string $label, string $unit, string $format = self::FORMAT_SHARE, ?string $detailUnit = null): array => [
+        $list = static fn(string $key, string $label, string $unit, FigureFormat $format = FigureFormat::Percent, ?string $detailUnit = null): array => [
             'label' => $label,
             'unit' => $unit,
             'format' => $format,
+            'decimals' => self::DECIMALS[$format->value] ?? null,
             'detail_unit' => $detailUnit,
             'rows' => self::top($collect[$key]),
         ];
@@ -188,17 +187,17 @@ final class EconomyExposureBuilder
                 $list('buys_farm', 'Buy crops and livestock', 'of costs'),
             ]],
             ['key' => 'rates', 'title' => 'Interest rates', 'intro' => 'Floating-rate debt reprices with the policy rate. Ranked by floating-rate debt against market value; banks and other lenders earn on rates and are left out.', 'lists' => [
-                $list('floating_debt', 'Most floating-rate debt', 'of market value', self::FORMAT_SHARE, 'of its debt floats'),
+                $list('floating_debt', 'Most floating-rate debt', 'of market value', FigureFormat::Percent, 'of its debt floats'),
             ]],
             ['key' => 'currency', 'title' => "The District's currency", 'intro' => 'Exporters and firms that compete with imports lose sales when the currency strengthens and gain when it weakens.', 'lists' => [
                 $list('currency', 'Sales that compete on the exchange rate', 'of sales'),
             ]],
             ['key' => 'property', 'title' => 'Property prices', 'intro' => 'Landlords reset rents toward market as leases roll; lenders lose more on defaults when the collateral is worth less.', 'lists' => [
-                $list('landlords', 'Largest landlords', 'total assets', self::FORMAT_MONEY),
+                $list('landlords', 'Largest landlords', 'total assets', FigureFormat::LargeMoney),
                 $list('property_lenders', 'Lenders with most property loans', 'of loans'),
             ]],
-            ['key' => 'cycle', 'title' => 'The business cycle', 'intro' => 'How far sales swing with the economy, where 1.0× is a typical company. Financial firms are left out.', 'lists' => [
-                $list('cycle', 'Most cyclical sales', 'typical swing', self::FORMAT_MULTIPLE),
+            ['key' => 'cycle', 'title' => 'The business cycle', 'intro' => 'How far sales swing with the economy, where 1.0x is a typical company. Financial firms are left out.', 'lists' => [
+                $list('cycle', 'Most cyclical sales', 'typical swing', FigureFormat::Multiple),
             ]],
         ];
 

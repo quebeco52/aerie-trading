@@ -97,7 +97,7 @@
 								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.seats }}</td>
 								<td class="py-2 text-right font-mono tabular-nums text-on-surface">{{ party.share|pct(1) }}</td>
 								<td class="py-2 text-right font-mono tabular-nums {{ party.swing|signed_class }}">
-									{{- party.swing is null ? '-' : (party.swing > 0 ? '+' : '') ~ (party.swing * 100)|number_format(1) ~ 'pp' -}}
+									{{- party.swing|pp(1, true) -}}
 								</td>
 							</tr>
 						{% endfor %}
@@ -157,14 +157,14 @@
 								<tr>
 									<th scope="row" class="py-1.5 text-left font-normal"><a href="{{ path('app_government_party', {slug: party.slug}) }}" class="text-on-surface hover:text-primary hover:underline">{{ party.name }}</a></th>
 									{% for axis in axes %}
-										<td class="py-1.5 text-right font-mono tabular-nums {{ axis.key in party.fixedAxes ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">{{ (attribute(party, axis.key) > 0 ? '+' : '') ~ attribute(party, axis.key)|number_format(2) }}</td>
+										<td class="py-1.5 text-right font-mono tabular-nums {{ axis.key in party.fixedAxes ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">{{ attribute(party, axis.key)|figure('signed_index', 2) }}</td>
 									{% endfor %}
 								</tr>
 							{% endfor %}
 							<tr>
 								<th scope="row" class="py-1.5 text-left font-semibold text-on-surface">The cabinet</th>
 								{% for axis in axes %}
-									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ (attribute(government, axis.key) > 0 ? '+' : '') ~ attribute(government, axis.key)|number_format(2) }}</td>
+									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ attribute(government, axis.key)|figure('signed_index', 2) }}</td>
 								{% endfor %}
 							</tr>
 						</tbody>
@@ -205,7 +205,7 @@
 									{% for cell in row.seats %}
 										<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface">
 											{{ cell.seats }}
-											<span class="block text-2xs {{ cell.swing|signed_class }}">{{ (cell.swing > 0 ? '+' : '') ~ (cell.swing * 100)|number_format(1) }}</span>
+											<span class="block text-2xs {{ cell.swing|signed_class }}">{{ cell.swing|pp(1, true) }}</span>
 										</td>
 									{% endfor %}
 									<td class="px-3 py-2">
@@ -244,9 +244,9 @@
 											{% endfor %}
 										{% endif %}
 									</td>
-									<td class="px-3 py-2 text-right font-mono tabular-nums hidden md:table-cell {{ row.incumbentSwing|signed_class }}">{{ (row.incumbentSwing > 0 ? '+' : '') ~ (row.incumbentSwing * 100)|number_format(1) }}pp</td>
-									<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden md:table-cell">{{ (row.growthGap > 0 ? '+' : '') ~ (row.growthGap * 100)|number_format(1) }} / {{ (row.inflationGap > 0 ? '+' : '') ~ (row.inflationGap * 100)|number_format(1) }}</td>
-									<td class="px-5 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell">{{ (row.volatility * 100)|number_format(1) }}</td>
+									<td class="px-3 py-2 text-right font-mono tabular-nums hidden md:table-cell {{ row.incumbentSwing|signed_class }}">{{ row.incumbentSwing|pp(1, true) }}</td>
+									<td class="px-3 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden md:table-cell">{{ row.growthGap|pp(1, true) }} / {{ row.inflationGap|pp(1, true) }}</td>
+									<td class="px-5 py-2 text-right font-mono tabular-nums text-on-surface-variant hidden sm:table-cell">{{ row.volatility|pct(1) }}</td>
 								</tr>
 							{% endfor %}
 						</tbody>

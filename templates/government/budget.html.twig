@@ -169,7 +169,7 @@
 														<a href="{{ path('app_stock_view', {ticker: firm.ticker}) }}" class="font-mono text-primary hover:underline">{{ firm.ticker }}</a>
 														<span class="text-on-surface-variant">{{ firm.name }}</span>
 													</th>
-													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.now|signed_class }}">{{ firm.now > 0 ? '+' : '' }}{{ firm.now|format_large('$') }}</td>
+													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.now|signed_class }}">{{ firm.now|format_large('$', true) }}</td>
 													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.nowShare is null ? 'text-on-surface-faint' : firm.nowShare|signed_class }}">{{ firm.nowShare is null ? '—' : firm.nowShare|pct(1, true) }}</td>
 													{% if law.expectedMoves %}
 														<td class="py-1.5 text-right font-mono tabular-nums {{ firm.changeShare is null ? 'text-on-surface-faint' : firm.changeShare|signed_class }}">{{ firm.changeShare is null ? '—' : firm.changeShare|pct(1, true) }}</td>

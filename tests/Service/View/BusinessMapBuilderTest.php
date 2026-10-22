@@ -82,7 +82,7 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertSame(1, $this->edge($map, 'input:labor', 'recover')[2]);
         $this->assertNull($this->find($map['outside'], 'input:agri'), 'only inputs in the model basket');
         $this->assertSame(-1, $this->edge($map, 'recover', 'cost')[2], 'an unrecovered cost rise hurts');
-        $this->assertEqualsWithDelta(-0.94, $this->card($map['inside'], 'recover')['chips'][0]['figure'], 1e-9);
+        $this->assertEqualsWithDelta(-0.0094, $this->card($map['inside'], 'recover')['chips'][0]['figure'], 1e-12);
     }
 
     /**
@@ -101,8 +101,8 @@ final class BusinessMapBuilderTest extends TestCase
 
         $this->assertSame(['input:metals', 'recover', -1, 0.012], $this->edge($map, 'input:metals', 'recover'));
         $this->assertSame(['input:labor', 'recover', 1, 0.0026], $this->edge($map, 'input:labor', 'recover'));
-        $this->assertEqualsWithDelta(-1.2, $this->card($map['outside'], 'input:metals')['chips'][0]['figure'], 1e-9);
-        $this->assertEqualsWithDelta(0.26, $this->card($map['outside'], 'input:labor')['chips'][0]['figure'], 1e-9);
+        $this->assertEqualsWithDelta(-0.012, $this->card($map['outside'], 'input:metals')['chips'][0]['figure'], 1e-12);
+        $this->assertEqualsWithDelta(0.0026, $this->card($map['outside'], 'input:labor')['chips'][0]['figure'], 1e-12);
         $this->assertNull($this->find($map['outside'], 'input:earlier'), 'nothing earlier to show');
 
         $map = $this->map(kpis: ['input_drag_earlier' => 0.002] + $kpis);
@@ -115,7 +115,7 @@ final class BusinessMapBuilderTest extends TestCase
 
         $margin = $this->card($map['produced'], 'margin');
         $this->assertSame(0.219, $margin['value']);
-        $this->assertEqualsWithDelta(6.1, $margin['chips'][0]['figure'], 1e-9);
+        $this->assertEqualsWithDelta(0.061, $margin['chips'][0]['figure'], 1e-12);
         $this->assertEqualsWithDelta(0.1, $map['handoff']['change'], 1e-12);
     }
 
@@ -166,7 +166,7 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertSame(['funding', 'paid', 0, 0.3], $this->edge($map, 'funding', 'paid'));
         $this->assertSame(['reserve', 'losses', 0, 0.1], $this->edge($map, 'reserve', 'losses'));
         $this->assertSame(4.0, $this->card($map['produced'], 'losses')['value']);
-        $this->assertEqualsWithDelta(0.06, $this->card($map['produced'], 'nim')['chips'][0]['figure'], 1e-9);
+        $this->assertEqualsWithDelta(0.0006, $this->card($map['produced'], 'nim')['chips'][0]['figure'], 1e-12);
         $this->assertSame(0.14, $this->card($map['inside'], 'capital')['value']);
         $this->assertSame(['ops:net_interest_income', 'funding', 'ops:fee_income', 'reserve', 'capital'], array_column($map['inside'], 'id'), 'funding beside the book');
         $this->assertSame(['rev:net_interest_income', 'nim', 'paid', 'rev:fee_income', 'losses'], array_column($map['produced'], 'id'), 'each result beside what feeds it');
@@ -262,7 +262,7 @@ final class BusinessMapBuilderTest extends TestCase
         $this->assertSame(12.0, $this->card($map['produced'], 'investment')['value']);
         $combined = $this->card($map['produced'], 'combined');
         $this->assertEqualsWithDelta(0.94, $combined['value'], 1e-12);
-        $this->assertEqualsWithDelta(-2.0, $combined['chips'][0]['figure'], 1e-9);
+        $this->assertEqualsWithDelta(-0.02, $combined['chips'][0]['figure'], 1e-12);
         $this->assertSame('up', $combined['chips'][0]['tone'], 'a lower combined ratio is the better quarter');
         $this->assertNull($this->find($map['produced'], 'cost'), 'no production cost side for an underwriter');
     }

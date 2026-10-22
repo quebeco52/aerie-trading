@@ -40,7 +40,7 @@ use App\Service\Politics\Diet\PartyLeaders;
 use App\Service\Politics\Policy\BudgetRound;
 use App\Service\Politics\Policy\Platforms;
 use App\Service\Politics\PoliticsEngine;
-use App\Twig\Extension\NumberFormatExtension;
+use App\Twig\Extension\UiExtension;
 
 /**
  * Builds the government's pages: the front page with a headline from each institution, the Diet (the chamber, the talks
@@ -976,7 +976,7 @@ class GovernmentPageBuilder
                     'enacted' => $standing['bankLevyRate'],
                     'status' => $status('bankLevyRate'),
                     'note' => $macro->boardBankLevy > 0.0
-                        ? sprintf('On banks\' short-term funding, half that on long-term funding and uninsured deposits; the banks owe %s a year', (new NumberFormatExtension())->formatLargeNumber($macro->boardBankLevy, '$'))
+                        ? sprintf('On banks\' short-term funding, half that on long-term funding and uninsured deposits; the banks owe %s a year', UiExtension::large($macro->boardBankLevy, '$'))
                         : 'On banks\' short-term funding, half that on long-term funding and uninsured deposits',
                 ],
                 [

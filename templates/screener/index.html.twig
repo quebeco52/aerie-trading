@@ -72,10 +72,10 @@
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">{{ stock.isBankrupt ? '$0.00' : stock.marketCap|format_large('$') }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : (stock.peRatio ?? 0) }}">
-                                {{ not stock.isBankrupt and stock.peRatio is not null ? stock.peRatio|number_format(2) ~ 'x' : '-' }}
+                                {{ (stock.isBankrupt ? null : stock.peRatio)|multiple }}
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.dividendYield ?? 0 }}">
-                                {{ not stock.isBankrupt and stock.dividendYield > 0 ? stock.dividendYield|pct(2) : '-' }}
+                                {{ not stock.isBankrupt and stock.dividendYield > 0 ? stock.dividendYield|pct(2) : '—' }}
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.eps }}">{{ stock.eps|money(2) }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.currentRoic|signed_class }}" data-value="{{ stock.currentRoic }}">
@@ -86,13 +86,13 @@
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.equity }}">{{ stock.equity|format_large('$') }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.debtToEquity ?? 0 }}">
-                                {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '-' }}
+                                {{ stock.debtToEquity|multiple }}
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.netDebtToEbitda is not null and stock.netDebtToEbitda > 4 ? 'text-tertiary' : 'text-on-surface' }}" data-value="{{ stock.netDebtToEbitda ?? 0 }}">
-                                {{ stock.netDebtToEbitda is not null ? stock.netDebtToEbitda|number_format(2) ~ 'x' : '-' }}
+                                {{ stock.netDebtToEbitda|multiple }}
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.fcfConversion is not null and stock.fcfConversion < 0.8 ? 'text-tertiary' : 'text-on-surface' }}" data-value="{{ stock.fcfConversion ?? 0 }}">
-                                {{ stock.fcfConversion is not null ? stock.fcfConversion|pct(0) : '-' }}
+                                {{ stock.fcfConversion|pct(0) }}
                             </td>
                             <td class="px-5 py-2.5 text-right">
                                 <span class="material-symbols-outlined text-base leading-none text-on-surface-variant group-hover:text-primary transition-colors" aria-hidden="true">chevron_right</span>

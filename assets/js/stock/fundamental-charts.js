@@ -1,5 +1,5 @@
 import { THEME_COLORS, SERIES, withAlpha } from '../utils/colors.js';
-import { formatLarge, formatCurrency, formatPercent } from '../utils/formatters.js';
+import { formatLarge, formatCurrency, formatPercent, formatFigure, isSignedFigure, NOT_AVAILABLE } from '../utils/formatters.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
 import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 import { refreshChartGrid } from '../utils/chart-grid.js';
@@ -2003,18 +2003,6 @@ function parseKpis(report) {
     }
 }
 
-// How each KPI format (FinancialSummaryBuilder::KPI_LABELS) reads on an axis and in the HUD: the same units the
-// summary tile prints, so a figure reads the same in both places.
-const KPI_FORMATS = {
-    percent: { scale: 100, text: (v) => `${v.toFixed(2)}%` },
-    signed_percent: { scale: 100, text: (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}%` },
-    multiple: { scale: 1, text: (v) => `${v.toFixed(2)}x` },
-    quarters: { scale: 1, text: (v) => `${v.toFixed(1)} qtrs` },
-    years: { scale: 1, text: (v) => `${v.toFixed(1)} yrs` },
-    index: { scale: 1, text: (v) => v.toFixed(3) },
-    signed_index: { scale: 1, text: (v) => `${v > 0 ? '+' : ''}${v.toFixed(3)}` },
-};
-
 // The picker is server-rendered, one button per KPI; a click only re-selects and redraws from the stored series.
 function setupKpiPicker() {
     document.querySelectorAll('[data-kpi-key]').forEach(btn => {
@@ -2037,13 +2025,14 @@ function renderKpiHistoryChart() {
     if (!canvas || !series) return;
     kpiHistoryChartInstance = destroyChartInstance(kpiHistoryChartInstance);
 
-    const format = KPI_FORMATS[series.format] ?? KPI_FORMATS.index;
+    // Each KPI reads in its FinancialSummaryBuilder format, as the summary tile prints it.
+    const text = (v) => formatFigure(v, series.format);
     // A quarter filed before the company reported this figure plots as a gap, not as zero.
     const data = kpiHistory.rows.map(row => {
         const value = parseFloat(row[kpiHistory.selected]);
-        return Number.isFinite(value) ? value * format.scale : null;
+        return Number.isFinite(value) ? value : null;
     });
-    const signed = series.format.startsWith('signed');
+    const signed = isSignedFigure(series.format);
 
     kpiHistoryChartInstance = new Chart(canvas.getContext('2d'), {
         type: signed ? 'bar' : 'line',
@@ -2070,17 +2059,17 @@ function renderKpiHistoryChart() {
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { display: false },
-                tooltip: { callbacks: { label: (ctx) => `${series.label}: ${ctx.raw === null ? '—' : format.text(ctx.raw)}` } }
+                tooltip: { callbacks: { label: (ctx) => `${series.label}: ${text(ctx.raw)}` } }
             },
             scales: {
                 x: { grid: { color: GRID_COLOR }, ticks: { maxTicksLimit: 12 } },
-                y: { grid: { color: GRID_COLOR }, ticks: { callback: (val) => format.text(val) } }
+                y: { grid: { color: GRID_COLOR }, ticks: { callback: (val) => text(val) } }
             }
         }
     });
 
     const latest = [...data].reverse().find(v => v !== null);
-    setHud('hud-kpiHistoryChart', latest === undefined ? '-' : `${series.label} ${format.text(latest)}`);
+    setHud('hud-kpiHistoryChart', latest === undefined ? NOT_AVAILABLE : `${series.label} ${text(latest)}`);
 }
 
 function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData) {
@@ -2315,7 +2304,7 @@ function renderFinancialStatements(latest) {
     const ageEl = document.getElementById('asset-age-badge');
     if (ageEl) {
         const age = latest.asset_age !== null && latest.asset_age !== undefined ? parseFloat(latest.asset_age) : NaN;
-        ageEl.innerText = isFinite(age) ? `${(age * 100).toFixed(0)}% depreciated` : '-';
+        ageEl.innerText = isFinite(age) ? `${formatPercent(age, 0)} depreciated` : NOT_AVAILABLE;
     }
     const ageLabelEl = document.getElementById('asset-age-label');
     if (ageLabelEl) ageLabelEl.innerText = isLender ? 'Reserve ratio' : 'Plant age';
@@ -2324,8 +2313,8 @@ function renderFinancialStatements(latest) {
         // Quarterly charge-offs annualized over the book they came out of.
         const chargeOffRate = num('earning_assets') > 0 ? (num('net_charge_offs') * 4) / num('earning_assets') : NaN;
         ageEl.innerText = isFinite(reserveRatio)
-            ? `${(reserveRatio * 100).toFixed(2)}% of book${isFinite(chargeOffRate) ? ` · NCO ${(chargeOffRate * 100).toFixed(2)}%` : ''}`
-            : '-';
+            ? `${formatPercent(reserveRatio)} of book${isFinite(chargeOffRate) ? ` · NCO ${formatPercent(chargeOffRate)}` : ''}`
+            : NOT_AVAILABLE;
     }
 
     const operatingRows = isLender ? [
@@ -2369,7 +2358,7 @@ function renderFinancialStatements(latest) {
     const stageEl = document.getElementById('lifecycle-stage-badge');
     if (stageEl) {
         const stage = latest.lifecycle_stage;
-        stageEl.innerText = stage ? stage.replace(/_/g, ' ') : '-';
+        stageEl.innerText = stage ? stage.replace(/_/g, ' ') : NOT_AVAILABLE;
     }
 }
 
