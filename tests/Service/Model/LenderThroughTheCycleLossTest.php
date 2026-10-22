@@ -66,10 +66,10 @@ final class LenderThroughTheCycleLossTest extends TestCase
         $weight = 0.0;
         for ($x = -3.5; $x <= 3.5 + 1e-9; $x += 0.05) {
             $macro = new MacroStateDTO(
-                retailDefaultRateEma: MacroConstants::RETAIL_DEFAULT_BASELINE * (1.0 + (0.28 * $x)),
-                retailDefaultRateTrend: MacroConstants::RETAIL_DEFAULT_BASELINE,
-                corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_BASELINE * max(0.05, 1.0 + (0.41 * $x)),
-                corporateDefaultRateTrend: MacroConstants::CORPORATE_DEFAULT_BASELINE,
+                retailDefaultRateEma: MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN * (1.0 + (0.28 * $x)),
+                retailDefaultRateTrend: MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN,
+                corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN * max(0.05, 1.0 + (0.41 * $x)),
+                corporateDefaultRateTrend: MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
             );
             $density = exp(-0.5 * $x * $x);
             $weight += $density;

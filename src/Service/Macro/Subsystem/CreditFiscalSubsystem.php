@@ -174,6 +174,11 @@ class CreditFiscalSubsystem
     // --- VASICEK ASRF RETAIL DEFAULT RATE (fitted on US household delinquency 1991-2019,
     // var/harness/retail_default_fit) ---
     /**
+     * Long-run household PD the factor is struck at (2.5%, the US delinquency mean the fit read); the District's
+     * channels settle the rate lower (MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN).
+     */
+    public const RETAIL_DEFAULT_BASELINE = 0.025;
+    /**
      * Household credit Z at NAIRU, base spreads and trend house prices: -0.06 (se 0.08), the intercept of the fit
      * below; the US channels average -0.17 on top, which with it puts mean delinquency at the 2.5% the PD is struck at.
      */
@@ -643,7 +648,7 @@ class CreditFiscalSubsystem
 
         $conditionalPd = CreditRisk::calculateVasicekExpectedLoss(
             macroZ: $macroZ,
-            pdLra: MacroConstants::RETAIL_DEFAULT_BASELINE,
+            pdLra: self::RETAIL_DEFAULT_BASELINE,
             rho: CreditRisk::RETAIL_ASRF_RHO,
             lgd: 1.0,
         );
@@ -1156,7 +1161,7 @@ class CreditFiscalSubsystem
      */
     public function householdChargeOffRate(float $retailDefaultRate): float
     {
-        $householdZ = CreditRisk::calculateVasicekSystematicFactor($retailDefaultRate, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO);
+        $householdZ = CreditRisk::calculateVasicekSystematicFactor($retailDefaultRate, self::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO);
 
         return (self::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO, 1.0))
             + ((1.0 - self::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * CreditRisk::calculateVasicekExpectedLoss($householdZ, self::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE, CreditRisk::RETAIL_ASRF_RHO, 1.0));

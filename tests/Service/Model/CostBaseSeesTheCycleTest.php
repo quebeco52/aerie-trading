@@ -71,8 +71,8 @@ class CostBaseSeesTheCycleTest extends TestCase
             domesticDemandGapEma: self::GAP,
             foreignOutputGap: self::GAP,
             consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL + (\App\Tests\Support\SentimentOnTheCycle::POINTS_PER_GAP * self::GAP),
-            corporateDefaultRate: 2.0 * MacroConstants::CORPORATE_DEFAULT_BASELINE,
-            corporateDefaultRateEma: 2.0 * MacroConstants::CORPORATE_DEFAULT_BASELINE,
+            corporateDefaultRate: 2.0 * MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
+            corporateDefaultRateEma: 2.0 * MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
             manufacturingPmi: MacroConstants::PMI_BASELINE - 5.0,
             exchangeRateIndexEma: 100.0,
         );

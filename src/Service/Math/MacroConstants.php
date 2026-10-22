@@ -222,9 +222,11 @@ final class MacroConstants
      */
     public const ALLIED_PROCUREMENT_ELASTICITY = 1.54;
 
-    // --- VASICEK ASRF RETAIL DEFAULT RATE ---
-    /** Baseline long-run average through-the-cycle retail consumer probability of default. */
-    public const RETAIL_DEFAULT_BASELINE = 0.025;
+    // --- Household Default Rate ---
+    /**
+     * The District's household default rate over its own cycle (~2.25%): where the rate and its measured trend open.
+     */
+    public const RETAIL_DEFAULT_LONG_RUN_MEAN = 0.0225;
 
     // --- 2-FACTOR CORRELATED OU AGRICULTURAL COMMODITIES & WEATHER JUMPS ---
     /** Baseline agricultural commodity index value (neutral crop harvest). */
@@ -315,14 +317,11 @@ final class MacroConstants
 
     // --- Estrella & Mishkin (1998) Yield Curve Recession Probit ---
     /**
-     * Share of months the US spent in recession, 1945Q4-2019 (FRED USREC): what a calibrated 12-month recession
-     * forecast averages, and the outlook readers measure from.
+     * What the 12-month recession forecast averages over the District's cycle (~17%; the US spent 13.8% of months in
+     * recession, 1945-2019): where the forecast and its measured trend open.
      */
-    public const RECESSION_BASE_RATE = 0.138;
-    /**
-     * Probit intercept, set so the forecast averages RECESSION_BASE_RATE over this engine's cycle (a probit with an
-     * intercept reproduces its sample frequency).
-     */
+    public const RECESSION_PROBABILITY_LONG_RUN_MEAN = 0.17;
+    /** Probit intercept (-0.92): with it the forecast averages RECESSION_PROBABILITY_LONG_RUN_MEAN over the cycle. */
     public const RECESSION_PROBIT_BETA_0 = -0.92;
     /** Probit sensitivity to sovereign yield curve slope (10Y minus policy rate). */
     public const RECESSION_PROBIT_BETA_SLOPE = -80.0;
@@ -336,10 +335,15 @@ final class MacroConstants
 
     // --- Corporate Default Dynamics (Moody's all-rated / Altman) ---
     /**
-     * Long-run average ALL-rated issuer-weighted corporate default rate (Moody's: 1.59% over 1983-2019, 1.56% over
-     * 1920-2017); speculative grade alone runs about three times it.
+     * Long-run all-rated corporate PD the Vasicek factor is struck at (Moody's: 1.59% over 1983-2019, 1.56% over
+     * 1920-2017; speculative grade alone runs about three times it); the District's channels settle the rate lower.
      */
     public const CORPORATE_DEFAULT_BASELINE = 0.016;
+    /**
+     * The District's all-rated corporate default rate over its own cycle (~1.43%): where the rate and its measured
+     * trend open.
+     */
+    public const CORPORATE_DEFAULT_LONG_RUN_MEAN = 0.0143;
 
     // --- NY Fed Global Supply Chain Pressure Index (GSCPI - Benigno et al. 2022) ---
     /** Supply-chain pressure in normal times: the index is in its own standard deviations about zero. */

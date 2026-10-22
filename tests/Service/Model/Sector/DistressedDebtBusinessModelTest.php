@@ -225,7 +225,7 @@ class DistressedDebtBusinessModelTest extends TestCase
             macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
             macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
             highYieldCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
-            corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_BASELINE,
+            corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
         );
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);

@@ -17,7 +17,7 @@ final class CreditRisk
      * Aggregate corporate default rate the base recoveries above are quoted at: the long-run average year of the series
      * the macro publishes.
      */
-    public const RECOVERY_BASELINE_DEFAULT_RATE = MacroConstants::CORPORATE_DEFAULT_BASELINE;
+    public const RECOVERY_BASELINE_DEFAULT_RATE = MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN;
     /**
      * Fall in recovery per unit of log excess in the aggregate default rate. Recovery and default are NEGATIVELY
      * correlated: defaults cluster in bad years, distressed assets are sold into a market with no buyers, and the same

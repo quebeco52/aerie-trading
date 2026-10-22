@@ -533,7 +533,7 @@ class MacroEngineTest extends TestCase
 
         $result = $this->engine->updateMacroState(0.25);
 
-        $this->assertGreaterThan(MacroConstants::RETAIL_DEFAULT_BASELINE, $result->retailDefaultRate, 'High unemployment and inflation should spike retail defaults via Vasicek ASRF.');
+        $this->assertGreaterThan(CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE, $result->retailDefaultRate, 'High unemployment and inflation should spike retail defaults via Vasicek ASRF.');
     }
 
     public function testAgriculturalCommoditiesFluctuateWithSeasonality(): void

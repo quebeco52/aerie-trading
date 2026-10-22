@@ -212,10 +212,10 @@ class CommercialBankBusinessModelTest extends TestCase
         $weight = 0.0;
         for ($x = -3.5; $x <= 3.5 + 1e-9; $x += $step) {
             $macro = new MacroStateDTO(
-                retailDefaultRateEma: MacroConstants::RETAIL_DEFAULT_BASELINE * (1.0 + (0.28 * $x)),
-                retailDefaultRateTrend: MacroConstants::RETAIL_DEFAULT_BASELINE,
-                corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_BASELINE * max(0.05, 1.0 + (0.41 * $x)),
-                corporateDefaultRateTrend: MacroConstants::CORPORATE_DEFAULT_BASELINE,
+                retailDefaultRateEma: MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN * (1.0 + (0.28 * $x)),
+                retailDefaultRateTrend: MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN,
+                corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN * max(0.05, 1.0 + (0.41 * $x)),
+                corporateDefaultRateTrend: MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
             );
             $stock->setEarningsMomentumZ([]);
             $result = $this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.10, $macro, $this->mathUtility);
@@ -856,18 +856,18 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($resultLowRisk->clampedMargin, $resultHighRisk->clampedMargin, 1e-12, 'the forecast reserve is not a running cost');
 
-        $atBaseRate = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: MacroConstants::RECESSION_BASE_RATE));
+        $atBaseRate = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: MacroConstants::RECESSION_PROBABILITY_LONG_RUN_MEAN));
         $calm = $this->model->getForwardCreditLossMultiplier($bank, $macroLowRisk);
         $stressed = $this->model->getForwardCreditLossMultiplier($bank, $macroHighRisk);
         $this->assertEqualsWithDelta(1.0, $atBaseRate, 1e-9, 'at the base-rate outlook the estimate is the through-the-cycle one');
         $this->assertEqualsWithDelta(
-            1.0 - (MacroConstants::RECESSION_BASE_RATE - 0.10) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
+            1.0 - (MacroConstants::RECESSION_PROBABILITY_LONG_RUN_MEAN - 0.10) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
             $calm,
             1e-9,
             'a better-than-average outlook releases, as the spread term does, so the average outlook carries no standing build',
         );
         $this->assertEqualsWithDelta(
-            1.0 + (0.70 - MacroConstants::RECESSION_BASE_RATE) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
+            1.0 + (0.70 - MacroConstants::RECESSION_PROBABILITY_LONG_RUN_MEAN) * CommercialBankBusinessModel::CECL_RESERVE_RECESSION_SENSITIVITY,
             $stressed,
             1e-9,
         );

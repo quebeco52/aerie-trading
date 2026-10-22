@@ -517,8 +517,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
             policyRateEma: self::NEUTRAL_POLICY_RATE,
             yield10yEma: 0.03,
             yield2yEma: 0.045,
-            retailDefaultRateEma: 2.0 * MacroConstants::RETAIL_DEFAULT_BASELINE,
-            corporateDefaultRateEma: 2.0 * MacroConstants::CORPORATE_DEFAULT_BASELINE,
+            retailDefaultRateEma: 2.0 * MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN,
+            corporateDefaultRateEma: 2.0 * MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
             macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD + 0.02,
         );
 

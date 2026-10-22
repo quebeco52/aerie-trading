@@ -2691,8 +2691,8 @@ class InitialMarket
             'beta_tilt' => 0.25, // its fees are struck on market values
             'jump_intensity' => 0.60,
             'jump_vol' => 0.12,
-            // Julius Baer earned 12% in 2019 with Swiss franc rates negative; at the District's rates its deposit
-            // franchise alone earns more than that, and 18% (break-even 17.6%) opens its loans at a positive spread
+            // Julius Baer earned 12% in 2019 with Swiss franc rates negative; at the District's rates its fees and
+            // deposit franchise earn 18% with its loans priced at about the market rate they reprice at
             'baseline_roe' => 0.18,
             'capex_ratio' => 0.08,
             'target_payout_ratio' => 0.45,
@@ -2706,11 +2706,13 @@ class InitialMarket
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0070,
             'depreciation_rate' => 0.03,
-            // Julius Baer's balance sheet at 2019: deposits 71% of assets, equity 6.1%; cash 10% of deposits.
+            // Julius Baer's balance sheet at 2019: deposits 71% of assets, equity 6.1%. The rest of a private bank's
+            // funding is mostly client-linked, so it sits with the deposits here (82%), leaving the wholesale notes
+            // inside twice equity; equity is 6.7%, clear of the 6% capital watch line. Cash is 9% of deposits.
             'corporate_treasury' => 43_000_000_000.00,
-            'total_equity'      => 36_000_000_000.00,
-            'customer_deposits' => 428_000_000_000.00,
-            'wholesale_debt'    => 136_000_000_000.00,
+            'total_equity'      => 40_000_000_000.00,
+            'customer_deposits' => 490_000_000_000.00,
+            'wholesale_debt'    => 70_000_000_000.00,
             'retained_earnings' => 21_000_000_000.00,
         ],
         [

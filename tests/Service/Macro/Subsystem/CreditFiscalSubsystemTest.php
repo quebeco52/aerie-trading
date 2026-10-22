@@ -1258,14 +1258,14 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $subsystem = $this->quietSubsystem();
         $calm = $this->householdStateAtNeutralRates();
-        $calm->retailDefaultRate = MacroConstants::RETAIL_DEFAULT_BASELINE;
+        $calm->retailDefaultRate = MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN;
         $crisis = $this->householdStateAtNeutralRates();
         $crisis->retailDefaultRate = 0.06;
 
         $subsystem->calculateHouseholdCredit($calm, 1.0);
         $subsystem->calculateHouseholdCredit($crisis, 1.0);
 
-        $excessChargeOff = $subsystem->householdChargeOffRate(0.06) - $subsystem->householdChargeOffRate(MacroConstants::RETAIL_DEFAULT_BASELINE);
+        $excessChargeOff = $subsystem->householdChargeOffRate(0.06) - $subsystem->householdChargeOffRate(MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN);
         $this->assertEqualsWithDelta(MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE, $calm->householdDebtToIncome, 1e-12, 'At the long-run default rate the stock holds.');
         $this->assertEqualsWithDelta(exp(-$excessChargeOff), $crisis->householdDebtToIncome / $calm->householdDebtToIncome, 1e-12, 'The excess charge-off flow leaves the stock.');
         $this->assertGreaterThan(0.01, $excessChargeOff, 'A 2009-scale default rate charges off well over a point of the stock a year.');
@@ -1279,8 +1279,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $longRun = (CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_DEBT_SHARE * CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_CHARGE_OFF_RATE)
             + ((1.0 - CreditFiscalSubsystem::HOUSEHOLD_MORTGAGE_DEBT_SHARE) * CreditFiscalSubsystem::HOUSEHOLD_CONSUMER_CHARGE_OFF_RATE);
 
-        $this->assertEqualsWithDelta($longRun, $this->subsystem->householdChargeOffRate(MacroConstants::RETAIL_DEFAULT_BASELINE), 0.1 * $longRun);
-        $this->assertGreaterThan($this->subsystem->householdChargeOffRate(MacroConstants::RETAIL_DEFAULT_BASELINE), $this->subsystem->householdChargeOffRate(0.04));
+        $this->assertEqualsWithDelta($longRun, $this->subsystem->householdChargeOffRate(CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE), 0.1 * $longRun);
+        $this->assertGreaterThan($this->subsystem->householdChargeOffRate(CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE), $this->subsystem->householdChargeOffRate(0.04));
     }
 
     /**
@@ -1663,8 +1663,8 @@ class CreditFiscalSubsystemTest extends TestCase
         $underwater->residentialWealthTrend = 100.0;
         $subsystem->calculateRetailDefaultRate($underwater, 0.25);
 
-        $this->assertEqualsWithDelta(CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, base spreads and trend prices the systematic factor is the intercept.');
-        $expected = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + log(0.8) * CreditFiscalSubsystem::RETAIL_HOUSE_PRICE_SENSITIVITY, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
+        $this->assertEqualsWithDelta(CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, base spreads and trend prices the systematic factor is the intercept.');
+        $expected = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + log(0.8) * CreditFiscalSubsystem::RETAIL_HOUSE_PRICE_SENSITIVITY, CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
         $this->assertEqualsWithDelta($expected, $underwater->retailDefaultRate, 1e-9, 'Homes 20% below trend default more households at the same unemployment.');
         $this->assertGreaterThan($neutral->retailDefaultRate, $underwater->retailDefaultRate);
     }
@@ -1710,7 +1710,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->assertLessThan(0.0, $shocked);
         $this->assertEqualsWithDelta($shocked * exp(-CreditFiscalSubsystem::RETAIL_CREDIT_FACTOR_KAPPA * 0.25), $state->retailCreditFactor, 1e-12, 'With no new shock the factor decays at its own rate.');
-        $atRest = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, MacroConstants::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
+        $atRest = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
         $this->assertGreaterThan($atRest, $state->retailDefaultRate, 'A bad factor still defaults more households a quarter later.');
     }
 

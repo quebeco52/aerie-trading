@@ -423,7 +423,7 @@ class StockModelTuning
             ModelParam::ResidentialMortgageShare->value  => 0.18, // Julius Baer 2019: CHF 8.9B of CHF 48.4B of loans
             ModelParam::ConsumerLoanShare->value         => 0.00,
             ModelParam::CommercialRealEstateShare->value => 0.00, // Lombard loans take the other 82%
-            ModelParam::TargetCapitalRatio->value        => 0.06, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value        => 0.0667, // Its seeded book equity/assets
         ],
 
         // --- Egret Trust (EGRT) --- Custodian of the Sovereign Reserve Fund. Its loans are lines to funds secured on

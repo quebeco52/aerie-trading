@@ -94,10 +94,10 @@ final class DefaultRateTrendTest extends TestCase
         $math->method('generateUniform')->willReturn(1.0);
 
         $macro = new MacroStateDTO(
-            corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_BASELINE * $rateMultiple * $corporateScale,
-            retailDefaultRateEma: MacroConstants::RETAIL_DEFAULT_BASELINE * $rateMultiple * $retailScale,
-            corporateDefaultRateTrend: MacroConstants::CORPORATE_DEFAULT_BASELINE * $trendMultiple,
-            retailDefaultRateTrend: MacroConstants::RETAIL_DEFAULT_BASELINE * $trendMultiple,
+            corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN * $rateMultiple * $corporateScale,
+            retailDefaultRateEma: MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN * $rateMultiple * $retailScale,
+            corporateDefaultRateTrend: MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN * $trendMultiple,
+            retailDefaultRateTrend: MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN * $trendMultiple,
         );
         // A balance sheet a lender's book is sized on; the operating firms ignore it.
         $stock = (new Stock())->setTicker($ticker)->setBeta('1.0')->setTotalEquity('10000000000')

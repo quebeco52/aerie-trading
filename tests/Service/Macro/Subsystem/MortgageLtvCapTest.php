@@ -47,7 +47,7 @@ class MortgageLtvCapTest extends TestCase
         $state->householdDebtToIncomeEma = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
         $state->creditToGdpTrend = MacroConstants::HOUSEHOLD_DEBT_TO_INCOME_BASELINE;
         $state->householdDebtServiceTrend = MacroConstants::HOUSEHOLD_DSR_NEUTRAL;
-        $state->retailDefaultRate = MacroConstants::RETAIL_DEFAULT_BASELINE;
+        $state->retailDefaultRate = MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN;
         $state->mortgageLtvCap = $cap;
 
         return $state;

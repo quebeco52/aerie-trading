@@ -31,7 +31,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
         float $energyCostPushLag = 0.0,
         float $realWageGap = 0.0,
         float $commercialPropertyIndexEma = 100.0,
-        float $retailDefaultRateEma = MacroConstants::RETAIL_DEFAULT_BASELINE,
+        float $retailDefaultRateEma = MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN,
         float $consumerSentimentMood = 0.0,
     ): MacroStateDTO {
         return new MacroStateDTO(
@@ -206,7 +206,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
 
         $calm = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0, 0.33, 2000.0, 0.15, $this->createMacroState(), $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
         // Retail defaults at twice their baseline: one unit of relative excess, already seen in expected revenue.
-        $macroWave = $this->createMacroState(retailDefaultRateEma: 2.0 * MacroConstants::RETAIL_DEFAULT_BASELINE);
+        $macroWave = $this->createMacroState(retailDefaultRateEma: 2.0 * MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN);
         $root = $model->getMacroPhysics($this->stock('GULL', $momentum), $macroWave)['macro_demand_shift'];
         $wave = $model->computeActualFinancials($this->stock('GULL', $momentum), 10_000.0 * (1.0 + $root), 0.33, 2000.0, 0.15, $macroWave, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
 

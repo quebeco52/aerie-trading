@@ -167,8 +167,8 @@ readonly class MacroStateDTO
         public float $residentialPropertyIndexEma = 100.0,
         public float $residentialWealthTrend = 100.0,
         public float $residentialPriceMomentum = 0.0,
-        public float $retailDefaultRate = MacroConstants::RETAIL_DEFAULT_BASELINE,
-        public float $retailDefaultRateEma = MacroConstants::RETAIL_DEFAULT_BASELINE,
+        public float $retailDefaultRate = MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN,
+        public float $retailDefaultRateEma = MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN,
         public float $retailCreditFactor = 0.0,
         public float $agriculturalCommodityIndex = 100.0,
         public float $agriculturalCommodityIndexEma = 100.0,
@@ -383,10 +383,10 @@ readonly class MacroStateDTO
         public float $energyInventoryIndexEma = MacroConstants::COMMODITY_INVENTORY_BASELINE,
         public float $capacityUtilizationRate = MacroConstants::CU_BASELINE,
         public float $capacityUtilizationRateEma = MacroConstants::CU_BASELINE,
-        public float $recessionProbability = MacroConstants::RECESSION_BASE_RATE,
-        public float $recessionProbabilityEma = MacroConstants::RECESSION_BASE_RATE,
-        public float $corporateDefaultRate = MacroConstants::CORPORATE_DEFAULT_BASELINE,
-        public float $corporateDefaultRateEma = MacroConstants::CORPORATE_DEFAULT_BASELINE,
+        public float $recessionProbability = MacroConstants::RECESSION_PROBABILITY_LONG_RUN_MEAN,
+        public float $recessionProbabilityEma = MacroConstants::RECESSION_PROBABILITY_LONG_RUN_MEAN,
+        public float $corporateDefaultRate = MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
+        public float $corporateDefaultRateEma = MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
         public float $sloosTighteningIndex = 0.0,
         public float $sloosTighteningIndexEma = 0.0,
         public float $supplyChainPressureIndex = 0.0,
@@ -716,9 +716,9 @@ readonly class MacroStateDTO
          * The corporate default rate's measured trend, its decade-long average: where its cyclical readers measure an
          * excess from.
          */
-        public float $corporateDefaultRateTrend = MacroConstants::CORPORATE_DEFAULT_BASELINE,
+        public float $corporateDefaultRateTrend = MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
         /** The household default rate's measured trend, its decade-long average. */
-        public float $retailDefaultRateTrend = MacroConstants::RETAIL_DEFAULT_BASELINE,
+        public float $retailDefaultRateTrend = MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN,
         /**
          * Commercial property's measured trend, the level a developer reads a boom in office and retail values against.
          */
@@ -737,7 +737,7 @@ readonly class MacroStateDTO
          * The recession probability's measured trend, its decade-long average: what a reserving committee reads the
          * outlook against.
          */
-        public float $recessionProbabilityTrend = MacroConstants::RECESSION_BASE_RATE,
+        public float $recessionProbabilityTrend = MacroConstants::RECESSION_PROBABILITY_LONG_RUN_MEAN,
     ) {
         // A state given its gap but not its lags is one where the gap has stood long enough to reach every order book.
         $this->outputGapLag3m = $outputGapLag3m ?? $outputGapEma;

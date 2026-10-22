@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Math;
 
+use App\DTO\MacroStateDTO;
 use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
@@ -19,11 +20,13 @@ class CreditRiskTest extends TestCase
 {
     // --- Recovery ---
 
-    public function testAnAverageDefaultYearRecoversTheBaseRate(): void
+    public function testTheDistrictsAverageDefaultYearRecoversTheBaseRate(): void
     {
+        // The economy opens at its own long-run default rate (CreditCycleOpeningRealismTest), so that is the year
+        // the base recoveries are quoted for.
         $recovery = CreditRisk::calculateRecoveryGivenDefault(
             CorporateDefaultService::RECOVERY_SENIOR_UNSECURED,
-            CreditRisk::RECOVERY_BASELINE_DEFAULT_RATE,
+            (new MacroStateDTO())->corporateDefaultRateEma,
         );
 
         $this->assertEqualsWithDelta(CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $recovery, 1e-12);
