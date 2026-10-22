@@ -9,6 +9,7 @@ use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Market\Ticker\BulkRowUpdate;
+use App\Service\Market\Ticker\TickCadence;
 use App\Service\Math\MacroConstants;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\ORM\EntityManagerInterface;
@@ -60,7 +61,7 @@ final class OptionDeskService
      */
     public static function sweepIntervalTicks(int $ticksPerYear): int
     {
-        return max(1, (int) ($ticksPerYear / (self::SWEEPS_PER_YEAR * self::SWEEP_SLICES)));
+        return TickCadence::intervalTicks($ticksPerYear, self::SWEEPS_PER_YEAR * self::SWEEP_SLICES);
     }
 
     /**

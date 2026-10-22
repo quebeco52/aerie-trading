@@ -9,6 +9,7 @@ use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\TimeSeries;
 
 /**
  * The public's standing position in a name's option chain.
@@ -138,7 +139,7 @@ final class OptionDemandEngine
 
         // Exponential approach to target over the demand horizon, in time rather than in ticks so the book
         // is rebuilt at the same speed whatever the tick rate.
-        $approach = 1.0 - exp(-$dt / self::OPTION_PUBLIC_DEMAND_HORIZON_YEARS);
+        $approach = TimeSeries::smoothingWeight($dt, self::OPTION_PUBLIC_DEMAND_HORIZON_YEARS);
 
         foreach ($contracts as $contract) {
             $side = $contract->isCall() ? 'CALL' : 'PUT';

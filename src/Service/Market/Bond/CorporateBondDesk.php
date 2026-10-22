@@ -9,6 +9,7 @@ use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Market\Ticker\TickCadence;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
@@ -70,7 +71,7 @@ final class CorporateBondDesk
     /** Ticks between reconciliations, given a tick rate. */
     public static function issuanceIntervalTicks(int $ticksPerYear): int
     {
-        return max(1, (int) ($ticksPerYear / self::CORPORATE_ISSUANCE_PER_YEAR));
+        return TickCadence::intervalTicks($ticksPerYear, self::CORPORATE_ISSUANCE_PER_YEAR);
     }
 
     /**

@@ -7,8 +7,9 @@ namespace App\Service\Math;
 /**
  * The simulation's random source: uniform, normal, Student-t, exponential, Poisson and Pareto draws on the global or a
  * private stream, uniforms hashed from a key, draw logging and replay, and the steps that make their own draws (jump
- * diffusion, QE variance, SVJJ and Kou jumps, two-factor OU and Schwartz, lognormal synergy). A step handed its draws
- * is deterministic and lives in StochasticProcesses. Tests subclass or mock this class to script draws.
+ * diffusion, the jumping log-OU, QE variance, SVJJ and Kou jumps, two-factor OU and Schwartz, lognormal synergy). A
+ * step handed its draws is deterministic and lives in StochasticProcesses. Tests subclass or mock this class to script
+ * draws.
  */
 class MathUtility
 {
@@ -323,6 +324,37 @@ class MathUtility
             'shock_pct'  => null,
             'exponent'   => null,
         ];
+    }
+
+    /**
+     * One step of a log-OU with Merton (1976) jumps in the log: the exact Schwartz (1997) step on a fresh normal, then
+     * calculateJumpDiffusion(), drawn in that order, the jump multiplying the stepped level. Final, so a test double
+     * scripts the draws and the step stays this one.
+     *
+     * @param float $current       Level now.
+     * @param float $kappa         Speed of mean reversion of the log level.
+     * @param float $theta         Schwartz's e^mu (StochasticProcesses::calculateSchwartz1Factor()).
+     * @param float $sigma         Volatility of the log level.
+     * @param float $jumpIntensity Jump arrivals per year.
+     * @param float $jumpMean      Mean log jump.
+     * @param float $jumpVol       Standard deviation of the log jump.
+     * @param float $dt            Time step in years.
+     * @return array{level: float, exponent: float|null} The new level, and the log jump when one landed.
+     */
+    final public function stepJumpingLogOu(
+        float $current,
+        float $kappa,
+        float $theta,
+        float $sigma,
+        float $jumpIntensity,
+        float $jumpMean,
+        float $jumpVol,
+        float $dt,
+    ): array {
+        $diffused = StochasticProcesses::calculateSchwartz1Factor($current, $kappa, $theta, $sigma, $dt, $this->generateStandardNormal());
+        $jump = $this->calculateJumpDiffusion($jumpIntensity, $jumpMean, $jumpVol, $dt);
+
+        return ['level' => $diffused * $jump['multiplier'], 'exponent' => $jump['exponent']];
     }
 
     /**

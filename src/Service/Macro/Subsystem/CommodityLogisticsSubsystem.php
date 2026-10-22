@@ -364,32 +364,25 @@ class CommodityLogisticsSubsystem
         // Ezekiel (1938) cobweb dynamics: capacity chases lagged prices while spot market clears demand.
         $priceSeen = $state->energyPriceIndexEma > 0.0 ? $state->energyPriceIndexEma : MacroConstants::ENERGY_BASELINE;
         $targetSupply = MacroConstants::ENERGY_BASELINE * (($priceSeen / MacroConstants::ENERGY_BASELINE) ** self::ENERGY_SUPPLY_ELASTICITY);
-        $supplyWeight = 1.0 - exp(-$dt / self::ENERGY_SUPPLY_LAG_YEARS);
-        $state->energySupplyEma += $supplyWeight * ($targetSupply - $state->energySupplyEma);
+        $state->energySupplyEma = TimeSeries::calculateDistributedLag($state->energySupplyEma, $targetSupply, $dt, self::ENERGY_SUPPLY_LAG_YEARS);
 
         $equilibriumPrice = self::resolveEnergyEquilibriumPrice($state->energySupplyEma);
 
-        $dW = $this->mathUtility->generateStandardNormal();
-        $currentBase = $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex;
-        $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: $currentBase,
+        // Merton (1976) jump in the log price: it lands in the level and decays at the reversion speed like any
+        // other move, so a year of shocks carries the same weight at every step size.
+        $step = $this->mathUtility->stepJumpingLogOu(
+            current: $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex,
             kappa: self::ENERGY_MEAN_REVERSION,
             theta: self::resolveEnergyProcessTheta($equilibriumPrice),
             sigma: self::ENERGY_VOLATILITY,
-            dt: $dt,
-            dW: $dW,
-        );
-        // Merton (1976) jump in the log price: it lands in the level and decays at the reversion speed like any
-        // other move, so a year of shocks carries the same weight at every step size.
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: self::ENERGY_JUMP_PROBABILITY,
+            jumpIntensity: self::ENERGY_JUMP_PROBABILITY,
             jumpMean: self::ENERGY_JUMP_MEAN,
             jumpVol: self::ENERGY_JUMP_VOL,
             dt: $dt,
         );
-        $state->energyBasePrice = max(10.0, min(350.0, $baseProcess * $jumpData['multiplier']));
-        if ($jumpData['exponent'] !== null) {
-            $this->diagnostics?->recordEvent('energy', $jumpData['exponent']);
+        $state->energyBasePrice = max(10.0, min(350.0, $step['level']));
+        if ($step['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('energy', $step['exponent']);
         }
 
         // Litzenberger & Rabinowitz (1995) physical commodity inventory buffer stock evolution.
@@ -664,25 +657,20 @@ class CommodityLogisticsSubsystem
         // added.
         $jumpShift = StochasticProcesses::logOuJumpLevelShift(self::GAS_JUMP_PROBABILITY, self::GAS_OIL_RATIO_KAPPA, self::GAS_JUMP_MEAN, self::GAS_JUMP_VOL);
         $ratioTarget = StochasticProcesses::schwartzThetaForMean(exp(-$jumpShift), self::GAS_OIL_RATIO_KAPPA, self::GAS_OIL_RATIO_SIGMA);
-        $ratio = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: exp($state->gasOilRatioLog),
+        $step = $this->mathUtility->stepJumpingLogOu(
+            current: exp($state->gasOilRatioLog),
             kappa: self::GAS_OIL_RATIO_KAPPA,
             theta: $ratioTarget,
             sigma: self::GAS_OIL_RATIO_SIGMA,
-            dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal(),
-        );
-
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: self::GAS_JUMP_PROBABILITY,
+            jumpIntensity: self::GAS_JUMP_PROBABILITY,
             jumpMean: self::GAS_JUMP_MEAN,
             jumpVol: self::GAS_JUMP_VOL,
             dt: $dt,
         );
 
-        $state->gasOilRatioLog = max(-2.0, min(2.0, log($ratio * $jumpData['multiplier'])));
-        if ($jumpData['exponent'] !== null) {
-            $this->diagnostics?->recordEvent('naturalGas', $jumpData['exponent']);
+        $state->gasOilRatioLog = max(-2.0, min(2.0, log($step['level'])));
+        if ($step['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('naturalGas', $step['exponent']);
         }
 
         $spot = ($state->energyPriceIndex / MacroConstants::ENERGY_BASELINE) * MacroConstants::NATURAL_GAS_BASELINE * exp($state->gasOilRatioLog) * self::gasSeasonalFactor($state->totalTime);
@@ -703,10 +691,10 @@ class CommodityLogisticsSubsystem
      */
     public function calculateWholesalePowerIndex(MacroState $state, float $dt): void
     {
-        $heatRate = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: exp($state->powerHeatRateLog),
+        $heatRate = StochasticProcesses::schwartzStepToMean(
+            current: exp($state->powerHeatRateLog),
             kappa: self::POWER_HEAT_RATE_KAPPA,
-            theta: StochasticProcesses::schwartzThetaForMean(1.0, self::POWER_HEAT_RATE_KAPPA, self::POWER_HEAT_RATE_SIGMA),
+            mean: 1.0,
             sigma: self::POWER_HEAT_RATE_SIGMA,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal(),
@@ -846,10 +834,10 @@ class CommodityLogisticsSubsystem
             $state->consumerSentimentIndexEma,
         );
 
-        $gold = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: $state->goldPriceIndex > 0.0 ? $state->goldPriceIndex : MacroConstants::GOLD_BASELINE,
+        $gold = StochasticProcesses::schwartzStepToMean(
+            current: $state->goldPriceIndex > 0.0 ? $state->goldPriceIndex : MacroConstants::GOLD_BASELINE,
             kappa: self::GOLD_MEAN_REVERSION,
-            theta: StochasticProcesses::schwartzThetaForMean($equilibrium, self::GOLD_MEAN_REVERSION, self::GOLD_VOLATILITY),
+            mean: $equilibrium,
             sigma: self::GOLD_VOLATILITY,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal(),
@@ -912,7 +900,7 @@ class CommodityLogisticsSubsystem
             xi: $state->agriXi,
             kappaChi: self::AGRI_SHORT_TERM_KAPPA,
             kappaXi: self::AGRI_LONG_TERM_KAPPA,
-            thetaChi: -(self::AGRI_WEATHER_JUMP_PROBABILITY * self::AGRI_WEATHER_JUMP_MEAN) / self::AGRI_SHORT_TERM_KAPPA,
+            thetaChi: -StochasticProcesses::logOuJumpLogShift(self::AGRI_WEATHER_JUMP_PROBABILITY, self::AGRI_SHORT_TERM_KAPPA, self::AGRI_WEATHER_JUMP_MEAN),
             thetaXi: log(MacroConstants::AGRI_BASELINE),
             sigChi: self::AGRI_SHORT_TERM_SIGMA,
             sigXi: self::AGRI_LONG_TERM_SIGMA,
@@ -957,19 +945,17 @@ class CommodityLogisticsSubsystem
         $profitabilityRatio = max(0.10, $state->freightRateIndexEma / MacroConstants::FREIGHT_BASELINE);
         $targetSupply = MacroConstants::FREIGHT_BASELINE * pow($profitabilityRatio, self::FREIGHT_SUPPLY_ORDER_ELASTICITY);
 
-        $slowEmaWeight = 1.0 - exp(-$dt / self::FREIGHT_SUPPLY_LAG_YEARS);
-        $state->freightSupplyEma += $slowEmaWeight * ($targetSupply - $state->freightSupplyEma);
+        $state->freightSupplyEma = TimeSeries::calculateDistributedLag($state->freightSupplyEma, $targetSupply, $dt, self::FREIGHT_SUPPLY_LAG_YEARS);
         $utilization = self::shippingTightness($state);
         $equilibriumRate = MacroConstants::FREIGHT_BASELINE * pow($utilization, self::FREIGHT_CAPACITY_INELASTICITY);
 
-        $dW = $this->mathUtility->generateStandardNormal();
-        $newFreight = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: $state->freightRateIndex,
+        $newFreight = StochasticProcesses::schwartzStepToMean(
+            current: $state->freightRateIndex,
             kappa: self::FREIGHT_MEAN_REVERSION,
-            theta: StochasticProcesses::schwartzThetaForMean($equilibriumRate, self::FREIGHT_MEAN_REVERSION, self::FREIGHT_VOLATILITY),
+            mean: $equilibriumRate,
             sigma: self::FREIGHT_VOLATILITY,
             dt: $dt,
-            dW: $dW,
+            dW: $this->mathUtility->generateStandardNormal(),
         );
 
         $state->freightRateIndex = max(20.0, min(500.0, $newFreight));

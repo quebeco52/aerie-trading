@@ -149,6 +149,27 @@ class StochasticProcessesTest extends TestCase
         $this->assertLessThanOrEqual($theta, $nextPrice);
     }
 
+    /** The step to a mean is the Schwartz step on the theta for that mean, read off one kappa and sigma. */
+    public function testSchwartzStepToMeanIsTheStepOnTheThetaForThatMean(): void
+    {
+        foreach ([[100.0, 0.8, 140.0, 0.25, 1.0 / 3600.0, 1.3], [1.0, 52.0, 1.0, 0.9, 1.0 / 252.0, -2.1], [35.0, 0.3, 20.0, 0.18, 0.25, 0.0]] as [$current, $kappa, $mean, $sigma, $dt, $dW]) {
+            $this->assertSame(
+                StochasticProcesses::calculateSchwartz1Factor($current, $kappa, StochasticProcesses::schwartzThetaForMean($mean, $kappa, $sigma), $sigma, $dt, $dW),
+                StochasticProcesses::schwartzStepToMean($current, $kappa, $mean, $sigma, $dt, $dW),
+            );
+        }
+    }
+
+    /** The jumps' log drift held by the reversion is lambda mu / kappa, evaluated as (lambda mu) / kappa. */
+    public function testLogOuJumpLogShiftIsTheMertonLogDriftOverTheReversionSpeed(): void
+    {
+        $this->assertSame(0.50 * 0.20 / 1.5, StochasticProcesses::logOuJumpLogShift(0.50, 1.5, 0.20));
+        $this->assertSame(0.029 * 0.5716 / 0.489, StochasticProcesses::logOuJumpLogShift(0.029, 0.489, 0.5716));
+        $this->assertSame(-(0.10 * 0.18) / 1.80, -StochasticProcesses::logOuJumpLogShift(0.10, 1.80, 0.18));
+        $this->assertEqualsWithDelta(0.2, StochasticProcesses::logOuJumpLogShift(1.0, 0.5, 0.1), 1e-15);
+        $this->assertSame(0.0, StochasticProcesses::logOuJumpLogShift(0.0, 0.5, 0.1));
+    }
+
     public function testSchwartzForwardIsTheExpectedSpotOfTheSameExactTransition(): void
     {
         $spot = 150.0;

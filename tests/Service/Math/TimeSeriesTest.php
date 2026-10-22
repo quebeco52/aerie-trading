@@ -96,6 +96,41 @@ class TimeSeriesTest extends TestCase
         $this->assertEquals($target, $immediate);
     }
 
+    /** The weight is 1 - e^(-dt/tau) to the bit, none with no time passed, and all of the gap at tau <= 0. */
+    public function testSmoothingWeightIsTheExactLagShareWithItsLimits(): void
+    {
+        foreach ([[1.0 / 3600.0, 0.25], [0.25, 5.0], [1.0 / 252.0, 0.004], [2.0, 0.5]] as [$dt, $tau]) {
+            $this->assertSame(1.0 - exp(-$dt / $tau), TimeSeries::smoothingWeight($dt, $tau));
+        }
+
+        $this->assertSame(0.0, TimeSeries::smoothingWeight(0.0, 0.25));
+        $this->assertSame(0.0, TimeSeries::smoothingWeight(-0.01, 0.25));
+        $this->assertSame(1.0, TimeSeries::smoothingWeight(0.25, 0.0));
+        $this->assertSame(1.0, TimeSeries::smoothingWeight(0.25, -1.0));
+        $this->assertSame(0.0, TimeSeries::smoothingWeight(0.0, 0.0), 'With no time passed nothing moves, even at tau 0.');
+        $this->assertGreaterThan(0.999, TimeSeries::smoothingWeight(10.0, 1.0));
+    }
+
+    /**
+     * The lag step is x + w (target - x) with the weight above, the same double as the hand-written step; no time
+     * passed keeps the value, and a zero or negative time constant jumps to the target.
+     */
+    public function testDistributedLagKeepsItsValueWithNoTimePassedAndJumpsAtAZeroTimeConstant(): void
+    {
+        $current = 0.0731;
+        $target = 0.0412;
+        $dt = 1.0 / 3600.0;
+        $tau = 0.25;
+
+        $this->assertSame($current + ((1.0 - exp(-$dt / $tau)) * ($target - $current)), TimeSeries::calculateDistributedLag($current, $target, $dt, $tau));
+
+        $this->assertSame($current, TimeSeries::calculateDistributedLag($current, $target, 0.0, $tau));
+        $this->assertSame($current, TimeSeries::calculateDistributedLag($current, $target, -0.25, $tau));
+        $this->assertSame($current, TimeSeries::calculateDistributedLag($current, $target, 0.0, 0.0));
+        $this->assertSame($target, TimeSeries::calculateDistributedLag($current, $target, $dt, 0.0));
+        $this->assertSame($target, TimeSeries::calculateDistributedLag($current, $target, $dt, -1.0));
+    }
+
     /** Yule-Walker: an AR(1) decays geometrically, and an AR(2)'s first autocorrelation is a1 / (1 - a2). */
     public function testAr2AutocorrelationFollowsTheYuleWalkerRecursion(): void
     {

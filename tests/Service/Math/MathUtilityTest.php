@@ -541,6 +541,105 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta((exp(0.05) - 1.0) * 100.0, $jump['shock_pct'], 0.0001);
     }
 
+    /**
+     * The jumping log-OU draws the diffusion's normal first, then the jump's arrival and, if one lands, its size; the
+     * level is the Schwartz step on that normal times the jump.
+     */
+    public function testStepJumpingLogOuDrawsTheNormalThenTheJump(): void
+    {
+        [$current, $kappa, $theta, $sigma, $lambda, $jumpMean, $jumpVol, $dt] = [100.0, 1.5, 104.0, 0.25, 0.5, 0.2, 0.15, 1.0 / 3600.0];
+
+        $drawn = new \ArrayObject();
+        $step = self::scriptedDraws([0.0], [1.3, -0.7], $drawn)->stepJumpingLogOu($current, $kappa, $theta, $sigma, $lambda, $jumpMean, $jumpVol, $dt);
+        $this->assertSame(['normal', 'uniform', 'normal'], $drawn->getArrayCopy());
+        $this->assertSame($jumpMean + ($jumpVol * -0.7), $step['exponent']);
+        $this->assertSame(StochasticProcesses::calculateSchwartz1Factor($current, $kappa, $theta, $sigma, $dt, 1.3) * exp($jumpMean + ($jumpVol * -0.7)), $step['level']);
+
+        $drawn = new \ArrayObject();
+        $step = self::scriptedDraws([0.99], [1.3], $drawn)->stepJumpingLogOu($current, $kappa, $theta, $sigma, $lambda, $jumpMean, $jumpVol, $dt);
+        $this->assertSame(['normal', 'uniform'], $drawn->getArrayCopy());
+        $this->assertNull($step['exponent']);
+        $this->assertSame(StochasticProcesses::calculateSchwartz1Factor($current, $kappa, $theta, $sigma, $dt, 1.3), $step['level']);
+    }
+
+    /**
+     * On the live stream the helper gives the hand-written sequence's level to the bit and leaves the stream where it
+     * did.
+     */
+    public function testStepJumpingLogOuMatchesTheHandWrittenSequenceOnTheLiveStream(): void
+    {
+        [$kappa, $theta, $sigma, $lambda, $jumpMean, $jumpVol, $dt] = [0.489, 1.2, 0.17, 40.0, 0.5716, 0.3, 1.0 / 52.0];
+
+        mt_srand(77);
+        $helper = new MathUtility();
+        $level = 1.0;
+        $helperPath = [];
+        for ($i = 0; $i < 400; $i++) {
+            $step = $helper->stepJumpingLogOu($level, $kappa, $theta, $sigma, $lambda, $jumpMean, $jumpVol, $dt);
+            $level = $step['level'];
+            $helperPath[] = [$level, $step['exponent']];
+        }
+        $helperNext = $helper->generateUniform();
+
+        mt_srand(77);
+        $byHand = new MathUtility();
+        $level = 1.0;
+        $handPath = [];
+        for ($i = 0; $i < 400; $i++) {
+            $diffused = StochasticProcesses::calculateSchwartz1Factor(
+                currentPrice: $level,
+                kappa: $kappa,
+                theta: $theta,
+                sigma: $sigma,
+                dt: $dt,
+                dW: $byHand->generateStandardNormal(),
+            );
+            $jump = $byHand->calculateJumpDiffusion(lambda: $lambda, jumpMean: $jumpMean, jumpVol: $jumpVol, dt: $dt);
+            $level = $diffused * $jump['multiplier'];
+            $handPath[] = [$level, $jump['exponent']];
+        }
+
+        $this->assertSame($handPath, $helperPath);
+        $this->assertSame($byHand->generateUniform(), $helperNext);
+        $this->assertNotSame([], array_filter(array_column($helperPath, 1), static fn(?float $e): bool => $e !== null), 'Some steps must jump.');
+    }
+
+    /**
+     * A MathUtility that hands out the given uniforms and normals in order and logs each draw's kind.
+     *
+     * @param list<float>                $uniforms
+     * @param list<float>                $normals
+     * @param \ArrayObject<int, string> $drawn
+     */
+    private static function scriptedDraws(array $uniforms, array $normals, \ArrayObject $drawn): MathUtility
+    {
+        return new class ($uniforms, $normals, $drawn) extends MathUtility {
+            /**
+             * @param list<float>                $uniforms
+             * @param list<float>                $normals
+             * @param \ArrayObject<int, string> $drawn
+             */
+            public function __construct(private array $uniforms, private array $normals, private readonly \ArrayObject $drawn)
+            {
+                parent::__construct();
+            }
+
+            public function generateUniform(): float
+            {
+                $this->drawn[] = 'uniform';
+
+                return (float) array_shift($this->uniforms);
+            }
+
+            public function generateStandardNormal(): float
+            {
+                $this->drawn[] = 'normal';
+
+                return (float) array_shift($this->normals);
+            }
+        };
+    }
+
     public function testCalculateCIR(): void
     {
         // Exact mean reversion without diffusion (dW = 0)

@@ -572,14 +572,13 @@ class AssetMarketSubsystem
         $capRate = max(self::CRE_MIN_CAP_RATE, $state->yield10yEma - $state->tipsBreakevenEma + $state->macroCreditSpreadEma + self::CRE_CAP_RATE_RISK_PREMIUM);
         $fundamentalValue = MacroConstants::CRE_BASELINE * $occupancyFactor * $rentFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
 
-        $dW = $this->mathUtility->generateStandardNormal();
-        $newIndex = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: $state->commercialPropertyIndex,
+        $newIndex = StochasticProcesses::schwartzStepToMean(
+            current: $state->commercialPropertyIndex,
             kappa: self::CRE_MEAN_REVERSION,
-            theta: StochasticProcesses::schwartzThetaForMean($fundamentalValue, self::CRE_MEAN_REVERSION, self::CRE_VOLATILITY),
+            mean: $fundamentalValue,
             sigma: self::CRE_VOLATILITY,
             dt: $dt,
-            dW: $dW,
+            dW: $this->mathUtility->generateStandardNormal(),
         );
 
         $state->commercialPropertyIndex = max(self::CRE_MIN_INDEX, min(self::CRE_MAX_INDEX, $newIndex));
@@ -627,14 +626,13 @@ class AssetMarketSubsystem
         $foreignBuyerFactor = self::foreignBuyerPriceFactor($state->foreignBuyerTaxRate);
         $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor * max(0.5, $damageFactor) * max(0.5, $creditConditionsFactor) * max(0.5, $creditSupplyFactor) * $immigrationFactor * $foreignBuyerFactor));
 
-        $dW = $this->mathUtility->generateStandardNormal();
-        $newIndex = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: $state->residentialPropertyIndex,
+        $newIndex = StochasticProcesses::schwartzStepToMean(
+            current: $state->residentialPropertyIndex,
             kappa: self::RESIDENTIAL_MEAN_REVERSION,
-            theta: StochasticProcesses::schwartzThetaForMean($fundamentalPrice, self::RESIDENTIAL_MEAN_REVERSION, self::RESIDENTIAL_VOLATILITY),
+            mean: $fundamentalPrice,
             sigma: self::RESIDENTIAL_VOLATILITY,
             dt: $dt,
-            dW: $dW,
+            dW: $this->mathUtility->generateStandardNormal(),
         );
         // Capozza, Hendershott, Mack & Mayer (2002): real house prices carry serial correlation on top of their
         // reversion to fundamental, so a boom keeps rising after its cause has passed and overshoots.
@@ -857,10 +855,10 @@ class AssetMarketSubsystem
     public function calculateExchangeRate(MacroState $state, float $dt): void
     {
         $sigma = self::exchangeRateDeviationVolatility();
-        $state->exchangeRateDeviation = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: $state->exchangeRateDeviation,
+        $state->exchangeRateDeviation = StochasticProcesses::schwartzStepToMean(
+            current: $state->exchangeRateDeviation,
             kappa: self::EXCHANGE_RATE_MEAN_REVERSION,
-            theta: StochasticProcesses::schwartzThetaForMean(1.0, self::EXCHANGE_RATE_MEAN_REVERSION, $sigma),
+            mean: 1.0,
             sigma: $sigma,
             dt: $dt,
             dW: $this->mathUtility->generateStandardNormal(),
@@ -1042,7 +1040,7 @@ class AssetMarketSubsystem
             + (self::FCI_YIELD_SLOPE_WEIGHT * $slopeZ)
             + (self::FCI_VOLATILITY_WEIGHT * $volZ)
             + (self::FCI_SLOOS_WEIGHT * $sloosZ);
-        $state->financialConditionsTrend += (1.0 - exp(-$dt / self::FCI_TREND_YEARS)) * ($composite - $state->financialConditionsTrend);
+        $state->financialConditionsTrend = TimeSeries::calculateDistributedLag($state->financialConditionsTrend, $composite, $dt, self::FCI_TREND_YEARS);
         $state->financialConditionsIndex = $composite - $state->financialConditionsTrend;
     }
 
@@ -1072,7 +1070,7 @@ class AssetMarketSubsystem
             sigma: self::DEAL_ACTIVITY_SIGMA,
             policyUncertaintyIndex: $state->policyUncertaintyIndexEma,
         );
-        $state->dealActivityIndexTrend += (1.0 - exp(-$dt / self::DEAL_ACTIVITY_TREND_YEARS)) * ($state->dealActivityIndex - $state->dealActivityIndexTrend);
+        $state->dealActivityIndexTrend = TimeSeries::calculateDistributedLag($state->dealActivityIndexTrend, $state->dealActivityIndex, $dt, self::DEAL_ACTIVITY_TREND_YEARS);
     }
 
     /**
@@ -1121,26 +1119,21 @@ class AssetMarketSubsystem
         // Its reader takes log(index / baseline) (MacroAggregateSubsystem::alliedDefenseGap()), so the log centres on
         // the baseline: the mobilisations' log drift lambda mu / kappa is netted out (Merton 1976), then Schwartz's
         // alpha.
-        $jumpLogShift = self::ALLIED_MOBILISATION_PROBABILITY * self::ALLIED_MOBILISATION_MEAN / self::ALLIED_DEFENSE_MEAN_REVERSION;
-        $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: $state->alliedDefenseSpendingIndex,
+        $jumpLogShift = StochasticProcesses::logOuJumpLogShift(self::ALLIED_MOBILISATION_PROBABILITY, self::ALLIED_DEFENSE_MEAN_REVERSION, self::ALLIED_MOBILISATION_MEAN);
+        $step = $this->mathUtility->stepJumpingLogOu(
+            current: $state->alliedDefenseSpendingIndex,
             kappa: self::ALLIED_DEFENSE_MEAN_REVERSION,
             theta: StochasticProcesses::schwartzThetaForLogMean(MacroConstants::ALLIED_DEFENSE_BASELINE * exp(-$jumpLogShift), self::ALLIED_DEFENSE_MEAN_REVERSION, self::ALLIED_DEFENSE_VOLATILITY),
             sigma: self::ALLIED_DEFENSE_VOLATILITY,
-            dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal(),
-        );
-
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: self::ALLIED_MOBILISATION_PROBABILITY,
+            jumpIntensity: self::ALLIED_MOBILISATION_PROBABILITY,
             jumpMean: self::ALLIED_MOBILISATION_MEAN,
             jumpVol: self::ALLIED_MOBILISATION_VOL,
             dt: $dt,
         );
 
-        $state->alliedDefenseSpendingIndex = max(self::MIN_ALLIED_DEFENSE_INDEX, min(self::MAX_ALLIED_DEFENSE_INDEX, $baseProcess * $jumpData['multiplier']));
-        if ($jumpData['exponent'] !== null) {
-            $this->diagnostics?->recordEvent('alliedMobilisation', $jumpData['exponent']);
+        $state->alliedDefenseSpendingIndex = max(self::MIN_ALLIED_DEFENSE_INDEX, min(self::MAX_ALLIED_DEFENSE_INDEX, $step['level']));
+        if ($step['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('alliedMobilisation', $step['exponent']);
         }
     }
 
@@ -1312,8 +1305,7 @@ class AssetMarketSubsystem
         $targetTradeBalance = max(self::MIN_TRADE_BALANCE, min(self::MAX_TRADE_BALANCE, $targetTradeBalance));
 
         // Exact exponential smoothing: a convex step toward an in-band target cannot leave the band.
-        $adjustmentWeight = 1.0 - exp(-$dt / self::TRADE_BALANCE_ADJUSTMENT_YEARS);
-        $state->tradeBalanceToGdp += $adjustmentWeight * ($targetTradeBalance - $state->tradeBalanceToGdp);
+        $state->tradeBalanceToGdp = TimeSeries::calculateDistributedLag($state->tradeBalanceToGdp, $targetTradeBalance, $dt, self::TRADE_BALANCE_ADJUSTMENT_YEARS);
     }
 
     /**

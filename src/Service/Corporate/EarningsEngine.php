@@ -14,6 +14,7 @@ use App\Service\Event\EarningsReportedEvent;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Ticker\TickCadence;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -437,7 +438,7 @@ class EarningsEngine
      */
     public static function resolveReportingTick(string $ticker, int $ticksPerYear): int
     {
-        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+        $ticksPerQuarter = TickCadence::intervalTicks($ticksPerYear, FinancialConstants::QUARTERS_PER_YEAR);
         $lagTicks    = (int) round($ticksPerQuarter * self::EARNINGS_REPORTING_LAG_RATIO);
         $seasonTicks = max(1, (int) round($ticksPerQuarter * self::EARNINGS_SEASON_LENGTH_RATIO));
 
@@ -449,7 +450,7 @@ class EarningsEngine
      */
     public static function ticksSinceReportingTick(string $ticker, int $tickCount, int $ticksPerYear): int
     {
-        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+        $ticksPerQuarter = TickCadence::intervalTicks($ticksPerYear, FinancialConstants::QUARTERS_PER_YEAR);
 
         return ((($tickCount % $ticksPerQuarter) - self::resolveReportingTick($ticker, $ticksPerYear)) % $ticksPerQuarter + $ticksPerQuarter) % $ticksPerQuarter;
     }
@@ -460,7 +461,7 @@ class EarningsEngine
      */
     public static function coveredCalendarQuarter(int $tickCount, int $ticksPerYear): int
     {
-        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+        $ticksPerQuarter = TickCadence::intervalTicks($ticksPerYear, FinancialConstants::QUARTERS_PER_YEAR);
 
         return ((intdiv($tickCount, $ticksPerQuarter) - 1) % 4 + 4) % 4;
     }
@@ -470,7 +471,7 @@ class EarningsEngine
      */
     public static function resolvePreAnnouncementTick(string $ticker, int $ticksPerYear): int
     {
-        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+        $ticksPerQuarter = TickCadence::intervalTicks($ticksPerYear, FinancialConstants::QUARTERS_PER_YEAR);
         $lead = max(1, (int) round($ticksPerQuarter * self::PREANNOUNCEMENT_LEAD_RATIO));
 
         return max(0, self::resolveReportingTick($ticker, $ticksPerYear) - $lead);
@@ -498,7 +499,7 @@ class EarningsEngine
      */
     public function evaluatePreAnnouncement(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount, int $ticksPerYear): array
     {
-        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+        $ticksPerQuarter = TickCadence::intervalTicks($ticksPerYear, FinancialConstants::QUARTERS_PER_YEAR);
         if ($stock->isBankrupt() || ($tickCount % $ticksPerQuarter) !== self::resolvePreAnnouncementTick($stock->getTicker(), $ticksPerYear)) {
             return [];
         }

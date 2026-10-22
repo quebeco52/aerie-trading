@@ -132,6 +132,16 @@ final class TickCadence
         return $tickCount % self::equityBufferStride($ticksPerYear) === 0;
     }
 
+    /**
+     * Ticks between events that happen a given number of times a simulated year: the tick rate over that count,
+     * truncated, and at least one. The jobs not tied to a history row count in ticks here; intervalBars() counts in
+     * bars and rounds.
+     */
+    public static function intervalTicks(int $ticksPerYear, int|float $perYear): int
+    {
+        return max(1, (int) ($ticksPerYear / $perYear));
+    }
+
     /** History bars between events that should happen a given number of times a simulated year. */
     private static function intervalBars(int $ticksPerYear, int $perYear): int
     {

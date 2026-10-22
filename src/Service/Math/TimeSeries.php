@@ -231,14 +231,27 @@ final class TimeSeries
         return $current;
     }
 
+    /** Share of a gap a first-order lag closes over dt: 1 - e^(-dt/tau); none at dt <= 0, all at tau <= 0. */
+    public static function smoothingWeight(float $dt, float $tauYears): float
+    {
+        if ($dt <= 0.0) {
+            return 0.0;
+        }
+        if ($tauYears <= 0.0) {
+            return 1.0;
+        }
+
+        return 1.0 - exp(-$dt / $tauYears);
+    }
+
     /**
      * Calculates an exponential distributed lag step (discrete recursive lag filter).
      * Models delayed transmission and economic stickiness (e.g., cost-push pass-through).
      *
      * @param float $currentLaggedValue The current lagged state variable.
      * @param float $targetValue        The new driving target value.
-     * @param float $dt                 The time step in years.
-     * @param float $lagTimeConstant    The characteristic adjustment time constant in years.
+     * @param float $dt                 The time step in years; with none passed the value stays.
+     * @param float $lagTimeConstant    The characteristic adjustment time constant in years; at zero the value jumps.
      * @return float The updated lagged value.
      */
     public static function calculateDistributedLag(
@@ -247,12 +260,14 @@ final class TimeSeries
         float $dt,
         float $lagTimeConstant,
     ): float {
-        if ($lagTimeConstant <= 0.0 || $dt <= 0.0) {
+        if ($dt <= 0.0) {
+            return $currentLaggedValue;
+        }
+        if ($lagTimeConstant <= 0.0) {
             return $targetValue;
         }
 
-        $weight = 1.0 - exp(-$dt / $lagTimeConstant);
-        return $currentLaggedValue + $weight * ($targetValue - $currentLaggedValue);
+        return $currentLaggedValue + self::smoothingWeight($dt, $lagTimeConstant) * ($targetValue - $currentLaggedValue);
     }
 
     /**

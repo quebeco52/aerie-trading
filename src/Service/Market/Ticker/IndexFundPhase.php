@@ -99,7 +99,7 @@ final class IndexFundPhase
         }
 
         $isDistributionTick = $tickCount > 0
-            && $tickCount % max(1, intdiv($ticksPerYear, FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR)) === 0;
+            && $tickCount % TickCadence::intervalTicks($ticksPerYear, FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR) === 0;
 
         // Prices as the tick has just published them, for splitting a creation basket into shares.
         $memberPrices = [];

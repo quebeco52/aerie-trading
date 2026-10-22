@@ -7,6 +7,7 @@ namespace App\Service\Market\Agent;
 use App\DTO\AgentMarketViewDTO;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\TimeSeries;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 
 /**
@@ -249,7 +250,7 @@ final class AgentFlowEngine
 
         // Worked over a horizon in simulated time, not a fixed slice per tick: a per-tick fraction would
         // make the same book fire in half a day at one tick rate and take a week at another.
-        $adjustment = 1.0 - exp(-$view->dt / self::AGENT_POSITION_HORIZON_YEARS);
+        $adjustment = TimeSeries::smoothingWeight($view->dt, self::AGENT_POSITION_HORIZON_YEARS);
 
         $flow = 0.0;
         $updatedPositions = $positions;

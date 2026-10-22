@@ -580,7 +580,7 @@ class CreditFiscalSubsystem
      */
     public function updateCreditSpreadTrend(MacroState $state, float $dt): void
     {
-        $state->macroCreditSpreadTrend += (1.0 - exp(-$dt / self::CREDIT_SPREAD_TREND_YEARS)) * ($state->macroCreditSpread - $state->macroCreditSpreadTrend);
+        $state->macroCreditSpreadTrend = TimeSeries::calculateDistributedLag($state->macroCreditSpreadTrend, $state->macroCreditSpread, $dt, self::CREDIT_SPREAD_TREND_YEARS);
     }
 
     /**
@@ -713,7 +713,7 @@ class CreditFiscalSubsystem
         $state->netTaxStanceRate += MacroConstants::FISCAL_ADJUSTMENT_SPEED * ($stanceTarget - $state->netTaxStanceRate) * $dt;
         $state->corporateTaxRate += MacroConstants::FISCAL_ADJUSTMENT_SPEED * (MacroConstants::BASE_CORPORATE_TAX_RATE + $state->corporateTaxPolicyShift - $state->corporateTaxRate) * $dt;
 
-        $trendWeight = 1.0 - exp(-$dt / self::TAX_RATE_TREND_YEARS);
+        $trendWeight = TimeSeries::smoothingWeight($dt, self::TAX_RATE_TREND_YEARS);
         $state->netTaxStanceRateTrend += $trendWeight * ($state->netTaxStanceRate - $state->netTaxStanceRateTrend);
         $state->corporateTaxRateTrend += $trendWeight * ($state->corporateTaxRate - $state->corporateTaxRateTrend);
 
@@ -842,8 +842,8 @@ class CreditFiscalSubsystem
         // bills at once (Treasury average rate on marketable debt, fitted above). The book moves toward the Exchequer's
         // maturity only as it rolls over: a steady ladder turns over once per average maturity, as the US extension
         // from 48 months to the high 60s took eight years.
-        $state->sovereignDebtAverageMaturity += (1.0 - exp(-$dt / $state->sovereignDebtAverageMaturity)) * ($state->sovereignDebtMaturityTarget - $state->sovereignDebtAverageMaturity);
-        $state->sovereignCouponRate += (1.0 - exp(-$dt / self::couponRepricingYears($state))) * ($state->yield10y - $state->sovereignCouponRate);
+        $state->sovereignDebtAverageMaturity = TimeSeries::calculateDistributedLag($state->sovereignDebtAverageMaturity, $state->sovereignDebtMaturityTarget, $dt, $state->sovereignDebtAverageMaturity);
+        $state->sovereignCouponRate = TimeSeries::calculateDistributedLag($state->sovereignCouponRate, $state->yield10y, $dt, self::couponRepricingYears($state));
 
         $accounts = self::publicAccounts($state, $dt);
         $funded = $state->sovereignFundDollarsPerGdp > 0.0;
@@ -1341,34 +1341,27 @@ class CreditFiscalSubsystem
      */
     public function calculatePolicyUncertainty(MacroState $state, float $dt): void
     {
-        $jumpLogCompensator = self::EPU_JUMP_PROBABILITY * self::EPU_JUMP_MEAN / self::EPU_MEAN_REVERSION;
-
         $target = MacroConstants::EPU_BASELINE * exp(
             (self::EPU_ELECTION_LIFT * $state->electionPulse)
                 + (self::EPU_SLACK_LIFT * ($state->unemploymentRate - $state->nairu))
-                - $jumpLogCompensator,
+                - StochasticProcesses::logOuJumpLogShift(self::EPU_JUMP_PROBABILITY, self::EPU_MEAN_REVERSION, self::EPU_JUMP_MEAN),
         );
 
         // Every reader takes log(EPU / baseline), so it is the log the process centres on the target.
-        $baseProcess = StochasticProcesses::calculateSchwartz1Factor(
-            currentPrice: max(self::MIN_EPU, $state->policyUncertaintyIndex),
+        $step = $this->mathUtility->stepJumpingLogOu(
+            current: max(self::MIN_EPU, $state->policyUncertaintyIndex),
             kappa: self::EPU_MEAN_REVERSION,
             theta: StochasticProcesses::schwartzThetaForLogMean($target, self::EPU_MEAN_REVERSION, self::EPU_VOLATILITY),
             sigma: self::EPU_VOLATILITY,
-            dt: $dt,
-            dW: $this->mathUtility->generateStandardNormal(),
-        );
-
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: self::EPU_JUMP_PROBABILITY,
+            jumpIntensity: self::EPU_JUMP_PROBABILITY,
             jumpMean: self::EPU_JUMP_MEAN,
             jumpVol: self::EPU_JUMP_VOL,
             dt: $dt,
         );
 
-        $state->policyUncertaintyIndex = max(self::MIN_EPU, min(self::MAX_EPU, $baseProcess * $jumpData['multiplier']));
-        if ($jumpData['exponent'] !== null) {
-            $this->diagnostics?->recordEvent('policyUncertainty', $jumpData['exponent']);
+        $state->policyUncertaintyIndex = max(self::MIN_EPU, min(self::MAX_EPU, $step['level']));
+        if ($step['exponent'] !== null) {
+            $this->diagnostics?->recordEvent('policyUncertainty', $step['exponent']);
         }
     }
 

@@ -366,6 +366,22 @@ final class StochasticProcesses
     }
 
     /**
+     * One calculateSchwartz1Factor() step of a log-OU whose level averages `$mean`: the step with the theta
+     * schwartzThetaForMean() sets, read off the same kappa and sigma.
+     *
+     * @param float $current Level now.
+     * @param float $kappa   Speed of mean reversion of the log level.
+     * @param float $mean    Level the process is to average.
+     * @param float $sigma   Volatility of the log level.
+     * @param float $dt      Time step in years.
+     * @param float $dW      Standard normal draw.
+     */
+    public static function schwartzStepToMean(float $current, float $kappa, float $mean, float $sigma, float $dt, float $dW): float
+    {
+        return self::calculateSchwartz1Factor($current, $kappa, self::schwartzThetaForMean($mean, $kappa, $sigma), $sigma, $dt, $dW);
+    }
+
+    /**
      * The theta calculateSchwartz1Factor() needs for its stationary LOG mean to be ln(`$level`): Schwartz's alpha
      * subtracts sigma^2 / 2 kappa, so theta is lifted by the inverse. For processes whose readers take log(S / level).
      *
@@ -376,6 +392,20 @@ final class StochasticProcesses
     public static function schwartzThetaForLogMean(float $level, float $kappa, float $sigma): float
     {
         return $level * exp(($sigma * $sigma) / (2.0 * max(0.0001, $kappa)));
+    }
+
+    /**
+     * How much compound-Poisson log jumps lift the stationary LOG mean of a log-OU: they add lambda x mu to the log
+     * drift, which the reversion holds at lambda mu / kappa (Merton 1976). Dividing a target by e^(this) puts the log
+     * mean back on it.
+     *
+     * @param float $lambda   Jump arrivals per year.
+     * @param float $kappa    Speed of mean reversion of the log level.
+     * @param float $jumpMean Mean log jump.
+     */
+    public static function logOuJumpLogShift(float $lambda, float $kappa, float $jumpMean): float
+    {
+        return $lambda * $jumpMean / max(0.0001, $kappa);
     }
 
     /**

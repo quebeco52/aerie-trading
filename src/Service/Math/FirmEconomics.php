@@ -475,7 +475,7 @@ final class FirmEconomics
         $demandFactor = 1.0 + (1.20 * $outputGap);
         $inventoryTightness = max(0.0, (100.0 - $energyInventoryIndex) / 100.0) * 15.0;
         $targetCrack = ($baselineCrack * max(0.30, $demandFactor)) + $inventoryTightness;
-        $newCrack = StochasticProcesses::calculateSchwartz1Factor(max(0.01, $currentCrack), $kappa, StochasticProcesses::schwartzThetaForMean($targetCrack, $kappa, $sigma), $sigma, $dt, $dW);
+        $newCrack = StochasticProcesses::schwartzStepToMean(max(0.01, $currentCrack), $kappa, $targetCrack, $sigma, $dt, $dW);
 
         return max(4.0, min(80.0, $newCrack));
     }

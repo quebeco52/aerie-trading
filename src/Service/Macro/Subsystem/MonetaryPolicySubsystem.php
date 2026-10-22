@@ -596,7 +596,7 @@ class MonetaryPolicySubsystem
 
         $kept = min($holdingsBefore, $holdings);
         $keptCoupon = $holdings >= $holdingsBefore
-            ? $state->authorityBookCouponRate + ((1.0 - exp(-$dt / CreditFiscalSubsystem::couponRepricingYears($state))) * ($state->yield10y - $state->authorityBookCouponRate))
+            ? TimeSeries::calculateDistributedLag($state->authorityBookCouponRate, $state->yield10y, $dt, CreditFiscalSubsystem::couponRepricingYears($state))
             : $state->authorityBookCouponRate;
         $state->authorityBookCouponRate = (($keptCoupon * $kept) + ($state->yield10y * max(0.0, $holdings - $holdingsBefore))) / $holdings;
     }
@@ -1033,7 +1033,7 @@ class MonetaryPolicySubsystem
         // The year's purchases as a flow: a lag's own change is the exponentially weighted average of what fed it, so
         // the whole of a programme is counted once.
         $priorHoldings = $state->authorityHoldingsToGdpEma;
-        $state->authorityHoldingsToGdpEma += (1.0 - exp(-$dt / $horizon)) * (self::authorityHoldingsToGdp($state) - $priorHoldings);
+        $state->authorityHoldingsToGdpEma = TimeSeries::calculateDistributedLag($priorHoldings, self::authorityHoldingsToGdp($state), $dt, $horizon);
         $purchasesFlow = ($state->authorityHoldingsToGdpEma - $priorHoldings) / $dt;
 
         $state->moneySupplyGrowth = MacroTransmission::broadMoneyGrowth(
@@ -1043,6 +1043,6 @@ class MonetaryPolicySubsystem
             broadMoneyToGdp: self::BROAD_MONEY_TO_GDP,
         );
         // The level its cyclical readers measure a liquidity surge against.
-        $state->moneySupplyGrowthTrend += (1.0 - exp(-$dt / self::M2_TREND_YEARS)) * ($state->moneySupplyGrowth - $state->moneySupplyGrowthTrend);
+        $state->moneySupplyGrowthTrend = TimeSeries::calculateDistributedLag($state->moneySupplyGrowthTrend, $state->moneySupplyGrowth, $dt, self::M2_TREND_YEARS);
     }
 }

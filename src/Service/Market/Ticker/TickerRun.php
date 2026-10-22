@@ -11,6 +11,7 @@ use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Service\Market\Chart\WireFrame;
 use App\Service\Market\Option\OptionDeskService;
+use App\Service\Math\FinancialConstants;
 
 /**
  * One run of the market ticker as MarketTickerCommand steps it: what carries from one tick to the next (the clock,
@@ -23,6 +24,11 @@ final class TickerRun
     public readonly float $dt;
 
     // --- Cadences, in ticks ---
+    /** Operator failure sweeps per simulated year: twice a month. */
+    public const OPERATOR_SWEEPS_PER_YEAR = 24;
+    /** Runs per simulated year of the weekly jobs on the snapshot interval: one a week. */
+    public const SNAPSHOTS_PER_YEAR = 52;
+
     /** The operator's failure sweep, twice a simulated month. */
     public readonly int $operatorInterval;
     /** Portfolio snapshots, the cash sweep, the margin sweep and the season's week, once a simulated week. */
@@ -58,9 +64,9 @@ final class TickerRun
         public readonly ChartBufferWriter $chartBuffers,
     ) {
         $this->dt = 1.0 / $ticksPerYear;
-        $this->operatorInterval = (int) max(1, $ticksPerYear / 24);
-        $this->snapshotInterval = (int) max(1, $ticksPerYear / 52);
-        $this->quarterlyInterval = (int) max(1, $ticksPerYear / 4);
+        $this->operatorInterval = TickCadence::intervalTicks($ticksPerYear, self::OPERATOR_SWEEPS_PER_YEAR);
+        $this->snapshotInterval = TickCadence::intervalTicks($ticksPerYear, self::SNAPSHOTS_PER_YEAR);
+        $this->quarterlyInterval = TickCadence::intervalTicks($ticksPerYear, FinancialConstants::QUARTERS_PER_YEAR);
         $this->optionSweepInterval = OptionDeskService::sweepIntervalTicks($ticksPerYear);
         $this->board = new BoardReadingDTO();
         $this->bars = new StockBarBook();

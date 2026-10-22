@@ -6,6 +6,7 @@ namespace App\Service\District;
 
 use App\Data\District\DistrictMap;
 use App\Entity\Stock;
+use App\Service\Market\Ticker\TickCadence;
 
 /**
  * The street's membership register: WHO holds frontage on Glasswater Row, and in what order, is
@@ -39,7 +40,7 @@ class DistrictRoster
     /** Ticks between reconstitutions — a simulated quarter at the default cadence. */
     public static function intervalTicks(int $ticksPerYear): int
     {
-        return max(1, intdiv($ticksPerYear, DistrictMap::RECONSTITUTIONS_PER_YEAR));
+        return TickCadence::intervalTicks($ticksPerYear, DistrictMap::RECONSTITUTIONS_PER_YEAR);
     }
 
     /** Whether this tick is a reconstitution boundary. Tick 0 is one: a fresh market takes its first roster. */

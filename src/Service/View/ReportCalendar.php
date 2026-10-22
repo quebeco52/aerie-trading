@@ -6,6 +6,7 @@ namespace App\Service\View;
 
 use App\Data\District\DistrictCalendar;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Market\Ticker\TickCadence;
 use App\Service\Math\FinancialConstants;
 
 /**
@@ -28,7 +29,7 @@ final class ReportCalendar
      */
     public static function nextReportTime(string $ticker, int $tickCount, int $ticksPerYear, float $totalTime): float
     {
-        $ticksPerQuarter = max(1, intdiv($ticksPerYear, 4));
+        $ticksPerQuarter = TickCadence::intervalTicks($ticksPerYear, FinancialConstants::QUARTERS_PER_YEAR);
         $since = EarningsEngine::ticksSinceReportingTick($ticker, $tickCount, $ticksPerYear);
 
         return $totalTime + ($ticksPerQuarter - $since) / max(1, $ticksPerYear);

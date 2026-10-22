@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Agent;
 
 use App\DTO\AgentMarketViewDTO;
+use App\Service\Math\TimeSeries;
 
 /**
  * Takes the other side of the flow the market generates, and works the inventory off afterwards.
@@ -52,7 +53,7 @@ final class MarketMakerStrategy implements LiquidityProviderInterface
 
         // Inventory decays toward flat over a horizon in time, so the same book is worked off at the same
         // pace whatever the simulation is stepping at.
-        $unwind = -$inventory * (1.0 - exp(-$view->dt / self::AGENT_MAKER_INVENTORY_HORIZON_YEARS));
+        $unwind = -$inventory * TimeSeries::smoothingWeight($view->dt, self::AGENT_MAKER_INVENTORY_HORIZON_YEARS);
 
         $next = max(-$capacity, min($capacity, $inventory + $absorbed + $unwind));
 

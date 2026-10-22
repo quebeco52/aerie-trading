@@ -6,6 +6,7 @@ namespace App\Service\Market\Index;
 
 use App\Entity\Stock;
 use App\Service\Market\Pricing\LiquidityEngine;
+use App\Service\Market\Ticker\TickCadence;
 use App\Service\Math\FinancialConstants;
 
 /**
@@ -73,7 +74,7 @@ final class IndexCommittee
     /** Ticks between reconstitutions. */
     public static function intervalTicks(int $ticksPerYear): int
     {
-        return max(1, intdiv($ticksPerYear, FinancialConstants::INDEX_RECONSTITUTIONS_PER_YEAR));
+        return TickCadence::intervalTicks($ticksPerYear, FinancialConstants::INDEX_RECONSTITUTIONS_PER_YEAR);
     }
 
     /** Whether this tick is a reconstitution boundary. Tick 0 is one: a fresh market takes its first roster. */

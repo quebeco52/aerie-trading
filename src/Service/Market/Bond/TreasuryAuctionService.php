@@ -6,6 +6,7 @@ namespace App\Service\Market\Bond;
 
 use App\DTO\SovereignCurveDTO;
 use App\Entity\Bond;
+use App\Service\Market\Ticker\TickCadence;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -50,7 +51,7 @@ class TreasuryAuctionService
      */
     public static function auctionIntervalTicks(int $ticksPerYear): int
     {
-        return (int) max(1, $ticksPerYear / self::BOND_AUCTIONS_PER_YEAR);
+        return TickCadence::intervalTicks($ticksPerYear, self::BOND_AUCTIONS_PER_YEAR);
     }
 
     /**

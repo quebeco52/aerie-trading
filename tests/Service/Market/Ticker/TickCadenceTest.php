@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Ticker;
 
+use App\Data\District\DistrictMap;
+use App\Service\Market\Bond\CorporateBondDesk;
+use App\Service\Market\Bond\TreasuryAuctionService;
 use App\Service\Market\Option\OptionDeskService;
 use App\Service\Market\Ticker\TickCadence;
+use App\Service\Market\Ticker\TickerRun;
+use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -235,6 +240,35 @@ class TickCadenceTest extends TestCase
                 $fired,
                 "Year boundary miscounted at {$ticksPerYear} ticks/year.",
             );
+        }
+    }
+
+    /**
+     * intervalTicks() gives what each of the three spellings it replaced gave, at every tick rate and for every count
+     * a caller passes, the float quarter count included.
+     */
+    public function testIntervalTicksMatchesTheSpellingsItReplaced(): void
+    {
+        $perYearCounts = [
+            TreasuryAuctionService::BOND_AUCTIONS_PER_YEAR,
+            CorporateBondDesk::CORPORATE_ISSUANCE_PER_YEAR,
+            FinancialConstants::INDEX_RECONSTITUTIONS_PER_YEAR,
+            FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR,
+            DistrictMap::RECONSTITUTIONS_PER_YEAR,
+            OptionDeskService::SWEEPS_PER_YEAR * OptionDeskService::SWEEP_SLICES,
+            TickerRun::OPERATOR_SWEEPS_PER_YEAR,
+            TickerRun::SNAPSHOTS_PER_YEAR,
+            4,
+        ];
+
+        for ($ticksPerYear = 1; $ticksPerYear <= 20000; $ticksPerYear++) {
+            foreach ($perYearCounts as $perYear) {
+                $interval = TickCadence::intervalTicks($ticksPerYear, $perYear);
+                $this->assertSame(max(1, intdiv($ticksPerYear, $perYear)), $interval);
+                $this->assertSame(max(1, (int) ($ticksPerYear / $perYear)), $interval);
+                $this->assertSame((int) max(1, $ticksPerYear / $perYear), $interval);
+            }
+            $this->assertSame(max(1, intdiv($ticksPerYear, 4)), TickCadence::intervalTicks($ticksPerYear, FinancialConstants::QUARTERS_PER_YEAR));
         }
     }
 

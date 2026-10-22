@@ -726,7 +726,7 @@ class MacroAggregateSubsystem
 
         // Blanchard & Summers (1986) hysteresis: potential takes a credit crisis's scar while the slump lasts, so
         // output the slump holds down reads, as potential falls to meet it, as less slack (calculateOutputGap()).
-        $state->crisisScarStep = $state->crisisScarPending * (1.0 - exp(-$dt / self::CRISIS_SCAR_ABSORPTION_YEARS));
+        $state->crisisScarStep = $state->crisisScarPending * TimeSeries::smoothingWeight($dt, self::CRISIS_SCAR_ABSORPTION_YEARS);
         $state->crisisScarPending -= $state->crisisScarStep;
 
         return $trendRate + (($state->tfpPotentialAbsorbed - $priorPotential + $state->crisisScarStep) / $dt);
@@ -1471,7 +1471,7 @@ class MacroAggregateSubsystem
         // Shapiro (2022) Sector 2: core goods. Freight sets a cost LEVEL of the landed goods (Carriere-Swallow et al.
         // 2023); inflation is its rate of change, as its quarter EMA moves this tick, so freight that stays high adds a
         // step to the level and then no more inflation.
-        $freightEmaNext = $state->freightRateIndexEma + ((1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS)) * ($state->freightRateIndex - $state->freightRateIndexEma));
+        $freightEmaNext = TimeSeries::calculateDistributedLag($state->freightRateIndexEma, $state->freightRateIndex, $dt, self::STANDARD_EMA_HORIZON_YEARS);
         $freightStep = ($state->freightRateIndexEma > 0.0 && $freightEmaNext > 0.0) ? log($freightEmaNext / $state->freightRateIndexEma) : 0.0;
         $goodsSupplyFriction = self::CORE_GOODS_FREIGHT_LEVEL_LOADING * $freightStep / $dt;
         $targetCoreGoods = $targetInflation + $anchorSlip + (self::CORE_GOODS_DEMAND_SENSITIVITY * $convexDemandPressure) + $goodsSupplyFriction + $importPriceInflation;
@@ -1523,7 +1523,7 @@ class MacroAggregateSubsystem
         $energyCostPush = ($state->energyCostPushLag - $priorEnergyCostPushLag) / $dt;
         $agriCostPush = ($state->agriCostPushLag - $priorAgriCostPushLag) / $dt;
         $noncorePassThrough = $energyCostPush + $agriCostPush + $carbonCostPush;
-        $state->noncorePassThroughEma += (1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS)) * ($noncorePassThrough - $state->noncorePassThroughEma);
+        $state->noncorePassThroughEma = TimeSeries::calculateDistributedLag($state->noncorePassThroughEma, $noncorePassThrough, $dt, self::STANDARD_EMA_HORIZON_YEARS);
 
         // Shapiro (2022) commodity basket aggregation normalized by expenditure weight.
         $commodityBasketInflation = $targetInflation + $anchorSlip
@@ -1697,8 +1697,8 @@ class MacroAggregateSubsystem
      */
     public function updateExponentialMovingAverages(MacroState $state, float $dt): void
     {
-        $emaWeight = 1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS);
-        $commodityTrendWeight = 1.0 - exp(-$dt / MacroConstants::COMMODITY_TREND_HORIZON_YEARS);
+        $emaWeight = TimeSeries::smoothingWeight($dt, self::STANDARD_EMA_HORIZON_YEARS);
+        $commodityTrendWeight = TimeSeries::smoothingWeight($dt, MacroConstants::COMMODITY_TREND_HORIZON_YEARS);
 
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
         foreach (self::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
@@ -1724,9 +1724,8 @@ class MacroAggregateSubsystem
         // Lettau & Ludvigson (2001) cay model: multi-year trend EMA for equity wealth effect.
         $state->equityWealthRatio = $this->equityWealthRatio($state);
         if ($state->equityWealthRatio > 0.0) {
-            $trendWeight = 1.0 - exp(-$dt / self::EQUITY_WEALTH_TREND_HORIZON_YEARS);
             $state->equityWealthTrend = $state->equityWealthTrend > 0.0
-                ? $state->equityWealthTrend + ($trendWeight * ($state->equityWealthRatio - $state->equityWealthTrend))
+                ? TimeSeries::calculateDistributedLag($state->equityWealthTrend, $state->equityWealthRatio, $dt, self::EQUITY_WEALTH_TREND_HORIZON_YEARS)
                 : $state->equityWealthRatio;
         }
 
@@ -1750,21 +1749,20 @@ class MacroAggregateSubsystem
         $state->energyPriceIndexTrend = $state->energyPriceIndexTrend > 0.0
             ? $state->energyPriceIndexTrend + ($commodityTrendWeight * ($state->energyPriceIndex - $state->energyPriceIndexTrend))
             : $state->energyPriceIndex;
-        $supplyCostTrendWeight = 1.0 - exp(-$dt / self::SUPPLY_COST_TREND_YEARS);
+        $supplyCostTrendWeight = TimeSeries::smoothingWeight($dt, self::SUPPLY_COST_TREND_YEARS);
         $state->energyPriceIndexDecadeTrend += $supplyCostTrendWeight * ($state->energyPriceIndexEma - $state->energyPriceIndexDecadeTrend);
         $state->consumerSentimentIndexEma += $emaWeight * ($state->consumerSentimentIndex - $state->consumerSentimentIndexEma);
         $state->exchangeRateIndexEma += $emaWeight * ($state->exchangeRateIndex - $state->exchangeRateIndexEma);
-        $exchangeRateTrendWeight = 1.0 - exp(-$dt / self::EXCHANGE_RATE_TREND_HORIZON_YEARS);
-        $state->exchangeRateTrend += $exchangeRateTrendWeight * ($state->exchangeRateIndexEma - $state->exchangeRateTrend);
+        $state->exchangeRateTrend = TimeSeries::calculateDistributedLag($state->exchangeRateTrend, $state->exchangeRateIndexEma, $dt, self::EXCHANGE_RATE_TREND_HORIZON_YEARS);
         $state->industrialMetalsIndexEma += $emaWeight * ($state->industrialMetalsIndex - $state->industrialMetalsIndexEma);
         $state->industrialMetalsIndexTrend = $state->industrialMetalsIndexTrend > 0.0
             ? $state->industrialMetalsIndexTrend + ($commodityTrendWeight * ($state->industrialMetalsIndex - $state->industrialMetalsIndexTrend))
             : $state->industrialMetalsIndex;
         $state->governmentSpendingIndexEma += $emaWeight * ($state->governmentSpendingIndex - $state->governmentSpendingIndexEma);
-        $state->governmentSpendingIndexTrend += (1.0 - exp(-$dt / CreditFiscalSubsystem::GOVT_SPENDING_TREND_YEARS)) * ($state->governmentSpendingIndexEma - $state->governmentSpendingIndexTrend);
+        $state->governmentSpendingIndexTrend = TimeSeries::calculateDistributedLag($state->governmentSpendingIndexTrend, $state->governmentSpendingIndexEma, $dt, CreditFiscalSubsystem::GOVT_SPENDING_TREND_YEARS);
         $state->alliedDefenseSpendingIndexEma += $emaWeight * ($state->alliedDefenseSpendingIndex - $state->alliedDefenseSpendingIndexEma);
         $state->retailDefaultRateEma += $emaWeight * ($state->retailDefaultRate - $state->retailDefaultRateEma);
-        $defaultTrendWeight = 1.0 - exp(-$dt / self::DEFAULT_RATE_TREND_YEARS);
+        $defaultTrendWeight = TimeSeries::smoothingWeight($dt, self::DEFAULT_RATE_TREND_YEARS);
         $state->retailDefaultRateTrend += $defaultTrendWeight * ($state->retailDefaultRateEma - $state->retailDefaultRateTrend);
         $state->agriculturalCommodityIndexEma += $emaWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexEma);
         $state->agriculturalCommodityIndexTrend = $state->agriculturalCommodityIndexTrend > 0.0
@@ -1772,17 +1770,16 @@ class MacroAggregateSubsystem
             : $state->agriculturalCommodityIndex;
         $state->freightRateIndexEma += $emaWeight * ($state->freightRateIndex - $state->freightRateIndexEma);
         $state->freightRateIndexDecadeTrend += $supplyCostTrendWeight * ($state->freightRateIndexEma - $state->freightRateIndexDecadeTrend);
-        $state->excessBondPremiumTrend += (1.0 - exp(-$dt / self::CREDIT_PREMIUM_TREND_YEARS)) * ($state->excessBondPremium - $state->excessBondPremiumTrend);
+        $state->excessBondPremiumTrend = TimeSeries::calculateDistributedLag($state->excessBondPremiumTrend, $state->excessBondPremium, $dt, self::CREDIT_PREMIUM_TREND_YEARS);
         $state->interbankLiquiditySpreadEma += $emaWeight * ($state->interbankLiquiditySpread - $state->interbankLiquiditySpreadEma);
-        $spreadTrendWeight = 1.0 - exp(-$dt / self::SPREAD_TREND_YEARS);
+        $spreadTrendWeight = TimeSeries::smoothingWeight($dt, self::SPREAD_TREND_YEARS);
         $state->interbankLiquiditySpreadTrend += $spreadTrendWeight * ($state->interbankLiquiditySpreadEma - $state->interbankLiquiditySpreadTrend);
         $state->totalFactorProductivityIndexEma += $emaWeight * ($state->totalFactorProductivityIndex - $state->totalFactorProductivityIndexEma);
         $state->capitalStockOverhangEma += $emaWeight * ($state->capitalStockOverhang - $state->capitalStockOverhangEma);
         $state->residentialPropertyIndexEma += $emaWeight * ($state->residentialPropertyIndex - $state->residentialPropertyIndexEma);
-        $residentialTrendWeight = 1.0 - exp(-$dt / self::RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS);
-        $state->residentialWealthTrend += $residentialTrendWeight * ($state->residentialPropertyIndexEma - $state->residentialWealthTrend);
+        $state->residentialWealthTrend = TimeSeries::calculateDistributedLag($state->residentialWealthTrend, $state->residentialPropertyIndexEma, $dt, self::RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS);
         $state->commercialPropertyIndexEma += $emaWeight * ($state->commercialPropertyIndex - $state->commercialPropertyIndexEma);
-        $state->commercialPropertyIndexTrend += (1.0 - exp(-$dt / self::COMMERCIAL_PROPERTY_TREND_YEARS)) * ($state->commercialPropertyIndexEma - $state->commercialPropertyIndexTrend);
+        $state->commercialPropertyIndexTrend = TimeSeries::calculateDistributedLag($state->commercialPropertyIndexTrend, $state->commercialPropertyIndexEma, $dt, self::COMMERCIAL_PROPERTY_TREND_YEARS);
         $state->nairuEma += $emaWeight * ($state->nairu - $state->nairuEma);
         $state->sovereignDebtToGdpEma += $emaWeight * ($state->sovereignDebtToGdp - $state->sovereignDebtToGdpEma);
         $state->sovereignNetDebtToGdpEma += $emaWeight * ($state->sovereignNetDebtToGdp - $state->sovereignNetDebtToGdpEma);
@@ -1797,7 +1794,7 @@ class MacroAggregateSubsystem
         $state->energyInventoryIndexEma += $emaWeight * ($state->energyInventoryIndex - $state->energyInventoryIndexEma);
         $state->capacityUtilizationRateEma += $emaWeight * ($state->capacityUtilizationRate - $state->capacityUtilizationRateEma);
         $state->recessionProbabilityEma += $emaWeight * ($state->recessionProbability - $state->recessionProbabilityEma);
-        $state->recessionProbabilityTrend += (1.0 - exp(-$dt / self::RECESSION_PROBABILITY_TREND_YEARS)) * ($state->recessionProbabilityEma - $state->recessionProbabilityTrend);
+        $state->recessionProbabilityTrend = TimeSeries::calculateDistributedLag($state->recessionProbabilityTrend, $state->recessionProbabilityEma, $dt, self::RECESSION_PROBABILITY_TREND_YEARS);
         $state->corporateDefaultRateEma += $emaWeight * ($state->corporateDefaultRate - $state->corporateDefaultRateEma);
         $state->corporateDefaultRateTrend += $defaultTrendWeight * ($state->corporateDefaultRateEma - $state->corporateDefaultRateTrend);
         $state->sloosTighteningIndexEma += $emaWeight * ($state->sloosTighteningIndex - $state->sloosTighteningIndexEma);
