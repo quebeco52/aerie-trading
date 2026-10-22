@@ -153,7 +153,8 @@ class InitialMarket
             'historical_fixed_rate' => 0.035,
             'credit_spread' => 0.0150,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 100_000_000_000.00,
+            // 15% of the wholesale book, the clearing backing its model targets; the rest of the book earns.
+            'corporate_treasury' => 45_000_000_000.00,
             'total_equity' => 125_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 300_000_000_000.00,
@@ -2672,8 +2673,9 @@ class InitialMarket
             'historical_fixed_rate' => 0.035,
             'credit_spread' => 0.0120,
             'depreciation_rate' => 0.02,
-            // Wholesale funding at the industry's 8x equity limit, twice the other dealers' leverage.
-            'corporate_treasury' => 120_000_000_000.00,
+            // Wholesale funding at the industry's 8x equity limit, twice the other dealers' leverage. Cash is 15% of
+            // it, the clearing backing its model targets.
+            'corporate_treasury' => 96_000_000_000.00,
             'total_equity'      => 80_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 640_000_000_000.00,

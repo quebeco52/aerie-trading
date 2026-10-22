@@ -31,8 +31,8 @@ class FeeEarnerSeedTest extends TestCase
     private const OPENING_RETURN_TOLERANCE = 0.005;
 
     /**
-     * The cash past its model's target a fee manager may open with, as a share of its tangible equity (2%). The strike
-     * counts that cash as earning, so a manager that handed a larger surplus back would run above its target for good.
+     * The cash past its model's target a fee earner may open with, as a share of its tangible equity (2%). The strike
+     * counts that cash as earning, so a firm that handed a larger surplus back would run above its target for good.
      */
     private const SURPLUS_CASH_TOLERANCE = 0.02;
 
@@ -70,12 +70,6 @@ class FeeEarnerSeedTest extends TestCase
         return $earners;
     }
 
-    /** @return array<string, array{array<string, mixed>}> Every seeded fee manager's row, by ticker. */
-    public static function feeManagerProvider(): array
-    {
-        return array_filter(self::feeEarnerProvider(), static fn(array $case): bool => Sectors::strategyFor($case[0]['industry']) instanceof AssetManagementBusinessModel);
-    }
-
     /**
      * It books its structural return at the opening macro, a fee manager plus its coupon gap: its fees are struck on
      * the coupon its notes would refinance at, so notes paying under the market earn it the difference until they roll.
@@ -102,12 +96,13 @@ class FeeEarnerSeedTest extends TestCase
     }
 
     /**
-     * It opens holding no more cash than its model targets, within the tolerance.
+     * It opens holding no more cash than its model targets, within the tolerance: a dealer's target is the clearing
+     * backing on its wholesale book, and its prime, repo and inventory books are in the earning book, not in cash.
      *
      * @param array<string, mixed> $row
      */
-    #[DataProvider('feeManagerProvider')]
-    public function testAFeeManagerOpensHoldingOnlyTheCashItNeeds(array $row): void
+    #[DataProvider('feeEarnerProvider')]
+    public function testItOpensHoldingOnlyTheCashItNeeds(array $row): void
     {
         [$stock, $strategy] = $this->open($row);
         $operatingBase = (new \ReflectionMethod($strategy, 'getOperatingBase'))->invoke($strategy, $stock);
