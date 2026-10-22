@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\DTO\DebtExpansionAppetiteDTO;
-use App\DTO\SectorCoverageProfile;
 
 use App\DTO\SectorPhysicsResult;
 
@@ -103,16 +102,12 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
-    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
-    {
-        return new SectorCoverageProfile(
-            baseVisibility: static::BASE_COVERAGE_VISIBILITY,
-            errorStdDev: static::BASE_COVERAGE_ERROR,
-            minVisibility: static::BASE_COVERAGE_MIN_VISIBILITY,
-            eventBaseVisibility: 0.80,
-            eventMinVisibility: 0.40,
-        );
-    }
+    // --- Analyst Coverage ---
+    // Flow reversals and fee cuts are disclosed.
+    /** Visibility of a quarter with an announced event (80%). */
+    public const EVENT_BASE_VISIBILITY = 0.80;
+    /** Floor on visibility in an announced-event quarter (40%). */
+    public const EVENT_MIN_VISIBILITY = 0.40;
 
     // --- Structural Yield Rails ---
     /** Minimum structural operating EBIT floor as a fraction of operating equity. */

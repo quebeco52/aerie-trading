@@ -7,7 +7,6 @@ namespace App\Service\Model\Sector;
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
 
-use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -271,16 +270,18 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         );
     }
 
-    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
-    {
-        return new SectorCoverageProfile(
-            baseVisibility: 0.15,
-            errorStdDev: 0.05,
-            minVisibility: 0.0,
-            eventBaseVisibility: 0.60,
-            eventMinVisibility: 0.30,
-        );
-    }
+    // --- Analyst Coverage ---
+    // Niche B2B order books are thinly covered; a large order or plant event is announced.
+    /** Share of routine shocks analysts see (15%). */
+    public const BASE_COVERAGE_VISIBILITY = 0.15;
+    /** Standard deviation of the consensus forecast error (0.05). */
+    public const BASE_COVERAGE_ERROR = 0.05;
+    /** Floor on routine visibility (0%). */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.00;
+    /** Visibility of a quarter with an announced event (60%). */
+    public const EVENT_BASE_VISIBILITY = 0.60;
+    /** Floor on visibility in an announced-event quarter (30%). */
+    public const EVENT_MIN_VISIBILITY = 0.30;
 
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in

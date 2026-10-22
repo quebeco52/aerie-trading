@@ -264,17 +264,18 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
-    {
-        // B2B precision tooling orders are opaque and hard for retail analysts to track.
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility: 0.15,
-            errorStdDev: 0.05,
-            minVisibility: 0.0,
-            eventBaseVisibility: 0.50,
-            eventMinVisibility: 0.20,
-        );
-    }
+    // --- Analyst Coverage ---
+    // B2B precision tooling orders are opaque and hard for retail analysts to track.
+    /** Share of routine shocks analysts see (15%). */
+    public const BASE_COVERAGE_VISIBILITY = 0.15;
+    /** Standard deviation of the consensus forecast error (0.05). */
+    public const BASE_COVERAGE_ERROR = 0.05;
+    /** Floor on routine visibility (0%). */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.00;
+    /** Visibility of a quarter with an announced event (50%). */
+    public const EVENT_BASE_VISIBILITY = 0.50;
+    /** Floor on visibility in an announced-event quarter (20%). */
+    public const EVENT_MIN_VISIBILITY = 0.20;
 
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in

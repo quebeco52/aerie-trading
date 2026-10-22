@@ -306,16 +306,18 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
-    {
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility: 0.30,
-            errorStdDev: 0.05,
-            minVisibility: 0.10,
-            eventBaseVisibility: 0.90,
-            eventMinVisibility: 0.50,
-        );
-    }
+    // --- Analyst Coverage ---
+    // Card-spend panels and foot traffic data track sales; a food-safety event is front-page news.
+    /** Share of routine shocks analysts see (30%). */
+    public const BASE_COVERAGE_VISIBILITY = 0.30;
+    /** Standard deviation of the consensus forecast error (0.05). */
+    public const BASE_COVERAGE_ERROR = 0.05;
+    /** Floor on routine visibility (10%). */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.10;
+    /** Visibility of a quarter with an announced event (90%). */
+    public const EVENT_BASE_VISIBILITY = 0.90;
+    /** Floor on visibility in an announced-event quarter (50%). */
+    public const EVENT_MIN_VISIBILITY = 0.50;
 
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in

@@ -366,10 +366,11 @@ final class OptionPricing
 
     /**
      * The same shape for a diffusion with several independent Kou jump processes, a name's own and the market's:
-     * their cumulants add, each lambda T E[J^n].
+     * their cumulants add, each lambda T E[J^n]. A process given caps has its moments taken on the capped draws, as the
+     * tape delivers them.
      *
      * @param float                                                              $diffusionVariance Annualised variance of the diffusion leg, excluding jumps.
-     * @param list<array{lambda: float, p_up: float, eta_up: float, eta_down: float}> $jumps         The jump processes.
+     * @param list<array{lambda: float, p_up: float, eta_up: float, eta_down: float, cap_up?: float, cap_down?: float}> $jumps The jump processes.
      * @param float                                                              $horizonYears      Years over which the return is measured.
      * @return array{variance: float, skewness: float, excess_kurtosis: float} Horizon variance and shape.
      */
@@ -384,9 +385,12 @@ final class OptionPricing
         $fourthCumulant = 0.0;
         foreach ($jumps as $jump) {
             $jumpArrivals = max(0.0, $jump['lambda']) * $horizonYears;
-            $secondCumulant += $jumpArrivals * self::calculateKouJumpMoment(2, $jump['p_up'], $jump['eta_up'], $jump['eta_down']);
-            $thirdCumulant += $jumpArrivals * self::calculateKouJumpMoment(3, $jump['p_up'], $jump['eta_up'], $jump['eta_down']);
-            $fourthCumulant += $jumpArrivals * self::calculateKouJumpMoment(4, $jump['p_up'], $jump['eta_up'], $jump['eta_down']);
+            $moment = isset($jump['cap_up'], $jump['cap_down'])
+                ? static fn(int $order): float => StochasticProcesses::kouTruncatedMoment($order, $jump['p_up'], $jump['eta_up'], $jump['eta_down'], $jump['cap_up'], $jump['cap_down'])
+                : static fn(int $order): float => self::calculateKouJumpMoment($order, $jump['p_up'], $jump['eta_up'], $jump['eta_down']);
+            $secondCumulant += $jumpArrivals * $moment(2);
+            $thirdCumulant += $jumpArrivals * $moment(3);
+            $fourthCumulant += $jumpArrivals * $moment(4);
         }
 
         if ($secondCumulant <= 0.0) {

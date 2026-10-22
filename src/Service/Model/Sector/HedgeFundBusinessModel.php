@@ -8,7 +8,6 @@ use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\DebtHealthDTO;
 
 use App\DTO\MacroStateDTO;
-use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -201,16 +200,14 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         return 0.008;
     }
 
-    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
-    {
-        return new SectorCoverageProfile(
-            baseVisibility: self::BASE_COVERAGE_VISIBILITY,
-            errorStdDev: self::BASE_COVERAGE_ERROR,
-            minVisibility: 0.10,
-            eventBaseVisibility: 0.60,
-            eventMinVisibility: 0.30,
-        );
-    }
+    // --- Analyst Coverage ---
+    // Returns leak through investor letters; a drawdown event is reported.
+    /** Floor on routine visibility (10%). */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.10;
+    /** Visibility of a quarter with an announced event (60%). */
+    public const EVENT_BASE_VISIBILITY = 0.60;
+    /** Floor on visibility in an announced-event quarter (30%). */
+    public const EVENT_MIN_VISIBILITY = 0.30;
 
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {

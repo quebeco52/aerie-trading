@@ -475,9 +475,12 @@ class MarketEngine
         // and were paid for before the idiosyncratic budget was struck (longTermIdiosyncraticVariance()).
         // The variance jumps below add to the stationary mean, so the target is struck low enough that the
         // process still settles on it: see varianceJumpLoad().
+        // The name's own sources besides its diffusion, deducted here, stripped from the state and added back to the
+        // reported total below: one sum, so the three can never list different sources.
+        $ownSourceVariance = $idiosyncraticJumpVariance + $impactVariance + $announcementVariance;
         $adjustedTheta = max(
             0.0001,
-            (($longTermIdiosyncraticVar * $commonIdiosyncraticScale) - $idiosyncraticJumpVariance - $impactVariance - $announcementVariance)
+            (($longTermIdiosyncraticVar * $commonIdiosyncraticScale) - $ownSourceVariance)
                 * (1.0 - self::varianceJumpLoad($lambda, $dynamicKappa, $dt)),
         );
 
@@ -490,7 +493,7 @@ class MarketEngine
         $priorSystematicVar = ($beta * $priorMarketVol) * ($beta * $priorMarketVol);
         $currentIdiosyncraticVar = max(
             0.0,
-            $currentVar - $priorSystematicVar - $systemicJumpVariance - $idiosyncraticJumpVariance,
+            $currentVar - $priorSystematicVar - $systemicJumpVariance - $ownSourceVariance,
         );
 
         // The SVJJ Jump Process (Kou Distribution). The variance jump scales with the name's own
@@ -519,10 +522,11 @@ class MarketEngine
 
         // Back to a TOTAL variance for everything downstream: the liquidity engine's spread and turnover,
         // the agents' risk charge, and the UI all read this as the name's volatility, and all of them want
-        // what the name actually realizes. That includes the variance its jumps deliver — reporting the
-        // diffusion alone would understate a jumpy name by exactly the amount the budget just deducted, and
-        // the spread and turnover models would be calibrated against a number the tape never prints.
-        $nextVar = $nextIdiosyncraticVar + $systematicVar + $systemicJumpVariance + $idiosyncraticJumpVariance;
+        // what the name actually realizes. That includes the variance its jumps, its order flow and its
+        // announcements deliver — reporting the diffusion alone would understate the name by exactly what the
+        // budget just deducted, and the spread and turnover models would be calibrated against a number the tape
+        // never prints.
+        $nextVar = $nextIdiosyncraticVar + $systematicVar + $systemicJumpVariance + $ownSourceVariance;
 
         // Convert back to volatility for the return payload.
         $nextVolatility = sqrt(max(0.0, $nextVar));

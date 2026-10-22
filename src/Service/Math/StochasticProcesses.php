@@ -159,6 +159,49 @@ final class StochasticProcesses
     }
 
     /**
+     * E[J^n] of one capped Kou jump, for the cumulants the option desk shapes its smile from.
+     *
+     * For X ~ Exp(eta) capped at c, E[min(X, c)^n] = (n! / eta^n) * (1 - e^(-eta c) * sum_{k<=n} (eta c)^k / k!)
+     * + c^n e^(-eta c): the lower incomplete gamma integral plus the point mass at the cap. At n = 2 it is
+     * kouTruncatedSecondMoment(). Odd moments of the down tail carry its sign.
+     *
+     * @param int   $order   Moment order, 1 or more.
+     * @param float $pUp     Probability the jump is upwards.
+     * @param float $etaUp   Exponential rate of the up jump.
+     * @param float $etaDown Exponential rate of the down jump.
+     * @param float $capUp   Largest up jump, as a positive log return.
+     * @param float $capDown Largest down jump, as a POSITIVE magnitude.
+     */
+    public static function kouTruncatedMoment(int $order, float $pUp, float $etaUp, float $etaDown, float $capUp, float $capDown): float
+    {
+        $downSign = $order % 2 === 0 ? 1.0 : -1.0;
+
+        return ($pUp * self::truncatedExponentialMoment($order, $etaUp, $capUp))
+            + ((1.0 - $pUp) * $downSign * self::truncatedExponentialMoment($order, $etaDown, $capDown));
+    }
+
+    /** E[min(X, cap)^n] for X ~ Exp(rate). See kouTruncatedMoment() for the derivation. */
+    private static function truncatedExponentialMoment(int $order, float $rate, float $cap): float
+    {
+        if ($order < 1 || $rate <= 0.0 || $cap <= 0.0) {
+            return 0.0;
+        }
+
+        $scaled = $rate * $cap;
+        $term = 1.0;
+        $partialSum = 1.0;
+        $factorial = 1.0;
+        for ($k = 1; $k <= $order; $k++) {
+            $term *= $scaled / $k;
+            $partialSum += $term;
+            $factorial *= $k;
+        }
+        $survival = exp(-$scaled);
+
+        return (($factorial / ($rate ** $order)) * (1.0 - ($survival * $partialSum))) + (($cap ** $order) * $survival);
+    }
+
+    /**
      * E[min(X, c)^2] for X ~ Exp(rate). See kouTruncatedSecondMoment() for the derivation.
      */
     private static function truncatedExponentialSecondMoment(float $rate, float $cap): float

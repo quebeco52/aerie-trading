@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Math;
 
 use App\Service\Math\MathUtility;
+use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
 
@@ -353,6 +354,46 @@ class StochasticProcessesTest extends TestCase
             $muV * (1.0 - exp(-StochasticProcesses::MAX_VARIANCE_JUMP_MEAN_MULTIPLE)),
             StochasticProcesses::meanVarianceJump(0.0, $muV),
             1e-15,
+        );
+    }
+
+    /**
+     * The capped Kou moment the option desk shapes its smile from: the second moment is the one the price engine's
+     * variance budget uses, the moments approach the uncapped ones as the cap recedes, and the third matches the
+     * integral it stands for, taken numerically.
+     */
+    public function testTheCappedKouMomentIsTheMomentOfTheCappedDraw(): void
+    {
+        [$pUp, $etaUp, $etaDown, $capUp, $capDown] = [0.35, 12.0, 8.0, 0.25, 0.30];
+
+        $this->assertEqualsWithDelta(
+            StochasticProcesses::kouTruncatedSecondMoment($pUp, $etaUp, $etaDown, $capUp, $capDown),
+            StochasticProcesses::kouTruncatedMoment(2, $pUp, $etaUp, $etaDown, $capUp, $capDown),
+            1e-15,
+        );
+        foreach ([3, 4] as $order) {
+            $this->assertEqualsWithDelta(
+                OptionPricing::calculateKouJumpMoment($order, $pUp, $etaUp, $etaDown),
+                StochasticProcesses::kouTruncatedMoment($order, $pUp, $etaUp, $etaDown, 50.0, 50.0),
+                1e-12,
+            );
+        }
+
+        $cappedTail = static function (float $rate, float $cap): float {
+            $steps = 200_000;
+            $width = $cap / $steps;
+            $integral = 0.0;
+            for ($i = 0; $i < $steps; $i++) {
+                $x = ($i + 0.5) * $width;
+                $integral += ($x ** 3) * $rate * exp(-$rate * $x) * $width;
+            }
+
+            return $integral + (($cap ** 3) * exp(-$rate * $cap));
+        };
+        $this->assertEqualsWithDelta(
+            ($pUp * $cappedTail($etaUp, $capUp)) - ((1.0 - $pUp) * $cappedTail($etaDown, $capDown)),
+            StochasticProcesses::kouTruncatedMoment(3, $pUp, $etaUp, $etaDown, $capUp, $capDown),
+            1e-9,
         );
     }
 }

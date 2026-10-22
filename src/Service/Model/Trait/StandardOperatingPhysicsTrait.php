@@ -158,10 +158,14 @@ trait StandardOperatingPhysicsTrait
             $minVis += 0.05;
         }
 
+        // A model whose quarters can carry an announced event (a trial readout, a recall, a missed hurdle) declares how
+        // visible such a quarter is; the systemic boost above applies to its routine quarters either way.
         return new SectorCoverageProfile(
             baseVisibility: min(1.0, $visibility),
             errorStdDev: $error,
             minVisibility: min(1.0, $minVis),
+            eventBaseVisibility: defined('static::EVENT_BASE_VISIBILITY') ? static::EVENT_BASE_VISIBILITY : null,
+            eventMinVisibility: defined('static::EVENT_MIN_VISIBILITY') ? static::EVENT_MIN_VISIBILITY : null,
         );
     }
 

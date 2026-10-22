@@ -11,6 +11,7 @@ use App\Entity\Stock;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\Decimal;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
 
@@ -118,10 +119,11 @@ final class OptionPricingEngine
 
         $jump = MarketEngine::calibratedJumpParameters($longRunVolatility, $beta, $lambda, $jumpVol);
         // The name gaps on its own news and on the market's crashes, which reach it through its beta; the tape
-        // delivers both, so the desk writes both.
+        // delivers both, so the desk writes both, at the caps the tape clamps every jump to.
+        $caps = ['cap_up' => FinancialConstants::MAX_JUMP_LOG_RETURN, 'cap_down' => abs(FinancialConstants::MIN_JUMP_LOG_RETURN)];
         $jumps = [
-            ['lambda' => max(0.0, $lambda), 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $jump['eta_up'], 'eta_down' => $jump['eta_down']],
-            MarketEngine::systemicJumpParameters($beta),
+            ['lambda' => max(0.0, $lambda), 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $jump['eta_up'], 'eta_down' => $jump['eta_down']] + $caps,
+            MarketEngine::systemicJumpParameters($beta) + $caps,
         ];
 
         // The jumps' share of that variance, so the diffusion is handed the REMAINDER and the shape function
@@ -129,7 +131,14 @@ final class OptionPricingEngine
         // instead would quote a name at more volatility than its own tape realizes.
         $jumpVariance = 0.0;
         foreach ($jumps as $component) {
-            $jumpVariance += $component['lambda'] * OptionPricing::calculateKouJumpMoment(2, $component['p_up'], $component['eta_up'], $component['eta_down']);
+            $jumpVariance += $component['lambda'] * StochasticProcesses::kouTruncatedMoment(
+                2,
+                $component['p_up'],
+                $component['eta_up'],
+                $component['eta_down'],
+                $component['cap_up'],
+                $component['cap_down'],
+            );
         }
         $diffusionVariance = max(0.0, $totalVariance - $jumpVariance);
 

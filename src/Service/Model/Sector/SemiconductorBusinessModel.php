@@ -273,18 +273,18 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
-    {
-        // Wafer shipment lead times and supply chain checks give ~60% visibility (40% floor).
-        // Fab fires, power outages, and export bans are highly public events.
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility: 0.60,
-            errorStdDev: 0.05,
-            minVisibility: 0.40,
-            eventBaseVisibility: 0.95,
-            eventMinVisibility: 0.80,
-        );
-    }
+    // --- Analyst Coverage --- Wafer shipment lead times and supply chain checks give ~60% visibility; fab fires, power
+    // outages and export bans are highly public events.
+    /** Share of routine shocks analysts see (60%). */
+    public const BASE_COVERAGE_VISIBILITY = 0.60;
+    /** Standard deviation of the consensus forecast error (0.05). */
+    public const BASE_COVERAGE_ERROR = 0.05;
+    /** Floor on routine visibility (40%). */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.40;
+    /** Visibility of a quarter with an announced event (95%). */
+    public const EVENT_BASE_VISIBILITY = 0.95;
+    /** Floor on visibility in an announced-event quarter (80%). */
+    public const EVENT_MIN_VISIBILITY = 0.80;
 
     public function getMarginReversionSpeed(): float
     {

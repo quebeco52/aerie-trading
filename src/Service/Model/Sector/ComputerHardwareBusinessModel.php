@@ -308,17 +308,18 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
-    {
-        // Consumer tech supply chains are heavily scrutinized and scraped.
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility: 0.35,
-            errorStdDev: 0.05,
-            minVisibility: 0.10,
-            eventBaseVisibility: 0.90,
-            eventMinVisibility: 0.50,
-        );
-    }
+    // --- Analyst Coverage ---
+    // Consumer tech supply chains are heavily scrutinized and scraped.
+    /** Share of routine shocks analysts see (35%). */
+    public const BASE_COVERAGE_VISIBILITY = 0.35;
+    /** Standard deviation of the consensus forecast error (0.05). */
+    public const BASE_COVERAGE_ERROR = 0.05;
+    /** Floor on routine visibility (10%). */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.10;
+    /** Visibility of a quarter with an announced event (90%). */
+    public const EVENT_BASE_VISIBILITY = 0.90;
+    /** Floor on visibility in an announced-event quarter (50%). */
+    public const EVENT_MIN_VISIBILITY = 0.50;
 
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in

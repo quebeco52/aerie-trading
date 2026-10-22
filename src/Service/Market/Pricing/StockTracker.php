@@ -414,13 +414,14 @@ class StockTracker
         if ($dt > 0.0) {
             $ticker = $stock->getTicker();
             $empty = ['sum' => 0.0, 'elapsed' => 0.0];
-            // Policy news moves the price outside its diffusion as order flow does, so the diffusion gives it back
-            // from the same measured budget.
+            // Policy news and a deal's announcement move the price outside its diffusion as order flow does, so the
+            // diffusion gives them back from the same measured budget.
             $policyLogReturn = log(max(1e-12, (float) ($tick->pricing['policy_repricing'] ?? 1.0)));
+            $dealLogReturn = log(max(1e-12, 1.0 + $tick->dealShock));
             $flowRead = TimeSeries::ewmaWindowedVariance(
                 $stock->getImpactVarianceEma() ?? 0.0,
                 $this->impactDay[$ticker]['flow'] ?? $empty,
-                $budgetedImpactLogReturn + $policyLogReturn,
+                $budgetedImpactLogReturn + $policyLogReturn + $dealLogReturn,
                 $dt,
                 self::IMPACT_MEASUREMENT_YEARS,
                 self::IMPACT_VARIANCE_EMA_YEARS,

@@ -86,6 +86,7 @@ class OrderFlowImpactWiringTest extends TestCase
         ?\App\Service\Market\Agent\AgentStateStoreInterface $agentStateStore = null,
         ?\Closure $onEarnings = null,
         ?\Closure $policyRepricing = null,
+        ?\Closure $dealShock = null,
     ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
@@ -128,7 +129,12 @@ class OrderFlowImpactWiringTest extends TestCase
         $earnings->method('evaluatePreAnnouncement')->willReturn([]);
 
         $ma = $this->createStub(MergerAndAcquisitionEngine::class);
-        $ma->method('evaluatePrivateAcquisition')->willReturn(null);
+        // A test that strikes a deal hands in its announcement shock, one per tick; null strikes none.
+        $ma->method('evaluatePrivateAcquisition')->willReturnCallback(static function () use ($dealShock): ?array {
+            $shock = $dealShock !== null ? $dealShock() : null;
+
+            return $shock === null ? null : ['event' => ['type' => 'ACQUISITION', 'description' => ''], 'shock' => $shock];
+        });
         $ma->method('evaluateCorporateDivestiture')->willReturn(null);
 
         return new StockTracker(
@@ -401,6 +407,24 @@ class OrderFlowImpactWiringTest extends TestCase
 
         $this->assertEqualsWithDelta(
             TimeSeries::ewmaAnnualizedVariance(0.0, log(1.03), $elapsed, StockTracker::IMPACT_VARIANCE_EMA_YEARS),
+            $stock->getImpactVarianceEma(),
+            1e-12,
+        );
+    }
+
+    /** A deal's announcement moves the price outside the diffusion like policy news, and is measured the same way. */
+    public function testADealAnnouncementIsMeasuredIntoTheBudgetTheDiffusionGivesBack(): void
+    {
+        $stock = $this->stock();
+        $shocks = [0.04];
+        $tracker = $this->tracker(dealShock: static function () use (&$shocks): ?float {
+            return array_shift($shocks);
+        });
+
+        $elapsed = $this->runTradingDay($tracker, $stock, 1.0 / 14400.0);
+
+        $this->assertEqualsWithDelta(
+            TimeSeries::ewmaAnnualizedVariance(0.0, log(1.04), $elapsed, StockTracker::IMPACT_VARIANCE_EMA_YEARS),
             $stock->getImpactVarianceEma(),
             1e-12,
         );

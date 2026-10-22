@@ -6,7 +6,6 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
-use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -441,17 +440,18 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
-    {
-        // Carrier capex guidance is public and vendor tenders are reported; royalty disputes are litigated in the open.
-        return new SectorCoverageProfile(
-            baseVisibility: 0.30,
-            errorStdDev: 0.05,
-            minVisibility: 0.10,
-            eventBaseVisibility: 0.85,
-            eventMinVisibility: 0.50,
-        );
-    }
+    // --- Analyst Coverage ---
+    // Carrier capex guidance is public and vendor tenders are reported; royalty disputes are litigated in the open.
+    /** Share of routine shocks analysts see (30%). */
+    public const BASE_COVERAGE_VISIBILITY = 0.30;
+    /** Standard deviation of the consensus forecast error (0.05). */
+    public const BASE_COVERAGE_ERROR = 0.05;
+    /** Floor on routine visibility (10%). */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.10;
+    /** Visibility of a quarter with an announced event (85%). */
+    public const EVENT_BASE_VISIBILITY = 0.85;
+    /** Floor on visibility in an announced-event quarter (50%). */
+    public const EVENT_MIN_VISIBILITY = 0.50;
 
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in

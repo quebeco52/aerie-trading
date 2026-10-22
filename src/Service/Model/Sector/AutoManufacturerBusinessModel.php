@@ -7,7 +7,6 @@ namespace App\Service\Model\Sector;
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
 
-use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -126,16 +125,12 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Minimum visibility floor for analyst consensus models. */
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.20;
 
-    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
-    {
-        return new SectorCoverageProfile(
-            baseVisibility: self::BASE_COVERAGE_VISIBILITY,
-            errorStdDev: self::BASE_COVERAGE_ERROR,
-            minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
-            eventBaseVisibility: 0.80,
-            eventMinVisibility: 0.40,
-        );
-    }
+    // --- Analyst Coverage ---
+    // Recalls and strikes make the national news.
+    /** Visibility of a quarter with an announced event (80%). */
+    public const EVENT_BASE_VISIBILITY = 0.80;
+    /** Floor on visibility in an announced-event quarter (40%). */
+    public const EVENT_MIN_VISIBILITY = 0.40;
 
     // --- Tri-Stream Automotive Architecture ---
     /** Baseline fraction of revenue derived from mass-market consumer vehicle manufacturing. */

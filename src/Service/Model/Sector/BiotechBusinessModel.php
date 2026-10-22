@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -898,19 +897,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-        );
-    }
-
-    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
-    {
-        // Dual-mode: FDA/trial announcements are binary public events (85% visible, 70% floor).
-        // Routine operational variance is low-visibility (~20%, 10% floor).
-        return new SectorCoverageProfile(
-            baseVisibility: self::BASE_COVERAGE_VISIBILITY,
-            errorStdDev: self::BASE_COVERAGE_ERROR,
-            minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
-            eventBaseVisibility: self::EVENT_BASE_VISIBILITY,
-            eventMinVisibility: self::EVENT_MIN_VISIBILITY,
         );
     }
 

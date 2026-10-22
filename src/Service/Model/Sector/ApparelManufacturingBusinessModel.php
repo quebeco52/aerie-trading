@@ -7,7 +7,6 @@ namespace App\Service\Model\Sector;
 use App\Data\Macro\InputOutputExposures;
 
 use App\DTO\MacroStateDTO;
-use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -205,16 +204,12 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
-    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
-    {
-        return new SectorCoverageProfile(
-            baseVisibility: self::BASE_COVERAGE_VISIBILITY,
-            errorStdDev: self::BASE_COVERAGE_ERROR,
-            minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
-            eventBaseVisibility: 0.70,
-            eventMinVisibility: 0.40,
-        );
-    }
+    // --- Analyst Coverage ---
+    // Inventory write-downs and brand scandals are reported.
+    /** Visibility of a quarter with an announced event (70%). */
+    public const EVENT_BASE_VISIBILITY = 0.70;
+    /** Floor on visibility in an announced-event quarter (40%). */
+    public const EVENT_MIN_VISIBILITY = 0.40;
 
     // --- Working Capital Intensities ---
     /** Fast inventory turns and instant credit card payments yield low working capital needs for DTC. */

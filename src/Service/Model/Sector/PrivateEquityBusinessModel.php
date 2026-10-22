@@ -464,15 +464,18 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         );
     }
 
-    public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
-    {
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility: 0.20,
-            errorStdDev: 0.05,
-            eventBaseVisibility: 0.85,
-            eventMinVisibility: 0.60,
-        );
-    }
+    // --- Analyst Coverage ---
+    // Portfolio marks are opaque; a missed hurdle or a markdown is announced.
+    /** Share of routine shocks analysts see (20%). */
+    public const BASE_COVERAGE_VISIBILITY = 0.20;
+    /** Standard deviation of the consensus forecast error (0.05). */
+    public const BASE_COVERAGE_ERROR = 0.05;
+    /** Floor on routine visibility (0%). */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.00;
+    /** Visibility of a quarter with an announced event (85%). */
+    public const EVENT_BASE_VISIBILITY = 0.85;
+    /** Floor on visibility in an announced-event quarter (60%). */
+    public const EVENT_MIN_VISIBILITY = 0.60;
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
     {

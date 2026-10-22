@@ -9,7 +9,9 @@ use App\Entity\OptionContract;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Option\OptionPricingEngine;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\OptionPricing;
+use App\Service\Math\StochasticProcesses;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -134,12 +136,12 @@ class OptionPricingEngineTest extends TestCase
 
         $surface = $this->engine->surface($longRunVol, $longRunVol, 1.0, $lambda, $configuredJumpVol, 0.25);
 
-        $own = ['lambda' => $lambda, 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $calibrated['eta_up'], 'eta_down' => $calibrated['eta_down']];
-        $market = MarketEngine::systemicJumpParameters(1.0);
+        $caps = ['cap_up' => FinancialConstants::MAX_JUMP_LOG_RETURN, 'cap_down' => abs(FinancialConstants::MIN_JUMP_LOG_RETURN)];
+        $own = ['lambda' => $lambda, 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $calibrated['eta_up'], 'eta_down' => $calibrated['eta_down']] + $caps;
+        $market = MarketEngine::systemicJumpParameters(1.0) + $caps;
+        $variance = static fn(array $jump): float => $jump['lambda'] * StochasticProcesses::kouTruncatedMoment(2, $jump['p_up'], $jump['eta_up'], $jump['eta_down'], $caps['cap_up'], $caps['cap_down']);
         $expected = OptionPricing::calculateMultiJumpDiffusionShape(
-            max(0.0, (($longRunVol * OptionPricingEngine::OPTION_VARIANCE_RISK_PREMIUM) ** 2)
-                - ($lambda * OptionPricing::calculateKouJumpMoment(2, $own['p_up'], $own['eta_up'], $own['eta_down']))
-                - ($market['lambda'] * OptionPricing::calculateKouJumpMoment(2, $market['p_up'], $market['eta_up'], $market['eta_down']))),
+            max(0.0, (($longRunVol * OptionPricingEngine::OPTION_VARIANCE_RISK_PREMIUM) ** 2) - $variance($own) - $variance($market)),
             [$own, $market],
             0.25,
         );
