@@ -526,4 +526,11 @@ class CreditRiskTest extends TestCase
         $this->assertSame(0.0585, CreditRisk::calculateSteadyStateProvisionRate(0.0585, 0.0, 0.0454), 'no reserve horizon: charge-offs alone');
         $this->assertEqualsWithDelta(0.0585 / (1.0 - (0.0585 * 1.5)), CreditRisk::calculateSteadyStateProvisionRate(0.0585, 1.5, 0.0), 1e-12, 'a book that does not grow funds only the gross-up');
     }
+
+    /** Altman's Z'' weights (1995): 6.56, 3.26, 6.72 and 1.05 on its four ratios. */
+    public function testAltmanZDoublePrimeWeighsItsFourRatios(): void
+    {
+        $this->assertEqualsWithDelta(0.656 + 0.652 + 0.336 + 1.575, CreditRisk::altmanZDoublePrime(0.10, 0.20, 0.05, 1.50), 1e-12);
+        $this->assertSame(0.0, CreditRisk::altmanZDoublePrime(0.0, 0.0, 0.0, 0.0));
+    }
 }

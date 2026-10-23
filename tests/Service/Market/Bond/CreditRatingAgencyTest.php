@@ -417,4 +417,27 @@ class CreditRatingAgencyTest extends TestCase
         $this->assertSame('BB', CreditRatingAgency::adjustedEquityLeverageAnchor(240.0, 100.0));
         $this->assertSame('B', CreditRatingAgency::adjustedEquityLeverageAnchor(240.0, -1.0), 'no tangible equity is highly leveraged');
     }
+
+    /**
+     * The scale reads both ways, an unrecognised rating reads as the BBB a firm opens on, and BBB is the last
+     * investment grade.
+     */
+    public function testTheRatingScaleReadsBothWays(): void
+    {
+        foreach (CreditRatingAgency::RATING_RANKS as $rating => $rank) {
+            $this->assertSame($rank, CreditRatingAgency::rank($rating));
+            $this->assertSame($rating, CreditRatingAgency::ratingAt($rank));
+        }
+        $this->assertSame(CreditRatingAgency::RATING_RANKS['BBB'], CreditRatingAgency::rank('NR'));
+        $this->assertTrue(CreditRatingAgency::isInvestmentGrade('BBB'));
+        $this->assertFalse(CreditRatingAgency::isInvestmentGrade('BB'));
+    }
+
+    /** A score is in distress below the first edge, grey below the second and safe on or above it. */
+    public function testASolvencyScoreFallsInTheZoneItsEdgesSet(): void
+    {
+        $this->assertSame('Distress', CreditRatingAgency::solvencyZone(1.09, CreditRatingAgency::ALTMAN_DISTRESS_THRESHOLD, CreditRatingAgency::ALTMAN_GREY_THRESHOLD));
+        $this->assertSame('Grey', CreditRatingAgency::solvencyZone(1.10, CreditRatingAgency::ALTMAN_DISTRESS_THRESHOLD, CreditRatingAgency::ALTMAN_GREY_THRESHOLD));
+        $this->assertSame('Safe', CreditRatingAgency::solvencyZone(2.60, CreditRatingAgency::ALTMAN_DISTRESS_THRESHOLD, CreditRatingAgency::ALTMAN_GREY_THRESHOLD));
+    }
 }

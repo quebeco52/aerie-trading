@@ -126,13 +126,12 @@ final class NewsDesk
      */
     private static function crossesInvestmentGrade(array $facts): bool
     {
-        $ranks = CreditRatingAgency::RATING_RANKS;
-        $from = $ranks[$facts['from'] ?? ''] ?? null;
-        $to = $ranks[$facts['to'] ?? ''] ?? null;
-        if ($from === null || $to === null) {
+        $from = $facts['from'] ?? null;
+        $to = $facts['to'] ?? null;
+        if (!is_string($from) || !is_string($to) || !isset(CreditRatingAgency::RATING_RANKS[$from], CreditRatingAgency::RATING_RANKS[$to])) {
             return false;
         }
 
-        return ($from >= $ranks['BBB']) !== ($to >= $ranks['BBB']);
+        return CreditRatingAgency::isInvestmentGrade($from) !== CreditRatingAgency::isInvestmentGrade($to);
     }
 }

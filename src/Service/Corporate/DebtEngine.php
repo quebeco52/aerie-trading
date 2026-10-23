@@ -64,6 +64,8 @@ class DebtEngine
      * Horizon the structural default model is struck on; 5 years is the standard tenor for corporate credit spreads.
      */
     private const MERTON_HORIZON_YEARS = 5.0;
+    /** The distance to default a firm that owes nothing is rated at: the top of the scale, past AAA's bracket. */
+    private const DEBT_FREE_DISTANCE_TO_DEFAULT = 10.0;
     /**
      * Floor on the asset volatility the Merton model is struck at; below it a distance to default stops meaning
      * anything.
@@ -185,21 +187,9 @@ class DebtEngine
         }
 
         $debt = (float) $stock->getTotalDebt();
-        $netDebt = $debt > 0.0 ? max(0.0, $strategy->getNetDebtCapital($debt, (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury())) : 0.0;
-        // A firm that owes nothing stands at the top of the distance-to-default scale.
-        $distanceToDefault = $debt > 0.0 ? $this->resolveDistanceToDefault($stock, $macroState) : 10.0;
-
         $oldRating = $stock->getCreditRating();
-        $zScoreData = $this->resolveRatingZScore($stock, $strategy, $operating['ebit'], $operating['revenue']);
-        $anchor = self::leverageAnchor(
-            $stock,
-            $strategy,
-            $netDebt,
-            $operating['ebitda'],
-            $this->recordRatedLeverage($stock, $netDebt, $operating['ebitda']),
-            self::baseCaseLeverage($stock, $netDebt, $operating['revenue'], $operating['depreciation']),
-        );
-        $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone'], $anchor);
+        $inputs = $this->ratingInputs($stock, $macroState, $strategy, $operating, recordsLeverage: true);
+        $newRating = $this->creditRatingAgency->evaluateRating($stock, $inputs['distance_to_default'], $inputs['z_score'], $inputs['zone'], $inputs['anchor']);
         if ($newRating === null || $this->marketEventPublisher === null) {
             return;
         }
@@ -210,6 +200,35 @@ class DebtEngine
             : sprintf('Credit rating upgraded from %s to %s following balance sheet strengthening.', $oldRating, $newRating);
         // No move on the card: a rating change has no price channel of its own, and a fixed figure would be invented.
         $this->marketEventPublisher->publish($stock, $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE', $desc, null, ['from' => $oldRating, 'to' => $newRating]);
+    }
+
+    /**
+     * What the agency rates a firm on: its distance to default (the top of the scale when it owes nothing), its
+     * solvency score and the anchor its leverage sets. A quarterly review records the leverage it reads on the
+     * operating history and anchors on the time-weighted years and the base case; a firm with no rating history yet
+     * is anchored on its figures alone.
+     *
+     * @param array{revenue: float, ebit: float, depreciation: float, ebitda: float} $operating
+     * @return array{distance_to_default: float, z_score: float|null, zone: string|null, anchor: string}
+     */
+    private function ratingInputs(Stock $stock, MacroStateDTO $macroState, \App\Service\Model\BusinessModelInterface $strategy, array $operating, bool $recordsLeverage): array
+    {
+        $debt = (float) $stock->getTotalDebt();
+        $netDebt = $debt > 0.0 ? max(0.0, $strategy->getNetDebtCapital($debt, (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury())) : 0.0;
+        $distanceToDefault = $debt > 0.0 ? $this->resolveDistanceToDefault($stock, $macroState) : self::DEBT_FREE_DISTANCE_TO_DEFAULT;
+        $zScoreData = $this->resolveRatingZScore($stock, $strategy, $operating['ebit'], $operating['revenue']);
+        $anchor = $recordsLeverage
+            ? self::leverageAnchor(
+                $stock,
+                $strategy,
+                $netDebt,
+                $operating['ebitda'],
+                $this->recordRatedLeverage($stock, $netDebt, $operating['ebitda']),
+                self::baseCaseLeverage($stock, $netDebt, $operating['revenue'], $operating['depreciation']),
+            )
+            : self::leverageAnchor($stock, $strategy, $netDebt, $operating['ebitda']);
+
+        return ['distance_to_default' => $distanceToDefault, 'z_score' => $zScoreData['z_score'], 'zone' => $zScoreData['zone'], 'anchor' => $anchor];
     }
 
     /**
@@ -303,9 +322,7 @@ class DebtEngine
     /** The credit index a rating class trades off: IG for an investment-grade rating, HY below it. */
     private static function resolveMarketIndexSpread(string $rating, MacroStateDTO $macroState): float
     {
-        $ranks = CreditRatingAgency::RATING_RANKS;
-
-        return ($ranks[$rating] ?? $ranks['BBB']) >= $ranks['BBB'] ? $macroState->macroCreditSpreadEma : $macroState->highYieldCreditSpreadEma;
+        return CreditRatingAgency::isInvestmentGrade($rating) ? $macroState->macroCreditSpreadEma : $macroState->highYieldCreditSpreadEma;
     }
 
     /**
@@ -409,17 +426,10 @@ class DebtEngine
 
         $opening = $stock->getCreditRating();
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
-        $revenue = (float) $stock->getTotalRevenue();
-        $ebit = $revenue * (float) $stock->getOperatingMargin();
-        $ebitda = $ebit + max(0.0, $strategy->getDepreciableBase($stock)) * $this->resolveDepreciationRate($stock);
-        $debt = (float) $stock->getTotalDebt();
-        $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, (float) $stock->getWholesaleDebt(), (float) $stock->getCorporateTreasury()));
-        $distanceToDefault = $debt > 0.0 ? $this->resolveDistanceToDefault($stock, $macroState) : 10.0;
-        $zScoreData = $this->resolveRatingZScore($stock, $strategy, $ebit, $revenue);
-        $anchor = self::leverageAnchor($stock, $strategy, $netDebt, $ebitda);
+        $inputs = $this->ratingInputs($stock, $macroState, $strategy, $this->resolveOperatingFigures($stock, $macroState, $strategy, null, null), recordsLeverage: false);
 
         for ($review = 0; $review < count(CreditRatingAgency::RATING_RANKS); $review++) {
-            if ($this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score'], $zScoreData['zone'], $anchor) === null) {
+            if ($this->creditRatingAgency->evaluateRating($stock, $inputs['distance_to_default'], $inputs['z_score'], $inputs['zone'], $inputs['anchor']) === null) {
                 break;
             }
         }
@@ -439,12 +449,13 @@ class DebtEngine
             return $current;
         }
 
-        $ranks = CreditRatingAgency::RATING_RANKS;
-        $rank = min($ranks[$current] ?? $ranks['BBB'], $ranks[$this->creditRatingAgency->convertDistanceToRating($proFormaDistanceToDefault, $current)]);
         $anchor = self::leverageAnchor($stock, \App\Data\Company\Sectors::strategyFor($stock->getIndustry()), $proFormaNetDebt, $proFormaEbitda);
-        $rank = min($rank, $ranks[$anchor] ?? $rank);
 
-        return array_flip($ranks)[$rank];
+        return CreditRatingAgency::ratingAt(min(
+            CreditRatingAgency::rank($current),
+            CreditRatingAgency::rank($this->creditRatingAgency->convertDistanceToRating($proFormaDistanceToDefault, $current)),
+            CreditRatingAgency::rank($anchor),
+        ));
     }
 
     /**
@@ -964,21 +975,10 @@ class DebtEngine
             // Convert to percentage points (e.g., 8% capital = 8.0 score)
             $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0));
 
-            $distressThreshold = $strategy->getDistressEquityThreshold();
-            $warningThreshold = $strategy->getWarningEquityThreshold();
-            $bankruptThreshold = $strategy->getBankruptEquityThreshold();
-
-            $zone = 'Safe';
-            if ($zScore < $distressThreshold) {
-                $zone = 'Distress';
-            } elseif ($zScore < $warningThreshold) {
-                $zone = 'Grey';
-            }
-
             return [
                 'z_score' => $zScore,
-                'zone' => $zone,
-                'is_bankrupt' => $zScore < $bankruptThreshold,
+                'zone' => CreditRatingAgency::solvencyZone($zScore, $strategy->getDistressEquityThreshold(), $strategy->getWarningEquityThreshold()),
+                'is_bankrupt' => $zScore < $strategy->getBankruptEquityThreshold(),
             ];
         }
 
@@ -999,31 +999,19 @@ class DebtEngine
             $workingCapital = $treasury - $currentLiabilities;
         }
 
-        // The 4 Z''-Score Ratios (X5 Revenue/Assets is removed for non-manufacturing). Z'' (Altman 1995) replaced
-        // the 1968 model's market equity with BOOK equity over total liabilities, which is what its 6.56/3.26/
-        // 6.72/1.05 weights and 1.10/2.60 cut-offs were fitted on; the equity market is already read through the
-        // Merton distance to default.
+        // Z'' reads book equity, not market equity: the equity market is already read through the Merton distance to
+        // default.
         $totalLiabilities = max(0.0, $totalAssets - $equity);
-        $x1 = $workingCapital / $totalAssets;
-        $x2 = $retainedEarnings / $totalAssets;
-        $x3 = $ebit / $totalAssets;
-        $x4 = $totalLiabilities > 0.0 ? ($equity / $totalLiabilities) : self::ALTMAN_X4_UNLEVERED_CAP;
-
-        // The Z''-Score Formula (Modern Service/Tech/Financial Weights)
-        $zScore = (6.56 * $x1) + (3.26 * $x2) + (6.72 * $x3) + (1.05 * $x4);
-        $zScore = max(-100.0, min(100.0, $zScore));
-
-        // Z'' has different threshold thresholds than the 1968 model
-        $zone = 'Safe';
-        if ($zScore < 1.10) {
-            $zone = 'Distress';
-        } elseif ($zScore < 2.60) {
-            $zone = 'Grey';
-        }
+        $zScore = max(-100.0, min(100.0, CreditRisk::altmanZDoublePrime(
+            $workingCapital / $totalAssets,
+            $retainedEarnings / $totalAssets,
+            $ebit / $totalAssets,
+            $totalLiabilities > 0.0 ? ($equity / $totalLiabilities) : self::ALTMAN_X4_UNLEVERED_CAP,
+        )));
 
         return [
             'z_score' => $zScore,
-            'zone' => $zone,
+            'zone' => CreditRatingAgency::solvencyZone($zScore, CreditRatingAgency::ALTMAN_DISTRESS_THRESHOLD, CreditRatingAgency::ALTMAN_GREY_THRESHOLD),
             // A negative Z'' score is a near-mathematical certainty of insolvency
             'is_bankrupt' => $zScore < 0.00,
         ];
@@ -1100,9 +1088,7 @@ class DebtEngine
     {
         $historicalRate = (float) $stock->getHistoricalFixedRate();
         $turnover = max(0.0, min(1.0, $refinancedShare));
-        $isSpeculativeGrade = (CreditRatingAgency::RATING_RANKS[(string) $stock->getCreditRating()] ?? CreditRatingAgency::RATING_RANKS['BBB'])
-            < CreditRatingAgency::RATING_RANKS['BBB'];
-        if ($isSpeculativeGrade && $marketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
+        if (!CreditRatingAgency::isInvestmentGrade($stock->getCreditRating()) && $marketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
             $turnover = max($turnover, self::ACCELERATED_DEBT_TURNOVER);
         }
 
@@ -1231,10 +1217,13 @@ class DebtEngine
             return false;
         }
 
-        $ranks = CreditRatingAgency::RATING_RANKS;
+        return self::meetsRefinancingFloor($stock);
+    }
 
-        return ($ranks[$stock->getCreditRating()] ?? $ranks['BBB'])
-            >= ($ranks[self::REFINANCING_RATING_FLOOR] ?? 1);
+    /** Whether the issuer's rating is at or above the floor the primary market lends to (REFINANCING_RATING_FLOOR). */
+    public static function meetsRefinancingFloor(Stock $stock): bool
+    {
+        return CreditRatingAgency::rank($stock->getCreditRating()) >= CreditRatingAgency::rank(self::REFINANCING_RATING_FLOOR);
     }
 
     /**

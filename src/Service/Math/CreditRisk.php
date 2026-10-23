@@ -62,6 +62,16 @@ final class CreditRisk
     /** Basel II/III consumer asset correlation factor for retail exposures. */
     public const RETAIL_ASRF_RHO = 0.12;
 
+    // --- Altman Z'' (Altman 1995) ---
+    /** Z'' weight on working capital over total assets. */
+    public const ALTMAN_Z2_WORKING_CAPITAL_WEIGHT = 6.56;
+    /** Z'' weight on retained earnings over total assets. */
+    public const ALTMAN_Z2_RETAINED_EARNINGS_WEIGHT = 3.26;
+    /** Z'' weight on EBIT over total assets. */
+    public const ALTMAN_Z2_EBIT_WEIGHT = 6.72;
+    /** Z'' weight on book equity over total liabilities. */
+    public const ALTMAN_Z2_BOOK_EQUITY_WEIGHT = 1.05;
+
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
     /**
      * IG spread widening per unit of interbank stress (~0.6): 2008's +430 bps TED moved IG OAS ~+450 bps. TED reads the
@@ -740,5 +750,18 @@ final class CreditRisk
         }
 
         return $seededSpread / $nearest;
+    }
+
+    /**
+     * Altman's Z'' (1995), the model for non-manufacturers: the 1968 model without sales over assets, and with BOOK
+     * equity over total liabilities in place of market equity, which is what its weights and its 1.10/2.60 zone edges
+     * (CreditRatingAgency::ALTMAN_DISTRESS_THRESHOLD, ALTMAN_GREY_THRESHOLD) were fitted on.
+     */
+    public static function altmanZDoublePrime(float $workingCapitalToAssets, float $retainedEarningsToAssets, float $ebitToAssets, float $bookEquityToLiabilities): float
+    {
+        return (self::ALTMAN_Z2_WORKING_CAPITAL_WEIGHT * $workingCapitalToAssets)
+            + (self::ALTMAN_Z2_RETAINED_EARNINGS_WEIGHT * $retainedEarningsToAssets)
+            + (self::ALTMAN_Z2_EBIT_WEIGHT * $ebitToAssets)
+            + (self::ALTMAN_Z2_BOOK_EQUITY_WEIGHT * $bookEquityToLiabilities);
     }
 }

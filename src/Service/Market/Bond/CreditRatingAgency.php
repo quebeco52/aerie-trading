@@ -109,6 +109,41 @@ class CreditRatingAgency
     ];
 
     /**
+     * The rating's place on the scale, D (0) to AAA (7); one the scale does not hold reads as BBB, the grade a firm
+     * opens on.
+     */
+    public static function rank(string $rating): int
+    {
+        return self::RATING_RANKS[$rating] ?? self::RATING_RANKS['BBB'];
+    }
+
+    /** The rating at a place on the scale. */
+    public static function ratingAt(int $rank): string
+    {
+        return array_flip(self::RATING_RANKS)[$rank];
+    }
+
+    /** Whether the rating is investment grade: BBB or better. */
+    public static function isInvestmentGrade(string $rating): bool
+    {
+        return self::rank($rating) >= self::RATING_RANKS['BBB'];
+    }
+
+    /**
+     * The zone a solvency score falls in against its two edges: Distress below the first, Grey below the second, Safe
+     * above both. Altman's Z'' reads ALTMAN_DISTRESS_THRESHOLD and ALTMAN_GREY_THRESHOLD; a capital ratio its model's
+     * own distress and warning lines.
+     */
+    public static function solvencyZone(float $score, float $distressEdge, float $greyEdge): string
+    {
+        return match (true) {
+            $score < $distressEdge => 'Distress',
+            $score < $greyEdge => 'Grey',
+            default => 'Safe',
+        };
+    }
+
+    /**
      * The Altman zone the rating caps read, with the same hysteresis the grade brackets carry: a firm the zone's cap
      * does not yet bind has to fall past the edge by ALTMAN_ZONE_HYSTERESIS before it does, and one already held at or
      * below the cap has to clear the edge by as much before it lifts. Without it a score sitting on 2.60 capped the
@@ -116,15 +151,13 @@ class CreditRatingAgency
      */
     public static function altmanZoneWithHysteresis(float $zScore, string $currentRating): string
     {
-        $rank = self::RATING_RANKS[$currentRating] ?? self::RATING_RANKS['BBB'];
-        $distressEdge = self::ALTMAN_DISTRESS_THRESHOLD + ($rank > self::RATING_RANKS['CCC'] ? -self::ALTMAN_ZONE_HYSTERESIS : self::ALTMAN_ZONE_HYSTERESIS);
-        $greyEdge = self::ALTMAN_GREY_THRESHOLD + ($rank > self::RATING_RANKS['BB'] ? -self::ALTMAN_ZONE_HYSTERESIS : self::ALTMAN_ZONE_HYSTERESIS);
+        $rank = self::rank($currentRating);
 
-        return match (true) {
-            $zScore < $distressEdge => 'Distress',
-            $zScore < $greyEdge => 'Grey',
-            default => 'Safe',
-        };
+        return self::solvencyZone(
+            $zScore,
+            self::ALTMAN_DISTRESS_THRESHOLD + ($rank > self::RATING_RANKS['CCC'] ? -self::ALTMAN_ZONE_HYSTERESIS : self::ALTMAN_ZONE_HYSTERESIS),
+            self::ALTMAN_GREY_THRESHOLD + ($rank > self::RATING_RANKS['BB'] ? -self::ALTMAN_ZONE_HYSTERESIS : self::ALTMAN_ZONE_HYSTERESIS),
+        );
     }
 
     /**
@@ -158,16 +191,16 @@ class CreditRatingAgency
 
         // 1. Calculate the pure structural rating based on current d2 score
         $targetRating = $this->convertDistanceToRating($distanceToDefault, $oldRating);
-        $targetRank = self::RATING_RANKS[$targetRating] ?? 4;
+        $targetRank = self::rank($targetRating);
 
         // 2. Fundamental & Balance Sheet Solvency Caps
-        $capRank = 7; // AAA default ceiling
+        $capRank = self::RATING_RANKS['AAA'];
 
         // The agencies rate on leverage against the business, or a bank on its country anchor and its capital, not on
         // the equity market: a Merton distance to default reads a low-debt, low-volatility firm as near riskless, so
         // the market-implied grade only ever lowers this.
         if ($leverageAnchor !== null) {
-            $capRank = min($capRank, self::RATING_RANKS[$leverageAnchor] ?? $capRank);
+            $capRank = min($capRank, self::rank($leverageAnchor));
         }
 
         // A company with negative book equity is balance sheet insolvent
@@ -197,8 +230,7 @@ class CreditRatingAgency
         }
 
         $effectiveTargetRank = min($targetRank, $capRank);
-        $flippedRanks = array_flip(self::RATING_RANKS);
-        $effectiveTargetRating = $flippedRanks[$effectiveTargetRank];
+        $effectiveTargetRating = self::ratingAt($effectiveTargetRank);
 
         if ($effectiveTargetRating !== $oldRating) {
             // Severe distress is a statement about the balance sheet, not about where the market-implied
@@ -210,7 +242,7 @@ class CreditRatingAgency
 
             // During fatal distress or insolvency, execute an immediate emergency downgrade
             // rather than artificially maintaining investment-grade ratings via notch damping.
-            if ($isSevereDistress && $effectiveTargetRank < (self::RATING_RANKS[$oldRating] ?? 4)) {
+            if ($isSevereDistress && $effectiveTargetRank < self::rank($oldRating)) {
                 $clampedRating = $effectiveTargetRating;
             } else {
                 $clampedRating = $this->clampRatingTransition($oldRating, $effectiveTargetRating);
@@ -319,7 +351,7 @@ class CreditRatingAgency
      */
     public function convertDistanceToRating(float $distanceToDefault, string $currentRating = 'BBB'): string
     {
-        $currentRank = self::RATING_RANKS[$currentRating] ?? 4; // Assume BBB default if missing
+        $currentRank = self::rank($currentRating);
 
         // Evaluate from top to bottom
         if ($this->qualifiesForBracket($distanceToDefault, self::THRESHOLD_AAA, $currentRank, 7)) {
@@ -371,8 +403,8 @@ class CreditRatingAgency
      */
     private function clampRatingTransition(string $oldRating, string $targetRating): string
     {
-        $oldRank = self::RATING_RANKS[$oldRating] ?? 4;
-        $targetRank = self::RATING_RANKS[$targetRating] ?? 4;
+        $oldRank = self::rank($oldRating);
+        $targetRank = self::rank($targetRating);
 
         // If target is more than 1 rank away, clamp it.
         if ($targetRank > $oldRank + 1) {
@@ -383,9 +415,7 @@ class CreditRatingAgency
             return $targetRating; // Safe 1-notch transition
         }
 
-        // Convert the clamped numeric rank back to a string rating
-        $flippedRanks = array_flip(self::RATING_RANKS);
-        return $flippedRanks[$clampedRank];
+        return self::ratingAt($clampedRank);
     }
 
     /**
@@ -393,9 +423,6 @@ class CreditRatingAgency
      */
     public function isDowngrade(string $oldRating, string $newRating): bool
     {
-        $oldRank = self::RATING_RANKS[$oldRating] ?? 4;
-        $newRank = self::RATING_RANKS[$newRating] ?? 4;
-
-        return $newRank < $oldRank;
+        return self::rank($newRating) < self::rank($oldRating);
     }
 }

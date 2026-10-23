@@ -658,7 +658,7 @@ class DistrictMapBuilder
             return 'ruin';
         }
 
-        $rank = CreditRatingAgency::RATING_RANKS[$stock->getCreditRating()] ?? CreditRatingAgency::RATING_RANKS['BBB'];
+        $rank = CreditRatingAgency::rank($stock->getCreditRating());
 
         return $rank <= DistrictMap::DISTRESSED_RANK ? 'distressed' : 'sound';
     }

@@ -153,9 +153,7 @@ final class CorporateBondDesk
             return false;
         }
 
-        $ranks = CreditRatingAgency::RATING_RANKS;
-
-        if (($ranks[$stock->getCreditRating()] ?? 0) < ($ranks[DebtEngine::REFINANCING_RATING_FLOOR] ?? 1)) {
+        if (!DebtEngine::meetsRefinancingFloor($stock)) {
             return false;
         }
 
