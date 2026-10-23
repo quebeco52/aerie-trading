@@ -8,6 +8,7 @@ use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -27,6 +28,10 @@ use App\Service\Model\ModelParam;
  */
 class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Credit Rating ---
+    /** Invests its own balance sheet: rated on debt to adjusted total equity. */
+    public const RATING_METHODOLOGY = RatingMethodology::BalanceSheetInvestor;
+
     // --- Operating Cyclicality & Demand Structure ---
     /**
      * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Counter-cyclical

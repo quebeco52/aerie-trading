@@ -11,6 +11,7 @@ use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
@@ -142,9 +143,9 @@ trait StandardDebtPhysicsTrait
         return Valuation::calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity);
     }
 
-    public function requiresAlternativeZScore(): bool
+    public function getRatingMethodology(): RatingMethodology
     {
-        return false;
+        return static::RATING_METHODOLOGY;
     }
 
     /**

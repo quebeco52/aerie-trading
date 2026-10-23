@@ -11,6 +11,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -24,6 +25,10 @@ use App\Service\Model\ModelParam;
  */
 class ReitBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Credit Rating ---
+    /** Rated on its capital on undepreciated real estate and S&P's real estate debt-to-EBITDA bands. */
+    public const RATING_METHODOLOGY = RatingMethodology::RealEstate;
+
     // --- Operating Cyclicality & Demand Structure ---
     /**
      * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Contracted leases lag
@@ -525,11 +530,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      * depreciate them.
      */
     public function reportsFundsFromOperations(): bool
-    {
-        return true;
-    }
-
-    public function requiresAlternativeZScore(): bool
     {
         return true;
     }

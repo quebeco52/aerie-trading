@@ -223,7 +223,7 @@ final class StandardDebtPhysicsTraitTest extends TestCase
 
         $this->assertEqualsWithDelta(1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $this->model->getLossGivenDefault(), 1e-12, 'A listed firm\'s notes are senior unsecured.');
         $this->assertSame(FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER, $this->model->getDebtMaturityRolloverRate());
-        $this->assertFalse($this->model->requiresAlternativeZScore(), 'Altman Z applies to a normal balance sheet.');
+        $this->assertFalse($this->model->getRatingMethodology()->scoresSolvencyOnCapital(), 'Altman Z applies to a normal balance sheet.');
         $this->assertFalse($this->model->supportsUnderleveragedDebtExpansion(), 'An operating company recapitalizes by repurchase, not by borrowing into its treasury.');
         $this->assertTrue($this->model->shouldForceDeleveragingOnJunkOrHoarding());
     }

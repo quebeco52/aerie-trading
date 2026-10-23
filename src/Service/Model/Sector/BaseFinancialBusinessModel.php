@@ -7,6 +7,7 @@ namespace App\Service\Model\Sector;
 use App\DTO\DebtCostDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
@@ -22,6 +23,10 @@ use App\Service\Model\ModelParam;
  */
 abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
 {
+    // --- Credit Rating ---
+    /** A financial institution is rated on its capital, not its cash flow; asset managers declare their own. */
+    public const RATING_METHODOLOGY = RatingMethodology::CapitalRated;
+
     // --- Bank Levy (UK Finance Act 2011, Schedule 19; FDIC) ---
     /**
      * Whether the institution is a bank the levy is charged on: deposit-takers and investment banks are; brokers,
@@ -462,11 +467,6 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
         // Banks and Financials inherently price their massive structural leverage into their baseline Beta.
         // Re-levering a bank using the Hamada equation creates a Cost of Equity death spiral!
         return $baseBeta;
-    }
-
-    public function requiresAlternativeZScore(): bool
-    {
-        return true;
     }
 
     public function getAcquisitionType(string $defaultType): string

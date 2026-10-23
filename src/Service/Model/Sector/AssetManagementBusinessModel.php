@@ -11,6 +11,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
@@ -29,6 +30,10 @@ use App\Service\Model\StreamContext;
  */
 class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Credit Rating ---
+    /** Rated on business and financial risk alone, without a solvency score. */
+    public const RATING_METHODOLOGY = RatingMethodology::AssetManager;
+
     // --- Operating Cyclicality & Demand Structure ---
     /**
      * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). AUM and flows amplify

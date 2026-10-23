@@ -14,6 +14,7 @@ use App\EventSubscriber\EarningsReportSubscriber;
 use App\Repository\CorporateReportRepository;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Model\BusinessModelInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -65,6 +66,7 @@ class EarningsReportSubscriberTest extends TestCase
         );
 
         $strategy = $this->createMock(BusinessModelInterface::class);
+        $strategy->method('getRatingMethodology')->willReturn(RatingMethodology::Corporate);
 
         $ctx = new EarningsSimulationContext(
             stock: $stock,
@@ -176,6 +178,7 @@ class EarningsReportSubscriberTest extends TestCase
         $stock->setDeferredTaxLiability('900000.0000');
 
         $strategy = $this->createMock(BusinessModelInterface::class);
+        $strategy->method('getRatingMethodology')->willReturn(RatingMethodology::Corporate);
         $strategy->method('getLeaseIntensity')->willReturn(0.05);
 
         $ctx = new EarningsSimulationContext(
@@ -327,6 +330,7 @@ class EarningsReportSubscriberTest extends TestCase
         // No plant ledger: gross PP&E stays null for a financial model.
 
         $strategy = $this->createMock(BusinessModelInterface::class);
+        $strategy->method('getRatingMethodology')->willReturn(RatingMethodology::Corporate);
         $strategy->method('getLeaseIntensity')->willReturn(0.0);
 
         $ctx = new EarningsSimulationContext(stock: $stock, macroState: new MacroStateDTO(), strategy: $strategy, businessModel: 'commercial_bank');
@@ -370,6 +374,7 @@ class EarningsReportSubscriberTest extends TestCase
         $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
 
         $strategy = $this->createMock(BusinessModelInterface::class);
+        $strategy->method('getRatingMethodology')->willReturn(RatingMethodology::Corporate);
         $strategy->method('getLeaseIntensity')->willReturn(0.0);
         $strategy->method('isFinancial')->willReturn(true);
 
@@ -417,7 +422,7 @@ class EarningsReportSubscriberTest extends TestCase
     {
         $debtEngine = new \App\Service\Corporate\DebtEngine(new \App\Service\Math\MathUtility(), new \App\Service\Corporate\CorporateMetrics());
         $governed = $this->createStub(BusinessModelInterface::class);
-        $governed->method('requiresAlternativeZScore')->willReturn(true);
+        $governed->method('getRatingMethodology')->willReturn(RatingMethodology::CapitalRated);
 
         $carrying = $this->reportCapitalRatio($this->bankWithGoodwill(40000000.0), $governed);
         $writtenOff = $this->reportCapitalRatio($this->bankWithGoodwill(0.0), $governed);
@@ -428,7 +433,9 @@ class EarningsReportSubscriberTest extends TestCase
         $this->assertEqualsWithDelta($writtenOff, $carrying, 1e-4, 'a write-off moves neither side');
         $this->assertLessThan((float) $bank->getTotalEquity() / $bank->getTotalAssets(), $carrying, 'goodwill is not capital');
 
-        $this->assertNull($this->reportCapitalRatio($this->bankWithGoodwill(40000000.0), $this->createStub(BusinessModelInterface::class)));
+        $operating = $this->createStub(BusinessModelInterface::class);
+        $operating->method('getRatingMethodology')->willReturn(RatingMethodology::Corporate);
+        $this->assertNull($this->reportCapitalRatio($this->bankWithGoodwill(40000000.0), $operating));
     }
 
     /** A firm in good standing: the report files its cash yield and cost of equity off this. */
@@ -521,6 +528,7 @@ class EarningsReportSubscriberTest extends TestCase
         );
 
         $strategy = $this->createMock(BusinessModelInterface::class);
+        $strategy->method('getRatingMethodology')->willReturn(RatingMethodology::Corporate);
 
         $ctx = new EarningsSimulationContext(
             stock: $stock,
@@ -612,6 +620,7 @@ class EarningsReportSubscriberTest extends TestCase
         );
 
         $strategy = $this->createMock(BusinessModelInterface::class);
+        $strategy->method('getRatingMethodology')->willReturn(RatingMethodology::Corporate);
 
         $ctx = new EarningsSimulationContext(
             stock: $stock,
@@ -699,6 +708,7 @@ class EarningsReportSubscriberTest extends TestCase
         $stock->setTotalRevenue('40000000.0000');
 
         $strategy = $this->createStub(BusinessModelInterface::class);
+        $strategy->method('getRatingMethodology')->willReturn(RatingMethodology::Corporate);
 
         $ctx = new EarningsSimulationContext(
             stock: $stock,

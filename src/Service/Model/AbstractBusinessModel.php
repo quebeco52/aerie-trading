@@ -7,6 +7,7 @@ namespace App\Service\Model;
 use App\DTO\InterestExpenseDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\Trait\StandardBaseModelTrait;
 use App\Service\Model\Trait\StandardCapitalAllocationTrait;
@@ -132,6 +133,10 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
      * @var float|null
      */
     public const MIN_RECAP_ICR_FLOOR = null;
+
+    // --- Credit Rating ---
+    /** The rating agency's methodology: S&P's corporate one, Altman's Z'' and the standard volatility table. */
+    public const RATING_METHODOLOGY = RatingMethodology::Corporate;
 
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.20 a year). */

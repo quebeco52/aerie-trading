@@ -12,6 +12,7 @@ use App\DTO\DebtMetricsDTO;
 use App\DTO\InterestExpenseDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\MathUtility;
 
 interface DebtStrategyInterface
@@ -47,7 +48,8 @@ interface DebtStrategyInterface
     public function getMarginalCostOfDebt(DebtMetricsDTO $debtMetrics): float;
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float;
     public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, MathUtility $mathUtility): float;
-    public function requiresAlternativeZScore(): bool;
+    /** The rating agency's methodology for the firm: the score its distress caps read and its leverage table. */
+    public function getRatingMethodology(): RatingMethodology;
     /**
      * Client assets the firm holds in custody and keeps segregated from its own estate. They are matched
      * one-for-one by a liability to the client, are bankruptcy-remote (CPMI-IOSCO PFMI Principle 14, EMIR

@@ -180,7 +180,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
 
         // The ratio the regulator closes the firm on (FailureSweep via DebtEngine::calculateAltmanZScore):
         // tangible equity over tangible assets. A firm the capital ratio does not govern discloses none.
-        if ($ctx->strategy->requiresAlternativeZScore()) {
+        if ($ctx->strategy->getRatingMethodology()->scoresSolvencyOnCapital()) {
             $capitalBase = $this->debtEngine->resolveTangibleCapitalBase($stock, (float) $stock->getTotalRevenue());
             $report->setCapitalRatio(Decimal::format($capitalBase['capital'] / $capitalBase['assets'], 4));
         }

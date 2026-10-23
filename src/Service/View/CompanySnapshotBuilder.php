@@ -79,7 +79,7 @@ class CompanySnapshotBuilder
     private function capitalPosition(Stock $stock, string $businessModel, float $price): ?array
     {
         $strategy = Sectors::getBusinessModelStrategy($businessModel);
-        if (!$strategy->requiresAlternativeZScore()) {
+        if (!$strategy->getRatingMethodology()->scoresSolvencyOnCapital()) {
             return null;
         }
 
@@ -112,7 +112,7 @@ class CompanySnapshotBuilder
     private function capitalThresholds(string $businessModel): ?array
     {
         $strategy = Sectors::getBusinessModelStrategy($businessModel);
-        if (!$strategy->requiresAlternativeZScore()) {
+        if (!$strategy->getRatingMethodology()->scoresSolvencyOnCapital()) {
             return null;
         }
 

@@ -84,7 +84,7 @@ class FinancialSummaryBuilder
 
         $tiles = match (true) {
             (float) $report->getEarningAssets() > 0.0 && $strategy->isFinancial() => $this->lenderTiles($report, $strategy instanceof CommercialBankBusinessModel ? $strategy->getLoanShareOfEarningAssets() : null),
-            $strategy->requiresAlternativeZScore() => $this->capitalTiles($report, $strategy instanceof InsuranceBusinessModel),
+            $strategy->getRatingMethodology()->scoresSolvencyOnCapital() => $this->capitalTiles($report, $strategy instanceof InsuranceBusinessModel),
             default => $this->operatingTiles($report),
         };
 

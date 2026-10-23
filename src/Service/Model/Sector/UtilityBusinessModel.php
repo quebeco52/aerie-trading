@@ -10,6 +10,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
@@ -35,6 +36,10 @@ use App\Service\Model\StreamContext;
  */
 class UtilityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Credit Rating ---
+    /** Rated without Z'', on an excellent business risk and the medial volatility table. */
+    public const RATING_METHODOLOGY = RatingMethodology::RegulatedUtility;
+
     // --- Operating Cyclicality & Demand Structure ---
     /**
      * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Essential service

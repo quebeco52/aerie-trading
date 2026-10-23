@@ -7,6 +7,7 @@ namespace App\Service\Corporate;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Market\Bond\CreditRatingAgency;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
@@ -906,7 +907,7 @@ class DebtEngine
         // A REIT's leverage is measured on its undepreciated real estate, as its bond covenants cap total debt against
         // total undepreciated assets: distributing past book income runs book equity down by the depreciation charge,
         // so on book a sound trust drifted through its warning and failure floors.
-        $undepreciation = $strategy instanceof \App\Service\Model\Sector\ReitBusinessModel ? max(0.0, (float) $stock->getAccumulatedDepreciation()) : 0.0;
+        $undepreciation = $strategy->getRatingMethodology() === RatingMethodology::RealEstate ? max(0.0, (float) $stock->getAccumulatedDepreciation()) : 0.0;
 
         return [
             'capital' => $stock->getTangibleEquity() + $undepreciation,
@@ -940,7 +941,7 @@ class DebtEngine
         // Accounting Proxy: Assets = Liabilities + Equity
         $totalAssets = max(1.0, $equity + $debt);
 
-        if ($strategy->requiresAlternativeZScore()) {
+        if ($strategy->getRatingMethodology()->scoresSolvencyOnCapital()) {
             $capitalBase = $this->resolveTangibleCapitalBase($stock, $revenue);
             $capitalRatio = $capitalBase['capital'] / $capitalBase['assets'];
             // Convert to percentage points (e.g., 8% capital = 8.0 score)
@@ -1092,33 +1093,20 @@ class DebtEngine
     }
 
     /**
-     * A lender, an insurer, or any institution steering to a capital ratio, is underwritten and rated on its capital,
-     * not its cash flow.
-     */
-    private static function isUnderwrittenOnCapital(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy): bool
-    {
-        return $strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
-            || $strategy instanceof \App\Service\Model\Sector\InsuranceBusinessModel
-            || $strategy->getTargetCapitalRatio($stock) !== null;
-    }
-
-    /**
-     * The score the agency's distress caps read: the Altman Z'' (or a financial's capital ratio in its place), except
-     * for an asset manager, which S&P rates on the corporate methodology's business and financial risk alone ("Key
-     * Credit Factors For Asset Managers", 2014), and a rate-regulated utility, which it rates on its excellent
-     * business risk and the medial volatility table. Altman's samples held neither financials nor regulated utilities,
-     * and a utility's thin asset turnover scores it grey however safe its rate base.
+     * The score the agency's distress caps read: the Altman Z'' or, for a firm whose solvency is scored on its capital,
+     * its capital ratio; none where the firm's methodology caps on no score (RatingMethodology::capsOnSolvencyScore()).
      *
      * @return array{z_score: float|null, zone: string|null, is_bankrupt?: bool}
      */
     private function resolveRatingZScore(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $ebit, float $revenue): array
     {
-        if ($strategy instanceof \App\Service\Model\Sector\AssetManagementBusinessModel || $strategy instanceof \App\Service\Model\Sector\UtilityBusinessModel) {
+        $methodology = $strategy->getRatingMethodology();
+        if (!$methodology->capsOnSolvencyScore()) {
             return ['z_score' => null, 'zone' => null];
         }
 
         $scored = $this->calculateAltmanZScore($stock, $ebit, $revenue);
-        if ($strategy->requiresAlternativeZScore()) {
+        if ($methodology->scoresSolvencyOnCapital()) {
             return $scored;
         }
 
@@ -1130,52 +1118,37 @@ class DebtEngine
     }
 
     /**
-     * An asset manager investing its own balance sheet (S&P's hybrid model): private equity, a hedge fund, a
-     * distressed-debt investor.
-     */
-    private static function investsItsBalanceSheet(\App\Service\Model\BusinessModelInterface $strategy): bool
-    {
-        return $strategy instanceof \App\Service\Model\Sector\PrivateEquityBusinessModel
-            || $strategy instanceof \App\Service\Model\Sector\HedgeFundBusinessModel
-            || $strategy instanceof \App\Service\Model\Sector\DistressedDebtBusinessModel;
-    }
-
-    /**
-     * The ceiling on a firm's rating before its market-implied grade: for an operating firm the one its leverage sets
-     * (CreditRatingAgency::financialRiskAnchor()), on S&P's real estate bands for a REIT; for an asset manager
-     * investing its balance sheet, debt to adjusted total equity (adjustedEquityLeverageAnchor()); for an institution
-     * rated on its capital the bank methodology's (CreditRatingAgency::CAPITAL_RATED_RATING_CEILING). A rate-regulated
-     * utility carries S&P's excellent business risk profile, read on the medial volatility table. Debt to EBITDA is
-     * rated on S&P's time-weighted years (CreditRatingAgency::timeWeightedLeverage()) when the review has them,
-     * $ratedQuarters and the $baseCase forecast, else on the figures given; a pro-forma deal is rated on its own year,
-     * as S&P weights a transformational event.
+     * The ceiling on a firm's rating before its market-implied grade, read off its RatingMethodology: for an operating
+     * firm the one its leverage sets (CreditRatingAgency::financialRiskAnchor()), on S&P's real estate bands for a
+     * REIT; for an asset manager investing its balance sheet, debt to adjusted total equity
+     * (adjustedEquityLeverageAnchor()); for an institution rated on its capital the bank methodology's
+     * (CreditRatingAgency::CAPITAL_RATED_RATING_CEILING). A rate-regulated utility carries S&P's excellent business
+     * risk profile, read on the medial volatility table. Debt to EBITDA is rated on S&P's time-weighted years
+     * (CreditRatingAgency::timeWeightedLeverage()) when the review has them, $ratedQuarters and the $baseCase forecast,
+     * else on the figures given; a pro-forma deal is rated on its own year, as S&P weights a transformational event.
      *
      * @param list<array{net_debt: float, ebitda: float}> $ratedQuarters Reviews' net debt and EBITDA, newest first.
      * @param array{net_debt: float, ebitda: float}|null $baseCase The forecast years (baseCaseLeverage()).
      */
     private static function leverageAnchor(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, float $netDebt, float $ebitda, array $ratedQuarters = [], ?array $baseCase = null): string
     {
-        if (self::isUnderwrittenOnCapital($stock, $strategy)) {
+        $methodology = $strategy->getRatingMethodology();
+        if ($methodology === RatingMethodology::CapitalRated) {
             return CreditRatingAgency::CAPITAL_RATED_RATING_CEILING;
         }
-        if (self::investsItsBalanceSheet($strategy)) {
+        if ($methodology === RatingMethodology::BalanceSheetInvestor) {
             return CreditRatingAgency::adjustedEquityLeverageAnchor($netDebt, $stock->getTangibleEquity());
         }
 
         $basis = $ratedQuarters !== []
             ? CreditRatingAgency::timeWeightedLeverage($ratedQuarters, $baseCase)
             : ['net_debt' => $netDebt, 'ebitda' => $ebitda];
-        if ($strategy instanceof \App\Service\Model\Sector\ReitBusinessModel) {
-            return CreditRatingAgency::financialRiskAnchor($basis['net_debt'], $basis['ebitda'], false, CreditRatingAgency::REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS);
-        }
-        $isUtility = $strategy instanceof \App\Service\Model\Sector\UtilityBusinessModel;
 
-        return CreditRatingAgency::financialRiskAnchor(
-            $basis['net_debt'],
-            $basis['ebitda'],
-            $isUtility,
-            $isUtility ? CreditRatingAgency::MEDIAL_VOLATILITY_DEBT_TO_EBITDA_BOUNDS : CreditRatingAgency::FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS,
-        );
+        return match ($methodology) {
+            RatingMethodology::RealEstate => CreditRatingAgency::financialRiskAnchor($basis['net_debt'], $basis['ebitda'], false, CreditRatingAgency::REAL_ESTATE_DEBT_TO_EBITDA_BOUNDS),
+            RatingMethodology::RegulatedUtility => CreditRatingAgency::financialRiskAnchor($basis['net_debt'], $basis['ebitda'], true, CreditRatingAgency::MEDIAL_VOLATILITY_DEBT_TO_EBITDA_BOUNDS),
+            RatingMethodology::Corporate, RatingMethodology::AssetManager => CreditRatingAgency::financialRiskAnchor($basis['net_debt'], $basis['ebitda'], false, CreditRatingAgency::FINANCIAL_RISK_DEBT_TO_EBITDA_BOUNDS),
+        };
     }
 
     /**
@@ -1237,7 +1210,7 @@ class DebtEngine
         // expense is its cost of goods, and a provisioning quarter is not a missed coupon. Its rating reads the
         // capital.
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
-        if (!self::isUnderwrittenOnCapital($stock, $strategy) && $interestCoverage < self::REFINANCING_MIN_COVERAGE) {
+        if ($strategy->getRatingMethodology() !== RatingMethodology::CapitalRated && $interestCoverage < self::REFINANCING_MIN_COVERAGE) {
             return false;
         }
 

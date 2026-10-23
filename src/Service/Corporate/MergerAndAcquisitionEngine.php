@@ -553,7 +553,7 @@ class MergerAndAcquisitionEngine
      */
     private function resolveLargestCapitalClearedDeal(AcquisitionContext $ctx): float
     {
-        if (!$ctx->strategy->requiresAlternativeZScore() || ($ctx->config['use_stock'] ?? false)) {
+        if (!$ctx->strategy->getRatingMethodology()->scoresSolvencyOnCapital() || ($ctx->config['use_stock'] ?? false)) {
             return INF;
         }
 

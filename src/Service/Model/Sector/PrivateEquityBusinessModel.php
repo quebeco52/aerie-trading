@@ -10,6 +10,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\Distributions;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -29,6 +30,10 @@ use App\Service\Model\ModelParam;
  */
 class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Credit Rating ---
+    /** Invests its own balance sheet: rated on debt to adjusted total equity. */
+    public const RATING_METHODOLOGY = RatingMethodology::BalanceSheetInvestor;
+
     // --- Operating Cyclicality & Demand Structure ---
     /**
      * Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Exit windows and LBO

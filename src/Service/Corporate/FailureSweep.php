@@ -92,7 +92,7 @@ class FailureSweep
         $isAccelerated = $stock->isPaymentDefault()
             && $stock->getQuartersInDefault() > \App\Service\Math\FinancialConstants::PAYMENT_DEFAULT_GRACE_QUARTERS;
 
-        if ($strategy->requiresAlternativeZScore()) {
+        if ($strategy->getRatingMethodology()->scoresSolvencyOnCapital()) {
             // The alternative score is a capital ratio; operating income does not enter it.
             $revenue = (float) $stock->getTotalRevenue();
             $margin = $stock->getReportedOperatingMargin() ?? (float) $stock->getOperatingMargin();
