@@ -41,18 +41,25 @@ class NarrativeEngineTest extends TestCase
     public function testGenerateLoreWithEmptyContextHandlesFallbacksGracefully(): void
     {
         $loreBankRun = $this->engine->generateLore(ShockEvent::BANK_RUN, []);
-        $this->assertStringContainsString('$0.00B', $loreBankRun);
+        $this->assertStringContainsString('$0.00 ', $loreBankRun);
 
         $loreFlight = $this->engine->generateLore(ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, []);
-        $this->assertStringContainsString('$0.00B', $loreFlight);
+        $this->assertStringContainsString('$0.00 ', $loreFlight);
 
         $loreDeposits = $this->engine->generateLore(ShockEvent::CAPTURED_NEW_DEPOSITS, []);
-        $this->assertStringContainsString('$0.00B', $loreDeposits);
+        $this->assertStringContainsString('$0.00 ', $loreDeposits);
+    }
+
+    /** An amount arrives in dollars and is quoted at its own scale: a $4.2M run does not read as "$0.00B". */
+    public function testAStoryQuotesASmallAmountInMillions(): void
+    {
+        $this->assertStringContainsString('$4.20M', $this->engine->generateLore(ShockEvent::BANK_RUN, ['amount' => 4.2e6]));
+        $this->assertStringContainsString('$1.25B', $this->engine->generateLore(ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, ['amount' => 1.25e9]));
     }
 
     public function testGenerateLoreWithCustomContextInterpolation(): void
     {
-        $lore = $this->engine->generateLore(ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, ['amount' => '4.20']);
+        $lore = $this->engine->generateLore(ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, ['amount' => 4.2e9]);
         $this->assertStringContainsString('$4.20B', $lore);
     }
 

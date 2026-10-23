@@ -23,6 +23,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Model\ModelParam;
 use App\Service\Model\StreamContext;
+use App\Service\News\WireFormat;
 
 /**
  * Earnings strategy for Insurance companies.
@@ -1439,8 +1440,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             $liquidityShortfall = abs($state['treasury']);
             $state['treasury'] = 0.0;
             $state['wholesaleDebt'] += $liquidityShortfall;
-            $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-            $state['events'][] = ['description' => "Claim payouts exceeded cash reserves. Forced to borrow \${$amtB}B."];
+            $amount = WireFormat::money($liquidityShortfall);
+            $state['events'][] = ['description' => "Claim payouts exceeded cash reserves. Forced to borrow {$amount}."];
         }
 
         $stock->setCustomerDeposits((string) $closing);

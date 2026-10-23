@@ -12,6 +12,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
+use App\Service\News\WireFormat;
 
 /**
  * Service responsible for returning cash to shareholders.
@@ -262,7 +263,7 @@ class CapitalAllocationEngine
 
             if (TreasuryEngine::isNewsworthy($ctx->stock, $distributionShortfall)) {
                 $purpose = $requiredDividend >= $heldDividend ? 'its required REIT distribution' : 'its dividend';
-                $ctx->events[] = ['description' => "Borrowed \$" . number_format($distributionShortfall / 1_000_000_000, 2) . "B to fund {$purpose}.", 'shock' => 0.0];
+                $ctx->events[] = ['description' => 'Borrowed ' . WireFormat::money($distributionShortfall) . " to fund {$purpose}.", 'shock' => 0.0];
             }
         }
 
@@ -303,10 +304,9 @@ class CapitalAllocationEngine
 
             $stock->setLastDividend((string) $ctx->newDividend);
             $yield = (($ctx->newDividend * 4) / max($ctx->currentPrice, 0.01)) * 100;
-            $totalPaidStr = $ctx->totalPaid >= 1_000_000_000 ? number_format($ctx->totalPaid / 1_000_000_000, 2) . 'B' : number_format($ctx->totalPaid / 1_000_000, 2) . 'M';
 
             $ctx->events[] = [
-                'description' => "Paid $" . number_format($ctx->newDividend, 2) . "/share div (\${$totalPaidStr} total, " . number_format($yield, 2) . "% yield).",
+                'description' => "Paid $" . number_format($ctx->newDividend, 2) . '/share div (' . WireFormat::money($ctx->totalPaid) . ' total, ' . number_format($yield, 2) . "% yield).",
                 'shock' => 0.0,
                 'fact' => ['kind' => 'dividend', 'perShare' => $ctx->newDividend, 'yield' => $yield / 100],
             ];
@@ -672,7 +672,7 @@ class CapitalAllocationEngine
 
             if (TreasuryEngine::isNewsworthy($ctx->stock, $borrowing)) {
                 $ctx->events[] = [
-                    'description' => "Issued \$" . number_format($borrowing / 1_000_000_000, 2) . "B in bonds for recapitalization.",
+                    'description' => 'Issued ' . WireFormat::money($borrowing) . ' in bonds for recapitalization.',
                     'fact' => ['kind' => 'bonds', 'amount' => $borrowing, 'purpose' => 'recapitalization'],
                 ];
             }

@@ -16,6 +16,7 @@ use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
+use App\Service\News\WireFormat;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -1577,7 +1578,7 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $loss = $retainedBefore - (float) $stock->getRetainedEarnings();
         $this->assertGreaterThan(0.0, $loss, 'a fire sale below book is a loss');
-        $this->assertStringContainsString('booking a $' . number_format($loss / 1_000_000_000, 1) . 'B loss on sale', (string) $published);
+        $this->assertStringContainsString('booking a ' . WireFormat::money($loss) . ' loss on sale', (string) $published);
         $this->assertStringNotContainsString('$-', (string) $published);
     }
 

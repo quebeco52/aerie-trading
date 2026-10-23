@@ -12,6 +12,9 @@ class NarrativeEngine
 {
     public function generateLore(string $eventType, array $context = []): string
     {
+        // A dollar amount the story quotes, passed in dollars.
+        $amount = WireFormat::money((float) ($context['amount'] ?? 0.0));
+
         return match ($eventType) {
             ShockEvent::VIRAL_GROWTH => $this->getRandomPhrase([
                 "Achieved viral product-market fit with a major new software breakthrough.",
@@ -19,9 +22,9 @@ class NarrativeEngine
                 "Captured massive market attention following a breakthrough software release.",
             ]),
             ShockEvent::GOODWILL_IMPAIRMENT => $this->getRandomPhrase([
-                "Booked a \$" . ($context['amount'] ?? '0.00') . "B non-cash goodwill impairment after the annual test found acquired businesses earning below their cost of capital.",
-                "Wrote down \$" . ($context['amount'] ?? '0.00') . "B of acquisition goodwill, conceding that past deals are not earning their keep.",
-                "Took a \$" . ($context['amount'] ?? '0.00') . "B goodwill charge as returns on acquired capital fell short of the hurdle rate.",
+                "Booked a {$amount} non-cash goodwill impairment after the annual test found acquired businesses earning below their cost of capital.",
+                "Wrote down {$amount} of acquisition goodwill, conceding that past deals are not earning their keep.",
+                "Took a {$amount} goodwill charge as returns on acquired capital fell short of the hurdle rate.",
             ]),
             ShockEvent::REGULATORY_FINE => $this->getRandomPhrase([
                 "Suffered a massive anti-trust fine and sweeping data privacy restrictions.",
@@ -34,9 +37,9 @@ class NarrativeEngine
                 "Reported a steep drop in active users following negative product reception.",
             ]),
             ShockEvent::BANK_RUN => $this->getRandomPhrase([
-                "Suffered a bank run. Forced into emergency borrowing of \$" . ($context['amount'] ?? '0.00') . "B to cover deposit flight.",
-                "Faced a sudden liquidity crisis as depositors withdrew \$" . ($context['amount'] ?? '0.00') . "B in a panic.",
-                "Experienced severe capital flight requiring a \$" . ($context['amount'] ?? '0.00') . "B emergency liquidity injection.",
+                "Suffered a bank run. Forced into emergency borrowing of {$amount} to cover deposit flight.",
+                "Faced a sudden liquidity crisis as depositors withdrew {$amount} in a panic.",
+                "Experienced severe capital flight requiring a {$amount} emergency liquidity injection.",
             ]),
             ShockEvent::CAPITAL_BELOW_MINIMUM => $this->getRandomPhrase([
                 "Fell below the minimum capital requirement. The " . Institutions::FINANCIAL_REGULATOR . " barred dividends and buybacks and ordered a capital plan.",
@@ -54,14 +57,14 @@ class NarrativeEngine
                 "Reported higher than expected non-performing loans this quarter.",
             ]),
             ShockEvent::CUSTOMER_DEPOSIT_FLIGHT => $this->getRandomPhrase([
-                "Suffered \$" . ($context['amount'] ?? '0.00') . "B in customer deposit flight.",
-                "Depositors fled, draining \$" . ($context['amount'] ?? '0.00') . "B from the balance sheet.",
-                "Experienced a capital outflow of \$" . ($context['amount'] ?? '0.00') . "B to higher-yielding funds.",
+                "Suffered {$amount} in customer deposit flight.",
+                "Depositors fled, draining {$amount} from the balance sheet.",
+                "Experienced a capital outflow of {$amount} to higher-yielding funds.",
             ]),
             ShockEvent::CAPTURED_NEW_DEPOSITS => $this->getRandomPhrase([
-                "Captured \$" . ($context['amount'] ?? '0.00') . "B in new customer deposits.",
-                "Attracted \$" . ($context['amount'] ?? '0.00') . "B in fresh deposit inflows from competitors.",
-                "Saw a surge in safety-seeking capital, adding \$" . ($context['amount'] ?? '0.00') . "B in deposits.",
+                "Captured {$amount} in new customer deposits.",
+                "Attracted {$amount} in fresh deposit inflows from competitors.",
+                "Saw a surge in safety-seeking capital, adding {$amount} in deposits.",
             ]),
 
             ShockEvent::VOLATILITY_SURGE => $this->getRandomPhrase([

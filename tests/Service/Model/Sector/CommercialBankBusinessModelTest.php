@@ -1261,7 +1261,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertLessThan(0.0, $outflow['change']);
         $flight = array_values(array_filter($outflow['events'], static fn(array $e): bool => $e['event_type'] === ShockEvent::CUSTOMER_DEPOSIT_FLIGHT));
         $this->assertCount(1, $flight);
-        $this->assertSame(number_format(-$outflow['change'] / 1_000_000_000, 2), $flight[0]['context']['amount']);
+        $this->assertEqualsWithDelta(-$outflow['change'], $flight[0]['context']['amount'], 1e-6);
     }
 
     /** @return array{change: float, events: list<array<string, mixed>>} */

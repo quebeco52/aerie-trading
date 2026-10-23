@@ -24,6 +24,7 @@ use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
 use App\Service\News\MarketEventPublisher;
 use App\Service\News\NarrativeEngine;
+use App\Service\News\WireFormat;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -2723,7 +2724,7 @@ class EarningsEngine
 
         if ($ctx->goodwillImpairment > 0.0) {
             $impairmentLore = $this->narrativeEngine->generateLore(\App\Service\Event\ShockEvent::GOODWILL_IMPAIRMENT, [
-                'amount' => number_format($ctx->goodwillImpairment / 1_000_000_000, 2),
+                'amount' => $ctx->goodwillImpairment,
             ]);
             if ($impairmentLore) {
                 $ctx->corporateActionDescriptions .= "\n• " . $impairmentLore;
@@ -2765,12 +2766,7 @@ class EarningsEngine
         $capital = $ctx->strategy->getPhysicalCapital($stock);
         $ctx->quarterlyEconomicProfit = ($capital * ($ctx->truePostTaxReturn - $ctx->wacc)) / 4.0;
 
-        $evaAbs = abs($ctx->quarterlyEconomicProfit);
-        $formattedEva = $evaAbs >= 1_000_000_000
-            ? '$' . number_format($evaAbs / 1_000_000_000, 2) . 'B'
-            : '$' . number_format($evaAbs / 1_000_000, 2) . 'M';
-
-        $evaString = $ctx->quarterlyEconomicProfit >= 0 ? "+{$formattedEva} EVA" : "-{$formattedEva} EVA";
+        $evaString = WireFormat::money($ctx->quarterlyEconomicProfit, true) . ' EVA';
 
         $money = static fn(float $eps): string => $eps < 0 ? '-$' . number_format(abs($eps), 2) : '$' . number_format($eps, 2);
         // The beat or miss is on adjusted earnings; when special items separate the two, the reported figure follows.

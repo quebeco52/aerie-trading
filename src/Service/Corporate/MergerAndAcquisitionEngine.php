@@ -14,6 +14,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\News\MarketEventPublisher;
+use App\Service\News\WireFormat;
 
 /**
  * Service responsible for executing Mergers and Acquisitions.
@@ -862,21 +863,19 @@ class MergerAndAcquisitionEngine
 
     /**
      * The terms a deal announcement states: how it was paid for, what went to goodwill, and, when a rule
-     * rather than the buyer's appetite set its size, which rule. The first sentence of the announcement is
-     * parsed for the price and type, so it is left alone.
+     * rather than the buyer's appetite set its size, which rule.
      */
     private function describeDealTerms(AcquisitionContext $ctx): string
     {
-        $billions = static fn(float $amount): string => '$' . number_format($amount / 1_000_000_000, 1) . 'B';
         $paidInStock = ($ctx->config['use_stock'] ?? false) ? $ctx->purchasePrice : 0.0;
         $paidInCash = max(0.0, $ctx->purchasePrice - $ctx->debtIssued - $paidInStock);
 
         $funding = array_filter([
-            $paidInCash > 0.0 ? "{$billions($paidInCash)} in cash" : null,
-            $ctx->debtIssued > 0.0 ? "{$billions($ctx->debtIssued)} in new debt" : null,
-            $paidInStock > 0.0 ? "{$billions($paidInStock)} in new shares" : null,
+            $paidInCash > 0.0 ? WireFormat::money($paidInCash) . ' in cash' : null,
+            $ctx->debtIssued > 0.0 ? WireFormat::money($ctx->debtIssued) . ' in new debt' : null,
+            $paidInStock > 0.0 ? WireFormat::money($paidInStock) . ' in new shares' : null,
         ]);
-        $terms = 'Funded with ' . implode(' and ', $funding) . "; {$billions($ctx->goodwillRecorded)} booked as goodwill.";
+        $terms = 'Funded with ' . implode(' and ', $funding) . '; ' . WireFormat::money($ctx->goodwillRecorded) . ' booked as goodwill.';
 
         $sizedByRule = in_array($ctx->bindingLimit, [self::LIMIT_SPEND_CAP, self::LIMIT_AVAILABLE_MARKET, self::LIMIT_MERGER_REVIEW, self::LIMIT_CAPITAL_TEST, self::LIMIT_COVENANT], true);
 
@@ -885,8 +884,8 @@ class MergerAndAcquisitionEngine
 
     private function finalizeAcquisitionEvent(AcquisitionContext $ctx): array
     {
-        $purchasePriceB = number_format($ctx->purchasePrice / 1_000_000_000, 1);
-        $desc = "{$ctx->acquirer->getName()} executed a \${$purchasePriceB}B {$ctx->config['type']} of {$ctx->target['name']}. " . $this->describeDealTerms($ctx);
+        $purchasePrice = WireFormat::money($ctx->purchasePrice);
+        $desc = "{$ctx->acquirer->getName()} executed a {$purchasePrice} {$ctx->config['type']} of {$ctx->target['name']}. " . $this->describeDealTerms($ctx);
 
         // The announcement return is the deal's NPV over the acquirer's market value before it (Moeller,
         // Schlingemann & Stulz 2004 measure acquirer returns in exactly these dollar terms). Limited
@@ -1241,14 +1240,14 @@ class MergerAndAcquisitionEngine
 
     private function finalizeDivestitureEvent(DivestitureContext $ctx): array
     {
-        $salePriceB = number_format($ctx->salePrice / 1_000_000_000, 1);
-        $resultB = number_format(abs($ctx->gainOnSale) / 1_000_000_000, 1);
-        $result = $ctx->gainOnSale >= 0.0 ? "generating a \${$resultB}B gain on sale" : "booking a \${$resultB}B loss on sale";
+        $salePrice = WireFormat::money($ctx->salePrice);
+        $gainOrLoss = WireFormat::money(abs($ctx->gainOnSale));
+        $result = $ctx->gainOnSale >= 0.0 ? "generating a {$gainOrLoss} gain on sale" : "booking a {$gainOrLoss} loss on sale";
         if ($ctx->taxOnSale !== 0.0) {
-            $result .= ' ($' . number_format(abs($ctx->gainOnSale - $ctx->taxOnSale) / 1_000_000_000, 1) . 'B after tax)';
+            $result .= ' (' . WireFormat::money(abs($ctx->gainOnSale - $ctx->taxOnSale)) . ' after tax)';
         }
         $target = $this->generateProceduralTarget();
-        $desc = "{$ctx->seller->getName()} sold its {$target['name']} division for \${$salePriceB}B in cash, {$result}.";
+        $desc = "{$ctx->seller->getName()} sold its {$target['name']} division for {$salePrice} in cash, {$result}.";
 
         // The seller's announcement return is what the sale is worth to its shareholders over their stake. The
         // market already values the division pro rata inside the firm, and the buyer takes its share of the

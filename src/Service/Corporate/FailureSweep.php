@@ -10,6 +10,7 @@ use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Market\Option\OptionSettlementEngine;
 use App\Service\News\MarketEventPublisher;
+use App\Service\News\WireFormat;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\User\CashLedger;
 use Doctrine\ORM\EntityManagerInterface;
@@ -223,11 +224,11 @@ class FailureSweep
         $this->logger->info("REORGANIZATION: {$name} ({$stock->getTicker()}) emerged from Chapter 11.");
 
         $eventDesc = sprintf(
-            '%s (%s) failed to cure an event of default and confirmed a prepackaged Chapter 11 plan: $%sB of debt exchanged for the reorganised equity and $%sB reinstated as new notes.',
+            '%s (%s) failed to cure an event of default and confirmed a prepackaged Chapter 11 plan: %s of debt exchanged for the reorganised equity and %s reinstated as new notes.',
             $name,
             $stock->getTicker(),
-            number_format($plan->convertedClaims / 1_000_000_000, 2),
-            number_format($plan->exitDebt / 1_000_000_000, 2),
+            WireFormat::money($plan->convertedClaims),
+            WireFormat::money($plan->exitDebt),
         );
         $eventDesc .= match (true) {
             $plan->oldEquityShare <= 0.0 => ' The old shares were cancelled and the creditors now own the company.',

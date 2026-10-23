@@ -1169,7 +1169,7 @@ class TreasuryEngineTest extends TestCase
         $this->assertEqualsWithDelta(95_000_000.0, (float) $stock->getRevolverDrawn(), 1.0, 'the waived line funds the maturity');
         $this->assertFalse($stock->isPaymentDefault());
         $this->assertNotContains(
-            'Lenders refused a $0.10B draw on its revolving credit facility while it is in breach of its leverage covenant.',
+            'Lenders refused a $100.00M draw on its revolving credit facility while it is in breach of its leverage covenant.',
             array_column($ctx->events, 'description'),
         );
     }

@@ -13,6 +13,7 @@ use App\Service\Math\Distributions;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
+use App\Service\News\WireFormat;
 
 /**
  * Earnings strategy for Central Counterparty Clearing Houses (CCP).
@@ -404,14 +405,14 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
             $changePct = $liabilityChange / $currentLiabilities;
             if ($changePct < -self::LORE_POOL_CHANGE_THRESHOLD) {
-                $amtB = number_format(abs($liabilityChange) / 1_000_000_000, 2);
+                $amount = WireFormat::money(abs($liabilityChange));
                 $state['events'][] = [
-                    'description' => "Initial margin pool contracted by \${$amtB}B amid declining market volatility.",
+                    'description' => "Initial margin pool contracted by {$amount} amid declining market volatility.",
                 ];
             } elseif ($changePct > self::LORE_POOL_CHANGE_THRESHOLD) {
-                $amtB = number_format($liabilityChange / 1_000_000_000, 2);
+                $amount = WireFormat::money($liabilityChange);
                 $state['events'][] = [
-                    'description' => "Collected \${$amtB}B in additional Initial Margin deposits due to elevated market volatility.",
+                    'description' => "Collected {$amount} in additional Initial Margin deposits due to elevated market volatility.",
                 ];
             }
         }

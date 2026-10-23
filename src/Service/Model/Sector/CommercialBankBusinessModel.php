@@ -1322,17 +1322,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             $state['customerDeposits'] += $liabilityChange;
 
             if ($state['treasury'] < 0.0) {
-                $liquidityShortfall = abs($state['treasury']);
-                $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-                $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => $amtB]];
+                $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => abs($state['treasury'])]];
             }
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
             // A flight is money leaving, not a base growing slower than trend. A capture is the departure above trend:
             // a base growing with the economy is not news.
             if ($liabilityChange < 0.0) {
-                $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)]];
+                $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => abs($liabilityChange)]];
             } elseif (($liabilityChange / $currentLiabilities) - $trendGrowthQuarterly > self::LIABILITY_CAPTURE_THRESHOLD) {
-                $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)]];
+                $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => $liabilityChange]];
             }
         }
     }

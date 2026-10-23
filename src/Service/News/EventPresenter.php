@@ -258,7 +258,7 @@ class EventPresenter
                 'surpriseType' => $surpriseType,
                 'surpriseAmount' => $surpriseAmount,
                 'surpriseText' => $surpriseText,
-                'eva' => $economicProfit !== null ? UiExtension::large($economicProfit, '$', true) . ' EVA' : null,
+                'eva' => $economicProfit !== null ? WireFormat::money($economicProfit, true) . ' EVA' : null,
                 'evaPositive' => $economicProfit === null || $economicProfit >= 0.0,
             ],
         );
@@ -318,8 +318,8 @@ class EventPresenter
             $kind = (string) ($action['kind'] ?? 'note');
             $text = match ($kind) {
                 'dividend' => sprintf('Paid %s/sh · %s yield', UiExtension::money((float) $action['perShare']), UiExtension::percent((float) $action['yield'])),
-                'buyback' => sprintf('Repurchased %s shares', self::shareCount((float) $action['shares'])),
-                'bonds' => sprintf('Issued %s bonds (%s)', UiExtension::large((float) $action['amount'], '$'), (string) $action['purpose']),
+                'buyback' => sprintf('Repurchased %s shares', WireFormat::shares((float) $action['shares'])),
+                'bonds' => sprintf('Issued %s bonds (%s)', WireFormat::money((float) $action['amount']), (string) $action['purpose']),
                 default => rtrim((string) ($action['text'] ?? ''), '.'),
             };
             if ($text !== '') {
@@ -328,11 +328,5 @@ class EventPresenter
         }
 
         return $pills;
-    }
-
-    /** A share count, abbreviated from a million up: "410.29M", "45,000". */
-    private static function shareCount(float $shares): string
-    {
-        return $shares >= 1_000_000 ? UiExtension::large($shares) : number_format($shares);
     }
 }

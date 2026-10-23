@@ -10,6 +10,7 @@ use App\Entity\Stock;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\News\WireFormat;
 
 /**
  * Service responsible for managing the internal corporate balance sheet.
@@ -270,9 +271,9 @@ class TreasuryEngine
         $ctx->assetSaleLoss += ($carryingValueSold * $haircut) + $unrecognizedMark;
 
         if (self::isNewsworthy($ctx->stock, $proceeds)) {
-            $amtB = number_format($proceeds / 1_000_000_000, 2);
-            $lossB = number_format(($carryingValueSold - $proceeds) / 1_000_000_000, 2);
-            $ctx->events[] = ['description' => "Sold \${$amtB}B of securities and loans below carrying value to meet withdrawals, realizing a \${$lossB}B loss."];
+            $amount = WireFormat::money($proceeds);
+            $loss = WireFormat::money($carryingValueSold - $proceeds);
+            $ctx->events[] = ['description' => "Sold {$amount} of securities and loans below carrying value to meet withdrawals, realizing a {$loss} loss."];
         }
     }
 
@@ -385,10 +386,10 @@ class TreasuryEngine
                     }
 
                     if (self::isNewsworthy($ctx->stock, $newDebtIssued)) {
-                        $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
+                        $amount = WireFormat::money($newDebtIssued);
                         $purpose = $isUnderLeveragedForDebt ? 'recapitalization' : 'expansion';
                         $ctx->events[] = [
-                            'description' => "Issued \${$amtB}B in bonds for {$purpose}.",
+                            'description' => "Issued {$amount} in bonds for {$purpose}.",
                             'fact' => ['kind' => 'bonds', 'amount' => $newDebtIssued, 'purpose' => $purpose],
                         ];
                     }
@@ -492,7 +493,7 @@ class TreasuryEngine
                 }
 
                 if ($expansionSpend > 1_000_000_000.0) {
-                    $amtB = number_format($expansionSpend / 1_000_000_000, 2);
+                    $amount = WireFormat::money($expansionSpend);
                     $actionText = match ($ctx->businessModel) {
                         'commercial_bank', 'credit_services', 'shadow_bank' => 'loan book expansion',
                         'insurance', 'retail_insurance', 'reinsurance' => 'underwriting infrastructure and float expansion',
@@ -503,7 +504,7 @@ class TreasuryEngine
                         'reit' => 'property acquisitions and development',
                         default => 'organic expansion',
                     };
-                    $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}."];
+                    $ctx->events[] = ['description' => "Deployed {$amount} in {$actionText}."];
                 }
             }
         }
@@ -549,7 +550,7 @@ class TreasuryEngine
         $ctx->loanOriginations += $deployable;
 
         if ($deployable > 1_000_000_000.0) {
-            $amtB = number_format($deployable / 1_000_000_000, 2);
+            $amount = WireFormat::money($deployable);
             $actionText = match ($ctx->businessModel) {
                 'commercial_bank', 'credit_services', 'shadow_bank' => 'loan book expansion',
                 'insurance', 'retail_insurance', 'reinsurance' => 'the investment portfolio backing the float',
@@ -559,7 +560,7 @@ class TreasuryEngine
                 'distressed_debt' => 'distressed credit and turnaround equity acquisitions',
                 default => 'earning assets',
             };
-            $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}."];
+            $ctx->events[] = ['description' => "Deployed {$amount} in {$actionText}."];
         }
     }
 
@@ -613,9 +614,9 @@ class TreasuryEngine
         $ctx->wholesaleDebt = (float) $ctx->stock->getWholesaleDebt();
 
         if (self::isNewsworthy($ctx->stock, $roll->principalRepaid)) {
-            $amtB = number_format($roll->principalRepaid / 1_000_000_000, 2);
+            $amount = WireFormat::money($roll->principalRepaid);
             $ctx->events[] = [
-                'description' => "Shut out of the bond market and forced to repay \${$amtB}B of maturing notes in cash.",
+                'description' => "Shut out of the bond market and forced to repay {$amount} of maturing notes in cash.",
             ];
         }
     }
@@ -642,7 +643,7 @@ class TreasuryEngine
                 $ctx->debtActionTaken = true;
 
                 if ($cashShortfall > 10_000_000.0) {
-                    $ctx->events[] = ['description' => "Forced to borrow \$" . number_format($cashShortfall / 1_000_000_000, 2) . "B at penalty rates due to cash shortfall."];
+                    $ctx->events[] = ['description' => 'Forced to borrow ' . WireFormat::money($cashShortfall) . ' at penalty rates due to cash shortfall.'];
                 }
             } else {
                 $ctx->failedEmergencyBorrow = true;
@@ -742,9 +743,9 @@ class TreasuryEngine
                 $currentEquityStr = $this->formatBc($stock->getTotalEquity());
                 $stock->setTotalEquity(\bcadd($currentEquityStr, $this->formatBc($targetRaise), 4));
 
-                $amtB = number_format($targetRaise / 1_000_000_000, 2);
+                $amount = WireFormat::money($targetRaise);
                 $ctx->events[] = [
-                    'description' => "Issued new shares to raise \${$amtB}B and {$reason}.",
+                    'description' => "Issued new shares to raise {$amount} and {$reason}.",
                     'shock' => self::SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT,
                 ];
 
@@ -837,9 +838,9 @@ class TreasuryEngine
         }
 
         if (self::isNewsworthy($ctx->stock, $drawn)) {
-            $amtB = number_format($drawn / 1_000_000_000, 2);
+            $amount = WireFormat::money($drawn);
             $ctx->events[] = [
-                'description' => "Drew \${$amtB}B on its committed revolving credit facility to cover a cash shortfall.",
+                'description' => "Drew {$amount} on its committed revolving credit facility to cover a cash shortfall.",
             ];
         }
 
@@ -847,9 +848,9 @@ class TreasuryEngine
         // paper, the rescue raise or the default), each of which carries its own reaction.
         $refused = min($floorShortfall + $maturity, $stock->getRevolverUndrawn());
         if ($drawRefused && self::isNewsworthy($ctx->stock, $refused)) {
-            $amtB = number_format($refused / 1_000_000_000, 2);
+            $amount = WireFormat::money($refused);
             $ctx->events[] = [
-                'description' => "Lenders refused a \${$amtB}B draw on its revolving credit facility while it is in breach of its leverage covenant.",
+                'description' => "Lenders refused a {$amount} draw on its revolving credit facility while it is in breach of its leverage covenant.",
             ];
         }
     }
@@ -961,9 +962,9 @@ class TreasuryEngine
             return;
         }
 
-        $amtB = number_format($ctx->unfundedMaturity / 1_000_000_000, 2);
+        $amount = WireFormat::money($ctx->unfundedMaturity);
         $ctx->events[] = [
-            'description' => "Failed to repay \${$amtB}B of maturing debt, triggering an event of default.",
+            'description' => "Failed to repay {$amount} of maturing debt, triggering an event of default.",
         ];
     }
 
@@ -1020,10 +1021,10 @@ class TreasuryEngine
                     $ctx->debtActionTaken = true;
 
                     if (self::isNewsworthy($ctx->stock, $actualPaydown)) {
-                        $amtB = number_format($actualPaydown / 1_000_000_000, 2);
+                        $amount = WireFormat::money($actualPaydown);
                         $reason = $isLiquidityCrisis ? "survive a liquidity crisis" : "reduce debt burden and escape negative carry";
                         $ctx->events[] = [
-                            'description' => "Paid down \${$amtB}B of debt to {$reason}.",
+                            'description' => "Paid down {$amount} of debt to {$reason}.",
                         ];
                     }
                 }
@@ -1097,9 +1098,9 @@ class TreasuryEngine
                     $ctx->newTreasury -= $debtToPayOff;
 
                     if (self::isNewsworthy($ctx->stock, $debtToPayOff)) {
-                        $amtB = number_format($debtToPayOff / 1_000_000_000, 2);
+                        $amount = WireFormat::money($debtToPayOff);
                         $ctx->events[] = [
-                            'description' => "Swept \${$amtB}B cash to aggressively deleverage.",
+                            'description' => "Swept {$amount} cash to aggressively deleverage.",
                         ];
                     }
                 }
