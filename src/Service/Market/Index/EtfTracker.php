@@ -97,6 +97,7 @@ class EtfTracker
      * @param float  $totalMarketCap The float-adjusted, factor-adjusted capitalisation of the index's members.
      * @param bool   $recordHistory  Whether to persist the new price to the history table.
      * @param string $ticker         The fund the level is written to; its divisor is keyed on the same ticker.
+     * @param Etf    $etf            The fund behind the index.
      * @param float  $dividendPoints Dividend cash the members paid this tick, on the same adjusted basis as
      *                               the capitalisation. Divided by the same divisor, it is the index
      *                               dividend, and it is what the fund actually collects.
@@ -110,20 +111,15 @@ class EtfTracker
      */
     public function updateIndex(
         float $totalMarketCap,
-        bool $recordHistory = false,
-        string $ticker = 'LBI',
-        ?Etf $etf = null,
+        bool $recordHistory,
+        string $ticker,
+        Etf $etf,
         ?float $simTime = null,
         float $dividendPoints = 0.0,
         float $dt = 0.0,
         float $netFlowValue = 0.0,
         float $basketHalfSpread = 0.0,
     ): array {
-
-        if ($etf === null) {
-            $etf = $this->entityManager->getRepository(Etf::class)->findOneByTicker($ticker);
-        }
-
         $divisorKey = self::divisorKey($ticker);
         $divisor = $this->redis->get($divisorKey);
 
@@ -132,7 +128,7 @@ class EtfTracker
             // Seeded from the LEVEL behind the fund's last price, not the price itself. The price carries
             // the fund's own fee drag and undistributed income; striking a divisor on it would fold the
             // fund's costs into the index and then measure the fund's tracking against them.
-            if ($etf && $etf->getIndexLevel() > 0) {
+            if ($etf->getIndexLevel() > 0) {
                 $divisor = $totalMarketCap / $etf->getIndexLevel();
             } else {
                 $divisor = $totalMarketCap / FinancialConstants::INDEX_BASE_LEVEL;
@@ -143,103 +139,95 @@ class EtfTracker
 
         $level = ($divisor > 0) ? ($totalMarketCap / (float) $divisor) : FinancialConstants::INDEX_BASE_LEVEL;
 
-        // With no fund attached there is only the index: no books, no shares, nothing to trade away from.
-        $price = $level;
-        $navPerShare = $level;
-        $premium = 0.0;
-        $creationValue = 0.0;
+        // 1. The fund's own books, before anything is priced off them: the fee it owes for the time
+        //    just elapsed, and the dividends its constituents just paid it.
+        $this->accountant->accrue(
+            $etf,
+            $level,
+            $divisor > 0 ? $dividendPoints / (float) $divisor : 0.0,
+            $dt,
+        );
 
-        if ($etf) {
-            // 1. The fund's own books, before anything is priced off them: the fee it owes for the time
-            //    just elapsed, and the dividends its constituents just paid it.
-            $this->accountant->accrue(
-                $etf,
-                $level,
-                $divisor > 0 ? $dividendPoints / (float) $divisor : 0.0,
-                $dt,
+        // NAV vs market price: Authorized Participant arbitrage settles price within the arbitrage band.
+        $navPerShare = $etf->netAssetValuePerShare($level);
+        $band = $this->authorizedParticipant->band($basketHalfSpread);
+        $settled = $this->authorizedParticipant->settle(
+            $etf->getNavPremium(),
+            $netFlowValue,
+            $navPerShare * $etf->getSharesOutstanding(),
+            $band,
+            $dt,
+        );
+
+        $premium = $settled['premium'];
+        $creationValue = $settled['creationValue'];
+
+        // A creation is paid for in basket and issues shares against it, so the fund gets bigger and
+        // every per-share figure is untouched. That is the whole difference between this and a split,
+        // which issues shares against nothing and has to restate all of them.
+        if ($creationValue !== 0.0 && $navPerShare > 0.0) {
+            $etf->setSharesOutstanding(
+                max(0.0, $etf->getSharesOutstanding() + ($creationValue / $navPerShare)),
             );
+        }
 
-            // NAV vs market price: Authorized Participant arbitrage settles price within the arbitrage band.
-            $navPerShare = $etf->netAssetValuePerShare($level);
-            $band = $this->authorizedParticipant->band($basketHalfSpread);
-            $settled = $this->authorizedParticipant->settle(
-                $etf->getNavPremium(),
-                $netFlowValue,
-                $navPerShare * $etf->getSharesOutstanding(),
-                $band,
-                $dt,
-            );
+        $etf->setArbitrageBand($band);
+        $etf->setNavPremium($premium);
+        $price = $navPerShare * (1.0 + $premium);
 
-            $premium = $settled['premium'];
-            $creationValue = $settled['creationValue'];
-
-            // A creation is paid for in basket and issues shares against it, so the fund gets bigger and
-            // every per-share figure is untouched. That is the whole difference between this and a split,
-            // which issues shares against nothing and has to restate all of them.
-            if ($creationValue !== 0.0 && $navPerShare > 0.0) {
-                $etf->setSharesOutstanding(
-                    max(0.0, $etf->getSharesOutstanding() + ($creationValue / $navPerShare)),
-                );
+        // 3. Process ETF Splits
+        if ($price >= 400.0) {
+            $splitFactor = 1;
+            while ($price >= 400.0 && $splitFactor <= 1000000) {
+                $price /= 4.0;
+                $splitFactor *= 4;
             }
 
-            $etf->setArbitrageBand($band);
-            $etf->setNavPremium($premium);
-            $price = $navPerShare * (1.0 + $premium);
+            $divisor *= $splitFactor;
+            $this->redis->set($divisorKey, (string) $divisor);
+            // All three are per-SHARE amounts and there are now more shares. Left alone, a 4-for-1 would
+            // quadruple the cash the fund believes it is holding for its members, and quadruple both of
+            // the costs it reports having charged them.
+            $etf->setAccruedIncome($etf->getAccruedIncome() / $splitFactor);
+            $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() / $splitFactor);
+            $etf->setCumulativeTradingCosts($etf->getCumulativeTradingCosts() / $splitFactor);
+            // Shares go the other way: the fund is the same size and there are more claims on it.
+            $etf->setSharesOutstanding($etf->getSharesOutstanding() * $splitFactor);
+            $navPerShare /= $splitFactor;
+            $this->executeEtfSplit($etf, $splitFactor, 'forward', $price * $splitFactor);
 
-            // 3. Process ETF Splits
-            if ($price >= 400.0) {
-                $splitFactor = 1;
-                while ($price >= 400.0 && $splitFactor <= 1000000) {
-                    $price /= 4.0;
-                    $splitFactor *= 4;
-                }
-
-                $divisor *= $splitFactor;
-                $this->redis->set($divisorKey, (string) $divisor);
-                // All three are per-SHARE amounts and there are now more shares. Left alone, a 4-for-1 would
-                // quadruple the cash the fund believes it is holding for its members, and quadruple both of
-                // the costs it reports having charged them.
-                $etf->setAccruedIncome($etf->getAccruedIncome() / $splitFactor);
-                $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() / $splitFactor);
-                $etf->setCumulativeTradingCosts($etf->getCumulativeTradingCosts() / $splitFactor);
-                // Shares go the other way: the fund is the same size and there are more claims on it.
-                $etf->setSharesOutstanding($etf->getSharesOutstanding() * $splitFactor);
-                $navPerShare /= $splitFactor;
-                $this->executeEtfSplit($etf, $splitFactor, 'forward', $price * $splitFactor);
-
-            } elseif ($price < 25.0 && $price > 0) {
-                $splitFactor = 1;
-                $preSplitPrice = $price;
-                while ($price < 25.0 && $splitFactor <= 1000000 && $price > 0.0) {
-                    $price *= 4.0;
-                    $splitFactor *= 4;
-                }
-
-                $divisor /= $splitFactor;
-                $this->redis->set($divisorKey, (string) $divisor);
-                $etf->setAccruedIncome($etf->getAccruedIncome() * $splitFactor);
-                $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() * $splitFactor);
-                $etf->setCumulativeTradingCosts($etf->getCumulativeTradingCosts() * $splitFactor);
-                $etf->setSharesOutstanding($etf->getSharesOutstanding() / $splitFactor);
-                $navPerShare *= $splitFactor;
-                $this->executeEtfSplit($etf, $splitFactor, 'reverse', $preSplitPrice);
+        } elseif ($price < 25.0 && $price > 0) {
+            $splitFactor = 1;
+            $preSplitPrice = $price;
+            while ($price < 25.0 && $splitFactor <= 1000000 && $price > 0.0) {
+                $price *= 4.0;
+                $splitFactor *= 4;
             }
 
-            // 4. Persist the updated price
-            $etf->setPrice((string) $price);
+            $divisor /= $splitFactor;
+            $this->redis->set($divisorKey, (string) $divisor);
+            $etf->setAccruedIncome($etf->getAccruedIncome() * $splitFactor);
+            $etf->setCumulativeFeesPaid($etf->getCumulativeFeesPaid() * $splitFactor);
+            $etf->setCumulativeTradingCosts($etf->getCumulativeTradingCosts() * $splitFactor);
+            $etf->setSharesOutstanding($etf->getSharesOutstanding() / $splitFactor);
+            $navPerShare *= $splitFactor;
+            $this->executeEtfSplit($etf, $splitFactor, 'reverse', $preSplitPrice);
+        }
 
-            if ($recordHistory && $etf->getId() !== null) {
-                $this->pendingHistory[] = [
-                    'etf_id' => $etf->getId(),
-                    'price' => (string) $price,
-                    // The premium is the difference between these two, archived as two numbers: the basket has
-                    // moved on by the next tick.
-                    'nav' => (string) round($navPerShare, 4),
-                    // Null when the caller is not the ticker: an honest "written outside the simulation
-                    // clock" rather than a zero that would sort the row before the beginning of time.
-                    'sim_time' => $simTime,
-                ];
-            }
+        // 4. Persist the updated price
+        $etf->setPrice((string) $price);
+
+        if ($recordHistory && $etf->getId() !== null) {
+            $this->pendingHistory[] = [
+                'etf_id' => $etf->getId(),
+                'price' => (string) $price,
+                // The premium is the difference between these two, archived as two numbers: the basket has
+                // moved on by the next tick.
+                'nav' => (string) round($navPerShare, 4),
+                // Null when the caller is not the ticker: an honest "written outside the simulation
+                // clock" rather than a zero that would sort the row before the beginning of time.
+                'sim_time' => $simTime,
+            ];
         }
 
         return [
@@ -251,7 +239,7 @@ class EtfTracker
             // the constituents' order flow, which is what makes money going into a fund reach what the
             // fund holds instead of stopping at the fund.
             'creation_value' => $creationValue,
-            'name' => $etf ? $etf->getName() : 'Market Index',
+            'name' => $etf->getName(),
             'is_etf' => true,
         ];
     }

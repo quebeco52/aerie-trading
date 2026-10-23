@@ -500,7 +500,6 @@ class DebtEngineTest extends TestCase
 
         $health = $engine->analyzeDebtHealth($stock, $macro);
 
-        $this->assertTrue($health->isNegativeCarry, 'Effective cost of debt should exceed yield on cash.');
         $this->assertTrue($health->isSevereNegativeCarry, 'Severe negative carry should be flagged when spread exceeds hurdle.');
         $this->assertTrue($health->wantsToPaydownDebt, 'Company should want to pay down expensive debt.');
     }
@@ -1029,7 +1028,6 @@ class DebtEngineTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.05,
             cashYield: 0.03,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: $interestCoverage,
             wantsToPaydownDebt: false,

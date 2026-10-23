@@ -212,6 +212,18 @@ final class AerieDiet
         return isset(self::FIXED_POSITIONS[$party][$axis]);
     }
 
+    /** The party's name without its article: "Vanguard", "Civic Front". */
+    public static function shortName(string $party): string
+    {
+        return preg_replace('/^The /', '', self::PARTY_NAMES[$party]) ?? self::PARTY_NAMES[$party];
+    }
+
+    /** The party's name as it reads mid-sentence: "the Vanguard", "the Civic Front". */
+    public static function midSentenceName(string $party): string
+    {
+        return 'the ' . self::shortName($party);
+    }
+
     /**
      * The parties a membership map marks, in party order.
      *

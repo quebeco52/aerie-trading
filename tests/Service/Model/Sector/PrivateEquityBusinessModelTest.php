@@ -215,8 +215,8 @@ class PrivateEquityBusinessModelTest extends TestCase
         $stock->setCorporateTreasury('100000000.0');
         $stock->setWholesaleDebt('0.0');
 
-        $calmIncome = $this->model->calculateInterestIncome($stock, $calmMacro, $this->mathUtility);
-        $panicIncome = $this->model->calculateInterestIncome($stock, $panicMacro, $this->mathUtility);
+        $calmIncome = $this->model->calculateInterestIncome($stock, $calmMacro);
+        $panicIncome = $this->model->calculateInterestIncome($stock, $panicMacro);
 
         $this->assertGreaterThan(0.0, $calmIncome);
         $this->assertEqualsWithDelta($calmIncome, $panicIncome, 1e-6);
@@ -245,7 +245,6 @@ class PrivateEquityBusinessModelTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.05,
             cashYield: 0.03,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: 5.0,
             wantsToPaydownDebt: false,
@@ -275,7 +274,6 @@ class PrivateEquityBusinessModelTest extends TestCase
             grossCost: 0.12,
             effectiveCost: 0.12,
             cashYield: 0.03,
-            isNegativeCarry: true,
             isSevereNegativeCarry: true,
             interestCoverage: 2.0,
             wantsToPaydownDebt: false,
@@ -318,7 +316,6 @@ class PrivateEquityBusinessModelTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.05,
             cashYield: 0.03,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: 5.0,
             wantsToPaydownDebt: false,

@@ -13,7 +13,6 @@ class DebtHealthDTO
         public readonly float $grossCost,
         public readonly float $effectiveCost,
         public readonly float $cashYield,
-        public readonly bool $isNegativeCarry,
         public readonly bool $isSevereNegativeCarry,
         public readonly float $interestCoverage,
         public readonly bool $wantsToPaydownDebt,

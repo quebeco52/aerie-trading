@@ -597,59 +597,6 @@ class MathUtility
     }
 
     /**
-     * Schwartz-Smith 2-Factor Model (2000) for industrial commodity pricing.
-     * Decomposes log-price into a mean-reverting short-term deviation (chi)
-     * and a drifting long-term equilibrium (xi).
-     *
-     * @param float $chi     Current short-term log-deviation state.
-     * @param float $xi      Current long-term log-equilibrium state.
-     * @param float $kappa   Mean-reversion speed of short-term deviation.
-     * @param float $muXi    Drift rate of long-term equilibrium (supercycle trend).
-     * @param float $sigChi  Volatility of short-term deviation.
-     * @param float $sigXi   Volatility of long-term equilibrium.
-     * @param float $rho     Correlation between chi and xi innovations.
-     * @param float $dt      Time step in years.
-     * @param float|null $dW1 Optional standard normal draw for short-term factor.
-     * @param float|null $dW2 Optional standard normal draw for long-term factor uncorrected component.
-     * @return array{chi: float, xi: float, spot: float}
-     */
-    public function calculateSchwartz2Factor(
-        float $chi,
-        float $xi,
-        float $kappa,
-        float $muXi,
-        float $sigChi,
-        float $sigXi,
-        float $rho,
-        float $dt,
-        ?float $dW1 = null,
-        ?float $dW2 = null,
-    ): array {
-        $dW1 ??= $this->generateStandardNormal();
-        $dW2 ??= $this->generateStandardNormal();
-
-        $clampedRho = max(-0.99, min(0.99, $rho));
-
-        // Correlated standard normal innovations
-        $zChi = $dW1;
-        $zXi = ($clampedRho * $dW1) + (sqrt(1.0 - ($clampedRho * $clampedRho)) * $dW2);
-
-        // Exact discretization of OU process for chi (mean-reverting to 0)
-        $nextChi = StochasticProcesses::ornsteinUhlenbeckDiffusionStep($chi, 0.0, $kappa, $sigChi, $dt, $zChi);
-
-        // Long-term equilibrium drift (Arithmetic Brownian Motion for log-equilibrium)
-        $nextXi = $xi + ($muXi * $dt) + ($sigXi * sqrt($dt) * $zXi);
-
-        $spot = exp($nextChi + $nextXi);
-
-        return [
-            'chi'  => $nextChi,
-            'xi'   => $nextXi,
-            'spot' => $spot,
-        ];
-    }
-
-    /**
      * Two-Factor Correlated Ornstein-Uhlenbeck (OU) Process.
      * Models a spot price derived from two distinct mean-reverting log-state variables.
      * Ideal for bounded index simulations (e.g., short-term shocks vs long-term structural cycles).

@@ -325,7 +325,7 @@ class GovernmentPageBuilder
                 'councilTermYears' => AerieCouncil::TERM_YEARS,
                 'reserveDrawCeiling' => MacroConstants::RESERVE_DRAW_CEILING,
                 'budgetRoundMonths' => 12.0 * MacroConstants::BUDGET_ROUND_PERIOD_YEARS,
-                'blocLeaders' => array_map(self::midSentenceName(...), $leaders),
+                'blocLeaders' => array_map(AerieDiet::midSentenceName(...), $leaders),
                 'blocSeats' => array_map(
                     static fn(string $leader): array => [
                         'name' => DietStyle::PARTY_LABELS[$leader],
@@ -665,7 +665,7 @@ class GovernmentPageBuilder
             'simDate' => DistrictCalendar::quarter($macro->totalTime),
             'party' => $row + AeriePartyProfiles::PROFILES[$party] + [
                 'caretaker' => $talking,
-                'blocLeader' => self::midSentenceName($politics->dietBlocs[$party]),
+                'blocLeader' => AerieDiet::midSentenceName($politics->dietBlocs[$party]),
                 'definedBy' => array_map(static fn(string $axis): string => DietStyle::AXIS_NAMES[$axis]['name'], array_keys(AerieDiet::FIXED_POSITIONS[$party])),
             ],
             'axes' => $axes,
@@ -910,7 +910,7 @@ class GovernmentPageBuilder
         $party = PartyLeaders::primeMinisterParty($politics);
         $leader = $party === null ? null : self::leader($politics, $party);
 
-        return $leader === null || $party === null ? null : $leader + ['party' => self::midSentenceName($party)];
+        return $leader === null || $party === null ? null : $leader + ['party' => AerieDiet::midSentenceName($party)];
     }
 
     /**
@@ -948,11 +948,6 @@ class GovernmentPageBuilder
         }
 
         return $leaders;
-    }
-
-    private static function midSentenceName(string $party): string
-    {
-        return 'the ' . (preg_replace('/^The /', '', AerieDiet::PARTY_NAMES[$party]) ?? AerieDiet::PARTY_NAMES[$party]);
     }
 
     /**

@@ -470,22 +470,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         return $powerShare * $gasFleetShare * FirmEconomics::gasFiredFuelCostChange($gasPrice, $macroState->carbonPrice);
     }
 
-    /**
-     * What the wholesale power market adds to or takes from the merchant stream's margin this quarter, per unit of
-     * merchant revenue at baseline prices: the price on the MWh less the gas the gas-fired share burns to make them,
-     * each at the price the ladder delivers this quarter, as the physics books them.
-     */
-    public function describeMerchantPowerImpact(Stock $stock, MacroStateDTO $macroState): float
-    {
-        $params = $this->resolveRevenueMixParameters($stock);
-        $streams = $this->createStreamContext($stock->getEarningsMomentumZ() ?? [], new MathUtility(), $macroState, $stock);
-        [$powerPrice, $gasPrice] = $this->resolveMerchantPrices($streams, $params, $params[ModelParam::UnregulatedMerchantWeight], 1.0, $macroState);
-        $powerShare = $params[ModelParam::MerchantPowerShare];
-
-        return (FirmEconomics::merchantPowerPriceRelative($powerShare, $powerPrice) - 1.0)
-            - $this->resolveMerchantFuelCostChange($powerShare, $params[ModelParam::MerchantGasFleetShare], $gasPrice, $macroState);
-    }
-
     /** The tariffed share of revenue at baseline prices: the regulated stream's target share of the mix. */
     private function resolveRegulatedRevenueShare(Stock $stock): float
     {

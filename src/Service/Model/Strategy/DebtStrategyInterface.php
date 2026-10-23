@@ -47,7 +47,7 @@ interface DebtStrategyInterface
     /** Pre-tax yield the firm would pay on a new dollar of the debt it funds itself with: the WACC's debt leg. */
     public function getMarginalCostOfDebt(DebtMetricsDTO $debtMetrics): float;
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float;
-    public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, MathUtility $mathUtility): float;
+    public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity): float;
     /** The rating agency's methodology for the firm: the score its distress caps read and its leverage table. */
     public function getRatingMethodology(): RatingMethodology;
     /**

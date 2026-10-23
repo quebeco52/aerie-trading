@@ -416,7 +416,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $target = $model->getTargetMetrics($stock, $macro, $math);
         $debt = (new DebtEngine($math, CorporateMetrics::getInstance()))->calculateInterestExpense($stock, $macro);
         $operatingProfit = $target['invested_capital'] * $target['baseline_roic'] / (1.0 - $macro->corporateTaxRate);
-        $income = $model->calculateInterestIncome($stock, $macro, $math, $debt->wholesaleRate);
+        $income = $model->calculateInterestIncome($stock, $macro, $debt->wholesaleRate);
 
         return ($operatingProfit - $debt->interestExpense + $income) * (1.0 - $macro->corporateTaxRate) / $stock->getTangibleEquity();
     }

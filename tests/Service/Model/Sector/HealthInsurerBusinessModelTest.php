@@ -164,6 +164,6 @@ final class HealthInsurerBusinessModelTest extends TestCase
         $buffer = $this->model->calculateTargetOperatingCash(80_000_000_000.0, 0.0, 8_000_000_000.0);
         $invested = 8_000_000_000.0 + max(0.0, 9_000_000_000.0 - 8_000_000_000.0 - $buffer);
 
-        $this->assertEqualsWithDelta($invested * $this->model->calculateCashYield($macro), $this->model->calculateInterestIncome($stock, $macro, $this->quietDraws()), 1.0);
+        $this->assertEqualsWithDelta($invested * $this->model->calculateCashYield($macro), $this->model->calculateInterestIncome($stock, $macro), 1.0);
     }
 }

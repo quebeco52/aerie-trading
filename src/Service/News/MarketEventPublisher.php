@@ -67,14 +67,10 @@ class MarketEventPublisher
         $event->setChangePercent($changePercent === null ? null : (string) round($changePercent, 2));
         $event->setSimTime($this->simTime);
 
-        // Log it beautifully for the terminal
-        $color = ($changePercent ?? 0.0) >= 0 ? "\033[32m" : "\033[31m";
-        if ($type === 'SHOCK') {
-            $move = $changePercent === null ? 'n/a' : number_format($changePercent, 2) . '%';
-            echo " [!] {$color}MARKET SHOCK on {$asset->getTicker()}: {$move} \033[0m\n";
-        } else {
-            $this->logger->info("[{$type}] {$asset->getTicker()}: {$description}");
-        }
+        // A shock leads with its move; every other story with its text.
+        $this->logger->info($type === 'SHOCK'
+            ? sprintf('[SHOCK] %s: %s', $asset->getTicker(), $changePercent === null ? 'n/a' : number_format($changePercent, 2) . '%')
+            : "[{$type}] {$asset->getTicker()}: {$description}");
 
         $wire = $this->wire(
             $type,

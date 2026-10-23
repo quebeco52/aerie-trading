@@ -1183,7 +1183,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /**
      * Banks earn standard money-market yields only on excess liquidity that isn't actively deployed.
      */
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         // Interest EARNED here is treasury income only: the spread on the loan book is already inside
         // net_interest_income on the revenue side, so the realized wholesale funding rate is deliberately

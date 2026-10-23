@@ -260,7 +260,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $earningAssets = max(1.0, $this->resolveEarningAssets($stock));
         $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveStructuralTargetRoe($stock, $opening) / (1.0 - $opening->corporateTaxRate);
         $interestExpense = (float) $stock->getTotalDebt() * DebtEngine::chargedWholesaleRate($stock, $opening, $this->getLossGivenDefault(), true);
-        $targetEbit = max($earningAssets * static::MIN_OPERATING_EBIT_YIELD, $targetEbt + $interestExpense - $this->calculateInterestIncome($stock, $opening, $mathUtility));
+        $targetEbit = max($earningAssets * static::MIN_OPERATING_EBIT_YIELD, $targetEbt + $interestExpense - $this->calculateInterestIncome($stock, $opening));
 
         return min($targetEbit / max(0.01, (float) $stock->getOperatingMargin()), $earningAssets * static::MAX_TURNOVER_CAP) / $earningAssets;
     }
@@ -432,7 +432,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      * expected return of the mix (calculateCashYield()). The equity sleeve's realised return replaces its expectation
      * in the books (resolveEquitySleeve()).
      */
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         return $this->resolveInvestedTreasury($stock) * $this->calculateCashYield($macroState);
     }

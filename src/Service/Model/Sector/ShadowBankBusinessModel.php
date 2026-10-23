@@ -176,7 +176,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
      * excess cash. The book is struck on the live earning-asset ledger, not the term notes alone, so drawn revolver
      * funds assets that earn.
      */
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         $bookInterest = $this->resolveEarningAssets($stock) * $this->resolveInterestYield($stock, $macroState);
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($this->getOperatingBase($stock) * self::TARGET_OPERATING_BUFFER));

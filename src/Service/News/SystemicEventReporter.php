@@ -146,10 +146,8 @@ class SystemicEventReporter
      */
     private static function budgetContext(PoliticsStateDTO $politics): array
     {
-        $names = array_map(static fn(string $name): string => preg_replace('/^The /', '', $name) ?? $name, AerieDiet::PARTY_NAMES);
-
         return [
-            'government' => implode('-', array_map(static fn(string $party): string => $names[$party], AerieDiet::governingParties($politics->governingCoalition))),
+            'government' => implode('-', array_map(AerieDiet::shortName(...), AerieDiet::governingParties($politics->governingCoalition))),
             'tax_rate_pct' => number_format((MacroConstants::BASE_CORPORATE_TAX_RATE + $politics->corporateTaxPolicyShift) * 100.0, 1),
             'tariff_pct' => number_format($politics->importTariffRate * 100.0, 1),
             'labor_growth_pct' => number_format($politics->laborForceGrowthRate * 100.0, 2),
@@ -623,7 +621,7 @@ class SystemicEventReporter
      */
     private static function midSentenceNames(): array
     {
-        return array_map(static fn(string $name): string => 'the ' . (preg_replace('/^The /', '', $name) ?? $name), AerieDiet::PARTY_NAMES);
+        return array_map(AerieDiet::midSentenceName(...), array_combine(array_keys(AerieDiet::PARTY_NAMES), array_keys(AerieDiet::PARTY_NAMES)));
     }
 
     /**

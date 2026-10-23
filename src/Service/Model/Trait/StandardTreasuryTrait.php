@@ -7,7 +7,6 @@ namespace App\Service\Model\Trait;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 
 trait StandardTreasuryTrait
 {
@@ -51,7 +50,7 @@ trait StandardTreasuryTrait
         return ['value' => 0.0, 'expected_return' => 0.0];
     }
 
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         $cash = (float) $stock->getCorporateTreasury();
         $operatingBase = max((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity(), FinancialConstants::MIN_OPERATING_BASE_CASH);

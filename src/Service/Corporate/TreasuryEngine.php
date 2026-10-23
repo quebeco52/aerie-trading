@@ -311,10 +311,10 @@ class TreasuryEngine
 
         // Leverage covenant gates discretionary debt expansion while permitting emergency refinancing.
         if (($marginalReturn > $hurdleRate || $isUnderLeveragedForDebt) && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom) {
-            $newBorrowingRate = $ctx->health->rawMetrics->currentMarketRate ?? 0.05;
+            $newBorrowingRate = $ctx->health->rawMetrics->currentMarketRate;
 
-            $ebit = $ctx->health->rawMetrics->ebit ?? 0.0;
-            $depreciation = $ctx->health->rawMetrics->depreciation ?? 0.0;
+            $ebit = $ctx->health->rawMetrics->ebit;
+            $depreciation = $ctx->health->rawMetrics->depreciation;
 
             $trueExpansionCapacity = $ctx->strategy->calculateDebtExpansionCapacity(
                 $preBuybackEquity,
@@ -633,7 +633,7 @@ class TreasuryEngine
             // a BBB issuer at 2.5x coverage refinances, it does not sell stock (Damodaran's coverage-rating table).
             // A firm the primary market just refused cannot turn around and issue into the same closed market.
             if ($ctx->health->hasMarketAccess && !$ctx->refinancingRefused) {
-                $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
+                $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate;
                 $costOfEmergencyDebt = $currentMarketRate + self::EMERGENCY_DEBT_SPREAD_PENALTY;
 
                 $this->debtEngine->issueDebt($stock, $cashShortfall, $costOfEmergencyDebt);

@@ -92,7 +92,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertLessThan(0.0, $legacyIncome, 'fixture guard: the notes are cheaper than the market');
         $this->assertEqualsWithDelta(
             ($book * $bookYield) + ($excessCash * $this->model->calculateCashYield($opening)) + $legacyIncome,
-            $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility),
+            $this->model->calculateInterestIncome($stock, $opening),
             1_000.0,
         );
     }
@@ -114,7 +114,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(225e9 * ((0.30 * 0.050) + (0.70 * ($opening->floatingReferenceRate() + $charged->dynamicSpread))), $interestExpense, 1.0, 'the fixed notes at their coupon, the floating repo at the interbank rate');
         $provision = CreditRisk::calculateSteadyStateProvisionRate($this->model->getThroughTheCycleCreditLossRate($stock), $this->model->getCreditLossHorizonYears(), MacroConstants::TARGET_INFLATION + MacroConstants::TREND_REAL_GROWTH) * $metrics['invested_capital'];
 
-        $netIncome = (($feeRevenue * 0.50) + $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility) - $interestExpense - $provision) * (1.0 - $tax);
+        $netIncome = (($feeRevenue * 0.50) + $this->model->calculateInterestIncome($stock, $opening) - $interestExpense - $provision) * (1.0 - $tax);
 
         $this->assertEqualsWithDelta(0.29, $netIncome / 55e9, 1e-9);
     }
@@ -134,7 +134,7 @@ class ShadowBankBusinessModelTest extends TestCase
             $feeRevenue = $metrics['invested_capital'] * $metrics['baseline_roic'] / (0.50 * (1.0 - $tax));
             $provision = CreditRisk::calculateSteadyStateProvisionRate($this->model->getThroughTheCycleCreditLossRate($stock), $this->model->getCreditLossHorizonYears(), MacroConstants::TARGET_INFLATION + MacroConstants::TREND_REAL_GROWTH) * $metrics['invested_capital'];
 
-            return (($feeRevenue * 0.50) + $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility) - $engine->calculateInterestExpense($stock, $opening)->interestExpense - $provision) * (1.0 - $tax) / 55e9;
+            return (($feeRevenue * 0.50) + $this->model->calculateInterestIncome($stock, $opening) - $engine->calculateInterestExpense($stock, $opening)->interestExpense - $provision) * (1.0 - $tax) / 55e9;
         };
 
         $this->assertEqualsWithDelta(0.29, $roe(), 1e-9);
@@ -238,8 +238,8 @@ class ShadowBankBusinessModelTest extends TestCase
         );
 
         $this->assertEqualsWithDelta(
-            $this->model->calculateInterestIncome($allTermNotes, $macro, $this->mathUtility),
-            $this->model->calculateInterestIncome($partlyOnTheRevolver, $macro, $this->mathUtility),
+            $this->model->calculateInterestIncome($allTermNotes, $macro),
+            $this->model->calculateInterestIncome($partlyOnTheRevolver, $macro),
             1_000_000.0,
         );
     }
@@ -359,8 +359,8 @@ class ShadowBankBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta($calmResult->clampedMargin, $spikeResult->clampedMargin, 1e-12);
         $this->assertEqualsWithDelta(
-            $this->model->calculateInterestIncome($stock, $calmMacro, $this->mathUtility),
-            $this->model->calculateInterestIncome($stock, $tedSpikeMacro, $this->mathUtility),
+            $this->model->calculateInterestIncome($stock, $calmMacro),
+            $this->model->calculateInterestIncome($stock, $tedSpikeMacro),
             1.0,
         );
     }

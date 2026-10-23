@@ -190,7 +190,7 @@ class OpeningBoardBuilderTest extends TestCase
             $this->builder->open($stock, $stockData, $openingMacro);
 
             $taxRate = $strategy->getEffectiveTaxRate($openingMacro->corporateTaxRate);
-            $preInterest = ((float) $stock->getTotalRevenue() * (float) $stock->getOperatingMargin() + $strategy->calculateInterestIncome($stock, $openingMacro, $this->math)) * (1.0 - $taxRate);
+            $preInterest = ((float) $stock->getTotalRevenue() * (float) $stock->getOperatingMargin() + $strategy->calculateInterestIncome($stock, $openingMacro)) * (1.0 - $taxRate);
             $leastInterest = $debt * (float) $stock->getCreditSpread() * (1.0 - $taxRate);
             if ($preInterest <= $leastInterest) {
                 continue;

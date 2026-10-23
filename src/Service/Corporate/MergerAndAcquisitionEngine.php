@@ -323,7 +323,6 @@ class MergerAndAcquisitionEngine
         $ctx->equity = (float) $stock->getTotalEquity();
         $ctx->preDealInvestedCapital = $stock->getInvestedCapital();
         $ctx->currentDebt = (float) $stock->getTotalDebt();
-        $ctx->yield5y = $ctx->macroState->yield5yEma;
 
         // Underwritten on the margin the firm last reported, as the treasury's own lender test is.
         $ctx->health = $this->debtEngine->analyzeTrailingDebtHealth($stock, $ctx->macroState);
@@ -353,7 +352,7 @@ class MergerAndAcquisitionEngine
         // the branch below is an identity test, everything after it reads dials.
         $style = $stock->getManagementStyle();
         $manager = $stock->getManagementProfile();
-        $ctx->costOfNewBorrowing = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->yield5y + (float) $stock->getCreditSpread());
+        $ctx->costOfNewBorrowing = $ctx->health->rawMetrics->currentMarketRate;
 
         $equityLimit = \App\Data\Company\Sectors::equityLimit($ctx->industry);
 
@@ -365,8 +364,8 @@ class MergerAndAcquisitionEngine
             (float) $stock->getWholesaleDebt(),
             $ctx->health,
             $ctx->costOfNewBorrowing,
-            $ctx->health->rawMetrics->ebit ?? 0.0,
-            $ctx->health->rawMetrics->depreciation ?? 0.0,
+            $ctx->health->rawMetrics->ebit,
+            $ctx->health->rawMetrics->depreciation,
         ));
         $ctx->totalBuyingPower = $ctx->treasury + $ctx->borrowingCapacity;
 
@@ -390,7 +389,6 @@ class MergerAndAcquisitionEngine
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;
         $ctx->isOvervalued = $normalizedEps > 0.0 && $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
 
-        $ctx->aggression = 1.0;
         $ctx->isEmpireBuilder = $style === \App\Data\Company\ManagementStyle::EmpireBuilder;
         $ctx->hubrisPremium = $manager->hubrisPremium();
 
@@ -590,7 +588,7 @@ class MergerAndAcquisitionEngine
 
         $multiple = $this->debtEngine->resolveCovenantLeverageMultiple($ctx->acquirer, $ctx->strategy);
         $normalEbitda = $multiple !== null
-            ? $ctx->strategy->getNormalEbitda($ctx->acquirer, $ctx->macroState->corporateTaxRate, $ctx->health->rawMetrics->depreciation ?? 0.0)
+            ? $ctx->strategy->getNormalEbitda($ctx->acquirer, $ctx->macroState->corporateTaxRate, $ctx->health->rawMetrics->depreciation)
             : null;
         if ($multiple === null || $normalEbitda === null) {
             return INF;
@@ -966,7 +964,7 @@ class MergerAndAcquisitionEngine
         $ctx->netIncome = (float) $stock->getTotalNetIncome();
 
         $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState);
-        $ctx->wacc = $ctx->health->wacc ?? 0.08;
+        $ctx->wacc = $ctx->health->wacc;
 
         $ctx->industry = $stock->getIndustry() ?: 'General';
         $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);

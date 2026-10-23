@@ -136,7 +136,7 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
      * A health plan invests the claims it owes until it pays them, as well as cash above its operating needs: the float
      * earns the cash yield whatever the operating buffer.
      */
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         $cash = (float) $stock->getCorporateTreasury();
         $float = min($cash, max(0.0, (float) ($stock->getPayables() ?? 0.0)));

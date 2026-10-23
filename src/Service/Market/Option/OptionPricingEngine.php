@@ -270,7 +270,6 @@ final class OptionPricingEngine
             gamma: $greeks['gamma'],
             vega: $greeks['vega'],
             theta: $greeks['theta'],
-            rho: $greeks['rho'],
             timeToExpiry: $timeToExpiry,
             riskFreeRate: $riskFreeRate,
             dividendYield: $dividendYield,

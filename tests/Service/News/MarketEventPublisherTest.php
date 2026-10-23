@@ -80,19 +80,21 @@ class MarketEventPublisherTest extends TestCase
         $this->assertSame('LBI', $result['ticker']);
     }
 
-    public function testPublishShockEventFormatsTerminalOutput(): void
+    /** A shock is logged with its move, through the logger rather than printed from inside the service. */
+    public function testAShockIsLoggedWithItsMove(): void
     {
         $stock = new Stock();
         $stock->setTicker('SHOCK_CORP');
+        $logged = [];
+        $this->loggerStub->method('info')->willReturnCallback(static function (string|\Stringable $message) use (&$logged): void {
+            $logged[] = (string) $message;
+        });
 
         $this->emMock->expects($this->once())->method('persist');
 
-        ob_start();
         $result = $this->publisher->publish($stock, 'SHOCK', 'Market shock occurred.', -12.5);
-        $output = ob_get_clean();
-        $this->assertIsString($output);
 
-        $this->assertStringContainsString('MARKET SHOCK on SHOCK_CORP: -12.50%', $output);
+        $this->assertSame(['[SHOCK] SHOCK_CORP: -12.50%'], $logged);
         $this->assertSame(-12.5, $result['change_percent']);
     }
 
@@ -106,14 +108,10 @@ class MarketEventPublisherTest extends TestCase
             ->method('persist')
             ->with($this->callback(fn(mixed $entity): bool => $entity instanceof EtfEvent && $entity->getChangePercent() === null));
 
-        ob_start();
         $result = $this->publisher->publish($etf, 'SHOCK', 'Systemic liquidity freeze.', null);
-        $output = ob_get_clean();
-        $this->assertIsString($output);
 
         $this->assertNull($result['change_percent']);
         $this->assertNull($result['presented']['changePercent']);
-        $this->assertStringContainsString('MARKET SHOCK on LBI: n/a', $output);
     }
 
     /** The live feed renders the card the page renders on load, so the wire copy carries it, JSON-safe. */

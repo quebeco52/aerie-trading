@@ -1453,7 +1453,7 @@ class EarningsEngine
         // Pass the realized wholesale rate (dynamic Merton/BGG spread already applied) so strategies whose
         // earning assets reprice off their own funding cost book income consistent with the expense side
         // computed just above, rather than a stale calm-market benchmark.
-        $annualInterestIncome = $ctx->strategy->calculateInterestIncome($stock, $ctx->macroState, $this->mathUtility, $ctx->debtMetrics->wholesaleRate);
+        $annualInterestIncome = $ctx->strategy->calculateInterestIncome($stock, $ctx->macroState, $ctx->debtMetrics->wholesaleRate);
         // The equity sleeve's expected return gives way to the dividends the board actually paid it; its price move
         // went to book value at the mark.
         if ($ctx->equitySleeveDividendReturn !== null) {

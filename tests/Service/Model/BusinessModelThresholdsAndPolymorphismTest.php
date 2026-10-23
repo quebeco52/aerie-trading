@@ -117,7 +117,6 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.03,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: 10.0,
             wantsToPaydownDebt: false,

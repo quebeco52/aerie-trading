@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Data\District;
 
 use App\Service\Math\MacroConstants;
+use App\Service\Model\Sector\ChemicalBusinessModel;
+use App\Service\Model\Sector\ClearingHouseBusinessModel;
+use App\Service\Model\Sector\InsuranceBusinessModel;
 
 /**
  * Authored cartography for the Aerie Autonomous District: a single street, Glasswater Row,
@@ -484,6 +487,16 @@ class DistrictMap
     /** Fractional fall of a property index below its 100.0 baseline that reads as a real-estate shock. */
     public const LAND_REGISTRY_PROPERTY_STRESS_DROP = 0.15;
 
+    // --- Statistical Office Stress ---
+    /** Recession odds within the year at which the Authority's forecast warns: even odds. */
+    public const RECESSION_ODDS_WARNING = 0.50;
+    /** Inflation over the Authority's target that reads as stress: 1.5 points (3.5% at the 2% target). */
+    public const INFLATION_STRESS_OVERSHOOT = 0.015;
+    /** Output below potential that reads as recession: a point (an output gap of -1%). */
+    public const OUTPUT_GAP_STRESS = -0.010;
+    /** Unemployment over its natural rate that reads as slack: a point (5% at the 4% natural rate). */
+    public const UNEMPLOYMENT_STRESS_SLACK = 0.010;
+
     // --- Institution Band Geometry ---
     /** Top y-coordinate of the institution structures on the far bank. */
     public const INSTITUTION_BAND_TOP = 40;
@@ -595,11 +608,10 @@ class DistrictMap
 
     // --- Institution Registry ---
     /**
-     * Abstract macro-publishing institutions — councils, registries and exchanges, not rival
-     * sovereigns. Each names the real `MacroStateDTO` fields (see App\DTO\MacroStateDTO)
-     * it publishes. An institution renders on a ward only where at least one of that ward's
-     * tenants draws a conduit from it (App\Service\District\DistrictConduitResolver), so no
-     * institution exists as pure decoration and none needs a `ward` key of its own.
+     * Abstract macro-publishing institutions: councils, registries and exchanges. Each names the real `MacroStateDTO`
+     * fields (see App\DTO\MacroStateDTO) it publishes. An institution renders on a ward only where at least one of that
+     * ward's tenants draws a conduit from it (App\Service\District\DistrictConduitResolver), so no institution exists
+     * as pure decoration and none needs a `ward` key of its own.
      *
      * `readouts` is the small subset of `fields` actually printed on the structure — a curated
      * pick of the one or two numbers a viewer would recognise at a glance, not every field the
@@ -612,8 +624,8 @@ class DistrictMap
      * own named crisis constant) — see that class's docblock. Where no such constant exists for
      * an institution's fields, `stress_rules` is simply omitted: the district may only raise an
      * alarm the simulation itself raises, so that institution's conduits highlight on click but
-     * never render as stressed. The one exception predating this rule is the Land Registry's
-     * property-index fall, defined locally as LAND_REGISTRY_PROPERTY_STRESS_DROP
+     * never render as stressed. The Land Registry's property-index fall and the Statistical Office's cycle
+     * readings are defined here (LAND_REGISTRY_PROPERTY_STRESS_DROP and the Statistical Office Stress constants),
      * because no such constant exists anywhere else in the simulation.
      */
     public const INSTITUTIONS = [
@@ -651,7 +663,7 @@ class DistrictMap
                 ['field' => 'household_debt_service_gap', 'op' => self::OP_GTE, 'value' => MacroConstants::HOUSEHOLD_DSR_STRESS_MARGIN],
                 // The yield-curve probit at even odds of a recession within the year — the Authority's forecast
                 // warning.
-                ['field' => 'recession_probability_ema', 'op' => self::OP_GTE, 'value' => 0.50],
+                ['field' => 'recession_probability_ema', 'op' => self::OP_GTE, 'value' => self::RECESSION_ODDS_WARNING],
             ],
         ],
         'exchange-floor' => [
@@ -663,9 +675,8 @@ class DistrictMap
                 ['field' => 'deal_activity_index_ema', 'label' => 'Deals', 'unit' => self::UNIT_INDEX],
             ],
             'stress_rules' => [
-                // ClearingHouseBusinessModel::VIX_EXTREME_THRESHOLD — the exact volatility level that class itself
-                // treats as a panic regime.
-                ['field' => 'market_volatility_ema', 'op' => self::OP_GTE, 'value' => 0.30],
+                // The volatility level the clearing house itself treats as a panic regime.
+                ['field' => 'market_volatility_ema', 'op' => self::OP_GTE, 'value' => ClearingHouseBusinessModel::VIX_EXTREME_THRESHOLD],
             ],
         ],
         'statistical-office' => [
@@ -677,12 +688,12 @@ class DistrictMap
                 ['field' => 'inflation_ema', 'label' => 'CPI', 'unit' => self::UNIT_PERCENT],
             ],
             'stress_rules' => [
-                // 1.5 points over MacroConstants::TARGET_INFLATION — inflation well past the Authority's target.
-                ['field' => 'inflation_ema', 'op' => self::OP_GTE, 'value' => 0.035],
-                // Output a point below potential — a recessionary output gap.
-                ['field' => 'output_gap_ema', 'op' => self::OP_LTE, 'value' => -0.010],
-                // A point of unemployment over MacroConstants::NATURAL_UNEMPLOYMENT: labour-market slack.
-                ['field' => 'unemployment_rate_ema', 'op' => self::OP_GTE, 'value' => 0.050],
+                // Inflation well past the Authority's target.
+                ['field' => 'inflation_ema', 'op' => self::OP_GTE, 'value' => MacroConstants::TARGET_INFLATION + self::INFLATION_STRESS_OVERSHOOT],
+                // A recessionary output gap.
+                ['field' => 'output_gap_ema', 'op' => self::OP_LTE, 'value' => self::OUTPUT_GAP_STRESS],
+                // Labour-market slack.
+                ['field' => 'unemployment_rate_ema', 'op' => self::OP_GTE, 'value' => MacroConstants::NATURAL_UNEMPLOYMENT + self::UNEMPLOYMENT_STRESS_SLACK],
             ],
         ],
         'land-registry' => [
@@ -698,8 +709,8 @@ class DistrictMap
                 // invents rather than borrows, because no such constant exists anywhere in the simulation.
                 ['field' => 'commercial_property_index_ema', 'op' => self::OP_INDEX_DROP, 'value' => self::LAND_REGISTRY_PROPERTY_STRESS_DROP],
                 ['field' => 'residential_property_index_ema', 'op' => self::OP_INDEX_DROP, 'value' => self::LAND_REGISTRY_PROPERTY_STRESS_DROP],
-                // InsuranceBusinessModel::CAT_HARD_MARKET_THRESHOLD — a storm season that hardens every carrier.
-                ['field' => 'catastrophe_loss_index_ema', 'op' => self::OP_GTE, 'value' => 3.0],
+                // A storm season that hardens every carrier.
+                ['field' => 'catastrophe_loss_index_ema', 'op' => self::OP_GTE, 'value' => InsuranceBusinessModel::CAT_HARD_MARKET_THRESHOLD],
             ],
         ],
         'commodity-exchange' => [
@@ -711,9 +722,8 @@ class DistrictMap
                 ['field' => 'agricultural_commodity_index_ema', 'label' => 'Farm', 'unit' => self::UNIT_INDEX],
             ],
             'stress_rules' => [
-                // ChemicalBusinessModel::SEVERE_ENERGY_INFLATION_THRESHOLD — the exact energy cost-push
-                // level that class itself treats as a severe inflation shock.
-                ['field' => 'energy_cost_push_lag', 'op' => self::OP_GTE, 'value' => 0.30],
+                // The energy cost-push the chemical makers treat as a severe inflation shock.
+                ['field' => 'energy_cost_push_lag', 'op' => self::OP_GTE, 'value' => ChemicalBusinessModel::SEVERE_ENERGY_INFLATION_THRESHOLD],
             ],
         ],
         'freight-authority' => [

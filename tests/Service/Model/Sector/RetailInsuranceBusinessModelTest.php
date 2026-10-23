@@ -107,7 +107,6 @@ class RetailInsuranceBusinessModelTest extends TestCase
      */
     public function testLifeReservesCreditTheirHoldersTheBookYieldLessTheSpread(): void
     {
-        $math = new MathUtility();
         $macro = new MacroStateDTO();
         // The float's mix held fixed, so the two books differ only in what their life reserves credit.
         $model = new class extends RetailInsuranceBusinessModel {
@@ -116,8 +115,8 @@ class RetailInsuranceBusinessModelTest extends TestCase
                 return self::FLOAT_EQUITY_WEIGHT;
             }
         };
-        $credited = fn(float $bookYield): float => $model->calculateInterestIncome($this->composite(0.0, $bookYield), $macro, $math)
-            - $model->calculateInterestIncome($this->composite(100_000_000_000.0, $bookYield), $macro, $math);
+        $credited = fn(float $bookYield): float => $model->calculateInterestIncome($this->composite(0.0, $bookYield), $macro)
+            - $model->calculateInterestIncome($this->composite(100_000_000_000.0, $bookYield), $macro);
 
         $this->assertEqualsWithDelta(100_000_000_000.0 * (0.045 - RetailInsuranceBusinessModel::LIFE_INVESTMENT_SPREAD), $credited(0.045), 1.0);
         $this->assertEqualsWithDelta(100_000_000_000.0 * RetailInsuranceBusinessModel::NONFORFEITURE_MIN_CREDITING_RATE, $credited(0.015), 1.0, 'the statutory floor');

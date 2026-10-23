@@ -403,20 +403,6 @@ class UtilityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($base->ebit, $powerSpike->ebit, 1e-6);
     }
 
-    public function testTheDriversPanelReadsTheModelsOwnMerchantArithmetic(): void
-    {
-        $stock = new Stock();
-        $stock->setTicker('BIRD');
-        $macro = new MacroStateDTO(naturalGasPriceIndexEma: 150.0, wholesalePowerPriceIndexEma: 130.0);
-
-        // Zero-fuel renewables keep the whole 30% price rise on what they sell at spot; gas is no cost to them.
-        $this->assertEqualsWithDelta(0.30, $this->unhedgedModel()->describeMerchantPowerImpact($stock, $macro), 1e-12);
-        // Hedged, the panel reads the strike the ladder delivers this quarter on its hedged share, as the books do.
-        $hedge = UtilityBusinessModel::POWER_HEDGE_RATIO;
-        $strike = CommodityLogisticsSubsystem::powerForwardRelative($macro, 0.0);
-        $this->assertEqualsWithDelta(($hedge * ($strike - 1.0)) + ((1.0 - $hedge) * 0.30), (new UtilityBusinessModel())->describeMerchantPowerImpact($stock, $macro), 1e-12);
-    }
-
     /**
      * A district storm opens the liability regime once, in the report whose window its losses arrive in, with the
      * utility's own event draw flat: not on a first report, which has no earlier reading, and not again when the regime
@@ -501,25 +487,6 @@ class UtilityBusinessModelTest extends TestCase
         $annual = 1.0 - ((1.0 - Distributions::calculateNormalCDF(UtilityBusinessModel::GRID_FAILURE_Z_SCORE)) ** 4);
 
         $this->assertEqualsWithDelta(0.010, $annual, 0.002);
-    }
-
-    /**
-     * Gas-fired fleets pay the carbon they burn and get back the share the power price passes through; zero-fuel
-     * renewables pay none and keep it all.
-     */
-    public function testCarbonCostsTheGasFleetWhatThePriceDoesNotPassThroughAndPaysRenewables(): void
-    {
-        $adderShare = CommodityLogisticsSubsystem::carbonPowerPriceAdder(70.37) / MacroConstants::REFERENCE_POWER_PRICE;
-        $macro = new MacroStateDTO(carbonPrice: 70.37, wholesalePowerPriceIndexEma: MacroConstants::WHOLESALE_POWER_BASELINE * (1.0 + $adderShare));
-        $carbonShare = MacroConstants::GAS_FLEET_HEAT_RATE * MacroConstants::NATURAL_GAS_CO2_TONNES_PER_MMBTU * 70.37 / MacroConstants::REFERENCE_POWER_PRICE;
-
-        $renewables = new Stock();
-        $renewables->setTicker('BIRD');
-        $this->assertEqualsWithDelta($adderShare, $this->unhedgedModel()->describeMerchantPowerImpact($renewables, $macro), 1e-12);
-
-        $mixed = new Stock();
-        $mixed->setTicker('UTIL');
-        $this->assertEqualsWithDelta($adderShare - (UtilityBusinessModel::MERCHANT_GAS_FLEET_SHARE * $carbonShare), $this->unhedgedModel()->describeMerchantPowerImpact($mixed, $macro), 1e-12);
     }
 
     /**

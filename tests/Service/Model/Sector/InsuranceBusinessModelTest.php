@@ -1114,15 +1114,14 @@ class InsuranceBusinessModelTest extends TestCase
         $stock->setCorporateTreasury('1000000000');
         $stock->setCustomerDeposits('1000000000');
         $stock->setSecuritiesCarryingYield(0.03);
-        $math = new MathUtility();
 
-        $atBook = $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.03), $math);
-        $afterSelloff = $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.06), $math);
+        $atBook = $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.03));
+        $afterSelloff = $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.06));
         $this->assertEqualsWithDelta($atBook, $afterSelloff, 1e-6);
 
         // A book with no history was bought at today's curve.
         $stock->setSecuritiesCarryingYield(null);
-        $this->assertGreaterThan($atBook, $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.06), $math));
+        $this->assertGreaterThan($atBook, $model->calculateInterestIncome($stock, new MacroStateDTO(yield10yEma: 0.06)));
     }
 
     /**

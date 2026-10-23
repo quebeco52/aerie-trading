@@ -529,14 +529,13 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $stock->setWholesaleDebt('140000000000');
 
         $macro = $this->neutralMacro();
-        $math = new MathUtility();
 
-        $this->assertSame(0.0, $this->model->calculateInterestIncome($stock, $macro, $math));
+        $this->assertSame(0.0, $this->model->calculateInterestIncome($stock, $macro));
 
         // The parent still books it, which is what makes the override load-bearing rather than decorative.
         $this->assertGreaterThan(
             0.0,
-            (new ConglomerateBusinessModel())->calculateInterestIncome($stock, $macro, $math),
+            (new ConglomerateBusinessModel())->calculateInterestIncome($stock, $macro),
             'If the parent stopped paying interest income, this override would be silently pointless.',
         );
 

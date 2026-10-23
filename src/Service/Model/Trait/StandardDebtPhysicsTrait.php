@@ -68,7 +68,7 @@ trait StandardDebtPhysicsTrait
 
     public function getHurdleRate(DebtHealthDTO $health): float
     {
-        return $health->wacc ?? 0.08;
+        return $health->wacc;
     }
 
     public function getExpansionCapacityBasis(float $equity, float $totalDebt, float $investedCapital): float
@@ -138,7 +138,7 @@ trait StandardDebtPhysicsTrait
         return max(0.0, $currentDebt - $treasury);
     }
 
-    public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, MathUtility $mathUtility): float
+    public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity): float
     {
         return Valuation::calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity);
     }

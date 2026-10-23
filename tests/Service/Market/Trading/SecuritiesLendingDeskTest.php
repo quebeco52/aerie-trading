@@ -106,25 +106,6 @@ class SecuritiesLendingDeskTest extends TestCase
         }
     }
 
-    public function testAccruedFeeScalesWithPositionValueAndTime(): void
-    {
-        $stock = $this->stock();
-
-        $oneYear = $this->desk->accruedFee($stock, 1000.0, 100.0, 1.0);
-
-        $this->assertEqualsWithDelta(1000.0 * 100.0 * SecuritiesLendingDesk::GENERAL_COLLATERAL_BORROW_FEE, $oneYear, 1e-9);
-        $this->assertEqualsWithDelta($oneYear / 2.0, $this->desk->accruedFee($stock, 1000.0, 100.0, 0.5), 1e-9);
-        $this->assertEqualsWithDelta($oneYear * 2.0, $this->desk->accruedFee($stock, 2000.0, 100.0, 1.0), 1e-9);
-    }
-
-    public function testNothingAccruesOnALongOrOverNoTime(): void
-    {
-        $stock = $this->stock();
-
-        $this->assertSame(0.0, $this->desk->accruedFee($stock, 0.0, 100.0, 1.0));
-        $this->assertSame(0.0, $this->desk->accruedFee($stock, 1000.0, 100.0, 0.0));
-    }
-
     public function testLendersRecallOnlyWhenTheSupplyIsAllButGone(): void
     {
         $supply = $this->desk->lendableSupply($this->stock());

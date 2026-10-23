@@ -33,7 +33,6 @@ class AcquisitionContext
     /** Invested capital before the deal is funded; funding moves cash, debt or shares and already adds the price. */
     public float $preDealInvestedCapital = 0.0;
     public float $currentDebt = 0.0;
-    public float $yield5y = 0.0;
 
     public DebtHealthDTO $health;
     public string $industry = 'General';
@@ -59,7 +58,6 @@ class AcquisitionContext
     public float $bookValuePerShare = 0.0;
     public float $priceToBook = 0.0;
     public bool $isOvervalued = false;
-    public float $aggression = 1.0;
     public bool $isEmpireBuilder = false;
     /** Fraction of the target's standalone value paid on top of it — the acquirer's overpayment (Roll 1986). */
     public float $hubrisPremium = 0.0;

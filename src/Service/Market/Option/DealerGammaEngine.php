@@ -108,27 +108,6 @@ final class DealerGammaEngine
     }
 
     /**
-     * The shares the desk must trade in one name to bring its hedge to the delta it owes now.
-     *
-     * Returns signed shares — positive is a buy — ready to join the tick's net order flow, and books them to the
-     * desk's holding, so the same delta is never hedged twice and a clipped remainder carries to the next pass.
-     *
-     * @param float $passYears Time since the previous hedging pass, in years.
-     */
-    public function hedgeFlow(Stock $stock, float $passYears): float
-    {
-        $state = $this->store->read($stock->getTicker());
-        $shares = $this->hedge($stock, $state, $passYears);
-
-        if ($state !== null && $shares !== 0.0) {
-            $state['held'] += $shares;
-            $this->store->record($stock->getTicker(), $state);
-        }
-
-        return $shares;
-    }
-
-    /**
      * Hedges every name in one pass, against one read of the store and one write back to it.
      *
      * A read and a write per name turned a pass over the market into a couple of hundred round trips

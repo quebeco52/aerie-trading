@@ -6,7 +6,6 @@ namespace App\Service\Model\Strategy;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 
 interface TreasuryStrategyInterface
 {
@@ -30,7 +29,7 @@ interface TreasuryStrategyInterface
      *                                           diverge under spread stress. Null when no live debt calc exists
      *                                           yet (e.g. market seed/reset bootstrapping).
      */
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float;
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float;
     public function calculateCashYield(MacroStateDTO $macroState): float;
 
     /**

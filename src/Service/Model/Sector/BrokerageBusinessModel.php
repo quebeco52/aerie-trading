@@ -255,7 +255,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $earningAssets = max(1.0, $this->resolveEarningAssets($stock));
         $fundingRate = $this->calculateBlendedWholesaleRate($stock, $opening);
         $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveStructuralTargetRoe($stock, $opening) / (1.0 - $opening->corporateTaxRate);
-        $netInterest = $this->calculateInterestIncome($stock, $opening, $mathUtility, $fundingRate) - ((float) $stock->getTotalDebt() * $fundingRate);
+        $netInterest = $this->calculateInterestIncome($stock, $opening, $fundingRate) - ((float) $stock->getTotalDebt() * $fundingRate);
         $targetEbit = max($earningAssets * static::MIN_OPERATING_EBIT_YIELD, $targetEbt - $netInterest);
 
         return min($targetEbit / max(0.01, (float) $stock->getOperatingMargin()), $earningAssets * static::MAX_GROSS_ASSET_YIELD) / $earningAssets;
@@ -274,7 +274,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         return DebtEngine::chargedWholesaleRate($stock, $macroState, $this->getLossGivenDefault());
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         $policyRate = $macroState->policyRateEma;
 

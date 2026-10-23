@@ -8,7 +8,6 @@ use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use PHPUnit\Framework\TestCase;
 
@@ -54,11 +53,10 @@ final class IndustryBetasTest extends TestCase
      */
     public function testTheAnchorIsTheBetaTheModelExpectsInTheColumn(): void
     {
-        $math = new MathUtility();
 
         foreach (array_keys(Sectors::INDUSTRY_METRICS) as $industry) {
             $row = IndustryBetas::DAMODARAN[IndustryBetas::damodaranIndustryFor($industry)];
-            $relevered = Sectors::strategyFor($industry)->calculateLeveredBeta(1.0, 0.25, 1.0, $math);
+            $relevered = Sectors::strategyFor($industry)->calculateLeveredBeta(1.0, 0.25, 1.0);
 
             if (abs($relevered - 1.0) < 1e-12) {
                 $this->assertSame($row['levered'], IndustryBetas::anchorFor($industry), "$industry passes its beta through, so it stores the levered one.");

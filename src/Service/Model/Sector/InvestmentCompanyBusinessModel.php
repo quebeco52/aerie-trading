@@ -356,7 +356,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
      * weight from Stock::corporateTreasury and runs the contrarian float physics over it. Idle cash at the
      * front rate is precisely what a sphere's dry powder is not.
      */
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         return 0.0;
     }

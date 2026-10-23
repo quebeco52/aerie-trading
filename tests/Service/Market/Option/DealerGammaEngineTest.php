@@ -6,6 +6,7 @@ namespace App\Tests\Service\Market\Option;
 
 use App\DTO\OptionQuoteDTO;
 use App\Entity\OptionContract;
+use App\Entity\Stock;
 use App\Service\Market\Option\DealerGammaEngine;
 use App\Service\Market\Option\InMemoryDealerGammaStore;
 use App\Service\Market\Option\OptionDemandEngine;
@@ -34,7 +35,7 @@ class DealerGammaEngineTest extends TestCase
         $this->engine = new DealerGammaEngine($this->store, new LiquidityEngine(new MathUtility()));
     }
 
-    private function stock(float $price = 100.0): \App\Entity\Stock
+    private function stock(float $price = 100.0): Stock
     {
         return StockBuilder::create('VANE')
             ->withPrice($price)
@@ -65,7 +66,6 @@ class DealerGammaEngineTest extends TestCase
             gamma: $gamma,
             vega: 20.0,
             theta: -8.0,
-            rho: 15.0,
             timeToExpiry: 0.25,
             riskFreeRate: 0.04,
             dividendYield: 0.0,
@@ -118,11 +118,11 @@ class DealerGammaEngineTest extends TestCase
         $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.02)]);
 
         $stock->setPrice('101.00000000');
-        $this->assertGreaterThan(0.0, $this->engine->hedgeFlow($stock, self::DAY));
+        $this->assertGreaterThan(0.0, $this->hedgeFlow($stock, self::DAY));
 
         $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.02)]);
         $stock->setPrice('99.00000000');
-        $this->assertLessThan(0.0, $this->engine->hedgeFlow($stock, self::DAY));
+        $this->assertLessThan(0.0, $this->hedgeFlow($stock, self::DAY));
     }
 
     public function testALongGammaDeskLeansAgainstTheMove(): void
@@ -133,7 +133,7 @@ class DealerGammaEngineTest extends TestCase
         $stock->setPrice('101.00000000');
 
         // The desk that is long gamma sells a rally, which is the stabilising side of the same channel.
-        $this->assertLessThan(0.0, $this->engine->hedgeFlow($stock, self::DAY));
+        $this->assertLessThan(0.0, $this->hedgeFlow($stock, self::DAY));
     }
 
     public function testHedgeSizeIsGammaTimesTheMoveTimesTheHedgeRatio(): void
@@ -145,7 +145,7 @@ class DealerGammaEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(
             $gamma * 2.0 * DealerGammaEngine::DEALER_HEDGE_RATIO,
-            $this->engine->hedgeFlow($stock, self::DAY),
+            $this->hedgeFlow($stock, self::DAY),
             1e-6,
         );
     }
@@ -158,15 +158,15 @@ class DealerGammaEngineTest extends TestCase
         $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.002)]);
 
         $stock->setPrice('102.00000000');
-        $this->assertGreaterThan(0.0, $this->engine->hedgeFlow($stock, self::DAY));
+        $this->assertGreaterThan(0.0, $this->hedgeFlow($stock, self::DAY));
 
         // Nothing has moved since; the book is already flat against it.
-        $this->assertSame(0.0, $this->engine->hedgeFlow($stock, self::DAY));
+        $this->assertSame(0.0, $this->hedgeFlow($stock, self::DAY));
     }
 
     public function testAnUnpricedNameHedgesNothing(): void
     {
-        $this->assertSame(0.0, $this->engine->hedgeFlow($this->stock(), self::DAY));
+        $this->assertSame(0.0, $this->hedgeFlow($this->stock(), self::DAY));
     }
 
     public function testAChainWithNoOpenInterestHedgesNothing(): void
@@ -176,7 +176,7 @@ class DealerGammaEngineTest extends TestCase
 
         $stock->setPrice('110.00000000');
 
-        $this->assertSame(0.0, $this->engine->hedgeFlow($stock, self::DAY));
+        $this->assertSame(0.0, $this->hedgeFlow($stock, self::DAY));
     }
 
     // --- The Liquidity Bound ---
@@ -192,7 +192,7 @@ class DealerGammaEngineTest extends TestCase
         $ceiling = (new LiquidityEngine(new MathUtility()))->averageDailyVolume($stock)
             * DealerGammaEngine::MAX_DEALER_HEDGE_ADV_MULTIPLE;
 
-        $this->assertEqualsWithDelta($ceiling, $this->engine->hedgeFlow($stock, self::DAY), 1e-6);
+        $this->assertEqualsWithDelta($ceiling, $this->hedgeFlow($stock, self::DAY), 1e-6);
     }
 
     public function testADaysClippedHedgeIsTheSameAtAnyHedgingCadence(): void
@@ -212,17 +212,17 @@ class DealerGammaEngineTest extends TestCase
         $stock->setPrice('140.00000000');
 
         $wanted = $gamma * 40.0 * DealerGammaEngine::DEALER_HEDGE_RATIO;
-        $first = $this->engine->hedgeFlow($stock, self::DAY);
+        $first = $this->hedgeFlow($stock, self::DAY);
         $this->assertLessThan($wanted, $first);
 
         $total = $first;
         for ($pass = 0; $pass < 100_000 && $total < $wanted * (1.0 - 1e-9); $pass++) {
-            $total += $this->engine->hedgeFlow($stock, self::DAY);
+            $total += $this->hedgeFlow($stock, self::DAY);
         }
 
         // The price has not moved again, so the later passes trade exactly the owed remainder and then stop.
         $this->assertEqualsWithDelta($wanted, $total, 1e-6 * $wanted);
-        $this->assertSame(0.0, $this->engine->hedgeFlow($stock, self::DAY));
+        $this->assertSame(0.0, $this->hedgeFlow($stock, self::DAY));
     }
 
     public function testARequoteKeepsTheHedgeStillOwed(): void
@@ -236,7 +236,7 @@ class DealerGammaEngineTest extends TestCase
         // move and its gamma doubled: the delta it owes is unchanged.
         $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.04, 0.5 + (0.02 * 4.0))]);
 
-        $this->assertEqualsWithDelta($owed, $this->engine->hedgeFlow($stock, self::DAY), 1e-6);
+        $this->assertEqualsWithDelta($owed, $this->hedgeFlow($stock, self::DAY), 1e-6);
     }
 
     // --- The Delta It Owes, Not Only The Move ---
@@ -253,7 +253,7 @@ class DealerGammaEngineTest extends TestCase
 
         $this->assertEqualsWithDelta(
             500 * FinancialConstants::OPTION_CONTRACT_MULTIPLIER * 0.5 * DealerGammaEngine::DEALER_HEDGE_RATIO,
-            $this->engine->hedgeFlow($stock, self::DAY),
+            $this->hedgeFlow($stock, self::DAY),
             1e-6,
         );
     }
@@ -264,12 +264,12 @@ class DealerGammaEngineTest extends TestCase
         $stock = $this->stock(100.0);
         $this->engine->refresh($stock, [$this->contract(0)], ['VANE-13C100' => $this->quote(0.02)]);
         $this->engine->refresh($stock, [$this->contract(500)], ['VANE-13C100' => $this->quote(0.02)]);
-        $held = $this->engine->hedgeFlow($stock, self::DAY);
+        $held = $this->hedgeFlow($stock, self::DAY);
 
         $this->engine->refresh($stock, [], []);
 
-        $this->assertEqualsWithDelta(-$held, $this->engine->hedgeFlow($stock, self::DAY), 1e-6);
-        $this->assertSame(0.0, $this->engine->hedgeFlow($stock, self::DAY));
+        $this->assertEqualsWithDelta(-$held, $this->hedgeFlow($stock, self::DAY), 1e-6);
+        $this->assertSame(0.0, $this->hedgeFlow($stock, self::DAY));
     }
 
     /** A name the desk has never had a book in records nothing when its empty chain is walked. */
@@ -293,7 +293,7 @@ class DealerGammaEngineTest extends TestCase
 
         $total = 0.0;
         for ($i = 0; $i < $passes; $i++) {
-            $total += $engine->hedgeFlow($stock, self::DAY / $passes);
+            $total += $this->hedgeFlow($stock, self::DAY / $passes, $engine);
         }
 
         return $total;
@@ -321,5 +321,11 @@ class DealerGammaEngineTest extends TestCase
 
         $this->assertGreaterThan(0, $contracts[0]->customerOpenInterest());
         $this->assertGreaterThan(0.0, $this->engine->refresh($stock, $contracts, $quotes));
+    }
+
+    /** The desk's trade in one name over a pass, as the ticker's market-wide pass makes it. */
+    private function hedgeFlow(Stock $stock, float $passYears, ?DealerGammaEngine $engine = null): float
+    {
+        return ($engine ?? $this->engine)->hedgeMarket([$stock], $passYears)[$stock->getTicker()] ?? 0.0;
     }
 }

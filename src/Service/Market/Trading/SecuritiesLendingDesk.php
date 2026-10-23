@@ -86,22 +86,6 @@ final class SecuritiesLendingDesk
             + ($range * ($utilization ** self::BORROW_FEE_CONVEXITY));
     }
 
-    /**
-     * Borrow cost accrued on a position over an interval.
-     *
-     * @param float $shortShares Shares short, positive.
-     * @param float $price       Current price.
-     * @param float $dt          Elapsed simulated time in years.
-     */
-    public function accruedFee(Stock $stock, float $shortShares, float $price, float $dt): float
-    {
-        if ($shortShares <= 0.0 || $dt <= 0.0) {
-            return 0.0;
-        }
-
-        return $shortShares * $price * $this->borrowFee($stock) * $dt;
-    }
-
     /** Whether lenders are recalling stock in this name. */
     public function isRecalling(Stock $stock): bool
     {

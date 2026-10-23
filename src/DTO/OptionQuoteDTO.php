@@ -22,7 +22,6 @@ final readonly class OptionQuoteDTO
      * @param float $gamma             Change in delta per unit change in the underlying.
      * @param float $vega              Change in premium per 1.00 change in volatility.
      * @param float $theta             Change in premium per YEAR of calendar time.
-     * @param float $rho               Change in premium per 1.00 change in the risk-free rate.
      * @param float $timeToExpiry      Years of life left at the quote.
      * @param float $riskFreeRate      Rate the contract was discounted at.
      * @param float $dividendYield     Continuous yield the spot leg was discounted at.
@@ -36,7 +35,6 @@ final readonly class OptionQuoteDTO
         public float $gamma,
         public float $vega,
         public float $theta,
-        public float $rho,
         public float $timeToExpiry,
         public float $riskFreeRate,
         public float $dividendYield,

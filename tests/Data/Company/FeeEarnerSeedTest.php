@@ -125,7 +125,7 @@ class FeeEarnerSeedTest extends TestCase
         $target = $strategy->getTargetMetrics($stock, $macro, $this->math);
         $debt = $this->debtEngine->calculateInterestExpense($stock, $macro);
         $operatingProfit = $target['invested_capital'] * $target['baseline_roic'] / (1.0 - $macro->corporateTaxRate);
-        $income = $strategy->calculateInterestIncome($stock, $macro, $this->math, $debt->wholesaleRate);
+        $income = $strategy->calculateInterestIncome($stock, $macro, $debt->wholesaleRate);
 
         return ($operatingProfit - $debt->interestExpense + $income) * (1.0 - $macro->corporateTaxRate) / $stock->getTangibleEquity();
     }

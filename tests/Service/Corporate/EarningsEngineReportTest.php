@@ -68,7 +68,6 @@ class EarningsEngineReportTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.02,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: 5.0,
             wantsToPaydownDebt: false,

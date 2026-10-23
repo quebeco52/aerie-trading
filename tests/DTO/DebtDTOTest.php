@@ -56,7 +56,6 @@ class DebtDTOTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.02,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: 5.0,
             wantsToPaydownDebt: false,
@@ -74,7 +73,6 @@ class DebtDTOTest extends TestCase
         $this->assertSame(0.05, $health->grossCost);
         $this->assertSame(0.04, $health->effectiveCost);
         $this->assertSame(0.02, $health->cashYield);
-        $this->assertFalse($health->isNegativeCarry);
         $this->assertFalse($health->isSevereNegativeCarry);
         $this->assertSame(5.0, $health->interestCoverage);
         $this->assertFalse($health->wantsToPaydownDebt);

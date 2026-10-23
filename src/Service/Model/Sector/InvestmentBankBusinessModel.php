@@ -226,7 +226,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         return $physics;
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         // The funded book the balance sheet actually carries, not the term notes alone. DebtEngine charges
         // interest on getTotalDebt() (wholesale + deposits + drawn revolver), so pricing the asset leg off

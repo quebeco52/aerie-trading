@@ -41,15 +41,13 @@ class ClearingHouseBusinessModelTest extends TestCase
         $stockMock->method('getCorporateTreasury')->willReturn('110000000000.0'); // 110B ($10B own cash + $100B margin)
         $stockMock->method('getCustomerDeposits')->willReturn('100000000000.0'); // 100B margin pool
 
-        $mathMock = $this->createStub(MathUtility::class);
-
         // At 5% policy rate:
         // Own cash yield = $10B * 0.05 = $500M
         $macroState = new MacroStateDTO(
             policyRateEma: 0.05,
             yield2yEma: 0.06,
         );
-        $income = $this->model->calculateInterestIncome($stockMock, $macroState, $mathMock);
+        $income = $this->model->calculateInterestIncome($stockMock, $macroState);
 
         $this->assertSame(500000000.0, $income);
     }
@@ -160,7 +158,6 @@ class ClearingHouseBusinessModelTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.03,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: 20.0,
             wantsToPaydownDebt: false,

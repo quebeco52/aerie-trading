@@ -104,7 +104,6 @@ class RunawayFeedbackLoopTest extends TestCase
             grossCost: 0.06,
             effectiveCost: 0.05,
             cashYield: 0.02,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: 0.25, // Distressed ICR
             wantsToPaydownDebt: false,
@@ -166,7 +165,6 @@ class RunawayFeedbackLoopTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.02,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: 5.0,
             wantsToPaydownDebt: false,
@@ -272,7 +270,6 @@ class RunawayFeedbackLoopTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.02,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: 5.0,
             wantsToPaydownDebt: false,

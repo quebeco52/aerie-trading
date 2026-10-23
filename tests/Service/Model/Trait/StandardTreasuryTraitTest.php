@@ -8,7 +8,6 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Tests\Support\Model\BareStandardModel;
 use PHPUnit\Framework\TestCase;
 
@@ -116,7 +115,6 @@ final class StandardTreasuryTraitTest extends TestCase
     public function testInterestIncomeAccruesOnlyOnCashAboveTheOperatingTarget(): void
     {
         $macro = new MacroStateDTO(policyRateEma: 0.05);
-        $math = new MathUtility();
         $yield = $this->model->calculateCashYield($macro);
 
         $revenue = 400_000_000.0;
@@ -126,7 +124,7 @@ final class StandardTreasuryTraitTest extends TestCase
         $atTarget->setTotalRevenue((string) $revenue);
         $atTarget->setTotalEquity('0');
         $atTarget->setCorporateTreasury((string) $target);
-        $this->assertSame(0.0, $this->model->calculateInterestIncome($atTarget, $macro, $math), 'A treasury at its target earns nothing.');
+        $this->assertSame(0.0, $this->model->calculateInterestIncome($atTarget, $macro), 'A treasury at its target earns nothing.');
 
         $rich = (new Stock())->setTicker('CASH');
         $rich->setTotalRevenue((string) $revenue);
@@ -134,7 +132,7 @@ final class StandardTreasuryTraitTest extends TestCase
         $rich->setCorporateTreasury((string) ($target + 100_000_000.0));
         $this->assertEqualsWithDelta(
             100_000_000.0 * $yield,
-            $this->model->calculateInterestIncome($rich, $macro, $math),
+            $this->model->calculateInterestIncome($rich, $macro),
             0.01,
             'Only the surplus over target earns the cash yield.',
         );
@@ -143,6 +141,6 @@ final class StandardTreasuryTraitTest extends TestCase
         $poor->setTotalRevenue((string) $revenue);
         $poor->setTotalEquity('0');
         $poor->setCorporateTreasury('1000');
-        $this->assertSame(0.0, $this->model->calculateInterestIncome($poor, $macro, $math), 'A firm below target must not accrue negative interest income.');
+        $this->assertSame(0.0, $this->model->calculateInterestIncome($poor, $macro), 'A firm below target must not accrue negative interest income.');
     }
 }

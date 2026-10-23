@@ -462,7 +462,7 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
         return $wholesaleDebt;
     }
 
-    public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, \App\Service\Math\MathUtility $mathUtility): float
+    public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity): float
     {
         // Banks and Financials inherently price their massive structural leverage into their baseline Beta.
         // Re-levering a bank using the Hamada equation creates a Cost of Equity death spiral!

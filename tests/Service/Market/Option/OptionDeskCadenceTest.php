@@ -130,7 +130,6 @@ class OptionDeskCadenceTest extends TestCase
             gamma: 0.0002,
             vega: 20.0,
             theta: -8.0,
-            rho: 15.0,
             timeToExpiry: 0.25,
             riskFreeRate: 0.04,
             dividendYield: 0.0,

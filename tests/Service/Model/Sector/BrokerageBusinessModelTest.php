@@ -170,7 +170,7 @@ class BrokerageBusinessModelTest extends TestCase
             'corporate_tax_rate' => 0.21,
         ]);
 
-        $interestIncome = $this->model->calculateInterestIncome($stock, $macroState, $this->mathUtility);
+        $interestIncome = $this->model->calculateInterestIncome($stock, $macroState);
         $this->assertGreaterThan(0.0, $interestIncome);
 
         // Margin loan yield = policyRate (0.05) + MARGIN_LOAN_SPREAD (0.025) = 0.075
@@ -212,8 +212,8 @@ class BrokerageBusinessModelTest extends TestCase
         );
 
         $this->assertEqualsWithDelta(
-            $this->model->calculateInterestIncome($allTermNotes, $macroState, $this->mathUtility),
-            $this->model->calculateInterestIncome($partlyOnTheRevolver, $macroState, $this->mathUtility),
+            $this->model->calculateInterestIncome($allTermNotes, $macroState),
+            $this->model->calculateInterestIncome($partlyOnTheRevolver, $macroState),
             1.0,
         );
     }
@@ -315,8 +315,8 @@ class BrokerageBusinessModelTest extends TestCase
         $highBeta = MacroStateDTO::fromArray(['policy_rate_ema' => 0.05, 'corporate_tax_rate' => 0.21, 'system_deposit_beta_ema' => 0.40]);
 
         $this->assertEqualsWithDelta(
-            $this->model->calculateInterestIncome($stock, $lowBeta, $this->mathUtility),
-            $this->model->calculateInterestIncome($stock, $highBeta, $this->mathUtility),
+            $this->model->calculateInterestIncome($stock, $lowBeta),
+            $this->model->calculateInterestIncome($stock, $highBeta),
             1e-6,
         );
     }
@@ -380,7 +380,7 @@ class BrokerageBusinessModelTest extends TestCase
         $fundingRate = (new \ReflectionMethod($model, 'calculateBlendedWholesaleRate'))->invoke($model, $stock, $macro);
         $operatingYield = (new \ReflectionMethod($model, 'resolveOperatingYield'))->invoke($model, $stock, $this->mathUtility);
         $operatingProfit = $operatingYield * $model->resolveEarningAssets($stock) * (float) $stock->getOperatingMargin();
-        $netInterest = $model->calculateInterestIncome($stock, $macro, $this->mathUtility, $fundingRate) - ((float) $stock->getTotalDebt() * $fundingRate);
+        $netInterest = $model->calculateInterestIncome($stock, $macro, $fundingRate) - ((float) $stock->getTotalDebt() * $fundingRate);
 
         return ($operatingProfit + $netInterest) * (1.0 - $macro->corporateTaxRate) / $stock->getTangibleEquity();
     }
@@ -406,9 +406,9 @@ class BrokerageBusinessModelTest extends TestCase
         $richer = new class ($extra) extends BrokerageBusinessModel {
             public function __construct(private readonly float $extra) {}
 
-            public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
+            public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
             {
-                return parent::calculateInterestIncome($stock, $macroState, $mathUtility, $realizedWholesaleRate) + $this->extra;
+                return parent::calculateInterestIncome($stock, $macroState, $realizedWholesaleRate) + $this->extra;
             }
         };
         $stock = $this->marginBroker();
@@ -457,7 +457,7 @@ class BrokerageBusinessModelTest extends TestCase
             $target = $this->model->getTargetMetrics($stock, $opening, $this->mathUtility);
             $debt = $debtEngine->calculateInterestExpense($stock, $opening);
             $operatingProfit = $target['invested_capital'] * $target['baseline_roic'] / (1.0 - $opening->corporateTaxRate);
-            $netInterest = $this->model->calculateInterestIncome($stock, $opening, $this->mathUtility, $debt->wholesaleRate) - $debt->interestExpense;
+            $netInterest = $this->model->calculateInterestIncome($stock, $opening, $debt->wholesaleRate) - $debt->interestExpense;
             $booked = ($operatingProfit + $netInterest) * (1.0 - $opening->corporateTaxRate) / $stock->getTangibleEquity();
             $structural = (new \ReflectionMethod($this->model, 'resolveStructuralTargetRoe'))->invoke($this->model, $stock, $opening);
 

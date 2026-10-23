@@ -339,7 +339,6 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock->setCorporateTreasury('10000000000.0'); // $10B treasury (equal to min cash)
         $stock->setFloatingDebtRatio('1.0');
 
-        $mathMock = $this->createStub(MathUtility::class);
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate'                    => 0.04,
@@ -348,7 +347,7 @@ class InvestmentBankBusinessModelTest extends TestCase
             'interbank_liquidity_spread_ema' => 0.0,
         ]);
 
-        $income = $this->model->calculateInterestIncome($stock, $macroState, $mathMock);
+        $income = $this->model->calculateInterestIncome($stock, $macroState);
 
         // With no realized rate the benchmark is the rate DebtEngine charges the firm: all floating, the policy rate
         // plus its own spread through the cycle.
@@ -381,7 +380,6 @@ class InvestmentBankBusinessModelTest extends TestCase
             'yield_5y_ema'                   => 0.04,
             'interbank_liquidity_spread_ema' => 0.0,
         ]);
-        $mathMock = $this->createStub(MathUtility::class);
 
         $allTermNotes = new Stock();
         $allTermNotes->setTicker('KING');
@@ -406,8 +404,8 @@ class InvestmentBankBusinessModelTest extends TestCase
         );
 
         $this->assertEqualsWithDelta(
-            $this->model->calculateInterestIncome($allTermNotes, $macroState, $mathMock),
-            $this->model->calculateInterestIncome($halfOnTheRevolver, $macroState, $mathMock),
+            $this->model->calculateInterestIncome($allTermNotes, $macroState),
+            $this->model->calculateInterestIncome($halfOnTheRevolver, $macroState),
             1_000.0,
             'a dollar of funding earns the same whether it is a term note or a revolver draw',
         );
@@ -435,7 +433,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $fundingRate = (new \ReflectionMethod($this->model, 'calculateBlendedWholesaleRate'))->invoke($this->model, $bank, $opening);
         $operatingYield = (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $bank, $math);
         $operatingProfit = $operatingYield * $this->model->resolveEarningAssets($bank) * (float) $bank->getOperatingMargin();
-        $netInterest = $this->model->calculateInterestIncome($bank, $opening, $math, $fundingRate) - ((float) $bank->getTotalDebt() * $fundingRate);
+        $netInterest = $this->model->calculateInterestIncome($bank, $opening, $fundingRate) - ((float) $bank->getTotalDebt() * $fundingRate);
         $booked = ($operatingProfit + $netInterest) * (1.0 - $opening->corporateTaxRate) / $bank->getTangibleEquity();
         $target = (new \ReflectionMethod($this->model, 'resolveStructuralTargetRoe'))->invoke($this->model, $bank, $opening);
         $this->assertEqualsWithDelta($target, $booked, 1e-9);
@@ -482,7 +480,6 @@ class InvestmentBankBusinessModelTest extends TestCase
         $interestIncome = $this->model->calculateInterestIncome(
             $corv,
             $macroState,
-            $this->createStub(MathUtility::class),
             $realizedWholesaleRate,
         );
 
@@ -804,8 +801,6 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock->setCorporateTreasury('25000000000.0'); // $25B treasury
         $stock->setTotalEquity('50000000000.0');
 
-        $mathMock = $this->createStub(MathUtility::class);
-
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             // synced with EMA: isolate this test's variable, avoid a phantom FICC rate-shock
             'policy_rate'                    => 0.04,
@@ -815,7 +810,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         ]);
 
         // Funded at the policy rate flat, so the book's own structure is all that moves the income.
-        $interestIncome = $this->model->calculateInterestIncome($stock, $macroState, $mathMock, 0.04);
+        $interestIncome = $this->model->calculateInterestIncome($stock, $macroState, 0.04);
 
         // Funded book = equity + total debt - treasury = $50B + $100B - $25B = $125B
         // 1. Prime financing: $125B * 70% * (0.04 + 0.0150) = $87.5B * 0.055 = $4.8125B
@@ -982,8 +977,6 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock->setFloatingDebtRatio('0.0'); // 100% fixed debt
         $stock->setHistoricalFixedRate('0.025'); // the coupon the notes carry
 
-        $mathMock = $this->createStub(MathUtility::class);
-
         // Hard curve inversion: policy rate = 0.06, 5Y yield = 0.02
         $macroInverted = \App\DTO\MacroStateDTO::fromArray([
             'policy_rate'     => 0.06,
@@ -995,7 +988,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         // Because policy rate is 6.0%, if max($policyRate, ...) were used, fundingBenchmark would be 6.0%,
         // generating 6.0% + 1.5% = 7.5% prime financing income on a book funded at 2.5% (phantom NII).
         // On the charged rate, fundingBenchmark = 0.0250, primeRate = 0.0400.
-        $income = $this->model->calculateInterestIncome($stock, $macroInverted, $mathMock);
+        $income = $this->model->calculateInterestIncome($stock, $macroInverted);
 
         // Funded book = equity + total debt - treasury = $0B + $10B - $1B = $9B
         // Prime: $9B * 70% * (0.0250 + 0.0150) = $6.3B * 0.0400 = $252M
@@ -1017,7 +1010,6 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock->setWholesaleDebt('100000000000.0'); // $100B wholesale debt
         $stock->setCorporateTreasury('10000000000.0'); // $10B treasury (equal to min cash -> excess cash = 0)
 
-        $mathMock = $this->createStub(MathUtility::class);
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'policy_rate'                    => 0.04,
             'policy_rate_ema'                => 0.04, // Static blended rate would be ~0.04 + 0.0200 = 0.0600
@@ -1026,11 +1018,11 @@ class InvestmentBankBusinessModelTest extends TestCase
         ]);
 
         // Without a realized rate, the strategy falls back to the static ~6.0% approximation.
-        $calmIncome = $this->model->calculateInterestIncome($stock, $macroState, $mathMock);
+        $calmIncome = $this->model->calculateInterestIncome($stock, $macroState);
 
         // DebtEngine measured a live, distressed wholesale rate of 15.0% this tick (dynamic Merton/BGG spread
         // widening on top of the static credit_spread) -- the exact scenario where the two rails used to diverge.
-        $distressedIncome = $this->model->calculateInterestIncome($stock, $macroState, $mathMock, 0.15);
+        $distressedIncome = $this->model->calculateInterestIncome($stock, $macroState, 0.15);
 
         // Funded book = equity + total debt - treasury = $0B + $100B - $10B = $90B
         // Prime: $90B * 70% * (0.15 + 0.0150) = $63B * 0.1650 = $10.395B
@@ -1220,8 +1212,6 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock->setFloatingDebtRatio('1.0'); // 100% floating debt
         $stock->setWholesaleDebt('10000000000.0');
 
-        $mathMock = $this->createStub(MathUtility::class);
-
         // Interbank liquidity spread widens by 200 bps (0.0215 vs baseline 0.0015)
         $macroStressedRepo = \App\DTO\MacroStateDTO::fromArray([
             'policy_rate'                    => 0.04,
@@ -1231,7 +1221,7 @@ class InvestmentBankBusinessModelTest extends TestCase
             'interbank_liquidity_spread_ema' => 0.0215,
         ]);
 
-        $income = $this->model->calculateInterestIncome($stock, $macroStressedRepo, $mathMock);
+        $income = $this->model->calculateInterestIncome($stock, $macroStressedRepo);
 
         // Floating rate = 0.04 + 0.0215 = 0.0615, plus the firm's spread through the cycle as DebtEngine charges it.
         $wholesaleRate = 0.0615 + DebtEngine::throughTheCycleCreditSpread($stock, $macroStressedRepo, $this->model->getLossGivenDefault());

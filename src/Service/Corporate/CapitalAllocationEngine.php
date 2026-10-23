@@ -256,7 +256,7 @@ class CapitalAllocationEngine
         $distributionShortfall = ($fundedDividend * $ctx->sharesOutstanding) - $cashAboveFloor;
         $borrowedForDividend = 0.0;
         if ($fundedDividend > 0.0 && $distributionShortfall > 0.0 && $ctx->health->hasMarketAccess && $ctx->health->hasLeverageHeadroom) {
-            $this->debtEngine->issueDebt($stock, $distributionShortfall, $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread()));
+            $this->debtEngine->issueDebt($stock, $distributionShortfall, $ctx->health->rawMetrics->currentMarketRate);
             $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
             $ctx->newTreasury += $distributionShortfall;
             $borrowedForDividend = $distributionShortfall;

@@ -184,7 +184,7 @@ class OpeningBoardBuilder
         } else {
             $ebit = $revenue * $margin;
             $interestExpense = $debtHealth->rawMetrics->interestExpense;
-            $interestIncome = $strategy->calculateInterestIncome($stock, $openingMacro, $this->mathUtility);
+            $interestIncome = $strategy->calculateInterestIncome($stock, $openingMacro);
             $ebt = $ebit - $interestExpense + $interestIncome;
             $effectiveTaxRate = $strategy->getEffectiveTaxRate($taxRate);
             $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));

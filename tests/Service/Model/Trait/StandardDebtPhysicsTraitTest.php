@@ -7,7 +7,6 @@ namespace App\Tests\Service\Model\Trait;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use App\Tests\Support\Model\BareStandardModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
 use PHPUnit\Framework\TestCase;
@@ -46,7 +45,6 @@ final class StandardDebtPhysicsTraitTest extends TestCase
             grossCost: 0.05,
             effectiveCost: 0.04,
             cashYield: 0.03,
-            isNegativeCarry: false,
             isSevereNegativeCarry: false,
             interestCoverage: $interestExpense > 0 ? $ebit / $interestExpense : 999.0,
             wantsToPaydownDebt: false,
@@ -188,11 +186,10 @@ final class StandardDebtPhysicsTraitTest extends TestCase
      */
     public function testLeveredBetaIsHamadaInFull(): void
     {
-        $math = new MathUtility();
-        $levered = $this->model->calculateLeveredBeta(1.0, 0.21, 2.0, $math);
+        $levered = $this->model->calculateLeveredBeta(1.0, 0.21, 2.0);
 
         $this->assertEqualsWithDelta(1.0 + (0.79 * 2.0), $levered, 0.0000001, 'beta_E = beta_U x (1 + (1 - t) x D/E).');
-        $this->assertSame(1.0, $this->model->calculateLeveredBeta(1.0, 0.21, 0.0, $math), 'With no debt the levered beta is the unlevered beta.');
+        $this->assertSame(1.0, $this->model->calculateLeveredBeta(1.0, 0.21, 0.0), 'With no debt the levered beta is the unlevered beta.');
     }
 
     /**

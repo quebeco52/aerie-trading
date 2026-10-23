@@ -731,7 +731,7 @@ class DebtEngine
         // Standard CAPM breaks down during insolvency. Cap D/E to prevent runaway WACC.
         $effectiveDebtToEquity = min(self::MAX_BETA_DEBT_TO_EQUITY, $debtToEquity);
 
-        $leveredBeta = $strategy->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity, $this->mathUtility);
+        $leveredBeta = $strategy->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity);
 
         // Cost of Equity (CAPM) on the long government yield: the riskless rate matched to the duration of the cash
         // flows being valued (Damodaran 2008, "What is the riskfree rate?"), which is also the rate the premium is
@@ -765,7 +765,7 @@ class DebtEngine
         // suffering false liquidity crises. Pass the realized wholesale rate (already carrying dynamic Merton/BGG
         // spread widening) so strategies whose earning assets reprice off their own funding cost cannot price income
         // off a stale calm-market benchmark while this same tick charges the distressed rate on the liability side.
-        $interestIncome = $strategy->calculateInterestIncome($stock, $macroState, $this->mathUtility, $debtMetrics->wholesaleRate);
+        $interestIncome = $strategy->calculateInterestIncome($stock, $macroState, $debtMetrics->wholesaleRate);
         $ebit += $interestIncome;
 
         $depreciation = $debtMetrics->depreciation;
@@ -787,7 +787,6 @@ class DebtEngine
         $effectiveYieldOnCash = $yieldOnCash * (1.0 - $effectiveYieldTaxRate);
 
         $isSevereNegativeCarry = $effectiveCostOfDebt > ($effectiveYieldOnCash + $hurdle);
-        $isNegativeCarry = $effectiveCostOfDebt > $effectiveYieldOnCash;
 
         // A company should only execute an Arbitrage Paydown if the debt is bleeding them via negative carry. A drop in
         // earnings (low ICR) should NEVER cause a company to burn its precious liquidity buffer to pay off cheap
@@ -844,7 +843,6 @@ class DebtEngine
             $grossCostOfDebt,
             $effectiveCostOfDebt,
             $yieldOnCash,
-            $isNegativeCarry,
             $isSevereNegativeCarry,
             $interestCoverage,
             $wantsToPaydownDebt,
