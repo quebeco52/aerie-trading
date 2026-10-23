@@ -9,14 +9,15 @@ use App\DTO\GovernmentPolicyDTO;
 use App\Entity\Bond;
 use App\Entity\Etf;
 use App\Entity\Stock;
+use App\Service\Macro\MacroState;
 use App\Service\Market\Chart\WireFrame;
 use App\Service\Market\Option\OptionDeskService;
 use App\Service\Math\FinancialConstants;
 
 /**
  * One run of the market ticker as MarketTickerCommand steps it: what carries from one tick to the next (the clock,
- * the working set, and the board and the laws the economy reads one tick behind), the cadences that gate the
- * periodic work, and the run's own buffers and profiler.
+ * the economy, the working set, and the board and the laws the economy reads one tick behind), the cadences that gate
+ * the periodic work, and the run's own buffers and profiler.
  */
 final class TickerRun
 {
@@ -58,6 +59,8 @@ final class TickerRun
         public int $tickCount,
         /** The economic clock: what dated output, the option grid and every retention cutoff are measured against. */
         public float $simTime,
+        /** The economy, stepped in place each tick; Redis holds the copy the pages and the desks read. */
+        public readonly MacroState $macro,
         int $ticksPerYear,
         /** What the government hands the economy, on the board's lag: the levers in force and the election pulse. */
         public GovernmentPolicyDTO $policy,

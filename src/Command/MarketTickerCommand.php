@@ -15,6 +15,8 @@ use App\Service\Corporate\FailureSweep;
 use App\Service\District\DistrictRoster;
 use App\Service\Macro\MacroConfigFingerprint;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroState;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Recorder\QuarterRecord;
@@ -94,6 +96,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private SimulationClockService $simulationClock,
         private OptionChainService $optionChain,
         private MacroEngine $macroEngine,
+        /** The economy in Redis: loaded once at start-up, saved after every tick. */
+        private MacroStateStore $macroStore,
         private FailureSweep $failureSweep,
         private Portfolio $portfolio,
         private \Redis $redis,
@@ -195,7 +199,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     /**
      * Resumes the tick counter and the simulation clock from their committed state.
      *
-     * @return array{0: int, 1: float} The tick counter and the simulation clock.
+     * @return array{0: int, 1: float, 2: MacroState} The tick counter, the simulation clock and the economy on that
+     *                                                clock.
      */
     private function resumeClock(InputInterface $input, OutputInterface $output): array
     {
@@ -203,7 +208,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $furthestSerial = $this->optionChain->furthestListedSerial();
         $clock = $this->simulationClock->resume(
             (int) ($this->redis->get('simulation_tick_count') ?: 0),
-            $this->macroEngine->getLiveState()->totalTime,
+            $this->macroStore->load()->totalTime,
             $furthestSerial === null ? 0.0 : OptionChainService::earliestTimeFor($furthestSerial),
             (bool) $input->getOption('rebase-clock'),
         );
@@ -216,7 +221,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $simTime = $clock->getTotalTime();
 
         // Synchronize cached Redis macro clock with authoritative simulation clock.
-        $this->macroEngine->alignClock($simTime);
+        $macro = $this->macroStore->alignClock($simTime);
 
         $output->writeln(sprintf(
             'Resuming at tick %d (simulation year %.4f, day %s).',
@@ -241,7 +246,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             ));
         }
 
-        return [$tickCount, $simTime];
+        return [$tickCount, $simTime, $macro];
     }
 
     /**
@@ -254,7 +259,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $output->writeln("<info>Market Ticker Started...</info>");
 
         $workingSet = $this->loadWorkingSet();
-        [$tickCount, $simTime] = $this->resumeClock($input, $output);
+        [$tickCount, $simTime, $macro] = $this->resumeClock($input, $output);
         $this->announceSampling($output);
 
         // Alert bounds live in Redis as a cache of the table; rebuilt here so a flushed Redis loses no alert.
@@ -265,6 +270,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $run = new TickerRun(
             $tickCount,
             $simTime,
+            $macro,
             $this->ticksPerYear,
             $this->politicsEngine->liveState()->policy(),
             new ChartBufferWriter($this->redis),
@@ -385,7 +391,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
      */
     private function stepEconomy(TickerRun $run): array
     {
-        $macroState = $this->macroEngine->updateMacroState($run->dt, $run->board, $run->policy);
+        $macroState = $this->macroEngine->step($run->macro, $run->dt, $run->board, $run->policy);
+        // Saved before anything else reads the economy, so the desks and the pages price off the tick's own.
+        $this->macroStore->save($run->macro);
         // The Diet votes on the calendar's election tick, on this tick's economy; the economy reads what it decides
         // next tick.
         // The election forecast goes to the forecaster rather than holding up the tick a poll lands on.

@@ -7,6 +7,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\FailureSweep;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Market\Pricing\StockTracker;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -77,7 +78,7 @@ final class HomeShareImpactTest extends KernelTestCase
         $liquidity = $c->get(\App\Service\Market\Pricing\LiquidityEngine::class);
         $floatCaps = [];
         $push = [];
-        $redis = (new \ReflectionProperty(MacroEngine::class, 'redis'))->getValue($macro);
+        $redis = $c->get(\Redis::class);
 
         $dt = 1.0 / $tpy;
         $ticks = (int) round($years * $tpy);
@@ -93,10 +94,10 @@ final class HomeShareImpactTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             if ($newShare !== null && $tick === $switchTick) {
-                $state = MacroState::fromArray(json_decode((string) $redis->get(MacroEngine::REDIS_MACRO_STATE), true, 512, JSON_THROW_ON_ERROR));
+                $state = MacroState::fromArray(json_decode((string) $redis->get(MacroStateStore::KEY), true, 512, JSON_THROW_ON_ERROR));
                 $switched = ['from' => $state->reserveHomeEquityShare, 'to' => $newShare, 't' => $state->totalTime];
                 $state->reserveHomeEquityShare = $newShare;
-                $redis->set(MacroEngine::REDIS_MACRO_STATE, json_encode($state->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION));
+                $redis->set(MacroStateStore::KEY, json_encode($state->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION));
             }
             $m = $macro->updateMacroState($dt, new \App\DTO\BoardReadingDTO($lastCap, $lastFloat, $lastReturn ?? 0.0, $lastDividends ?? 0.0, $lastIssuance ?? 0.0, $lastDuty ?? 0.0, $lastStake ?? 0.0, $lastLevy));
 

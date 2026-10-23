@@ -6,6 +6,7 @@
 // php tax_irf.php <seedFrom> <seedTo> <burnYears> <horizonYears> <tpy> <shock> <out>
 require '/home/quebeco/Projects/Code/Private/aerie-trading/tests/bootstrap.php';
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
 use App\Service\Math\MacroConstants;
@@ -29,7 +30,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             $engine->updateMacroState(1.0 / $tpy);
         }
         if ($size !== 0.0) {
-            $state = json_decode($redis->store[MacroEngine::REDIS_MACRO_STATE], true);
+            $state = json_decode($redis->store[MacroStateStore::KEY], true);
             if (!array_key_exists('corporate_tax_policy_shift', $state)) { fwrite(STDERR, "no shift key\n"); exit(1); }
             $lever = getenv('LEVER') ?: 'tax';
             if ($lever === 'tax') {
@@ -44,7 +45,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             } else {
                 $state['labor_force_growth_rate'] += $size;
             }
-            $redis->store[MacroEngine::REDIS_MACRO_STATE] = json_encode($state, JSON_PRESERVE_ZERO_FRACTION);
+            $redis->store[MacroStateStore::KEY] = json_encode($state, JSON_PRESERVE_ZERO_FRACTION);
         }
         $rows = [];
         for ($i = 1; $i <= (int) $horizon * $tpy; ++$i) {

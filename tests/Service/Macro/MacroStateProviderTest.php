@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Macro;
 
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Macro\MacroStateStore;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -22,10 +22,10 @@ class MacroStateProviderTest extends TestCase
         $redis = $this->createMock(\Redis::class);
         $redis->expects($this->atLeastOnce())
             ->method('get')
-            ->with(MacroEngine::REDIS_MACRO_STATE)
+            ->with(MacroStateStore::KEY)
             ->willReturn($stored);
 
-        return new MacroStateProvider($redis);
+        return new MacroStateProvider(new MacroStateStore($redis));
     }
 
     public function testThePublishedSnapshotIsRead(): void

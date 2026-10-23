@@ -25,8 +25,6 @@ use Psr\Log\LoggerInterface;
 
 class MacroEngine
 {
-    public const REDIS_MACRO_STATE = 'macroeconomic_state';
-
     // --- Sector Demand Factor ---
     /**
      * Time constant (years) of the per-sector demand factor read by every firm's earnings physics: an industry upswing
@@ -45,12 +43,12 @@ class MacroEngine
      */
     public const SYSTEMIC_EVENT_COOLDOWN_YEARS = 0.25;
 
-    /** Whether this process has saved a state, after which a missing one is lost rather than not yet opened. */
-    private bool $statePersisted = false;
+    /** The state updateMacroState() steps, for a caller that holds none of its own. */
+    private readonly MacroStateStore $store;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
-        private readonly \Redis $redis,
+        \Redis $redis,
         private readonly MacroSnapshotRecorder $snapshotRecorder,
         private readonly MonetaryPolicySubsystem $monetarySubsystem,
         private readonly LaborMarketSubsystem $laborSubsystem,
@@ -58,7 +56,7 @@ class MacroEngine
         private readonly CommodityLogisticsSubsystem $commoditySubsystem,
         private readonly AssetMarketSubsystem $assetSubsystem,
         private readonly CreditFiscalSubsystem $creditFiscalSubsystem,
-        private readonly ?LoggerInterface $logger = null,
+        ?LoggerInterface $logger = null,
         /** Records the quarter's averages. Null in a test or a headless harness, off everywhere the ticker is not. */
         private readonly ?MacroDiagnosticsProbe $diagnostics = null,
         /**
@@ -66,122 +64,32 @@ class MacroEngine
          * by hand gets.
          */
         private readonly ?SovereignFundSubsystem $sovereignFundSubsystem = null,
-    ) {}
+    ) {
+        $this->store = new MacroStateStore($redis, $logger);
+    }
 
     /**
-     * The state Redis holds, or the opening state when there is none yet.
+     * Steps the state Redis holds by one tick and saves it, for a caller that holds no state of its own.
      *
-     * A process that has saved a state and then finds none has lost it to a flush, an eviction or a corrupt
-     * write. Opening a fresh economy there would run Year-1 prices under the current board and carry that clock
-     * into the database, so it stops instead; on restart, alignClock() refuses the missing state against the
-     * database clock.
-     *
-     * @throws \RuntimeException When the state this process saved is gone.
+     * @param float                    $dt     Time increment in years.
+     * @param BoardReadingDTO|null     $board  The board as of the previous tick, or null for no market.
+     * @param GovernmentPolicyDTO|null $policy The government's levers and election pulse as of the previous tick, or
+     *                                         null.
      */
-    private function loadState(): MacroState
-    {
-        $state = $this->readPersistedState();
-        if ($state !== null) {
-            return $state;
-        }
+    public function updateMacroState(
+        float $dt,
+        ?BoardReadingDTO $board = null,
+        ?GovernmentPolicyDTO $policy = null,
+    ): MacroStateDTO {
+        $state = $this->store->load();
+        $stepped = $this->step($state, $dt, $board, $policy);
+        $this->store->save($state);
 
-        if ($this->statePersisted) {
-            throw new \RuntimeException(sprintf(
-                'The macroeconomic state saved under Redis key "%s" is gone. Stop the ticker and restore the key, or '
-                . 'start over with app:market-reset.',
-                self::REDIS_MACRO_STATE,
-            ));
-        }
-
-        return new MacroState();
-    }
-
-    /** The state Redis holds, or null when it holds none that decodes. */
-    private function readPersistedState(): ?MacroState
-    {
-        $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
-        if (!is_string($rawState) || trim($rawState) === '') {
-            return null;
-        }
-
-        try {
-            $decoded = json_decode($rawState, true, 512, JSON_THROW_ON_ERROR);
-            if (!is_array($decoded)) {
-                $this->logger?->warning('Corrupt macroeconomic state in Redis: expected array, got ' . gettype($decoded));
-                return null;
-            }
-            return MacroState::fromArray($decoded);
-        } catch (\Throwable $e) {
-            $this->logger?->error('Failed to decode macroeconomic state from Redis: ' . $e->getMessage());
-            return null;
-        }
-    }
-
-    private function saveState(MacroState $state): void
-    {
-        try {
-            $payload = $state->toArray();
-            $encoded = json_encode($payload, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
-            if ($this->redis->set(self::REDIS_MACRO_STATE, $encoded) === true) {
-                $this->statePersisted = true;
-            }
-        } catch (\Throwable $e) {
-            $this->logger?->critical('Failed to persist macroeconomic state to Redis: ' . $e->getMessage());
-        }
-    }
-
-    public function getLiveState(): MacroState
-    {
-        return $this->loadState();
+        return $stepped;
     }
 
     /**
-     * Sets the macroeconomic clock to an authoritative simulation time.
-     *
-     * The macro state is cached in Redis and the simulation clock is committed to the database, so a cache
-     * that has lost writes comes back describing an economy at the wrong moment. Everything else in the state
-     * — the rate, the regime, where the cycle stands — is a level with no record of when it was taken, and
-     * there is nothing to reconcile it against; only time itself can be corrected, and it has to be, because
-     * the expiry grids and sampling cadences read off it. The ticker does this once at start-up.
-     *
-     * A cache with no state at all is refused once the clock has run: an opening state stamped with a late clock is
-     * a Year-1 economy (deflator 1.0) under a board carrying every year of nominal growth since, and the firms that
-     * report on it book their plant at a price level a hundredth of the one they bought it at.
-     *
-     * @throws \RuntimeException When Redis holds no macro state and the clock is past the opening.
-     */
-    public function alignClock(float $totalTime): void
-    {
-        $state = $this->readPersistedState();
-        if ($state === null) {
-            if ($totalTime > 0.0) {
-                throw new \RuntimeException(sprintf(
-                    'No macroeconomic state in Redis (key "%s") while the simulation clock stands at year %.4f. '
-                    . 'Restore the key, or start over with app:market-reset; opening a fresh economy here would run '
-                    . 'Year-1 prices under the current board.',
-                    self::REDIS_MACRO_STATE,
-                    $totalTime,
-                ));
-            }
-            $state = new MacroState();
-        }
-
-        if ($state->totalTime === $totalTime) {
-            return;
-        }
-
-        $this->logger?->warning(sprintf(
-            'Macroeconomic clock realigned from %.6f to %.6f simulation years to match the database.',
-            $state->totalTime,
-            $totalTime,
-        ));
-
-        $state->totalTime = $totalTime;
-        $this->saveState($state);
-    }
-
-    /**
-     * Advances the macroeconomic state by one tick.
+     * Advances the macroeconomic state by one tick, in place.
      * Calculates Inflation, Output Gap, Taylor Rule (Short Rate), and the Yield Curve.
      *
      * Everything here runs forward, from the economy to the prices it sets, with one exception: household
@@ -206,18 +114,18 @@ class MacroEngine
      * tick, and null leaves both where they stand, so a caller with no politics runs on the opening levers and no
      * calendar.
      *
+     * @param MacroState               $state  The economy, stepped in place.
      * @param float                    $dt     Time increment in years.
      * @param BoardReadingDTO|null     $board  The board as of the previous tick, or null for no market.
      * @param GovernmentPolicyDTO|null $policy The government's levers and election pulse as of the previous tick, or
      *                                         null.
      */
-    public function updateMacroState(
+    public function step(
+        MacroState $state,
         float $dt,
         ?BoardReadingDTO $board = null,
         ?GovernmentPolicyDTO $policy = null,
     ): MacroStateDTO {
-        $state = $this->loadState();
-
         if ($policy !== null) {
             $this->enactPolicy($state, $policy);
         }
@@ -368,7 +276,6 @@ class MacroEngine
 
         $this->diagnostics?->recordAverages($state, $dt);
 
-        $this->saveState($state);
         return MacroStateDTO::fromMacroState($state);
     }
 

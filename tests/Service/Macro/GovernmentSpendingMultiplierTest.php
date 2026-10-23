@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro;
 
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
@@ -82,11 +83,11 @@ class GovernmentSpendingMultiplierTest extends TestCase
         }
 
         if ($shock !== 0.0) {
-            $state = json_decode((string) $redis->get(MacroEngine::REDIS_MACRO_STATE), true);
+            $state = json_decode((string) $redis->get(MacroStateStore::KEY), true);
             $this->assertIsArray($state);
             $this->assertArrayHasKey('government_spending_index', $state);
             $state['government_spending_index'] *= 1.0 + $shock;
-            $redis->set(MacroEngine::REDIS_MACRO_STATE, (string) json_encode($state, JSON_PRESERVE_ZERO_FRACTION));
+            $redis->set(MacroStateStore::KEY, (string) json_encode($state, JSON_PRESERVE_ZERO_FRACTION));
         }
 
         $rows = [];

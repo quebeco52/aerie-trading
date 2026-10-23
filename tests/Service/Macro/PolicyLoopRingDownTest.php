@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro;
 
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
@@ -114,9 +115,9 @@ class PolicyLoopRingDownTest extends TestCase
                 $engine->updateMacroState($dt);
             }
             if ($kick !== 0.0) {
-                $state = json_decode((string) $redis->get(MacroEngine::REDIS_MACRO_STATE), true);
+                $state = json_decode((string) $redis->get(MacroStateStore::KEY), true);
                 $state['output_gap'] += $kick;
-                $redis->set(MacroEngine::REDIS_MACRO_STATE, json_encode($state, JSON_PRESERVE_ZERO_FRACTION));
+                $redis->set(MacroStateStore::KEY, json_encode($state, JSON_PRESERVE_ZERO_FRACTION));
             }
             $path = [];
             for ($tick = 1; $tick <= self::OBSERVE_YEARS * self::TICKS_PER_YEAR; $tick++) {

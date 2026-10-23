@@ -573,7 +573,7 @@ class BankruptcyTest extends TestCase
             new \App\Service\Market\Option\OptionTradeService(
                 $this->entityManagerMock,
                 new \App\Service\Market\Option\OptionPricingEngine(new \App\Service\Market\Bond\BondPricingEngine()),
-                new \App\Service\Macro\MacroStateProvider($redis),
+                new \App\Service\Macro\MacroStateProvider(new \App\Service\Macro\MacroStateStore($redis)),
                 new \App\Service\Market\Trading\MarginEngine(
                     $this->entityManagerMock,
                     new \App\Service\Market\Option\OptionMarginCalculator($this->entityManagerMock),

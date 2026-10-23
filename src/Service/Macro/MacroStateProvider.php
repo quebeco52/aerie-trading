@@ -17,14 +17,14 @@ use App\DTO\MacroStateDTO;
  */
 class MacroStateProvider
 {
-    public function __construct(private readonly \Redis $redis) {}
+    public function __construct(private readonly MacroStateStore $store) {}
 
     /**
      * The live snapshot, or the standing openings when the ticker has not published one yet.
      */
     public function liveState(): MacroStateDTO
     {
-        return MacroStateDTO::fromArray($this->livePayload());
+        return MacroStateDTO::fromArray($this->store->payload());
     }
 
     /**
@@ -34,13 +34,6 @@ class MacroStateProvider
      */
     public function livePayload(): array
     {
-        $raw = $this->redis->get(MacroEngine::REDIS_MACRO_STATE);
-        if (!is_string($raw) || $raw === '') {
-            return [];
-        }
-
-        $decoded = json_decode($raw, true);
-
-        return is_array($decoded) ? $decoded : [];
+        return $this->store->payload();
     }
 }

@@ -40,6 +40,7 @@ class MacroConfigFingerprintTest extends TestCase
         \App\Data\Politics\UsNameFrequencies::class,
         MacroConfigFingerprint::class,
         \App\Service\Macro\MacroState::class,
+        \App\Service\Macro\MacroStateStore::class,
         \App\Service\Macro\Recorder\MacroDiagnosticsProbe::class,
         \App\Service\Macro\Recorder\MacroSnapshotRecorder::class,
         \App\Service\Macro\Recorder\OutputGapProbe::class,

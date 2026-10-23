@@ -17,6 +17,7 @@ use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
 use App\Repository\TradeOrderRepository;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\Option\OptionMarginCalculator;
@@ -108,7 +109,7 @@ class TradeExecutionServiceTest extends TestCase
             new OptionTradeService(
                 $this->emMock,
                 new OptionPricingEngine(new BondPricingEngine()),
-                new MacroStateProvider($this->redisStub),
+                new MacroStateProvider(new MacroStateStore($this->redisStub)),
                 new MarginEngine($this->emMock, new OptionMarginCalculator($this->emMock)),
                 new \App\Service\User\CashLedger(),
             ),
