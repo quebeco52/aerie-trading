@@ -33,8 +33,8 @@ final class ElectionForecast
     /** Days an off-tick forecast is awaited before the tick works it out, so a forecaster that is down costs a week. */
     public const OFF_TICK_PATIENCE_DAYS = 7.0;
 
-    /** @var array{inputs: string, levers: array<string, float>}|null The talks' budget as last weighed, and on what. */
-    private static ?array $talksBudget = null;
+    /** @var array{inputs: string, levers: array<string, float>}|null The budget as last worked out, and on what. */
+    private static ?array $budget = null;
 
     /**
      * One tick: reads the sitting government's coming budget, pools a poll published on it and forecasts afresh; on the
@@ -232,32 +232,32 @@ final class ElectionForecast
     public static function sittingBudget(PoliticsState $state, bool $recession = false): array
     {
         $standing = BudgetRound::standingLevers($state);
-        if ($state->coalitionTakesOfficeAt >= 0.0) {
-            if ($state->talksStartedAt === $state->lastElectionAt) {
-                return $standing;
-            }
-            // Weighed once for the inputs it reads, which hold still while the talks run, rather than on every tick.
-            $seats = array_map('intval', $state->dietSeats);
-            $inputs = serialize([$seats, $state->dietVoteShares, $state->partyPositions, $state->dietBlocs, $standing, $recession]);
-            if (self::$talksBudget === null || self::$talksBudget['inputs'] !== $inputs) {
-                $odds = self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs);
-                self::$talksBudget = [
-                    'inputs' => $inputs,
-                    'levers' => self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => $odds]], 1.0, $state->partyPositions, $standing, $recession)['levers'],
-                ];
-            }
-
-            return self::$talksBudget['levers'];
+        $inTalks = $state->coalitionTakesOfficeAt >= 0.0;
+        if ($inTalks && $state->talksStartedAt === $state->lastElectionAt) {
+            return $standing;
         }
 
-        return BudgetRound::budget(
-            AerieDiet::governingParties($state->governingCoalition),
-            AerieDiet::governingParties($state->supportParties),
-            $state->dietSeats,
-            $state->partyPositions,
-            $standing,
-            $recession,
-        )['levers'];
+        // Worked out once for the inputs it reads, which change only at votes, falls, formations, budget rounds and
+        // recession turns, rather than on every tick.
+        $seats = array_map('intval', $state->dietSeats);
+        $inputs = serialize($inTalks
+            ? ['talks', $seats, $state->dietVoteShares, $state->partyPositions, $state->dietBlocs, $standing, $recession]
+            : ['sitting', $state->governingCoalition, $state->supportParties, $state->dietSeats, $state->partyPositions, $standing, $recession]);
+        if (self::$budget === null || self::$budget['inputs'] !== $inputs) {
+            $levers = $inTalks
+                ? self::tally([['seats' => $seats, 'shares' => $state->dietVoteShares, 'odds' => self::cabinetOdds($seats, $state->dietVoteShares, $state->partyPositions, [], $state->dietBlocs)]], 1.0, $state->partyPositions, $standing, $recession)['levers']
+                : BudgetRound::budget(
+                    AerieDiet::governingParties($state->governingCoalition),
+                    AerieDiet::governingParties($state->supportParties),
+                    $state->dietSeats,
+                    $state->partyPositions,
+                    $standing,
+                    $recession,
+                )['levers'];
+            self::$budget = ['inputs' => $inputs, 'levers' => $levers];
+        }
+
+        return self::$budget['levers'];
     }
 
     /**

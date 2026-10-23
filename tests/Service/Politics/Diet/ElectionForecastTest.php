@@ -145,7 +145,7 @@ class ElectionForecastTest extends TestCase
         $state->talksStartedAt = 6.2;
         $state->coalitionTakesOfficeAt = 6.3;
         $fresh = static function (PoliticsState $state, bool $recession): array {
-            (new \ReflectionProperty(ElectionForecast::class, 'talksBudget'))->setValue(null, null);
+            (new \ReflectionProperty(ElectionForecast::class, 'budget'))->setValue(null, null);
 
             return ElectionForecast::sittingBudget($state, $recession);
         };
@@ -160,6 +160,42 @@ class ElectionForecastTest extends TestCase
         ElectionForecast::sittingBudget($state);
         $slump = ElectionForecast::sittingBudget($state, true);
         $this->assertSame($fresh($state, true), $slump, 'The fund consents in a recession.');
+    }
+
+    /**
+     * A sitting cabinet's budget is worked out once for its inputs and afresh whenever one moves: the laws in force,
+     * the cabinet and its supporters, and the fund's consent in a recession.
+     */
+    public function testTheSittingBudgetIsWorkedOutAfreshWhenItsInputsMove(): void
+    {
+        $state = new PoliticsState();
+        $state->dietSeats = Election::dHondt(Diet::SEED_VOTE_SHARES, Diet::SEATS);
+        $state->governingCoalition = Diet::membership([Diet::VANGUARD, Diet::CIVIC]);
+        $state->coalitionTakesOfficeAt = -1.0;
+        $fresh = static function (PoliticsState $state, bool $recession): array {
+            (new \ReflectionProperty(ElectionForecast::class, 'budget'))->setValue(null, null);
+
+            return ElectionForecast::sittingBudget($state, $recession);
+        };
+
+        $before = ElectionForecast::sittingBudget($state);
+        $this->assertSame($fresh($state, false), $before, 'Held for the same inputs.');
+
+        $state->corporateTaxPolicyShift += 0.01;
+        $moved = ElectionForecast::sittingBudget($state);
+        $this->assertNotSame($before, $moved, 'The laws in force moved.');
+        $this->assertSame($fresh($state, false), $moved);
+
+        $state->governingCoalition = Diet::membership([Diet::EXCHANGE]);
+        $recast = ElectionForecast::sittingBudget($state);
+        $this->assertNotSame($moved, $recast, 'The cabinet changed.');
+        $this->assertSame($fresh($state, false), $recast);
+
+        $state->reserveDrawShare = MacroConstants::RESERVE_DRAW_CEILING * 2.0;
+        $calm = ElectionForecast::sittingBudget($state);
+        $slump = ElectionForecast::sittingBudget($state, true);
+        $this->assertNotSame($calm, $slump, 'The fund consents in a recession.');
+        $this->assertSame($fresh($state, true), $slump);
     }
 
     /**
