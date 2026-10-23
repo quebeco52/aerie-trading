@@ -51,8 +51,8 @@ class ReorganizationEngine
             ? $going->trailingEbit / ($exitRate * $requiredCoverage)
             : 0.0;
 
-        $ebitdaLimit = (float) ($metrics['ebitda_limit'] ?? DebtEngine::DEFAULT_EBITDA_COVENANT_LIMIT);
-        $covenantCapacity = $ebitdaLimit >= DebtEngine::EBITDA_COVENANT_EXEMPT_LIMIT
+        $ebitdaLimit = $metrics['ebitda_limit'];
+        $covenantCapacity = $ebitdaLimit === null
             ? $going->claims
             : max(0.0, ($ebitdaLimit * $going->trailingEbitda) + $going->cash);
 

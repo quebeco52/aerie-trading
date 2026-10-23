@@ -98,9 +98,9 @@ class Sectors
         'Auto Parts' => ['pe' => 14.00, 'depreciation' => 0.07, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'heavy_manufacturing'],
         // Floorplan debt allows high limits
         'Auto & Truck Dealerships' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'none'],
-        'Banks - Diversified' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 15.0, 'business_model' => 'commercial_bank'],
+        'Banks - Diversified' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 15.0, 'business_model' => 'commercial_bank'],
         // Higher risk of localized deposit flight
-        'Banks - Regional' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 11.0, 'business_model' => 'commercial_bank'],
+        'Banks - Regional' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 11.0, 'business_model' => 'commercial_bank'],
         'Beverages - Brewers' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'],
         // Massive brand moat
         'Beverages - Non-Alcoholic' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'consumer_staples'],
@@ -108,7 +108,7 @@ class Sectors
         // R&D driven
         'Biotechnology' => ['pe' => 15.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'biotech'],
         // Prime brokers, market makers, prop shops
-        'Brokerages' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'brokerage'],
+        'Brokerages' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'brokerage'],
         'Building Materials' => ['pe' => 15.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'heavy_manufacturing'],
         'Building Products & Equipment' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'heavy_manufacturing'],
         'Business Equipment & Supplies' => ['pe' => 12.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
@@ -123,9 +123,9 @@ class Sectors
         // 73 firms).
         'Copper' => ['pe' => 12.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 0.44, 'business_model' => 'mining'],
         // State Street: assets about ten times equity
-        'Custody Banks' => ['pe' => 12.00, 'depreciation' => 0.03, 'ebitda_limit' => 999.0, 'equity_limit' => 12.0, 'business_model' => 'custody_bank'],
+        'Custody Banks' => ['pe' => 12.00, 'depreciation' => 0.03, 'ebitda_limit' => null, 'equity_limit' => 12.0, 'business_model' => 'custody_bank'],
         // Amex, Discover. Unsecured lending & swipe fees.
-        'Credit Services' => ['pe' => 15.00, 'depreciation' => 0.05, 'ebitda_limit' => 999.0, 'equity_limit' => 7.0, 'business_model' => 'credit_services'],
+        'Credit Services' => ['pe' => 15.00, 'depreciation' => 0.05, 'ebitda_limit' => null, 'equity_limit' => 7.0, 'business_model' => 'credit_services'],
         'Diagnostics & Research' => ['pe' => 24.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'],
         // Very safe, steady cash flows
         'Discount Stores' => ['pe' => 20.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'],
@@ -149,7 +149,7 @@ class Sectors
         'Farm Products' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'consumer_staples'],
         // Monopolies, high P/E
         'Financial Data & Stock Exchanges' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'financial_data'],
-        'Financial Clearinghouses' => ['pe' => 18.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 50.0, 'business_model' => 'clearing_house'],
+        'Financial Clearinghouses' => ['pe' => 18.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 50.0, 'business_model' => 'clearing_house'],
         'Food Distribution' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Footwear & Accessories' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'apparel_manufacturing'],
         'Furnishings, Fixtures & Appliances' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'tools_and_accessories'],
@@ -161,7 +161,7 @@ class Sectors
         // Very safe debt profile
         'Grocery Stores' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'],
         // Quantitative alpha, leveraged directional trading
-        'Hedge Fund' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 3.0, 'business_model' => 'hedge_fund'],
+        'Hedge Fund' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 3.0, 'business_model' => 'hedge_fund'],
         // Managed care
         'Healthcare Plans' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'health_insurer'],
         'Health Information Services' => ['pe' => 24.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'tech'],
@@ -172,7 +172,7 @@ class Sectors
         // Asset light
         'Information Technology Services' => ['pe' => 24.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'tech'],
         // Pure-play investment banks and M&A syndicates
-        'Investment Banking' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'investment_bank'],
+        'Investment Banking' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'investment_bank'],
         // Not filed under conglomerates, because it is not one and the model is built on it not being one:
         // its book is a portfolio of marketable stakes, so it is priced on net asset value at a discount
         // rather than on the multiple below, which survives only to feed the sector P/E anchor. Leverage is
@@ -184,13 +184,13 @@ class Sectors
         // A multi-line retail carrier writes P&C and Life side by side and cedes its tail upward, which is
         // exactly the retail model's two-stream split. The generic insurance model has no such split, so a
         // diversified carrier priced on it silently discarded its own product mix.
-        'Insurance - Diversified' => ['pe' => 12.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 7.0, 'business_model' => 'retail_insurance'],
-        'Insurance - Life' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'retail_insurance'],
+        'Insurance - Diversified' => ['pe' => 12.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 7.0, 'business_model' => 'retail_insurance'],
+        'Insurance - Life' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'retail_insurance'],
         // P&C is riskier, needs more equity buffer
-        'Insurance - Property & Casualty' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 6.0, 'business_model' => 'retail_insurance'],
+        'Insurance - Property & Casualty' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 6.0, 'business_model' => 'retail_insurance'],
         // Taking the riskiest policies, highest capital requirements
-        'Insurance - Reinsurance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 5.0, 'business_model' => 'reinsurance'],
-        'Insurance - Specialty' => ['pe' => 13.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 6.0, 'business_model' => 'insurance'],
+        'Insurance - Reinsurance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 5.0, 'business_model' => 'reinsurance'],
+        'Insurance - Specialty' => ['pe' => 13.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 6.0, 'business_model' => 'insurance'],
         // UPS, FedEx. Heavy CapEx.
         'Integrated Freight & Logistics' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'logistics'],
         // Alphabet, Meta. Asset light.
@@ -222,7 +222,7 @@ class Sectors
         'Merchant Houses' => ['pe' => 11.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'merchant_house'],
         'Metal Fabrication' => ['pe' => 13.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'heavy_manufacturing'],
         // Shadow banks / Fannie Mae. Bank Rule.
-        'Mortgage Finance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'],
+        'Mortgage Finance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'],
         // Exploration. Wells deplete incredibly fast. Book D/E of US E&P (Damodaran, Jan 2026: 33.2% book debt/capital,
         // 142 firms).
         'Oil & Gas E&P' => ['pe' => 11.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.5, 'equity_limit' => 0.50, 'business_model' => 'oil_gas_producer'],
@@ -242,9 +242,9 @@ class Sectors
         // ESG premium, stable.
         'Pollution & Treatment Controls' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'waste_management'],
         // Julius Baer: assets 16.5 times equity
-        'Private Banks' => ['pe' => 12.00, 'depreciation' => 0.03, 'ebitda_limit' => 999.0, 'equity_limit' => 16.0, 'business_model' => 'private_bank'],
+        'Private Banks' => ['pe' => 12.00, 'depreciation' => 0.03, 'ebitda_limit' => null, 'equity_limit' => 16.0, 'business_model' => 'private_bank'],
         // Hostile takeovers, leveraged buyouts
-        'Private Equity' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 3.0, 'business_model' => 'private_equity'],
+        'Private Equity' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 3.0, 'business_model' => 'private_equity'],
         // Secular decline.
         'Publishing' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         // Wide moat monopoly pricing.
@@ -263,7 +263,7 @@ class Sectors
         // Warehouses (Amazon effect), premium P/E
         'REIT - Industrial' => ['pe' => 18.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
         // Pure financial engineering (Bank Rule)
-        'REIT - Mortgage' => ['pe' => 10.00, 'depreciation' => 0.01, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'],
+        'REIT - Mortgage' => ['pe' => 10.00, 'depreciation' => 0.01, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'],
         // Work-from-home headwinds
         'REIT - Office' => ['pe' => 12.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.0, 'equity_limit' => 2.5, 'business_model' => 'reit'],
         // Apartments, highly resilient
@@ -418,11 +418,20 @@ class Sectors
      * The industry's row of the table, or the General row for an industry the table does not list. Every reader of a
      * sector parameter goes through here, so an unlisted industry falls back the same way whichever parameter is read.
      *
-     * @return array{pe: float, depreciation: float, ebitda_limit: float, equity_limit: float, business_model: string}
+     * @return array{pe: float, depreciation: float, ebitda_limit: float|null, equity_limit: float, business_model: string}
      */
     public static function metricsFor(?string $industry): array
     {
         return self::INDUSTRY_METRICS[$industry ?: 'General'] ?? self::INDUSTRY_METRICS['General'];
+    }
+
+    /**
+     * The maintenance covenant the industry's lenders set on funded net debt over EBITDA, or null where they test none:
+     * a bank or an insurer is bound by its regulatory capital, not its cash-flow leverage.
+     */
+    public static function ebitdaCovenant(?string $industry): ?float
+    {
+        return self::metricsFor($industry)['ebitda_limit'];
     }
 
     /** The business model identifier the industry runs on. */

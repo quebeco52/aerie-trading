@@ -9,7 +9,6 @@ use App\DTO\DivestitureContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\Industry\IndustryShareLedger;
-use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Model\BusinessModelInterface;
@@ -66,9 +65,6 @@ class MergerAndAcquisitionEngine
     public const MA_FINANCIAL_EQUITY_CAP = 0.15;
     /** Most of a target's net identifiable assets that can be trade cycle rather than plant. */
     public const MA_MAX_WORKING_CAPITAL_SHARE = 0.90;
-
-    /** Maturity used in Merton's distance to default calculation. */
-    public const MA_MERTON_MATURITY = 5.0;
 
     // --- Horizontal Merger Review (2023 Merger Guidelines §2.1; 2010 Horizontal Merger Guidelines §5.3) ---
     /**
@@ -327,7 +323,6 @@ class MergerAndAcquisitionEngine
         $ctx->equity = (float) $stock->getTotalEquity();
         $ctx->preDealInvestedCapital = $stock->getInvestedCapital();
         $ctx->currentDebt = (float) $stock->getTotalDebt();
-        $ctx->policyRate = $ctx->macroState->policyRate;
         $ctx->yield5y = $ctx->macroState->yield5yEma;
 
         // Underwritten on the margin the firm last reported, as the treasury's own lender test is.
@@ -664,29 +659,10 @@ class MergerAndAcquisitionEngine
             $ctx->debtIssued = $ctx->purchasePrice - $ctx->usableTreasury;
             $stock->setCorporateTreasury((string) ($ctx->treasury - $ctx->usableTreasury));
 
-            $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
-            $currentNetDebt = max(0.0, $ctx->currentDebt - $ctx->treasury);
-            // The price moves net debt by all of itself: the cash spent leaves the treasury, the rest is borrowed.
-            $newNetDebt = max(0.0, $ctx->currentDebt - $ctx->treasury + $ctx->purchasePrice);
-
-            $newAssetValue = $marketCap + $currentNetDebt + $ctx->purchasePrice;
-            // The acquired business is priced at the acquirer's own asset risk.
-            $newAssetVolatility = $this->debtEngine->resolveAssetVolatility($stock, $marketCap, max(0.01, $newNetDebt), $ctx->policyRate);
-
-            $distanceToDefault = CreditRisk::calculateDistanceToDefault(
-                $newAssetValue,
-                max(0.01, $newNetDebt),
-                $newAssetVolatility,
-                $ctx->policyRate,
-                self::MA_MERTON_MATURITY,
-            );
-
             // The deal's notes price at the rating the pro-forma balance sheet carries: the combined EBITDA is the
             // acquirer's trailing figure plus the operating income the target is bought for.
             $proFormaEbitda = $ctx->health->rawMetrics->ebitda + $this->valueTarget($ctx, $ctx->purchasePrice)['operating_income'];
-            $proFormaRating = $this->debtEngine->resolveProFormaRating($stock, $distanceToDefault, $newNetDebt, $proFormaEbitda);
-
-            $ctx->costOfNewDebt = $ctx->yield5y + $this->debtEngine->resolveCreditSpread($stock, $ctx->macroState, $proFormaRating);
+            $ctx->costOfNewDebt = $this->debtEngine->priceAcquisitionDebt($stock, $ctx->macroState, $ctx->currentDebt - $ctx->treasury, $ctx->purchasePrice, $proFormaEbitda);
 
             $this->debtEngine->issueDebt($stock, $ctx->debtIssued, $ctx->costOfNewDebt);
         }

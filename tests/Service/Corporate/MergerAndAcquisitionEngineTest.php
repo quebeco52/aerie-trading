@@ -609,24 +609,15 @@ class MergerAndAcquisitionEngineTest extends TestCase
     }
 
     /**
-     * The pro-forma credit check strikes the acquirer's Merton distance at its business risk, and the deal's notes
-     * price at the rating that pro-forma balance sheet carries. It used to de-lever equity volatility across the
-     * enlarged balance sheet, so the more a deal borrowed the SAFER the combined assets looked and the cheaper the
-     * new debt was priced.
+     * A debt-funded deal borrows at the coupon DebtEngine prices its notes at, on the acquirer's net debt before the
+     * deal and the deal's whole price: a deal paid partly from the treasury and partly with new notes adds all of its
+     * price to net debt. Counting only the borrowed part struck the pro-forma rating, and the coupon on the notes, as
+     * if the cash spent were still there.
      */
-    public function testALeveragedDealIsUnderwrittenAtTheAcquirersAssetRisk(): void
+    public function testADebtFundedDealBorrowsAtTheCouponItsWholePriceIsRatedAt(): void
     {
         $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
         $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
-        $assetVolatility = 0.27;
-        $consulted = 0;
-        $this->debtEngineMock->method('resolveAssetVolatility')->willReturnCallback(
-            static function () use (&$assetVolatility, &$consulted): float {
-                ++$consulted;
-
-                return $assetVolatility;
-            },
-        );
         $borrowed = [];
         $this->debtEngineMock->method('issueDebt')->willReturnCallback(
             static function (Stock $borrower, float $amount, float $cost) use (&$borrowed): void {
@@ -634,56 +625,12 @@ class MergerAndAcquisitionEngineTest extends TestCase
                 $borrowed[] = $cost;
             },
         );
-        $graded = [];
-        $this->debtEngineMock->method('resolveProFormaRating')->willReturnCallback(
-            static function (Stock $acquirer, float $distanceToDefault) use (&$graded): string {
-                $graded[] = $distanceToDefault;
+        $priced = [];
+        $this->debtEngineMock->method('priceAcquisitionDebt')->willReturnCallback(
+            static function (Stock $acquirer, MacroStateDTO $macro, float $netDebt, float $price) use (&$priced): float {
+                $priced[] = ['net_debt' => $netDebt, 'price' => $price];
 
-                return 'BB';
-            },
-        );
-        $this->debtEngineMock->method('resolveCreditSpread')->willReturnCallback(
-            static fn(Stock $acquirer, MacroStateDTO $macro, ?string $rating = null): float => $rating === 'BB' ? 0.03 : 0.0,
-        );
-        $dealPricedAt = function (float $volatility) use (&$assetVolatility, &$borrowed, $macroState): float {
-            $assetVolatility = $volatility;
-            $borrowed = [];
-            $stock = $this->buildLedgeredAcquirer('LEVR', treasury: 1_000_000_000.0, debt: 1_000_000_000.0, shares: 100_000_000.0);
-            $this->assertIsArray($this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0), 'the levered control deal must execute');
-            $this->assertCount(1, $borrowed, 'the deal must borrow');
-
-            return $borrowed[0];
-        };
-
-        $calm = $dealPricedAt(0.27);
-        $this->assertGreaterThan(0, $consulted, 'a debt-funded deal is credit-checked at the acquirer\'s asset risk');
-        $this->assertEqualsWithDelta(0.035 + 0.03, $calm, 1e-12, 'the notes price at the pro-forma rating\'s spread');
-        $dealPricedAt(0.40);
-        $this->assertCount(2, $graded);
-        $this->assertLessThan($graded[0], $graded[1], 'the asset risk the engine resolves is the one the pro-forma rating reads');
-    }
-
-    /**
-     * A deal paid partly from the treasury and partly with new notes adds its whole price to net debt. Counting only
-     * the borrowed part struck the pro-forma rating, and the coupon on the notes, as if the cash spent were still
-     * there.
-     */
-    public function testAPartlyCashFundedDealIsRatedOnItsWholePriceInNetDebt(): void
-    {
-        $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
-        $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
-        $this->debtEngineMock->method('resolveAssetVolatility')->willReturn(0.27);
-        $this->debtEngineMock->method('issueDebt')->willReturnCallback(
-            static function (Stock $borrower, float $amount): void {
-                $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
-            },
-        );
-        $rated = null;
-        $this->debtEngineMock->method('resolveProFormaRating')->willReturnCallback(
-            static function (Stock $acquirer, float $distanceToDefault, float $netDebt) use (&$rated): string {
-                $rated = $netDebt;
-
-                return 'BB';
+                return 0.065;
             },
         );
 
@@ -692,8 +639,10 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $deal = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
 
         $this->assertIsArray($deal, 'the levered deal must execute');
-        $this->assertNotNull($rated, 'the deal must borrow and be rated');
-        $this->assertEqualsWithDelta($netDebtBefore + (float) $deal['spent'], $rated, 1.0);
+        $this->assertCount(1, $priced, 'the deal must borrow and be priced');
+        $this->assertSame([0.065], $borrowed, 'the notes carry the coupon they were priced at');
+        $this->assertEqualsWithDelta($netDebtBefore, $priced[0]['net_debt'], 1.0);
+        $this->assertEqualsWithDelta((float) $deal['spent'], $priced[0]['price'], 1.0);
     }
 
     /**

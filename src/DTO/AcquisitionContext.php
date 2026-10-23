@@ -33,7 +33,6 @@ class AcquisitionContext
     /** Invested capital before the deal is funded; funding moves cash, debt or shares and already adds the price. */
     public float $preDealInvestedCapital = 0.0;
     public float $currentDebt = 0.0;
-    public float $policyRate = 0.0;
     public float $yield5y = 0.0;
 
     public DebtHealthDTO $health;

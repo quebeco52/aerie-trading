@@ -44,7 +44,7 @@ def per_seed(arm, s, absurd):
         for i in range(3, len(q)):
             e4 = sum(x['ebitda'] for x in q[i - 3:i + 1]); nd = q[i]['debt'] - q[i]['cash']
             if e4 > 0:
-                nde.append(nd / e4); br += nd / e4 >= q[i]['covL']
+                nde.append(nd / e4); br += q[i]['covL'] is not None and nd / e4 >= q[i]['covL']
             else:
                 br += nd > 0
         T = []

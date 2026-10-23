@@ -1991,6 +1991,44 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * An acquisition's notes are underwritten at the acquirer's own asset risk and price at the spread of the rating
+     * the pro-forma balance sheet carries, the deal's whole price added to net debt. De-levering equity volatility
+     * across the enlarged balance sheet made the combined assets look safer the more a deal borrowed.
+     */
+    public function testAcquisitionNotesAreUnderwrittenAtTheAcquirersAssetRisk(): void
+    {
+        $assetVolatility = 0.27;
+        $rated = [];
+        $engine = $this->getMockBuilder(DebtEngine::class)
+            ->setConstructorArgs([$this->mathUtilityMock, $this->corporateMetricsMock, $this->creditRatingAgency])
+            ->onlyMethods(['resolveAssetVolatility', 'resolveProFormaRating', 'resolveCreditSpread'])
+            ->getMock();
+        $engine->method('resolveAssetVolatility')->willReturnCallback(static function () use (&$assetVolatility): float {
+            return $assetVolatility;
+        });
+        $engine->method('resolveProFormaRating')->willReturnCallback(
+            static function (Stock $acquirer, float $distanceToDefault, float $netDebt) use (&$rated): string {
+                $rated[] = ['distance' => $distanceToDefault, 'net_debt' => $netDebt];
+
+                return 'BB';
+            },
+        );
+        $engine->method('resolveCreditSpread')->willReturnCallback(
+            static fn(Stock $acquirer, MacroStateDTO $macro, ?string $rating = null): float => $rating === 'BB' ? 0.03 : 0.0,
+        );
+        $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
+        $acquirer = $this->leveredOperatingFirm('BBB');
+
+        $calm = $engine->priceAcquisitionDebt($acquirer, $macroState, 60_000_000.0, 40_000_000.0, 25_000_000.0);
+        $assetVolatility = 0.40;
+        $engine->priceAcquisitionDebt($acquirer, $macroState, 60_000_000.0, 40_000_000.0, 25_000_000.0);
+
+        $this->assertEqualsWithDelta(0.035 + 0.03, $calm, 1e-12, 'The notes price at the pro-forma rating\'s spread.');
+        $this->assertSame(100_000_000.0, $rated[0]['net_debt'], 'The whole price joins net debt, cash spent or borrowed.');
+        $this->assertLessThan($rated[0]['distance'], $rated[1]['distance'], 'The acquirer\'s asset risk is the one the rating reads.');
+    }
+
+    /**
      * The primary market shuts to a class when the index it trades off blows out, as high yield did in 2008 and 2020:
      * a CCC issuer trading at a CCC spread in a calm market still rolls its maturity, the same issuer is shut out once
      * the HY index reaches crisis levels, and an investment-grade issuer refinances with the IG index at its record.

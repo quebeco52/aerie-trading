@@ -49,7 +49,7 @@ class CreditHealthBuilder
             'revolverDrawn' => $drawn,
             'revolverUtilization' => $commitment > 0.0 ? $drawn / $commitment : null,
             'netDebtToEbitda' => $health->netDebtToEbitda,
-            'covenantLimit' => $health->ebitdaCovenantLimit < DebtEngine::EBITDA_COVENANT_EXEMPT_LIMIT ? $health->ebitdaCovenantLimit : null,
+            'covenantLimit' => $health->ebitdaCovenantLimit,
             'hasCovenantHeadroom' => $health->hasLeverageHeadroom,
             'interestCoverage' => $health->interestCoverage,
             'distanceToDefault' => $this->debtEngine->resolveDistanceToDefault($stock, $macroState),

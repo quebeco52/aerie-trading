@@ -49,15 +49,6 @@ class DebtEngine
      */
     private const MIN_BASELINE_CREDIT_SPREAD = 0.0015;
 
-    // --- Leverage Covenant (Net Debt / EBITDA) ---
-    /**
-     * Sector limits at or above this are a no-test sentinel: financials are bound by regulatory capital, not cash-flow
-     * leverage.
-     */
-    public const EBITDA_COVENANT_EXEMPT_LIMIT = 999.0;
-    /** Fallback Net Debt / EBITDA covenant for an industry carrying no calibrated limit. */
-    public const DEFAULT_EBITDA_COVENANT_LIMIT = 3.0;
-
     // --- CAPM / Beta Limits ---
     /** Prevent runaway WACC in standard CAPM by capping debt to equity ratio. */
     private const MAX_BETA_DEBT_TO_EQUITY = 2.5;
@@ -457,6 +448,33 @@ class DebtEngine
     }
 
     /**
+     * The coupon a debt-funded acquisition's notes price at: the five-year yield plus the spread of the rating the
+     * pro-forma balance sheet carries (resolveProFormaRating()). Its distance to default is struck over the credit
+     * horizon at the acquirer's own asset risk, the business it buys priced at the same, with the deal's whole price
+     * added to net debt: the cash spent leaves the treasury, the rest is borrowed.
+     *
+     * @param float $netDebt        The acquirer's debt less its treasury before the deal.
+     * @param float $price          What the deal costs.
+     * @param float $proFormaEbitda The acquirer's trailing EBITDA plus the operating income the target is bought for.
+     */
+    public function priceAcquisitionDebt(Stock $acquirer, MacroStateDTO $macroState, float $netDebt, float $price, float $proFormaEbitda): float
+    {
+        $marketCap = max(1.0, (float) $acquirer->getPrice() * max(1.0, (float) $acquirer->getSharesOutstanding()));
+        $proFormaNetDebt = max(0.0, $netDebt + $price);
+        $barrier = max(0.01, $proFormaNetDebt);
+        $distanceToDefault = CreditRisk::calculateDistanceToDefault(
+            $marketCap + max(0.0, $netDebt) + $price,
+            $barrier,
+            $this->resolveAssetVolatility($acquirer, $marketCap, $barrier, $macroState->policyRate),
+            $macroState->policyRate,
+            self::MERTON_HORIZON_YEARS,
+        );
+        $rating = $this->resolveProFormaRating($acquirer, $distanceToDefault, $proFormaNetDebt, $proFormaEbitda);
+
+        return $macroState->yield5yEma + $this->resolveCreditSpread($acquirer, $macroState, $rating);
+    }
+
+    /**
      * Merton's distance to default (d2) over the credit horizon: firm value is market equity plus the debt
      * obligations the model is judged on, at the firm's de-levered asset volatility. The rating agency grades
      * on it and the stock page quotes it, so both read this one calculation.
@@ -769,12 +787,11 @@ class DebtEngine
         $canIssueDebt = $interestCoverage >= ($minIcr + $icrBuffer);
 
         // Maintenance leverage covenant: Net Debt / EBITDA constraint on funded debt.
-        $ebitdaCovenantLimit = (float) ($metrics['ebitda_limit'] ?? self::DEFAULT_EBITDA_COVENANT_LIMIT);
+        $ebitdaCovenantLimit = $metrics['ebitda_limit'];
         $netDebtToEbitda = $debtMetrics->ebitda > 0.0
             ? min(self::MAX_LEVERAGE_RATIO, $netDebtCapital / $debtMetrics->ebitda)
             : self::MAX_LEVERAGE_RATIO;
-        $hasLeverageHeadroom = $ebitdaCovenantLimit >= self::EBITDA_COVENANT_EXEMPT_LIMIT
-            || $netDebtToEbitda < $ebitdaCovenantLimit;
+        $hasLeverageHeadroom = $ebitdaCovenantLimit === null || $netDebtToEbitda < $ebitdaCovenantLimit;
 
         // Macro-Economic Leverage Tolerance
         $macroDebtTolerance = $equityLimit;
@@ -845,8 +862,8 @@ class DebtEngine
      */
     public function resolveCovenantLeverageMultiple(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy): ?float
     {
-        $covenant = (float) (\App\Data\Company\Sectors::metricsFor($stock->getIndustry())['ebitda_limit'] ?? self::DEFAULT_EBITDA_COVENANT_LIMIT);
-        if ($covenant >= self::EBITDA_COVENANT_EXEMPT_LIMIT) {
+        $covenant = \App\Data\Company\Sectors::ebitdaCovenant($stock->getIndustry());
+        if ($covenant === null) {
             return null;
         }
 

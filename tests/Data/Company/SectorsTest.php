@@ -51,7 +51,7 @@ class SectorsTest extends TestCase
         $this->assertGreaterThanOrEqual(0.0, $metrics['depreciation'], "Depreciation must be non-negative for {$industry}");
         $this->assertLessThanOrEqual(0.50, $metrics['depreciation'], "Depreciation exceeds 50% for {$industry}");
 
-        $this->assertGreaterThanOrEqual(0.0, $metrics['ebitda_limit'], "EBITDA limit must be non-negative for {$industry}");
+        $this->assertTrue($metrics['ebitda_limit'] === null || $metrics['ebitda_limit'] > 0.0, "A covenant, where {$industry} has one, is positive");
         $this->assertGreaterThanOrEqual(0.0, $metrics['equity_limit'], "Equity limit must be non-negative for {$industry}");
 
         // Strategy resolution
