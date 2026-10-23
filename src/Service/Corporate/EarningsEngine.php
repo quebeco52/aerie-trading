@@ -11,7 +11,6 @@ use App\Entity\Stock;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Event\EarningsReportedEvent;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Ticker\TickCadence;
@@ -23,6 +22,7 @@ use App\Service\Math\ResponseCurves;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
+use App\Service\News\MarketEventPublisher;
 use App\Service\News\NarrativeEngine;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 

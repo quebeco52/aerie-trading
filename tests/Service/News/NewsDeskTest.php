@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\News;
 
 use App\Service\Math\FinancialConstants;
-use App\Service\News\EventCategory;
 use App\Service\News\EventPresenter;
+use App\Service\News\NewsCard;
 use App\Service\News\NewsDesk;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -71,7 +71,7 @@ class NewsDeskTest extends TestCase
     /** A deal, bought or sold, is a headline when it is at least 10% of the company's market value. */
     public function testADealIsAHeadlineWhenSignificantToTheCompany(): void
     {
-        foreach (['ACQUISITION', 'STRATEGIC ACQUISITION', 'DIVESTITURE'] as $type) {
+        foreach (['LEVERAGED BUYOUT', 'STRATEGIC ACQUISITION', 'DIVESTITURE'] as $type) {
             $this->assertTrue(NewsDesk::isHeadline($this->card($type, 0.4), self::VOLATILITY, 0.10), $type);
             $this->assertFalse(NewsDesk::isHeadline($this->card($type, 0.4), self::VOLATILITY, 0.099), $type);
             $this->assertFalse(NewsDesk::isHeadline($this->card($type, 0.4), self::VOLATILITY), "{$type} of unknown size");
@@ -103,29 +103,28 @@ class NewsDeskTest extends TestCase
 
     public function testEachStoryIsFiledUnderOneSectionAndAppearsUnderAllAndItsScope(): void
     {
-        $this->assertSame('district', NewsDesk::sectionOf(NewsDesk::SCOPE_DISTRICT, 'government'));
-        $this->assertSame('funds', NewsDesk::sectionOf(NewsDesk::SCOPE_FUND, 'index'));
-        $this->assertSame('earnings', NewsDesk::sectionOf(NewsDesk::SCOPE_COMPANY, 'earnings'));
-        $this->assertSame('deals', NewsDesk::sectionOf(NewsDesk::SCOPE_COMPANY, 'mna'));
-        $this->assertSame('credit', NewsDesk::sectionOf(NewsDesk::SCOPE_COMPANY, 'bankruptcy'));
-        $this->assertSame('companies', NewsDesk::sectionOf(NewsDesk::SCOPE_COMPANY, 'governance'));
+        $this->assertSame('district', NewsDesk::sectionOf(NewsDesk::SCOPE_DISTRICT, NewsCard::Government));
+        $this->assertSame('funds', NewsDesk::sectionOf(NewsDesk::SCOPE_FUND, NewsCard::Index));
+        $this->assertSame('earnings', NewsDesk::sectionOf(NewsDesk::SCOPE_COMPANY, NewsCard::Earnings));
+        $this->assertSame('deals', NewsDesk::sectionOf(NewsDesk::SCOPE_COMPANY, NewsCard::Deal));
+        $this->assertSame('credit', NewsDesk::sectionOf(NewsDesk::SCOPE_COMPANY, NewsCard::Bankruptcy));
+        $this->assertSame('companies', NewsDesk::sectionOf(NewsDesk::SCOPE_COMPANY, NewsCard::Succession));
 
-        $this->assertTrue(NewsDesk::inSection('companies', NewsDesk::SCOPE_COMPANY, 'earnings'));
-        $this->assertFalse(NewsDesk::inSection('companies', NewsDesk::SCOPE_FUND, 'index'));
-        $this->assertTrue(NewsDesk::inSection('all', NewsDesk::SCOPE_DISTRICT, 'economy'));
+        $this->assertTrue(NewsDesk::inSection('companies', NewsDesk::SCOPE_COMPANY, NewsCard::Earnings));
+        $this->assertFalse(NewsDesk::inSection('companies', NewsDesk::SCOPE_FUND, NewsCard::Index));
+        $this->assertTrue(NewsDesk::inSection('all', NewsDesk::SCOPE_DISTRICT, NewsCard::Economy));
         $this->assertSame('all', NewsDesk::section('no-such-section'));
     }
 
-    /** The wire selects a company section by type, so every type of each section's cards must be selectable. */
-    public function testEachCompanySectionSelectsEveryTypeItsCardsAreRoutedFrom(): void
+    /** The headline scan reads every card a story can be a headline on, and only those. */
+    public function testTheHeadlineScanReadsEveryCardThatCanMakeAHeadline(): void
     {
-        foreach (NewsDesk::COMPANY_SECTION_CATEGORIES as $section => $categories) {
-            foreach (EventCategory::typesIn($categories) as $type) {
-                $this->assertContains(EventCategory::forType($type), $categories, "{$type} selected for {$section}");
-            }
+        $cards = NewsDesk::headlineCards();
+
+        foreach (NewsCard::cases() as $card) {
+            $story = (new EventPresenter())->present(['type' => NewsCard::typesOf([$card])[0] ?? 'SOMETHING NEW', 'description' => 'from BBB to BB', 'change_percent' => 50.0]);
+            $this->assertSame(in_array($card, $cards, true), NewsDesk::isHeadline($story, 0.01, 1.0), $card->name);
         }
-        $this->assertContains('STRATEGIC ACQUISITION', EventCategory::typesIn(NewsDesk::COMPANY_SECTION_CATEGORIES['deals']));
-        $this->assertContains('CREDIT_DOWNGRADE', EventCategory::typesIn(NewsDesk::COMPANY_SECTION_CATEGORIES['credit']));
     }
 
     /** @return array<string, mixed> */

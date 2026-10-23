@@ -6,8 +6,8 @@ namespace App\Tests\Service\Market\Index;
 
 use App\Entity\Etf;
 use App\Entity\EtfHistory;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Index\EtfTracker;
+use App\Service\News\MarketEventPublisher;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Schema\AbstractSchemaManager;
 use Doctrine\DBAL\Types\Types;

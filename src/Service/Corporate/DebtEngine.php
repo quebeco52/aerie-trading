@@ -6,7 +6,6 @@ namespace App\Service\Corporate;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FirmEconomics;
@@ -14,6 +13,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\Valuation;
+use App\Service\News\MarketEventPublisher;
 
 class DebtEngine
 {

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Service\Event;
+namespace App\Tests\Service\News;
 
 use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Entity\EtfEvent;
 use App\Entity\Stock;
 use App\Entity\StockEvent;
-use App\Service\Event\MarketEventPublisher;
+use App\Service\News\MarketEventPublisher;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;

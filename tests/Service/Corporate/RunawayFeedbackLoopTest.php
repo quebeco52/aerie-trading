@@ -183,7 +183,7 @@ class RunawayFeedbackLoopTest extends TestCase
         $debtEngine->method('analyzeDebtHealth')->willReturn($health);
         $debtEngine->method('analyzeTrailingDebtHealth')->willReturn($health);
 
-        $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
+        $marketEventPublisher = $this->createStub(\App\Service\News\MarketEventPublisher::class);
         $narrativeEngine = $this->createStub(\App\Service\News\NarrativeEngine::class);
         $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
         $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();
@@ -289,7 +289,7 @@ class RunawayFeedbackLoopTest extends TestCase
         $debtEngine->method('analyzeDebtHealth')->willReturn($health);
         $debtEngine->method('analyzeTrailingDebtHealth')->willReturn($health);
 
-        $marketEventPublisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
+        $marketEventPublisher = $this->createStub(\App\Service\News\MarketEventPublisher::class);
         $narrativeEngine = $this->createStub(\App\Service\News\NarrativeEngine::class);
         $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
         $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();

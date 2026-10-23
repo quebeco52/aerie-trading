@@ -8,7 +8,7 @@ use App\Entity\Stock;
 use App\Entity\User;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\FailureSweep;
-use App\Service\Event\MarketEventPublisher;
+use App\Service\News\MarketEventPublisher;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;

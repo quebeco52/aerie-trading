@@ -31,13 +31,6 @@ final class NewsDesk
         'funds' => 'Index funds',
     ];
 
-    /** The company sections narrower than "companies", with the cards each one carries. */
-    public const COMPANY_SECTION_CATEGORIES = [
-        'earnings' => ['earnings'],
-        'deals' => ['mna'],
-        'credit' => ['debt', 'bankruptcy', 'reorganization'],
-    ];
-
     /** Who a story is about: the District as a whole, a listed company, or an index fund. */
     public const SCOPE_DISTRICT = 'district';
     public const SCOPE_COMPANY = 'company';
@@ -45,17 +38,11 @@ final class NewsDesk
 
     // --- Headlines ---
 
-    /** Cards that are headlines by kind, whatever the price did. */
-    private const HEADLINE_CATEGORIES = ['economy', 'government', 'bankruptcy', 'reorganization'];
-
-    /** Cards that are headlines only when the price move they report is significant. */
-    private const MOVE_TESTED_CATEGORIES = ['earnings', 'analyst'];
-
     /**
      * A price shock is a headline beyond a 10% move either way: the single-stock circuit-breaker size (SEC Rule 201;
      * LULD Tier 2 band).
      */
-    public const HEADLINE_SHOCK_MOVE = 0.10;
+    private const HEADLINE_SHOCK_MOVE = 0.10;
 
     /** Two-sided 1% critical value of a standardised abnormal return (|SAR| ≥ 2.576; MacKinlay 1997). */
     public const HEADLINE_ABNORMAL_RETURN_Z = 2.576;
@@ -64,34 +51,28 @@ final class NewsDesk
      * A deal is a headline at 10% of the company's market value: the SEC's significance test (Regulation S-X Rule
      * 1-02(w)).
      */
-    public const HEADLINE_DEAL_SHARE = 0.10;
+    private const HEADLINE_DEAL_SHARE = 0.10;
 
     /** A rating change as the debt engine words it: "from BBB to BB". */
     private const RATING_CHANGE_PATTERN = '/\bfrom (AAA|AA|A|BBB|BB|B|CCC|D) to (AAA|AA|A|BBB|BB|B|CCC|D)\b/';
 
     /** The section a story is filed under on its own; "all" and "companies" also take it. */
-    public static function sectionOf(string $scope, string $category): string
+    public static function sectionOf(string $scope, NewsCard $card): string
     {
-        if ($scope !== self::SCOPE_COMPANY) {
-            return $scope === self::SCOPE_DISTRICT ? 'district' : 'funds';
-        }
-
-        foreach (self::COMPANY_SECTION_CATEGORIES as $section => $categories) {
-            if (in_array($category, $categories, true)) {
-                return $section;
-            }
-        }
-
-        return 'companies';
+        return match ($scope) {
+            self::SCOPE_COMPANY => $card->companySection() ?? 'companies',
+            self::SCOPE_DISTRICT => 'district',
+            default => 'funds',
+        };
     }
 
-    /** Whether a story belongs on a section's page. */
-    public static function inSection(string $section, string $scope, string $category): bool
+    /** Whether a story belongs on a section's page; assets/js/pages/news.js mirrors it. */
+    public static function inSection(string $section, string $scope, NewsCard $card): bool
     {
         return match ($section) {
             'all' => true,
             'companies' => $scope === self::SCOPE_COMPANY,
-            default => self::sectionOf($scope, $category) === $section,
+            default => self::sectionOf($scope, $card) === $section,
         };
     }
 
@@ -110,36 +91,31 @@ final class NewsDesk
      */
     public static function isHeadline(array $card, ?float $annualVolatility = null, ?float $dealShareOfValue = null): bool
     {
-        $category = (string) ($card['category'] ?? 'general');
+        $move = isset($card['changePercent']) ? (float) $card['changePercent'] / 100.0 : null;
 
-        if (in_array($category, self::HEADLINE_CATEGORIES, true)) {
-            return true;
-        }
+        return match (NewsCard::from((string) $card['category'])->headlineTest()) {
+            HeadlineTest::ByKind => true,
+            HeadlineTest::DealSize => $dealShareOfValue !== null && $dealShareOfValue >= self::HEADLINE_DEAL_SHARE,
+            HeadlineTest::GradeCrossing => self::crossesInvestmentGrade((string) $card['rawDescription']),
+            HeadlineTest::ShockMove => $move !== null && abs($move) > self::HEADLINE_SHOCK_MOVE,
+            HeadlineTest::AbnormalReturn => $move !== null && $annualVolatility !== null
+                && self::abnormalReturnZ($move, $annualVolatility) >= self::HEADLINE_ABNORMAL_RETURN_Z,
+            HeadlineTest::Never => false,
+        };
+    }
 
-        if ($category === 'mna') {
-            return $dealShareOfValue !== null && $dealShareOfValue >= self::HEADLINE_DEAL_SHARE;
-        }
-
-        if ($category === 'debt') {
-            return self::crossesInvestmentGrade((string) ($card['rawDescription'] ?? ''));
-        }
-
-        $changePercent = isset($card['changePercent']) ? (float) $card['changePercent'] : null;
-
-        if ($category === 'shock') {
-            return $changePercent !== null && abs($changePercent / 100.0) > self::HEADLINE_SHOCK_MOVE;
-        }
-
-        if (!in_array($category, self::MOVE_TESTED_CATEGORIES, true)) {
-            return false;
-        }
-
-        return $changePercent !== null && $annualVolatility !== null
-            && self::abnormalReturnZ($changePercent / 100.0, $annualVolatility) >= self::HEADLINE_ABNORMAL_RETURN_Z;
+    /**
+     * The cards a story can make a headline on; the wire's headline scan reads only these.
+     *
+     * @return list<NewsCard>
+     */
+    public static function headlineCards(): array
+    {
+        return array_values(array_filter(NewsCard::cases(), static fn(NewsCard $card): bool => $card->headlineTest() !== HeadlineTest::Never));
     }
 
     /** A one-day move in units of the stock's daily volatility; 0 when the volatility is unknown. */
-    public static function abnormalReturnZ(float $move, float $annualVolatility): float
+    private static function abnormalReturnZ(float $move, float $annualVolatility): float
     {
         $dailyVolatility = $annualVolatility / sqrt(FinancialConstants::TRADING_DAYS_PER_YEAR);
 

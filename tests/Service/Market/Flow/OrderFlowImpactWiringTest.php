@@ -13,7 +13,6 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
@@ -21,6 +20,7 @@ use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Service\News\MarketEventPublisher;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 

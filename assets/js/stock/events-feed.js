@@ -1,7 +1,7 @@
 /**
  * Live corporate events for the instrument page.
  *
- * Each event arrives with `presented`, the card App\Service\Event\EventPresenter built for it, so a live
+ * Each event arrives with `presented`, the card App\Service\News\EventPresenter built for it, so a live
  * event renders exactly as it will on the next page load. The browser used to re-derive the card from the
  * type string, and that copy fell behind the types the engines actually publish.
  */

@@ -6,7 +6,6 @@ namespace App\Tests\Service\Market\Ticker;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\Index\AuthorizedParticipant;
 use App\Service\Market\Index\EtfTracker;
@@ -17,6 +16,7 @@ use App\Service\Market\Index\MarketIndex;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Ticker\IndexFundPhase;
 use App\Service\Math\MathUtility;
+use App\Service\News\MarketEventPublisher;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 

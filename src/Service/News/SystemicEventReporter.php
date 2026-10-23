@@ -12,7 +12,6 @@ use App\DTO\PoliticsStateDTO;
 use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;

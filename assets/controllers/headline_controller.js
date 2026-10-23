@@ -5,7 +5,7 @@ import { formatPercent, sentenceCase, signedClass } from '../js/utils/formatters
  * The headline strip under the navigation (templates/partials/_headline_strip.html.twig).
  *
  * The strip is `data-turbo-permanent`, so it survives page visits: the latest headline is fetched once per full
- * load, and after that each wire event the news desk marks as a headline (App\Service\Event\NewsDesk) replaces it.
+ * load, and after that each wire event the news desk marks as a headline (App\Service\News\NewsDesk) replaces it.
  * A dismissed headline stays hidden until a newer one arrives; the choice is kept per browser.
  */
 const DISMISSED_KEY = 'aerie.headline.dismissed';

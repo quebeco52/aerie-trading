@@ -7,7 +7,6 @@ namespace App\Service\Market\Ticker;
 use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
 use App\Entity\Stock;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Market\Index\AuthorizedParticipant;
 use App\Service\Market\Index\EtfTracker;
@@ -15,6 +14,7 @@ use App\Service\Market\Index\IndexCommittee;
 use App\Service\Market\Index\IndexFundAccountant;
 use App\Service\Market\Index\MarketIndex;
 use App\Service\Math\FinancialConstants;
+use App\Service\News\MarketEventPublisher;
 
 /**
  * The tick's index-fund phase, run after the board is priced: the quarterly reconstitution, the quarterly

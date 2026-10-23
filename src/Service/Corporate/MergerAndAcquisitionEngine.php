@@ -9,11 +9,11 @@ use App\DTO\DivestitureContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\Industry\IndustryShareLedger;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Model\BusinessModelInterface;
+use App\Service\News\MarketEventPublisher;
 
 /**
  * Service responsible for executing Mergers and Acquisitions.

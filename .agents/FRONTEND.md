@@ -118,7 +118,8 @@ same before and after the feed repaints it.
 ## Components
 - `.table-head` on a `<thead>` or header `<tr>`.
 - `.badge` plus a tone: `badge-up`, `badge-down`, `badge-warn`, `badge-accent`, `badge-neutral`. Sentence case.
-  `EventPresenter` hands out the tone as `badgeClass`.
+  A news card's tone is a `Tone` (App\Service\News): `EventPresenter` hands it out as `tone`, with its `badgeClass`
+  and `iconClass`.
 - `.term` on a label that explains itself on hover, with `ui.tooltip(text)` beside it:
   `{% import 'partials/_ui.html.twig' as ui %}`.
 - `.seg-btn` for range and filter buttons; state lives in `aria-pressed`.

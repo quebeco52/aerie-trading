@@ -6,7 +6,7 @@ namespace App\Tests\Service\Corporate;
 
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
-use App\Service\Event\MarketEventPublisher;
+use App\Service\News\MarketEventPublisher;
 use PHPUnit\Framework\TestCase;
 
 class CorporateActionEngineTest extends TestCase

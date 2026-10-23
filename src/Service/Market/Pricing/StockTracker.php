@@ -12,7 +12,6 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Market\Index\IndexCommittee;
 use App\Service\Math\Decimal;
@@ -20,6 +19,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\TimeSeries;
 use App\Service\News\EventPresenter;
+use App\Service\News\MarketEventPublisher;
 
 /**
  * Steps every listed company through one tick of the market, in the order each step reads the last: the deals and the

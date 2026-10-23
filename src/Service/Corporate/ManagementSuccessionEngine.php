@@ -7,9 +7,9 @@ namespace App\Service\Corporate;
 use App\Data\Company\ManagementProfile;
 use App\Data\Company\ManagementStyle;
 use App\Entity\Stock;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
+use App\Service\News\MarketEventPublisher;
 
 /**
  * Management turnover: the experiment Bertrand & Schoar (2003) actually ran.

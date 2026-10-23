@@ -11,8 +11,8 @@ use App\Entity\StockEvent;
 use App\Service\Event\ShockEvent;
 
 /**
- * Transforms raw corporate and market events into rich, structured presentation view models
- * for clean, highly readable financial card layouts in Twig and APIs.
+ * Turns a published event into the card the stock page, the newswire, the live feed and the district map all render:
+ * its badge, tone, icon and headline, by the card its type routes to (NewsCard).
  */
 class EventPresenter
 {
@@ -73,58 +73,117 @@ class EventPresenter
     public function present(StockEvent|EtfEvent|DistrictNews|array $event): array
     {
         $topic = null;
-        $simTime = null;
         if ($event instanceof DistrictNews) {
-            $rawType = $event->getDesk();
+            $type = $event->getDesk();
             $topic = $event->getTopic();
-            $rawDesc = $event->getDescription();
+            $description = $event->getDescription();
             $changePct = $event->getChangePercent() !== null ? (float) $event->getChangePercent() : null;
             $recordedAt = $event->getRecordedAt();
             $simTime = $event->getSimTime();
         } elseif ($event instanceof StockEvent || $event instanceof EtfEvent) {
-            $rawType = strtoupper((string) $event->getEventType());
-            $rawDesc = (string) $event->getDescription();
+            $type = strtoupper((string) $event->getEventType());
+            $description = (string) $event->getDescription();
             $changePct = $event->getChangePercent() !== null ? (float) $event->getChangePercent() : null;
             $recordedAt = $event->getRecordedAt();
             $simTime = $event->getSimTime();
         } else {
-            $rawType = strtoupper((string) ($event['type'] ?? $event['eventType'] ?? 'EVENT'));
-            $rawDesc = (string) ($event['description'] ?? '');
+            $type = strtoupper((string) ($event['type'] ?? 'EVENT'));
+            $description = (string) ($event['description'] ?? '');
             $changePct = isset($event['change_percent']) ? (float) $event['change_percent'] : null;
             $topic = isset($event['topic']) ? (string) $event['topic'] : null;
             $simTime = isset($event['sim_time']) ? (float) $event['sim_time'] : null;
             $recordedAt = isset($event['recorded_at']) ? new \DateTime((string) $event['recorded_at']) : new \DateTime();
         }
 
-        $card = match (EventCategory::forType($rawType)) {
-            'earnings' => $this->presentEarnings($rawType, $rawDesc, $changePct, $recordedAt),
-            'shock' => $this->presentShock($rawType, $rawDesc, $changePct, $recordedAt),
-            'split' => $this->presentSplit($rawType, $rawDesc, $changePct, $recordedAt),
-            'debt' => $this->presentDebt($rawType, $rawDesc, $changePct, $recordedAt),
-            'mna' => $this->presentMna($rawType, $rawDesc, $changePct, $recordedAt),
-            'analyst' => $this->presentAnalyst($rawType, $rawDesc, $changePct, $recordedAt),
-            'bankruptcy' => $this->presentBankruptcy($rawType, $rawDesc, $changePct, $recordedAt),
-            'reorganization' => $this->presentReorganization($rawType, $rawDesc, $changePct, $recordedAt),
-            'district' => $this->presentDistrict($rawType, $rawDesc, $changePct, $recordedAt),
-            'index' => $this->presentIndex($rawType, $rawDesc, $changePct, $recordedAt),
-            'income' => $this->presentDistribution($rawType, $rawDesc, $changePct, $recordedAt),
-            'governance' => $this->presentSuccession($rawType, $rawDesc, $changePct, $recordedAt),
-            'economy', 'government' => $this->presentDistrictStory($rawType, $topic, $rawDesc, $changePct, $recordedAt),
-            default => $this->presentGeneral($rawType, $rawDesc, $changePct, $recordedAt),
+        $card = NewsCard::forType($type);
+        $story = match ($card) {
+            NewsCard::Earnings => $this->earnings($description),
+            NewsCard::Shock => self::story(
+                'MARKET SHOCK',
+                $changePct === null || $changePct >= 0.0 ? Tone::Warn : Tone::Down,
+                'bolt',
+                // Read with their move, a shock says what the shares did.
+                match (true) {
+                    $description !== '' => $description,
+                    $changePct !== null => self::shockHeadline('Shares', $changePct),
+                    default => 'Shares moved sharply.',
+                },
+            ),
+            NewsCard::Split => $type === 'REVERSE_SPLIT'
+                ? self::story('REVERSE STOCK SPLIT', Tone::Neutral, 'call_split', $description ?: 'Reverse stock split executed.')
+                : self::story('STOCK SPLIT', Tone::Neutral, 'call_split', $description ?: 'Stock split executed.'),
+            NewsCard::Rating => self::rating($type, $description),
+            // The deal type is already the headline a desk would print (STRATEGIC ACQUISITION, LEVERAGED BUYOUT…).
+            NewsCard::Deal => self::story($type, Tone::Accent, $type === 'DIVESTITURE' ? 'domain_disabled' : 'domain_add', $description ?: 'Corporate restructuring announcement.'),
+            NewsCard::Analyst => self::analyst($type, $description),
+            NewsCard::Bankruptcy => self::story('BANKRUPTCY', Tone::Down, 'gavel', $description ?: 'Filed for Chapter 7 bankruptcy liquidation.'),
+            // The company keeps trading, so a Chapter 11 plan reads as a restructuring rather than a death.
+            NewsCard::Reorganization => self::story('CHAPTER 11', Tone::Warn, 'balance', $description ?: 'Confirmed a Chapter 11 plan of reorganisation.'),
+            NewsCard::Street => self::street($description),
+            // The divisor is restated across a reconstitution, so the level itself does not move on it.
+            NewsCard::Index => self::story('INDEX RECONSTITUTION', Tone::Accent, 'checklist', $description ?: 'Index membership reconstituted.'),
+            // The price falls by the payment, but the holder has the cash, so it must not read as a drop.
+            NewsCard::Distribution => self::story('DISTRIBUTION', Tone::Up, 'payments', $description ?: 'Fund distribution paid.'),
+            NewsCard::Succession => self::succession($description),
+            NewsCard::Economy, NewsCard::Government => self::districtStory($card, $type, $topic, $description),
+            NewsCard::General => self::story($type, Tone::Neutral, 'campaign', $description ?: 'Corporate news announcement.'),
         };
 
-        // Dated in the District's calendar; a row from before events carried their simulation time keeps its clock
-        // time.
-        $card['simTime'] = $simTime;
-        $card['dateline'] = $simTime !== null ? DistrictCalendar::dateline($simTime) : $recordedAt->format('Y-m-d H:i');
+        $tone = $story['tone'];
 
-        return $card;
+        return [
+            'type' => $type,
+            'category' => $card->value,
+            'badge' => $story['badge'],
+            'tone' => $tone->value,
+            'badgeClass' => $tone->badgeClass(),
+            'icon' => $story['icon'],
+            'iconClass' => $tone->iconClass(),
+            'isEarnings' => $card === NewsCard::Earnings,
+            'headline' => $story['headline'],
+            'pills' => $story['pills'],
+            'changePercent' => $card === NewsCard::Bankruptcy ? ($changePct ?? -100.0) : $changePct,
+            'recordedAt' => $recordedAt,
+            // Dated in the District's calendar; a row from before events carried their simulation time keeps its
+            // clock time.
+            'dateline' => $simTime !== null ? DistrictCalendar::dateline($simTime) : $recordedAt->format('Y-m-d H:i'),
+            'rawDescription' => $description,
+        ] + $story['earnings'];
     }
 
     /** A price shock as a wire line: "Hummock Foods shares jump 12.4% in a sudden move." */
     public static function shockHeadline(string $subject, float $changePercent): string
     {
         return sprintf('%s %s %s%% in a sudden move.', $subject, $changePercent >= 0.0 ? 'jump' : 'drop', number_format(abs($changePercent), 1));
+    }
+
+    /**
+     * The card as the live feed receives it: the same array with the timestamp already printed the way the
+     * page prints it, since a DateTime does not survive json_encode in a form the browser can read.
+     *
+     * @param array<string, mixed> $event
+     * @return array<string, mixed>
+     */
+    public function presentForWire(array $event): array
+    {
+        $card = $this->present($event);
+        $card['recordedAt'] = $card['recordedAt'] instanceof \DateTimeInterface
+            ? $card['recordedAt']->format('Y-m-d H:i')
+            : (string) $card['recordedAt'];
+
+        return $card;
+    }
+
+    /**
+     * What a card says: its badge, tone, icon and headline, plus the pills under it and, for earnings, the figures.
+     *
+     * @param  list<array{kind: string, text: string}> $pills
+     * @param  array<string, mixed>                    $earnings
+     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
+     */
+    private static function story(string $badge, Tone $tone, string $icon, string $headline, array $pills = [], array $earnings = []): array
+    {
+        return ['badge' => $badge, 'tone' => $tone, 'icon' => $icon, 'headline' => $headline, 'pills' => $pills, 'earnings' => $earnings];
     }
 
     /**
@@ -146,26 +205,9 @@ class EventPresenter
     }
 
     /**
-     * The card as the live feed receives it: the same array with the timestamp already printed the way the
-     * page prints it, since a DateTime does not survive json_encode in a form the browser can read.
-     *
-     * @param array<string, mixed> $event
-     * @return array<string, mixed>
+     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
      */
-    public function presentForWire(array $event): array
-    {
-        $card = $this->present($event);
-        $card['recordedAt'] = $card['recordedAt'] instanceof \DateTimeInterface
-            ? $card['recordedAt']->format('Y-m-d H:i')
-            : (string) $card['recordedAt'];
-
-        return $card;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function presentEarnings(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    private function earnings(string $description): array
     {
         $eps = null;
         $surpriseType = null; // 'beat', 'miss', 'met'
@@ -173,12 +215,12 @@ class EventPresenter
         $eva = null;
         $evaPositive = true;
         $headline = 'Quarterly Earnings Report';
-        $remainingText = $rawDesc;
+        $remainingText = $description;
 
         // Pattern matching: "Q-Earnings: $2.26 (Beat expectations by $0.01 | +$80.92B EVA).". When special items part
         // the two, the figure reads "$2.26 adjusted, $1.80 reported"; the beat or miss is on the adjusted one.
         $pattern = '/^Q-Earnings:\s*([+-]?\$?[\d,.]+(?:\s*[BMTk])?)(?:\s*adjusted,\s*[+-]?\$?[\d,.]+\s*reported)?\s*\((Beat expectations by|Missed expectations by|Met expectations(?: exactly)?)\s*([+-]?\$?[\d,.]+(?:\s*[BMTk])?)?\s*\|\s*([+-]?\$?[\d,.]+[BMTk]?\s*EVA)\)\.?/i';
-        if (preg_match($pattern, $rawDesc, $matches)) {
+        if (preg_match($pattern, $description, $matches)) {
             $eps = trim($matches[1]);
             $verbiage = strtolower($matches[2]);
             if (str_contains($verbiage, 'beat')) {
@@ -202,401 +244,105 @@ class EventPresenter
             $eva = trim($matches[4]);
             $evaPositive = !str_starts_with($eva, '-');
             $headline = self::earningsHeadline($eps, $surpriseType, $surpriseAmount);
-            $remainingText = trim(substr($rawDesc, strlen($matches[0])));
+            $remainingText = trim(substr($description, strlen($matches[0])));
         }
 
-        $pills = $this->parseSubActionPills($remainingText);
+        [$badge, $tone, $icon, $surpriseText] = match ($surpriseType) {
+            'beat' => ['EARNINGS BEAT', Tone::Up, 'trending_up', $surpriseAmount ? "Beat by +{$surpriseAmount}" : 'Beat Expectations'],
+            'miss' => ['EARNINGS MISS', Tone::Down, 'trending_down', $surpriseAmount ? "Missed by {$surpriseAmount}" : 'Missed Expectations'],
+            default => ['EARNINGS IN-LINE', Tone::Accent, 'equalizer', 'In-Line'],
+        };
 
-        $badge = 'EARNINGS IN-LINE';
-        $badgeClass = 'badge-accent';
-        $borderClass = 'border-l-primary';
-        $icon = 'equalizer';
-        $iconClass = 'bg-primary/15 text-primary';
-        $surpriseText = 'In-Line';
-
-        if ($surpriseType === 'beat') {
-            $badge = 'EARNINGS BEAT';
-            $badgeClass = 'badge-up';
-            $borderClass = 'border-l-secondary';
-            $icon = 'trending_up';
-            $iconClass = 'bg-secondary/15 text-secondary';
-            $surpriseText = $surpriseAmount ? "Beat by +{$surpriseAmount}" : 'Beat Expectations';
-        } elseif ($surpriseType === 'miss') {
-            $badge = 'EARNINGS MISS';
-            $badgeClass = 'badge-down';
-            $borderClass = 'border-l-tertiary';
-            $icon = 'trending_down';
-            $iconClass = 'bg-tertiary/15 text-tertiary';
-            $surpriseText = $surpriseAmount ? "Missed by {$surpriseAmount}" : 'Missed Expectations';
-        }
-
-        return [
-            'type' => $type,
-            'category' => 'earnings',
-            'badge' => $badge,
-            'badgeClass' => $badgeClass,
-            'borderClass' => $borderClass,
-            'icon' => $icon,
-            'iconClass' => $iconClass,
-            'isEarnings' => true,
-            'headline' => $headline,
+        return self::story($badge, $tone, $icon, $headline, $this->parseSubActionPills($remainingText), [
             'eps' => $eps,
             'surpriseType' => $surpriseType,
             'surpriseAmount' => $surpriseAmount,
             'surpriseText' => $surpriseText,
             'eva' => $eva,
             'evaPositive' => $evaPositive,
-            'pills' => $pills,
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
+        ]);
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
      */
-    private function presentShock(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    private static function rating(string $type, string $description): array
     {
-        $isPositive = $changePct !== null ? $changePct >= 0 : true;
-        // Read with their move, a shock says what the shares did.
-        $headline = match (true) {
-            $rawDesc !== '' => $rawDesc,
-            $changePct !== null => self::shockHeadline('Shares', $changePct),
-            default => 'Shares moved sharply.',
-        };
-
-        return [
-            'type' => $type,
-            'category' => 'shock',
-            'badge' => 'MARKET SHOCK',
-            'badgeClass' => $isPositive ? 'badge-warn' : 'badge-down',
-            'borderClass' => $isPositive ? 'border-l-warning' : 'border-l-tertiary',
-            'icon' => 'bolt',
-            'iconClass' => $isPositive ? 'bg-warning/15 text-warning' : 'bg-tertiary/15 text-tertiary',
-            'isEarnings' => false,
-            'headline' => $headline,
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function presentSplit(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
-    {
-        $isReverse = in_array($type, ['REVERSE_SPLIT', 'REVSPLIT'], true);
-        $badge = $isReverse ? 'REVERSE STOCK SPLIT' : 'STOCK SPLIT';
-        $headline = !empty($rawDesc) ? $rawDesc : ($isReverse ? 'Reverse stock split executed.' : 'Stock split executed.');
-
-        return [
-            'type' => $type,
-            'category' => 'split',
-            'badge' => $badge,
-            'badgeClass' => 'badge-neutral',
-            'borderClass' => 'border-l-outline-variant',
-            'icon' => 'call_split',
-            'iconClass' => 'bg-surface-container-high text-on-surface-variant',
-            'isEarnings' => false,
-            'headline' => $headline,
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function presentDebt(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
-    {
-        $isUpgrade = in_array($type, ['RATING_UPGRADE', 'CREDIT_UPGRADE'], true) || ($type === 'DEBT' && str_contains(strtolower($rawDesc), 'upgrade'));
-        $isDowngrade = in_array($type, ['RATING_DOWNGRADE', 'CREDIT_DOWNGRADE'], true);
-        $badge = $isUpgrade ? 'RATING UPGRADE' : ($isDowngrade ? 'RATING DOWNGRADE' : 'CREDIT RATING');
         // The debt engine writes "[CREDIT DOWNGRADE] TICK: ..." for the log; the badge already says both.
-        $rawDesc = (string) preg_replace('/^\[[A-Z ]+\]\s*[A-Z0-9.]+:\s*/', '', $rawDesc);
-        $badgeClass = $isUpgrade ? 'badge-up' : 'badge-down';
-        $borderClass = $isUpgrade ? 'border-l-secondary' : 'border-l-tertiary';
-        $icon = $isUpgrade ? 'credit_score' : 'warning';
-        $iconClass = $isUpgrade ? 'bg-secondary/15 text-secondary' : 'bg-tertiary/15 text-tertiary';
+        $headline = (string) preg_replace('/^\[[A-Z ]+\]\s*[A-Z0-9.]+:\s*/', '', $description);
 
-        return [
-            'type' => $type,
-            'category' => 'debt',
-            'badge' => $badge,
-            'badgeClass' => $badgeClass,
-            'borderClass' => $borderClass,
-            'icon' => $icon,
-            'iconClass' => $iconClass,
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Credit rating event.',
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function presentMna(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
-    {
-        // The deal type is already the headline a desk would print (STRATEGIC ACQUISITION, LEVERAGED BUYOUT…).
-        return [
-            'type' => $type,
-            'category' => 'mna',
-            'badge' => $type,
-            'badgeClass' => 'badge-accent',
-            'borderClass' => 'border-l-primary',
-            'icon' => $type === 'DIVESTITURE' ? 'domain_disabled' : 'domain_add',
-            'iconClass' => 'bg-primary/15 text-primary',
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Corporate restructuring announcement.',
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
+        return $type === 'CREDIT_UPGRADE'
+            ? self::story('RATING UPGRADE', Tone::Up, 'credit_score', $headline ?: 'Credit rating event.')
+            : self::story('RATING DOWNGRADE', Tone::Down, 'warning', $headline ?: 'Credit rating event.');
     }
 
     /**
      * The sell side and management talking about the number rather than reporting it: a price-target
      * revision (StockTracker) or a guidance cut (EarningsEngine). A cut reads down; a raise reads up.
      *
-     * @return array<string, mixed>
+     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
      */
-    private function presentAnalyst(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    private static function analyst(string $type, string $description): array
     {
-        $isGuidance = $type === 'GUIDANCE';
-        $isCut = $isGuidance || str_contains(strtolower($rawDesc), ' cut ');
+        $headline = $description ?: 'Analyst revision.';
 
-        return [
-            'type' => $type,
-            'category' => 'analyst',
-            'badge' => $isGuidance ? 'GUIDANCE CUT' : ($isCut ? 'TARGET CUT' : 'TARGET RAISED'),
-            'badgeClass' => $isCut ? 'badge-down' : 'badge-up',
-            'borderClass' => $isCut ? 'border-l-tertiary' : 'border-l-secondary',
-            'icon' => $isGuidance ? 'campaign' : 'query_stats',
-            'iconClass' => $isCut ? 'bg-tertiary/15 text-tertiary' : 'bg-secondary/15 text-secondary',
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Analyst revision.',
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
+        return match (true) {
+            $type === 'GUIDANCE' => self::story('GUIDANCE CUT', Tone::Down, 'campaign', $headline),
+            str_contains(strtolower($description), ' cut ') => self::story('TARGET CUT', Tone::Down, 'query_stats', $headline),
+            default => self::story('TARGET RAISED', Tone::Up, 'query_stats', $headline),
+        };
     }
 
     /**
      * A Glasswater Row roster change — promotion onto or eviction from the street at the quarterly
-     * reconstitution (MarketTickerCommand via DistrictRoster). Not a price event: the change is
-     * whatever the description says, and no move is implied.
+     * reconstitution (MarketTickerCommand via DistrictRoster). Not a price event: no move is implied.
+     *
+     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
      */
-    private function presentDistrict(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    private static function street(string $description): array
     {
-        $evicted = str_contains(strtolower($rawDesc), 'lost');
+        $headline = $description ?: 'Glasswater Row roster reconstituted.';
 
-        return [
-            'type' => $type,
-            'category' => 'district',
-            'badge' => $evicted ? 'STREET EVICTION' : 'STREET PROMOTION',
-            'badgeClass' => $evicted
-                ? 'badge-warn'
-                : 'badge-accent',
-            'borderClass' => $evicted ? 'border-l-warning' : 'border-l-primary',
-            'icon' => 'location_city',
-            'iconClass' => $evicted ? 'bg-warning/20 text-warning' : 'bg-primary/20 text-primary',
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Glasswater Row roster reconstituted.',
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
+        return str_contains(strtolower($description), 'lost')
+            ? self::story('STREET EVICTION', Tone::Warn, 'location_city', $headline)
+            : self::story('STREET PROMOTION', Tone::Accent, 'location_city', $headline);
+    }
+
+    /**
+     * A change at the top (App\Service\Corporate\ManagementSuccessionEngine). Not a price event — the value in it is
+     * the policy that follows, which the engines price through the dials the incoming style moves.
+     *
+     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
+     */
+    private static function succession(string $description): array
+    {
+        $headline = $description ?: 'The company named new management.';
+
+        return str_contains(strtolower($description), 'removed by the board')
+            ? self::story('BOARD REMOVAL', Tone::Warn, 'gavel', $headline)
+            : self::story('MANAGEMENT CHANGE', Tone::Neutral, 'badge', $headline);
     }
 
     /**
      * A district-wide story from the economy or government desk (SystemicEventReporter). The number is what the
      * benchmark did over the month before it, so it carries the sign colour and the badge only says what happened.
      *
-     * @return array<string, mixed>
+     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
      */
-    private function presentDistrictStory(string $type, ?string $topic, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
+    private static function districtStory(NewsCard $card, string $desk, ?string $topic, string $description): array
     {
-        $caution = $topic !== null && in_array($topic, self::CAUTION_TOPICS, true);
-
-        return [
-            'type' => $type,
-            'category' => $type === DistrictNews::DESK_GOVERNMENT ? 'government' : 'economy',
-            'topic' => $topic,
-            'badge' => self::TOPIC_BADGES[$topic ?? ''] ?? $type,
-            'badgeClass' => $caution ? 'badge-warn' : 'badge-accent',
-            'borderClass' => $caution ? 'border-l-warning' : 'border-l-primary',
-            'icon' => $type === DistrictNews::DESK_GOVERNMENT ? 'account_balance' : 'public',
-            'iconClass' => $caution ? 'bg-warning/15 text-warning' : 'bg-primary/10 text-primary',
-            'isEarnings' => false,
-            'headline' => $rawDesc,
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
-    }
-
-    /**
-     * An index reconstitution (App\Service\Market\Index\IndexCommittee): who was admitted and who was dropped. Not
-     * a price event — the divisor is restated across the change, so the level itself does not move on it.
-     *
-     * @return array<string, mixed>
-     */
-    private function presentIndex(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
-    {
-        return [
-            'type' => $type,
-            'category' => 'index',
-            'badge' => 'INDEX RECONSTITUTION',
-            'badgeClass' => 'badge-accent',
-            'borderClass' => 'border-l-primary',
-            'icon' => 'checklist',
-            'iconClass' => 'bg-primary/20 text-primary',
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Index membership reconstituted.',
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
-    }
-
-    /**
-     * A fund distribution (App\Service\Market\Index\IndexFundAccountant): dividend cash the fund collected from
-     * its constituents and passed on to its holders.
-     *
-     * Not a price event, though the price falls by the payment on the same tick. The holder has the cash
-     * instead, so nothing was made or lost and the card must not read as a drop — which is exactly why it
-     * carries its own presentation rather than falling through to the generic one.
-     *
-     * @return array<string, mixed>
-     */
-    private function presentDistribution(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
-    {
-        return [
-            'type' => $type,
-            'category' => 'income',
-            'badge' => 'DISTRIBUTION',
-            'badgeClass' => 'badge-up',
-            'borderClass' => 'border-l-secondary',
-            'icon' => 'payments',
-            'iconClass' => 'bg-secondary/20 text-secondary',
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Fund distribution paid.',
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
-    }
-
-    /**
-     * A change at the top (App\Service\Corporate\ManagementSuccessionEngine). Not a price event — the
-     * value in it is the policy that follows, which the engines price through the dials the incoming
-     * style moves, so the card states what changed and implies no move of its own.
-     *
-     * @return array<string, mixed>
-     */
-    private function presentSuccession(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
-    {
-        $dismissed = str_contains(strtolower($rawDesc), 'removed by the board');
-
-        return [
-            'type' => $type,
-            'category' => 'governance',
-            'badge' => $dismissed ? 'BOARD REMOVAL' : 'MANAGEMENT CHANGE',
-            'badgeClass' => $dismissed
-                ? 'badge-warn'
-                : 'badge-neutral',
-            'borderClass' => $dismissed ? 'border-l-warning' : 'border-l-primary',
-            'icon' => $dismissed ? 'gavel' : 'badge',
-            'iconClass' => $dismissed ? 'bg-warning/20 text-warning' : 'bg-primary/10 text-primary',
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'The company named new management.',
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
-    }
-
-    /** A Chapter 11 plan: the company keeps trading, so it reads as a restructuring rather than a death. */
-    private function presentReorganization(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
-    {
-        return [
-            'type' => $type,
-            'category' => 'reorganization',
-            'badge' => 'CHAPTER 11',
-            'badgeClass' => 'badge-warn',
-            'borderClass' => 'border-l-warning',
-            'icon' => 'balance',
-            'iconClass' => 'bg-warning/20 text-warning',
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Confirmed a Chapter 11 plan of reorganisation.',
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
-    }
-
-    private function presentBankruptcy(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
-    {
-        return [
-            'type' => $type,
-            'category' => 'bankruptcy',
-            'badge' => 'BANKRUPTCY',
-            'badgeClass' => 'badge-down',
-            'borderClass' => 'border-l-tertiary',
-            'icon' => 'gavel',
-            'iconClass' => 'bg-tertiary/20 text-tertiary',
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Filed for Chapter 7 bankruptcy liquidation.',
-            'pills' => [],
-            'changePercent' => $changePct ?? -100.0,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function presentGeneral(string $type, string $rawDesc, ?float $changePct, \DateTimeInterface $recordedAt): array
-    {
-        return [
-            'type' => $type,
-            'category' => 'general',
-            'badge' => $type,
-            'badgeClass' => 'badge-neutral',
-            'borderClass' => 'border-l-primary',
-            'icon' => 'campaign',
-            'iconClass' => 'bg-primary/10 text-primary',
-            'isEarnings' => false,
-            'headline' => !empty($rawDesc) ? $rawDesc : 'Corporate news announcement.',
-            'pills' => [],
-            'changePercent' => $changePct,
-            'recordedAt' => $recordedAt,
-            'rawDescription' => $rawDesc,
-        ];
+        return self::story(
+            self::TOPIC_BADGES[$topic ?? ''] ?? $desk,
+            in_array($topic, self::CAUTION_TOPICS, true) ? Tone::Warn : Tone::Accent,
+            $card === NewsCard::Government ? 'account_balance' : 'public',
+            $description,
+        );
     }
 
     /**
      * Splits sub-actions (dividend, buyback, bond issuance, narrative lore) into individual pills.
      *
-     * @return list<array{type: string, icon: string, label: string, text: string, pillClass: string}>
+     * @return list<array{kind: string, text: string}>
      */
     private function parseSubActionPills(string $text): array
     {
@@ -625,13 +371,7 @@ class EventPresenter
                 } else {
                     $divText = "Paid {$divPerShare}/sh";
                 }
-                $pills[] = [
-                    'type' => 'dividend',
-                    'icon' => 'payments',
-                    'label' => 'Dividend',
-                    'text' => $divText,
-                    'pillClass' => 'badge-up',
-                ];
+                $pills[] = ['kind' => 'dividend', 'text' => $divText];
                 continue;
             }
 
@@ -640,13 +380,7 @@ class EventPresenter
                 $shareCount = $bbMatch[1];
                 $cleanNum = (float) str_replace(',', '', $shareCount);
                 $formattedCount = $this->formatShares($cleanNum);
-                $pills[] = [
-                    'type' => 'buyback',
-                    'icon' => 'published_with_changes',
-                    'label' => 'Buyback',
-                    'text' => "Repurchased {$formattedCount} shares",
-                    'pillClass' => 'badge-accent',
-                ];
+                $pills[] = ['kind' => 'buyback', 'text' => "Repurchased {$formattedCount} shares"];
                 continue;
             }
 
@@ -654,24 +388,12 @@ class EventPresenter
             if (preg_match('/Issued\s+([+-]?\$?[\d,.]+[BMTk]?)\s+in\s+bonds(?:\s+for\s+([^.]+))?/i', $line, $debtMatch)) {
                 $amount = $debtMatch[1];
                 $purpose = !empty($debtMatch[2]) ? ' (' . trim($debtMatch[2]) . ')' : '';
-                $pills[] = [
-                    'type' => 'debt',
-                    'icon' => 'receipt_long',
-                    'label' => 'Bonds',
-                    'text' => "Issued {$amount} bonds{$purpose}",
-                    'pillClass' => 'badge-warn',
-                ];
+                $pills[] = ['kind' => 'bonds', 'text' => "Issued {$amount} bonds{$purpose}"];
                 continue;
             }
 
             // 4. Strategic Narrative / Lore / News highlight
-            $pills[] = [
-                'type' => 'lore',
-                'icon' => 'feed',
-                'label' => 'Corporate News',
-                'text' => rtrim($line, '.'),
-                'pillClass' => 'badge-accent',
-            ];
+            $pills[] = ['kind' => 'note', 'text' => rtrim($line, '.')];
         }
 
         return $pills;

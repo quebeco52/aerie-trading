@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
-use App\Service\Event\MarketEventPublisher;
+use App\Service\News\MarketEventPublisher;
 use App\Service\Notification\PriceAlertService;
 use Doctrine\ORM\EntityManagerInterface;
 

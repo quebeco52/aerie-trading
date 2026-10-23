@@ -43,17 +43,17 @@ class EventPresenterTest extends TestCase
         // Check sub-actions (pills)
         $this->assertCount(4, $presented['pills']);
 
-        $this->assertSame('dividend', $presented['pills'][0]['type']);
+        $this->assertSame('dividend', $presented['pills'][0]['kind']);
         $this->assertStringContainsString('$0.61/sh', $presented['pills'][0]['text']);
         $this->assertStringContainsString('1.97% yield', $presented['pills'][0]['text']);
 
-        $this->assertSame('debt', $presented['pills'][1]['type']);
+        $this->assertSame('bonds', $presented['pills'][1]['kind']);
         $this->assertStringContainsString('$18.31B bonds', $presented['pills'][1]['text']);
 
-        $this->assertSame('buyback', $presented['pills'][2]['type']);
+        $this->assertSame('buyback', $presented['pills'][2]['kind']);
         $this->assertStringContainsString('410.29M shares', $presented['pills'][2]['text']);
 
-        $this->assertSame('lore', $presented['pills'][3]['type']);
+        $this->assertSame('note', $presented['pills'][3]['kind']);
         $this->assertStringContainsString('Launched next-gen AI platform', $presented['pills'][3]['text']);
     }
 
@@ -222,7 +222,7 @@ class EventPresenterTest extends TestCase
     public function testPresentRatingUpgradeAndDowngrade(): void
     {
         $upgrade = [
-            'type' => 'RATING_UPGRADE',
+            'type' => 'CREDIT_UPGRADE',
             'description' => 'Credit rating upgraded from BBB to A',
         ];
         $presentedUp = $this->presenter->present($upgrade);
@@ -230,7 +230,7 @@ class EventPresenterTest extends TestCase
         $this->assertSame('credit_score', $presentedUp['icon']);
 
         $downgrade = [
-            'type' => 'RATING_DOWNGRADE',
+            'type' => 'CREDIT_DOWNGRADE',
             'description' => 'Credit rating downgraded from A to BBB',
         ];
         $presentedDown = $this->presenter->present($downgrade);

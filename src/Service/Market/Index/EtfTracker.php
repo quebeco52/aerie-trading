@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Service\Market\Index;
 
 use App\Entity\Etf;
-use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\Ticker\NestedTransaction;
 use App\Service\Market\Trading\SplitOrderBook;
 use App\Service\Math\FinancialConstants;
+use App\Service\News\MarketEventPublisher;
 use App\Service\Notification\PlayerNotifier;
 use App\Service\Notification\PriceAlertService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -329,7 +329,7 @@ class EtfTracker
                 );
 
                 $desc = "{$etf->getName()} has executed a 1-for-{$factor} reverse split to maintain value requirements.";
-                $this->marketEvent->publish($etf, 'REVSPLIT', $desc, 0.0);
+                $this->marketEvent->publish($etf, 'REVERSE_SPLIT', $desc, 0.0);
 
                 $this->adjustRedisBuffer($ticker, $factor, 'multiply');
             }

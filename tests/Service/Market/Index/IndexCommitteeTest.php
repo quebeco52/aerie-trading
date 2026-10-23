@@ -56,7 +56,7 @@ class IndexCommitteeTest extends TestCase
 
         $this->etfTracker = new EtfTracker(
             $this->createStub(EntityManagerInterface::class),
-            $this->createStub(\App\Service\Event\MarketEventPublisher::class),
+            $this->createStub(\App\Service\News\MarketEventPublisher::class),
             $redis,
             new \App\Service\Market\Index\IndexFundAccountant($this->createStub(EntityManagerInterface::class)),
         );

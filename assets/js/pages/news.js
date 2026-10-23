@@ -1,7 +1,7 @@
 /**
  * Live stories on the newswire (templates/news/index.html.twig).
  *
- * Each wire event arrives filed by App\Service\Event\NewsDesk: `scope` (district, company or fund), `section` and
+ * Each wire event arrives filed by App\Service\News\NewsDesk: `scope` (district, company or fund), `section` and
  * `headline`, so a live story lands in the same section and weight it will have on the next page load.
  */
 

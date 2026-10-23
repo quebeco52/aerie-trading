@@ -144,23 +144,22 @@ function sparklinePoints(series, left, top, width, height) {
     }).join(' ');
 }
 
+/** Flare colour by the card's tone (App\Service\News\Tone). */
 const EVENT_COLORS = {
-    primary: THEME_COLORS.primary,
-    secondary: THEME_COLORS.positive,
-    tertiary: THEME_COLORS.negative,
-    warning: THEME_COLORS.warning,
-    'outline-variant': THEME_COLORS.textMuted,
+    up: THEME_COLORS.positive,
+    down: THEME_COLORS.negative,
+    warn: THEME_COLORS.warning,
+    accent: THEME_COLORS.primary,
+    neutral: THEME_COLORS.textMuted,
 };
 
 /**
- * The flare colour of a live event: the colour of the card App\Service\Event\EventPresenter built for it,
- * read off the card's own left border so the building flashes the same tone the card is drawn in. The
- * live event carries that card (`presented`, from MarketEventPublisher::publish), so the routing from type
- * to card lives only in App\Service\Event\EventCategory.
+ * The flare colour of a live event: the tone of the card App\Service\News\EventPresenter built for it, so the
+ * building flashes the colour the card is drawn in. The live event carries that card (`presented`, from
+ * MarketEventPublisher::publish), so the routing from type to card lives only in App\Service\News\NewsCard.
  */
 function flareColor(card) {
-    const tone = /border-l-(primary|secondary|tertiary|warning|outline-variant)/.exec(card.borderClass || '');
-    return tone ? EVENT_COLORS[tone[1]] : EVENT_COLORS.primary;
+    return EVENT_COLORS[card.tone] || EVENT_COLORS.accent;
 }
 
 /** Client-clock timestamp, matching how assets/js/stock/events-feed.js stamps live events that carry none of their own. */

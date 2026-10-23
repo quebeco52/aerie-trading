@@ -2,15 +2,14 @@
 
 declare(strict_types=1);
 
-namespace App\Service\Event;
+namespace App\Service\News;
 
 use App\Entity\DistrictNews;
 use App\Entity\Etf;
 use App\Entity\EtfEvent;
 use App\Entity\Stock;
 use App\Entity\StockEvent;
-use App\Service\News\EventPresenter;
-use App\Service\News\NewsDesk;
+use App\Service\Notification\PlayerNotifier;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -27,7 +26,7 @@ class MarketEventPublisher
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
         private EventPresenter $presenter = new EventPresenter(),
-        private ?\App\Service\Notification\PlayerNotifier $notifier = null,
+        private ?PlayerNotifier $notifier = null,
     ) {}
 
     /**
@@ -148,7 +147,7 @@ class MarketEventPublisher
             'sim_time' => $this->simTime,
             'presented' => $presented,
             'scope' => $scope,
-            'section' => NewsDesk::sectionOf($scope, (string) $presented['category']),
+            'section' => NewsDesk::sectionOf($scope, NewsCard::from((string) $presented['category'])),
             'headline' => NewsDesk::isHeadline($presented, $annualVolatility, $dealShareOfValue),
         ];
 

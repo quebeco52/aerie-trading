@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\News;
 
 use App\Data\Company\Sectors;
-use App\Service\News\EventCategory;
 use App\Service\News\EventPresenter;
+use App\Service\News\NewsCard;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -15,19 +15,44 @@ use PHPUnit\Framework\TestCase;
  * general card because the engines type a deal by the business model that made it and the presenter only
  * knew ACQUISITION/MERGER; the debt engine publishes CREDIT_* where the presenter expected RATING_*.
  */
-class EventCategoryTest extends TestCase
+class NewsCardTest extends TestCase
 {
     #[DataProvider('publishedTypes')]
     public function testEveryPublishedTypeHasACardOfItsOwn(string $type): void
     {
-        $this->assertNotSame('general', EventCategory::forType($type), "{$type} would render as general news");
-        $this->assertSame(EventCategory::forType($type), (new EventPresenter())->present(['type' => $type, 'description' => 'x'])['category']);
+        $this->assertNotSame(NewsCard::General, NewsCard::forType($type), "{$type} would render as general news");
+        $this->assertSame(NewsCard::forType($type)->value, (new EventPresenter())->present(['type' => $type, 'description' => 'x'])['category']);
+    }
+
+    /** The table routes only what the engines publish, so a type no engine still writes does not linger in it. */
+    public function testEveryRoutedTypeIsPublished(): void
+    {
+        $published = [
+            ...array_keys(iterator_to_array(self::publishedTypes())),
+            ...array_map(static fn(array $deal): string => $deal[1], iterator_to_array(self::dealTypes())),
+        ];
+
+        $this->assertSame([], array_values(array_diff(NewsCard::typesOf(NewsCard::cases()), $published)));
     }
 
     #[DataProvider('dealTypes')]
     public function testEveryBusinessModelsDealIsPresentedAsADeal(string $model, string $type): void
     {
-        $this->assertSame('mna', EventCategory::forType($type), "{$model} publishes its deals as {$type}");
+        $this->assertSame(NewsCard::Deal, NewsCard::forType($type), "{$model} publishes its deals as {$type}");
+    }
+
+    /** The wire selects a company section by type, so every type of each section's cards must be selectable. */
+    public function testEachCompanySectionSelectsEveryTypeItsCardsAreRoutedFrom(): void
+    {
+        foreach (['earnings', 'deals', 'credit'] as $section) {
+            $cards = NewsCard::inCompanySection($section);
+            $this->assertNotSame([], $cards, $section);
+            foreach (NewsCard::typesOf($cards) as $type) {
+                $this->assertSame($section, NewsCard::forType($type)->companySection(), "{$type} selected for {$section}");
+            }
+        }
+        $this->assertContains('STRATEGIC ACQUISITION', NewsCard::typesOf(NewsCard::inCompanySection('deals')));
+        $this->assertContains('CREDIT_DOWNGRADE', NewsCard::typesOf(NewsCard::inCompanySection('credit')));
     }
 
     public function testARatingChangeReadsInItsDirectionWithoutTheLogPrefix(): void
@@ -40,7 +65,7 @@ class EventCategoryTest extends TestCase
 
         $up = $presenter->present(['type' => 'CREDIT_UPGRADE', 'description' => '[CREDIT UPGRADE] LAKE: Credit rating upgraded from BBB to A following balance sheet strengthening.']);
         $this->assertSame('RATING UPGRADE', $up['badge']);
-        $this->assertStringContainsString('secondary', $up['borderClass']);
+        $this->assertSame('up', $up['tone']);
     }
 
     public function testAnalystRevisionsReadInTheirDirection(): void
@@ -50,7 +75,7 @@ class EventCategoryTest extends TestCase
         $this->assertSame('TARGET RAISED', $presenter->present(['type' => 'ANALYST', 'description' => 'Sell-side raised its price target on WEAV to $120.00 from $100.00.'])['badge']);
         $cut = $presenter->present(['type' => 'ANALYST', 'description' => 'Sell-side cut its price target on WEAV to $80.00 from $100.00.']);
         $this->assertSame('TARGET CUT', $cut['badge']);
-        $this->assertStringContainsString('tertiary', $cut['borderClass']);
+        $this->assertSame('down', $cut['tone']);
         $this->assertSame('GUIDANCE CUT', $presenter->present(['type' => 'GUIDANCE', 'description' => 'Guidance cut: management expects to miss consensus by roughly 8%.'])['badge']);
     }
 

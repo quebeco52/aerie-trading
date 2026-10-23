@@ -10,8 +10,8 @@ use App\Entity\StockEvent;
 use App\Repository\DistrictNewsRepository;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
-use App\Service\News\EventCategory;
 use App\Service\News\EventPresenter;
+use App\Service\News\NewsCard;
 use App\Service\News\NewsDesk;
 
 /**
@@ -31,9 +31,6 @@ class NewsFeedBuilder
     /** Recent company stories searched for the latest headline; most are not headlines, so it reaches past one. */
     private const HEADLINE_SCAN_ROWS = 40;
 
-    /** Company cards that can make a headline (NewsDesk::isHeadline); the scan reads only these. */
-    private const HEADLINE_CAPABLE_CATEGORIES = ['bankruptcy', 'reorganization', 'mna', 'debt', 'earnings', 'shock', 'analyst'];
-
     public function __construct(
         private readonly DistrictNewsRepository $districtNews,
         private readonly StockEventRepository $stockEvents,
@@ -52,7 +49,7 @@ class NewsFeedBuilder
             'district' => $this->districtNews->findLatest($limit),
             'funds' => $this->etfEvents->findLatest($limit),
             'companies' => $this->stockEvents->findLatest($limit),
-            'earnings', 'deals', 'credit' => $this->stockEvents->findLatest($limit, EventCategory::typesIn(NewsDesk::COMPANY_SECTION_CATEGORIES[$section])),
+            'earnings', 'deals', 'credit' => $this->stockEvents->findLatest($limit, NewsCard::typesOf(NewsCard::inCompanySection($section))),
             default => [
                 ...$this->districtNews->findLatest($limit),
                 ...$this->stockEvents->findLatest($limit),
@@ -79,7 +76,7 @@ class NewsFeedBuilder
     {
         $candidates = [
             ...$this->districtNews->findLatest(1),
-            ...$this->stockEvents->findLatest(self::HEADLINE_SCAN_ROWS, EventCategory::typesIn(self::HEADLINE_CAPABLE_CATEGORIES)),
+            ...$this->stockEvents->findLatest(self::HEADLINE_SCAN_ROWS, NewsCard::typesOf(NewsDesk::headlineCards())),
         ];
 
         $latest = null;
@@ -101,7 +98,6 @@ class NewsFeedBuilder
     private function item(DistrictNews|StockEvent|EtfEvent $row): array
     {
         $card = $this->presenter->present($row);
-        $category = (string) $card['category'];
 
         [$scope, $ticker, $name, $volatility] = match (true) {
             $row instanceof StockEvent => [NewsDesk::SCOPE_COMPANY, $row->getStock()->getTicker(), $row->getStock()->getName(), (float) $row->getStock()->getVolatility()],
@@ -112,7 +108,7 @@ class NewsFeedBuilder
         return [
             'card' => $card,
             'scope' => $scope,
-            'section' => NewsDesk::sectionOf($scope, $category),
+            'section' => NewsDesk::sectionOf($scope, NewsCard::from((string) $card['category'])),
             // The verdict the desk reached when it ran the story; a row from before verdicts were kept is judged now.
             'headline' => $row->getHeadline() ?? NewsDesk::isHeadline($card, $volatility),
             'ticker' => $ticker,

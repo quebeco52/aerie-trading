@@ -33,7 +33,7 @@ final class AnalystPriceTargetTest extends TestCase
     {
         $this->published = [];
 
-        $publisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
+        $publisher = $this->createStub(\App\Service\News\MarketEventPublisher::class);
         $publisher->method('publish')->willReturnCallback(
             function (mixed $asset, string $type, string $description): array {
                 $this->published[] = [$type, $description];
@@ -132,7 +132,7 @@ final class AnalystPriceTargetTest extends TestCase
     {
         $captured = null;
 
-        $publisher = $this->createStub(\App\Service\Event\MarketEventPublisher::class);
+        $publisher = $this->createStub(\App\Service\News\MarketEventPublisher::class);
         $publisher->method('publish')->willReturnCallback(
             function (mixed $asset, string $type, string $description, float $changePercent) use (&$captured): array {
                 $captured = $changePercent;
