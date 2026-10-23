@@ -15,6 +15,7 @@ use App\Service\Politics\Department\FairTradingBoard;
 use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
 use App\Service\Politics\Department\Office;
+use App\Service\Politics\Policy\Lever;
 use App\Service\Politics\Policy\Platforms;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\PoliticsState;
@@ -134,7 +135,7 @@ class FairTradingBoardTest extends TestCase
         $state = self::opened();
         $this->assertArrayNotHasKey(Appointments::AXIS_COMPETITION, Appointments::councilMedians($state));
         $this->assertArrayNotHasKey(Appointments::AXIS_COMPETITION, Appointments::boardMedians($state));
-        $this->assertArrayNotHasKey('mergerReviewLeniency', Platforms::LEVER_FIELDS);
+        $this->assertNull(Lever::tryFrom('mergerReviewLeniency'));
         $this->assertArrayNotHasKey('mergerReviewLeniency', Platforms::platform([]));
     }
 }

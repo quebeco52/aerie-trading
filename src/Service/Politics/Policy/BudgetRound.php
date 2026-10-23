@@ -23,8 +23,8 @@ final class BudgetRound
     public static function standingLevers(PoliticsState|PoliticsStateDTO $state): array
     {
         $standing = [];
-        foreach (Platforms::LEVER_FIELDS as $lever => $field) {
-            $standing[$lever] = $state->$field;
+        foreach (Lever::cases() as $lever) {
+            $standing[$lever->value] = $state->{$lever->field()};
         }
 
         return $standing;
@@ -54,8 +54,8 @@ final class BudgetRound
         ], $support);
 
         $proposal = [];
-        foreach (array_keys(Platforms::LEVER_FIELDS) as $lever) {
-            $proposal[$lever] = $platform[$lever];
+        foreach (Lever::cases() as $lever) {
+            $proposal[$lever->value] = $platform[$lever->value];
         }
         // Out of a recession the fund will not consent above the ceiling, so the bargain is struck within it.
         $caps = $recession ? [] : ['reserveDrawShare' => MacroConstants::RESERVE_DRAW_CEILING];
@@ -94,8 +94,8 @@ final class BudgetRound
         if ($levers !== $standing) {
             $state->lastBudgetEnactedAt = $state->totalTime;
         }
-        foreach (Platforms::LEVER_FIELDS as $lever => $field) {
-            $state->$field = $levers[$lever];
+        foreach (Lever::cases() as $lever) {
+            $state->{$lever->field()} = $levers[$lever->value];
         }
     }
 }

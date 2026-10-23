@@ -33,6 +33,7 @@ use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\Diet\PartyLeaders;
 use App\Service\Politics\Policy\BudgetRound;
+use App\Service\Politics\Policy\Lever;
 use App\Service\Politics\Policy\Platforms;
 use App\Service\Politics\PoliticsState;
 use App\Service\View\DietChamberDrawing;
@@ -698,7 +699,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(['tariffs', 'immigration', 'foreign buyers', 'reserves at home'], $rows[Diet::AXIS_OPENNESS]);
         $this->assertSame(['utility rates'], $rows[Diet::AXIS_COUNCIL]);
         $this->assertSame(['green belts', 'carbon price', 'extraction rules'], $rows[Diet::AXIS_ENVIRONMENT]);
-        $this->assertCount(count(Platforms::LEVER_FIELDS), array_merge(...array_values($rows)));
+        $this->assertCount(count(Lever::cases()), array_merge(...array_values($rows)));
     }
 
     /**

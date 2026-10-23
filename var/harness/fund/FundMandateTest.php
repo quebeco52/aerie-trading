@@ -92,13 +92,8 @@ final class FundMandateTest extends KernelTestCase
             $policy = null;
             if (getenv('MANDATE') && isset($m) && $m->totalTime >= (float) (getenv('MANDATE_AT') ?: 5.0)) {
                 $policy = new \App\DTO\GovernmentPolicyDTO(
-                    publicSpendingShare: $m->publicSpendingShare, foreignBuyerTaxRate: $m->foreignBuyerTaxRate, reserveDrawShare: $m->reserveDrawShare,
-                    consolidationTaxShare: $m->consolidationTaxShare, reserveHomeEquityShare: $m->reserveHomeEquityShare,
-                    utilityRateCaseGrantShare: $m->utilityRateCaseGrantShare, dividendTaxRate: $m->dividendTaxRate,
-                    debtTarget: $m->debtTarget, debtPace: $m->debtPace,
-                    corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate,
-                    mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
-                    extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
+                    levers: array_map(static fn(string $field): float => $m->$field, \App\Service\Politics\Policy\Lever::fields()),
+                    mergerReviewLeniency: $m->mergerReviewLeniency, electionPulse: $m->electionPulse,
                     reserveFundEquityShare: (float) getenv('MANDATE'),
                 );
             }

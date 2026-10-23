@@ -93,7 +93,7 @@ final class PolicyCapitalization
 
     // --- Laws Priced per Firm ---
     /**
-     * The laws a firm's own accounts answer to, keyed as Platforms::LEVER_FIELDS; the corporate tax reaches every
+     * The laws a firm's own accounts answer to, keyed by Lever; the corporate tax reaches every
      * firm through its effective rate instead.
      */
     public const PER_FIRM_LEVERS = ['bankLevyRate', 'extractionStringency', 'stampDutyRate', 'carbonPrice', 'publicSpending', 'utilityRateGrant'];
@@ -310,7 +310,7 @@ final class PolicyCapitalization
      * end of that government's term the drift back toward the long-run law, each counting for the share of the firm's
      * value accruing after it starts.
      *
-     * @param string                $lever       The lever, keyed as Platforms::LEVER_FIELDS.
+     * @param string                $lever       The lever, keyed by Lever.
      * @param float                 $law         The law in force.
      * @param \Closure(float, array<string, float>): float $measure The law as the earnings feel it, given the rest of
      *                                                              that government's laws.

@@ -9,13 +9,13 @@ use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
 use App\Service\Math\MathUtility;
 use App\Service\Politics\PoliticsEngine;
-use App\Service\Politics\Policy\Platforms;
+use App\Service\Politics\Policy\Lever;
 
 [$script, $seedFrom, $seedTo, $years, $out] = $argv;
 $tpy = 48;
 $fh = fopen($out, 'a');
 for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
-    $series = array_fill_keys(array_keys(Platforms::LEVER_FIELDS), []);
+    $series = array_fill_keys(array_column(Lever::cases(), 'value'), []);
     mt_srand($seed);
     $math = new MathUtility();
     $redis = new class extends \Redis {
@@ -32,7 +32,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
         $m = $politics->updatePolitics($macro, 1.0 / $tpy);
         $policy = $m->policy();
         if ($i > 4 * $tpy && $i % 12 === 0) {
-            foreach (Platforms::LEVER_FIELDS as $lever => $field) {
+            foreach (Lever::fields() as $lever => $field) {
                 $series[$lever][] = $m->$field;
             }
         }

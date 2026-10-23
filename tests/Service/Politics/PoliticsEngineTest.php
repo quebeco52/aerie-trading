@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Service\Politics;
 
 use App\Data\Politics\AerieDiet as Diet;
-use App\DTO\GovernmentPolicyDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
@@ -21,6 +21,7 @@ use App\Service\Politics\Diet\CoalitionFormation;
 use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Policy\BudgetBargain;
 use App\Service\Politics\Policy\BudgetRound;
+use App\Service\Politics\Policy\Lever;
 use App\Service\Politics\Policy\Platforms;
 use App\Service\Politics\PoliticsEngine as Politics;
 use App\Service\Politics\PoliticsState;
@@ -647,9 +648,9 @@ class PoliticsEngineTest extends TestCase
         $this->assertSame($state->totalTime, $state->lastBudgetEnactedAt);
 
         $policy = PoliticsStateDTO::fromState($state)->policy();
-        $this->assertSame($state->corporateTaxPolicyShift, $policy->corporateTaxPolicyShift, 'The economy reads the levers the budget enacted.');
-        $this->assertSame($state->importTariffRate, $policy->importTariffRate);
-        $this->assertSame($state->laborForceGrowthRate, $policy->laborForceGrowthRate);
+        $this->assertSame($state->corporateTaxPolicyShift, $policy->lever(Lever::CorporateTax), 'The economy reads the levers the budget enacted.');
+        $this->assertSame($state->importTariffRate, $policy->lever(Lever::Tariff));
+        $this->assertSame($state->laborForceGrowthRate, $policy->lever(Lever::LaborGrowth));
     }
 
     /**
@@ -675,7 +676,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(10.0 / 71.0, $civic - $vanguard, 1e-12, 'Labour\'s 2:1 against the Conservatives\' 4:1.');
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE, Platforms::platform([Diet::AXIS_STATE => 0.0])['consolidationTaxShare'], 1e-12);
         $this->assertEqualsWithDelta(CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE, (new PoliticsStateDTO())->consolidationTaxShare, 1e-12);
-        $this->assertSame(Diet::AXIS_STATE, Platforms::LEVER_AXES['consolidationTaxShare']);
+        $this->assertSame(Diet::AXIS_STATE, Lever::axes()['consolidationTaxShare']);
     }
 
     /**
@@ -707,7 +708,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.15, Platforms::platform([Diet::AXIS_STATE => $half])['dividendTax'], 1e-12, 'Left of the middle the rate stays where it was founded.');
         $this->assertEqualsWithDelta(0.075, Platforms::platform([Diet::AXIS_STATE => -$half])['dividendTax'], 1e-12);
         $this->assertSame(Valuation::FOUNDING_DIVIDEND_TAX_RATE, (new PoliticsStateDTO())->dividendTaxRate);
-        $this->assertSame(Diet::AXIS_STATE, Platforms::LEVER_AXES['dividendTax']);
+        $this->assertSame(Diet::AXIS_STATE, Lever::axes()['dividendTax']);
     }
 
     /**
@@ -720,7 +721,7 @@ class PoliticsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.0, Platforms::platform(Diet::position(Diet::EXCHANGE, []))['reserveHomeShare'], 1e-12);
         $this->assertEqualsWithDelta(0.25, Platforms::platform([Diet::AXIS_OPENNESS => 0.0])['reserveHomeShare'], 1e-12);
         $this->assertEqualsWithDelta(SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE, (new PoliticsStateDTO())->reserveHomeEquityShare, 1e-12);
-        $this->assertSame(Diet::AXIS_OPENNESS, Platforms::LEVER_AXES['reserveHomeShare']);
+        $this->assertSame(Diet::AXIS_OPENNESS, Lever::axes()['reserveHomeShare']);
     }
 
     /**
@@ -778,7 +779,7 @@ class PoliticsEngineTest extends TestCase
         }
 
         $majority = BudgetRound::budget([Diet::VANGUARD, Diet::EXCHANGE, Diet::CHARTISTS], [], $seats, $positions, $standing(0.0));
-        $this->assertSame(array_fill_keys(array_keys(Platforms::LEVER_FIELDS), false), $majority['supportHeld'], 'A majority cabinet answers to no supporter.');
+        $this->assertSame(array_fill_keys(array_keys(Lever::fields()), false), $majority['supportHeld'], 'A majority cabinet answers to no supporter.');
     }
 
     public function testTheVoteReadsGrowthPerHead(): void
@@ -819,19 +820,20 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
-     * A party's programme, the standing levers and the state fields all list the levers in one order, so a budget that
-     * changes nothing compares equal.
+     * A party's programme, the standing levers and the policy handed to the economy all list the levers in one order,
+     * so a budget that changes nothing compares equal; and each lever has its property on all four states.
      */
     public function testEveryLeverListIsInPlatformOrder(): void
     {
         $order = array_keys(Platforms::partyProgramme(Diet::CIVIC, Diet::HOME_POSITIONS));
 
-        $this->assertSame($order, array_keys(Platforms::LEVER_FIELDS));
-        $this->assertSame($order, array_keys(Platforms::LEVER_AXES));
+        $this->assertSame($order, array_column(Lever::cases(), 'value'));
         $this->assertSame($order, array_keys(BudgetRound::standingLevers(new PoliticsStateDTO())));
-        foreach (Platforms::LEVER_FIELDS as $field) {
-            $this->assertTrue(property_exists(PoliticsStateDTO::class, $field), "{$field} is kept on the state.");
-            $this->assertTrue(property_exists(GovernmentPolicyDTO::class, $field), "{$field} is handed to the economy.");
+        $this->assertSame($order, array_keys((new PoliticsStateDTO())->policy()->levers));
+        foreach (Lever::cases() as $lever) {
+            foreach ([PoliticsState::class, PoliticsStateDTO::class, MacroState::class, MacroStateDTO::class] as $state) {
+                $this->assertTrue(property_exists($state, $lever->field()), "{$state} keeps {$lever->field()}.");
+            }
         }
     }
 
@@ -841,7 +843,7 @@ class PoliticsEngineTest extends TestCase
         $centre = array_fill_keys(Diet::AXES, 0.0);
         foreach (Diet::AXES as $axis) {
             $towards = [Platforms::platform([$axis => -0.4] + $centre), Platforms::platform([$axis => 0.4] + $centre)];
-            foreach (array_intersect_key(Platforms::LEVER_AXES, $towards[0]) as $lever => $own) {
+            foreach (array_intersect_key(Lever::axes(), $towards[0]) as $lever => $own) {
                 $moved = $towards[0][$lever] !== $towards[1][$lever];
                 $this->assertSame($own === $axis, $moved, "{$lever} " . ($moved ? 'moves' : 'does not move') . " with {$axis}.");
             }

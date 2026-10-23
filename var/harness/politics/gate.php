@@ -16,6 +16,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\Diet\Election;
+use App\Service\Politics\Policy\Lever;
 [$script, $seedFrom, $seedTo, $years, $tpy, $arm, $out] = $argv;
 $fh = fopen($out, 'w');
 $tpy = (int) $tpy;
@@ -59,24 +60,15 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             // steers to a fixed debt target at a fixed pace from the second tick.
             [$fdT, $fdP] = array_map('floatval', explode(',', getenv('FIXED_DEBT')));
             $policy ??= new \App\DTO\GovernmentPolicyDTO(
-                publicSpendingShare: $m->publicSpendingShare,
-                corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate, foreignBuyerTaxRate: $m->foreignBuyerTaxRate,
-                mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
-                extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
-                reserveDrawShare: $m->reserveDrawShare, consolidationTaxShare: $m->consolidationTaxShare, reserveHomeEquityShare: $m->reserveHomeEquityShare,
-                utilityRateCaseGrantShare: $m->utilityRateCaseGrantShare, dividendTaxRate: $m->dividendTaxRate,
+                levers: ['debtTarget' => $fdT, 'debtPace' => $fdP] + array_map(static fn(string $field): float => $m->$field, Lever::fields()),
+                mergerReviewLeniency: $m->mergerReviewLeniency, electionPulse: $m->electionPulse,
                 bankCapitalRequirement: $m->bankCapitalRequirement, mortgageLtvCap: $m->mortgageLtvCap, neutralCountercyclicalBuffer: $m->neutralCountercyclicalBuffer,
                 initialMarginRequirement: $m->initialMarginRequirement, earningsManagementScale: $m->earningsManagementScale,
-                debtTarget: $fdT, debtPace: $fdP,
             );
         } elseif ($arm === 'step') {
             $policy = new \App\DTO\GovernmentPolicyDTO(
-                publicSpendingShare: $m->publicSpendingShare,
-                corporateTaxPolicyShift: $m->corporateTaxPolicyShift, importTariffRate: $m->importTariffRate, laborForceGrowthRate: $m->laborForceGrowthRate, foreignBuyerTaxRate: $m->foreignBuyerTaxRate,
-                mergerReviewLeniency: $m->mergerReviewLeniency, greenBeltStringency: $m->greenBeltStringency, carbonPrice: $m->carbonPrice,
-                extractionStringency: $m->extractionStringency, stampDutyRate: $m->stampDutyRate, bankLevyRate: $m->bankLevyRate, electionPulse: $m->electionPulse,
-                reserveDrawShare: $m->reserveDrawShare, consolidationTaxShare: $m->consolidationTaxShare, reserveHomeEquityShare: $m->reserveHomeEquityShare,
-                utilityRateCaseGrantShare: $m->utilityRateCaseGrantShare, dividendTaxRate: $m->dividendTaxRate,
+                levers: array_map(static fn(string $field): float => $m->$field, Lever::fields()),
+                mergerReviewLeniency: $m->mergerReviewLeniency, electionPulse: $m->electionPulse,
                 bankCapitalRequirement: \App\Service\Math\FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT + ((float) (getenv('STEP_SIZE') ?: 0.01)) * ((float) (getenv('STEP_PHASE') ?: 0.0) > 0.0
                     ? max(0.0, min(1.0, ($m->totalTime - (float) (getenv('STEP_AT') ?: 10.0)) / (float) getenv('STEP_PHASE')))
                     : ($m->totalTime >= (float) (getenv('STEP_AT') ?: 10.0) ? 1.0 : 0.0)),
@@ -85,22 +77,8 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
             // What the economy read before politics left it: the term's ramp and the vote's own tick, no talks.
             $vote = TimeSeries::crossedSimulatedBoundary($m->totalTime, 1.0 / $tpy, Election::TERM_YEARS);
             $policy = new \App\DTO\GovernmentPolicyDTO(
-                publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,
-                corporateTaxPolicyShift: 0.0,
-                importTariffRate: 0.0,
-                laborForceGrowthRate: MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
-                foreignBuyerTaxRate: 0.0,
+                levers: \App\Service\Politics\Policy\BudgetRound::standingLevers(new \App\DTO\PoliticsStateDTO()),
                 mergerReviewLeniency: 0.0,
-                greenBeltStringency: 0.0,
-                carbonPrice: 0.0,
-                extractionStringency: 0.0,
-                stampDutyRate: \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE,
-                bankLevyRate: 0.0,
-                reserveDrawShare: MacroConstants::RESERVE_DRAW_CEILING,
-                consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
-                reserveHomeEquityShare: \App\Service\Macro\Subsystem\SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
-                utilityRateCaseGrantShare: \App\Service\Math\FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
-                dividendTaxRate: \App\Service\Math\Valuation::FOUNDING_DIVIDEND_TAX_RATE,
                 electionPulse: Election::pulse($m->totalTime, $vote ? $m->totalTime : -1.0, -1.0),
             );
         }

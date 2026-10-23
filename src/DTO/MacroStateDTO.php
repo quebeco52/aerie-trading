@@ -565,9 +565,8 @@ readonly class MacroStateDTO
          */
         public float $governmentSpendingShiftEmbodied = 0.0,
         /**
-         * @var array<string, float> The levers the sitting government will pass at its next budget round, keyed as
-         *                           \App\Service\Politics\Policy\Platforms::LEVER_FIELDS; empty before they have been
-         *                           read.
+         * @var array<string, float> The levers the sitting government will pass at its next budget round, keyed by
+         *                           \App\Service\Politics\Policy\Lever; empty before they have been read.
          */
         public array $sittingLevers = [],
         /** When that round falls (-1: not yet read). */

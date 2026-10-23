@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\DTO;
 
+use App\Service\Politics\Policy\Lever;
+
 /**
  * What the government hands the economy each tick: the levers it has in force, and how far the election calendar
  * stands above its average pull on policy uncertainty. The macro engine reads nothing else of politics.
@@ -11,45 +13,13 @@ namespace App\DTO;
 final readonly class GovernmentPolicyDTO
 {
     public function __construct(
-        /** Government purchases as a share of GDP: the level the purchases process reverts to. */
-        public float $publicSpendingShare,
-        /** The corporate rate's shift from the neutral rate. */
-        public float $corporateTaxPolicyShift,
-        /** Average tariff on imports. */
-        public float $importTariffRate,
-        /** Labour force growth, the immigration regime in it. */
-        public float $laborForceGrowthRate,
-        /** Tax on a home bought by a buyer from outside the District, a share of the price. */
-        public float $foreignBuyerTaxRate,
+        /**
+         * @var array<string, float> The Diet's levers in force, keyed by Lever in budget order
+         *                           (App\Service\Politics\Policy\BudgetRound::standingLevers()).
+         */
+        public array $levers,
         /** Where merger review stands between the 2023 guidelines (0) and the 2010 guidelines (1). */
         public float $mergerReviewLeniency,
-        /** How far the green belt stands between the founding planning regime (0) and the strictest on record (1). */
-        public float $greenBeltStringency,
-        /** The carbon price on power and industry, in dollars a tonne of CO2. */
-        public float $carbonPrice,
-        /** How far the rules on extraction stand between the founding ones (0) and the strictest on record (1). */
-        public float $extractionStringency,
-        /** Stamp duty on each side of a share trade, paid into the reserve fund. */
-        public float $stampDutyRate,
-        /** Bank levy on short-term funding, a year (half that on long-term funding). */
-        public float $bankLevyRate,
-        /**
-         * Share of the reserve fund's expected long-term real return the budget spends
-         * (MacroConstants::RESERVE_DRAW_CEILING without the fund's consent).
-         */
-        public float $reserveDrawShare,
-        /**
-         * Share of the surplus the debt calls for (App\Service\Macro\Subsystem\CreditFiscalSubsystem::fiscalStance())
-         * raised by tax rather than by cutting purchases, and of the room under the line spent on purchases rather than
-         * tax cuts.
-         */
-        public float $consolidationTaxShare,
-        /** Share of the reserve fund's equities held on the District's own board. */
-        public float $reserveHomeEquityShare,
-        /** Share of a utility's rate request the utility commission grants. */
-        public float $utilityRateCaseGrantShare,
-        /** Tax on the dividends the District's own shareholders are paid. */
-        public float $dividendTaxRate,
         /** Nearness to the vote (0 at mid-term, 1 on its eve and through the talks after it) less its long-run mean. */
         public float $electionPulse,
         /**
@@ -94,8 +64,7 @@ final readonly class GovernmentPolicyDTO
         public ?float $debtAverageMaturity = null,
         /**
          * @var array<string, float>|null The levers the sitting government will pass at its next budget round, keyed as
-         *                                \App\Service\Politics\Policy\Platforms::LEVER_FIELDS; null before they have been
-         *                                read.
+         *                                Lever; null before they have been read.
          */
         public ?array $sittingLevers = null,
         /** When that round falls; null before it has been read. */
@@ -111,9 +80,11 @@ final readonly class GovernmentPolicyDTO
          * has a forecast.
          */
         public ?float $expectedPolicyFrom = null,
-        /** Gross debt to GDP the Diet's budget steers toward. */
-        public float $debtTarget = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_DEBT_TARGET,
-        /** Points of GDP a year the budget moves debt toward that target. */
-        public float $debtPace = \App\Service\Macro\Subsystem\CreditFiscalSubsystem::FOUNDING_DEBT_PACE,
     ) {}
+
+    /** A lever in force. */
+    public function lever(Lever $lever): float
+    {
+        return $this->levers[$lever->value];
+    }
 }

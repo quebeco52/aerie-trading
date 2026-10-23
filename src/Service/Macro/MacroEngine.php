@@ -20,6 +20,7 @@ use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\Department\SecuritiesCommission;
+use App\Service\Politics\Policy\Lever;
 use Psr\Log\LoggerInterface;
 
 class MacroEngine
@@ -517,28 +518,14 @@ class MacroEngine
      */
     private function enactPolicy(MacroState $state, GovernmentPolicyDTO $policy): void
     {
-        $productivityLoss = -MacroConstants::TARIFF_OUTPUT_LOSS * ($policy->importTariffRate - $state->importTariffRate);
+        $productivityLoss = -MacroConstants::TARIFF_OUTPUT_LOSS * ($policy->lever(Lever::Tariff) - $state->importTariffRate);
         $state->tfpShockLevel += $productivityLoss;
         $state->totalFactorProductivityIndex *= exp($productivityLoss);
 
-        $state->publicSpendingShare = $policy->publicSpendingShare;
-        $state->corporateTaxPolicyShift = $policy->corporateTaxPolicyShift;
-        $state->importTariffRate = $policy->importTariffRate;
-        $state->laborForceGrowthRate = $policy->laborForceGrowthRate;
-        $state->foreignBuyerTaxRate = $policy->foreignBuyerTaxRate;
+        foreach (Lever::cases() as $lever) {
+            $state->{$lever->field()} = $policy->lever($lever);
+        }
         $state->mergerReviewLeniency = $policy->mergerReviewLeniency;
-        $state->greenBeltStringency = $policy->greenBeltStringency;
-        $state->carbonPrice = $policy->carbonPrice;
-        $state->extractionStringency = $policy->extractionStringency;
-        $state->stampDutyRate = $policy->stampDutyRate;
-        $state->bankLevyRate = $policy->bankLevyRate;
-        $state->reserveDrawShare = $policy->reserveDrawShare;
-        $state->consolidationTaxShare = $policy->consolidationTaxShare;
-        $state->reserveHomeEquityShare = $policy->reserveHomeEquityShare;
-        $state->utilityRateCaseGrantShare = $policy->utilityRateCaseGrantShare;
-        $state->dividendTaxRate = $policy->dividendTaxRate;
-        $state->debtTarget = $policy->debtTarget;
-        $state->debtPace = $policy->debtPace;
         $state->electionPulse = $policy->electionPulse;
         $state->authorityMajority = $policy->authorityMajority ?? 0.0;
         $state->authorityCommitteeSeated = $policy->authorityMajority === null ? 0.0 : 1.0;

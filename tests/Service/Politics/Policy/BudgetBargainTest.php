@@ -8,6 +8,7 @@ use App\Data\Politics\AerieDiet as Diet;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Politics\Policy\BudgetBargain;
 use App\Service\Politics\Policy\BudgetRound;
+use App\Service\Politics\Policy\Lever;
 use App\Service\Politics\Policy\Platforms;
 use PHPUnit\Framework\TestCase;
 
@@ -261,7 +262,7 @@ class BudgetBargainTest extends TestCase
     private function ordered(array $budget): array
     {
         $ordered = [];
-        foreach (array_keys(Platforms::LEVER_FIELDS) as $lever) {
+        foreach (array_column(Lever::cases(), 'value') as $lever) {
             $ordered[$lever] = $budget[$lever];
         }
 

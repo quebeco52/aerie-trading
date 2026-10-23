@@ -5,15 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro;
 
 use App\DTO\GovernmentPolicyDTO;
+use App\DTO\PoliticsStateDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
-use App\Service\Math\Valuation;
+use App\Service\Politics\Policy\BudgetRound;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -55,22 +54,8 @@ class GovernmentPolicyTest extends TestCase
         $this->assertNull($state->mortgageLtvCap, 'The District opens with no cap until a regulator sets one.');
 
         $this->enactPolicyDto($state, new GovernmentPolicyDTO(
-            publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,
-            corporateTaxPolicyShift: 0.0,
-            importTariffRate: 0.0,
-            laborForceGrowthRate: MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
-            foreignBuyerTaxRate: 0.0,
+            levers: self::levers([]),
             mergerReviewLeniency: 0.0,
-            greenBeltStringency: 0.0,
-            carbonPrice: 0.0,
-            extractionStringency: 0.0,
-            stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
-            bankLevyRate: 0.0,
-            reserveDrawShare: MacroConstants::RESERVE_DRAW_CEILING,
-            consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
-            reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
-            utilityRateCaseGrantShare: FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
-            dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
             electionPulse: 0.0,
             mortgageLtvCap: 0.85,
         ));
@@ -107,22 +92,8 @@ class GovernmentPolicyTest extends TestCase
     {
         $state = new MacroState();
         $rules = new GovernmentPolicyDTO(
-            publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,
-            corporateTaxPolicyShift: 0.0,
-            importTariffRate: 0.0,
-            laborForceGrowthRate: MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
-            foreignBuyerTaxRate: 0.0,
+            levers: self::levers([]),
             mergerReviewLeniency: 0.0,
-            greenBeltStringency: 0.0,
-            carbonPrice: 0.0,
-            extractionStringency: 0.0,
-            stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
-            bankLevyRate: 0.0,
-            reserveDrawShare: MacroConstants::RESERVE_DRAW_CEILING,
-            consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
-            reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
-            utilityRateCaseGrantShare: FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
-            dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
             electionPulse: 0.0,
             initialMarginRequirement: 0.7,
             earningsManagementScale: 0.6,
@@ -144,22 +115,8 @@ class GovernmentPolicyTest extends TestCase
     {
         $state = new MacroState();
         $forecast = static fn(?array $levers, ?float $from): GovernmentPolicyDTO => new GovernmentPolicyDTO(
-            publicSpendingShare: MacroConstants::PUBLIC_PURCHASES_TO_GDP,
-            corporateTaxPolicyShift: 0.01,
-            importTariffRate: 0.0,
-            laborForceGrowthRate: MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
-            foreignBuyerTaxRate: 0.0,
+            levers: self::levers(['corporateTax' => 0.01, 'bankLevyRate' => 0.0005, 'reserveDrawShare' => 0.55, 'consolidationTaxShare' => 0.30, 'reserveHomeShare' => 0.10, 'utilityRateGrant' => 0.40, 'dividendTax' => 0.30]),
             mergerReviewLeniency: 0.0,
-            greenBeltStringency: 0.0,
-            carbonPrice: 0.0,
-            extractionStringency: 0.0,
-            stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
-            bankLevyRate: 0.0005,
-            reserveDrawShare: 0.55,
-            consolidationTaxShare: 0.30,
-            reserveHomeEquityShare: 0.10,
-            utilityRateCaseGrantShare: 0.40,
-            dividendTaxRate: 0.30,
             electionPulse: 0.0,
             expectedLevers: $levers,
             expectedPolicyFrom: $from,
@@ -221,23 +178,20 @@ class GovernmentPolicyTest extends TestCase
     private function enact(MacroState $state, float $tariff, float $corporateTax = 0.0, float $laborGrowth = MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, float $leniency = 0.0, float $pulse = 0.0, float $spending = MacroConstants::PUBLIC_PURCHASES_TO_GDP): void
     {
         $this->enactPolicy->invokeArgs($this->engine, [$state, new GovernmentPolicyDTO(
-            publicSpendingShare: $spending,
-            corporateTaxPolicyShift: $corporateTax,
-            importTariffRate: $tariff,
-            laborForceGrowthRate: $laborGrowth,
-            foreignBuyerTaxRate: 0.0,
+            levers: self::levers(['publicSpending' => $spending, 'corporateTax' => $corporateTax, 'tariff' => $tariff, 'laborGrowth' => $laborGrowth]),
             mergerReviewLeniency: $leniency,
-            greenBeltStringency: 0.0,
-            carbonPrice: 0.0,
-            extractionStringency: 0.0,
-            stampDutyRate: FinancialConstants::STAMP_DUTY_RATE,
-            bankLevyRate: 0.0,
-            reserveDrawShare: MacroConstants::RESERVE_DRAW_CEILING,
-            consolidationTaxShare: CreditFiscalSubsystem::FOUNDING_CONSOLIDATION_TAX_SHARE,
-            reserveHomeEquityShare: SovereignFundSubsystem::OPENING_HOME_EQUITY_SHARE,
-            utilityRateCaseGrantShare: FirmEconomics::APPOINTED_COMMISSION_GRANTED_SHARE,
-            dividendTaxRate: Valuation::FOUNDING_DIVIDEND_TAX_RATE,
             electionPulse: $pulse,
         )]);
+    }
+
+    /**
+     * The founding levers with the given ones changed.
+     *
+     * @param  array<string, float> $changed
+     * @return array<string, float>
+     */
+    private static function levers(array $changed): array
+    {
+        return $changed + BudgetRound::standingLevers(new PoliticsStateDTO());
     }
 }

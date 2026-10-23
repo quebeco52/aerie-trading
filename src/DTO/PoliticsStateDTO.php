@@ -18,6 +18,7 @@ use App\Service\Politics\Department\SecuritiesCommission;
 use App\Service\Politics\Department\SovereignReserveFund;
 use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Diet\ElectionForecast;
+use App\Service\Politics\Policy\BudgetRound;
 use App\Service\Politics\PoliticsState;
 
 /**
@@ -341,7 +342,7 @@ readonly class PoliticsStateDTO
         public array $forecastSeats = [],
         /**
          * @var array<string, float> The laws the market expects after the vote, each government's budget weighted by
-         *                           its chance (Platforms::LEVER_FIELDS keys).
+         *                           its chance (keyed by Lever).
          */
         public array $forecastLevers = [],
         /**
@@ -402,24 +403,8 @@ readonly class PoliticsStateDTO
         $exchequer = $this->head(Office::ExchequerHead);
 
         return new GovernmentPolicyDTO(
-            publicSpendingShare: $this->publicSpendingShare,
-            corporateTaxPolicyShift: $this->corporateTaxPolicyShift,
-            importTariffRate: $this->importTariffRate,
-            laborForceGrowthRate: $this->laborForceGrowthRate,
-            foreignBuyerTaxRate: $this->foreignBuyerTaxRate,
+            levers: BudgetRound::standingLevers($this),
             mergerReviewLeniency: $fairTrading['name'] === '' ? FairTradingBoard::FOUNDING_LENIENCY : FairTradingBoard::leniency($fairTrading['stance']),
-            greenBeltStringency: $this->greenBeltStringency,
-            carbonPrice: $this->carbonPrice,
-            extractionStringency: $this->extractionStringency,
-            stampDutyRate: $this->stampDutyRate,
-            bankLevyRate: $this->bankLevyRate,
-            reserveDrawShare: $this->reserveDrawShare,
-            consolidationTaxShare: $this->consolidationTaxShare,
-            reserveHomeEquityShare: $this->reserveHomeEquityShare,
-            utilityRateCaseGrantShare: $this->utilityRateCaseGrantShare,
-            dividendTaxRate: $this->dividendTaxRate,
-            debtTarget: $this->debtTarget,
-            debtPace: $this->debtPace,
             electionPulse: Election::pulse($this->totalTime, $this->lastElectionAt, $this->coalitionTakesOfficeAt),
             authorityMajority: $this->authoritySalt < 0.0 ? null : $this->committeeMajority,
             bankCapitalRequirement: $this->head(Office::Regulator)['name'] === '' ? null : $this->bankCapitalRequirement,

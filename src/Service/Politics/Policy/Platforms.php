@@ -17,48 +17,6 @@ use App\Service\Math\Valuation;
  */
 final class Platforms
 {
-    // --- The Budget ---
-    /** The state field each lever is kept in, in the same order. */
-    public const LEVER_FIELDS = [
-        'publicSpending' => 'publicSpendingShare',
-        'corporateTax' => 'corporateTaxPolicyShift',
-        'tariff' => 'importTariffRate',
-        'laborGrowth' => 'laborForceGrowthRate',
-        'foreignBuyerTax' => 'foreignBuyerTaxRate',
-        'greenBeltStringency' => 'greenBeltStringency',
-        'carbonPrice' => 'carbonPrice',
-        'extractionStringency' => 'extractionStringency',
-        'stampDutyRate' => 'stampDutyRate',
-        'bankLevyRate' => 'bankLevyRate',
-        'reserveDrawShare' => 'reserveDrawShare',
-        'consolidationTaxShare' => 'consolidationTaxShare',
-        'reserveHomeShare' => 'reserveHomeEquityShare',
-        'utilityRateGrant' => 'utilityRateCaseGrantShare',
-        'dividendTax' => 'dividendTaxRate',
-        'debtTarget' => 'debtTarget',
-        'debtPace' => 'debtPace',
-    ];
-    /** The question each lever's platform reads, in the same order. */
-    public const LEVER_AXES = [
-        'publicSpending' => AerieDiet::AXIS_STATE,
-        'corporateTax' => AerieDiet::AXIS_STATE,
-        'tariff' => AerieDiet::AXIS_OPENNESS,
-        'laborGrowth' => AerieDiet::AXIS_OPENNESS,
-        'foreignBuyerTax' => AerieDiet::AXIS_OPENNESS,
-        'greenBeltStringency' => AerieDiet::AXIS_ENVIRONMENT,
-        'carbonPrice' => AerieDiet::AXIS_ENVIRONMENT,
-        'extractionStringency' => AerieDiet::AXIS_ENVIRONMENT,
-        'stampDutyRate' => AerieDiet::AXIS_STATE,
-        'bankLevyRate' => AerieDiet::AXIS_STATE,
-        'reserveDrawShare' => AerieDiet::AXIS_STATE,
-        'consolidationTaxShare' => AerieDiet::AXIS_STATE,
-        'reserveHomeShare' => AerieDiet::AXIS_OPENNESS,
-        'utilityRateGrant' => AerieDiet::AXIS_COUNCIL,
-        'dividendTax' => AerieDiet::AXIS_STATE,
-        'debtTarget' => AerieDiet::AXIS_STATE,
-        'debtPace' => AerieDiet::AXIS_STATE,
-    ];
-
     // --- Platforms: Public Spending ---
     /**
      * Log gap between the big-state and small-state ends' public spending: the 0.7% of GDP Singapore's Workers' Party

@@ -19,6 +19,7 @@ use App\Service\Math\TimeSeries;
 use App\Service\Politics\Diet\CoalitionFormation;
 use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Diet\ElectionForecast;
+use App\Service\Politics\Policy\Lever;
 use App\Service\Politics\PoliticsEngine as Politics;
 use App\Service\Politics\PoliticsState;
 use PHPUnit\Framework\TestCase;
@@ -176,8 +177,8 @@ class PoliticsEngineRealismTest extends TestCase
         $policy = $engine->liveState()->policy();
         for ($tick = 0; $tick < 9 * $ticksPerYear; ++$tick) {
             $macro = $economy->updateMacroState(1.0 / $ticksPerYear, policy: $policy);
-            $this->assertSame($policy->corporateTaxPolicyShift, $macro->corporateTaxPolicyShift);
-            $this->assertSame($policy->laborForceGrowthRate, $macro->laborForceGrowthRate);
+            $this->assertSame($policy->lever(Lever::CorporateTax), $macro->corporateTaxPolicyShift);
+            $this->assertSame($policy->lever(Lever::LaborGrowth), $macro->laborForceGrowthRate);
             $this->assertSame($policy->electionPulse, $macro->electionPulse);
 
             $politics = $engine->updatePolitics($macro, 1.0 / $ticksPerYear);

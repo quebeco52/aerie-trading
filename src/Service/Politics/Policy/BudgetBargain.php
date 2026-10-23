@@ -255,7 +255,7 @@ final class BudgetBargain
     {
         $owned = AerieDiet::FIXED_POSITIONS[$party] ?? [];
 
-        return array_keys(array_filter(Platforms::LEVER_AXES, static fn(string $axis): bool => isset($owned[$axis])));
+        return array_keys(array_filter(Lever::axes(), static fn(string $axis): bool => isset($owned[$axis])));
     }
 
     /**
@@ -276,12 +276,12 @@ final class BudgetBargain
                 $ends[$axis] = [min($ends[$axis][0] ?? 0.0, $value), max($ends[$axis][1] ?? 0.0, $value)];
             }
         }
-        $perAxis = array_count_values(Platforms::LEVER_AXES);
+        $perAxis = array_count_values(Lever::axes());
         $targets = array_column(AerieDiet::DEBT_PLANKS, 'target');
         $paces = array_column(AerieDiet::DEBT_PLANKS, 'pace');
 
         $scales = [];
-        foreach (Platforms::LEVER_AXES as $lever => $axis) {
+        foreach (Lever::axes() as $lever => $axis) {
             $span = match ($lever) {
                 'debtTarget' => max($targets) - min($targets),
                 'debtPace' => max($paces) - min($paces),
