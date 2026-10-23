@@ -36,6 +36,8 @@ use App\Service\Politics\Diet\PartyLeaders;
  * assumed to have: a systemic event moves prices only through the economy the engine runs, so a fixed
  * "+5%" on a rescue or "-5%" on a crisis reported moves that never happened. Without buffered history the
  * card carries no number at all.
+ *
+ * @phpstan-import-type WireEvent from MarketEventPublisher
  */
 class SystemicEventReporter
 {
@@ -65,11 +67,11 @@ class SystemicEventReporter
      * Every story the tick carries: the economy's, the government's, and a rate decision that made news when the
      * government's lead story is another, since the meetings share their calendar with the budget rounds.
      *
-     * @return list<array<string, mixed>> The wire copy of each published story, in that order; empty when the tick
-     *                                    carries none.
+     * @return list<WireEvent> The wire copy of each published story, in that order; empty when the tick carries none.
      */
     public function report(MacroStateDTO $macro, PoliticsStateDTO $politics, Etf $benchmark): array
     {
+        /** @var list<array{string, string}> $stories desk and topic */
         $stories = [];
         if ($macro->eventType !== null) {
             $stories[] = [DistrictNews::DESK_ECONOMY, $macro->eventType];

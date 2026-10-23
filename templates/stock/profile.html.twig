@@ -138,7 +138,7 @@
 				{% for rawEvent in headlines %}
 					{% set story = present_event(rawEvent) %}
 					<div class="py-2 first:pt-0 border-t first:border-t-0 border-outline-variant/10">
-						<time class="block text-xs text-on-surface-variant">{{ story.dateline|default(story.recordedAt|date('Y-m-d')) }}</time>
+						<time class="block text-xs text-on-surface-variant">{{ story.dateline }}</time>
 						<p class="mt-0.5 text-sm text-on-surface leading-snug">{{ story.headline|default(story.badge|lower|capitalize) }}</p>
 					</div>
 				{% else %}

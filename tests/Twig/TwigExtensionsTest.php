@@ -6,7 +6,10 @@ namespace App\Tests\Twig;
 
 use App\Entity\StockEvent;
 use App\Entity\User;
+use App\Service\News\EventCard;
 use App\Service\News\EventPresenter;
+use App\Service\News\NewsCard;
+use App\Service\News\Tone;
 use App\Twig\Extension\EventExtension;
 use App\Twig\Extension\SimDateExtension;
 use App\Twig\WebSocketTicketExtension;
@@ -40,14 +43,14 @@ class TwigExtensionsTest extends TestCase
         $presenterMock->expects($this->once())
             ->method('present')
             ->with($event)
-            ->willReturn(['isEarnings' => true, 'badge' => 'EARNINGS BEAT']);
+            ->willReturn(new EventCard('EARNINGS', NewsCard::Earnings, 'EARNINGS BEAT', Tone::Up, 'trending_up', 'x', null, new \DateTimeImmutable(), null));
 
         $ext = new EventExtension($presenterMock);
         $this->assertCount(1, $ext->getFilters());
         $this->assertCount(1, $ext->getFunctions());
 
         $result = $ext->presentEvent($event);
-        $this->assertSame('EARNINGS BEAT', $result['badge']);
+        $this->assertSame('EARNINGS BEAT', $result->badge);
     }
 
     /**

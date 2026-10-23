@@ -16,6 +16,9 @@ use Psr\Log\LoggerInterface;
 /**
  * Centralized publisher for all market events, news headlines, and shocks: company and fund events against their
  * instrument, district-wide stories on their own desk.
+ *
+ * @phpstan-import-type WireCard from EventCard
+ * @phpstan-type WireEvent array{type: string, ticker: string|null, description: string, change_percent: float|null, sim_time: float|null, presented: WireCard, scope: string, section: string, headline: bool}
  */
 class MarketEventPublisher
 {
@@ -49,7 +52,7 @@ class MarketEventPublisher
      * passes its price over the company's market value before it, which decides whether it runs as a headline.
      *
      * @param array<string, mixed> $facts
-     * @return array{type: string, ticker: string|null, description: string, change_percent: float|null, sim_time: float|null, presented: array<string, mixed>, scope: string, section: string, headline: bool}
+     * @return WireEvent
      */
     public function publish(Stock|Etf $asset, string $type, string $description, ?float $changePercent, array $facts = [], ?float $dealShareOfValue = null): array
     {
@@ -87,10 +90,10 @@ class MarketEventPublisher
         $this->entityManager->persist($event);
 
         // Every story on a watched name goes to its watchers, resolved and sent once the tick commits.
-        $headline = $wire['presented']['headline'] ?? null;
+        $headline = $wire['presented']['headline'];
         $this->notifier?->queueForWatchers(
             $asset->getTicker(),
-            sprintf('%s: %s', $asset->getTicker(), is_string($headline) && $headline !== '' ? $headline : $description),
+            sprintf('%s: %s', $asset->getTicker(), $headline !== '' ? $headline : $description),
             $description,
             '/stock/' . rawurlencode($asset->getTicker()),
         );
@@ -103,7 +106,7 @@ class MarketEventPublisher
      *
      * @param string $desk  DistrictNews::DESK_ECONOMY or DistrictNews::DESK_GOVERNMENT
      * @param string $topic the ShockEvent that made the story
-     * @return array{type: string, ticker: string|null, description: string, change_percent: float|null, sim_time: float|null, presented: array<string, mixed>, scope: string, section: string, headline: bool}
+     * @return WireEvent
      */
     public function publishDistrict(string $desk, string $topic, string $description, ?float $changePercent): array
     {
@@ -127,19 +130,12 @@ class MarketEventPublisher
      * carries its section and headline verdict, so the newswire and the headline strip agree with a page load.
      *
      * @param array<string, mixed> $facts
-     * @return array{type: string, ticker: string|null, description: string, change_percent: float|null, sim_time: float|null, presented: array<string, mixed>, scope: string, section: string, headline: bool}
+     * @return WireEvent
      */
     private function wire(string $type, ?string $ticker, ?string $topic, string $description, ?float $changePercent, string $scope, ?float $annualVolatility, array $facts, ?float $dealShareOfValue = null): array
     {
         $changePercent = $changePercent === null ? null : round($changePercent, 2);
-        $presented = $this->presenter->presentForWire([
-            'type' => $type,
-            'topic' => $topic,
-            'description' => $description,
-            'facts' => $facts,
-            'change_percent' => $changePercent,
-            'sim_time' => $this->simTime,
-        ]);
+        $card = $this->presenter->present(new PresentableEvent($type, $description, $facts, $changePercent, $topic, $this->simTime));
 
         $eventData = [
             'type' => $type,
@@ -147,10 +143,10 @@ class MarketEventPublisher
             'description' => $description,
             'change_percent' => $changePercent,
             'sim_time' => $this->simTime,
-            'presented' => $presented,
+            'presented' => $card->toWire(),
             'scope' => $scope,
-            'section' => NewsDesk::sectionOf($scope, NewsCard::from((string) $presented['category'])),
-            'headline' => NewsDesk::isHeadline($presented, $annualVolatility, $dealShareOfValue),
+            'section' => NewsDesk::sectionOf($scope, $card->card),
+            'headline' => NewsDesk::isHeadline($card, $annualVolatility, $dealShareOfValue),
         ];
 
         return $eventData;

@@ -82,18 +82,17 @@ final class NewsDesk
     /**
      * Whether a presented card is a headline.
      *
-     * @param array<string, mixed> $card              EventPresenter's card
-     * @param float|null           $annualVolatility  the stock's annualised volatility; null for a story with no stock
-     * @param float|null           $dealShareOfValue  a deal's price over the company's market value before it
+     * @param float|null $annualVolatility the stock's annualised volatility; null for a story with no stock
+     * @param float|null $dealShareOfValue a deal's price over the company's market value before it
      */
-    public static function isHeadline(array $card, ?float $annualVolatility = null, ?float $dealShareOfValue = null): bool
+    public static function isHeadline(EventCard $card, ?float $annualVolatility = null, ?float $dealShareOfValue = null): bool
     {
-        $move = isset($card['changePercent']) ? (float) $card['changePercent'] / 100.0 : null;
+        $move = $card->changePercent !== null ? $card->changePercent / 100.0 : null;
 
-        return match (NewsCard::from((string) $card['category'])->headlineTest()) {
+        return match ($card->card->headlineTest()) {
             HeadlineTest::ByKind => true,
             HeadlineTest::DealSize => $dealShareOfValue !== null && $dealShareOfValue >= self::HEADLINE_DEAL_SHARE,
-            HeadlineTest::GradeCrossing => self::crossesInvestmentGrade((array) $card['facts']),
+            HeadlineTest::GradeCrossing => self::crossesInvestmentGrade($card->facts),
             HeadlineTest::ShockMove => $move !== null && abs($move) > self::HEADLINE_SHOCK_MOVE,
             HeadlineTest::AbnormalReturn => $move !== null && $annualVolatility !== null
                 && self::abnormalReturnZ($move, $annualVolatility) >= self::HEADLINE_ABNORMAL_RETURN_Z,
@@ -122,7 +121,7 @@ final class NewsDesk
     /**
      * A fallen angel or a rising star: the rating moved between investment grade (BBB and better) and high yield.
      *
-     * @param array<mixed> $facts the rating change's facts: its old and new rating
+     * @param array<string, mixed> $facts the rating change's facts: its old and new rating
      */
     private static function crossesInvestmentGrade(array $facts): bool
     {

@@ -7,6 +7,7 @@ namespace App\Twig\Extension;
 use App\Entity\DistrictNews;
 use App\Entity\EtfEvent;
 use App\Entity\StockEvent;
+use App\Service\News\EventCard;
 use App\Service\News\EventPresenter;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFilter;
@@ -32,11 +33,7 @@ class EventExtension extends AbstractExtension
         ];
     }
 
-    /**
-     * @param StockEvent|EtfEvent|DistrictNews|array<string, mixed> $event
-     * @return array<string, mixed>
-     */
-    public function presentEvent(StockEvent|EtfEvent|DistrictNews|array $event): array
+    public function presentEvent(StockEvent|EtfEvent|DistrictNews $event): EventCard
     {
         return $this->eventPresenter->present($event);
     }

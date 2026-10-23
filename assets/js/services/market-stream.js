@@ -54,7 +54,7 @@ let frameRaf = null;
 let lastFrameAt = 0;
 
 /** Scalar fields carried through as "latest wins". */
-const FRAME_SCALARS = ['timestamp', 'tick', 'market_vol', 'economic_cycle', 'council_rate', 'macro', 'bond_curve'];
+const FRAME_SCALARS = ['timestamp', 'tick', 'sim_time', 'market_vol', 'economic_cycle', 'council_rate', 'macro', 'bond_curve'];
 
 /** Folds one tick's payload into the frame being assembled. */
 function absorbIntoFrame(payload) {

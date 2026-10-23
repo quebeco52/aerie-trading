@@ -6,6 +6,7 @@ namespace App\Tests\Render;
 
 use App\Data\Company\InitialMarket;
 use App\Data\Company\StockInfo;
+use App\Entity\StockEvent;
 use App\Entity\User;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -185,8 +186,8 @@ final class PagesRenderTest extends KernelTestCase
                 'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Commercial banking', 'price' => 84.21, 'isBankrupt' => false, 'bankrupt' => false, 'sharesOutstanding' => 2400000000, 'earningsPerShare' => 6.12, 'currentRoe' => 0.124, 'baselineRoe' => 0.12, 'currentRoic' => 0.09, 'baselineRoic' => 0.09, 'publicFloatPercentage' => 0.8, 'volatility' => 0.22, 'totalEquity' => 1.6e11, 'debtToEquity' => 1.4, 'creditRating' => 'A', 'creditSpread' => 0.011, 'dynamicCreditSpread' => 0.0134, 'systemicImportance' => 'Systemic'],
                 'isEtf' => false, 'isFinancial' => true, 'changePercent' => 0.0342, 'businessModel' => 'commercial_bank', 'generalInfo' => StockInfo::DESCRIPTIONS['LAKE'], 'hasProfile' => true,
                 'events' => [
-                    ['type' => 'MANAGEMENT CHANGE', 'description' => 'Lakebird Bank chief executive was removed by the board after 5.2 years.', 'facts' => ['forced' => true], 'change_percent' => 0.0, 'recorded_at' => '2026-09-30 12:00'],
-                    ['type' => 'CREDIT DOWNGRADE', 'description' => 'Shrike Standard Ratings cut Lakebird Bank to A-.', 'change_percent' => -1.4, 'recorded_at' => '2026-09-12 12:00'],
+                    (new StockEvent())->setEventType('MANAGEMENT CHANGE')->setDescription('Lakebird Bank chief executive was removed by the board after 5.2 years.')->setFacts(['forced' => true])->setChangePercent('0.00')->setRecordedAt(new \DateTime('2026-09-30 12:00')),
+                    (new StockEvent())->setEventType('CREDIT DOWNGRADE')->setDescription('Shrike Standard Ratings cut Lakebird Bank to A-.')->setChangePercent('-1.40')->setRecordedAt(new \DateTime('2026-09-12 12:00')),
                 ],
                 'userQuantity' => 0, 'userDividendIncome' => 0, 'marketCap' => 2.02e11, 'peRatio' => 13.76, 'dividendYield' => 0.031, 'strategicStake' => 0, 'macro' => ['sovereignFundOwnershipShare' => 0.23, 'stampDutyRate' => 0.001],
                 'analystTargets' => ['rating' => 'Outperform', 'upside' => 0.084, 'consensus' => 91.3, 'growth_analyst' => 95.1, 'value_analyst' => 88.2, 'income_analyst' => 90.4],
@@ -213,8 +214,8 @@ final class PagesRenderTest extends KernelTestCase
                     ['ticker' => 'KING', 'name' => 'Kingfisher Capital', 'marketCap' => 4.1e10, 'isBankrupt' => false],
                 ],
                 'headlines' => [
-                    ['type' => 'MANAGEMENT CHANGE', 'description' => 'Lakebird Bank chief executive was removed by the board after 5.2 years.', 'facts' => ['forced' => true], 'change_percent' => 0.0, 'recorded_at' => '2026-09-30 12:00'],
-                    ['type' => 'CREDIT DOWNGRADE', 'description' => 'Shrike Standard Ratings cut Lakebird Bank to A-.', 'change_percent' => -1.4, 'recorded_at' => '2026-09-12 12:00'],
+                    (new StockEvent())->setEventType('MANAGEMENT CHANGE')->setDescription('Lakebird Bank chief executive was removed by the board after 5.2 years.')->setFacts(['forced' => true])->setChangePercent('0.00')->setRecordedAt(new \DateTime('2026-09-30 12:00')),
+                    (new StockEvent())->setEventType('CREDIT DOWNGRADE')->setDescription('Shrike Standard Ratings cut Lakebird Bank to A-.')->setChangePercent('-1.40')->setRecordedAt(new \DateTime('2026-09-12 12:00')),
                 ],
             ]],
             'dashboard' => ['/dashboard', 'dashboard/index.html.twig', [
@@ -370,7 +371,7 @@ final class PagesRenderTest extends KernelTestCase
 
         $items = [];
         foreach ($stories as $i => [$type, $topic, $ticker, $name, $description, $change, $headline, $facts]) {
-            $card = $presenter->present(['type' => $type, 'topic' => $topic, 'description' => $description, 'facts' => $facts, 'change_percent' => $change, 'recorded_at' => sprintf('2026-10-06 14:%02d', 50 - 7 * $i), 'sim_time' => 13.71 - 0.013 * $i]);
+            $card = $presenter->present(new \App\Service\News\PresentableEvent($type, $description, $facts, $change, $topic, 13.71 - 0.013 * $i, new \DateTimeImmutable(sprintf('2026-10-06 14:%02d', 50 - 7 * $i))));
             $items[] = ['card' => $card, 'ticker' => $ticker, 'name' => $name, 'headline' => $headline];
         }
 

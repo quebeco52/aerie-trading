@@ -552,10 +552,10 @@ class CorporateLedgerServiceTest extends TestCase
 
         $event = (new StockEvent())->setEventType('EARNINGS')->setDescription('x')->setFacts($rewrites[7]);
         $presented = (new EventPresenter())->present($event);
-        $this->assertSame('$2.94', $presented['eps']);
-        $this->assertSame('$0.08', $presented['surpriseAmount']);
-        $this->assertSame('Paid $0.15/sh · 1.97% yield', $presented['pills'][0]['text']);
-        $this->assertSame('Repurchased 1.64B shares', $presented['pills'][1]['text']);
+        $this->assertSame('$2.94', $presented->eps);
+        $this->assertSame('$0.08', $presented->surpriseAmount);
+        $this->assertSame('Paid $0.15/sh · 1.97% yield', $presented->pills[0]['text']);
+        $this->assertSame('Repurchased 1.64B shares', $presented->pills[1]['text']);
     }
 
     /** A filing with special items carries a reported figure beside the adjusted one; both are per share. */

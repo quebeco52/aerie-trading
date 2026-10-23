@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Tests\Service\News;
 
 use App\Service\Math\FinancialConstants;
+use App\Service\News\EventCard;
 use App\Service\News\EventPresenter;
 use App\Service\News\NewsCard;
 use App\Service\News\NewsDesk;
+use App\Service\News\PresentableEvent;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -122,24 +124,22 @@ class NewsDeskTest extends TestCase
         $cards = NewsDesk::headlineCards();
 
         foreach (NewsCard::cases() as $card) {
-            $story = (new EventPresenter())->present(['type' => NewsCard::typesOf([$card])[0] ?? 'SOMETHING NEW', 'description' => 'x', 'facts' => ['from' => 'BBB', 'to' => 'BB'], 'change_percent' => 50.0]);
+            $story = (new EventPresenter())->present(new PresentableEvent(type: NewsCard::typesOf([$card])[0] ?? 'SOMETHING NEW', description: 'x', facts: ['from' => 'BBB', 'to' => 'BB'], changePercent: 50.0));
             $this->assertSame(in_array($card, $cards, true), NewsDesk::isHeadline($story, 0.01, 1.0), $card->name);
         }
     }
 
-    /** @return array<string, mixed> */
-    private function card(string $type, ?float $changePercent): array
+    private function card(string $type, ?float $changePercent): EventCard
     {
-        return (new EventPresenter())->present(['type' => $type, 'description' => 'x', 'change_percent' => $changePercent]);
+        return (new EventPresenter())->present(new PresentableEvent(type: $type, description: 'x', changePercent: $changePercent));
     }
 
-    /** @return array<string, mixed> */
-    private function rating(string $from, string $to): array
+    private function rating(string $from, string $to): EventCard
     {
-        return (new EventPresenter())->present([
-            'type' => 'CREDIT_DOWNGRADE',
-            'description' => "Credit rating downgraded from {$from} to {$to} due to deteriorating credit profile.",
-            'facts' => ['from' => $from, 'to' => $to],
-        ]);
+        return (new EventPresenter())->present(new PresentableEvent(
+            type: 'CREDIT_DOWNGRADE',
+            description: "Credit rating downgraded from {$from} to {$to} due to deteriorating credit profile.",
+            facts: ['from' => $from, 'to' => $to],
+        ));
     }
 }

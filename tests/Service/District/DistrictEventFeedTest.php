@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\District;
 
+use App\Data\District\DistrictMap;
 use App\Entity\Stock;
 use App\Entity\StockEvent;
 use App\Repository\StockEventRepository;
@@ -13,7 +14,6 @@ use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Clock\MockClock;
 
 /**
  * Pins the district event backfill's job: fetch every tenant's recent history in one query and
@@ -29,12 +29,10 @@ class DistrictEventFeedTest extends TestCase
     private EntityManagerInterface&MockObject $entityManager;
 
     private StockEventRepository&MockObject $repository;
-    private MockClock $clock;
     private DistrictEventFeed $feed;
 
-    /** 3,600 ticks a year at 20ms each: a simulated month is 300 ticks, i.e. 6 wall-clock seconds. */
-    private const TICKS_PER_YEAR = 3600;
-    private const TICK_INTERVAL_US = 20_000;
+    /** The simulation time the page renders at, in years. */
+    private const NOW = 13.5;
 
     protected function setUp(): void
     {
@@ -42,14 +40,7 @@ class DistrictEventFeedTest extends TestCase
         $this->repository = $this->createMock(StockEventRepository::class);
         $this->entityManager->method('getRepository')->willReturn($this->repository);
 
-        $this->clock = new MockClock('2026-03-14 09:30:00');
-        $this->feed = new DistrictEventFeed(
-            $this->entityManager,
-            new EventPresenter(),
-            self::TICKS_PER_YEAR,
-            self::TICK_INTERVAL_US,
-            $this->clock,
-        );
+        $this->feed = new DistrictEventFeed($this->entityManager, new EventPresenter());
     }
 
     private function makeStock(string $ticker): Stock
@@ -76,7 +67,7 @@ class DistrictEventFeedTest extends TestCase
 
     public function testReturnsEmptyArrayForNoStocks(): void
     {
-        $this->assertSame([], $this->feed->recentEventsByTicker([]));
+        $this->assertSame([], $this->feed->recentEventsByTicker([], self::NOW));
     }
 
     public function testKeysResultByTickerAndPresentsEachEvent(): void
@@ -86,30 +77,31 @@ class DistrictEventFeedTest extends TestCase
 
         $this->repository->method('findForStocksNewestFirst')->willReturn([$shockEvent]);
 
-        $result = $this->feed->recentEventsByTicker([$stock]);
+        $result = $this->feed->recentEventsByTicker([$stock], self::NOW);
 
         $this->assertArrayHasKey('LAKE', $result);
         $this->assertCount(1, $result['LAKE']);
 
         $presented = $result['LAKE'][0];
-        $this->assertSame('shock', $presented['category']);
+        $this->assertSame('MARKET SHOCK', $presented['badge']);
         $this->assertSame('bolt', $presented['icon']);
-        $this->assertArrayHasKey('badge', $presented);
-        $this->assertArrayHasKey('badgeClass', $presented);
+        $this->assertSame('badge-down', $presented['badgeClass']);
+        $this->assertSame('A sudden liquidity event rattled the row.', $presented['headline']);
     }
 
-    public function testFlattensRecordedAtToAPlainStringForJsonTransport(): void
+    /** The side panel prints the District dateline, as the stock page does. */
+    public function testEachEventCarriesItsDateline(): void
     {
         $stock = $this->makeStock('SWAN');
         $event = $this->makeEvent($stock, 'BANKRUPTCY', 'Filed for liquidation.');
-        $event->setRecordedAt(new \DateTime('2026-03-14 09:30:00'));
+        $event->setSimTime(13.25);
 
         $this->repository->method('findForStocksNewestFirst')->willReturn([$event]);
 
-        $result = $this->feed->recentEventsByTicker([$stock]);
+        $result = $this->feed->recentEventsByTicker([$stock], self::NOW);
 
-        $this->assertIsString($result['SWAN'][0]['recordedAt']);
-        $this->assertSame('2026-03-14 09:30', $result['SWAN'][0]['recordedAt']);
+        $this->assertSame('1 Apr, Year 14', $result['SWAN'][0]['dateline']);
+        $this->assertSame(13.25, $result['SWAN'][0]['simTime']);
     }
 
     public function testFetchesAllStocksInOneQuery(): void
@@ -121,7 +113,7 @@ class DistrictEventFeedTest extends TestCase
             ->with([$lake, $swan], DistrictEventFeed::EVENTS_PER_TICKER)
             ->willReturn([]);
 
-        $this->feed->recentEventsByTicker([$lake, $swan]);
+        $this->feed->recentEventsByTicker([$lake, $swan], self::NOW);
     }
 
     public function testGroupsRowsByTickerAndCapsAtEventsPerTicker(): void
@@ -138,7 +130,7 @@ class DistrictEventFeedTest extends TestCase
 
         $this->repository->method('findForStocksNewestFirst')->willReturn($rows);
 
-        $result = $this->feed->recentEventsByTicker([$lake, $swan]);
+        $result = $this->feed->recentEventsByTicker([$lake, $swan], self::NOW);
 
         $this->assertCount(6, $result['LAKE'], 'Should cap at EVENTS_PER_TICKER even though 7 rows were returned for LAKE');
         $this->assertCount(1, $result['SWAN']);
@@ -149,50 +141,31 @@ class DistrictEventFeedTest extends TestCase
         $stock = $this->makeStock('ROOK');
         $this->repository->method('findForStocksNewestFirst')->willReturn([]);
 
-        $result = $this->feed->recentEventsByTicker([$stock]);
+        $result = $this->feed->recentEventsByTicker([$stock], self::NOW);
 
         $this->assertArrayHasKey('ROOK', $result);
         $this->assertSame([], $result['ROOK']);
     }
 
-    public function testBadgeWindowIsOneSimulatedMonthInWallClockSeconds(): void
-    {
-        $this->assertEqualsWithDelta(6.0, $this->feed->badgeWindowSeconds(), 1.0e-9);
-    }
-
     /**
-     * The badge used to print the whole capped backfill, so it read "6" on every building for
-     * good. Only events inside the window count now; the rest still ship for the side panel.
+     * The badge used to print the whole capped backfill, so it read "6" on every building for good. Only events inside
+     * one simulated month of now count; the rest still ship for the side panel. A paused ticker leaves now where it
+     * is, so nothing ages out while the market stands still.
      */
     public function testOnlyEventsInsideTheBadgeWindowAreMarkedRecent(): void
     {
         $stock = $this->makeStock('LAKE');
-        $justNow = $this->makeEvent($stock, 'EARNINGS', 'Fresh');
-        $justNow->setRecordedAt(new \DateTime('2026-03-14 09:29:58'));
-        $onTheEdge = $this->makeEvent($stock, 'EARNINGS', 'Six seconds ago');
-        $onTheEdge->setRecordedAt(new \DateTime('2026-03-14 09:29:54'));
-        $stale = $this->makeEvent($stock, 'EARNINGS', 'Seven seconds ago');
-        $stale->setRecordedAt(new \DateTime('2026-03-14 09:29:53'));
+        $window = DistrictMap::EVENT_BADGE_WINDOW_YEARS;
+        $justNow = $this->makeEvent($stock, 'EARNINGS', 'Fresh')->setSimTime(self::NOW - 0.001);
+        $onTheEdge = $this->makeEvent($stock, 'EARNINGS', 'A month ago')->setSimTime(self::NOW - $window);
+        $stale = $this->makeEvent($stock, 'EARNINGS', 'Older')->setSimTime(self::NOW - $window - 0.001);
+        $undated = $this->makeEvent($stock, 'EARNINGS', 'From before stories carried their simulation time');
 
-        $this->repository->method('findForStocksNewestFirst')->willReturn([$justNow, $onTheEdge, $stale]);
+        $this->repository->method('findForStocksNewestFirst')->willReturn([$justNow, $onTheEdge, $stale, $undated]);
 
-        $result = $this->feed->recentEventsByTicker([$stock]);
+        $result = $this->feed->recentEventsByTicker([$stock], self::NOW);
 
-        $this->assertCount(3, $result['LAKE'], 'Stale events still ship for the side panel');
-        $this->assertSame([true, true, false], array_column($result['LAKE'], 'recent'));
-    }
-
-    public function testEachEventCarriesItsEpochTimestampForTheClientToReCount(): void
-    {
-        $stock = $this->makeStock('SWAN');
-        $event = $this->makeEvent($stock, 'SHOCK', 'Rattled.');
-        $event->setRecordedAt(new \DateTime('2026-03-14 09:00:00'));
-
-        $this->repository->method('findForStocksNewestFirst')->willReturn([$event]);
-
-        $result = $this->feed->recentEventsByTicker([$stock]);
-
-        $this->assertSame((new \DateTime('2026-03-14 09:00:00'))->getTimestamp(), $result['SWAN'][0]['recordedAtTs']);
-        $this->assertFalse($result['SWAN'][0]['recent']);
+        $this->assertCount(4, $result['LAKE'], 'Stale events still ship for the side panel');
+        $this->assertSame([true, true, false, false], array_column($result['LAKE'], 'recent'));
     }
 }

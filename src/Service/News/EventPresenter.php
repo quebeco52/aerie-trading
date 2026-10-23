@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\News;
 
-use App\Data\District\DistrictCalendar;
 use App\Entity\DistrictNews;
 use App\Entity\EtfEvent;
 use App\Entity\StockEvent;
@@ -14,6 +13,9 @@ use App\Twig\Extension\UiExtension;
 /**
  * Turns a published event into the card the stock page, the newswire, the live feed and the district map all render:
  * its badge, tone, icon and headline, by the card its type routes to (NewsCard).
+ *
+ * @phpstan-type Earnings array{eps?: string|null, surpriseType?: string|null, surpriseAmount?: string|null, surpriseText?: string|null, eva?: string|null, evaPositive?: bool}
+ * @phpstan-type Story array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: Earnings}
  */
 class EventPresenter
 {
@@ -65,39 +67,14 @@ class EventPresenter
         ShockEvent::GOVERNMENT_FELL,
     ];
 
-    /**
-     * Presents an event entity or associative array into a structured view model.
-     *
-     * @param StockEvent|EtfEvent|DistrictNews|array<string, mixed> $event
-     * @return array<string, mixed>
-     */
-    public function present(StockEvent|EtfEvent|DistrictNews|array $event): array
+    /** The card a published event renders as, whether a stored row or a story about to go on the wire. */
+    public function present(StockEvent|EtfEvent|DistrictNews|PresentableEvent $event): EventCard
     {
-        $topic = null;
-        $facts = [];
-        if ($event instanceof DistrictNews) {
-            $type = $event->getDesk();
-            $topic = $event->getTopic();
-            $description = $event->getDescription();
-            $changePct = $event->getChangePercent() !== null ? (float) $event->getChangePercent() : null;
-            $recordedAt = $event->getRecordedAt();
-            $simTime = $event->getSimTime();
-        } elseif ($event instanceof StockEvent || $event instanceof EtfEvent) {
-            $type = strtoupper((string) $event->getEventType());
-            $description = (string) $event->getDescription();
-            $facts = $event->getFacts() ?? [];
-            $changePct = $event->getChangePercent() !== null ? (float) $event->getChangePercent() : null;
-            $recordedAt = $event->getRecordedAt();
-            $simTime = $event->getSimTime();
-        } else {
-            $type = strtoupper((string) ($event['type'] ?? 'EVENT'));
-            $description = (string) ($event['description'] ?? '');
-            $facts = is_array($event['facts'] ?? null) ? $event['facts'] : [];
-            $changePct = isset($event['change_percent']) ? (float) $event['change_percent'] : null;
-            $topic = isset($event['topic']) ? (string) $event['topic'] : null;
-            $simTime = isset($event['sim_time']) ? (float) $event['sim_time'] : null;
-            $recordedAt = isset($event['recorded_at']) ? new \DateTime((string) $event['recorded_at']) : new \DateTime();
-        }
+        $event = $event instanceof PresentableEvent ? $event : PresentableEvent::of($event);
+        $type = strtoupper($event->type);
+        $description = $event->description;
+        $facts = $event->facts;
+        $changePct = $event->changePercent;
 
         $card = NewsCard::forType($type);
         $story = match ($card) {
@@ -138,31 +115,29 @@ class EventPresenter
             NewsCard::Succession => ($facts['forced'] ?? false)
                 ? self::story('BOARD REMOVAL', Tone::Warn, 'gavel', $description ?: 'The board removed the chief executive.')
                 : self::story('MANAGEMENT CHANGE', Tone::Neutral, 'badge', $description ?: 'The company named new management.'),
-            NewsCard::Economy, NewsCard::Government => self::districtStory($card, $type, $topic, $description),
+            NewsCard::Economy, NewsCard::Government => self::districtStory($card, $type, $event->topic, $description),
             NewsCard::General => self::story($type, Tone::Neutral, 'campaign', $description ?: 'Corporate news announcement.'),
         };
 
-        $tone = $story['tone'];
-
-        return [
-            'type' => $type,
-            'category' => $card->value,
-            'badge' => $story['badge'],
-            'tone' => $tone->value,
-            'badgeClass' => $tone->badgeClass(),
-            'icon' => $story['icon'],
-            'iconClass' => $tone->iconClass(),
-            'isEarnings' => $card === NewsCard::Earnings,
-            'headline' => $story['headline'],
-            'pills' => $story['pills'],
-            'changePercent' => $card === NewsCard::Bankruptcy ? ($changePct ?? -100.0) : $changePct,
-            'recordedAt' => $recordedAt,
-            // Dated in the District's calendar; a row from before events carried their simulation time keeps its
-            // clock time.
-            'dateline' => $simTime !== null ? DistrictCalendar::dateline($simTime) : $recordedAt->format('Y-m-d H:i'),
-            // What the story reports as data; the news desk reads a rating change from it.
-            'facts' => $facts,
-        ] + $story['earnings'];
+        return new EventCard(
+            type: $type,
+            card: $card,
+            badge: $story['badge'],
+            tone: $story['tone'],
+            icon: $story['icon'],
+            headline: $story['headline'],
+            changePercent: $card === NewsCard::Bankruptcy ? ($changePct ?? -100.0) : $changePct,
+            recordedAt: $event->recordedAt,
+            simTime: $event->simTime,
+            facts: $facts,
+            pills: $story['pills'],
+            eps: $story['earnings']['eps'] ?? null,
+            surpriseType: $story['earnings']['surpriseType'] ?? null,
+            surpriseAmount: $story['earnings']['surpriseAmount'] ?? null,
+            surpriseText: $story['earnings']['surpriseText'] ?? null,
+            eva: $story['earnings']['eva'] ?? null,
+            evaPositive: $story['earnings']['evaPositive'] ?? true,
+        );
     }
 
     /** A price shock as a wire line: "Hummock Foods shares jump 12.4% in a sudden move." */
@@ -172,28 +147,11 @@ class EventPresenter
     }
 
     /**
-     * The card as the live feed receives it: the same array with the timestamp already printed the way the
-     * page prints it, since a DateTime does not survive json_encode in a form the browser can read.
-     *
-     * @param array<string, mixed> $event
-     * @return array<string, mixed>
-     */
-    public function presentForWire(array $event): array
-    {
-        $card = $this->present($event);
-        $card['recordedAt'] = $card['recordedAt'] instanceof \DateTimeInterface
-            ? $card['recordedAt']->format('Y-m-d H:i')
-            : (string) $card['recordedAt'];
-
-        return $card;
-    }
-
-    /**
      * What a card says: its badge, tone, icon and headline, plus the pills under it and, for earnings, the figures.
      *
      * @param  list<array{kind: string, text: string}> $pills
-     * @param  array<string, mixed>                    $earnings
-     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
+     * @param  Earnings                                $earnings
+     * @return Story
      */
     private static function story(string $badge, Tone $tone, string $icon, string $headline, array $pills = [], array $earnings = []): array
     {
@@ -224,7 +182,7 @@ class EventPresenter
      * cent is in line.
      *
      * @param  array<string, mixed> $facts
-     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
+     * @return Story
      */
     private static function earnings(array $facts): array
     {
@@ -271,7 +229,7 @@ class EventPresenter
      *
      * @param array<string, mixed> $facts
      *
-     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
+     * @return Story
      */
     private static function analyst(string $type, string $description, array $facts): array
     {
@@ -288,7 +246,7 @@ class EventPresenter
      * A district-wide story from the economy or government desk (SystemicEventReporter). The number is what the
      * benchmark did over the month before it, so it carries the sign colour and the badge only says what happened.
      *
-     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
+     * @return Story
      */
     private static function districtStory(NewsCard $card, string $desk, ?string $topic, string $description): array
     {

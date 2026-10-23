@@ -23,7 +23,7 @@ class NewsController extends AbstractController
         return $this->render('news/index.html.twig', $feed->build((string) $request->query->get('section', 'all')));
     }
 
-    /** The newest headline as the strip renders it, its time printed as the page prints it. */
+    /** The newest headline as the strip renders it, the card as the live wire carries it. */
     #[Route('/api/news/headline', name: 'api_news_headline', methods: ['GET'])]
     public function headline(NewsFeedBuilder $feed): JsonResponse
     {
@@ -32,14 +32,11 @@ class NewsController extends AbstractController
             return new JsonResponse(null);
         }
 
-        $card = $item['card'];
-        $card['recordedAt'] = $card['recordedAt'] instanceof \DateTimeInterface ? $card['recordedAt']->format('Y-m-d H:i') : (string) $card['recordedAt'];
-
         return new JsonResponse([
             'ticker' => $item['ticker'],
             'scope' => $item['scope'],
             'headline' => true,
-            'presented' => $card,
+            'presented' => $item['card']->toWire(),
         ]);
     }
 }

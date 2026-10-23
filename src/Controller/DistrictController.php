@@ -162,10 +162,11 @@ class DistrictController extends AbstractController
                 'sparklineHeight' => DistrictMap::INSTITUTION_SPARKLINE_HEIGHT,
                 'sparklineGap' => DistrictMap::INSTITUTION_SPARKLINE_GAP,
             ],
-            'events' => $eventFeed->recentEventsByTicker($onStreet),
-            // Wall-clock seconds one simulated month currently lasts: what the client needs to
-            // let a building's event badge age out while the page stays open.
-            'eventBadgeWindowSeconds' => $eventFeed->badgeWindowSeconds(),
+            'events' => $eventFeed->recentEventsByTicker($onStreet, $macroState->totalTime),
+            // What the client needs to let a building's event badge age out as the simulation moves on while the
+            // page stays open: the window, and the time it runs back from until the first frame brings a later one.
+            'eventBadgeWindowYears' => DistrictMap::EVENT_BADGE_WINDOW_YEARS,
+            'simTime' => $macroState->totalTime,
             'revenueMix' => $revenueFeed->latestRevenueMixByTicker($onStreet),
             'summary' => $this->buildSummary($plots, $institutionStress),
             'reconstitution' => $reconstitution + [

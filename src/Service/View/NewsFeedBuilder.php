@@ -10,6 +10,7 @@ use App\Entity\StockEvent;
 use App\Repository\DistrictNewsRepository;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
+use App\Service\News\EventCard;
 use App\Service\News\EventPresenter;
 use App\Service\News\NewsCard;
 use App\Service\News\NewsDesk;
@@ -20,6 +21,8 @@ use App\Service\News\NewsDesk;
  *
  * Each source keeps its own table; the wire reads the newest rows of each a section draws on and merges them, so
  * no story is copied into a second table.
+ *
+ * @phpstan-type NewsItem array{card: EventCard, scope: string, section: string, headline: bool, ticker: string|null, name: string|null}
  */
 class NewsFeedBuilder
 {
@@ -39,7 +42,7 @@ class NewsFeedBuilder
     ) {}
 
     /**
-     * @return array{section: string, sections: array<string, string>, items: list<array<string, mixed>>}
+     * @return array{section: string, sections: array<string, string>, items: list<NewsItem>}
      */
     public function build(string $section, int $limit = self::FEED_ROWS): array
     {
@@ -58,7 +61,7 @@ class NewsFeedBuilder
         };
 
         $items = array_map($this->item(...), $rows);
-        usort($items, static fn(array $a, array $b): int => $b['card']['recordedAt'] <=> $a['card']['recordedAt']);
+        usort($items, static fn(array $a, array $b): int => $b['card']->recordedAt <=> $a['card']->recordedAt);
 
         return [
             'section' => $section,
@@ -70,7 +73,7 @@ class NewsFeedBuilder
     /**
      * The newest headline on the wire, or null before there is one.
      *
-     * @return array<string, mixed>|null
+     * @return NewsItem|null
      */
     public function latestHeadline(): ?array
     {
@@ -82,7 +85,7 @@ class NewsFeedBuilder
         $latest = null;
         foreach ($candidates as $row) {
             $item = $this->item($row);
-            if ($item['headline'] && ($latest === null || $item['card']['recordedAt'] > $latest['card']['recordedAt'])) {
+            if ($item['headline'] && ($latest === null || $item['card']->recordedAt > $latest['card']->recordedAt)) {
                 $latest = $item;
             }
         }
@@ -93,7 +96,7 @@ class NewsFeedBuilder
     /**
      * One story as the wire lists it: its card, who it is about and where it is filed.
      *
-     * @return array<string, mixed>
+     * @return NewsItem
      */
     private function item(DistrictNews|StockEvent|EtfEvent $row): array
     {
@@ -108,7 +111,7 @@ class NewsFeedBuilder
         return [
             'card' => $card,
             'scope' => $scope,
-            'section' => NewsDesk::sectionOf($scope, NewsCard::from((string) $card['category'])),
+            'section' => NewsDesk::sectionOf($scope, $card->card),
             // The verdict the desk reached when it ran the story; a row from before verdicts were kept is judged now.
             'headline' => $row->getHeadline() ?? NewsDesk::isHeadline($card, $volatility),
             'ticker' => $ticker,

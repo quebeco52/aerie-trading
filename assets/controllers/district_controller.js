@@ -162,13 +162,6 @@ function flareColor(card) {
     return EVENT_COLORS[card.tone] || EVENT_COLORS.accent;
 }
 
-/** Client-clock timestamp, matching how assets/js/stock/events-feed.js stamps live events that carry none of their own. */
-function nowStamp() {
-    const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-}
-
 /**
  * Drives the district ward elevation: plot and institution selection, conduit highlighting, and
  * live facade/conduit/stress updates. Geometry stays a view concern — nothing computed here is
@@ -202,8 +195,10 @@ export default class extends Controller {
         lighting: Object,
         /** Credit rating ladder and the distressed cut — CreditRatingAgency::RATING_RANKS, DistrictMap::DISTRESSED_RANK. */
         condition: Object,
-        /** Wall-clock seconds one simulated month lasts — App\Service\District\DistrictEventFeed::badgeWindowSeconds(). */
-        eventBadgeWindowSeconds: Number,
+        /** Simulated years a building's event badge counts over — DistrictMap::EVENT_BADGE_WINDOW_YEARS. */
+        eventBadgeWindowYears: Number,
+        /** The simulation time the page was rendered at, in years; each frame's sim_time moves it on. */
+        simTime: Number,
         /**
          * Open positions keyed by ticker — App\Service\District\DistrictHoldingsFeed. `quantity` is
          * ALWAYS the unsigned size; `isShort` carries the direction. `averageCost` is the weighted
@@ -222,9 +217,8 @@ export default class extends Controller {
     static MAX_EVENTS_PER_TICKER = 8;
 
     /**
-     * How often the badges are re-counted so an event ages out of its window while the page
-     * stays open. Coarse on purpose: a badge is a "something happened here lately" cue, and
-     * nothing else on the street changes on this clock.
+     * How often, at most, a frame re-counts the badges so an event ages out of its window while
+     * the page stays open. Coarse on purpose: a badge is a "something happened here lately" cue.
      */
     static BADGE_REFRESH_MS = 5000;
 
@@ -406,9 +400,10 @@ export default class extends Controller {
         this.lastRerankAt = 0;
 
         // The server counted each badge at render time; from here on the client owns the count,
-        // so events fall out of the window on schedule rather than only on the next page load.
-        this.refreshBadges = this.refreshBadges.bind(this);
-        this.badgeRefreshHandle = setInterval(this.refreshBadges, this.constructor.BADGE_REFRESH_MS);
+        // re-counting against each frame's simulation time, so events fall out of the window as the
+        // simulation moves on rather than only on the next page load, and hold while it is paused.
+        this.simTime = this.simTimeValue;
+        this.lastBadgeRefreshAt = 0;
     }
 
     /** Appends `value` to the array at `map[key]`, creating it on first use. */
@@ -424,7 +419,6 @@ export default class extends Controller {
         Object.values(this.rankMoveTimers).forEach(clearTimeout);
         Object.values(this.flareTimers).forEach(clearTimeout);
         Object.values(this.badgeTimers).forEach(clearTimeout);
-        clearInterval(this.badgeRefreshHandle);
         clearTimeout(this.reconstitutionNoticeTimer);
     }
 
@@ -1085,23 +1079,17 @@ export default class extends Controller {
     }
 
     /** Builds one compact event card from an EventPresenter card, whether backfilled on load or
-     *  arrived live; `color` is the fallback for a card that carries no Tailwind classes. */
+     *  arrived live. */
     buildEventCard(evt) {
         const card = document.createElement('div');
         card.className = 'district-event-card flex items-start gap-2 p-2 rounded-lg bg-surface-container-lowest/80 border border-outline-variant/15';
 
         const iconWrap = document.createElement('div');
-        iconWrap.className = 'w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5';
+        iconWrap.className = `w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5 ${evt.iconClass}`;
         const icon = document.createElement('span');
         icon.className = 'material-symbols-outlined text-xs';
-        icon.textContent = evt.icon || 'campaign';
+        icon.textContent = evt.icon;
         iconWrap.appendChild(icon);
-        if (evt.iconClass) {
-            iconWrap.className += ' ' + evt.iconClass;
-        } else {
-            iconWrap.style.backgroundColor = (evt.color || THEME_COLORS.primary) + '26';
-            icon.style.color = evt.color || THEME_COLORS.primary;
-        }
         card.appendChild(iconWrap);
 
         const body = document.createElement('div');
@@ -1111,26 +1099,19 @@ export default class extends Controller {
         header.className = 'flex items-center justify-between gap-2';
 
         const badge = document.createElement('span');
-        badge.className = 'badge';
-        badge.textContent = sentenceCase(evt.badge || evt.type || 'Event');
-        if (evt.badgeClass) {
-            badge.className += ' ' + evt.badgeClass;
-        } else {
-            badge.style.color = evt.color || THEME_COLORS.primary;
-            badge.style.borderColor = (evt.color || THEME_COLORS.primary) + '55';
-            badge.style.backgroundColor = (evt.color || THEME_COLORS.primary) + '1a';
-        }
+        badge.className = `badge ${evt.badgeClass}`;
+        badge.textContent = sentenceCase(evt.badge);
         header.appendChild(badge);
 
         const time = document.createElement('span');
         time.className = 'text-4xs font-mono text-on-surface-faint shrink-0';
-        time.textContent = evt.recordedAt || '';
+        time.textContent = evt.dateline;
         header.appendChild(time);
         body.appendChild(header);
 
         const headline = document.createElement('p');
         headline.className = 'text-2xs text-on-surface leading-snug';
-        headline.textContent = evt.headline || '';
+        headline.textContent = evt.headline;
         body.appendChild(headline);
 
         card.appendChild(body);
@@ -1501,11 +1482,19 @@ export default class extends Controller {
             this.reconstitute(payload.district);
         }
 
+        if (Number.isFinite(payload.sim_time)) {
+            this.simTime = payload.sim_time;
+            if (now - this.lastBadgeRefreshAt >= this.constructor.BADGE_REFRESH_MS) {
+                this.lastBadgeRefreshAt = now;
+                this.refreshBadges();
+            }
+        }
+
         // Events are occurrences rather than replaceable state: several can land on different
         // buildings in one frame and all of them fire.
         if (Array.isArray(payload.events)) {
             payload.events.forEach(evt => {
-                if (this.plotsByTicker.has(evt.ticker)) this.applyEvent(evt);
+                if (evt.presented && this.plotsByTicker.has(evt.ticker)) this.applyEvent(evt);
             });
         }
     }
@@ -1513,7 +1502,7 @@ export default class extends Controller {
     /** Fires a flare, updates the badge, and prepends a live event to a building's history. */
     applyEvent(evt) {
         const ticker = evt.ticker;
-        const card = evt.presented || { type: evt.type, category: 'general', badge: evt.type, icon: 'campaign', headline: evt.description || '' };
+        const card = evt.presented;
         const color = flareColor(card);
 
         const flare = this.flaresByTicker.get(ticker);
@@ -1524,15 +1513,8 @@ export default class extends Controller {
             this.flareTimers[ticker] = setTimeout(() => flare.removeAttribute('data-flash'), 900);
         }
 
-        const entry = {
-            ...card,
-            color,
-            recordedAt: card.dateline || card.recordedAt || nowStamp(),
-            recordedAtTs: Date.now() / 1000,
-        };
-
         const history = this.eventsByTicker.get(ticker) || [];
-        history.unshift(entry);
+        history.unshift(card);
         history.length = Math.min(history.length, this.constructor.MAX_EVENTS_PER_TICKER);
         this.eventsByTicker.set(ticker, history);
 
@@ -1552,10 +1534,10 @@ export default class extends Controller {
 
     /** Events for a ticker that still fall inside the badge window, oldest already dropped. */
     countRecentEvents(ticker) {
-        const windowOpensAt = Date.now() / 1000 - (this.eventBadgeWindowSecondsValue || 0);
+        const windowOpensAt = this.simTime - (this.eventBadgeWindowYearsValue || 0);
         const events = this.eventsByTicker.get(ticker) || [];
 
-        return events.filter(evt => Number.isFinite(evt.recordedAtTs) && evt.recordedAtTs >= windowOpensAt).length;
+        return events.filter(evt => Number.isFinite(evt.simTime) && evt.simTime >= windowOpensAt).length;
     }
 
     /** Rewrites one building's badge from its current in-window count. */

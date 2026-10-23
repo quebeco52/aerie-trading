@@ -13,6 +13,12 @@ class NarrativeEngine
 {
     public function __construct(private readonly MathUtility $math = new MathUtility()) {}
 
+    /**
+     * The story an event makes, in one of its phrasings.
+     *
+     * @param array<string, string|float> $context what the story quotes: a district story's readings already printed
+     *                                           (SystemicEventReporter), a company story's amounts in dollars
+     */
     public function generateLore(string $eventType, array $context = []): string
     {
         // A dollar amount the story quotes, passed in dollars.
@@ -694,7 +700,11 @@ class NarrativeEngine
         };
     }
 
-    /** One of the story's phrasings, on one draw from the simulation's stream. */
+    /**
+     * One of the story's phrasings, on one draw from the simulation's stream.
+     *
+     * @param array<string> $phrases
+     */
     private function getRandomPhrase(array $phrases): string
     {
         $phrases = array_values($phrases);

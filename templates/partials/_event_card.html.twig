@@ -1,5 +1,5 @@
-{# One news row, from EventPresenter's card. The stock page and the newswire both render it, and
-   assets/js/stock/events-feed.js buildCard() builds the same row for live events.
+{# One news row, from EventPresenter's card (App\Service\News\EventCard). The stock page and the newswire both
+   render it, and assets/js/stock/events-feed.js buildCard() builds the same row for live events.
    `event`: the presented card. `source` (optional): { ticker, name } for a company or fund story on the wire.
    `headline` (optional): the story is a headline (App\Service\News\NewsDesk), set in a heavier weight. #}
 <article class="py-3 space-y-1.5">
@@ -26,7 +26,7 @@
 			{% if event.changePercent is not null and event.changePercent != 0 %}
 				<span class="{{ event.changePercent|signed_class }}">{{ (event.changePercent / 100)|pct(2, true) }}</span>
 			{% endif %}
-			<time class="text-on-surface-variant whitespace-nowrap">{{ event.dateline|default(event.recordedAt|date('Y-m-d H:i')) }}</time>
+			<time class="text-on-surface-variant whitespace-nowrap">{{ event.dateline }}</time>
 		</div>
 	</div>
 
@@ -35,7 +35,7 @@
 	{% endif %}
 
 	{# Corporate actions that came with the report: dividends, buybacks, debt. #}
-	{% if event.pills is defined and event.pills|length > 0 %}
+	{% if event.pills|length > 0 %}
 		<ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant">
 			{% for pill in event.pills %}
 				<li>{{ pill.text }}</li>

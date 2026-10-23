@@ -67,7 +67,7 @@ class NewsFeedBuilderTest extends TestCase
 
         $this->assertNotNull($headline);
         $this->assertSame('WEAV', $headline['ticker']);
-        $this->assertSame(-9.0, $headline['card']['changePercent']);
+        $this->assertSame(-9.0, $headline['card']->changePercent);
     }
 
     /** The desk's verdict at publication stands; only a row from before verdicts were kept is judged on the rule. */

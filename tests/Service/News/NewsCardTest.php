@@ -7,6 +7,7 @@ namespace App\Tests\Service\News;
 use App\Data\Company\Sectors;
 use App\Service\News\EventPresenter;
 use App\Service\News\NewsCard;
+use App\Service\News\PresentableEvent;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -21,7 +22,7 @@ class NewsCardTest extends TestCase
     public function testEveryPublishedTypeHasACardOfItsOwn(string $type): void
     {
         $this->assertNotSame(NewsCard::General, NewsCard::forType($type), "{$type} would render as general news");
-        $this->assertSame(NewsCard::forType($type)->value, (new EventPresenter())->present(['type' => $type, 'description' => 'x'])['category']);
+        $this->assertSame(NewsCard::forType($type)->value, (new EventPresenter())->present(new PresentableEvent(type: $type, description: 'x'))->card->value);
     }
 
     /** The table routes only what the engines publish, so a type no engine still writes does not linger in it. */
@@ -59,24 +60,24 @@ class NewsCardTest extends TestCase
     {
         $presenter = new EventPresenter();
 
-        $down = $presenter->present(['type' => 'CREDIT_DOWNGRADE', 'description' => 'Credit rating downgraded from A to BBB due to deteriorating credit profile.', 'facts' => ['from' => 'A', 'to' => 'BBB']]);
-        $this->assertSame('RATING DOWNGRADE', $down['badge']);
-        $this->assertSame('Credit rating downgraded from A to BBB due to deteriorating credit profile.', $down['headline']);
+        $down = $presenter->present(new PresentableEvent(type: 'CREDIT_DOWNGRADE', description: 'Credit rating downgraded from A to BBB due to deteriorating credit profile.', facts: ['from' => 'A', 'to' => 'BBB']));
+        $this->assertSame('RATING DOWNGRADE', $down->badge);
+        $this->assertSame('Credit rating downgraded from A to BBB due to deteriorating credit profile.', $down->headline);
 
-        $up = $presenter->present(['type' => 'CREDIT_UPGRADE', 'description' => 'Credit rating upgraded from BBB to A following balance sheet strengthening.', 'facts' => ['from' => 'BBB', 'to' => 'A']]);
-        $this->assertSame('RATING UPGRADE', $up['badge']);
-        $this->assertSame('up', $up['tone']);
+        $up = $presenter->present(new PresentableEvent(type: 'CREDIT_UPGRADE', description: 'Credit rating upgraded from BBB to A following balance sheet strengthening.', facts: ['from' => 'BBB', 'to' => 'A']));
+        $this->assertSame('RATING UPGRADE', $up->badge);
+        $this->assertSame('up', $up->tone->value);
     }
 
     public function testAnalystRevisionsReadInTheirDirection(): void
     {
         $presenter = new EventPresenter();
 
-        $this->assertSame('TARGET RAISED', $presenter->present(['type' => 'ANALYST', 'description' => 'x', 'facts' => ['from' => 100.0, 'to' => 120.0]])['badge']);
-        $cut = $presenter->present(['type' => 'ANALYST', 'description' => 'x', 'facts' => ['from' => 100.0, 'to' => 80.0]]);
-        $this->assertSame('TARGET CUT', $cut['badge']);
-        $this->assertSame('down', $cut['tone']);
-        $this->assertSame('GUIDANCE CUT', $presenter->present(['type' => 'GUIDANCE', 'description' => 'Guidance cut: management expects to miss consensus by roughly 8%.'])['badge']);
+        $this->assertSame('TARGET RAISED', $presenter->present(new PresentableEvent(type: 'ANALYST', description: 'x', facts: ['from' => 100.0, 'to' => 120.0]))->badge);
+        $cut = $presenter->present(new PresentableEvent(type: 'ANALYST', description: 'x', facts: ['from' => 100.0, 'to' => 80.0]));
+        $this->assertSame('TARGET CUT', $cut->badge);
+        $this->assertSame('down', $cut->tone->value);
+        $this->assertSame('GUIDANCE CUT', $presenter->present(new PresentableEvent(type: 'GUIDANCE', description: 'Guidance cut: management expects to miss consensus by roughly 8%.'))->badge);
     }
 
     /**

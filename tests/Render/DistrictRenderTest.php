@@ -122,7 +122,8 @@ final class DistrictRenderTest extends KernelTestCase
                 'sparklineGap' => DistrictMap::INSTITUTION_SPARKLINE_GAP,
             ],
             'events' => [],
-            'eventBadgeWindowSeconds' => 60.0,
+            'eventBadgeWindowYears' => 1.0 / 12.0,
+            'simTime' => 13.5,
             'revenueMix' => [],
             'summary' => [
                 'tenantCount' => count($plots),

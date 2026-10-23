@@ -245,7 +245,8 @@
 	data-district-envelope-value="{{ envelope|json_encode|e('html_attr') }}"
 	data-district-lighting-value="{{ lighting|json_encode|e('html_attr') }}"
 	data-district-condition-value="{{ condition|json_encode|e('html_attr') }}"
-	data-district-event-badge-window-seconds-value="{{ eventBadgeWindowSeconds }}"
+	data-district-event-badge-window-years-value="{{ eventBadgeWindowYears }}"
+	data-district-sim-time-value="{{ simTime }}"
 	data-district-revenue-mix-value="{{ revenueMix|json_encode|e('html_attr') }}"
 	data-district-institutions-value="{{ institutions|map(i => {id: i.id, label: i.label, readouts: i.readouts, stressRules: i.stressRules, fields: i.fields})|json_encode|e('html_attr') }}"
 	data-district-user-holdings-value="{{ userHoldings|json_encode(constant('JSON_FORCE_OBJECT'))|e('html_attr') }}"
@@ -822,7 +823,8 @@
 											{# On the roofline, not the kerb: a narrow plot has no room beside
 											   the ticker plate. Counts only the events inside the badge window
 											   (DistrictEventFeed marks them `recent`), not the whole backfill —
-											   the client re-counts on a timer so the badge ages out. #}
+											   the client re-counts as the frames move the simulation on, so the
+											   badge ages out. #}
 											{% set recentCount = events[plot.ticker]|default([])|filter(e => e.recent)|length %}
 											<g class="event-badge" data-district-target="badge" data-badge-for="{{ plot.ticker }}"
 												data-count="{{ recentCount }}">

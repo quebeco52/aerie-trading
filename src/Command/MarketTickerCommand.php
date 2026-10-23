@@ -609,6 +609,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $events,
             $districtReconstitution,
             $isFrameTick ? [
+                // The economic clock, which the district's event badges age against.
+                'sim_time' => $run->simTime,
                 'market_vol' => $marketVol,
                 'economic_cycle' => $macroState->economicCycleLabel(),
                 'council_rate' => $macroState->policyRate,
