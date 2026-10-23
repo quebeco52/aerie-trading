@@ -25,7 +25,6 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
@@ -38,6 +37,7 @@ use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\Diet\PartyLeaders;
 use App\Service\Politics\Policy\BudgetRound;
+use App\Service\Politics\Policy\Lever;
 use App\Service\Politics\Policy\Platforms;
 use App\Service\Politics\PoliticsEngine;
 use App\Twig\Extension\UiExtension;
@@ -58,26 +58,6 @@ use App\Twig\Extension\UiExtension;
 class GovernmentPageBuilder
 {
     // --- Laws ---
-    /** Each law's name and unit on the market's forecast and the law charts, in the budget's order. */
-    private const LEVER_DISPLAY = [
-        'publicSpending' => ['Public spending, share of GDP', 'pct'],
-        'corporateTax' => ['Corporate tax rate', 'pct'],
-        'dividendTax' => ['Tax on dividends', 'pct'],
-        'tariff' => ['Average tariff on imports', 'pct'],
-        'laborGrowth' => ['Labour force growth', 'pct'],
-        'foreignBuyerTax' => ['Tax on foreign home buyers', 'pct'],
-        'greenBeltStringency' => ['Housing schemes refused', 'pct'],
-        'carbonPrice' => ['Carbon price', 'usd_t'],
-        'extractionStringency' => ['Extraction compliance cost', 'pct'],
-        'stampDutyRate' => ['Stamp duty on share trades', 'pct'],
-        'bankLevyRate' => ['Bank levy', 'pct'],
-        'reserveDrawShare' => ['Share of reserve returns spent', 'pct'],
-        'consolidationTaxShare' => ['Debt repair raised by tax', 'pct'],
-        'reserveHomeShare' => ['Reserve fund shares held at home', 'pct'],
-        'utilityRateGrant' => ['Utility rate requests granted', 'pct'],
-        'debtTarget' => ['Debt target', 'pct'],
-        'debtPace' => ['Debt cut a year', 'pct'],
-    ];
     /**
      * The laws the Council's departments set that the law charts show beside the Diet's, keyed as each recorded quarter
      * carries them.
@@ -431,13 +411,14 @@ class GovernmentPageBuilder
         $names = static fn(array $parties): array => array_map(static fn(string $party): string => AerieDiet::PARTY_NAMES[$party], $parties);
         $standing = BudgetRound::standingLevers($politics);
         $levers = [];
-        foreach (self::LEVER_DISPLAY as $lever => [$name, $unit]) {
-            $enacted = self::leverDisplay($lever, $standing[$lever]);
-            $expected = self::leverDisplay($lever, $politics->forecastLevers[$lever] ?? $standing[$lever]);
+        foreach (LawCatalogue::ORDER as $lever) {
+            $unit = LawCatalogue::unit($lever);
+            $enacted = LawCatalogue::display($lever, $standing[$lever->value]);
+            $expected = LawCatalogue::display($lever, $politics->forecastLevers[$lever->value] ?? $standing[$lever->value]);
             // A move shows only when it shows at the precision the page prints: hundredths of a point, whole HHI
             // points, cents.
             $places = self::displayPlaces($unit);
-            $levers[] = ['name' => $name, 'unit' => $unit, 'enacted' => $enacted, 'expected' => $expected, 'moves' => round($expected, $places) !== round($enacted, $places)];
+            $levers[] = ['name' => LawCatalogue::name($lever), 'unit' => $unit, 'enacted' => $enacted, 'expected' => $expected, 'moves' => round($expected, $places) !== round($enacted, $places)];
         }
 
         return [
@@ -474,13 +455,20 @@ class GovernmentPageBuilder
         [$left, $right, $top, $bottom] = self::LAW_CHART_PLOT;
         $x = static fn(float $time): float => round($left + (($right - $left) * ($time - $from) / max(1e-9, $now - $from)), 1);
 
+        // Each law's name, unit and value as the page shows it in a recorded quarter, null where it was not recorded.
+        $series = [];
+        foreach (LawCatalogue::ORDER as $lever) {
+            $series[] = [LawCatalogue::name($lever), LawCatalogue::unit($lever), static fn(array $row): ?float => isset($row['levers'][$lever->value]) ? LawCatalogue::display($lever, $row['levers'][$lever->value]) : null];
+        }
+        $series[] = [...self::DEPARTMENT_LAWS['mergerReviewLeniency'], static fn(array $row): ?float => isset($row['mergerReviewLeniency']) ? MergerAndAcquisitionEngine::reviewScreens($row['mergerReviewLeniency'])['concentrated'] : null];
+        $series[] = [...self::DEPARTMENT_LAWS['capitalRequirement'], static fn(array $row): ?float => $row['capitalRequirement'] ?? null];
+
         $charts = [];
-        foreach (self::LEVER_DISPLAY + self::DEPARTMENT_LAWS as $key => [$name, $unit]) {
+        foreach ($series as [$name, $unit, $value]) {
             $points = [];
             foreach ($rows as $row) {
-                $raw = array_key_exists($key, self::DEPARTMENT_LAWS) ? ($row[$key] ?? null) : ($row['levers'][$key] ?? null);
-                if ($raw !== null) {
-                    $points[] = [$row['t'], $key === 'capitalRequirement' ? $raw : self::leverDisplay($key, $raw)];
+                if (($shown = $value($row)) !== null) {
+                    $points[] = [$row['t'], $shown];
                 }
             }
             if (count($points) < 2) {
@@ -628,21 +616,6 @@ class GovernmentPageBuilder
     }
 
     /**
-     * A law's value as the page shows it: the corporate rate itself, the merger line as an HHI, the green belt as
-     * schemes refused, the extraction rules as their cost.
-     */
-    private static function leverDisplay(string $lever, float $value): float
-    {
-        return match ($lever) {
-            'corporateTax' => MacroConstants::BASE_CORPORATE_TAX_RATE + $value,
-            'mergerReviewLeniency' => MergerAndAcquisitionEngine::reviewScreens($value)['concentrated'],
-            'greenBeltStringency' => AssetMarketSubsystem::planningRefusalRate($value),
-            'extractionStringency' => self::extractionCostUplift($value),
-            default => $value,
-        };
-    }
-
-    /**
      * A party's page: who it is, where it stands, what it would enact governing alone from there today against what is
      * in force, and its record at the polls since Year 1.
      *
@@ -655,7 +628,7 @@ class GovernmentPageBuilder
         $row = $rows[$party];
         $position = AerieDiet::position($party, $politics->partyPositions);
         $platform = Platforms::partyProgramme($party, $politics->partyPositions);
-        $neutral = MacroConstants::BASE_CORPORATE_TAX_RATE;
+        $standing = BudgetRound::standingLevers($politics);
         $talking = $politics->coalitionTakesOfficeAt > $macro->totalTime;
 
         $axes = [];
@@ -696,25 +669,12 @@ class GovernmentPageBuilder
                 'definedBy' => array_map(static fn(string $axis): string => DietStyle::AXIS_NAMES[$axis]['name'], array_keys(AerieDiet::FIXED_POSITIONS[$party])),
             ],
             'axes' => $axes,
-            'levers' => [
-                ['name' => 'Public spending, share of GDP', 'unit' => 'pct', 'platform' => $platform['publicSpending'], 'enacted' => $politics->publicSpendingShare],
-                ['name' => 'Corporate tax rate', 'unit' => 'pct', 'platform' => $neutral + $platform['corporateTax'], 'enacted' => $neutral + $politics->corporateTaxPolicyShift],
-                ['name' => 'Tax on dividends', 'unit' => 'pct', 'platform' => $platform['dividendTax'], 'enacted' => $politics->dividendTaxRate],
-                ['name' => 'Average tariff on imports', 'unit' => 'pct', 'platform' => $platform['tariff'], 'enacted' => $politics->importTariffRate],
-                ['name' => 'Labour force growth', 'unit' => 'pct', 'platform' => $platform['laborGrowth'], 'enacted' => $politics->laborForceGrowthRate],
-                ['name' => 'Tax on foreign home buyers', 'unit' => 'pct', 'platform' => $platform['foreignBuyerTax'], 'enacted' => $politics->foreignBuyerTaxRate],
-                ['name' => 'Housing schemes refused', 'unit' => 'pct', 'platform' => AssetMarketSubsystem::planningRefusalRate($platform['greenBeltStringency']), 'enacted' => AssetMarketSubsystem::planningRefusalRate($politics->greenBeltStringency)],
-                ['name' => 'Carbon price', 'unit' => 'usd_t', 'platform' => $platform['carbonPrice'], 'enacted' => $politics->carbonPrice],
-                ['name' => 'Extraction compliance cost', 'unit' => 'pct', 'platform' => self::extractionCostUplift($platform['extractionStringency']), 'enacted' => self::extractionCostUplift($politics->extractionStringency)],
-                ['name' => 'Stamp duty on share trades', 'unit' => 'pct', 'platform' => $platform['stampDutyRate'], 'enacted' => $politics->stampDutyRate],
-                ['name' => 'Bank levy', 'unit' => 'pct', 'platform' => $platform['bankLevyRate'], 'enacted' => $politics->bankLevyRate],
-                ['name' => 'Share of reserve returns spent', 'unit' => 'pct', 'platform' => $platform['reserveDrawShare'], 'enacted' => $politics->reserveDrawShare],
-                ['name' => 'Debt repair raised by tax', 'unit' => 'pct', 'platform' => $platform['consolidationTaxShare'], 'enacted' => $politics->consolidationTaxShare],
-                ['name' => 'Reserve fund shares held at home', 'unit' => 'pct', 'platform' => $platform['reserveHomeShare'], 'enacted' => $politics->reserveHomeEquityShare],
-                ['name' => 'Utility rate requests granted', 'unit' => 'pct', 'platform' => $platform['utilityRateGrant'], 'enacted' => $politics->utilityRateCaseGrantShare],
-                ['name' => 'Debt target', 'unit' => 'pct', 'platform' => $platform['debtTarget'], 'enacted' => $politics->debtTarget],
-                ['name' => 'Debt cut a year', 'unit' => 'pct', 'platform' => $platform['debtPace'], 'enacted' => $politics->debtPace],
-            ],
+            'levers' => array_map(static fn(Lever $lever): array => [
+                'name' => LawCatalogue::name($lever),
+                'unit' => LawCatalogue::unit($lever),
+                'platform' => LawCatalogue::display($lever, $platform[$lever->value]),
+                'enacted' => LawCatalogue::display($lever, $standing[$lever->value]),
+            ], LawCatalogue::ORDER),
             'leaders' => self::leaders($politics, $party),
             'polling' => $politics->polls === [] ? null : (static function (array $poll) use ($politics, $party): array {
                 return [
@@ -846,200 +806,36 @@ class GovernmentPageBuilder
         $round = MacroConstants::BUDGET_ROUND_PERIOD_YEARS;
         $nextRound = DistrictCalendar::quarter((floor($macro->totalTime / $round) + 1.0) * $round);
 
-        $status = static function (string $lever) use ($budget, $standing, $talking): string {
+        $status = static function (Lever $lever) use ($budget, $standing, $talking): string {
+            $key = $lever->value;
+
             return match (true) {
-                abs($budget['platform'][$lever] - $standing[$lever]) < 1e-9 => 'enacted',
+                abs($budget['platform'][$key] - $standing[$key]) < 1e-9 => 'enacted',
                 $talking => 'caretaker',
-                $lever === 'reserveDrawShare' && $budget['fundHeld'] => 'fund',
-                $budget['supportHeld'][$lever] && abs($budget['levers'][$lever] - $standing[$lever]) < 1e-9 => 'blocked',
-                $budget['supportHeld'][$lever] => 'partial',
+                $lever === Lever::ReserveDraw && $budget['fundHeld'] => 'fund',
+                $budget['supportHeld'][$key] && abs($budget['levers'][$key] - $standing[$key]) < 1e-9 => 'blocked',
+                $budget['supportHeld'][$key] => 'partial',
                 default => 'pending',
             };
         };
-        $neutral = MacroConstants::BASE_CORPORATE_TAX_RATE;
         $planned = CreditFiscalSubsystem::requiredPrimaryBalance($macro);
 
+        $levers = [];
+        foreach (LawCatalogue::ORDER as $lever) {
+            $levers[] = [
+                'name' => LawCatalogue::name($lever),
+                'axis' => $lever->axis(),
+                'unit' => LawCatalogue::unit($lever),
+                'platform' => LawCatalogue::display($lever, $budget['platform'][$lever->value]),
+                'target' => LawCatalogue::display($lever, $budget['levers'][$lever->value]),
+                'enacted' => LawCatalogue::display($lever, $standing[$lever->value]),
+                'status' => $status($lever),
+                'note' => $this->budgetNote($lever, $macro, $standing[$lever->value], $planned),
+            ];
+        }
+
         return [
-            'levers' => [
-                [
-                    'name' => 'Public spending, share of GDP',
-                    'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $budget['platform']['publicSpending'],
-                    'target' => $budget['levers']['publicSpending'],
-                    'enacted' => $standing['publicSpending'],
-                    'status' => $status('publicSpending'),
-                    'spending' => true,
-                    'note' => sprintf(
-                        'Spending on public services runs %.1f%% of GDP today; a budget\'s change reaches it over two to three years',
-                        100.0 * CreditFiscalSubsystem::publicAccounts($macro, 0.0)->purchases,
-                    ),
-                ],
-                [
-                    'name' => 'Corporate tax rate',
-                    'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $neutral + $budget['platform']['corporateTax'],
-                    'target' => $neutral + $budget['levers']['corporateTax'],
-                    'enacted' => $neutral + $standing['corporateTax'],
-                    'status' => $status('corporateTax'),
-                    'note' => sprintf('Firms pay %.1f%% today. Other taxes, net of benefits, take %.1f%% of GDP and move with the economy', 100.0 * $macro->corporateTaxRate, 100.0 * $macro->netTaxRate),
-                ],
-                [
-                    'name' => 'Tax on dividends',
-                    'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $budget['platform']['dividendTax'],
-                    'target' => $budget['levers']['dividendTax'],
-                    'enacted' => $standing['dividendTax'],
-                    'status' => $status('dividendTax'),
-                    'note' => self::dividendTaxNote($standing['dividendTax']),
-                ],
-                [
-                    'name' => 'Average tariff on imports',
-                    'axis' => AerieDiet::AXIS_OPENNESS,
-                    'platform' => $budget['platform']['tariff'],
-                    'target' => $budget['levers']['tariff'],
-                    'enacted' => $standing['tariff'],
-                    'status' => $status('tariff'),
-                    'note' => sprintf('Partners answer with %.1f%% on the District\'s exports', 100.0 * MacroConstants::TARIFF_RETALIATION_RATIO * $standing['tariff']),
-                ],
-                [
-                    'name' => 'Labour force growth',
-                    'axis' => AerieDiet::AXIS_OPENNESS,
-                    'platform' => $budget['platform']['laborGrowth'],
-                    'target' => $budget['levers']['laborGrowth'],
-                    'enacted' => $standing['laborGrowth'],
-                    'status' => $status('laborGrowth'),
-                    'note' => sprintf('Immigration has added %+.1f%% to the population over the structural path', 100.0 * $macro->immigrationPopulationShift),
-                ],
-                [
-                    'name' => 'Tax on foreign home buyers',
-                    'axis' => AerieDiet::AXIS_OPENNESS,
-                    'platform' => $budget['platform']['foreignBuyerTax'],
-                    'target' => $budget['levers']['foreignBuyerTax'],
-                    'enacted' => $standing['foreignBuyerTax'],
-                    'status' => $status('foreignBuyerTax'),
-                    'note' => $standing['foreignBuyerTax'] > 0.0
-                        ? sprintf('Of the price of a home bought from outside the District; it holds home prices %.1f%% below where they would stand without it', 100.0 * (1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($standing['foreignBuyerTax'])))
-                        : 'Homes are open to buyers from anywhere, as at Year 1',
-                ],
-                [
-                    'name' => 'Housing schemes refused',
-                    'axis' => AerieDiet::AXIS_ENVIRONMENT,
-                    'platform' => AssetMarketSubsystem::planningRefusalRate($budget['platform']['greenBeltStringency']),
-                    'target' => AssetMarketSubsystem::planningRefusalRate($budget['levers']['greenBeltStringency']),
-                    'enacted' => AssetMarketSubsystem::planningRefusalRate($standing['greenBeltStringency']),
-                    'status' => $status('greenBeltStringency'),
-                    'note' => $standing['greenBeltStringency'] > 0.0
-                        ? sprintf('Builders answer a rise in prices only %.0f%% as strongly as under the plan in force at Year 1', 100.0 * AssetMarketSubsystem::greenBeltSupplyResponse($standing['greenBeltStringency']))
-                        : 'The plan in force at Year 1 still stands',
-                ],
-                [
-                    'name' => 'Carbon price',
-                    'axis' => AerieDiet::AXIS_ENVIRONMENT,
-                    'unit' => 'usd_t',
-                    'platform' => $budget['platform']['carbonPrice'],
-                    'target' => $budget['levers']['carbonPrice'],
-                    'enacted' => $standing['carbonPrice'],
-                    'status' => $status('carbonPrice'),
-                    'note' => $standing['carbonPrice'] > 0.0
-                        ? sprintf('Adds $%.2f to each MWh of wholesale power', CommodityLogisticsSubsystem::carbonPowerPriceAdder($standing['carbonPrice']))
-                        : 'No carbon price is in force; one would add to each MWh of wholesale power',
-                ],
-                [
-                    'name' => 'Extraction compliance cost',
-                    'axis' => AerieDiet::AXIS_ENVIRONMENT,
-                    'platform' => self::extractionCostUplift($budget['platform']['extractionStringency']),
-                    'target' => self::extractionCostUplift($budget['levers']['extractionStringency']),
-                    'enacted' => self::extractionCostUplift($standing['extractionStringency']),
-                    'status' => $status('extractionStringency'),
-                    'note' => $standing['extractionStringency'] > 0.0
-                        ? 'Added to the cost of every barrel lifted offshore and every tonne mined'
-                        : 'The rules on offshore drilling and mining in force at Year 1 still stand',
-                ],
-                [
-                    'name' => 'Stamp duty on share trades',
-                    'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $budget['platform']['stampDutyRate'],
-                    'target' => $budget['levers']['stampDutyRate'],
-                    'enacted' => $standing['stampDutyRate'],
-                    'status' => $status('stampDutyRate'),
-                    'note' => sprintf(
-                        'Paid by buyer and seller each, into the Sovereign Reserve Fund; turnover runs %.0f%% %s its level at the rate in force at Year 1',
-                        abs(100.0 * (MacroTransmission::calculateStampDutyVolumeFactor($standing['stampDutyRate']) - 1.0)),
-                        MacroTransmission::calculateStampDutyVolumeFactor($standing['stampDutyRate']) < 1.0 ? 'below' : 'above',
-                    ),
-                ],
-                [
-                    'name' => 'Bank levy',
-                    'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $budget['platform']['bankLevyRate'],
-                    'target' => $budget['levers']['bankLevyRate'],
-                    'enacted' => $standing['bankLevyRate'],
-                    'status' => $status('bankLevyRate'),
-                    'note' => $macro->boardBankLevy > 0.0
-                        ? sprintf('On banks\' short-term funding, half that on long-term funding and uninsured deposits; the banks owe %s a year', UiExtension::large($macro->boardBankLevy, '$'))
-                        : 'On banks\' short-term funding, half that on long-term funding and uninsured deposits',
-                ],
-                [
-                    'name' => 'Share of reserve returns spent',
-                    'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $budget['platform']['reserveDrawShare'],
-                    'target' => $budget['levers']['reserveDrawShare'],
-                    'enacted' => $standing['reserveDrawShare'],
-                    'status' => $status('reserveDrawShare'),
-                    'note' => $macro->sovereignFundDrawToGdp > 0.0
-                        ? sprintf('Of the Sovereign Reserve Fund\'s expected return; it pays the budget %.1f%% of GDP this year', 100.0 * $macro->sovereignFundDrawToGdp)
-                        : 'Of the Sovereign Reserve Fund\'s expected return, paid to the budget each year',
-                ],
-                [
-                    'name' => 'Debt repair raised by tax',
-                    'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $budget['platform']['consolidationTaxShare'],
-                    'target' => $budget['levers']['consolidationTaxShare'],
-                    'enacted' => $standing['consolidationTaxShare'],
-                    'status' => $status('consolidationTaxShare'),
-                    'note' => $planned > 0.0
-                        ? sprintf('Of the primary surplus the budget plans, %.1f%% of GDP this year; the rest comes from spending cuts', 100.0 * $planned)
-                        : sprintf('Of any surplus the debt path calls for; the rest comes from spending cuts. The budget plans a primary deficit of %.1f%% of GDP this year, and this share of the room goes to spending, the rest to tax cuts', 100.0 * abs($planned)),
-                ],
-                [
-                    'name' => 'Debt target',
-                    'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $budget['platform']['debtTarget'],
-                    'target' => $budget['levers']['debtTarget'],
-                    'enacted' => $standing['debtTarget'],
-                    'status' => $status('debtTarget'),
-                    'note' => sprintf('Of GDP in public debt, which the budget steers toward over the years: a surplus while debt stands above it, room to spend or cut taxes below it. Debt stands at %.1f%% of GDP', 100.0 * $macro->sovereignDebtToGdp),
-                ],
-                [
-                    'name' => 'Debt cut a year',
-                    'axis' => AerieDiet::AXIS_STATE,
-                    'platform' => $budget['platform']['debtPace'],
-                    'target' => $budget['levers']['debtPace'],
-                    'enacted' => $standing['debtPace'],
-                    'status' => $status('debtPace'),
-                    'note' => $standing['debtPace'] > 0.0
-                        ? 'Of GDP a year at most that the budget moves debt toward its target, on top of what holds debt steady as interest and growth move it'
-                        : 'The budget holds debt where it stands, as interest and growth move it, and makes no move toward the target',
-                ],
-                [
-                    'name' => 'Reserve fund shares held at home',
-                    'axis' => AerieDiet::AXIS_OPENNESS,
-                    'platform' => $budget['platform']['reserveHomeShare'],
-                    'target' => $budget['levers']['reserveHomeShare'],
-                    'enacted' => $standing['reserveHomeShare'],
-                    'status' => $status('reserveHomeShare'),
-                    'note' => $this->reserveHomeShareNote($macro),
-                ],
-                [
-                    'name' => 'Utility rate requests granted',
-                    'axis' => AerieDiet::AXIS_COUNCIL,
-                    'platform' => $budget['platform']['utilityRateGrant'],
-                    'target' => $budget['levers']['utilityRateGrant'],
-                    'enacted' => $standing['utilityRateGrant'],
-                    'status' => $status('utilityRateGrant'),
-                    'note' => 'Of the rise in power and water bills a utility asks the commission for when its costs outrun its tariff; the rest it carries into its next request',
-                ],
-            ],
+            'levers' => $levers,
             'debt' => $macro->sovereignDebtToGdp,
             'debtTarget' => $macro->debtTarget,
             'debtPace' => $macro->debtPace,
@@ -1053,13 +849,55 @@ class GovernmentPageBuilder
     }
 
     /**
-     * What the rules on extraction add to the cost of each barrel or tonne, as a fraction.
+     * What a budget row says under the law's name: what the law does, and where it stands today.
      *
-     * @param float $stringency The rules, 0 to 1.
+     * @param float $inForce The law in force, as the lever holds it.
+     * @param float $planned The primary balance the budget plans this year, as a share of GDP.
      */
-    private static function extractionCostUplift(float $stringency): float
+    private function budgetNote(Lever $lever, MacroStateDTO $macro, float $inForce, float $planned): string
     {
-        return FirmEconomics::calculateProductivityLossCostFactor(FinancialConstants::ENVIRONMENTAL_REGULATION_TFP_LOSS * $stringency) - 1.0;
+        return match ($lever) {
+            Lever::PublicSpending => sprintf(
+                'Spending on public services runs %.1f%% of GDP today; a budget\'s change reaches it over two to three years',
+                100.0 * CreditFiscalSubsystem::publicAccounts($macro, 0.0)->purchases,
+            ),
+            Lever::CorporateTax => sprintf('Firms pay %.1f%% today. Other taxes, net of benefits, take %.1f%% of GDP and move with the economy', 100.0 * $macro->corporateTaxRate, 100.0 * $macro->netTaxRate),
+            Lever::DividendTax => self::dividendTaxNote($inForce),
+            Lever::Tariff => sprintf('Partners answer with %.1f%% on the District\'s exports', 100.0 * MacroConstants::TARIFF_RETALIATION_RATIO * $inForce),
+            Lever::LaborGrowth => sprintf('Immigration has added %+.1f%% to the population over the structural path', 100.0 * $macro->immigrationPopulationShift),
+            Lever::ForeignBuyerTax => $inForce > 0.0
+                ? sprintf('Of the price of a home bought from outside the District; it holds home prices %.1f%% below where they would stand without it', 100.0 * (1.0 - AssetMarketSubsystem::foreignBuyerPriceFactor($inForce)))
+                : 'Homes are open to buyers from anywhere, as at Year 1',
+            Lever::GreenBelt => $inForce > 0.0
+                ? sprintf('Builders answer a rise in prices only %.0f%% as strongly as under the plan in force at Year 1', 100.0 * AssetMarketSubsystem::greenBeltSupplyResponse($inForce))
+                : 'The plan in force at Year 1 still stands',
+            Lever::CarbonPrice => $inForce > 0.0
+                ? sprintf('Adds $%.2f to each MWh of wholesale power', CommodityLogisticsSubsystem::carbonPowerPriceAdder($inForce))
+                : 'No carbon price is in force; one would add to each MWh of wholesale power',
+            Lever::Extraction => $inForce > 0.0
+                ? 'Added to the cost of every barrel lifted offshore and every tonne mined'
+                : 'The rules on offshore drilling and mining in force at Year 1 still stand',
+            Lever::StampDuty => sprintf(
+                'Paid by buyer and seller each, into the Sovereign Reserve Fund; turnover runs %.0f%% %s its level at the rate in force at Year 1',
+                abs(100.0 * (MacroTransmission::calculateStampDutyVolumeFactor($inForce) - 1.0)),
+                MacroTransmission::calculateStampDutyVolumeFactor($inForce) < 1.0 ? 'below' : 'above',
+            ),
+            Lever::BankLevy => $macro->boardBankLevy > 0.0
+                ? sprintf('On banks\' short-term funding, half that on long-term funding and uninsured deposits; the banks owe %s a year', UiExtension::large($macro->boardBankLevy, '$'))
+                : 'On banks\' short-term funding, half that on long-term funding and uninsured deposits',
+            Lever::ReserveDraw => $macro->sovereignFundDrawToGdp > 0.0
+                ? sprintf('Of the Sovereign Reserve Fund\'s expected return; it pays the budget %.1f%% of GDP this year', 100.0 * $macro->sovereignFundDrawToGdp)
+                : 'Of the Sovereign Reserve Fund\'s expected return, paid to the budget each year',
+            Lever::ConsolidationTax => $planned > 0.0
+                ? sprintf('Of the primary surplus the budget plans, %.1f%% of GDP this year; the rest comes from spending cuts', 100.0 * $planned)
+                : sprintf('Of any surplus the debt path calls for; the rest comes from spending cuts. The budget plans a primary deficit of %.1f%% of GDP this year, and this share of the room goes to spending, the rest to tax cuts', 100.0 * abs($planned)),
+            Lever::DebtTarget => sprintf('Of GDP in public debt, which the budget steers toward over the years: a surplus while debt stands above it, room to spend or cut taxes below it. Debt stands at %.1f%% of GDP', 100.0 * $macro->sovereignDebtToGdp),
+            Lever::DebtPace => $inForce > 0.0
+                ? 'Of GDP a year at most that the budget moves debt toward its target, on top of what holds debt steady as interest and growth move it'
+                : 'The budget holds debt where it stands, as interest and growth move it, and makes no move toward the target',
+            Lever::ReserveHome => $this->reserveHomeShareNote($macro),
+            Lever::UtilityRateGrant => 'Of the rise in power and water bills a utility asks the commission for when its costs outrun its tariff; the rest it carries into its next request',
+        };
     }
 
     /**

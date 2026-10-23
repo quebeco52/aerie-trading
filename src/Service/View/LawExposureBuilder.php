@@ -11,6 +11,7 @@ use App\Service\Market\Pricing\PolicyCapitalization;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
+use App\Service\Politics\Policy\Lever;
 
 /**
  * The listed firms each law moves most, for the government page: what the law in force adds to or takes from each
@@ -25,14 +26,14 @@ final class LawExposureBuilder
     /** Smallest share of earnings the page prints as a change: half the last place of a percentage to one decimal. */
     public const PRINTED_SHARE = 0.0005;
 
-    /** Each law a firm's own accounts answer to: its name as the budget table prints it, and what it reaches. */
+    /** Each law a firm's own accounts answer to, and what it reaches. */
     private const LAWS = [
-        'bankLevyRate' => ['Bank levy', 'Charged each year on what a bank funds itself with beyond its equity and insured deposits. Every bank that owes it is listed.'],
-        'extractionStringency' => ['Extraction compliance cost', 'Raises the cost of every barrel and tonne the District\'s drillers and miners produce.'],
-        'stampDutyRate' => ['Stamp duty on share trades', 'Thins the trading that brokers earn their commissions on.'],
-        'carbonPrice' => ['Carbon price', 'Raises the price of power. A generator gains on the power it sells and pays on the gas it burns.'],
-        'publicSpending' => ['Public spending, share of GDP', 'What the budget buys from the District\'s contractors, hospitals, colleges and guard firms. Measured against spending at its Year 1 share.'],
-        'utilityRateGrant' => ['Utility rate requests granted', 'How much of each rate increase the utilities ask for the commission allows. The less it grants, the further their prices lag their costs. Measured against the Year 1 commission\'s grant.'],
+        'bankLevyRate' => 'Charged each year on what a bank funds itself with beyond its equity and insured deposits. Every bank that owes it is listed.',
+        'extractionStringency' => 'Raises the cost of every barrel and tonne the District\'s drillers and miners produce.',
+        'stampDutyRate' => 'Thins the trading that brokers earn their commissions on.',
+        'carbonPrice' => 'Raises the price of power. A generator gains on the power it sells and pays on the gas it burns.',
+        'publicSpending' => 'What the budget buys from the District\'s contractors, hospitals, colleges and guard firms. Measured against spending at its Year 1 share.',
+        'utilityRateGrant' => 'How much of each rate increase the utilities ask for the commission allows. The less it grants, the further their prices lag their costs. Measured against the Year 1 commission\'s grant.',
     ];
     /**
      * The law each is measured against: none, but for public spending and the utility grant, measured against Year 1's.
@@ -81,13 +82,13 @@ final class LawExposureBuilder
         }
 
         $laws = [];
-        foreach (self::LAWS as $lever => [$name, $note]) {
+        foreach (self::LAWS as $lever => $note) {
             $rows = $exposed[$lever];
             usort($rows, static fn(array $a, array $b): int => $b['weight'] <=> $a['weight']);
             $shown = $lever === 'bankLevyRate' ? $rows : array_slice($rows, 0, self::FIRMS_PER_LAW);
             $laws[] = [
                 'lever' => $lever,
-                'name' => $name,
+                'name' => LawCatalogue::name(Lever::from($lever)),
                 'note' => $note,
                 'firms' => array_map(static fn(array $row): array => array_diff_key($row, ['weight' => true]), $shown),
                 'more' => count($rows) - count($shown),

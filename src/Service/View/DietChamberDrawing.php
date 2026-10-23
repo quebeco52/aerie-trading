@@ -37,26 +37,6 @@ final class DietChamberDrawing
         AerieDiet::AXIS_COUNCIL => ['Populist', 'Technocratic'],
         AerieDiet::AXIS_ENVIRONMENT => ['Growth', 'Environment'],
     ];
-    /** The levers as a question's heading lists them. */
-    private const LEVER_SHORT_NAMES = [
-        'corporateTax' => 'corporate tax',
-        'publicSpending' => 'public spending',
-        'tariff' => 'tariffs',
-        'laborGrowth' => 'immigration',
-        'foreignBuyerTax' => 'foreign buyers',
-        'greenBeltStringency' => 'green belts',
-        'carbonPrice' => 'carbon price',
-        'extractionStringency' => 'extraction rules',
-        'stampDutyRate' => 'stamp duty',
-        'bankLevyRate' => 'bank levy',
-        'reserveDrawShare' => 'reserve draw',
-        'consolidationTaxShare' => 'tax or cuts',
-        'reserveHomeShare' => 'reserves at home',
-        'utilityRateGrant' => 'utility rates',
-        'dividendTax' => 'dividend tax',
-        'debtTarget' => 'debt target',
-        'debtPace' => 'debt pace',
-    ];
     /** Font size of the end words and party labels, in SVG units. */
     private const COMPASS_FONT_SIZE = 7.0;
     /** Advance of a bold label's average character as a share of its font size, to size a label's box. */
@@ -255,7 +235,7 @@ final class DietChamberDrawing
         return [
             'axis' => $axis,
             'name' => DietStyle::AXIS_NAMES[$axis]['name'],
-            'laws' => array_map(static fn(string $lever): string => self::LEVER_SHORT_NAMES[$lever], array_keys(Lever::axes(), $axis, true)),
+            'laws' => array_map(static fn(Lever $lever): string => LawCatalogue::shortName($lever), array_values(array_filter(Lever::cases(), static fn(Lever $lever): bool => $lever->axis() === $axis))),
             'summary' => sprintf(
                 '%s, from %s on the left to %s on the right: %s%s',
                 DietStyle::AXIS_NAMES[$axis]['name'],
