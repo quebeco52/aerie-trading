@@ -15,6 +15,7 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -74,21 +75,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     // --- Model Thresholds ---
     /** Minimum Interest Coverage Ratio (ICR) required before distress. */
     public const MIN_ICR = 1.05;
-    /**
-     * Tangible capital over assets, in percentage points, below which the lender has failed: 2%, the critically
-     * undercapitalized line at which US prompt corrective action puts a bank into receivership (12 CFR 324.403).
-     */
-    public const BANKRUPT_EQUITY_THRESHOLD = 2.0;
-    /**
-     * Tangible capital over assets, in percentage points, below which the lender is in distress: 4%, the leverage ratio
-     * under which prompt corrective action rates a bank undercapitalized.
-     */
-    public const DISTRESS_EQUITY_THRESHOLD = 4.0;
-    /**
-     * Tangible capital over assets, in percentage points, below which the lender is on watch: a point above the 5%
-     * well-capitalized leverage ratio.
-     */
-    public const WARNING_EQUITY_THRESHOLD = 6.0;
     /** Maximum allowed wholesale leverage multiplier. */
     public const WHOLESALE_LEVERAGE_LIMIT = 2.0;
     /** ICR level below which dividends are suspended. */
@@ -1253,15 +1239,14 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return max(0.0, min($spendCap, $retainedEarningsThisQuarter));
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $fundedDebt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
     {
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
         // The floating wholesale resets to the interbank rate (DebtEngine's floating rate), the index the floating
         // loans reprice at, so a freeze raises it.
-        $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
+        $wholesaleInterest = FixedIncome::fixedFloatingInterest($wholesaleDebt, (float) $stock->getFloatingDebtRatio(), $blendedFixedRate, $floatingInterestRate);
         $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
 
         // Deposits are cheap, but the bank must pay an APY to prevent capital flight; it pays the rate its

@@ -7,9 +7,9 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ApparelManufacturingBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -377,7 +377,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         // starts recovering 0.60 x 0.80 of it.
         $spotDeviation = 0.05 * ApparelManufacturingBusinessModel::INPUT_COST_EXPOSURES['labor'];
         $hedgedShare = 1.0 - exp(-0.25 / ApparelManufacturingBusinessModel::INPUT_COST_LAG_YEARS);
-        $recoveryShare = 1.0 - exp(-0.25 / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
+        $recoveryShare = 1.0 - exp(-0.25 / AbstractBusinessModel::INPUT_PASS_THROUGH_LAG_YEARS);
         $costLevel = $spotDeviation * $hedgedShare;
         $recovered = $costLevel * 0.60 * ApparelManufacturingBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryShare;
         $marginIncrease = $shockResult->clampedMargin - $neutralResult->clampedMargin;

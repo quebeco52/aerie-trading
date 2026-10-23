@@ -11,6 +11,7 @@ use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -400,7 +401,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($model->calibrationYield($stock), $openingYield, 1e-9);
         $this->assertLessThan(0.0, $legacyIncome, 'fixture guard: its notes are cheaper than the market');
         $this->carryBook($model, $stock, $opening, 4);
-        $runOff = $legacyIncome * ((1.0 - FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER) ** 4 - 1.0) / $model->resolveEarningAssets($stock);
+        $runOff = $legacyIncome * ((1.0 - AbstractBusinessModel::DEBT_MATURITY_ROLLOVER_RATE) ** 4 - 1.0) / $model->resolveEarningAssets($stock);
         $this->assertEqualsWithDelta($openingYield + $runOff, $grossYield(), 1e-9, 'a book at its steady state stays there but for the legacy run-off');
     }
 
@@ -1055,7 +1056,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $stock = $this->creditTestBank('LAKE');
         $opening = new MacroStateDTO();
         $raised = new MacroStateDTO(policyRateEma: $opening->policyRateEma + 0.01);
-        $paid = fn(): float => $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.0, 0.0, 0.0, $raised->policyRateEma, 15.0, 10e9, 90e9, $raised)->interestExpense;
+        $paid = fn(): float => $this->model->calculateInterestExpenseAndWholesaleRate($stock, 0.0, 0.0, 0.0, $raised->policyRateEma, 90e9, $raised)->interestExpense;
         $stock->setWholesaleDebt('0');
 
         $this->carryBook($this->model, $stock, $opening, 1);

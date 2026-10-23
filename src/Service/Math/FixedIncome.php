@@ -18,6 +18,14 @@ final class FixedIncome
     public const YTM_PRICE_TOLERANCE = 1.0e-9;
 
     /**
+     * A year's interest on a book of debt, its floating share at the floating rate and the rest at the fixed coupon.
+     */
+    public static function fixedFloatingInterest(float $principal, float $floatingShare, float $fixedRate, float $floatingRate): float
+    {
+        return ($principal * (1.0 - $floatingShare) * $fixedRate) + ($principal * $floatingShare * $floatingRate);
+    }
+
+    /**
      * The yield on cash and money-market paper: the policy rate less the funds' running spread, floored at zero, where
      * US money-market funds held it at the lower bound by waiving their fees.
      */

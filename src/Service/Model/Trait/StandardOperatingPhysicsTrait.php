@@ -772,7 +772,7 @@ trait StandardOperatingPhysicsTrait
 
         return isset(static::INPUT_COST_EXPOSURES['labor'])
             ? (float) static::INPUT_COST_EXPOSURES['labor']
-            : FinancialConstants::DEFAULT_FIXED_COST_LABOR_SHARE;
+            : static::UNMEASURED_LABOR_SHARE;
     }
 
     public function getCapExCompletionRate(Stock $stock): float

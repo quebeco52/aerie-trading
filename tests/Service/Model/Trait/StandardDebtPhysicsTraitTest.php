@@ -7,6 +7,7 @@ namespace App\Tests\Service\Model\Trait;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Service\Math\FinancialConstants;
+use App\Service\Model\AbstractBusinessModel;
 use App\Tests\Support\Model\BareStandardModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
 use PHPUnit\Framework\TestCase;
@@ -219,7 +220,7 @@ final class StandardDebtPhysicsTraitTest extends TestCase
         $this->assertSame(0.0, $this->model->getWarningEquityThreshold());
 
         $this->assertEqualsWithDelta(1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED, $this->model->getLossGivenDefault(), 1e-12, 'A listed firm\'s notes are senior unsecured.');
-        $this->assertSame(FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER, $this->model->getDebtMaturityRolloverRate());
+        $this->assertSame(AbstractBusinessModel::DEBT_MATURITY_ROLLOVER_RATE, $this->model->getDebtMaturityRolloverRate());
         $this->assertFalse($this->model->getRatingMethodology()->scoresSolvencyOnCapital(), 'Altman Z applies to a normal balance sheet.');
         $this->assertFalse($this->model->supportsUnderleveragedDebtExpansion(), 'An operating company recapitalizes by repurchase, not by borrowing into its treasury.');
         $this->assertTrue($this->model->shouldForceDeleveragingOnJunkOrHoarding());

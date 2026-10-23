@@ -77,11 +77,20 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
     public const DIVIDEND_CRISIS_ICR = 1.05;
     /** Interest coverage below which the firm stops repurchasing stock (1.15x). */
     public const BUYBACK_MIN_ICR = 1.15;
-    /** Capital ratio, in percent of assets, below which the institution is bankrupt (2%). */
+    /**
+     * Tangible capital over assets, in percentage points, below which the institution has failed: 2%, the critically
+     * undercapitalised line at which US prompt corrective action puts a bank into receivership (12 CFR 324.403).
+     */
     public const BANKRUPT_EQUITY_THRESHOLD = 2.0;
-    /** Capital ratio, in percent of assets, below which the institution is in distress (4%). */
+    /**
+     * Tangible capital over assets, in percentage points, below which the institution is in distress: 4%, the leverage
+     * ratio under which prompt corrective action rates a bank undercapitalised.
+     */
     public const DISTRESS_EQUITY_THRESHOLD = 4.0;
-    /** Capital ratio, in percent of assets, below which the institution is in the grey zone (6%). */
+    /**
+     * Tangible capital over assets, in percentage points, below which the institution is on watch: a point above the
+     * 5% well-capitalised leverage ratio.
+     */
     public const WARNING_EQUITY_THRESHOLD = 6.0;
 
     /**

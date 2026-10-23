@@ -16,6 +16,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\ModelParam;
 
 /**
@@ -231,7 +232,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     {
         return FirmEconomics::revenueWeightedRatio(
             $this->resolveTargetStreamWeights($stock),
-            [self::DTC_LEASE_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY],
+            [self::DTC_LEASE_INTENSITY, AbstractBusinessModel::LEASE_LIABILITY_INTENSITY, AbstractBusinessModel::LEASE_LIABILITY_INTENSITY],
         );
     }
 

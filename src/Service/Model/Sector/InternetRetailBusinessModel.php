@@ -16,6 +16,7 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\ModelParam;
 
 /**
@@ -170,7 +171,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     {
         return FirmEconomics::revenueWeightedRatio(
             $this->resolveTargetStreamWeights($stock),
-            [self::FIRST_PARTY_LEASE_INTENSITY, FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY, self::DIGITAL_ADS_LEASE_INTENSITY],
+            [self::FIRST_PARTY_LEASE_INTENSITY, AbstractBusinessModel::LEASE_LIABILITY_INTENSITY, self::DIGITAL_ADS_LEASE_INTENSITY],
         );
     }
 

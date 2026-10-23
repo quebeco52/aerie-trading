@@ -1264,11 +1264,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return $isMegaHoarder ? $excessCash * self::MEGA_BUYBACK_CASH_SHARE : min($excessCash * self::STANDARD_BUYBACK_SHARE, $retainedEarningsThisQuarter * self::MAX_RETAINED_BUYBACK_MULT);
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $fundedDebt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $corporateDebt = (float) $stock->getWholesaleDebt();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        $interestExpense = ($corporateDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($corporateDebt * $floatingRatio * $floatingInterestRate);
+        $interestExpense = FixedIncome::fixedFloatingInterest($corporateDebt, (float) $stock->getFloatingDebtRatio(), $blendedFixedRate, $floatingInterestRate);
         return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $corporateDebt > 0 ? ($interestExpense / $corporateDebt) : $currentMarketFixedRate);
     }
 

@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FixedIncome;
 use App\Service\Model\Trait\StandardBaseModelTrait;
 use App\Service\Model\Trait\StandardCapitalAllocationTrait;
 use App\Service\Model\Trait\StandardDebtPhysicsTrait;
@@ -48,18 +49,18 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     /** Pricing power index, from 0 for a pure price taker to 1 for a price setter: the median firm's 0.5. */
     public const PRICING_POWER_INDEX = 0.5;
     /** Own-price elasticity of demand, the volume lost per unit of real price increase (0.50). */
-    public const PRICE_ELASTICITY_OF_DEMAND = FinancialConstants::DEFAULT_PRICE_ELASTICITY_OF_DEMAND;
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.50;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers, not won from a larger market (0.50). */
-    public const INDUSTRY_SUBSTITUTABILITY = FinancialConstants::DEFAULT_INDUSTRY_SUBSTITUTABILITY;
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
     /** Years for a move in the output gap to reach the order book: none, a business that sells as demand appears. */
-    public const DEMAND_LAG_YEARS = FinancialConstants::DEFAULT_DEMAND_LAG_YEARS;
+    public const DEMAND_LAG_YEARS = 0.0;
 
     // --- FX Exposure ---
     /**
      * Share of revenue whose competitiveness moves with the trade-weighted exchange rate (0.05): a mostly domestic firm
      * meeting a little imported competition.
      */
-    public const FX_REVENUE_EXPOSURE = FinancialConstants::DEFAULT_FX_REVENUE_EXPOSURE;
+    public const FX_REVENUE_EXPOSURE = 0.05;
 
     // --- Inflation Pass-Through ---
     /**
@@ -85,7 +86,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     /** Years for spot input moves to reach the cost base: none, a spot buyer; hedges and contracts lengthen it. */
     public const INPUT_COST_LAG_YEARS = 0.0;
     /** Years for the recoverable part of an input move to reach selling prices (0.75; menu costs, repricing). */
-    public const INPUT_PASS_THROUGH_LAG_YEARS = FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS;
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
     /**
      * Payroll's share of the cost base the wage factor and severance scale; null takes the labor share measured into
      * the declared input basket, or 0.65 where it measures none.
@@ -93,6 +94,8 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
      * @var float|null
      */
     public const FIXED_COST_LABOR_SHARE = null;
+    /** Payroll's share of the cost base for a model that declares neither its own share nor a labour input (0.65). */
+    public const UNMEASURED_LABOR_SHARE = 0.65;
 
     // --- Analyst Coverage ---
     /** Analysts' visibility into a routine quarter before the systemic-importance uplift (20%). */
@@ -117,11 +120,11 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
 
     // --- Balance Sheet & Reporting ---
     /** Capitalised operating lease liability (IFRS 16 / ASC 842) as a share of annual revenue (5%). */
-    public const LEASE_LIABILITY_INTENSITY = FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY;
+    public const LEASE_LIABILITY_INTENSITY = 0.05;
     /** Stock-based compensation as a share of revenue (1.57%, the US total market). */
-    public const STOCK_COMPENSATION_INTENSITY = FinancialConstants::DEFAULT_STOCK_COMPENSATION_INTENSITY;
+    public const STOCK_COMPENSATION_INTENSITY = 0.0157;
     /** Probability management reaches for accruals to land a reachable quarter on consensus (0.50). */
-    public const EARNINGS_MANAGEMENT_PROPENSITY = FinancialConstants::DEFAULT_EARNINGS_MANAGEMENT_PROPENSITY;
+    public const EARNINGS_MANAGEMENT_PROPENSITY = 0.50;
 
     // --- Capital Structure ---
     /** Target leverage as a share of the sector's debt tolerance (0.75). */
@@ -152,7 +155,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     /** Share of construction in progress completed into plant each quarter (33%, a build of about nine months). */
     public const CAPEX_COMPLETION_RATE = 0.33;
     /** Net working capital as a share of revenue for a model that declares no balances of its own (10%). */
-    public const WORKING_CAPITAL_INTENSITY = FinancialConstants::DEFAULT_WORKING_CAPITAL_INTENSITY;
+    public const WORKING_CAPITAL_INTENSITY = 0.10;
 
     // --- Seasonality ---
     /**
@@ -180,7 +183,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
      */
     public const WARNING_EQUITY_THRESHOLD = 0.0;
     /** Share of fixed-rate debt that matures and reprices each quarter (5%, a five-year average tenor). */
-    public const DEBT_MATURITY_ROLLOVER_RATE = FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER;
+    public const DEBT_MATURITY_ROLLOVER_RATE = 0.05;
     /** Years of expected loss the credit-loss allowance covers (one). */
     public const CREDIT_LOSS_HORIZON_YEARS = 1.0;
 
@@ -225,13 +228,10 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
      * Market interest on all of the firm's debt: the fixed share at its blended coupon, the floating share at the
      * floating rate. A firm with no cheap customer deposits pays the market on every dollar it owes.
      */
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $fundedDebt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
     {
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+        $interestExpense = FixedIncome::fixedFloatingInterest($fundedDebt, (float) $stock->getFloatingDebtRatio(), $blendedFixedRate, $floatingInterestRate);
 
-        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
-        $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
-
-        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);
+        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $fundedDebt > 0 ? ($interestExpense / $fundedDebt) : $currentMarketFixedRate);
     }
 }

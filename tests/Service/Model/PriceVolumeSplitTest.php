@@ -7,8 +7,8 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -107,7 +107,7 @@ class PriceVolumeSplitTest extends TestCase
 
     public function testElasticityDefaultsAndFinancialImmunity(): void
     {
-        $this->assertSame(FinancialConstants::DEFAULT_PRICE_ELASTICITY_OF_DEMAND, (new StandardCorporateBusinessModel())->getPriceElasticityOfDemand());
+        $this->assertSame(AbstractBusinessModel::PRICE_ELASTICITY_OF_DEMAND, (new StandardCorporateBusinessModel())->getPriceElasticityOfDemand());
         $this->assertSame(0.0, (new CommercialBankBusinessModel())->getPriceElasticityOfDemand());
     }
 }

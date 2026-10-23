@@ -49,26 +49,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Supplemental deposit beta spread added to attract high-yield savings funding. */
     public const HIGH_YIELD_BETA_SPREAD   = 0.10;
 
-    // --- Liquidity & Cash Target Constants ---
-    /** Fraction of operating base held as cash. */
-    public const TARGET_CASH_OPERATING_MULT = 0.05;
-    /** Fraction of current liabilities held as target cash. */
-    public const TARGET_CASH_LIABILITY_MULT = 0.10;
-    /** Fraction of wholesale debt held as target cash. */
-    public const TARGET_CASH_WHOLESALE_MULT = 0.05;
-    /** Minimum fraction of operating base held as cash. */
-    public const MIN_CASH_OPERATING_MULT = 0.03;
-    /** Minimum fraction of current liabilities held as cash. */
-    public const MIN_CASH_LIABILITY_MULT = 0.05;
-    /** Minimum fraction of wholesale debt held as cash. */
-    public const MIN_CASH_WHOLESALE_MULT = 0.03;
-
-    // --- Hoarding & Deposit Flight ---
-    /** Fraction of total debt held as idle excess cash before flagged as a hoarder. */
-    public const HOARDER_THRESHOLD      = 0.12;
-    /** Higher idle cash fraction that triggers aggressive capital return. */
-    public const MEGA_HOARDER_THRESHOLD = 0.18;
-
     // --- APR & Gross Yield Ceiling ---
     /** Absolute minimum APR gross yield ceiling floor. */
     public const MIN_APR_YIELD_FLOOR      = 0.25;

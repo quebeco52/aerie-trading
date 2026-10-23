@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -527,7 +528,7 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     {
         $stock = (new Stock())->setTicker('EM_NO_OVERRIDE');
 
-        $this->assertSame(FinancialConstants::DEFAULT_EARNINGS_MANAGEMENT_PROPENSITY, $this->model->getEarningsManagementPropensity($stock));
+        $this->assertSame(AbstractBusinessModel::EARNINGS_MANAGEMENT_PROPENSITY, $this->model->getEarningsManagementPropensity($stock));
         $this->assertSame(0.90, (new ConfiguredStandardModel())->getEarningsManagementPropensity($stock), 'A declared propensity must reach the accrual channel.');
 
         $extreme = new class extends BareStandardModel {

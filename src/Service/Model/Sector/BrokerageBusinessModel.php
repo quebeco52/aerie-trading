@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\DTO\InterestExpenseDTO;
-
 use App\DTO\SectorPhysicsResult;
 
 use App\Entity\Stock;
@@ -313,18 +311,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $cashInterest = $excessCash * $cashYield;
 
         return $marginInterest + $sweepInterest + $cashInterest;
-    }
-
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
-    {
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-
-        // Brokerages fund operations and margin lending purely via wholesale debt markets; the floating part resets to
-        // the interbank rate (DebtEngine's floating rate).
-        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
-        $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
-
-        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);
     }
 
     /**

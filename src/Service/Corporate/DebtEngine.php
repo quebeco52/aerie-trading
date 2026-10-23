@@ -262,9 +262,6 @@ class DebtEngine
             );
         }
 
-        $totalEquity = (float) $stock->getTotalEquity();
-        $equityLimit = \App\Data\Company\Sectors::metricsFor($stock->getIndustry() ?: 'General')['equity_limit'];
-
         // An indebted firm's first evaluation records its asset volatility at the capital structure it has then
         // (calibrateAssetVolatility()), as the opening seed does; the distance to default reads it from there on.
         if ($stock->getAssetVolatility() === null) {
@@ -283,15 +280,10 @@ class DebtEngine
         // Floating debt, the revolver included, resets to the interbank rate plus the issuer's own spread.
         $floatingInterestRate = $macroState->floatingReferenceRate() + $dynamicSpread;
 
-        // Customer Deposits & Leverage Physics
-        // The strategies are handed the FUNDED book only — term debt and deposits — because the revolver is
-        // priced here instead. They do not agree on where they read the balance from: the corporate and the
-        // base financial physics charge whatever $debt they are given, while the bank, credit, clearing and
-        // insurance models re-read the entity themselves. A revolver leg pushed down into them would be
-        // charged twice by the first group and not at all by the second.
+        // The strategies are handed the funded book only, term debt and deposits: the revolver is priced here.
         $revolverDrawn = max(0.0, (float) $stock->getRevolverDrawn());
         $fundedDebt = max(0.0, $debt - $revolverDrawn);
-        $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $equityLimit, $totalEquity, $fundedDebt, $macroState);
+        $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $fundedDebt, $macroState);
         $interestExpense = $expenseMetrics->interestExpense;
         $wholesaleRate = $expenseMetrics->wholesaleRate;
 

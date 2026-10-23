@@ -143,11 +143,6 @@ class FinancialConstants
     public const STD_STANDARD_GROWTH_LIMIT = 0.08;
 
     // --- Input Cost Basket ---
-    /**
-     * Default years for the recoverable share of an input move to reach selling prices (Nakamura & Steinsson 2008 price
-     * durations).
-     */
-    public const DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
     /** Stream-state key: lagged relative input cost level of the basket (fraction above baseline). */
     public const STATE_INPUT_COST_LEVEL = 'state:input_cost_level';
     /** Stream-state key: lagged share of the input cost level already recovered in selling prices. */
@@ -170,18 +165,8 @@ class FinancialConstants
     public const STATE_INPUT_COST_RECOVERY_PREFIX = 'state:input_cost_recovery:';
 
     // --- FX Exposure ---
-    /**
-     * Default share of revenue exposed to the exchange rate: a mostly domestic firm meeting a little imported
-     * competition.
-     */
-    public const DEFAULT_FX_REVENUE_EXPOSURE = 0.05;
 
     // --- Demand Transmission Lag ---
-    /**
-     * Default years for a move in the output gap to reach a firm's order book: none, for a business that sells at the
-     * moment demand appears.
-     */
-    public const DEFAULT_DEMAND_LAG_YEARS = 0.0;
 
     // --- Analyst Cost-Base Visibility ---
     /**
@@ -199,18 +184,8 @@ class FinancialConstants
     public const RATE_EASING_SLOPE_SHARE = 0.50;
 
     // --- Own-Price Demand Response ---
-    /**
-     * Default own-price elasticity of demand for a producing firm (volume lost per unit of real price increase);
-     * mid-range of empirical estimates for differentiated goods.
-     */
-    public const DEFAULT_PRICE_ELASTICITY_OF_DEMAND = 0.50;
 
     // --- Industry Share Dynamics ---
-    /**
-     * Default share of a firm's idiosyncratic revenue gain that is taken from same-industry peers rather than won from
-     * a larger market (Berry-style substitution).
-     */
-    public const DEFAULT_INDUSTRY_SUBSTITUTABILITY = 0.50;
 
     // --- Industry Capacity & Cournot Pricing ---
     /**
@@ -225,24 +200,10 @@ class FinancialConstants
     public const MAX_INDUSTRY_PRICE_RESPONSE = 0.30;
 
     // --- Balance Sheet Realism ---
-    /** Default capitalized operating lease liability (IFRS 16 / ASC 842) as a fraction of annual revenue. */
-    public const DEFAULT_LEASE_LIABILITY_INTENSITY = 0.05;
-    /**
-     * Default stock-based compensation (ASC 718) as a fraction of revenue, non-cash expense and real dilution: 1.57%
-     * for the US total market, 5,994 firms (Damodaran, Employee data by industry, January 2026).
-     */
-    public const DEFAULT_STOCK_COMPENSATION_INTENSITY = 0.0157;
 
     // --- Labor Intensity ---
-    /**
-     * Payroll share of the cost base for a model with neither its own FIXED_COST_LABOR_SHARE nor a measured input
-     * basket.
-     */
-    public const DEFAULT_FIXED_COST_LABOR_SHARE = 0.65;
 
     // --- Debt Physics ---
-    /** Fraction of fixed-rate debt that matures and reprices at market each quarter (5-year average tenor). */
-    public const DEFAULT_QUARTERLY_DEBT_ROLLOVER = 0.05;
     /**
      * Target net book D/E as a share of the sector's debt tolerance; at the default tolerance of 1.0 it is 0.75
      * (debt/capital 43%), against 48% book debt/capital, leases included, for 4,822 US non-financials (Damodaran, Debt
@@ -291,14 +252,8 @@ class FinancialConstants
     public const MIN_COMMITTED_COST_SCALE = 0.50;
 
     // --- Earnings Management (Burgstahler & Dichev 1997) ---
-    /**
-     * Default propensity to manage reported earnings toward consensus (0 = never, 1 = closes every gap it can reach).
-     */
-    public const DEFAULT_EARNINGS_MANAGEMENT_PROPENSITY = 0.50;
 
     // --- Working Capital Ledger ---
-    /** Net working capital over revenue for a firm whose model declares no cycle of its own (~36 days). */
-    public const DEFAULT_WORKING_CAPITAL_INTENSITY = 0.10;
     /** Share of a positive working capital cycle carried as receivables; the rest is inventory (Compustat medians). */
     public const WORKING_CAPITAL_RECEIVABLE_SHARE = 0.55;
     /**

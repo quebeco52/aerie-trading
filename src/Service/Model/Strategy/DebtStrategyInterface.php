@@ -17,7 +17,13 @@ use App\Service\Math\MathUtility;
 
 interface DebtStrategyInterface
 {
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt, ?MacroStateDTO $macroState = null): InterestExpenseDTO;
+    /**
+     * A year's interest on the debt the firm funds itself with, and the rate its wholesale notes carry. DebtEngine
+     * hands over $fundedDebt, every liability but the drawn revolver, which it prices itself. An operating firm pays
+     * the market on all of it; a model whose book holds liabilities priced apart (deposits, a margin pool, policy
+     * float) reads its wholesale notes from the entity instead.
+     */
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $fundedDebt, ?MacroStateDTO $macroState = null): InterestExpenseDTO;
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float;
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO;
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float;

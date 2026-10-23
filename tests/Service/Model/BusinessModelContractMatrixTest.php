@@ -141,9 +141,7 @@ class BusinessModelContractMatrixTest extends TestCase
             floatingInterestRate: 0.08,
             currentMarketFixedRate: 0.07,
             policyRate: 0.07,
-            equityLimit: 5.0,
-            totalEquity: 500000000.0,
-            debt: 1000000000.0,
+            fundedDebt: 1000000000.0,
         );
 
         $this->assertTrue(is_finite($debtCalc->interestExpense));

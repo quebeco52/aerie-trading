@@ -10,6 +10,7 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\ResortsCasinosBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -282,7 +283,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
         // the cost base this quarter; room and menu pricing recovers pricingPower x MAX_INPUT_COST_PASS_THROUGH of it
         // with the pass-through lag.
         $wageDeviation = 0.10 * ResortsCasinosBusinessModel::INPUT_COST_EXPOSURES['labor'];
-        $recoveryWeight = 1.0 - exp(-FinancialConstants::QUARTER_YEARS / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
+        $recoveryWeight = 1.0 - exp(-FinancialConstants::QUARTER_YEARS / AbstractBusinessModel::INPUT_PASS_THROUGH_LAG_YEARS);
         $macroBase = $this->createMacroState();
         $macroWage = $this->createMacroState(realWageGap: 0.10);
 

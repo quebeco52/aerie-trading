@@ -11,6 +11,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Model\AbstractBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -82,7 +83,7 @@ class WorkingCapitalByStreamTest extends TestCase
         $withShop = $strategy->getLeaseIntensity(self::firm('WEAV', 'Internet Retail'));
 
         // JDAW: 80% marketplace at the default, 20% ads on data-centre leases.
-        $this->assertEqualsWithDelta(0.80 * FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY + 0.20 * 0.10, $marketplace, 1e-12);
+        $this->assertEqualsWithDelta(0.80 * AbstractBusinessModel::LEASE_LIABILITY_INTENSITY + 0.20 * 0.10, $marketplace, 1e-12);
         $this->assertGreaterThan($marketplace + 0.05, $withShop, 'A 30% first-party shop adds its warehouses.');
     }
 
@@ -92,14 +93,14 @@ class WorkingCapitalByStreamTest extends TestCase
         $lease = Sectors::strategyFor('Apparel Manufacturing')->getLeaseIntensity(self::firm('SHER', 'Apparel Manufacturing'));
 
         // SHER: 30% direct to consumer, 70% wholesale and contract supply.
-        $this->assertEqualsWithDelta(0.30 * 0.30 + 0.70 * FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY, $lease, 1e-12);
+        $this->assertEqualsWithDelta(0.30 * 0.30 + 0.70 * AbstractBusinessModel::LEASE_LIABILITY_INTENSITY, $lease, 1e-12);
     }
 
     /** A brand owner makes goods and ships them to retailers; it does not lease the shelves they sit on. */
     public function testABrandOwnerLeasesAtAManufacturersLevel(): void
     {
         $this->assertSame(
-            FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY,
+            AbstractBusinessModel::LEASE_LIABILITY_INTENSITY,
             Sectors::strategyFor('Household & Personal Products')->getLeaseIntensity(self::firm('LARK', 'Household & Personal Products')),
         );
     }

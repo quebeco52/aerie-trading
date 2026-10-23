@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -66,7 +67,7 @@ class SemiconductorBusinessModelTest extends TestCase
         // with the lag.
         $metalsSpike = $run(['industrial_metals_index_ema' => 120.0]);
         $metalsDeviation = 0.20 * SemiconductorBusinessModel::INPUT_COST_EXPOSURES['metals'];
-        $recoveryWeight = 1.0 - exp(-FinancialConstants::QUARTER_YEARS / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
+        $recoveryWeight = 1.0 - exp(-FinancialConstants::QUARTER_YEARS / AbstractBusinessModel::INPUT_PASS_THROUGH_LAG_YEARS);
         $recovered = SemiconductorBusinessModel::PRICING_POWER_INDEX * SemiconductorBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
         $this->assertEqualsWithDelta(1000.0 * 0.30 * $metalsDeviation * (1.0 - $recovered), $metalsSpike->actualVariableCosts - $baseline->actualVariableCosts, 0.1);
         $this->assertLessThan($baseline->ebit, $metalsSpike->ebit);
