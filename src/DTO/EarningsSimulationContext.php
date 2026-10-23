@@ -317,6 +317,12 @@ class EarningsSimulationContext
     // Market Event
     public float $totalShockPct = 0.0;
     public string $corporateActionDescriptions = "";
+    /**
+     * What came with the report, as the card lists it: a dividend, buyback or bond issue with its figures, else a note.
+     *
+     * @var list<array<string, mixed>>
+     */
+    public array $corporateActions = [];
 
     // Health & Value
     /** Set by reconcileTaxesAndNetIncome, before any later step reads it. */

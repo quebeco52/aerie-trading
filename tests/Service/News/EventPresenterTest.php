@@ -22,11 +22,20 @@ class EventPresenterTest extends TestCase
 
     public function testPresentEarningsBeatWithFullCorporateActions(): void
     {
-        $desc = "Q-Earnings: $2.26 (Beat expectations by $0.01 | +$80.92B EVA).\n• Paid $0.61/share div ($27.64B total, 1.97% yield).\n• Issued $18.31B in bonds for expansion.\n• Bought back 410,288,930 shares.\n• Launched next-gen AI platform.";
-
         $event = new StockEvent();
         $event->setEventType('EARNINGS');
-        $event->setDescription($desc);
+        $event->setDescription('Q-Earnings: $2.26 (Beat expectations by $0.01 | +$80.92B EVA).');
+        $event->setFacts([
+            'eps' => 2.26,
+            'surprise' => 0.01,
+            'economicProfit' => 80.92e9,
+            'actions' => [
+                ['kind' => 'dividend', 'perShare' => 0.61, 'yield' => 0.0197],
+                ['kind' => 'bonds', 'amount' => 18.31e9, 'purpose' => 'expansion'],
+                ['kind' => 'buyback', 'shares' => 410_288_930],
+                ['kind' => 'note', 'text' => 'Launched next-gen AI platform.'],
+            ],
+        ]);
         $event->setChangePercent('2.45');
 
         $presented = $this->presenter->present($event);
@@ -48,7 +57,7 @@ class EventPresenterTest extends TestCase
         $this->assertStringContainsString('1.97% yield', $presented['pills'][0]['text']);
 
         $this->assertSame('bonds', $presented['pills'][1]['kind']);
-        $this->assertStringContainsString('$18.31B bonds', $presented['pills'][1]['text']);
+        $this->assertSame('Issued $18.31B bonds (expansion)', $presented['pills'][1]['text']);
 
         $this->assertSame('buyback', $presented['pills'][2]['kind']);
         $this->assertStringContainsString('410.29M shares', $presented['pills'][2]['text']);
@@ -59,11 +68,10 @@ class EventPresenterTest extends TestCase
 
     public function testPresentEarningsMiss(): void
     {
-        $desc = "Q-Earnings: -$0.45 (Missed expectations by $0.10 | -$15.00M EVA).";
-
         $event = new StockEvent();
         $event->setEventType('EARNINGS');
-        $event->setDescription($desc);
+        $event->setDescription('Q-Earnings: -$0.45 (Missed expectations by $0.10 | -$15.00M EVA).');
+        $event->setFacts(['eps' => -0.45, 'surprise' => -0.10, 'economicProfit' => -15.0e6, 'actions' => []]);
         $event->setChangePercent('-3.20');
 
         $presented = $this->presenter->present($event);
@@ -79,15 +87,13 @@ class EventPresenterTest extends TestCase
         $this->assertEmpty($presented['pills']);
     }
 
-    /**
-     * When special items separate adjusted from reported earnings, the filing prints both. The beat or miss is on the
-     * adjusted figure, and the card still has to read it rather than fall back to a plain "Quarterly Earnings Report".
-     */
+    /** When special items separate adjusted from reported earnings, the beat or miss is on the adjusted figure. */
     public function testPresentEarningsWithAdjustedAndReportedFiguresKeepsTheBeat(): void
     {
         $event = new StockEvent();
         $event->setEventType('EARNINGS');
-        $event->setDescription("Q-Earnings: $0.71 adjusted, -$1.20 reported (Beat expectations by $0.05 | +$1.20B EVA).");
+        $event->setDescription('Q-Earnings: $0.71 adjusted, -$1.20 reported (Beat expectations by $0.05 | +$1.20B EVA).');
+        $event->setFacts(['eps' => 0.71, 'reportedEps' => -1.20, 'surprise' => 0.05, 'economicProfit' => 1.2e9, 'actions' => []]);
 
         $presented = $this->presenter->present($event);
 
@@ -95,16 +101,15 @@ class EventPresenterTest extends TestCase
         $this->assertSame('$0.71', $presented['eps']);
         $this->assertSame('$0.05', $presented['surpriseAmount']);
         $this->assertSame('+$1.20B EVA', $presented['eva']);
-        $this->assertEmpty($presented['pills'], 'The parsed line is not repeated as a pill.');
+        $this->assertEmpty($presented['pills']);
     }
 
     public function testPresentEarningsMet(): void
     {
-        $desc = "Q-Earnings: $1.50 (Met expectations exactly | +$5.00M EVA).";
-
         $event = new StockEvent();
         $event->setEventType('EARNINGS');
-        $event->setDescription($desc);
+        $event->setDescription('Q-Earnings: $1.50 (Met expectations exactly | +$5.00M EVA).');
+        $event->setFacts(['eps' => 1.50, 'surprise' => 0.0, 'economicProfit' => 5.0e6, 'actions' => []]);
 
         $presented = $this->presenter->present($event);
 
@@ -119,10 +124,10 @@ class EventPresenterTest extends TestCase
 
     public function testPresentEarningsWithSubCentDeltaNormalizesToInLine(): void
     {
-        $descMiss = "Q-Earnings: $2.08 (Missed expectations by $0.00 | +$74.14B EVA).";
         $eventMiss = new StockEvent();
         $eventMiss->setEventType('EARNINGS');
-        $eventMiss->setDescription($descMiss);
+        $eventMiss->setDescription('x');
+        $eventMiss->setFacts(['eps' => 2.08, 'surprise' => -0.0, 'economicProfit' => 74.14e9, 'actions' => []]);
         $presentedMiss = $this->presenter->present($eventMiss);
 
         $this->assertSame('EARNINGS IN-LINE', $presentedMiss['badge']);
@@ -130,10 +135,10 @@ class EventPresenterTest extends TestCase
         $this->assertNull($presentedMiss['surpriseAmount']);
         $this->assertSame('In-Line', $presentedMiss['surpriseText']);
 
-        $descBeat = "Q-Earnings: $1.69 (Beat expectations by $0.00 | +$68.37B EVA).";
         $eventBeat = new StockEvent();
         $eventBeat->setEventType('EARNINGS');
-        $eventBeat->setDescription($descBeat);
+        $eventBeat->setDescription('x');
+        $eventBeat->setFacts(['eps' => 1.69, 'surprise' => 0.004, 'economicProfit' => 68.37e9, 'actions' => []]);
         $presentedBeat = $this->presenter->present($eventBeat);
 
         $this->assertSame('EARNINGS IN-LINE', $presentedBeat['badge']);
@@ -191,11 +196,27 @@ class EventPresenterTest extends TestCase
     /** A quarter's results read as a sentence, so the headline strip and the district map can print them. */
     public function testEarningsReadAsASentence(): void
     {
-        $headline = fn(string $desc): string => $this->presenter->present(['type' => 'EARNINGS', 'description' => $desc])['headline'];
+        $headline = fn(float $eps, float $surprise): string => $this->presenter->present([
+            'type' => 'EARNINGS',
+            'description' => 'x',
+            'facts' => ['eps' => $eps, 'surprise' => $surprise, 'economicProfit' => 1.0e9, 'actions' => []],
+        ])['headline'];
 
-        $this->assertSame('Quarterly earnings of $1.42 a share beat forecasts by $0.11.', $headline('Q-Earnings: $1.42 (Beat expectations by $0.11 | +$1.20B EVA).'));
-        $this->assertSame('Quarterly loss of $0.45 a share missed forecasts by $0.10.', $headline('Q-Earnings: -$0.45 (Missed expectations by $0.10 | -$15.00M EVA).'));
-        $this->assertSame('Quarterly earnings of $1.00 a share were in line with forecasts.', $headline('Q-Earnings: $1.00 (Met expectations exactly | +$5.00M EVA).'));
+        $this->assertSame('Quarterly earnings of $1.42 a share beat forecasts by $0.11.', $headline(1.42, 0.11));
+        $this->assertSame('Quarterly loss of $0.45 a share missed forecasts by $0.10.', $headline(-0.45, -0.10));
+        $this->assertSame('Quarterly earnings of $1.00 a share were in line with forecasts.', $headline(1.00, 0.0));
+    }
+
+    /** A report stored before stories carried their facts shows no figures and claims no beat or miss. */
+    public function testAReportWithoutFactsClaimsNothing(): void
+    {
+        $presented = $this->presenter->present(['type' => 'EARNINGS', 'description' => 'Q-Earnings: $1.42 (Beat expectations by $0.11 | +$1.20B EVA).']);
+
+        $this->assertSame(['EARNINGS', 'neutral'], [$presented['badge'], $presented['tone']]);
+        $this->assertNull($presented['eps']);
+        $this->assertNull($presented['surpriseType']);
+        $this->assertNull($presented['eva']);
+        $this->assertSame([], $presented['pills']);
     }
 
     /** A price shock with no description of its own says what the shares did. */
@@ -224,6 +245,7 @@ class EventPresenterTest extends TestCase
         $upgrade = [
             'type' => 'CREDIT_UPGRADE',
             'description' => 'Credit rating upgraded from BBB to A',
+            'facts' => ['from' => 'BBB', 'to' => 'A'],
         ];
         $presentedUp = $this->presenter->present($upgrade);
         $this->assertSame('RATING UPGRADE', $presentedUp['badge']);
@@ -232,6 +254,7 @@ class EventPresenterTest extends TestCase
         $downgrade = [
             'type' => 'CREDIT_DOWNGRADE',
             'description' => 'Credit rating downgraded from A to BBB',
+            'facts' => ['from' => 'A', 'to' => 'BBB'],
         ];
         $presentedDown = $this->presenter->present($downgrade);
         $this->assertSame('RATING DOWNGRADE', $presentedDown['badge']);
@@ -259,6 +282,7 @@ class EventPresenterTest extends TestCase
         $dismissal = $this->presenter->present([
             'type' => 'MANAGEMENT CHANGE',
             'description' => 'Falcon Holdings chief executive was removed by the board after 5.2 years. The incoming management is expected to hold a high internal hurdle and return what it cannot beat.',
+            'facts' => ['forced' => true],
             'change_percent' => 0.0,
         ]);
 
@@ -270,11 +294,22 @@ class EventPresenterTest extends TestCase
         $orderly = $this->presenter->present([
             'type' => 'MANAGEMENT CHANGE',
             'description' => 'Lakeside Mutual chief executive stepped down after 13.4 years. An internal promotion inherits the mandate unchanged.',
+            'facts' => ['forced' => false],
             'change_percent' => 0.0,
         ]);
 
         $this->assertSame('MANAGEMENT CHANGE', $orderly['badge']);
         $this->assertSame('badge', $orderly['icon']);
         $this->assertFalse($orderly['isEarnings']);
+    }
+
+    /** A street roster change reads as a promotion or an eviction from its facts. */
+    public function testAStreetRosterChangeReadsFromItsFacts(): void
+    {
+        $promoted = $this->presenter->present(['type' => 'DISTRICT', 'description' => 'Promoted to Glasswater Row.', 'facts' => ['promoted' => true]]);
+        $evicted = $this->presenter->present(['type' => 'DISTRICT', 'description' => 'Lost its frontage on Glasswater Row.', 'facts' => ['promoted' => false]]);
+
+        $this->assertSame(['STREET PROMOTION', 'accent'], [$promoted['badge'], $promoted['tone']]);
+        $this->assertSame(['STREET EVICTION', 'warn'], [$evicted['badge'], $evicted['tone']]);
     }
 }

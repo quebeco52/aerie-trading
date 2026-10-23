@@ -17,6 +17,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
 use App\Service\News\NarrativeEngine;
+use App\Twig\Extension\UiExtension;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -85,12 +86,13 @@ class EarningsEngineReportTest extends TestCase
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealth);
 
         $this->marketEventMock = $this->createStub(MarketEventPublisher::class);
-        $this->marketEventMock->method('publish')->willReturnCallback(function ($stock, $type, $desc, $pct) {
+        $this->marketEventMock->method('publish')->willReturnCallback(function ($stock, $type, $desc, $pct, $facts = []) {
             return [
                 'type' => $type,
                 'ticker' => $stock->getTicker(),
                 'description' => $desc,
                 'magnitude' => $pct,
+                'facts' => $facts,
             ];
         });
 
@@ -189,6 +191,15 @@ class EarningsEngineReportTest extends TestCase
 
         // EPS should have increased
         $this->assertGreaterThan(10.00, (float) $stock->getEarningsPerShare());
+
+        // The card is built from the facts, which are the figures the wire line printed.
+        $facts = $result[0]['facts'];
+        $this->assertSame(round($facts['eps'], 2), $facts['eps']);
+        $this->assertStringStartsWith('Q-Earnings: ' . UiExtension::money($facts['eps']), $result[0]['description']);
+        $this->assertSame(round($facts['surprise'], 2), $facts['surprise']);
+        $this->assertIsFloat($facts['economicProfit']);
+        $this->assertIsList($facts['actions']);
+        $this->assertArrayNotHasKey('reportedEps', $facts, 'With no special items the reported figure is the adjusted one.');
     }
 
     /**

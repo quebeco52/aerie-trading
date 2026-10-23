@@ -894,7 +894,7 @@ class MergerAndAcquisitionEngine
         $marketCap = max(1.0, $ctx->price * $ctx->shares);
         $ctx->eventShock = max(-100.0, ($ctx->synergyValueCreation / $marketCap) * 100.0);
 
-        $event = $this->marketEvent->publish($ctx->acquirer, $ctx->config['type'], $desc, $ctx->eventShock, $ctx->purchasePrice / $marketCap);
+        $event = $this->marketEvent->publish($ctx->acquirer, $ctx->config['type'], $desc, $ctx->eventShock, dealShareOfValue: $ctx->purchasePrice / $marketCap);
 
         return [
             'event' => $event,
@@ -1258,7 +1258,7 @@ class MergerAndAcquisitionEngine
         $marketCap = max(1.0, $ctx->price * $ctx->shares);
         $ctx->eventShock = max(-100.0, (($ctx->salePrice - $ctx->taxOnSale - $ctx->soldValue) / $marketCap) * 100.0);
 
-        $event = $this->marketEvent->publish($ctx->seller, 'DIVESTITURE', $desc, $ctx->eventShock, $ctx->salePrice / $marketCap);
+        $event = $this->marketEvent->publish($ctx->seller, 'DIVESTITURE', $desc, $ctx->eventShock, dealShareOfValue: $ctx->salePrice / $marketCap);
 
         return ['event' => $event, 'shock' => $ctx->eventShock / 100.0];
     }

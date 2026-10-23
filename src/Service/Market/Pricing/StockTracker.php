@@ -813,6 +813,7 @@ class StockTracker
             'ANALYST',
             "Sell-side {$direction} its price target on {$stock->getTicker()} to \${$to} from \${$from}.",
             0.0,
+            ['from' => $standing, 'to' => $fresh],
         );
     }
 

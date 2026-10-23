@@ -386,7 +386,11 @@ class TreasuryEngine
 
                     if (self::isNewsworthy($ctx->stock, $newDebtIssued)) {
                         $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
-                        $ctx->events[] = ['description' => "Issued \${$amtB}B in bonds for " . ($isUnderLeveragedForDebt ? "recapitalization" : "expansion") . "."];
+                        $purpose = $isUnderLeveragedForDebt ? 'recapitalization' : 'expansion';
+                        $ctx->events[] = [
+                            'description' => "Issued \${$amtB}B in bonds for {$purpose}.",
+                            'fact' => ['kind' => 'bonds', 'amount' => $newDebtIssued, 'purpose' => $purpose],
+                        ];
                     }
                 }
             }

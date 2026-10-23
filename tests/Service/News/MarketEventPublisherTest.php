@@ -47,15 +47,17 @@ class MarketEventPublisherTest extends TestCase
                     && $entity->getStock() === $stock
                     && $entity->getEventType() === 'EARNINGS'
                     && $entity->getDescription() === 'Quarterly earnings beat expectations.'
+                    && $entity->getFacts() === ['eps' => 1.42, 'surprise' => 0.11]
                     && $entity->getChangePercent() === '5.25';
             }));
 
-        $result = $this->publisher->publish($stock, 'EARNINGS', 'Quarterly earnings beat expectations.', 5.25);
+        $result = $this->publisher->publish($stock, 'EARNINGS', 'Quarterly earnings beat expectations.', 5.25, ['eps' => 1.42, 'surprise' => 0.11]);
 
         $this->assertSame('EARNINGS', $result['type']);
         $this->assertSame('APEX', $result['ticker']);
         $this->assertSame('Quarterly earnings beat expectations.', $result['description']);
         $this->assertSame(5.25, $result['change_percent']);
+        $this->assertSame('$1.42', $result['presented']['eps'], 'The live card is built from the same facts the row keeps.');
     }
 
     public function testPublishEtfEventPersists(): void
@@ -206,8 +208,8 @@ class MarketEventPublisherTest extends TestCase
         });
         $stock = (new Stock())->setTicker('WEAV')->setVolatility('0.20');
 
-        $large = $this->publisher->publish($stock, 'STRATEGIC ACQUISITION', 'Weave Holdings executed a $12.0B STRATEGIC ACQUISITION of Target Co.', 0.4, 0.15);
-        $small = $this->publisher->publish($stock, 'STRATEGIC ACQUISITION', 'Weave Holdings executed a $1.0B STRATEGIC ACQUISITION of Target Co.', 0.1, 0.02);
+        $large = $this->publisher->publish($stock, 'STRATEGIC ACQUISITION', 'Weave Holdings executed a $12.0B STRATEGIC ACQUISITION of Target Co.', 0.4, dealShareOfValue: 0.15);
+        $small = $this->publisher->publish($stock, 'STRATEGIC ACQUISITION', 'Weave Holdings executed a $1.0B STRATEGIC ACQUISITION of Target Co.', 0.1, dealShareOfValue: 0.02);
         $district = $this->publisher->publishDistrict(DistrictNews::DESK_ECONOMY, 'recession_declared', 'A recession has been declared.', null);
 
         $this->assertSame([true, false, true], [$large['headline'], $small['headline'], $district['headline']]);

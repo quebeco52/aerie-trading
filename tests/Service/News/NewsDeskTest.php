@@ -122,7 +122,7 @@ class NewsDeskTest extends TestCase
         $cards = NewsDesk::headlineCards();
 
         foreach (NewsCard::cases() as $card) {
-            $story = (new EventPresenter())->present(['type' => NewsCard::typesOf([$card])[0] ?? 'SOMETHING NEW', 'description' => 'from BBB to BB', 'change_percent' => 50.0]);
+            $story = (new EventPresenter())->present(['type' => NewsCard::typesOf([$card])[0] ?? 'SOMETHING NEW', 'description' => 'x', 'facts' => ['from' => 'BBB', 'to' => 'BB'], 'change_percent' => 50.0]);
             $this->assertSame(in_array($card, $cards, true), NewsDesk::isHeadline($story, 0.01, 1.0), $card->name);
         }
     }
@@ -138,8 +138,8 @@ class NewsDeskTest extends TestCase
     {
         return (new EventPresenter())->present([
             'type' => 'CREDIT_DOWNGRADE',
-            'description' => "[CREDIT DOWNGRADE] LAKE: Credit rating downgraded from {$from} to {$to} due to deteriorating credit profile.",
-            'change_percent' => -3.0,
+            'description' => "Credit rating downgraded from {$from} to {$to} due to deteriorating credit profile.",
+            'facts' => ['from' => $from, 'to' => $to],
         ]);
     }
 }

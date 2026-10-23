@@ -812,12 +812,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         }
         foreach ($reconstitution['promoted'] as $ticker) {
             if (isset($stocksByTicker[$ticker])) {
-                $events[] = $this->marketEvent->publish($stocksByTicker[$ticker], 'DISTRICT', 'Promoted to Glasswater Row at the quarterly reconstitution.', 0.0);
+                $events[] = $this->marketEvent->publish($stocksByTicker[$ticker], 'DISTRICT', 'Promoted to Glasswater Row at the quarterly reconstitution.', 0.0, ['promoted' => true]);
             }
         }
         foreach ($reconstitution['evicted'] as $ticker) {
             if (isset($stocksByTicker[$ticker])) {
-                $events[] = $this->marketEvent->publish($stocksByTicker[$ticker], 'DISTRICT', 'Lost its frontage on Glasswater Row at the quarterly reconstitution.', 0.0);
+                $events[] = $this->marketEvent->publish($stocksByTicker[$ticker], 'DISTRICT', 'Lost its frontage on Glasswater Row at the quarterly reconstitution.', 0.0, ['promoted' => false]);
             }
         }
         if ($reconstitution['promoted'] !== [] || $reconstitution['evicted'] !== []) {

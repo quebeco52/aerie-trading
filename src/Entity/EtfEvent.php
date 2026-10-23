@@ -42,6 +42,15 @@ class EtfEvent
     #[ORM\Column(nullable: true)]
     private ?bool $headline = null;
 
+    /**
+     * What the story reports, as data rather than prose: an earnings report's figures and actions, a rating's old and
+     * new grade (EventPresenter reads it); null for rows from before it was recorded.
+     *
+     * @var array<string, mixed>|null
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $facts = null;
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -132,6 +141,20 @@ class EtfEvent
     public function setHeadline(?bool $headline): static
     {
         $this->headline = $headline;
+
+        return $this;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function getFacts(): ?array
+    {
+        return $this->facts;
+    }
+
+    /** @param array<string, mixed> $facts */
+    public function setFacts(array $facts): static
+    {
+        $this->facts = $facts;
 
         return $this;
     }

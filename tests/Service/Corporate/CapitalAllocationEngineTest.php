@@ -355,7 +355,13 @@ class CapitalAllocationEngineTest extends TestCase
 
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
 
-        $engine->allocateCapital($stock, 4.00, 2.00, 100.00, 1000000.0, $macroState);
+        $result = $engine->allocateCapital($stock, 4.00, 2.00, 100.00, 1000000.0, $macroState);
+
+        // The news card lists the dividend from its rate and yield, the annualised rate on the price as a fraction.
+        $dividend = array_values(array_filter($result['events'], static fn(array $event): bool => ($event['fact']['kind'] ?? null) === 'dividend'));
+        $this->assertCount(1, $dividend);
+        $this->assertEqualsWithDelta($result['dividend_paid'], $dividend[0]['fact']['perShare'], 1e-9);
+        $this->assertEqualsWithDelta(4.0 * $result['dividend_paid'] / 100.00, $dividend[0]['fact']['yield'], 1e-9);
     }
 
     public function testLifeCycleDividendExpansionUnderSaturation(): void
@@ -1502,5 +1508,8 @@ class CapitalAllocationEngineTest extends TestCase
         // through the same impact channel as any other buyer, at the 10b-18 pace, on the ticker.
         $this->assertSame(0.0, $buybackEvent['shock']);
         $this->assertEqualsWithDelta($sharesRepurchased, $stock->getCorporateFlowBacklog(), 1e-6);
+        // The news card lists the repurchase from its count, not from the sentence.
+        $this->assertSame('buyback', $buybackEvent['fact']['kind']);
+        $this->assertEqualsWithDelta($sharesRepurchased, $buybackEvent['fact']['shares'], 1e-6);
     }
 }

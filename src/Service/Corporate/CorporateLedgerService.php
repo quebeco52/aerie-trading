@@ -219,9 +219,8 @@ class CorporateLedgerService
 
             PriceAlertService::restateForSplit($conn, $stock->getTicker(), $factor, $isReverse);
 
-            // Restate historical event descriptions so per-share metrics (EPS, dividends, prices) reflect post-split
-            // scale.
-            $this->restateEventDescriptions($conn, $stock, $isReverse ? $splitFactor : 1.0 / $splitFactor);
+            // Restate past earnings stories so their per-share figures read on the post-split basis.
+            $this->restateEarningsFacts($conn, $stock, $isReverse ? $splitFactor : 1.0 / $splitFactor);
 
             $conn->commit();
         } catch (\Exception $e) {
@@ -366,71 +365,59 @@ class CorporateLedgerService
     }
 
     /**
-     * Rewrites the per-share figures in this stock's event feed onto the post-split basis.
+     * Rewrites the per-share figures of this stock's earnings stories onto the post-split basis.
      *
-     * The feed is text, so the restatement is done by pattern against exactly the phrasings the engines
-     * write and EventPresenter parses: the EPS that opens "Q-Earnings: $11.75", the "Beat/Missed
-     * expectations by $0.30" surprise, the "Paid $0.61/share div" rate, and the "Bought back N shares"
-     * count, which moves the opposite way to price. Formatting is kept as written (two decimals, thousands
-     * separators) so the presenter's regexes still match. Dollar totals (EVA, bond issues, total paid)
-     * are unchanged by a split and are not touched; rows that carry none of these are not rewritten.
+     * A story's card is built from its facts (EventPresenter). The description is the line the wire ran at the time and
+     * is left as written.
      *
      * @param float $priceRatio Factor a per-share dollar figure is multiplied by: 1/factor for a forward
      *                          split, factor for a reverse split. Share counts divide by it.
      */
-    private function restateEventDescriptions(\Doctrine\DBAL\Connection $conn, Stock $stock, float $priceRatio): void
+    private function restateEarningsFacts(\Doctrine\DBAL\Connection $conn, Stock $stock, float $priceRatio): void
     {
         $rows = $conn->fetchAllAssociative(
-            "SELECT id, description FROM stock_events
-             WHERE stock_id = :stock_id
-               AND (description LIKE 'Q-Earnings:%' OR description LIKE '%/share div%' OR description LIKE '%Bought back%')",
+            "SELECT id, facts FROM stock_events WHERE stock_id = :stock_id AND event_type = 'EARNINGS' AND facts IS NOT NULL",
             ['stock_id' => $stock->getId()],
         );
 
-        $money = static fn(string $amount): string => number_format(((float) str_replace(',', '', $amount)) * $priceRatio, 2);
-
         foreach ($rows as $row) {
-            $original = (string) $row['description'];
-            $restated = $original;
-
-            // "Q-Earnings: $11.75" / "Q-Earnings: -$3.56": the sign sits outside the dollar sign.
-            $restated = preg_replace_callback(
-                '/^(Q-Earnings:\s*-?\$)([\d,]+\.\d{2})/',
-                static fn(array $m): string => $m[1] . $money($m[2]),
-                $restated,
-            ) ?? $restated;
-
-            // "$11.75 adjusted, -$3.56 reported": the reported figure is per share too.
-            $restated = preg_replace_callback(
-                '/(adjusted,\s*-?\$)([\d,]+\.\d{2})(\s*reported)/',
-                static fn(array $m): string => $m[1] . $money($m[2]) . $m[3],
-                $restated,
-            ) ?? $restated;
-
-            $restated = preg_replace_callback(
-                '/((?:Beat|Missed) expectations by\s*\$)([\d,]+\.\d{2})/',
-                static fn(array $m): string => $m[1] . $money($m[2]),
-                $restated,
-            ) ?? $restated;
-
-            $restated = preg_replace_callback(
-                '/(Paid\s+\$)([\d,]+\.\d{2})(\/share\s+div)/',
-                static fn(array $m): string => $m[1] . $money($m[2]) . $m[3],
-                $restated,
-            ) ?? $restated;
-
-            $restated = preg_replace_callback(
-                '/(Bought\s+back\s+)([\d,]+)(\s+shares)/',
-                static fn(array $m): string => $m[1] . number_format(round(((float) str_replace(',', '', $m[2])) / $priceRatio)) . $m[3],
-                $restated,
-            ) ?? $restated;
-
-            if ($restated !== $original) {
-                $conn->executeStatement(
-                    'UPDATE stock_events SET description = :description WHERE id = :id',
-                    ['description' => $restated, 'id' => $row['id']],
-                );
+            $facts = json_decode((string) $row['facts'], true);
+            if (!is_array($facts)) {
+                continue;
             }
+
+            $conn->executeStatement(
+                'UPDATE stock_events SET facts = :facts WHERE id = :id',
+                ['facts' => json_encode(self::restatedEarningsFacts($facts, $priceRatio), JSON_THROW_ON_ERROR), 'id' => $row['id']],
+            );
         }
     }
+
+    /**
+     * An earnings story's facts on the post-split basis: earnings a share, the reported figure beside it, the surprise
+     * and a dividend's rate move with price, at the cent the report gave them; a buyback's share count moves the
+     * opposite way. Dollar totals (economic profit, a bond issue) are not per share and are unchanged.
+     *
+     * @param  array<mixed> $facts
+     * @return array<mixed>
+     */
+    public static function restatedEarningsFacts(array $facts, float $priceRatio): array
+    {
+        foreach (['eps', 'reportedEps', 'surprise'] as $perShare) {
+            if (isset($facts[$perShare])) {
+                $facts[$perShare] = round((float) $facts[$perShare] * $priceRatio, 2);
+            }
+        }
+
+        foreach (is_array($facts['actions'] ?? null) ? $facts['actions'] : [] as $i => $action) {
+            $facts['actions'][$i] = match ($action['kind'] ?? null) {
+                'dividend' => ['perShare' => (float) $action['perShare'] * $priceRatio] + $action,
+                'buyback' => ['shares' => round((float) $action['shares'] / $priceRatio)] + $action,
+                default => $action,
+            };
+        }
+
+        return $facts;
+    }
+
 }

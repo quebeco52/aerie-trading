@@ -131,11 +131,13 @@ final class AnalystPriceTargetTest extends TestCase
     public function testARevisionIsNewsWithoutBeingAShock(): void
     {
         $captured = null;
+        $facts = null;
 
         $publisher = $this->createStub(\App\Service\News\MarketEventPublisher::class);
         $publisher->method('publish')->willReturnCallback(
-            function (mixed $asset, string $type, string $description, float $changePercent) use (&$captured): array {
+            function (mixed $asset, string $type, string $description, float $changePercent, array $published) use (&$captured, &$facts): array {
                 $captured = $changePercent;
+                $facts = $published;
 
                 return [];
             },
@@ -144,9 +146,12 @@ final class AnalystPriceTargetTest extends TestCase
 
         $stock = $this->stock();
         $this->revise($stock, 100.0);
+        $struck = (float) $stock->getAnalystPriceTarget();
         $this->revise($stock, 200.0);
 
         self::assertSame(0.0, $captured);
+        // The card reads the direction from the old and new target, not from the sentence.
+        self::assertSame(['from' => $struck, 'to' => (float) $stock->getAnalystPriceTarget()], $facts);
     }
 
     /** A four-for-one is not a seventy-five percent downgrade. */

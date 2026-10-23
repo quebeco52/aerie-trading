@@ -2713,10 +2713,12 @@ class EarningsEngine
         );
         $ctx->totalShockPct = $ctx->priceGapPct;
         $ctx->corporateActionDescriptions = "";
+        $ctx->corporateActions = [];
 
         $customEventLore = $ctx->eventType !== null ? $this->narrativeEngine->generateLore($ctx->eventType, $ctx->eventContext) : null;
         if ($customEventLore) {
             $ctx->corporateActionDescriptions .= "\n• " . $customEventLore;
+            $ctx->corporateActions[] = ['kind' => 'note', 'text' => $customEventLore];
         }
 
         if ($ctx->goodwillImpairment > 0.0) {
@@ -2725,6 +2727,7 @@ class EarningsEngine
             ]);
             if ($impairmentLore) {
                 $ctx->corporateActionDescriptions .= "\n• " . $impairmentLore;
+                $ctx->corporateActions[] = ['kind' => 'note', 'text' => $impairmentLore];
             }
         }
 
@@ -2736,6 +2739,7 @@ class EarningsEngine
                     $desc = $subEvent['description'] ?? '';
                 }
                 $ctx->corporateActionDescriptions .= "\n• " . $desc;
+                $ctx->corporateActions[] = $subEvent['fact'] ?? ['kind' => 'note', 'text' => $desc];
                 // Only an announcement with a measured return carries one; distress is already in fair value.
                 $ctx->totalShockPct += (($subEvent['shock'] ?? 0.0) / 100.0);
             }
@@ -2786,7 +2790,19 @@ class EarningsEngine
 
         $description .= $ctx->corporateActionDescriptions;
 
-        $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $ctx->totalShockPct * 100);
+        // The card is built from these: the beat or miss is on adjusted earnings, and a reported figure that special
+        // items set apart follows it.
+        $facts = [
+            'eps' => round($ctx->streetQuarterlyEps, 2),
+            'surprise' => round($ctx->surpriseAmountQuarterly, 2),
+            'economicProfit' => $ctx->quarterlyEconomicProfit,
+            'actions' => $ctx->corporateActions,
+        ];
+        if (round($ctx->streetQuarterlyEps, 2) !== round($ctx->actualQuarterlyEps, 2)) {
+            $facts['reportedEps'] = round($ctx->actualQuarterlyEps, 2);
+        }
+
+        $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $ctx->totalShockPct * 100, $facts);
 
         // The cash that left the price. The tracker measures the tick's return across the ex-dividend
         // drop, and a holder who was paid the dividend did not lose it.

@@ -148,11 +148,18 @@ final class ManagementSuccessionEngineTest extends TestCase
         // corrects, and the first of the corrective styles is drawn.
         $stock = $this->firm(ManagementStyle::EmpireBuilder, 6.0);
         $engine = $this->engine($this->drawing([0.0, 0.10, 0.10, 0.0]));
+        $facts = null;
+        $this->publisher->method('publish')->willReturnCallback(static function (mixed $asset, string $type, string $description, float $change, array $published) use (&$facts): array {
+            $facts = $published;
+
+            return [];
+        });
 
         $result = $engine->evaluateSuccession($stock, 0.25, -0.10);
 
         $this->assertIsArray($result);
         $this->assertTrue($result['was_forced'], 'Value destruction past the grace period is a dismissal.');
+        $this->assertSame(['forced' => true], $facts, 'The card reads the dismissal from the facts, not the sentence.');
         $this->assertSame('empire_builder', $result['outgoing']);
         $this->assertSame(ManagementStyle::Steward, $stock->getManagementStyle());
         $this->assertEqualsWithDelta(0.0, $stock->getCeoTenureYears(), 1e-12, 'The clock restarts for the incoming manager.');

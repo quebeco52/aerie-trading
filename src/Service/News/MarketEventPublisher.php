@@ -44,12 +44,14 @@ class MarketEventPublisher
      * The wire copy carries the presented card, so the live feed renders exactly what a page load renders
      * rather than re-deriving it from the type string in the browser.
      *
-     * A null change publishes the event without a number, for news whose price effect is not known. A deal passes its
-     * price over the company's market value before it, which decides whether it runs as a headline.
+     * A null change publishes the event without a number, for news whose price effect is not known. The facts are what
+     * the card is built from (EventPresenter); the description is the line the log and the notification carry. A deal
+     * passes its price over the company's market value before it, which decides whether it runs as a headline.
      *
+     * @param array<string, mixed> $facts
      * @return array{type: string, ticker: string|null, description: string, change_percent: float|null, sim_time: float|null, presented: array<string, mixed>, scope: string, section: string, headline: bool}
      */
-    public function publish(Stock|Etf $asset, string $type, string $description, ?float $changePercent, ?float $dealShareOfValue = null): array
+    public function publish(Stock|Etf $asset, string $type, string $description, ?float $changePercent, array $facts = [], ?float $dealShareOfValue = null): array
     {
         // Create the Doctrine Entity
         if ($asset instanceof Stock) {
@@ -61,6 +63,7 @@ class MarketEventPublisher
         }
         $event->setEventType($type);
         $event->setDescription($description);
+        $event->setFacts($facts);
         $event->setChangePercent($changePercent === null ? null : (string) round($changePercent, 2));
         $event->setSimTime($this->simTime);
 
@@ -81,6 +84,7 @@ class MarketEventPublisher
             $changePercent,
             $asset instanceof Stock ? NewsDesk::SCOPE_COMPANY : NewsDesk::SCOPE_FUND,
             $asset instanceof Stock ? (float) $asset->getVolatility() : null,
+            $facts,
             $dealShareOfValue,
         );
         $event->setHeadline($wire['headline']);
@@ -115,7 +119,7 @@ class MarketEventPublisher
             ->setSimTime($this->simTime);
         $this->logger->info("[{$desk}] {$description}");
 
-        $wire = $this->wire($desk, null, $topic, $description, $changePercent, NewsDesk::SCOPE_DISTRICT, null);
+        $wire = $this->wire($desk, null, $topic, $description, $changePercent, NewsDesk::SCOPE_DISTRICT, null, []);
         $news->setHeadline($wire['headline']);
         $this->entityManager->persist($news);
 
@@ -126,15 +130,17 @@ class MarketEventPublisher
      * Presents the event for the wire, and files it with the news desk. The wire copy
      * carries its section and headline verdict, so the newswire and the headline strip agree with a page load.
      *
+     * @param array<string, mixed> $facts
      * @return array{type: string, ticker: string|null, description: string, change_percent: float|null, sim_time: float|null, presented: array<string, mixed>, scope: string, section: string, headline: bool}
      */
-    private function wire(string $type, ?string $ticker, ?string $topic, string $description, ?float $changePercent, string $scope, ?float $annualVolatility, ?float $dealShareOfValue = null): array
+    private function wire(string $type, ?string $ticker, ?string $topic, string $description, ?float $changePercent, string $scope, ?float $annualVolatility, array $facts, ?float $dealShareOfValue = null): array
     {
         $changePercent = $changePercent === null ? null : round($changePercent, 2);
         $presented = $this->presenter->presentForWire([
             'type' => $type,
             'topic' => $topic,
             'description' => $description,
+            'facts' => $facts,
             'change_percent' => $changePercent,
             'sim_time' => $this->simTime,
         ]);

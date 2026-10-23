@@ -255,7 +255,7 @@ class ManagementSuccessionEngine
             $mandate,
         );
 
-        $event = $this->marketEvent->publish($stock, 'MANAGEMENT CHANGE', $description, 0.0);
+        $event = $this->marketEvent->publish($stock, 'MANAGEMENT CHANGE', $description, 0.0, ['forced' => $wasForced]);
 
         return [
             'event' => $event,

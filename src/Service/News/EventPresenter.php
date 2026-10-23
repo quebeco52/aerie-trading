@@ -9,6 +9,7 @@ use App\Entity\DistrictNews;
 use App\Entity\EtfEvent;
 use App\Entity\StockEvent;
 use App\Service\Event\ShockEvent;
+use App\Twig\Extension\UiExtension;
 
 /**
  * Turns a published event into the card the stock page, the newswire, the live feed and the district map all render:
@@ -73,6 +74,7 @@ class EventPresenter
     public function present(StockEvent|EtfEvent|DistrictNews|array $event): array
     {
         $topic = null;
+        $facts = [];
         if ($event instanceof DistrictNews) {
             $type = $event->getDesk();
             $topic = $event->getTopic();
@@ -83,12 +85,14 @@ class EventPresenter
         } elseif ($event instanceof StockEvent || $event instanceof EtfEvent) {
             $type = strtoupper((string) $event->getEventType());
             $description = (string) $event->getDescription();
+            $facts = $event->getFacts() ?? [];
             $changePct = $event->getChangePercent() !== null ? (float) $event->getChangePercent() : null;
             $recordedAt = $event->getRecordedAt();
             $simTime = $event->getSimTime();
         } else {
             $type = strtoupper((string) ($event['type'] ?? 'EVENT'));
             $description = (string) ($event['description'] ?? '');
+            $facts = is_array($event['facts'] ?? null) ? $event['facts'] : [];
             $changePct = isset($event['change_percent']) ? (float) $event['change_percent'] : null;
             $topic = isset($event['topic']) ? (string) $event['topic'] : null;
             $simTime = isset($event['sim_time']) ? (float) $event['sim_time'] : null;
@@ -97,7 +101,7 @@ class EventPresenter
 
         $card = NewsCard::forType($type);
         $story = match ($card) {
-            NewsCard::Earnings => $this->earnings($description),
+            NewsCard::Earnings => self::earnings($facts),
             NewsCard::Shock => self::story(
                 'MARKET SHOCK',
                 $changePct === null || $changePct >= 0.0 ? Tone::Warn : Tone::Down,
@@ -112,19 +116,28 @@ class EventPresenter
             NewsCard::Split => $type === 'REVERSE_SPLIT'
                 ? self::story('REVERSE STOCK SPLIT', Tone::Neutral, 'call_split', $description ?: 'Reverse stock split executed.')
                 : self::story('STOCK SPLIT', Tone::Neutral, 'call_split', $description ?: 'Stock split executed.'),
-            NewsCard::Rating => self::rating($type, $description),
+            NewsCard::Rating => $type === 'CREDIT_UPGRADE'
+                ? self::story('RATING UPGRADE', Tone::Up, 'credit_score', $description ?: 'Credit rating upgraded.')
+                : self::story('RATING DOWNGRADE', Tone::Down, 'warning', $description ?: 'Credit rating downgraded.'),
             // The deal type is already the headline a desk would print (STRATEGIC ACQUISITION, LEVERAGED BUYOUT…).
             NewsCard::Deal => self::story($type, Tone::Accent, $type === 'DIVESTITURE' ? 'domain_disabled' : 'domain_add', $description ?: 'Corporate restructuring announcement.'),
-            NewsCard::Analyst => self::analyst($type, $description),
+            NewsCard::Analyst => self::analyst($type, $description, $facts),
             NewsCard::Bankruptcy => self::story('BANKRUPTCY', Tone::Down, 'gavel', $description ?: 'Filed for Chapter 7 bankruptcy liquidation.'),
             // The company keeps trading, so a Chapter 11 plan reads as a restructuring rather than a death.
             NewsCard::Reorganization => self::story('CHAPTER 11', Tone::Warn, 'balance', $description ?: 'Confirmed a Chapter 11 plan of reorganisation.'),
-            NewsCard::Street => self::street($description),
+            // Not a price event: the roster changes at the quarterly reconstitution and no move is implied.
+            NewsCard::Street => ($facts['promoted'] ?? true)
+                ? self::story('STREET PROMOTION', Tone::Accent, 'location_city', $description ?: 'Promoted to Glasswater Row.')
+                : self::story('STREET EVICTION', Tone::Warn, 'location_city', $description ?: 'Lost its frontage on Glasswater Row.'),
             // The divisor is restated across a reconstitution, so the level itself does not move on it.
             NewsCard::Index => self::story('INDEX RECONSTITUTION', Tone::Accent, 'checklist', $description ?: 'Index membership reconstituted.'),
             // The price falls by the payment, but the holder has the cash, so it must not read as a drop.
             NewsCard::Distribution => self::story('DISTRIBUTION', Tone::Up, 'payments', $description ?: 'Fund distribution paid.'),
-            NewsCard::Succession => self::succession($description),
+            // Not a price event: the value in it is the policy that follows, which the engines price through the dials
+            // the incoming style moves.
+            NewsCard::Succession => ($facts['forced'] ?? false)
+                ? self::story('BOARD REMOVAL', Tone::Warn, 'gavel', $description ?: 'The board removed the chief executive.')
+                : self::story('MANAGEMENT CHANGE', Tone::Neutral, 'badge', $description ?: 'The company named new management.'),
             NewsCard::Economy, NewsCard::Government => self::districtStory($card, $type, $topic, $description),
             NewsCard::General => self::story($type, Tone::Neutral, 'campaign', $description ?: 'Corporate news announcement.'),
         };
@@ -147,7 +160,8 @@ class EventPresenter
             // Dated in the District's calendar; a row from before events carried their simulation time keeps its
             // clock time.
             'dateline' => $simTime !== null ? DistrictCalendar::dateline($simTime) : $recordedAt->format('Y-m-d H:i'),
-            'rawDescription' => $description,
+            // What the story reports as data; the news desk reads a rating change from it.
+            'facts' => $facts,
         ] + $story['earnings'];
     }
 
@@ -205,122 +219,69 @@ class EventPresenter
     }
 
     /**
+     * A quarterly report from its facts (EarningsEngine): adjusted earnings a share and the surprise against consensus,
+     * both rounded to the cent, the quarter's economic profit, and the actions that came with it. A surprise under a
+     * cent is in line.
+     *
+     * @param  array<string, mixed> $facts
      * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
      */
-    private function earnings(string $description): array
+    private static function earnings(array $facts): array
     {
-        $eps = null;
-        $surpriseType = null; // 'beat', 'miss', 'met'
-        $surpriseAmount = null;
-        $eva = null;
-        $evaPositive = true;
-        $headline = 'Quarterly Earnings Report';
-        $remainingText = $description;
-
-        // Pattern matching: "Q-Earnings: $2.26 (Beat expectations by $0.01 | +$80.92B EVA).". When special items part
-        // the two, the figure reads "$2.26 adjusted, $1.80 reported"; the beat or miss is on the adjusted one.
-        $pattern = '/^Q-Earnings:\s*([+-]?\$?[\d,.]+(?:\s*[BMTk])?)(?:\s*adjusted,\s*[+-]?\$?[\d,.]+\s*reported)?\s*\((Beat expectations by|Missed expectations by|Met expectations(?: exactly)?)\s*([+-]?\$?[\d,.]+(?:\s*[BMTk])?)?\s*\|\s*([+-]?\$?[\d,.]+[BMTk]?\s*EVA)\)\.?/i';
-        if (preg_match($pattern, $description, $matches)) {
-            $eps = trim($matches[1]);
-            $verbiage = strtolower($matches[2]);
-            if (str_contains($verbiage, 'beat')) {
-                $surpriseType = 'beat';
-            } elseif (str_contains($verbiage, 'missed')) {
-                $surpriseType = 'miss';
-            } else {
-                $surpriseType = 'met';
-            }
-            $rawSurprise = !empty($matches[3]) ? trim($matches[3]) : null;
-            $surpriseVal = $rawSurprise !== null ? (float) preg_replace('/[^\d.]/', '', $rawSurprise) : 0.0;
-
-            // Sub-cent difference (< 0.005) is reported as In-Line
-            if ($surpriseVal < 0.005) {
-                $surpriseType = 'met';
-                $surpriseAmount = null;
-            } else {
-                $surpriseAmount = $rawSurprise;
-            }
-
-            $eva = trim($matches[4]);
-            $evaPositive = !str_starts_with($eva, '-');
-            $headline = self::earningsHeadline($eps, $surpriseType, $surpriseAmount);
-            $remainingText = trim(substr($description, strlen($matches[0])));
-        }
+        $eps = isset($facts['eps']) ? UiExtension::money((float) $facts['eps']) : null;
+        $surprise = (float) ($facts['surprise'] ?? 0.0);
+        $surpriseType = match (true) {
+            $eps === null => null,
+            $surprise >= 0.01 => 'beat',
+            $surprise <= -0.01 => 'miss',
+            default => 'met',
+        };
+        $surpriseAmount = in_array($surpriseType, ['beat', 'miss'], true) ? UiExtension::money(abs($surprise)) : null;
+        $economicProfit = isset($facts['economicProfit']) ? (float) $facts['economicProfit'] : null;
 
         [$badge, $tone, $icon, $surpriseText] = match ($surpriseType) {
-            'beat' => ['EARNINGS BEAT', Tone::Up, 'trending_up', $surpriseAmount ? "Beat by +{$surpriseAmount}" : 'Beat Expectations'],
-            'miss' => ['EARNINGS MISS', Tone::Down, 'trending_down', $surpriseAmount ? "Missed by {$surpriseAmount}" : 'Missed Expectations'],
-            default => ['EARNINGS IN-LINE', Tone::Accent, 'equalizer', 'In-Line'],
+            'beat' => ['EARNINGS BEAT', Tone::Up, 'trending_up', "Beat by +{$surpriseAmount}"],
+            'miss' => ['EARNINGS MISS', Tone::Down, 'trending_down', "Missed by {$surpriseAmount}"],
+            'met' => ['EARNINGS IN-LINE', Tone::Accent, 'equalizer', 'In-Line'],
+            // A report stored before stories carried their facts says only that it was a report.
+            default => ['EARNINGS', Tone::Neutral, 'equalizer', null],
         };
 
-        return self::story($badge, $tone, $icon, $headline, $this->parseSubActionPills($remainingText), [
-            'eps' => $eps,
-            'surpriseType' => $surpriseType,
-            'surpriseAmount' => $surpriseAmount,
-            'surpriseText' => $surpriseText,
-            'eva' => $eva,
-            'evaPositive' => $evaPositive,
-        ]);
-    }
-
-    /**
-     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
-     */
-    private static function rating(string $type, string $description): array
-    {
-        // The debt engine writes "[CREDIT DOWNGRADE] TICK: ..." for the log; the badge already says both.
-        $headline = (string) preg_replace('/^\[[A-Z ]+\]\s*[A-Z0-9.]+:\s*/', '', $description);
-
-        return $type === 'CREDIT_UPGRADE'
-            ? self::story('RATING UPGRADE', Tone::Up, 'credit_score', $headline ?: 'Credit rating event.')
-            : self::story('RATING DOWNGRADE', Tone::Down, 'warning', $headline ?: 'Credit rating event.');
+        return self::story(
+            $badge,
+            $tone,
+            $icon,
+            $eps !== null ? self::earningsHeadline($eps, $surpriseType, $surpriseAmount) : 'Quarterly earnings report.',
+            self::pills(is_array($facts['actions'] ?? null) ? $facts['actions'] : []),
+            [
+                'eps' => $eps,
+                'surpriseType' => $surpriseType,
+                'surpriseAmount' => $surpriseAmount,
+                'surpriseText' => $surpriseText,
+                'eva' => $economicProfit !== null ? UiExtension::large($economicProfit, '$', true) . ' EVA' : null,
+                'evaPositive' => $economicProfit === null || $economicProfit >= 0.0,
+            ],
+        );
     }
 
     /**
      * The sell side and management talking about the number rather than reporting it: a price-target
-     * revision (StockTracker) or a guidance cut (EarningsEngine). A cut reads down; a raise reads up.
+     * revision (StockTracker, with the old and new target as facts) or a guidance cut (EarningsEngine). A cut reads
+     * down; a raise reads up.
+     *
+     * @param array<string, mixed> $facts
      *
      * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
      */
-    private static function analyst(string $type, string $description): array
+    private static function analyst(string $type, string $description, array $facts): array
     {
         $headline = $description ?: 'Analyst revision.';
 
         return match (true) {
             $type === 'GUIDANCE' => self::story('GUIDANCE CUT', Tone::Down, 'campaign', $headline),
-            str_contains(strtolower($description), ' cut ') => self::story('TARGET CUT', Tone::Down, 'query_stats', $headline),
+            (float) ($facts['to'] ?? 0.0) < (float) ($facts['from'] ?? 0.0) => self::story('TARGET CUT', Tone::Down, 'query_stats', $headline),
             default => self::story('TARGET RAISED', Tone::Up, 'query_stats', $headline),
         };
-    }
-
-    /**
-     * A Glasswater Row roster change — promotion onto or eviction from the street at the quarterly
-     * reconstitution (MarketTickerCommand via DistrictRoster). Not a price event: no move is implied.
-     *
-     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
-     */
-    private static function street(string $description): array
-    {
-        $headline = $description ?: 'Glasswater Row roster reconstituted.';
-
-        return str_contains(strtolower($description), 'lost')
-            ? self::story('STREET EVICTION', Tone::Warn, 'location_city', $headline)
-            : self::story('STREET PROMOTION', Tone::Accent, 'location_city', $headline);
-    }
-
-    /**
-     * A change at the top (App\Service\Corporate\ManagementSuccessionEngine). Not a price event — the value in it is
-     * the policy that follows, which the engines price through the dials the incoming style moves.
-     *
-     * @return array{badge: string, tone: Tone, icon: string, headline: string, pills: list<array{kind: string, text: string}>, earnings: array<string, mixed>}
-     */
-    private static function succession(string $description): array
-    {
-        $headline = $description ?: 'The company named new management.';
-
-        return str_contains(strtolower($description), 'removed by the board')
-            ? self::story('BOARD REMOVAL', Tone::Warn, 'gavel', $headline)
-            : self::story('MANAGEMENT CHANGE', Tone::Neutral, 'badge', $headline);
     }
 
     /**
@@ -340,77 +301,38 @@ class EventPresenter
     }
 
     /**
-     * Splits sub-actions (dividend, buyback, bond issuance, narrative lore) into individual pills.
+     * The actions that came with a report, one line each: a dividend, buyback or bond issue from its figures, anything
+     * else as the note the engine wrote.
      *
+     * @param  array<mixed>                            $actions
      * @return list<array{kind: string, text: string}>
      */
-    private function parseSubActionPills(string $text): array
+    private static function pills(array $actions): array
     {
-        if (trim($text) === '') {
-            return [];
-        }
-
-        // Split by newlines or bullet markers (•, -, *)
-        $rawLines = preg_split('/(?:\r\n|\r|\n)+|\s*[•*·]\s*/u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $pills = [];
-
-        foreach ($rawLines as $line) {
-            $line = trim($line, " \t\n\r\0\x0B•*·-");
-            if ($line === '') {
+        foreach ($actions as $action) {
+            if (!is_array($action)) {
                 continue;
             }
 
-            // 1. Dividend: e.g. "Paid $0.61/share div ($27.64B total, 1.97% yield)."
-            if (preg_match('/Paid\s+([+-]?\$?[\d,.]+)\/share\s+div(?:\s*\(([^)]+)\))?/i', $line, $divMatch)) {
-                $divPerShare = $divMatch[1];
-                $rawDetails = $divMatch[2] ?? '';
-                if (preg_match('/([\d,.]+)%\s*yield/i', $rawDetails, $yMatch)) {
-                    $divText = "Paid {$divPerShare}/sh · {$yMatch[1]}% yield";
-                } elseif (!empty($rawDetails)) {
-                    $divText = "Paid {$divPerShare}/sh ({$rawDetails})";
-                } else {
-                    $divText = "Paid {$divPerShare}/sh";
-                }
-                $pills[] = ['kind' => 'dividend', 'text' => $divText];
-                continue;
+            $kind = (string) ($action['kind'] ?? 'note');
+            $text = match ($kind) {
+                'dividend' => sprintf('Paid %s/sh · %s yield', UiExtension::money((float) $action['perShare']), UiExtension::percent((float) $action['yield'])),
+                'buyback' => sprintf('Repurchased %s shares', self::shareCount((float) $action['shares'])),
+                'bonds' => sprintf('Issued %s bonds (%s)', UiExtension::large((float) $action['amount'], '$'), (string) $action['purpose']),
+                default => rtrim((string) ($action['text'] ?? ''), '.'),
+            };
+            if ($text !== '') {
+                $pills[] = ['kind' => $kind, 'text' => $text];
             }
-
-            // 2. Buyback: e.g. "Bought back 410,288,930 shares."
-            if (preg_match('/Bought\s+back\s+([\d,]+)\s+shares/i', $line, $bbMatch)) {
-                $shareCount = $bbMatch[1];
-                $cleanNum = (float) str_replace(',', '', $shareCount);
-                $formattedCount = $this->formatShares($cleanNum);
-                $pills[] = ['kind' => 'buyback', 'text' => "Repurchased {$formattedCount} shares"];
-                continue;
-            }
-
-            // 3. Bonds / Debt: e.g. "Issued $18.31B in bonds for expansion."
-            if (preg_match('/Issued\s+([+-]?\$?[\d,.]+[BMTk]?)\s+in\s+bonds(?:\s+for\s+([^.]+))?/i', $line, $debtMatch)) {
-                $amount = $debtMatch[1];
-                $purpose = !empty($debtMatch[2]) ? ' (' . trim($debtMatch[2]) . ')' : '';
-                $pills[] = ['kind' => 'bonds', 'text' => "Issued {$amount} bonds{$purpose}"];
-                continue;
-            }
-
-            // 4. Strategic Narrative / Lore / News highlight
-            $pills[] = ['kind' => 'note', 'text' => rtrim($line, '.')];
         }
 
         return $pills;
     }
 
-    private function formatShares(float $num): string
+    /** A share count, abbreviated from a million up: "410.29M", "45,000". */
+    private static function shareCount(float $shares): string
     {
-        if ($num >= 1_000_000_000) {
-            return number_format($num / 1_000_000_000, 2) . 'B';
-        }
-        if ($num >= 1_000_000) {
-            return number_format($num / 1_000_000, 2) . 'M';
-        }
-        if ($num >= 1_000) {
-            return number_format($num / 1_000, 1) . 'K';
-        }
-
-        return number_format($num);
+        return $shares >= 1_000_000 ? UiExtension::large($shares) : number_format($shares);
     }
 }

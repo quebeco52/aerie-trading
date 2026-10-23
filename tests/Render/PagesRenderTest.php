@@ -185,7 +185,7 @@ final class PagesRenderTest extends KernelTestCase
                 'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Commercial banking', 'price' => 84.21, 'isBankrupt' => false, 'bankrupt' => false, 'sharesOutstanding' => 2400000000, 'earningsPerShare' => 6.12, 'currentRoe' => 0.124, 'baselineRoe' => 0.12, 'currentRoic' => 0.09, 'baselineRoic' => 0.09, 'publicFloatPercentage' => 0.8, 'volatility' => 0.22, 'totalEquity' => 1.6e11, 'debtToEquity' => 1.4, 'creditRating' => 'A', 'creditSpread' => 0.011, 'dynamicCreditSpread' => 0.0134, 'systemicImportance' => 'Systemic'],
                 'isEtf' => false, 'isFinancial' => true, 'changePercent' => 0.0342, 'businessModel' => 'commercial_bank', 'generalInfo' => StockInfo::DESCRIPTIONS['LAKE'], 'hasProfile' => true,
                 'events' => [
-                    ['type' => 'MANAGEMENT CHANGE', 'description' => 'Lakebird Bank chief executive was removed by the board after 5.2 years.', 'change_percent' => 0.0, 'recorded_at' => '2026-09-30 12:00'],
+                    ['type' => 'MANAGEMENT CHANGE', 'description' => 'Lakebird Bank chief executive was removed by the board after 5.2 years.', 'facts' => ['forced' => true], 'change_percent' => 0.0, 'recorded_at' => '2026-09-30 12:00'],
                     ['type' => 'CREDIT DOWNGRADE', 'description' => 'Shrike Standard Ratings cut Lakebird Bank to A-.', 'change_percent' => -1.4, 'recorded_at' => '2026-09-12 12:00'],
                 ],
                 'userQuantity' => 0, 'userDividendIncome' => 0, 'marketCap' => 2.02e11, 'peRatio' => 13.76, 'dividendYield' => 0.031, 'strategicStake' => 0, 'macro' => ['sovereignFundOwnershipShare' => 0.23, 'stampDutyRate' => 0.001],
@@ -213,7 +213,7 @@ final class PagesRenderTest extends KernelTestCase
                     ['ticker' => 'KING', 'name' => 'Kingfisher Capital', 'marketCap' => 4.1e10, 'isBankrupt' => false],
                 ],
                 'headlines' => [
-                    ['type' => 'MANAGEMENT CHANGE', 'description' => 'Lakebird Bank chief executive was removed by the board after 5.2 years.', 'change_percent' => 0.0, 'recorded_at' => '2026-09-30 12:00'],
+                    ['type' => 'MANAGEMENT CHANGE', 'description' => 'Lakebird Bank chief executive was removed by the board after 5.2 years.', 'facts' => ['forced' => true], 'change_percent' => 0.0, 'recorded_at' => '2026-09-30 12:00'],
                     ['type' => 'CREDIT DOWNGRADE', 'description' => 'Shrike Standard Ratings cut Lakebird Bank to A-.', 'change_percent' => -1.4, 'recorded_at' => '2026-09-12 12:00'],
                 ],
             ]],
@@ -359,18 +359,18 @@ final class PagesRenderTest extends KernelTestCase
     {
         $presenter = new \App\Service\News\EventPresenter();
         $stories = [
-            ['GOVERNMENT', 'budget_enacted', null, null, 'The Diet passed the Civic-Vanguard budget: corporate tax at 21.0%, tariffs at 2.5%.', -0.8, true],
-            ['EARNINGS', null, 'HUMM', 'Hummock Foods', 'Q-Earnings: $1.42 (Beat expectations by $0.11 | +$1.20B EVA).', 6.4, true],
-            ['SHOCK', null, 'ORRA', 'Orra Biosciences', 'Orra Biosciences shares drop 13.2% in a sudden move.', -13.2, true],
-            ['INDEX', null, 'LBI', 'Skein Lakebird 30', 'Admitted: HUMM. Dropped: KITE.', 0.0, false],
-            ['CREDIT_DOWNGRADE', null, 'KITE', 'Kite Freight', '[CREDIT DOWNGRADE] KITE: Credit rating downgraded from BBB to BB due to deteriorating credit profile.', null, true],
-            ['ECONOMY', 'banking_crisis', null, null, 'Interbank lending has frozen: the overnight spread stands at 310 basis points.', -7.1, true],
-            ['MANAGEMENT CHANGE', null, 'LAKE', 'Lakebird Bank', 'Lakebird Bank named a new chief executive after 6.1 years.', 0.0, false],
+            ['GOVERNMENT', 'budget_enacted', null, null, 'The Diet passed the Civic-Vanguard budget: corporate tax at 21.0%, tariffs at 2.5%.', -0.8, true, []],
+            ['EARNINGS', null, 'HUMM', 'Hummock Foods', 'Q-Earnings: $1.42 (Beat expectations by $0.11 | +$1.20B EVA).', 6.4, true, ['eps' => 1.42, 'surprise' => 0.11, 'economicProfit' => 1.2e9, 'actions' => []]],
+            ['SHOCK', null, 'ORRA', 'Orra Biosciences', 'Orra Biosciences shares drop 13.2% in a sudden move.', -13.2, true, []],
+            ['INDEX', null, 'LBI', 'Skein Lakebird 30', 'Admitted: HUMM. Dropped: KITE.', 0.0, false, []],
+            ['CREDIT_DOWNGRADE', null, 'KITE', 'Kite Freight', 'Credit rating downgraded from BBB to BB due to deteriorating credit profile.', null, true, ['from' => 'BBB', 'to' => 'BB']],
+            ['ECONOMY', 'banking_crisis', null, null, 'Interbank lending has frozen: the overnight spread stands at 310 basis points.', -7.1, true, []],
+            ['MANAGEMENT CHANGE', null, 'LAKE', 'Lakebird Bank', 'Lakebird Bank named a new chief executive after 6.1 years.', 0.0, false, ['forced' => false]],
         ];
 
         $items = [];
-        foreach ($stories as $i => [$type, $topic, $ticker, $name, $description, $change, $headline]) {
-            $card = $presenter->present(['type' => $type, 'topic' => $topic, 'description' => $description, 'change_percent' => $change, 'recorded_at' => sprintf('2026-10-06 14:%02d', 50 - 7 * $i), 'sim_time' => 13.71 - 0.013 * $i]);
+        foreach ($stories as $i => [$type, $topic, $ticker, $name, $description, $change, $headline, $facts]) {
+            $card = $presenter->present(['type' => $type, 'topic' => $topic, 'description' => $description, 'facts' => $facts, 'change_percent' => $change, 'recorded_at' => sprintf('2026-10-06 14:%02d', 50 - 7 * $i), 'sim_time' => 13.71 - 0.013 * $i]);
             $items[] = ['card' => $card, 'ticker' => $ticker, 'name' => $name, 'headline' => $headline];
         }
 

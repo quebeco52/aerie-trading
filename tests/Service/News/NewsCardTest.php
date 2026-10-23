@@ -55,15 +55,15 @@ class NewsCardTest extends TestCase
         $this->assertContains('CREDIT_DOWNGRADE', NewsCard::typesOf(NewsCard::inCompanySection('credit')));
     }
 
-    public function testARatingChangeReadsInItsDirectionWithoutTheLogPrefix(): void
+    public function testARatingChangeReadsInItsDirection(): void
     {
         $presenter = new EventPresenter();
 
-        $down = $presenter->present(['type' => 'CREDIT_DOWNGRADE', 'description' => '[CREDIT DOWNGRADE] LAKE: Credit rating downgraded from A to BBB due to deteriorating credit profile.']);
+        $down = $presenter->present(['type' => 'CREDIT_DOWNGRADE', 'description' => 'Credit rating downgraded from A to BBB due to deteriorating credit profile.', 'facts' => ['from' => 'A', 'to' => 'BBB']]);
         $this->assertSame('RATING DOWNGRADE', $down['badge']);
         $this->assertSame('Credit rating downgraded from A to BBB due to deteriorating credit profile.', $down['headline']);
 
-        $up = $presenter->present(['type' => 'CREDIT_UPGRADE', 'description' => '[CREDIT UPGRADE] LAKE: Credit rating upgraded from BBB to A following balance sheet strengthening.']);
+        $up = $presenter->present(['type' => 'CREDIT_UPGRADE', 'description' => 'Credit rating upgraded from BBB to A following balance sheet strengthening.', 'facts' => ['from' => 'BBB', 'to' => 'A']]);
         $this->assertSame('RATING UPGRADE', $up['badge']);
         $this->assertSame('up', $up['tone']);
     }
@@ -72,8 +72,8 @@ class NewsCardTest extends TestCase
     {
         $presenter = new EventPresenter();
 
-        $this->assertSame('TARGET RAISED', $presenter->present(['type' => 'ANALYST', 'description' => 'Sell-side raised its price target on WEAV to $120.00 from $100.00.'])['badge']);
-        $cut = $presenter->present(['type' => 'ANALYST', 'description' => 'Sell-side cut its price target on WEAV to $80.00 from $100.00.']);
+        $this->assertSame('TARGET RAISED', $presenter->present(['type' => 'ANALYST', 'description' => 'x', 'facts' => ['from' => 100.0, 'to' => 120.0]])['badge']);
+        $cut = $presenter->present(['type' => 'ANALYST', 'description' => 'x', 'facts' => ['from' => 100.0, 'to' => 80.0]]);
         $this->assertSame('TARGET CUT', $cut['badge']);
         $this->assertSame('down', $cut['tone']);
         $this->assertSame('GUIDANCE CUT', $presenter->present(['type' => 'GUIDANCE', 'description' => 'Guidance cut: management expects to miss consensus by roughly 8%.'])['badge']);

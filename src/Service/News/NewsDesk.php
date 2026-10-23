@@ -53,9 +53,6 @@ final class NewsDesk
      */
     private const HEADLINE_DEAL_SHARE = 0.10;
 
-    /** A rating change as the debt engine words it: "from BBB to BB". */
-    private const RATING_CHANGE_PATTERN = '/\bfrom (AAA|AA|A|BBB|BB|B|CCC|D) to (AAA|AA|A|BBB|BB|B|CCC|D)\b/';
-
     /** The section a story is filed under on its own; "all" and "companies" also take it. */
     public static function sectionOf(string $scope, NewsCard $card): string
     {
@@ -96,7 +93,7 @@ final class NewsDesk
         return match (NewsCard::from((string) $card['category'])->headlineTest()) {
             HeadlineTest::ByKind => true,
             HeadlineTest::DealSize => $dealShareOfValue !== null && $dealShareOfValue >= self::HEADLINE_DEAL_SHARE,
-            HeadlineTest::GradeCrossing => self::crossesInvestmentGrade((string) $card['rawDescription']),
+            HeadlineTest::GradeCrossing => self::crossesInvestmentGrade((array) $card['facts']),
             HeadlineTest::ShockMove => $move !== null && abs($move) > self::HEADLINE_SHOCK_MOVE,
             HeadlineTest::AbnormalReturn => $move !== null && $annualVolatility !== null
                 && self::abnormalReturnZ($move, $annualVolatility) >= self::HEADLINE_ABNORMAL_RETURN_Z,
@@ -122,15 +119,20 @@ final class NewsDesk
         return $dailyVolatility > 0.0 ? abs($move) / $dailyVolatility : 0.0;
     }
 
-    /** A fallen angel or a rising star: the rating moved between investment grade (BBB and better) and high yield. */
-    private static function crossesInvestmentGrade(string $description): bool
+    /**
+     * A fallen angel or a rising star: the rating moved between investment grade (BBB and better) and high yield.
+     *
+     * @param array<mixed> $facts the rating change's facts: its old and new rating
+     */
+    private static function crossesInvestmentGrade(array $facts): bool
     {
-        if (preg_match(self::RATING_CHANGE_PATTERN, $description, $match) !== 1) {
+        $ranks = CreditRatingAgency::RATING_RANKS;
+        $from = $ranks[$facts['from'] ?? ''] ?? null;
+        $to = $ranks[$facts['to'] ?? ''] ?? null;
+        if ($from === null || $to === null) {
             return false;
         }
 
-        $floor = CreditRatingAgency::RATING_RANKS['BBB'];
-
-        return (CreditRatingAgency::RATING_RANKS[$match[1]] >= $floor) !== (CreditRatingAgency::RATING_RANKS[$match[2]] >= $floor);
+        return ($from >= $ranks['BBB']) !== ($to >= $ranks['BBB']);
     }
 }

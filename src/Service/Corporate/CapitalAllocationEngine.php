@@ -305,7 +305,11 @@ class CapitalAllocationEngine
             $yield = (($ctx->newDividend * 4) / max($ctx->currentPrice, 0.01)) * 100;
             $totalPaidStr = $ctx->totalPaid >= 1_000_000_000 ? number_format($ctx->totalPaid / 1_000_000_000, 2) . 'B' : number_format($ctx->totalPaid / 1_000_000, 2) . 'M';
 
-            $ctx->events[] = ['description' => "Paid $" . number_format($ctx->newDividend, 2) . "/share div (\${$totalPaidStr} total, " . number_format($yield, 2) . "% yield).", 'shock' => 0.0];
+            $ctx->events[] = [
+                'description' => "Paid $" . number_format($ctx->newDividend, 2) . "/share div (\${$totalPaidStr} total, " . number_format($yield, 2) . "% yield).",
+                'shock' => 0.0,
+                'fact' => ['kind' => 'dividend', 'perShare' => $ctx->newDividend, 'yield' => $yield / 100],
+            ];
         } else {
             $stock->setLastDividend('0.00');
         }
@@ -504,6 +508,7 @@ class CapitalAllocationEngine
                 $ctx->events[] = [
                     'description' => "Bought back " . number_format($sharesRepurchased) . " shares.",
                     'shock' => 0.0,
+                    'fact' => ['kind' => 'buyback', 'shares' => $sharesRepurchased],
                 ];
             }
         }
@@ -666,7 +671,10 @@ class CapitalAllocationEngine
             $ctx->recapActionTaken = true;
 
             if (TreasuryEngine::isNewsworthy($ctx->stock, $borrowing)) {
-                $ctx->events[] = ['description' => "Issued \$" . number_format($borrowing / 1_000_000_000, 2) . "B in bonds for recapitalization."];
+                $ctx->events[] = [
+                    'description' => "Issued \$" . number_format($borrowing / 1_000_000_000, 2) . "B in bonds for recapitalization.",
+                    'fact' => ['kind' => 'bonds', 'amount' => $borrowing, 'purpose' => 'recapitalization'],
+                ];
             }
         }
 
