@@ -18,6 +18,12 @@ final class WireFormat
         return UiExtension::large($amount, '$', $signed);
     }
 
+    /** A share as a percentage the page prints it: 0.4 → "40%" at no decimals. */
+    public static function percent(float $share, int $decimals): string
+    {
+        return UiExtension::percent($share, $decimals);
+    }
+
     /** A share count, abbreviated from a million up: "410.29M", "45,000". */
     public static function shares(float $shares): string
     {

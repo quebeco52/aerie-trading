@@ -87,12 +87,9 @@ class SystemicEventReporter
         $context = [
             'interbank_spread_bps' => number_format($macro->interbankLiquiditySpread * 10000.0, 0),
             'hy_spread_pct' => number_format($macro->highYieldCreditSpread * 100.0, 2),
-            'recession_prob_pct' => number_format($macro->recessionProbability * 100.0, 1),
             'unemployment_pct' => number_format($macro->unemploymentRate * 100.0, 1),
             'output_gap_pct' => number_format($macro->outputGap * 100.0, 2),
             'inversion_months' => number_format($macro->inversionDuration * 12.0, 1),
-            'erp_pct' => number_format($macro->equityRiskPremium * 100.0, 2),
-            'qe_intensity_pct' => number_format($macro->balanceSheetIntensity * 100.0, 2),
             'epu_index' => number_format($macro->policyUncertaintyIndexEma, 0),
             'sovereign_spread_bps' => number_format($macro->sovereignRiskSpread * 10000.0, 0),
             'debt_to_gdp_pct' => number_format($macro->sovereignDebtToGdp * 100.0, 0),
@@ -254,7 +251,6 @@ class SystemicEventReporter
             'supported_seats' => (string) ($seatsOf($cabinet) + $seatsOf($support)),
             'minority' => $support === [] ? 'no' : 'yes',
             'talk_days' => number_format($final['day'], 0),
-            'attempts' => (string) count($politics->formationLog),
             'attempts_phrase' => count($politics->formationLog) === 1 ? 'at the first attempt' : 'after ' . count($politics->formationLog) . ' attempts',
             'lead_party' => $names[$final['formateur']],
             'prime_minister' => $politics->leaderNames[PartyLeaders::primeMinisterParty($politics) ?? ''] ?? '',
@@ -328,7 +324,6 @@ class SystemicEventReporter
             $member = static fn(int $n): string => $n === 1 ? 'member' : 'members';
             $move = (int) round($politics->lastMeetingChange * 10000.0);
             $rate = number_format($politics->lastMeetingRate * 100.0, 2);
-            $context['policy_rate_pct'] = $rate;
             $context['rate_move'] = abs($move) < 13 ? "holds the rate at {$rate}%" : ($move > 0 ? "raises the rate by {$move} basis points to {$rate}%" : 'cuts the rate by ' . abs($move) . " basis points to {$rate}%");
             $context['vote_split'] = (count($votes) - $higher - $lower) . '-' . ($higher + $lower);
             $context['dissent_phrase'] = match (true) {
@@ -388,14 +383,8 @@ class SystemicEventReporter
         $basisPoints = (int) round(10000.0 * (CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $target) - CreditFiscalSubsystem::maturitySupplyTermPremium($macro->sovereignDebtToGdpEma, $current)));
 
         return [
-            'exchequer_head' => $head['name'],
-            'exchequer_head_age' => (string) (int) floor($politics->totalTime - $head['birth']),
+            ...self::headContext($politics, Office::ExchequerHead, 'exchequer_head', static fn(array $candidate): string => "{$candidate['name']}, who would have borrowed at {$years(Exchequer::averageMaturity($candidate['debt']))} on average"),
             'exchequer_head_stance' => self::DEBT_PHRASES[Exchequer::stanceName($target)],
-            'exchequer_head_term_ends' => DistrictCalendar::quarter(Office::ExchequerHead->termEnd($politics->totalTime)),
-            'exchequer_head_passed_over' => self::listNames(array_map(
-                static fn(array $candidate): string => "{$candidate['name']}, who would have borrowed at {$years(Exchequer::averageMaturity($candidate['debt']))} on average",
-                $head['passedOver'],
-            )),
             'debt_maturity_change' => match (true) {
                 abs($target - $current) < 0.05 => "keeps the debt's average maturity near {$years($current)}",
                 $target > $current => "lengthens the debt toward an average of {$years($target)} from {$years($current)}, which as the debt rolls over adds about {$basisPoints} basis points to the ten-year",
@@ -418,19 +407,12 @@ class SystemicEventReporter
             return [];
         }
 
-        $pct = static fn(float $share): string => number_format($share * 100.0, 0) . '%';
+        $pct = static fn(float $share): string => WireFormat::percent($share, 0);
         $target = SovereignReserveFund::equityShare($head['stance']);
         $current = $macro->sovereignFundPolicyEquityShare;
         $context = [
-            'fund_head' => $head['name'],
-            'fund_head_age' => (string) (int) floor($politics->totalTime - $head['birth']),
+            ...self::headContext($politics, Office::FundHead, 'fund_head', static fn(array $candidate): string => "{$candidate['name']}, who would have held {$pct(SovereignReserveFund::equityShare($candidate['fund']))} in shares"),
             'fund_head_stance' => self::FUND_PHRASES[SovereignReserveFund::stanceName($target)],
-            'fund_head_term_ends' => DistrictCalendar::quarter(Office::FundHead->termEnd($politics->totalTime)),
-            'fund_head_passed_over' => self::listNames(array_map(
-                static fn(array $candidate): string => "{$candidate['name']}, who would have held {$pct(SovereignReserveFund::equityShare($candidate['fund']))} in shares",
-                $head['passedOver'],
-            )),
-            'fund_equity_target' => $pct($target),
         ];
         if ($current <= 0.0 || $macro->boardFloatCap <= 0.0) {
             return $context + ['fund_mix_change' => "sets its share in equities at {$pct($target)}"];
@@ -442,8 +424,8 @@ class SystemicEventReporter
 
         return $context + ['fund_mix_change' => match (true) {
             abs($target - $current) < 0.005 => "keeps its share in equities at {$pct($target)}",
-            $target > $current => "raises its share in equities to {$pct($target)} from {$pct($current)}, buying about " . number_format($boardShare * 100.0, 1) . "% of the board's free float over {$months} months",
-            default => "cuts its share in equities to {$pct($target)} from {$pct($current)}, selling about " . number_format($boardShare * 100.0, 1) . "% of the board's free float over {$months} months",
+            $target > $current => "raises its share in equities to {$pct($target)} from {$pct($current)}, buying about " . WireFormat::percent($boardShare, 1) . " of the board's free float over {$months} months",
+            default => "cuts its share in equities to {$pct($target)} from {$pct($current)}, selling about " . WireFormat::percent($boardShare, 1) . " of the board's free float over {$months} months",
         }];
     }
 
@@ -464,17 +446,11 @@ class SystemicEventReporter
         $line = static fn(float $stance): string => number_format(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($stance))['concentrated'], 0);
         $ceiling = MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($head['stance']))['shareCeiling'];
         $screens = "a concentration line at {$line($head['stance'])} on the HHI"
-            . ($ceiling < 1.0 ? ' and a merged firm presumed too big above ' . number_format($ceiling * 100.0, 0) . '% of its market' : ' and no cap on a merged firm\'s share');
+            . ($ceiling < 1.0 ? ' and a merged firm presumed too big above ' . WireFormat::percent($ceiling, 0) . ' of its market' : ' and no cap on a merged firm\'s share');
 
         return [
-            'fair_trading_head' => $head['name'],
-            'fair_trading_head_age' => (string) (int) floor($politics->totalTime - $head['birth']),
+            ...self::headContext($politics, Office::FairTradingHead, 'fair_trading_head', static fn(array $candidate): string => "{$candidate['name']}, who would have drawn the line at {$line($candidate['competition'])}"),
             'fair_trading_head_stance' => self::COMPETITION_PHRASES[FairTradingBoard::stanceName($head['stance'])],
-            'fair_trading_head_term_ends' => DistrictCalendar::quarter(Office::FairTradingHead->termEnd($politics->totalTime)),
-            'fair_trading_head_passed_over' => self::listNames(array_map(
-                static fn(array $candidate): string => "{$candidate['name']}, who would have drawn the line at {$line($candidate['competition'])}",
-                $head['passedOver'],
-            )),
             'merger_review_change' => match (true) {
                 abs($head['stance'] - $politics->fairTradingPriorStance) < 0.05 => "keeps merger review where it stood, with {$screens}",
                 $head['stance'] > $politics->fairTradingPriorStance => "tightens merger review to {$screens}, from a line at {$line($politics->fairTradingPriorStance)}",
@@ -497,7 +473,7 @@ class SystemicEventReporter
             return [];
         }
 
-        $pct = static fn(float $share): string => number_format($share * 100.0, 0) . '%';
+        $pct = static fn(float $share): string => WireFormat::percent($share, 0);
         $stance = $head['stance'];
         $prior = $politics->securitiesPriorStance;
         $margin = SecuritiesCommission::initialMargin($stance);
@@ -506,15 +482,9 @@ class SystemicEventReporter
         $scaleBefore = SecuritiesCommission::earningsManagementScale($prior);
 
         return [
-            'securities_head' => $head['name'],
-            'securities_head_age' => (string) (int) floor($politics->totalTime - $head['birth']),
+            ...self::headContext($politics, Office::SecuritiesHead, 'securities_head', static fn(array $candidate): string => "{$candidate['name']}, who would have set margin at {$pct(SecuritiesCommission::initialMargin($candidate['markets']))}"),
             'securities_head_stance' => self::MARKETS_PHRASES[SecuritiesCommission::stanceName($stance)],
-            'securities_head_term_ends' => DistrictCalendar::quarter(Office::SecuritiesHead->termEnd($politics->totalTime)),
             'securities_rules_from' => DistrictCalendar::quarter($head['termStart'] + SecuritiesCommission::RULE_NOTICE_YEARS),
-            'securities_head_passed_over' => self::listNames(array_map(
-                static fn(array $candidate): string => "{$candidate['name']}, who would have set margin at {$pct(SecuritiesCommission::initialMargin($candidate['markets']))}",
-                $head['passedOver'],
-            )),
             'securities_rules_change' => sprintf(
                 '%s and %s',
                 abs($margin - $marginBefore) < 0.005 ? "keeps the initial margin at {$pct($margin)}" : ($margin > $marginBefore ? 'raises' : 'lowers') . " the initial margin to {$pct($margin)} from {$pct($marginBefore)}",
@@ -540,12 +510,7 @@ class SystemicEventReporter
             return [];
         }
 
-        return [
-            'security_director' => $head['name'],
-            'security_director_age' => (string) (int) floor($politics->totalTime - $head['birth']),
-            'security_director_term_ends' => DistrictCalendar::quarter(Office::SecurityDirector->termEnd($politics->totalTime)),
-            'security_director_passed_over' => self::listNames(array_map(static fn(array $candidate): string => $candidate['name'], $head['passedOver'])),
-        ];
+        return self::headContext($politics, Office::SecurityDirector, 'security_director', static fn(array $candidate): string => $candidate['name']);
     }
 
     /**
@@ -587,24 +552,37 @@ class SystemicEventReporter
             return [];
         }
 
-        $pct = static fn(float $share): string => number_format($share * 100.0, 1) . '%';
+        $pct = static fn(float $share): string => WireFormat::percent($share, 1);
         $target = FinancialRegulator::requirement($head['stance']);
         $before = $politics->requirementPhaseFrom;
 
         return [
-            'regulator' => $head['name'],
-            'regulator_age' => (string) (int) floor($politics->totalTime - $head['birth']),
+            ...self::headContext($politics, Office::Regulator, 'regulator', static fn(array $candidate): string => "{$candidate['name']}, who would have set {$pct(FinancialRegulator::requirement($candidate['regulation']))}"),
             'regulator_stance' => self::REGULATION_PHRASES[FinancialRegulator::stanceName($target)],
-            'regulator_term_ends' => DistrictCalendar::quarter(Office::Regulator->termEnd($politics->totalTime)),
-            'regulator_passed_over' => self::listNames(array_map(
-                static fn(array $candidate): string => "{$candidate['name']}, who would have set {$pct(FinancialRegulator::requirement($candidate['regulation']))}",
-                $head['passedOver'],
-            )),
             'requirement_change' => match (true) {
                 abs($target - $before) < 0.0005 => "holds the banks' core capital requirement at {$pct($target)} of risk-weighted assets",
                 $target > $before => "raises the banks' core capital requirement to {$pct($target)} of risk-weighted assets from {$pct($before)}, phased in over the coming year",
                 default => "cuts the banks' core capital requirement to {$pct($target)} of risk-weighted assets from {$pct($before)}, with immediate effect",
             },
+        ];
+    }
+
+    /**
+     * The lines every appointment story carries under its office's key: the head's name, their age, when their term
+     * ends and whom the Council passed over, each candidate as $candidate describes them.
+     *
+     * @param callable(array<string, mixed>): string $candidate
+     * @return array<string, string>
+     */
+    private static function headContext(PoliticsStateDTO $politics, Office $office, string $key, callable $candidate): array
+    {
+        $head = $politics->head($office);
+
+        return [
+            $key => $head['name'],
+            "{$key}_age" => (string) (int) floor($politics->totalTime - $head['birth']),
+            "{$key}_term_ends" => DistrictCalendar::quarter($office->termEnd($politics->totalTime)),
+            "{$key}_passed_over" => self::listNames(array_map($candidate, $head['passedOver'])),
         ];
     }
 

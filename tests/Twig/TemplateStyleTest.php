@@ -52,7 +52,7 @@ final class TemplateStyleTest extends TestCase
     ];
 
     /** Out-of-world names: real agencies, markets, comparators and models, and names the District has retired. */
-    private const OUT_OF_WORLD = [
+    public const OUT_OF_WORLD = [
         'US bodies and markets' => '/\b(BLS|BEA|EIA|FRED|FOMC|FDIC|NYSE|Nasdaq|Federal Reserve|the Fed|Dow Jones|Wall Street|S&P|Treasury|Treasuries)\b/',
         'real-world comparators' => '/\b(Singapore|Norway|Norwegian|Hong Kong|Japan|Japanese|IMF|OECD|GPFG|GPIF|Temasek|Prompt Corrective Action)\b/',
         'model and paper names' => '/\b(Merton|Taylor rule|Cournot|Heston|Black-Scholes|Brock-Hommes|Vasicek|Fernald|Leontief|Diebold|Nelson-Siegel|Schularick|Dornbusch|Zakraj\w+|et al\.?|GSCPI)\b/',

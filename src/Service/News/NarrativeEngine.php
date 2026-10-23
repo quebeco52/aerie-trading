@@ -7,9 +7,12 @@ namespace App\Service\News;
 use App\Data\District\Institutions;
 use App\Data\Politics\AerieCouncil;
 use App\Service\Event\ShockEvent;
+use App\Service\Math\MathUtility;
 
 class NarrativeEngine
 {
+    public function __construct(private readonly MathUtility $math = new MathUtility()) {}
+
     public function generateLore(string $eventType, array $context = []): string
     {
         // A dollar amount the story quotes, passed in dollars.
@@ -113,22 +116,22 @@ class NarrativeEngine
                 "Faced sudden regulatory scrutiny and fines over product health concerns.",
             ]),
             ShockEvent::SHIPPING_PORT_CONGESTION => $this->getRandomPhrase([
-                "Capitalized on severe global port congestion with record-breaking container spot rates.",
+                "Capitalised on severe global port congestion with record-breaking container spot rates.",
                 "Supply chain bottlenecks drove charter and freight spot yields to historical highs.",
                 "Captured massive premium surcharges amid global logistics constraints.",
             ]),
             ShockEvent::SHIPPING_CAPACITY_GLUT => $this->getRandomPhrase([
                 "Suffered operating losses due to a severe global vessel capacity glut and collapsing freight rates.",
                 "Excess container tonnage pressured global spot charter rates lower.",
-                "Fleet utilization dropped as oversupply weighed on international shipping margins.",
+                "Fleet utilisation dropped as oversupply weighed on international shipping margins.",
             ]),
             ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE => $this->getRandomPhrase([
-                "Achieved 100% fab capacity utilization amid a global technological hardware shortage.",
+                "Achieved 100% fab capacity utilisation amid a global technological hardware shortage.",
                 "Soaring wafer pricing power and fully booked cleanroom lines drove record foundry margins.",
                 "High-performance compute demand triggered multi-year advanced node pre-orders.",
             ]),
             ShockEvent::SEMICONDUCTOR_INVENTORY_CORRECTION => $this->getRandomPhrase([
-                "Suffered severe margin drag from underutilized cleanrooms during an industry inventory correction.",
+                "Suffered severe margin drag from underutilised cleanrooms during an industry inventory correction.",
                 "Customer destocking across consumer electronics reduced wafer shipment volumes.",
                 "Faced pricing pressure as downstream partners worked off excess chip inventories.",
             ]),
@@ -159,18 +162,18 @@ class NarrativeEngine
             ]),
             ShockEvent::PE_CARRIED_INTEREST_SURGE => $this->getRandomPhrase([
                 "Generated massive carried interest fees following a series of highly successful portfolio exits.",
-                "Landmark portfolio company IPO and strategic sales crystallized substantial carry.",
-                "Fund realizations exceeded hurdle rates, driving exceptional performance fee income.",
+                "Landmark portfolio company IPO and strategic sales crystallised substantial carry.",
+                "Fund realisations exceeded hurdle rates, driving exceptional performance fee income.",
             ]),
             ShockEvent::PE_HURDLE_RATE_MISSED => $this->getRandomPhrase([
-                "Failed to clear the minimum hurdle rate, resulting in zero carried interest crystallization.",
+                "Failed to clear the minimum hurdle rate, resulting in zero carried interest crystallisation.",
                 "Missed performance targets triggered a complete wipeout of performance fees for the quarter.",
                 "Underperforming portfolio assets caused the firm to miss its preferred return hurdle, zeroing out carry.",
             ]),
             ShockEvent::PE_DEAL_DROUGHT => $this->getRandomPhrase([
                 "Suffered a severe deal drought as frozen credit markets prevented portfolio exits.",
-                "Lack of debt financing stalled leveraged buyout deployment and exit realizations.",
-                "Extended portfolio holding periods delayed carried interest crystallization.",
+                "Lack of debt financing stalled leveraged buyout deployment and exit realisations.",
+                "Extended portfolio holding periods delayed carried interest crystallisation.",
             ]),
             ShockEvent::HF_QUANT_ALPHA_SURGE => $this->getRandomPhrase([
                 "Black-box quantitative trading desks exploited massive market volatility, generating historic stat-arb alpha.",
@@ -183,7 +186,7 @@ class NarrativeEngine
                 "Prime brokers aggressively hiked collateral haircuts, forcing emergency portfolio de-leveraging.",
             ]),
             ShockEvent::HF_PERFORMANCE_FEE_CRYSTALLIZATION => $this->getRandomPhrase([
-                "Crystallized massive 20% incentive fees as flagship funds set new all-time high-water marks.",
+                "Crystallised massive 20% incentive fees as flagship funds set new all-time high-water marks.",
                 "Explosive trading gains cleared high-water marks, unlocking substantial performance fee allocations.",
                 "Exceptional risk-adjusted fund returns triggered historic quarterly incentive fee payouts.",
             ]),
@@ -193,13 +196,13 @@ class NarrativeEngine
                 "Concentrated directional positions collapsed under violent market rotation, wiping out trading equity.",
             ]),
             ShockEvent::DEFENSE_CONTRACT_LOSS => $this->getRandomPhrase([
-                "Lost a multi-billion dollar next-generation government defense contract to a rival.",
-                "Major aerospace program cancellation reduced forward backlog significantly.",
-                "Budgetary reallocation by defense procurement officials impacted quarterly order flow.",
+                "Lost a multi-billion dollar next-generation government defence contract to a rival.",
+                "Major aerospace programme cancellation reduced forward backlog significantly.",
+                "Budgetary reallocation by defence procurement officials impacted quarterly order flow.",
             ]),
             ShockEvent::DEFENSE_CONTRACT_WIN => $this->getRandomPhrase([
-                "Secured a massive, multi-decade international defense contract.",
-                "Awarded prime contractor status on a critical next-generation defense platform.",
+                "Secured a massive, multi-decade international defence contract.",
+                "Awarded prime contractor status on a critical next-generation defence platform.",
                 "Surging geopolitical demand drove record order intake across munitions and systems.",
             ]),
             ShockEvent::CREDIT_UNSECURED_PROVISIONS => $this->getRandomPhrase([
@@ -234,8 +237,8 @@ class NarrativeEngine
             ]),
             ShockEvent::IB_PROP_TRADING_SURGE => $this->getRandomPhrase([
                 "Proprietary trading desks generated billions in market-making and arbitrage revenue during severe market panic.",
-                "Fixed income, currency, and commodities (FICC) trading desks captured record bid-ask spreads.",
-                "Macro trading desks capitalized on currency and interest rate volatility.",
+                "Fixed income, currency and commodities trading desks captured record bid-ask spreads.",
+                "Macro trading desks capitalised on currency and interest rate volatility.",
             ]),
             ShockEvent::IB_COUNTERPARTY_DEFAULT => $this->getRandomPhrase([
                 "Suffered catastrophic prime brokerage losses following the sudden liquidation and default of a highly leveraged family office.",
@@ -244,7 +247,7 @@ class NarrativeEngine
             ]),
             ShockEvent::DISTRESSED_DEBT_RESTRUCTURING => $this->getRandomPhrase([
                 "Executed massive restructuring deals on defaulted corporate debt, unlocking extraordinary turnaround gains.",
-                "Capitalized on corporate credit spread blowouts by acquiring senior debt at steep discounts.",
+                "Capitalised on corporate credit spread blowouts by acquiring senior debt at steep discounts.",
                 "Orchestrated successful debtor-in-possession restructurings across distressed assets.",
             ]),
             ShockEvent::INFRASTRUCTURE_FAILURE => $this->getRandomPhrase([
@@ -255,17 +258,17 @@ class NarrativeEngine
             ShockEvent::SECURITY_BREACH => $this->getRandomPhrase([
                 "Suffered a catastrophic security breach and VIP protection failure, prompting immediate contract terminations.",
                 "High-profile tactical failure triggered intense legal scrutiny, lawsuits, and client flight.",
-                "Faced severe reputational damage and client cancellations following a publicized security breakdown.",
+                "Faced severe reputational damage and client cancellations following a publicised security breakdown.",
             ]),
             ShockEvent::GEOPOLITICAL_CONFLICT => $this->getRandomPhrase([
                 "Surge in global geopolitical conflict drove record demand for private military extraction and expeditionary security.",
                 "Outbreak of regional hostilities triggered an explosion in high-margin expeditionary deployment contracts.",
-                "Escalating international tensions fueled massive contract awards for specialized private security forces.",
+                "Escalating international tensions fueled massive contract awards for specialised private security forces.",
             ]),
             ShockEvent::LABOR_STRIKE => $this->getRandomPhrase([
-                "Fulfillment center labor strikes and unionization votes severely disrupted logistics operations.",
+                "Fulfilment centre labour strikes and unionisation votes severely disrupted logistics operations.",
                 "Mass warehouse worker walkouts and picket lines halted regional package distribution.",
-                "Coordinated labor strikes across key fulfillment hubs triggered widespread delivery delays and emergency overtime costs.",
+                "Coordinated labour strikes across key fulfilment hubs triggered widespread delivery delays and emergency overtime costs.",
             ]),
             ShockEvent::DOCK_STRIKE => $this->getRandomPhrase([
                 "Dock crews walked off the container terminals over pay and shift rosters, idling the cranes.",
@@ -278,12 +281,12 @@ class NarrativeEngine
                 "An unplanned outage at one of the company's largest units removed output it had already sold forward.",
             ]),
             ShockEvent::GEOPOLITICAL_EXPORT_BAN => $this->getRandomPhrase([
-                "Targeted arms export embargoes and congressional export restrictions curtailed foreign shipments.",
+                "Targeted arms export embargoes and mainland export restrictions curtailed foreign shipments.",
                 "Geopolitical export licensing bans halted international military platform deliveries.",
-                "Foreign military sales were frozen following new congressional defense export sanctions.",
+                "Foreign military sales were frozen following new mainland defence export sanctions.",
             ]),
             ShockEvent::PROJECT_DELAY => $this->getRandomPhrase([
-                "Unanticipated engineering defects and schedule overruns triggered ASC 606 reach-forward project losses.",
+                "Unanticipated engineering defects and schedule overruns triggered reach-forward losses on fixed-price programmes.",
                 "Complex developmental milestone delays and supply chain logjams led to programmatic forward loss charges.",
                 "Project delays on fixed-price development contracts resulted in significant cost overrun provisions.",
             ]),
@@ -303,7 +306,7 @@ class NarrativeEngine
             ShockEvent::PERFORMANCE_FEE_SURGE => $this->getRandomPhrase([
                 "Surging asset management performance fees drove record quarterly non-interest income.",
                 "Outperforming benchmark hurdles unlocked outsized quarterly incentive fee allocations.",
-                "Strong fund alpha generation triggered significant performance fee crystallization.",
+                "Strong fund alpha generation triggered significant performance fee crystallisation.",
             ]),
             ShockEvent::FUND_OUTFLOWS => $this->getRandomPhrase([
                 "Experienced elevated institutional fund outflows and redemption pressures.",
@@ -311,93 +314,65 @@ class NarrativeEngine
                 "Net redemption outflows reduced recurring management fee revenues.",
             ]),
             ShockEvent::BANKING_CRISIS => $this->getRandomPhrase(
-                isset($context['credit_gap_pct']) ? [
+                [
                     "Banking crisis: With household credit {$context['credit_gap_pct']} points of income above trend, lenders are failing and the credit boom has gone bust.",
                     "Credit boom gone bust: Leverage {$context['credit_gap_pct']} points over its trend has turned into a banking crisis; wholesale funding is running and borrowers are cut off.",
                     "Financial crisis declared: Bank failures spread as the credit build-up of {$context['credit_gap_pct']} points of income unwinds; households and firms deleverage.",
-                ] : [
-                    "Banking crisis: Lenders are failing and the credit boom has gone bust; wholesale funding is running and borrowers are cut off.",
-                    "Credit boom gone bust: A banking crisis has begun and households and firms are deleveraging.",
-                    "Financial crisis declared: Bank failures spread as the credit build-up unwinds.",
                 ],
             ),
             ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE => $this->getRandomPhrase(
-                isset($context['interbank_spread_bps']) ? [
+                [
                     "Interbank liquidity freeze: Short-term wholesale funding spread spiked to {$context['interbank_spread_bps']} bps, reflecting acute money-market distress.",
                     "Wholesale funding seized: Interbank liquidity spread widened to {$context['interbank_spread_bps']} bps as institutions hoarded cash and restricted counterparty lending.",
                     "Money market distress: Short-term interbank spreads expanded to {$context['interbank_spread_bps']} bps, freezing unsecured wholesale financing.",
-                ] : [
-                    "Interbank liquidity freeze: Short-term wholesale funding spreads spiked sharply as institutions restricted counterparty lending.",
-                    "Wholesale funding seized: Interbank lending spreads widened to crisis levels amid acute liquidity hoarding.",
-                    "Money market distress: Short-term funding markets seized, sharply restricting interbank credit access.",
                 ],
             ),
             ShockEvent::CREDIT_MARKET_SEIZURE => $this->getRandomPhrase(
-                isset($context['hy_spread_pct']) ? [
+                [
                     "Credit market seizure: High-yield credit spreads blew out to {$context['hy_spread_pct']}%, shutting speculative-grade primary debt issuance.",
                     "High-yield debt freeze: Speculative corporate bond spreads widened to {$context['hy_spread_pct']}%, halting corporate refinancing.",
                     "Corporate credit freeze: Speculative-grade bond yields surged ({$context['hy_spread_pct']}% spread), locking leveraged borrowers out of debt markets.",
-                ] : [
-                    "Credit market seizure: Speculative-grade credit spreads widened sharply, shutting primary corporate debt issuance.",
-                    "High-yield debt freeze: Corporate credit spreads blew out to crisis levels, freezing corporate refinancing.",
-                    "Corporate credit freeze: Speculative-grade bond yields surged, locking leveraged borrowers out of primary debt markets.",
                 ],
             ),
             ShockEvent::RECESSION_DECLARED => $this->getRandomPhrase(
                 // The quarter's fall comes only with the quarter that made the call; a late report falls back on the
                 // rest.
                 isset($context['gdp_fall_pct']) ? [
-                    "Recession confirmed: Output shrank {$context['gdp_fall_pct']}% last quarter, the second fall in a row, with unemployment at " . ($context['unemployment_pct'] ?? 'a higher') . "%.",
-                    "Two quarters of contraction: The statistics office declares a recession after output fell {$context['gdp_fall_pct']}% on the quarter; output stands " . ($context['output_gap_pct'] ?? 'below') . "% against potential.",
-                    "Recession confirmed: A second straight quarterly fall in output, down {$context['gdp_fall_pct']}%, puts the economy in recession; the jobless rate is " . ($context['unemployment_pct'] ?? 'rising') . "%.",
+                    "Recession confirmed: Output shrank {$context['gdp_fall_pct']}% last quarter, the second fall in a row, with unemployment at " . $context['unemployment_pct'] . "%.",
+                    "Two quarters of contraction: The " . Institutions::STATISTICAL_OFFICE . " declares a recession after output fell {$context['gdp_fall_pct']}% on the quarter; output stands " . $context['output_gap_pct'] . "% against potential.",
+                    "Recession confirmed: A second straight quarterly fall in output, down {$context['gdp_fall_pct']}%, puts the economy in recession; the jobless rate is " . $context['unemployment_pct'] . "%.",
                 ] : [
                     "Recession confirmed: Macroeconomic indicators signaled sustained output contraction and rising economic slack.",
-                    "Technical recession confirmed: Contracting aggregate output and deteriorating labor conditions met formal recession criteria.",
+                    "Technical recession confirmed: Contracting aggregate output and deteriorating labour conditions met formal recession criteria.",
                     "Macroeconomic downturn confirmed: Consecutive periods of output contraction confirmed the economy has entered recession.",
                 ],
             ),
             ShockEvent::YIELD_CURVE_INVERSION_ALARM => $this->getRandomPhrase(
-                isset($context['inversion_months']) ? [
+                [
                     "Yield curve inversion alert: Benchmark sovereign yield curve has remained inverted for {$context['inversion_months']} consecutive months, signaling heightened recession risk.",
                     "Persistent yield curve inversion: Short rates exceeded long-term sovereign yields for {$context['inversion_months']} months, historically a reliable downturn indicator.",
                     "Yield curve warning: Sustained term spread inversion reached {$context['inversion_months']} months, reflecting tight monetary conditions and future growth deceleration.",
-                ] : [
-                    "Yield curve inversion alert: Benchmark sovereign yield curve has remained inverted for a sustained period, signaling heightened recession risk.",
-                    "Persistent yield curve inversion: Short-term rates remained above long-term sovereign yields, historically a reliable recession warning.",
-                    "Yield curve warning: Sustained negative term spread signaled tight monetary conditions and economic deceleration ahead.",
                 ],
             ),
             ShockEvent::HOUSEHOLD_DELEVERAGING => $this->getRandomPhrase(
-                isset($context['dsr_pct']) ? [
-                    "Household deleveraging: With debt service at {$context['dsr_pct']}% of income" . (isset($context['debt_to_income_pct']) ? " on debt of {$context['debt_to_income_pct']}% of income" : "") . ", households are repaying rather than spending.",
+                [
+                    "Household deleveraging: With debt service at {$context['dsr_pct']}% of income on debt of {$context['debt_to_income_pct']}% of income, households are repaying rather than spending.",
                     "Credit cycle turns: Debt service reached {$context['dsr_pct']}% of income and household borrowing is now contracting, the bust that follows a credit boom.",
                     "Consumers pull back: Servicing debt at {$context['dsr_pct']}% of income, households cut spending to pay it down; lenders' order books thin.",
-                ] : [
-                    "Household deleveraging: Debt service past the warning line, households are repaying rather than spending.",
-                    "Credit cycle turns: Household borrowing is contracting, the bust that follows a credit boom.",
-                    "Consumers pull back: Households cut spending to pay down debt; lenders' order books thin.",
                 ],
             ),
             ShockEvent::NATURAL_CATASTROPHE => $this->getRandomPhrase(
-                isset($context['cat_severity']) ? [
-                    "Natural catastrophe: A storm struck the district with insured losses of {$context['cat_severity']}x an average year's, hitting carriers, landlords and the grid at once.",
-                    "Disaster declared: Physical damage across the district ran to {$context['cat_severity']}x an average year's insured losses; rebuilding contracts will follow the claims.",
-                    "Catastrophe losses mount: A single event cost {$context['cat_severity']}x a normal year's claims, and every underwriter in the district is exposed to the same one.",
-                ] : [
-                    "Natural catastrophe: A storm struck the district, hitting carriers, landlords and the grid at once.",
-                    "Disaster declared: Physical damage across the district ran to a multiple of an average year's insured losses.",
-                    "Catastrophe losses mount: A single event cost a normal year's claims, and every underwriter is exposed to the same one.",
+                [
+                    "Natural catastrophe: A storm struck the District with insured losses of {$context['cat_severity']}x an average year's, hitting carriers, landlords and the grid at once.",
+                    "Disaster declared: Physical damage across the District ran to {$context['cat_severity']}x an average year's insured losses; rebuilding contracts will follow the claims.",
+                    "Catastrophe losses mount: A single event cost {$context['cat_severity']}x a normal year's claims, and every underwriter in the District is exposed to the same one.",
                 ],
             ),
             ShockEvent::SOVEREIGN_DOWNGRADE => $this->getRandomPhrase(
-                isset($context['sovereign_spread_bps']) ? [
-                    "Sovereign downgrade: Rating agencies cut the district's credit standing as the fiscal risk premium on its bonds reached {$context['sovereign_spread_bps']} bps" . (isset($context['debt_to_gdp_pct']) ? " with debt at {$context['debt_to_gdp_pct']}% of GDP" : "") . ".",
+                [
+                    "Sovereign downgrade: Rating agencies cut the District's credit standing as the fiscal risk premium on its bonds reached {$context['sovereign_spread_bps']} bps with debt at {$context['debt_to_gdp_pct']}% of GDP.",
                     "Fiscal re-rating: The sovereign risk premium widened to {$context['sovereign_spread_bps']} bps, lifting every borrower's cost of funds through the sovereign ceiling.",
                     "Debt sustainability warning: Investors demanded {$context['sovereign_spread_bps']} bps over the risk-free level to hold district debt, and the currency sold off with it.",
-                ] : [
-                    "Sovereign downgrade: Rating agencies cut the district's credit standing as the fiscal risk premium on its bonds widened sharply.",
-                    "Fiscal re-rating: The sovereign risk premium widened, lifting every borrower's cost of funds through the sovereign ceiling.",
-                    "Debt sustainability warning: Investors demanded a rising premium to hold district debt, and the currency sold off with it.",
                 ],
             ),
             ShockEvent::ELECTION_HELD => $this->getRandomPhrase(
@@ -575,51 +550,37 @@ class NarrativeEngine
                     "Rate decision: The Monetary Authority's committee has set the policy rate.",
                 ],
             ),
-            ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase(
-                isset($context['qe_intensity_pct']) ? [
-                    "Central bank Quantitative Easing: Monetary authority expanded asset purchases (QE intensity: {$context['qe_intensity_pct']}%) to compress bond yields and inject liquidity" . (isset($context['output_gap_pct']) ? " amid negative output gap ({$context['output_gap_pct']}%)" : "") . ".",
-                    "Emergency monetary easing: Central bank initiated large-scale asset purchases (QE: {$context['qe_intensity_pct']}%) to stabilize credit markets and lower borrowing costs" . (isset($context['output_gap_pct']) ? " (output gap: {$context['output_gap_pct']}%)" : "") . ".",
-                    "Central bank liquidity facility activated: Quantitative easing purchases ramped up to {$context['qe_intensity_pct']}%" . (isset($context['output_gap_pct']) ? " (output gap: {$context['output_gap_pct']}%)" : "") . " to support aggregate liquidity and counter recessionary pressure.",
-                ] : [
-                    "Central bank Quantitative Easing: Monetary authority expanded emergency asset purchases to suppress bond yields and restore liquidity.",
-                    "Emergency monetary easing: Central bank launched large-scale asset purchases to stabilize credit markets and lower borrowing costs.",
-                    "Monetary authorities activated emergency asset purchases (QE) to counter recessionary pressures and support market liquidity.",
-                ],
-            ),
+            ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase([
+                "Bond purchases begin: With its rate at the floor, the " . Institutions::MONETARY_AUTHORITY . " is buying bonds to bring long-term yields down and ease credit; output stands {$context['output_gap_pct']}% against potential.",
+                "Emergency easing: The " . Institutions::MONETARY_AUTHORITY . " has begun large-scale bond purchases to steady credit markets and lower borrowing costs, with output {$context['output_gap_pct']}% against potential.",
+                "Liquidity support: The " . Institutions::MONETARY_AUTHORITY . " is buying assets to support liquidity and counter the downturn; output stands {$context['output_gap_pct']}% against potential.",
+            ]),
             ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => $this->getRandomPhrase(
-                isset($context['swf_trade_pct'], $context['swf_weight_pct'], $context['swf_target_pct'], $context['swf_months']) ? [
+                [
                     "Sovereign Reserve Fund rebalances into equities: Its board holding fell to {$context['swf_weight_pct']}% of the fund against a {$context['swf_target_pct']}% policy weight, so it will buy about {$context['swf_trade_pct']}% of the free float over the next {$context['swf_months']} months.",
                     "Rule-based buying: The Sovereign Reserve Fund's domestic equities slipped to {$context['swf_weight_pct']}% of the fund (policy weight {$context['swf_target_pct']}%), triggering purchases of roughly {$context['swf_trade_pct']}% of the float spread over {$context['swf_months']} months.",
-                    "Reserve fund tops up the board: With domestic equities at {$context['swf_weight_pct']}% of a fund worth " . ($context['swf_size_gdp_pct'] ?? '—') . "% of GDP, the Sovereign Reserve Fund will add about {$context['swf_trade_pct']}% of the float to return to {$context['swf_target_pct']}%.",
-                ] : [
-                    "Sovereign Reserve Fund rebalances into equities: Its board holding fell through the band around its policy weight, and it will buy back to target over the coming months.",
-                    "Rule-based buying: The Sovereign Reserve Fund's domestic weight breached its deviation band, triggering purchases spread over the coming months.",
-                    "Reserve fund tops up the board: The Sovereign Reserve Fund will add to its board holding to return to its policy weight.",
+                    "Reserve fund tops up the board: With domestic equities at {$context['swf_weight_pct']}% of a fund worth " . $context['swf_size_gdp_pct'] . "% of GDP, the Sovereign Reserve Fund will add about {$context['swf_trade_pct']}% of the float to return to {$context['swf_target_pct']}%.",
                 ],
             ),
             ShockEvent::SOVEREIGN_WEALTH_TRIM => $this->getRandomPhrase(
-                isset($context['swf_trade_pct'], $context['swf_weight_pct'], $context['swf_target_pct'], $context['swf_months']) ? [
+                [
                     "Sovereign Reserve Fund trims equities: Its board holding rose to {$context['swf_weight_pct']}% of the fund against a {$context['swf_target_pct']}% policy weight, so it will sell about {$context['swf_trade_pct']}% of the free float over the next {$context['swf_months']} months.",
                     "Rule-based selling: The Sovereign Reserve Fund's domestic equities climbed to {$context['swf_weight_pct']}% of the fund (policy weight {$context['swf_target_pct']}%), triggering sales of roughly {$context['swf_trade_pct']}% of the float spread over {$context['swf_months']} months.",
-                    "Reserve fund takes profits by rule: With domestic equities up to {$context['swf_weight_pct']}% of a fund worth " . ($context['swf_size_gdp_pct'] ?? '—') . "% of GDP, the Sovereign Reserve Fund will sell about {$context['swf_trade_pct']}% of the float to return to {$context['swf_target_pct']}%.",
-                ] : [
-                    "Sovereign Reserve Fund trims equities: Its board holding rose through the band around its policy weight, and it will sell back to target over the coming months.",
-                    "Rule-based selling: The Sovereign Reserve Fund's domestic weight breached the top of its deviation band, triggering sales spread over the coming months.",
-                    "Reserve fund takes profits by rule: The Sovereign Reserve Fund will reduce its board holding to return to its policy weight.",
+                    "Reserve fund takes profits by rule: With domestic equities up to {$context['swf_weight_pct']}% of a fund worth " . $context['swf_size_gdp_pct'] . "% of GDP, the Sovereign Reserve Fund will sell about {$context['swf_trade_pct']}% of the float to return to {$context['swf_target_pct']}%.",
                 ],
             ),
             ShockEvent::PE_LEVERAGE_RECAPITALIZATION => $this->getRandomPhrase([
-                "Executed dividend recapitalizations across private equity portfolio assets, unlocking substantial liquidity.",
+                "Executed dividend recapitalisations across private equity portfolio assets, unlocking substantial liquidity.",
                 "Completed opportunistic debt refinancing and special dividend payouts across core portfolio holdings.",
-                "Optimized capital structure across buyout assets to return cash to fund LPs.",
+                "Optimised capital structure across buyout assets to return cash to fund LPs.",
             ]),
             ShockEvent::PE_PORTFOLIO_MARKDOWN => $this->getRandomPhrase([
                 "Marked down private equity portfolio company valuations amid multiple compression.",
-                "Unrealized fair-value adjustments across technology and growth investments weighed on portfolio net worth.",
+                "Unrealised fair-value adjustments across technology and growth investments weighed on portfolio net worth.",
                 "Weakened public comps required conservative valuation markdowns across private holdings.",
             ]),
             ShockEvent::GEOPOLITICAL_SANCTIONS => $this->getRandomPhrase([
-                "Sweeping international trade sanctions disrupted global business lines and contract fulfillment.",
+                "Sweeping international trade sanctions disrupted global business lines and contract fulfilment.",
                 "Imposition of cross-border trade restrictions halted key international shipment routes.",
                 "Compliance mandates and sanctions enforcement restricted access to foreign enterprise markets.",
             ]),
@@ -629,7 +590,7 @@ class NarrativeEngine
                 "Industry-wide catastrophe events exhausted primary treaty deductibles.",
             ]),
             ShockEvent::LITIGATION_SETTLEMENT_WIN => $this->getRandomPhrase([
-                "Secured a favorable legal settlement, unlocking substantial contingency fee income.",
+                "Secured a favourable legal settlement, unlocking substantial contingency fee income.",
                 "Landmark patent infringement verdict awarded significant damages to the firm.",
                 "Resolution of major class-action claims resulted in outsized legal contingency revenues.",
             ]),
@@ -641,7 +602,7 @@ class NarrativeEngine
             ShockEvent::LOGISTICS_SURGE_PRICING => $this->getRandomPhrase([
                 "Tight freight capacity enabled dynamic surge pricing across core shipping lanes.",
                 "Peak season carrier capacity constraints drove record contractual and spot freight yields.",
-                "High lane utilization and expedited freight premiums expanded logistics operating margins.",
+                "High lane utilisation and expedited freight premiums expanded logistics operating margins.",
             ]),
             ShockEvent::COMPONENT_SHORTAGE => $this->getRandomPhrase([
                 "Shortages of chips and parts at suppliers held back shipments, leaving orders unfilled at the quarter's end.",
@@ -664,7 +625,7 @@ class NarrativeEngine
                 "A wave of data centre construction filled the order book for high-end servers.",
             ]),
             ShockEvent::INFRASTRUCTURE_BILL_WIN => $this->getRandomPhrase([
-                "Secured landmark federal infrastructure grants and public-private partnership concessions.",
+                "Secured landmark public infrastructure grants and public-private partnership concessions.",
                 "Awarded multi-billion dollar municipal transportation and civil works construction contracts.",
                 "National infrastructure spending legislation unlocked significant forward project backlog.",
             ]),
@@ -679,9 +640,9 @@ class NarrativeEngine
                 "Subscriber retention promotions and device subsidy wars squeezed telecom service margins.",
             ]),
             ShockEvent::SPECTRUM_AUCTION => $this->getRandomPhrase([
-                "Secured prime 5G spectrum licenses in a competitive government auction, expanding network reach.",
+                "Secured prime 5G spectrum licences in a competitive government auction, expanding network reach.",
                 "Acquired high-capacity mid-band spectrum blocks to expand mobile broadband leadership.",
-                "Strategic spectrum license acquisitions reinforced long-term wireless network capacity.",
+                "Strategic spectrum licence acquisitions reinforced long-term wireless network capacity.",
             ]),
             ShockEvent::NETWORK_ROLLOUT_WAVE => $this->getRandomPhrase([
                 "Carrier customers launched a generational network rollout, stepping up radio access equipment order intake.",
@@ -700,12 +661,12 @@ class NarrativeEngine
             ]),
             ShockEvent::MANDATORY_HEALTHCARE_EXPANSION => $this->getRandomPhrase([
                 "Mandatory healthcare coverage expansions and higher patient admissions boosted operating volumes.",
-                "Expanded statutory health insurance coverage drove higher patient utilization across medical centers.",
-                "Increased healthcare enrollment supported robust inpatient and outpatient procedure growth.",
+                "Expanded statutory health insurance coverage drove higher patient utilisation across medical centres.",
+                "Increased healthcare enrolment supported robust inpatient and outpatient procedure growth.",
             ]),
             ShockEvent::HEALTHCARE_AUDIT_CLAWBACK => $this->getRandomPhrase([
                 "Regulatory billing audits and reimbursement clawbacks reduced net medical service revenue.",
-                "Statutory Medicare/Medicaid reimbursement revisions resulted in retrospective revenue adjustments.",
+                "Statutory public health reimbursement revisions resulted in retrospective revenue adjustments.",
                 "Payer claims review findings necessitated reserves for disputed clinical billing codes.",
             ]),
             ShockEvent::APPAREL_SUPPLY_CHAIN_DISRUPTION => $this->getRandomPhrase([
@@ -724,17 +685,20 @@ class NarrativeEngine
                 "Upstream commodity inflation narrowed refining and cracking unit margins.",
             ]),
             ShockEvent::CHEMICAL_AGRI_BOOM => $this->getRandomPhrase([
-                "Surging global fertilizer demand and agricultural commodity prices drove outsized specialty chemical margins.",
+                "Surging global fertiliser demand and agricultural commodity prices drove outsized specialty chemical margins.",
                 "Strong crop nutrient pricing and international agronomic demand expanded chemical operating earnings.",
-                "High fertilizer utilization and agricultural input pricing power drove record specialty chemical profits.",
+                "High fertiliser utilisation and agricultural input pricing power drove record specialty chemical profits.",
             ]),
 
             default => "Experienced an unexpected market event.",
         };
     }
 
+    /** One of the story's phrasings, on one draw from the simulation's stream. */
     private function getRandomPhrase(array $phrases): string
     {
-        return $phrases[array_rand($phrases)];
+        $phrases = array_values($phrases);
+
+        return $phrases[$this->math->generateIndex(count($phrases))];
     }
 }

@@ -26,7 +26,7 @@ class NarrativeEngineTest extends TestCase
         $this->assertNotEmpty($constants, 'ShockEvent constants must not be empty.');
 
         foreach ($constants as $name => $eventType) {
-            $lore = $this->engine->generateLore($eventType, ['amount' => '12.50']);
+            $lore = $this->engine->generateLore($eventType, ['amount' => '12.50'] + self::MACRO_CONTEXT);
 
             $this->assertIsString($lore, "Lore for {$name} ({$eventType}) must be a string.");
             $this->assertNotEmpty($lore, "Lore for {$name} ({$eventType}) must not be empty.");
@@ -94,10 +94,9 @@ class NarrativeEngineTest extends TestCase
         $this->assertStringContainsString('9.5', $inversion);
 
         $qe = $this->engine->generateLore(ShockEvent::TITAN_INTERVENTION, [
-            'qe_intensity_pct' => '1.50',
             'output_gap_pct' => '-1.80',
         ]);
-        $this->assertStringContainsString('1.50%', $qe);
+        $this->assertStringContainsString('-1.80%', $qe);
 
         $deployment = $this->engine->generateLore(ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT, [
             'swf_trade_pct' => '2.36',
@@ -121,6 +120,27 @@ class NarrativeEngineTest extends TestCase
         $this->assertStringContainsString('sell', $trim);
     }
 
+    /** Every macro reading SystemicEventReporter quotes, as it always sends them. */
+    private const MACRO_CONTEXT = [
+        'interbank_spread_bps' => '187',
+        'hy_spread_pct' => '8.40',
+        'unemployment_pct' => '6.3',
+        'output_gap_pct' => '-2.10',
+        'inversion_months' => '7.5',
+        'epu_index' => '140',
+        'sovereign_spread_bps' => '95',
+        'debt_to_gdp_pct' => '71',
+        'cat_severity' => '3.4',
+        'dsr_pct' => '14.2',
+        'debt_to_income_pct' => '128',
+        'credit_gap_pct' => '9.8',
+        'swf_trade_pct' => '0.85',
+        'swf_weight_pct' => '18.20',
+        'swf_target_pct' => '22.00',
+        'swf_size_gdp_pct' => '64',
+        'swf_months' => '9',
+    ];
+
     public function testSystemicEventsDoNotContainFantasyLore(): void
     {
         $eventsToVerify = [
@@ -136,7 +156,7 @@ class NarrativeEngineTest extends TestCase
         foreach ($eventsToVerify as $eventType) {
             // Run multiple times since phrases are randomly picked
             for ($i = 0; $i < 10; ++$i) {
-                $lore = $this->engine->generateLore($eventType, []);
+                $lore = $this->engine->generateLore($eventType, self::MACRO_CONTEXT);
                 $this->assertStringNotContainsString('Sovereign wealth funds', $lore);
                 $this->assertStringNotContainsString('District Titans', $lore);
                 $this->assertStringNotContainsString('District Statistical Office', $lore);
