@@ -5,15 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro;
 
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
 use App\Service\Macro\Recorder\OutputGapProbe;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
-use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -40,26 +34,15 @@ class MacroDiagnosticsClosureTest extends TestCase
         $gapProbe->enable();
         $diagnostics->enable();
 
-        $engine = new MacroEngine(
-            $math,
-            self::inMemoryRedis(),
-            new MacroSnapshotRecorder(),
-            new MonetaryPolicySubsystem($math, $diagnostics),
-            new LaborMarketSubsystem($diagnostics),
-            new MacroAggregateSubsystem($math, $gapProbe, $diagnostics),
-            new CommodityLogisticsSubsystem($math, $diagnostics),
-            new AssetMarketSubsystem($math, $diagnostics),
-            new CreditFiscalSubsystem($math, $diagnostics),
-            null,
-            $diagnostics,
-        );
+        $engine = MacroEngine::headless($math, diagnostics: $diagnostics, gapProbe: $gapProbe);
+        $economy = new MacroState();
 
         $perQuarter = intdiv(self::TICKS_PER_YEAR, 4);
         for ($quarter = 0; $quarter < self::QUARTERS; ++$quarter) {
             $gaps = [];
             $unemployment = $nairu = 0.0;
             for ($tick = 0; $tick < $perQuarter; ++$tick) {
-                $state = $engine->updateMacroState(1.0 / self::TICKS_PER_YEAR);
+                $state = $engine->step($economy, 1.0 / self::TICKS_PER_YEAR);
                 $gaps[] = $state->outputGap;
                 $unemployment = $state->unemploymentRate;
                 $nairu = $state->nairu;
@@ -181,24 +164,4 @@ class MacroDiagnosticsClosureTest extends TestCase
         }
     }
 
-    /** The bootstrap's Redis stand-in forgets everything; the engine needs its state back each tick. */
-    private static function inMemoryRedis(): \Redis
-    {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
-    }
 }

@@ -6,6 +6,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Corporate\FailureSweep;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Politics\PoliticsEngine;
@@ -96,6 +97,8 @@ final class MainlandCrashHarnessTest extends KernelTestCase
         }
 
         $macro = $c->get(MacroEngine::class);
+        $macroStore = $c->get(MacroStateStore::class);
+        $economy = $macroStore->load();
         $this->debtEngine = $c->get(\App\Service\Corporate\DebtEngine::class);
         $tracker = $c->get(StockTracker::class);
         $this->fvTracker = $tracker;
@@ -134,7 +137,10 @@ final class MainlandCrashHarnessTest extends KernelTestCase
         $disPrev = 0.0;
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt)
-                : $macro->updateMacroState($dt, $reading, $policy);
+                : $macro->step($economy, $dt, $reading, $policy);
+            if ($replay === null) {
+                $macroStore->save($economy);
+            }
             if ($politicsEngine !== null) {
                 $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
             }

@@ -5,8 +5,8 @@
 require dirname(__DIR__, 3) . '/tests/bootstrap.php';
 
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem, SovereignFundSubsystem};
+use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\PoliticsEngine;
 
@@ -21,9 +21,8 @@ $redis = new class extends \Redis {
     public function get(mixed $key): mixed { return $this->store[(string) $key] ?? false; }
     public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool { $this->store[$key] = (string) $value; return true; }
 };
-$engine = new MacroEngine($math, $redis, new MacroSnapshotRecorder(), new MonetaryPolicySubsystem($math), new LaborMarketSubsystem(),
-    new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math),
-    sovereignFundSubsystem: $fund ? new SovereignFundSubsystem($math) : null);
+$engine = MacroEngine::headless($math, withFund: $fund);
+$economy = new MacroState();
 $politics = new PoliticsEngine(MathUtility::ownStream($seed), $redis);
 $policy = $politics->liveState()->policy();
 $fields = ['outputGap', 'unemploymentRate', 'inflation', 'supercoreInflation', 'policyRate', 'yield2y', 'yield10y',
@@ -42,7 +41,7 @@ $fx = ['meet' => [0.0, 0, 0], 'other' => [0.0, 0, 0], 'meetQ' => [0.0, 0, 0], 'm
 $prevFx = null; $prevRate = null;
 for ($i = 1; $i <= (int) $years * $tpy; ++$i) {
     $cap = $fund ? SovereignFundSubsystem::BOARD_OPENING_CAP_USD * $nominal : null;
-    $macro = $engine->updateMacroState(1.0 / $tpy, new \App\DTO\BoardReadingDTO($cap, $cap === null ? null : 0.8 * $cap), $policy);
+    $macro = $engine->step($economy, 1.0 / $tpy, new \App\DTO\BoardReadingDTO($cap, $cap === null ? null : 0.8 * $cap), $policy);
     $nominal = $macro->nominalGdpIndex;
     $k = \App\Service\Math\TimeSeries::crossedSimulatedBoundary($macro->totalTime, 1.0 / $tpy, 1.0 / 8) ? 'meet' : 'other';
     if ($prevFx !== null && $prevFx > 0 && $macro->exchangeRateIndex > 0) {

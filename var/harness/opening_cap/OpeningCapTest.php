@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Market\Pricing\StockTracker;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -68,6 +69,8 @@ final class OpeningCapTest extends KernelTestCase
         }
 
         $macro = $c->get(MacroEngine::class);
+        $macroStore = $c->get(MacroStateStore::class);
+        $economy = $macroStore->load();
         $tracker = $c->get(StockTracker::class);
         $list = array_values($stocks);
         $dt = 1.0 / $tpy;
@@ -78,7 +81,8 @@ final class OpeningCapTest extends KernelTestCase
         $firmQ = [];
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
-            $m = $macro->updateMacroState($dt, new \App\DTO\BoardReadingDTO($lastCap));
+            $m = $macro->step($economy, $dt, new \App\DTO\BoardReadingDTO($lastCap));
+            $macroStore->save($economy);
             $result = $tracker->updateStocks($list, $dt, false, $m, $tick, $tpy);
             $lastCap = (float) $result['total_cap'];
             $caps[] = $lastCap;

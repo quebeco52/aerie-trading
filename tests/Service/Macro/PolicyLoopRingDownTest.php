@@ -5,14 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro;
 
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\MacroStateStore;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
-use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\MacroState;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -99,29 +92,17 @@ class PolicyLoopRingDownTest extends TestCase
                     return false;
                 }
             };
-            $redis = $this->inMemoryRedis();
-            $engine = new MacroEngine(
-                $math,
-                $redis,
-                new MacroSnapshotRecorder(),
-                new MonetaryPolicySubsystem($math),
-                new LaborMarketSubsystem(),
-                new MacroAggregateSubsystem($math),
-                new CommodityLogisticsSubsystem($math),
-                new AssetMarketSubsystem($math),
-                new CreditFiscalSubsystem($math),
-            );
+            $engine = MacroEngine::headless($math);
+            $economy = new MacroState();
             for ($tick = 0; $tick < self::BURN_IN_YEARS * self::TICKS_PER_YEAR; $tick++) {
-                $engine->updateMacroState($dt);
+                $engine->step($economy, $dt);
             }
             if ($kick !== 0.0) {
-                $state = json_decode((string) $redis->get(MacroStateStore::KEY), true);
-                $state['output_gap'] += $kick;
-                $redis->set(MacroStateStore::KEY, json_encode($state, JSON_PRESERVE_ZERO_FRACTION));
+                $economy->outputGap += $kick;
             }
             $path = [];
             for ($tick = 1; $tick <= self::OBSERVE_YEARS * self::TICKS_PER_YEAR; $tick++) {
-                $macro = $engine->updateMacroState($dt);
+                $macro = $engine->step($economy, $dt);
                 if ($tick % $perQuarter === 0) {
                     $path[] = $macro->outputGap;
                 }
@@ -135,24 +116,4 @@ class PolicyLoopRingDownTest extends TestCase
         return $response;
     }
 
-    /** The bootstrap's Redis stand-in forgets everything; the engine needs its state back each tick. */
-    private function inMemoryRedis(): \Redis
-    {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
-    }
 }

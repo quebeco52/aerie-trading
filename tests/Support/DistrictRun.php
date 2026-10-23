@@ -6,14 +6,7 @@ namespace App\Tests\Support;
 
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
-use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
-use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Macro\MacroState;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\PoliticsEngine;
 
@@ -33,24 +26,14 @@ final class DistrictRun
     {
         mt_srand($seed);
         $math = new MathUtility();
-        $engine = new MacroEngine(
-            $math,
-            self::inMemoryRedis(),
-            new MacroSnapshotRecorder(),
-            new MonetaryPolicySubsystem($math),
-            new LaborMarketSubsystem(),
-            new MacroAggregateSubsystem($math),
-            new CommodityLogisticsSubsystem($math),
-            new AssetMarketSubsystem($math),
-            new CreditFiscalSubsystem($math),
-            sovereignFundSubsystem: new SovereignFundSubsystem($math),
-        );
+        $engine = MacroEngine::headless($math, withFund: true);
+        $economy = new MacroState();
         $diet = $withDiet ? new PoliticsEngine(MathUtility::ownStream($seed), self::inMemoryRedis()) : null;
         $policy = $diet?->liveState()->policy();
 
         $dt = 1.0 / $ticksPerYear;
         for ($tick = 1; $tick <= $years * $ticksPerYear; ++$tick) {
-            $macro = $engine->updateMacroState($dt, policy: $policy);
+            $macro = $engine->step($economy, $dt, policy: $policy);
             if ($diet !== null) {
                 $policy = $diet->updatePolitics($macro, $dt)->policy();
             }
@@ -60,7 +43,7 @@ final class DistrictRun
         }
     }
 
-    /** The bootstrap's Redis stand-in forgets everything; the engines need their state back each tick. */
+    /** The bootstrap's Redis stand-in forgets everything; the Diet needs its state back each tick. */
     private static function inMemoryRedis(): \Redis
     {
         return new class extends \Redis {

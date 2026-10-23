@@ -24,13 +24,7 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
-use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\MacroState;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
@@ -80,17 +74,8 @@ final class GovernmentRenderTest extends KernelTestCase
                 return true;
             }
         };
-        $economy = new MacroEngine(
-            $math,
-            $redis,
-            new MacroSnapshotRecorder(),
-            new MonetaryPolicySubsystem($math),
-            new LaborMarketSubsystem(),
-            new MacroAggregateSubsystem($math),
-            new CommodityLogisticsSubsystem($math),
-            new AssetMarketSubsystem($math),
-            new CreditFiscalSubsystem($math),
-        );
+        $economy = MacroEngine::headless($math);
+        $state = new MacroState();
         $engine = new PoliticsEngine(MathUtility::ownStream($seed), $redis);
 
         $elections = new InMemoryDietElections();
@@ -117,7 +102,7 @@ final class GovernmentRenderTest extends KernelTestCase
         // Seeded once the mocks are built: PHPUnit names a new mock class from the same generator.
         mt_srand($seed);
         for ($tick = 0; $tick < (int) round($years * self::TICKS_PER_YEAR); ++$tick) {
-            $macro = $economy->updateMacroState(1.0 / self::TICKS_PER_YEAR, policy: $policy);
+            $macro = $economy->step($state, 1.0 / self::TICKS_PER_YEAR, policy: $policy);
             $politics = $engine->updatePolitics($macro, 1.0 / self::TICKS_PER_YEAR);
             $policy = $politics->policy();
             $recorder->record($politics);

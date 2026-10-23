@@ -5,13 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro;
 
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
-use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\MacroState;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -60,24 +54,15 @@ class HouseholdCreditCycleTest extends TestCase
     {
         mt_srand($seed);
         $mathUtility = new MathUtility();
-        $engine = new MacroEngine(
-            $mathUtility,
-            $this->inMemoryRedis(),
-            new MacroSnapshotRecorder(),
-            new MonetaryPolicySubsystem($mathUtility),
-            new LaborMarketSubsystem(),
-            new MacroAggregateSubsystem($mathUtility),
-            new CommodityLogisticsSubsystem($mathUtility),
-            new AssetMarketSubsystem($mathUtility),
-            new CreditFiscalSubsystem($mathUtility),
-        );
+        $engine = MacroEngine::headless($mathUtility);
+        $economy = new MacroState();
         $dt = 1.0 / self::TICKS_PER_YEAR;
         $perQuarter = intdiv(self::TICKS_PER_YEAR, 4);
         $leverage = [];
         $gap = [];
         $gapSum = 0.0;
         for ($tick = 1; $tick <= self::YEARS * self::TICKS_PER_YEAR; $tick++) {
-            $macro = $engine->updateMacroState($dt);
+            $macro = $engine->step($economy, $dt);
             $gapSum += $macro->outputGap;
             if ($tick % $perQuarter === 0) {
                 if ($tick > self::BURN_IN_YEARS * self::TICKS_PER_YEAR) {
@@ -111,24 +96,4 @@ class HouseholdCreditCycleTest extends TestCase
         return $cov / sqrt($varA * $varB);
     }
 
-    /** The bootstrap's Redis stand-in forgets everything; the engine needs its state back each tick. */
-    private function inMemoryRedis(): \Redis
-    {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
-    }
 }

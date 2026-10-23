@@ -6,13 +6,7 @@ namespace App\Tests\Service\Politics;
 
 use App\Data\Politics\AerieDiet as Diet;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
-use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\MacroState;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -156,17 +150,8 @@ class PoliticsEngineRealismTest extends TestCase
     {
         mt_srand(17);
         $math = new MathUtility();
-        $economy = new MacroEngine(
-            $math,
-            $this->inMemoryRedis(),
-            new MacroSnapshotRecorder(),
-            new MonetaryPolicySubsystem($math),
-            new LaborMarketSubsystem(),
-            new MacroAggregateSubsystem($math),
-            new CommodityLogisticsSubsystem($math),
-            new AssetMarketSubsystem($math),
-            new CreditFiscalSubsystem($math),
-        );
+        $economy = MacroEngine::headless($math);
+        $state = new MacroState();
         $engine = new Politics(MathUtility::ownStream(17), $this->inMemoryRedis());
 
         $votes = 0;
@@ -176,7 +161,7 @@ class PoliticsEngineRealismTest extends TestCase
         $ticksPerYear = 52;
         $policy = $engine->liveState()->policy();
         for ($tick = 0; $tick < 9 * $ticksPerYear; ++$tick) {
-            $macro = $economy->updateMacroState(1.0 / $ticksPerYear, policy: $policy);
+            $macro = $economy->step($state, 1.0 / $ticksPerYear, policy: $policy);
             $this->assertSame($policy->lever(Lever::CorporateTax), $macro->corporateTaxPolicyShift);
             $this->assertSame($policy->lever(Lever::LaborGrowth), $macro->laborForceGrowthRate);
             $this->assertSame($policy->electionPulse, $macro->electionPulse);

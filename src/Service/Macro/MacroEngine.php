@@ -10,6 +10,7 @@ use App\DTO\MacroStateDTO;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\MacroSnapshotRecorder;
+use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
@@ -21,7 +22,6 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\Department\SecuritiesCommission;
 use App\Service\Politics\Policy\Lever;
-use Psr\Log\LoggerInterface;
 
 class MacroEngine
 {
@@ -43,12 +43,8 @@ class MacroEngine
      */
     public const SYSTEMIC_EVENT_COOLDOWN_YEARS = 0.25;
 
-    /** The state updateMacroState() steps, for a caller that holds none of its own. */
-    private readonly MacroStateStore $store;
-
     public function __construct(
         private readonly MathUtility $mathUtility,
-        \Redis $redis,
         private readonly MacroSnapshotRecorder $snapshotRecorder,
         private readonly MonetaryPolicySubsystem $monetarySubsystem,
         private readonly LaborMarketSubsystem $laborSubsystem,
@@ -56,7 +52,6 @@ class MacroEngine
         private readonly CommodityLogisticsSubsystem $commoditySubsystem,
         private readonly AssetMarketSubsystem $assetSubsystem,
         private readonly CreditFiscalSubsystem $creditFiscalSubsystem,
-        ?LoggerInterface $logger = null,
         /** Records the quarter's averages. Null in a test or a headless harness, off everywhere the ticker is not. */
         private readonly ?MacroDiagnosticsProbe $diagnostics = null,
         /**
@@ -64,28 +59,30 @@ class MacroEngine
          * by hand gets.
          */
         private readonly ?SovereignFundSubsystem $sovereignFundSubsystem = null,
-    ) {
-        $this->store = new MacroStateStore($redis, $logger);
-    }
+    ) {}
 
     /**
-     * Steps the state Redis holds by one tick and saves it, for a caller that holds no state of its own.
-     *
-     * @param float                    $dt     Time increment in years.
-     * @param BoardReadingDTO|null     $board  The board as of the previous tick, or null for no market.
-     * @param GovernmentPolicyDTO|null $policy The government's levers and election pulse as of the previous tick, or
-     *                                         null.
+     * The engine as a test or a headless harness runs it: every subsystem drawing from one generator, the reserve fund
+     * only when asked for (a caller that builds the engine by hand gets none), and the quarter's probes when handed in.
      */
-    public function updateMacroState(
-        float $dt,
-        ?BoardReadingDTO $board = null,
-        ?GovernmentPolicyDTO $policy = null,
-    ): MacroStateDTO {
-        $state = $this->store->load();
-        $stepped = $this->step($state, $dt, $board, $policy);
-        $this->store->save($state);
-
-        return $stepped;
+    public static function headless(
+        MathUtility $math,
+        bool $withFund = false,
+        ?MacroDiagnosticsProbe $diagnostics = null,
+        ?OutputGapProbe $gapProbe = null,
+    ): self {
+        return new self(
+            $math,
+            new MacroSnapshotRecorder(),
+            new MonetaryPolicySubsystem($math, diagnostics: $diagnostics),
+            new LaborMarketSubsystem(diagnostics: $diagnostics),
+            new MacroAggregateSubsystem($math, $gapProbe, $diagnostics),
+            new CommodityLogisticsSubsystem($math, diagnostics: $diagnostics),
+            new AssetMarketSubsystem($math, diagnostics: $diagnostics),
+            new CreditFiscalSubsystem($math, diagnostics: $diagnostics),
+            $diagnostics,
+            $withFund ? new SovereignFundSubsystem($math) : null,
+        );
     }
 
     /**

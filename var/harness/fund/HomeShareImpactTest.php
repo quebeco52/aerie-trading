@@ -6,7 +6,6 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Corporate\FailureSweep;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\MacroState;
 use App\Service\Macro\MacroStateStore;
 use App\Service\Market\Pricing\StockTracker;
 use Doctrine\DBAL\Connection;
@@ -18,7 +17,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 /**
  * The Diet's home-equity share for the reserve fund, scripted: live macro + failure sweep + StockTracker on the
  * seeded board, fed every board input MarketTickerCommand feeds (one tick behind), no politics.
- * At SWITCH_YEAR the macro state's reserveHomeEquityShare is set (Redis state edit, nothing else touched).
+ * At SWITCH_YEAR the macro state's reserveHomeEquityShare is set (nothing else touched).
  *
  * Env: YEARS TPY SEED OUT=<jsonl> ARM=base|closed|open SWITCH_YEAR (3.0) HOME_CLOSED (0.5) HOME_OPEN (0.0)
  * Output: one JSON line: per-tick board return, trade/float and ownership; monthly fund snapshot.
@@ -73,12 +72,13 @@ final class HomeShareImpactTest extends KernelTestCase
         $this->assertNotEmpty($stocks);
 
         $macro = $c->get(MacroEngine::class);
+        $macroStore = $c->get(MacroStateStore::class);
+        $economy = $macroStore->load();
         $tracker = $c->get(StockTracker::class);
         $sweep = $c->get(FailureSweep::class);
         $liquidity = $c->get(\App\Service\Market\Pricing\LiquidityEngine::class);
         $floatCaps = [];
         $push = [];
-        $redis = $c->get(\Redis::class);
 
         $dt = 1.0 / $tpy;
         $ticks = (int) round($years * $tpy);
@@ -94,12 +94,11 @@ final class HomeShareImpactTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             if ($newShare !== null && $tick === $switchTick) {
-                $state = MacroState::fromArray(json_decode((string) $redis->get(MacroStateStore::KEY), true, 512, JSON_THROW_ON_ERROR));
-                $switched = ['from' => $state->reserveHomeEquityShare, 'to' => $newShare, 't' => $state->totalTime];
-                $state->reserveHomeEquityShare = $newShare;
-                $redis->set(MacroStateStore::KEY, json_encode($state->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION));
+                $switched = ['from' => $economy->reserveHomeEquityShare, 'to' => $newShare, 't' => $economy->totalTime];
+                $economy->reserveHomeEquityShare = $newShare;
             }
-            $m = $macro->updateMacroState($dt, new \App\DTO\BoardReadingDTO($lastCap, $lastFloat, $lastReturn ?? 0.0, $lastDividends ?? 0.0, $lastIssuance ?? 0.0, $lastDuty ?? 0.0, $lastStake ?? 0.0, $lastLevy));
+            $m = $macro->step($economy, $dt, new \App\DTO\BoardReadingDTO($lastCap, $lastFloat, $lastReturn ?? 0.0, $lastDividends ?? 0.0, $lastIssuance ?? 0.0, $lastDuty ?? 0.0, $lastStake ?? 0.0, $lastLevy));
+            $macroStore->save($economy);
 
             if ($tick % $operatorInterval === 0) {
                 foreach ($sweep->sweep($stocks, $m) as $ev) {

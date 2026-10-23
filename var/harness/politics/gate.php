@@ -9,8 +9,8 @@
 require __DIR__ . '/../../../tests/bootstrap.php';
 use App\Data\Politics\AerieDiet;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
+use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -30,8 +30,8 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
         public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool { $this->store[$key] = (string) $value; return true; }
     };
     $politics = in_array($arm, ['off', 'calendar', 'step'], true) ? null : new PoliticsEngine(MathUtility::ownStream($seed), $redis);
-    $engine = new MacroEngine($math, $redis, new MacroSnapshotRecorder(), new MonetaryPolicySubsystem($math), new LaborMarketSubsystem(),
-        new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math));
+    $engine = MacroEngine::headless($math);
+    $economy = new MacroState();
     $policy = $politics?->liveState()->policy();
     $p = new \App\DTO\PoliticsStateDTO();
     unset($m);
@@ -39,7 +39,7 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
     $ticks = (int) $years * $tpy;
     for ($i = 1; $i <= $ticks; ++$i) {
         $pre = isset($m) ? [$m->creditCrisisDrag, $m->bankCapitalBuilt, $m->bankCapitalRequirement, $m->lastCreditCrisisAt, $m->countercyclicalBufferRate] : null;
-        $m = $engine->updateMacroState(1.0 / $tpy, policy: $policy);
+        $m = $engine->step($economy, 1.0 / $tpy, policy: $policy);
         if ($pre !== null && $m->lastCreditCrisisAt !== $pre[3]) {
             // Crisis event row: the drag jump on the tick, and the capital the banks held going in.
             fwrite($fh, json_encode(['s' => $seed, 'ev' => 'crisis', 't' => round($m->totalTime, 4), 'djump' => $m->creditCrisisDrag - $pre[0],

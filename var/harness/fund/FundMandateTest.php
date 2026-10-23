@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Corporate\FailureSweep;
 use App\Service\Market\Pricing\StockTracker;
 use Doctrine\DBAL\Connection;
@@ -64,6 +65,8 @@ final class FundMandateTest extends KernelTestCase
         $this->assertNotEmpty($stocks);
 
         $macro = $c->get(MacroEngine::class);
+        $macroStore = $c->get(MacroStateStore::class);
+        $economy = $macroStore->load();
         $tracker = $c->get(StockTracker::class);
         $sweep = $c->get(FailureSweep::class);
 
@@ -97,7 +100,8 @@ final class FundMandateTest extends KernelTestCase
                     reserveFundEquityShare: (float) getenv('MANDATE'),
                 );
             }
-            $m = $macro->updateMacroState($dt, new \App\DTO\BoardReadingDTO($lastCap, $lastFloat, $lastReturn ?? 0.0, $lastDividends ?? 0.0, $lastIssuance ?? 0.0, $lastDuty ?? 0.0, $lastStake ?? 0.0, $lastLevy), $policy);
+            $m = $macro->step($economy, $dt, new \App\DTO\BoardReadingDTO($lastCap, $lastFloat, $lastReturn ?? 0.0, $lastDividends ?? 0.0, $lastIssuance ?? 0.0, $lastDuty ?? 0.0, $lastStake ?? 0.0, $lastLevy), $policy);
+            $macroStore->save($economy);
             $lastReturn = null;
             $lastDividends = null;
             $lastIssuance = null;

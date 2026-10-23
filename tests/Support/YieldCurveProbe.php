@@ -10,7 +10,7 @@ use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 /**
  * A one-shot reading of the Authority's balance sheet step and the curve it leaves, for tests that probe either from a
  * given state. It is not the engine's sequence, which applies the balance sheet, rolls the book coupon and moves the
- * term premium and expectations before it fits the curve (MacroEngine::updateMacroState()); the state is left as given.
+ * term premium and expectations before it fits the curve (MacroEngine::step()); the state is left as given.
  */
 final class YieldCurveProbe
 {

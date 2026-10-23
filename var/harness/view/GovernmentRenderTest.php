@@ -13,8 +13,7 @@ use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
 use App\Repository\DietElectionRepository;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
+use App\Service\Macro\MacroState;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\Recorder\ElectionRecorder;
 use App\Service\Politics\PoliticsEngine;
@@ -58,8 +57,8 @@ final class GovernmentRenderTest extends KernelTestCase
             public function get(mixed $key): mixed { return $this->store[(string) $key] ?? false; }
             public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool { $this->store[$key] = (string) $value; return true; }
         };
-        $economy = new MacroEngine($math, $redis, new MacroSnapshotRecorder(), new MonetaryPolicySubsystem($math), new LaborMarketSubsystem(),
-            new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math));
+        $economy = MacroEngine::headless($math);
+        $state = new MacroState();
         $engine = new PoliticsEngine(MathUtility::ownStream($seed), $redis);
 
         $elections = new InMemoryDietElections();
@@ -76,7 +75,7 @@ final class GovernmentRenderTest extends KernelTestCase
         $macro = new MacroStateDTO();
         $politics = new PoliticsStateDTO();
         for ($tick = 0; $tick < (int) round($years * $tpy); ++$tick) {
-            $macro = $economy->updateMacroState(1.0 / $tpy, policy: $policy);
+            $macro = $economy->step($state, 1.0 / $tpy, policy: $policy);
             $politics = $engine->updatePolitics($macro, 1.0 / $tpy);
             $policy = $politics->policy();
             $recorder->record($politics);

@@ -128,7 +128,7 @@ class MacroStateStoreTest extends TestCase
 
     public function testAPayloadThatIsNotAStateReadsAsNone(): void
     {
-        foreach (['not json at all', '"a bare string"', '12345', '  '] as $corrupt) {
+        foreach (['{invalid json payload!!}', 'null', '"a bare string"', '12345', '', '  '] as $corrupt) {
             $redis = $this->createMock(\Redis::class);
             $redis->method('get')->willReturn($corrupt);
 

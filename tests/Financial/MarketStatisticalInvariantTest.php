@@ -50,7 +50,7 @@ class MarketStatisticalInvariantTest extends TestCase
         $this->tailWeight = sqrt(1.0 - AssetMarketSubsystem::MARKET_FACTOR_REGIME_VARIANCE_SHARE);
     }
 
-    /** Advances the two-leg market factor exactly as MacroEngine::updateMacroState() does. */
+    /** Advances the two-leg market factor exactly as MacroEngine::step() does. */
     private function nextMarketShock(float &$latent): float
     {
         $latent = $this->math->generatePersistentZ($latent, $this->regimePhi);

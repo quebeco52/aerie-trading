@@ -4,8 +4,7 @@
 // php formation_run.php <seedFrom> <seedTo> <years> <tpy> <out>
 require '/home/quebeco/Projects/Code/Private/aerie-trading/tests/bootstrap.php';
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem};
+use App\Service\Macro\MacroState;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Math\MathUtility;
 use App\Data\Politics\AerieDiet;
@@ -20,15 +19,15 @@ for ($seed = (int) $seedFrom; $seed <= (int) $seedTo; ++$seed) {
         public function get(mixed $key): mixed { return $this->store[(string) $key] ?? false; }
         public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool { $this->store[$key] = (string) $value; return true; }
     };
-    $engine = new MacroEngine($math, $redis, new MacroSnapshotRecorder(), new MonetaryPolicySubsystem($math), new LaborMarketSubsystem(),
-        new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math));
+    $engine = MacroEngine::headless($math);
+    $economy = new MacroState();
     $politics = new PoliticsEngine(MathUtility::ownStream($seed), $redis);
     $policy = $politics->liveState()->policy();
     $outgoing = AerieDiet::governingParties(AerieDiet::SEED_COALITION);
     $outgoingSupport = [];
     $ticks = (int) $years * $tpy;
     for ($i = 1; $i <= $ticks; ++$i) {
-        $macro = $engine->updateMacroState(1.0 / $tpy, policy: $policy);
+        $macro = $engine->step($economy, 1.0 / $tpy, policy: $policy);
         $m = $politics->updatePolitics($macro, 1.0 / $tpy);
         $policy = $m->policy();
         if ($m->lastCabinetFellAt === $m->totalTime) {

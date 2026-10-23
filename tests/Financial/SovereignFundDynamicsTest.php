@@ -6,13 +6,7 @@ namespace App\Tests\Financial;
 
 use App\DTO\BoardReadingDTO;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
-use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
-use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -121,20 +115,8 @@ class SovereignFundDynamicsTest extends TestCase
     {
         mt_srand($seed);
         $math = new MathUtility();
-        $engine = new MacroEngine(
-            $math,
-            $this->inMemoryRedis(),
-            new MacroSnapshotRecorder(),
-            new MonetaryPolicySubsystem($math),
-            new LaborMarketSubsystem(),
-            new MacroAggregateSubsystem($math),
-            new CommodityLogisticsSubsystem($math),
-            new AssetMarketSubsystem($math),
-            new CreditFiscalSubsystem($math),
-            null,
-            null,
-            $withFund ? new SovereignFundSubsystem($math) : null,
-        );
+        $engine = MacroEngine::headless($math, withFund: $withFund);
+        $economy = new MacroState();
 
         $dt = 1.0 / self::TICKS_PER_YEAR;
         $floatCap = self::OPENING_FLOAT_CAP;
@@ -153,7 +135,7 @@ class SovereignFundDynamicsTest extends TestCase
         $lastRebalance = -1.0;
 
         for ($tick = 1; $tick <= self::YEARS * self::TICKS_PER_YEAR; ++$tick) {
-            $macro = $engine->updateMacroState($dt, new BoardReadingDTO($floatCap / self::FLOAT_SHARE, $floatCap, $priceReturn, $dividends));
+            $macro = $engine->step($economy, $dt, new BoardReadingDTO($floatCap / self::FLOAT_SHARE, $floatCap, $priceReturn, $dividends));
             $openingGdp ??= $macro->nominalGdpIndex;
 
             // A board anchored the way the engine's is: it scales with nominal GDP, re-rates against the equity risk
@@ -194,23 +176,4 @@ class SovereignFundDynamicsTest extends TestCase
         return $values[intdiv(count($values), 2)];
     }
 
-    private function inMemoryRedis(): \Redis
-    {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
-    }
 }

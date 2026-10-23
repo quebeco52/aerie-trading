@@ -14,8 +14,8 @@ require __DIR__ . '/../../../tests/bootstrap.php';
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Macro\MacroEngine;
-use App\Service\Macro\Recorder\MacroSnapshotRecorder;
-use App\Service\Macro\Subsystem\{AssetMarketSubsystem, CommodityLogisticsSubsystem, CreditFiscalSubsystem, LaborMarketSubsystem, MacroAggregateSubsystem, MonetaryPolicySubsystem, SovereignFundSubsystem};
+use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\News\SystemicEventReporter;
 use App\Service\Politics\PoliticsEngine;
@@ -100,11 +100,11 @@ function run(int $seedFrom, int $seedTo, int $years, int $tpy, string $statesOut
             public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool { $this->store[$key] = (string) $value; return true; }
         };
         $politics = new PoliticsEngine(MathUtility::ownStream($seed), $redis);
-        $engine = new MacroEngine($math, $redis, new MacroSnapshotRecorder(), new MonetaryPolicySubsystem($math), new LaborMarketSubsystem(),
-            new MacroAggregateSubsystem($math), new CommodityLogisticsSubsystem($math), new AssetMarketSubsystem($math), new CreditFiscalSubsystem($math));
+        $engine = MacroEngine::headless($math);
+        $economy = new MacroState();
         $policy = $politics->liveState()->policy();
         for ($i = 1; $i <= $years * $tpy; ++$i) {
-            $macro = $engine->updateMacroState(1.0 / $tpy, policy: $policy);
+            $macro = $engine->step($economy, 1.0 / $tpy, policy: $policy);
             $p = $politics->updatePolitics($macro, 1.0 / $tpy);
             $policy = $p->policy();
             if ($i % $tpy === 0) {

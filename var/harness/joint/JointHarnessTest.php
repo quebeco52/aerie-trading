@@ -8,6 +8,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\FailureSweep;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\MacroStateStore;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
@@ -97,6 +98,8 @@ class JointHarnessTest extends KernelTestCase
         }
 
         $macro = $c->get(MacroEngine::class);
+        $macroStore = $c->get(MacroStateStore::class);
+        $economy = $macroStore->load();
         $this->debtEngine = $c->get(App\Service\Corporate\DebtEngine::class);
         $tracker = $c->get(StockTracker::class);
         $this->fvTracker = $tracker;
@@ -133,7 +136,10 @@ class JointHarnessTest extends KernelTestCase
 
         for ($tick = 1; $tick <= $ticks; $tick++) {
             $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt)
-                : $macro->updateMacroState($dt, $reading, $policy);
+                : $macro->step($economy, $dt, $reading, $policy);
+            if ($replay === null) {
+                $macroStore->save($economy);
+            }
             if ($politicsEngine !== null) {
                 $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
             }
