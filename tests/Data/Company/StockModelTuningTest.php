@@ -211,6 +211,7 @@ class StockModelTuningTest extends TestCase
             'mining' => [ModelParam::BaseMetalsWeight, ModelParam::PreciousMetalsWeight, ModelParam::EnergyMineralsWeight, ModelParam::FertilizerMineralsWeight],
             'conglomerate' => [ModelParam::IndustrialConglomerateWeight, ModelParam::DefensiveStaplesWeight, ModelParam::ContrarianFloatWeight],
             'law_firm' => [ModelParam::CorporateRetainerWeight, ModelParam::LitigationContingencyWeight, ModelParam::RestructuringAdvisoryWeight],
+            'consulting' => [ModelParam::StrategyAdvisoryWeight, ModelParam::TechnologyProgrammeWeight, ModelParam::RiskRestructuringWeight],
             'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight, ModelParam::CaptiveFinanceWeight],
             'hedge_fund' => [ModelParam::HfManagementFeeWeight, ModelParam::HfDirectionalBetsWeight, ModelParam::HfQuantAlphaWeight],
             'chemical' => [ModelParam::BasePetrochemicalsWeight, ModelParam::SpecialtyChemicalsWeight, ModelParam::AgrochemicalsWeight],

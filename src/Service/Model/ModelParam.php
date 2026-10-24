@@ -254,6 +254,11 @@ enum ModelParam: string
     case CorporateRetainerWeight = 'corporate_retainer_weight';
     case LitigationContingencyWeight = 'litigation_contingency_weight';
 
+    // --- Consulting ---
+    case StrategyAdvisoryWeight = 'strategy_advisory_weight';
+    case TechnologyProgrammeWeight = 'technology_programme_weight';
+    case RiskRestructuringWeight = 'risk_restructuring_weight';
+
     // --- Utilities & Waste Management ---
     case RegulatedBaseWeight = 'regulated_base_weight';
     case UnregulatedMerchantWeight = 'unregulated_merchant_weight';

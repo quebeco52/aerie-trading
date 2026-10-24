@@ -66,6 +66,7 @@ class Sectors
         'restaurant'      => 'Operates a mix of corporate-owned and franchised locations. Corporate stores have high revenue and high fixed costs. Franchise operations generate low revenue but near 100% margin royalty streams. Highly sensitive to consumer discretionary spending and input inflation.',
         'resorts_casinos' => 'Integrated resorts and casinos. Dual-stream engine: high-margin gaming (subject to volatile "Whale Luck") and sticky non-gaming conventions. Highly elastic to consumer sentiment, suffering promotional margin drag during downturns.',
         'law_firm'        => 'Asset-light, human-capital intensive corporate legal advisory and litigation practice. Dual-stream revenue engine blends defensive, high-margin corporate retainers and advisory fees with highly volatile, lumpy contingency payouts from blockbuster litigation settlements. Features minimal CapEx requirements, rapid free cash flow conversion, and strong macro cycle resilience.',
+        'consulting'      => 'Consultancies sell their staff\'s time under signed engagements, and each line of work books into its own backlog that bills as the work is done. Strategy advice is weeks of work bought from discretionary budgets and is the first thing clients cut; technology programmes and managed services run for years against IT budgets set a year ahead; risk, regulatory and restructuring mandates arrive with credit stress and corporate failures. The firm staffs to the work in hand, so when bookings fall the bench fills before headcount comes down, and margins move ahead of revenue.',
         'advertising_agency' => 'Asset light, human-capital intensive. Revenue driven by steady long-term corporate retainers and counter-cyclical crisis management mandates.',
         'education'       => 'Revenue is a mix of highly sticky, guaranteed corporate/government subsidies and highly cyclical talent placement fees.',
         'conglomerate'    => 'A mix of diverse, unrelated business lines (industrial manufacturing, consumer products, financial investments) providing incredibly low baseline variance.',
@@ -118,7 +119,7 @@ class Sectors
         'Computer Hardware' => ['pe' => 15.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'computer_hardware'],
         'Conglomerates' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'conglomerate'],
         // Almost entirely human capital
-        'Consulting Services' => ['pe' => 22.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'law_firm'],
+        'Consulting Services' => ['pe' => 22.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'consulting'],
         // Asset heavy, cyclical mining. Book D/E of US metals & mining (Damodaran, Jan 2026: 30.7% book debt/capital,
         // 73 firms).
         'Copper' => ['pe' => 12.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 0.44, 'business_model' => 'mining'],
@@ -373,6 +374,7 @@ class Sectors
         'internet_retail'                => Sector\InternetRetailBusinessModel::class,
         'restaurant'                     => Sector\RestaurantBusinessModel::class,
         'law_firm'                       => Sector\LawFirmBusinessModel::class,
+        'consulting'                     => Sector\ConsultingBusinessModel::class,
         'advertising_agency'             => Sector\AdvertisingAgencyBusinessModel::class,
         'education'                      => Sector\EducationBusinessModel::class,
         'conglomerate'                   => Sector\ConglomerateBusinessModel::class,

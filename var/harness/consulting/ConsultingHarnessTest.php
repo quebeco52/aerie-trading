@@ -1,0 +1,115 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../lib/BoardRun.php';
+
+use App\Entity\CorporateReport;
+use App\Entity\StockEvent;
+
+/**
+ * Behaviour check for the consulting firms (GDWT, TSTN) beside two service comparators (CLAW, LYRE). Read-only probe:
+ * writes one JSON per seed to CONSULT_OUT with the opening, every quarter of the four firms (KPIs, stream revenue,
+ * the macro the bookings read), a daily price path with a cap-weighted board index, and industry/sector revenue.
+ */
+final class ConsultingHarnessTest extends BoardRun
+{
+    private const FIRMS = ['GDWT', 'TSTN', 'CLAW', 'LYRE'];
+
+    /** @var array<string, mixed> */
+    private array $out = ['opening' => [], 'q' => [], 'daily' => [], 'agg' => [], 'events' => []];
+    private float $index = 1.0;
+    /** @var array<string, float> */
+    private array $lastPx = [];
+
+    protected function onStart(): void
+    {
+        foreach (self::FIRMS as $t) {
+            $s = $this->stocks[$t];
+            $this->out['opening'][$t] = [
+                'px' => (float) $s->getPrice(), 'eps' => (float) $s->getEarningsPerShare(),
+                'bvps' => (float) $s->getBookValuePerShare(), 'rev' => (float) $s->getTotalRevenue(),
+                'om' => (float) ($s->getOperatingMargin() ?? 0.0), 'eq' => (float) $s->getTotalEquity(),
+                'sector' => $s->getSector(), 'industry' => $s->getIndustry(),
+            ];
+        }
+        foreach ($this->list as $s) {
+            $this->lastPx[$s->getTicker()] = (float) $s->getPrice();
+        }
+    }
+
+    protected function afterStocks(array $result): void
+    {
+        // Cap-weighted board return over firms alive at both ends of the tick.
+        $num = 0.0;
+        $den = 0.0;
+        foreach ($this->list as $s) {
+            $t = $s->getTicker();
+            $px = (float) $s->getPrice();
+            $prev = $this->lastPx[$t] ?? 0.0;
+            if (!$s->isBankrupt() && $prev > 0.0 && $px > 0.0) {
+                $w = $prev * (float) $s->getSharesOutstanding();
+                $num += $w * ($px / $prev - 1.0);
+                $den += $w;
+            }
+            $this->lastPx[$t] = $px;
+        }
+        $this->index *= 1.0 + ($den > 0.0 ? $num / $den : 0.0);
+        $row = ['i' => $this->index];
+        foreach (self::FIRMS as $t) {
+            $row[$t] = (float) $this->stocks[$t]->getPrice();
+        }
+        $this->out['daily'][] = $row;
+    }
+
+    protected function reportRow(array $row, CorporateReport $report): array
+    {
+        $s = $report->getStock();
+        $t = $s->getTicker();
+        $q = (string) round($this->currentTime, 2);
+        $rev = (float) $report->getRevenue();
+        $ind = (string) $s->getIndustry();
+        $this->out['agg'][$q]['ind'][$ind] = ($this->out['agg'][$q]['ind'][$ind] ?? 0.0) + $rev;
+        $this->out['agg'][$q]['sec'][$s->getSector()] = ($this->out['agg'][$q]['sec'][$s->getSector()] ?? 0.0) + $rev;
+        if (in_array($t, self::FIRMS, true)) {
+            $m = $this->currentMacro;
+            $this->out['q'][$t][] = [
+                't' => round($this->currentTime, 3), 'rev' => $rev, 'om' => (float) $report->getOperatingMargin(),
+                'ni' => (float) $report->getNetIncome(), 'eps' => (float) $s->getEarningsPerShare(),
+                'px' => (float) $s->getPrice(), 'div' => (float) $report->getDividendPaid(),
+                'sh' => (float) $s->getSharesOutstanding(), 'eq' => (float) $report->getEquity(),
+                'debt' => (float) $report->getTotalDebt(), 'rating' => $s->getCreditRating(),
+                'qid' => $s->getQuartersInDefault(), 'pd' => $s->isPaymentDefault(),
+                'kpi' => $report->getReportedKpis() ?? [], 'streams' => $report->getRevenueStreams() ?? [],
+                'gap' => $m?->outputGapEma ?? 0.0, 'gap_raw' => $m?->outputGap ?? 0.0,
+                'spread' => $m !== null ? $m->macroCreditSpreadEma - $m->macroCreditSpreadTrend : 0.0,
+                'deal' => $m?->dealActivityDeviation() ?? 0.0, 'dflt' => $m?->corporateDefaultDeviation() ?? 0.0,
+            ];
+        }
+
+        return $row;
+    }
+
+    protected function onEvent(StockEvent $event): void
+    {
+        $t = $event->getStock()->getTicker();
+        if (in_array($t, self::FIRMS, true)) {
+            $this->out['events'][$t][$event->getEventType()] = ($this->out['events'][$t][$event->getEventType()] ?? 0) + 1;
+        }
+    }
+
+    protected function quarterRows(): bool
+    {
+        return false;
+    }
+
+    protected function onEnd(): void
+    {
+        $this->out['dead'] = $this->dead;
+        $this->out['seed'] = $this->seed;
+        $path = getenv('CONSULT_OUT');
+        if ($path) {
+            file_put_contents((string) $path, (string) json_encode($this->out, JSON_PARTIAL_OUTPUT_ON_ERROR));
+        }
+    }
+}

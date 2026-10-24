@@ -99,7 +99,6 @@ class SectorsTest extends TestCase
         yield 'homebuilders run on their own land bank' => ['Residential Construction', 'homebuilder'];
         yield 'components ride the hardware cycle' => ['Electronic Components', 'computer_hardware'];
         yield 'pollution controls are waste management' => ['Pollution & Treatment Controls', 'waste_management'];
-        yield 'consulting is a professional-services partnership' => ['Consulting Services', 'law_firm'];
     }
 
     /**

@@ -84,6 +84,7 @@ class DistrictMap
             'steel_manufacturing', 'specialty_industrial_machinery', 'chemical',
             'construction', 'defense_contractor', 'security_protection', 'waste_management',
             'railroad', 'shipping', 'port_terminal', 'logistics', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
+            'consulting',
         ],
         'Consumer Trades' => [
             'consumer_staples', 'restaurant', 'apparel_manufacturing', 'auto_manufacturer',
@@ -335,6 +336,8 @@ class DistrictMap
         // Guardians and the professions.
         'defense_contractor' => 'shield', 'security_protection' => 'lock',
         'law_firm' => 'scales', 'education' => 'cap', 'advertising_agency' => 'megaphone',
+        // A consultancy is known by its slide decks: the bar chart the market-data houses carry too.
+        'consulting' => 'chart',
         // Consumer houses.
         'consumer_staples' => 'cart', 'restaurant' => 'fork', 'apparel_manufacturing' => 'shirt',
         'auto_manufacturer' => 'car', 'internet_retail' => 'bag', 'resorts_casinos' => 'dice',

@@ -865,6 +865,27 @@ class StockModelTuning
         ],
 
         // =====================================================================
+        // CONSULTING ARCHETYPES
+        // =====================================================================
+
+        // --- Godwit Consulting Group (GDWT) ---
+        // Strategy and technology house: board advice on top of multi-year systems programmes and managed services.
+        'GDWT' => [
+            ModelParam::StrategyAdvisoryWeight->value    => 0.35,
+            ModelParam::TechnologyProgrammeWeight->value => 0.55,
+            ModelParam::RiskRestructuringWeight->value   => 0.10,
+        ],
+
+        // --- Turnstone Advisory (TSTN) ---
+        // Restructuring, regulatory remediation and forensic work, with economic and technology advice on the side.
+        'TSTN' => [
+            ModelParam::StrategyAdvisoryWeight->value    => 0.30,
+            ModelParam::TechnologyProgrammeWeight->value => 0.10,
+            ModelParam::RiskRestructuringWeight->value   => 0.60,
+            ModelParam::PricingPowerIndex->value         => 0.75, // A crisis mandate is not shopped on price
+        ],
+
+        // =====================================================================
         // AUTO MANUFACTURER ARCHETYPES
         // =====================================================================
 

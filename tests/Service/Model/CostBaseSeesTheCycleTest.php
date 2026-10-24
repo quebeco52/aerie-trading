@@ -29,6 +29,7 @@ class CostBaseSeesTheCycleTest extends TestCase
      * cycle, so each model's own test runs the book down instead.
      */
     private const BACKLOG_DRIVEN = [
+        'consulting',
         'defense_contractor',
         'homebuilder',
         'specialty_industrial_machinery',
