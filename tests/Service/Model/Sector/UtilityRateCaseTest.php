@@ -7,10 +7,9 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\FirmEconomics;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -27,7 +26,6 @@ use PHPUnit\Framework\TestCase;
  * inflates revenue with, so a multiplier carrying a cumulative level rather than the lag hands the utility
  * free margin on every order instead of squeezing it between them.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class UtilityRateCaseTest extends TestCase
 {
     private const PENDING_KEY = StreamContext::REGIME_STATE_PREFIX . UtilityBusinessModel::REGIME_RATE_CASE;
@@ -48,13 +46,9 @@ final class UtilityRateCaseTest extends TestCase
         $stock->setBeta('0.5');
 
         $quarter = 0;
-        $math = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal', 'checkProbability'])
-            ->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
         // By reference: an arrow function would capture the counter by value and freeze it at zero.
-        $math->method('checkProbability')->willReturnCallback(
-            static function () use (&$quarter, $decideOn): bool {
+        $math = new ScriptedDraws(
+            checkProbability: static function () use (&$quarter, $decideOn): bool {
                 return in_array($quarter, $decideOn, true);
             },
         );

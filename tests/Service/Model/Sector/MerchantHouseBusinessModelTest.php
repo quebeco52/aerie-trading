@@ -16,6 +16,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\MerchantHouseBusinessModel;
 use App\Tests\Support\FloatBookCreditDrivers;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class MerchantHouseBusinessModelTest extends TestCase
@@ -38,17 +39,7 @@ class MerchantHouseBusinessModelTest extends TestCase
      */
     private function deterministicMath(): MathUtility
     {
-        return new class extends MathUtility {
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return 0.0;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     /** Every series this model reads sitting exactly on its baseline. */
@@ -196,7 +187,7 @@ class MerchantHouseBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($calm->actualRevenue, $frozen->actualRevenue, 1e-6);
         $this->assertEqualsWithDelta($calm->clampedMargin, $frozen->clampedMargin, 1e-12, 'The cargo\'s funding is not in its cost of goods.');
 
-        $debtEngine = new DebtEngine(new MathUtility(), CorporateMetrics::getInstance());
+        $debtEngine = new DebtEngine(MathUtility::ownStream(20261024), CorporateMetrics::getInstance());
         $interest = static fn(MacroStateDTO $macro): float => $debtEngine->calculateInterestExpense($ravn, $macro)->interestExpense;
         $floatingDebt = (float) $ravn->getTotalDebt() * (float) $ravn->getFloatingDebtRatio();
 
@@ -229,7 +220,7 @@ class MerchantHouseBusinessModelTest extends TestCase
         }
         $this->assertNotNull($seed);
 
-        $math = new MathUtility();
+        $math = MathUtility::ownStream(20261024);
         $debtEngine = new DebtEngine($math, CorporateMetrics::getInstance());
         $stock = (new Stock())->setTicker('RAVN');
         (new OpeningBoardBuilder($math, $debtEngine, new MarketEngine($math), new AnchorStakeLedger()))->open($stock, $seed, new MacroStateDTO());

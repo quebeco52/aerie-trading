@@ -8,6 +8,7 @@ use App\Data\Politics\AerieDiet as Diet;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\Diet\CoalitionFormation as Formation;
 use App\Service\Politics\Diet\Election;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class CoalitionFormationTest extends TestCase
@@ -420,18 +421,7 @@ class CoalitionFormationTest extends TestCase
         // Uniform draws in turn: which cabinet an attempt tries, then whether it succeeds. 0.0 tries the first cabinet,
         // the Civic Front alone; just under 1.0 tries the last with any odds to speak of -- every party but the Civic
         // Front, since every party together holds both leaders -- and fails anything short of certain.
-        $draws = new class extends MathUtility {
-            /** @var list<float> */
-            public array $uniforms = [0.0, 0.9999999, 0.99999999, 0.9999999, 0.0, 0.0];
-            public function generateExponential(float $rate = 1.0): float
-            {
-                return 1.0;
-            }
-            public function generateUniform(): float
-            {
-                return (float) array_shift($this->uniforms);
-            }
-        };
+        $draws = new ScriptedDraws(generateUniform: [0.0, 0.9999999, 0.99999999, 0.9999999, 0.0, 0.0], generateExponential: 1.0);
 
         $talks = Formation::talks(Diet::SEED_SEATS, Diet::SEED_VOTE_SHARES, Diet::HOME_POSITIONS, [], Diet::SEED_BLOCS, $draws);
 

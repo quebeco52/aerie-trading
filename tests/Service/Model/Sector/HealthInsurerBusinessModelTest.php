@@ -10,6 +10,7 @@ use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\HealthInsurerBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 final class HealthInsurerBusinessModelTest extends TestCase
@@ -28,17 +29,7 @@ final class HealthInsurerBusinessModelTest extends TestCase
     /** Every membership draw at zero, so the cost trend is the only thing moving. */
     private function quietDraws(): MathUtility
     {
-        return new class extends MathUtility {
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return 0.0;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     private function plan(): Stock

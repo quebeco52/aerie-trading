@@ -11,10 +11,9 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class ConsumerStaplesBusinessModelTest extends TestCase
 {
     private ConsumerStaplesBusinessModel $model;
@@ -36,11 +35,7 @@ class ConsumerStaplesBusinessModelTest extends TestCase
     /** Every stream and event draw at zero, so a comparison isolates the macro term under test. */
     private function calmDraws(): MathUtility
     {
-        $mathUtility = $this->createStub(MathUtility::class);
-        $mathUtility->method('generatePersistentZ')->willReturn(0.0);
-        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
-
-        return $mathUtility;
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     private function report(Stock $stock, MacroStateDTO $macro, ?MathUtility $mathUtility = null): ActualFinancialsDTO
@@ -183,11 +178,8 @@ class ConsumerStaplesBusinessModelTest extends TestCase
     {
         $macro = new MacroStateDTO();
         $draws = function (float $eventDraw): MathUtility {
-            $mathUtility = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
             // firm factor, branded, volume, event
-            $mathUtility->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, $eventDraw, 0.0, 0.0);
-
-            return $mathUtility;
+            return new ScriptedDraws(generateStandardNormal: [0.0, 0.0, 0.0, $eventDraw, 0.0, 0.0]);
         };
 
         $quiet = $this->report(self::stock('STAPLE'), $macro, $draws(0.0));

@@ -14,6 +14,7 @@ use App\Service\Politics\Diet\Election;
 use App\Service\Politics\Diet\OpinionPolls;
 use App\Service\Politics\PoliticsEngine as Politics;
 use App\Service\Politics\PoliticsState;
+use App\Tests\Support\InMemoryRedis;
 use PHPUnit\Framework\TestCase;
 
 class OpinionPollsTest extends TestCase
@@ -456,7 +457,7 @@ class OpinionPollsTest extends TestCase
         );
     }
 
-    /** Every draw is zero. */
+    /** Normals are zero; the other draws stay live. */
     private function quietMath(): MathUtility
     {
         return new class extends MathUtility {
@@ -469,21 +470,6 @@ class OpinionPollsTest extends TestCase
 
     private function inMemoryRedis(): \Redis
     {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
+        return new InMemoryRedis();
     }
 }

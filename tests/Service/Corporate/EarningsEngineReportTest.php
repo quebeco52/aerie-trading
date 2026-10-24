@@ -17,6 +17,10 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
 use App\Service\News\NarrativeEngine;
+use App\Tests\Support\CorporateEngineFactory;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\ScriptedDraws;
+use App\Tests\Support\StockBuilder;
 use App\Twig\Extension\UiExtension;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -27,7 +31,9 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 #[AllowMockObjectsWithoutExpectations]
 class EarningsEngineReportTest extends TestCase
 {
-    private MathUtility&Stub $mathUtilityMock;
+    use CorporateEngineFactory;
+
+    private ScriptedDraws $mathUtilityMock;
     private MarketEventPublisher&Stub $marketEventMock;
     private CapitalAllocationEngine&Stub $capitalAllocationEngineMock;
     private DebtEngine&Stub $debtEngineMock;
@@ -64,23 +70,7 @@ class EarningsEngineReportTest extends TestCase
         );
         $this->debtEngineMock->method('calculateInterestExpense')->willReturn($debtMetrics);
         $this->debtEngineMock->method('reviewRatingAndPriceDebt')->willReturn($debtMetrics);
-        $debtHealth = new \App\DTO\DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: $debtMetrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $debtHealth = DebtHealthBuilder::healthy()->withMetrics($debtMetrics)->build();
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealth);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealth);
 
@@ -95,12 +85,13 @@ class EarningsEngineReportTest extends TestCase
             ];
         });
 
-        // 3. Mock MathUtility to control the stochastic Z-scores
-        $this->mathUtilityMock = $this->createStub(MathUtility::class);
-        $this->mathUtilityMock->method('generatePersistentZ')->willReturnCallback(function ($prev, $phi) {
-            return $this->mathUtilityMock->generateStandardNormal();
-        });
-        $this->mathUtilityMock->method('calculateJumpDiffusion')->willReturn(['exponent' => 0.0]);
+        // 3. Script the draws to control the stochastic Z-scores
+        $this->mathUtilityMock = new ScriptedDraws(
+            generatePersistentZ: function ($prev, $phi) {
+                return $this->mathUtilityMock->generateStandardNormal();
+            },
+            calculateJumpDiffusion: ['exponent' => 0.0],
+        );
 
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
@@ -129,22 +120,47 @@ class EarningsEngineReportTest extends TestCase
         $this->capExEngineMock = $this->createStub(CapExEngine::class);
 
         // Instantiate the core engine
-        $this->engine = new EarningsEngine(
-            $this->eventDispatcherMock,
-            $this->marketEventMock,
-            $this->capitalAllocationEngineMock,
-            $this->debtEngineMock,
-            $this->capExEngineMock,
+        $this->engine = $this->buildEngine();
+    }
+
+    /** The engine over this file's doubles; a test hands in the debt engine or the price engine it is about. */
+    private function buildEngine(?DebtEngine $debtEngine = null, ?MarketEngine $marketEngine = null): EarningsEngine
+    {
+        return self::earningsEngine(
             $this->mathUtilityMock,
-            $this->corporateMetricsMock,
-            $this->narrativeEngineMock,
-            new MarketConsensusEngine(),
+            eventDispatcher: $this->eventDispatcherMock,
+            publisher: $this->marketEventMock,
+            capitalAllocation: $this->capitalAllocationEngineMock,
+            debtEngine: $debtEngine ?? $this->debtEngineMock,
+            capExEngine: $this->capExEngineMock,
+            metrics: $this->corporateMetricsMock,
+            narrative: $this->narrativeEngineMock,
+            marketEngine: $marketEngine,
         );
     }
 
     private function getReportingTick(string $ticker, int $ticksPerYear = 252): int
     {
         return EarningsEngine::resolveReportingTick($ticker, $ticksPerYear);
+    }
+
+    /** An engineering contractor on a bare entity: 9% margin and ROIC, 60% of costs fixed, $100M of equity. */
+    private function contractor(string $ticker): Stock
+    {
+        return StockBuilder::blank($ticker)
+            ->withIndustry('Engineering & Construction')
+            ->withSharesOutstanding('1000000')
+            ->withTotalEquity('100000000')
+            ->withFixedCostRatio(0.60)
+            ->withOperatingMargin('0.09')
+            ->withBaselineRoic('0.09')
+            ->withVolatility('0.15')
+            ->withCurrentVolatility('0.15')
+            ->withBeta('1.0')
+            ->withWholesaleDebt('10000000')
+            ->withCustomerDeposits('0')
+            ->withCorporateTreasury('5000000')
+            ->build();
     }
 
     public function testCalculateReturnsNullWhenNoEventOccurs(): void
@@ -177,7 +193,7 @@ class EarningsEngineReportTest extends TestCase
         $stock->setOperatingMargin('0.20');
 
         // Force a mildly positive business quarter
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.5);
+        $this->mathUtilityMock->script(generateStandardNormal: 0.5);
 
         $reportingTick = $this->getReportingTick('TEST');
         $macroState = new \App\DTO\MacroStateDTO();
@@ -222,7 +238,7 @@ class EarningsEngineReportTest extends TestCase
         $stock->setOperatingMargin('0.20');
 
         // Force an extreme blowout quarter.
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(3.5);
+        $this->mathUtilityMock->script(generateStandardNormal: 3.5);
 
         $reportingTick = $this->getReportingTick('SHOCK');
         $macroState = new \App\DTO\MacroStateDTO();
@@ -249,7 +265,6 @@ class EarningsEngineReportTest extends TestCase
         $stock->setOperatingMargin('0.20');
 
         // Neutral quarter (0.0) isolates the recovery boost math
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $reportingTick = $this->getReportingTick('RECOV');
         $macroState = new \App\DTO\MacroStateDTO();
@@ -279,8 +294,6 @@ class EarningsEngineReportTest extends TestCase
         $stock->setBaselineRoic('0.12');
         $stock->setOperatingMargin('0.20');
         $stock->setDepreciationRate('0.08');
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         /** @var EarningsSimulationContext|null $capturedContext */
         $capturedContext = null;
@@ -332,8 +345,6 @@ class EarningsEngineReportTest extends TestCase
         $stockCalm->setCorporateTreasury('10000000');
         $stockCalm->setBaselineRoic('0.10');
         $stockCalm->setOperatingMargin('0.20');
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $calmMacro = new \App\DTO\MacroStateDTO(
             macroCreditSpreadEma: 0.02,
@@ -387,7 +398,6 @@ class EarningsEngineReportTest extends TestCase
         // Simulate accumulated CIP balance that exceeds invested capital
         $stock->setCipBalance('100000000000'); // $100B in CIP queue
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $macroState = new \App\DTO\MacroStateDTO();
         $reportingTick = $this->getReportingTick('RIVE_TEST');
 
@@ -414,7 +424,6 @@ class EarningsEngineReportTest extends TestCase
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $macroState = new \App\DTO\MacroStateDTO();
         $reportingTick = $this->getReportingTick('NWC_BUG');
 
@@ -450,7 +459,6 @@ class EarningsEngineReportTest extends TestCase
             return $stock;
         };
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $reportingTick = $this->getReportingTick('WAGE_TEST');
 
         $earningsUnder = function (\App\DTO\MacroStateDTO $macro) use ($createStock, $reportingTick): float {
@@ -507,8 +515,6 @@ class EarningsEngineReportTest extends TestCase
         $stock->setVolatility('0.15');
         $stock->setCurrentVolatility('0.15');
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $positiveMacro = new \App\DTO\MacroStateDTO(
             outputGapEma: 0.05, // Persistent 500bps positive output gap
         );
@@ -558,8 +564,6 @@ class EarningsEngineReportTest extends TestCase
         $stockShocked = clone $stockNormal;
         $stockShocked->setTicker('MGN_SHK');
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $macroNormal = new \App\DTO\MacroStateDTO();
         // Negative output gap compresses dynamic variable theta (cyclical margin squeeze)
         $macroShocked = new \App\DTO\MacroStateDTO(outputGapEma: -0.05);
@@ -590,7 +594,6 @@ class EarningsEngineReportTest extends TestCase
         $stock->setVolatility('0.15');
         $stock->setCurrentVolatility('0.15');
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $macro = new \App\DTO\MacroStateDTO();
         $ticksPerQuarter = 63;
         $reportingTick = $this->getReportingTick('RETAIL_SEAS');
@@ -636,7 +639,6 @@ class EarningsEngineReportTest extends TestCase
         $stock->setVolatility('0.15');
         $stock->setCurrentVolatility('0.15');
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $macro = new \App\DTO\MacroStateDTO();
         $ticksPerQuarter = 63;
         $reportingTick = $this->getReportingTick('RETAIL_FIX');
@@ -675,7 +677,6 @@ class EarningsEngineReportTest extends TestCase
         );
 
         $reportingTick = $this->getReportingTick('CAP_CLAMP');
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $this->engine->calculate($stock, $boomMacro, $reportingTick, 252);
 
@@ -692,22 +693,8 @@ class EarningsEngineReportTest extends TestCase
      */
     public function testEachReportRollsTheTrailingYearLendersUnderwriteOn(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('TTM_ROLL');
-        $stock->setIndustry('Engineering & Construction');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalEquity('100000000');
-        $stock->setFixedCostRatio(0.60);
-        $stock->setOperatingMargin('0.09');
-        $stock->setBaselineRoic('0.09');
-        $stock->setVolatility('0.15');
-        $stock->setCurrentVolatility('0.15');
-        $stock->setBeta('1.0');
-        $stock->setWholesaleDebt('10000000');
-        $stock->setCustomerDeposits('0');
-        $stock->setCorporateTreasury('5000000');
+        $stock = $this->contractor('TTM_ROLL');
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $macro = new \App\DTO\MacroStateDTO();
         $reportingTick = $this->getReportingTick('TTM_ROLL');
 
@@ -770,33 +757,9 @@ class EarningsEngineReportTest extends TestCase
                 return parent::reviewRatingAndPriceDebt($stock, $macroState, $overrideRevenue, $overrideMargin);
             }
         };
-        $engine = new EarningsEngine(
-            $this->eventDispatcherMock,
-            $this->marketEventMock,
-            $this->capitalAllocationEngineMock,
-            $debt,
-            $this->capExEngineMock,
-            $this->mathUtilityMock,
-            $this->corporateMetricsMock,
-            $this->narrativeEngineMock,
-            new MarketConsensusEngine(),
-        );
+        $engine = $this->buildEngine($debt);
 
-        $stock = new Stock();
-        $stock->setTicker('TTM_CRED');
-        $stock->setIndustry('Engineering & Construction');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalEquity('100000000');
-        $stock->setFixedCostRatio(0.60);
-        $stock->setOperatingMargin('0.09');
-        $stock->setBaselineRoic('0.09');
-        $stock->setVolatility('0.15');
-        $stock->setCurrentVolatility('0.15');
-        $stock->setBeta('1.0');
-        $stock->setWholesaleDebt('10000000');
-        $stock->setCustomerDeposits('0');
-        $stock->setCorporateTreasury('5000000');
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $stock = $this->contractor('TTM_CRED');
 
         $context = null;
         $this->eventDispatcherMock->method('dispatch')->willReturnCallback(function ($event) use (&$context) {
@@ -819,22 +782,8 @@ class EarningsEngineReportTest extends TestCase
 
     public function testSeasonalAnnualizationDeseasonalizesAnnualRunrateAndProtectsDebtHealth(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('IBHI_SEAS');
-        $stock->setIndustry('Engineering & Construction');
-        $stock->setSharesOutstanding('1000000');
-        $stock->setTotalEquity('100000000');
-        $stock->setFixedCostRatio(0.60);
-        $stock->setOperatingMargin('0.09');
-        $stock->setBaselineRoic('0.09');
-        $stock->setVolatility('0.15');
-        $stock->setCurrentVolatility('0.15');
-        $stock->setBeta('1.0');
-        $stock->setWholesaleDebt('10000000');
-        $stock->setCustomerDeposits('0');
-        $stock->setCorporateTreasury('5000000');
+        $stock = $this->contractor('IBHI_SEAS');
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $macro = new \App\DTO\MacroStateDTO();
         // The Q1 report is filed in the season that follows, inside Q2.
         $reportingTick = intdiv(252, 4) + $this->getReportingTick('IBHI_SEAS');
@@ -885,7 +834,6 @@ class EarningsEngineReportTest extends TestCase
         $stock->setCustomerDeposits('0');
         $stock->setCorporateTreasury('5000000');
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $dispatchedContext = null;
         $this->eventDispatcherMock->method('dispatch')->willReturnCallback(function ($event) use (&$dispatchedContext) {
             if ($event instanceof \App\Service\Event\EarningsReportedEvent) {
@@ -927,18 +875,7 @@ class EarningsEngineReportTest extends TestCase
     {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('strikeFairValue')->willReturn(['perceived_fair_value' => 110.0, 'analyst_targets' => []]);
-        $engine = new EarningsEngine(
-            $this->eventDispatcherMock,
-            $this->marketEventMock,
-            $this->capitalAllocationEngineMock,
-            $this->debtEngineMock,
-            $this->capExEngineMock,
-            $this->mathUtilityMock,
-            $this->corporateMetricsMock,
-            $this->narrativeEngineMock,
-            new MarketConsensusEngine(),
-            marketEngine: $marketEngine,
-        );
+        $engine = $this->buildEngine(marketEngine: $marketEngine);
 
         $stock = (new Stock())->setTicker('VANE')->setIndustry('Software - Application')->setPrice('50.00')->setSharesOutstanding('1000');
         $ctx = new EarningsSimulationContext($stock, new \App\DTO\MacroStateDTO(), new \App\Service\Model\Sector\StandardCorporateBusinessModel(), 'none');

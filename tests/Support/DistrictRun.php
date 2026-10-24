@@ -46,21 +46,6 @@ final class DistrictRun
     /** The bootstrap's Redis stand-in forgets everything; the Diet needs its state back each tick. */
     private static function inMemoryRedis(): \Redis
     {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
+        return new InMemoryRedis();
     }
 }

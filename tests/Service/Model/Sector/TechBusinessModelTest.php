@@ -7,13 +7,11 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\TechBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class TechBusinessModelTest extends TestCase
 {
     public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void
@@ -27,11 +25,12 @@ class TechBusinessModelTest extends TestCase
             $stock->setTicker('TECH');
             $stock->setBeta('1.0');
             $stock->setEarningsMomentumZ($momentum);
-            // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            // Stream draws and regime dice are scripted; the mix-drift weight math stays real.
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
-            $math->method('checkProbability')->willReturn($exits);
+            $math = new ScriptedDraws(
+                generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0,
+                checkProbability: $exits,
+            );
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
 
@@ -66,9 +65,7 @@ class TechBusinessModelTest extends TestCase
             $stock->setTicker('HUMM');
             $stock->setBeta('1.0');
             $stock->setEarningsMomentumZ($momentum);
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generatePersistentZ')->willReturn(0.0);
-            $math->method('checkProbability')->willReturn(false);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0);
 
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.08, 20_000_000.0, 0.10, new MacroStateDTO(), $math);
         };

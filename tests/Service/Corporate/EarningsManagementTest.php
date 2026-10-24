@@ -11,6 +11,7 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Politics\Department\SecuritiesCommission;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -42,12 +43,11 @@ final class EarningsManagementTest extends TestCase
         // draws; the rest of the collaborators are reached solely through resolveTotalAssets, and only once a
         // balance-sheet ledger is open. The draws are pinned at a quarter of the unit interval, so a gap whose odds
         // exceed 25% is closed and the cushion is a quarter of a cent.
-        $this->engine = $this->engineDrawing(new class extends MathUtility {
-            public function generateUniform(): float
-            {
-                return 0.25;
-            }
-        });
+        $this->engine = $this->engineDrawing(new ScriptedDraws(
+            generateUniform: 0.25,
+            checkProbability: static fn(float $odds): bool => 0.25 < $odds,
+            generateUniformBetween: static fn(float $min, float $max): float => $min + (0.25 * ($max - $min)),
+        ));
 
         $this->manage = new ReflectionMethod(EarningsEngine::class, 'manageReportedEarnings');
     }

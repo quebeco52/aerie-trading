@@ -17,10 +17,9 @@ use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InvestmentBankBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class InvestmentBankBusinessModelTest extends TestCase
 {
     private InvestmentBankBusinessModel $model;
@@ -53,9 +52,8 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('CORV');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50); // No regulatory fine
+        // No regulatory fine
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         // Neutral macro baseline with VIX 10 points above the anchor (VIX_ARBITRAGE_FLOOR 0.15), within
         // BASEL_VAR_VOL_TARGET 0.30
@@ -95,9 +93,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GS');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         // Extreme 2008-level VIX panic (0.80) -> vixGap = 0.80 - 0.15 anchor = 0.65
         // Basel FRTB volatility targeting deleveraging: varDeleverageFactor = 0.30 / 0.80 = 0.375
@@ -139,9 +135,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         // PERE: advisory = 0.0, trading = 0.40, options_premium_income = 0.60, vix_scalar = 1.80
         $stock->setTicker('PERE');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
@@ -183,9 +177,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('KING'); // KING: advisory = 0.75, trading = 0.25
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         // Boom conditions: +2% output gap, ERP down 50bps, Credit spreads tight by 50bps, curve steep by 200bps.
         // ERP reaches advisory only through the deal activity index, which this static state holds at baseline.
@@ -240,9 +232,7 @@ class InvestmentBankBusinessModelTest extends TestCase
     public function testSpreadAndErpReachAdvisoryOnceEach(): void
     {
         $stock = (new Stock())->setTicker('KING');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
         $advisory = function (array $overrides) use ($stock, $mathMock): float {
             $macro = \App\DTO\MacroStateDTO::fromArray($overrides + [
                 'output_gap_ema'          => 0.0,
@@ -274,9 +264,7 @@ class InvestmentBankBusinessModelTest extends TestCase
      */
     public function testEveryVolatilityTermIsNeutralAtTheAnchor(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
         $anchor = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
             'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
@@ -303,9 +291,7 @@ class InvestmentBankBusinessModelTest extends TestCase
      */
     public function testGammaFrictionIsChargedBothWaysAroundTheAnchor(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
         $margin = function (float $volatility) use ($mathMock): float {
             $macro = \App\DTO\MacroStateDTO::fromArray([
                 'output_gap_ema'            => 0.0,
@@ -434,7 +420,7 @@ class InvestmentBankBusinessModelTest extends TestCase
     public function testTheOperatingTargetIsStruckOnceOnTheBanksOwnInterest(): void
     {
         $bank = $this->dealer();
-        $math = new MathUtility();
+        $math = MathUtility::ownStream(20261024);
         $opening = new \App\DTO\MacroStateDTO();
         $fundingRate = DebtEngine::chargedWholesaleRate($bank, $opening, $this->model->getLossGivenDefault(), true);
         $operatingYield = (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $bank, $math);
@@ -463,7 +449,7 @@ class InvestmentBankBusinessModelTest extends TestCase
      */
     public function testTheCouponGapReachesABankOnlyThroughBorrowingItDoesNotLendOn(): void
     {
-        $math = new MathUtility();
+        $math = MathUtility::ownStream(20261024);
         $opening = \App\Tests\Support\OpeningCreditAtTrend::macro();
         $debtEngine = new DebtEngine($math, CorporateMetrics::getInstance());
         $builder = new OpeningBoardBuilder($math, $debtEngine, new MarketEngine($math), new AnchorStakeLedger());
@@ -571,11 +557,7 @@ class InvestmentBankBusinessModelTest extends TestCase
             'event'                         => 0.0,
         ]);
 
-        $mathMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal', 'generateUniform'])
-            ->getMock();
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.02, // Positive macro boom that would otherwise stimulate advisory
@@ -612,11 +594,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('ADVISORY_IB');
 
-        $mathMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal', 'generateUniform'])
-            ->getMock();
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         $macroNormal = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
@@ -674,9 +652,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('ECM_IB');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         // Boom in deal activity with normal volatility (VIX = 0.20)
         $macroBoomCalm = \App\DTO\MacroStateDTO::fromArray([
@@ -743,9 +719,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('LEVFIN_IB');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         $baseline = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
         $margin = function (float $spot, float $ema) use ($stock, $mathMock): float {
@@ -782,9 +756,7 @@ class InvestmentBankBusinessModelTest extends TestCase
      */
     public function testSectorActivityShiftIsTheSwingTheDesksBook(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         $drought = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => -0.045,
@@ -813,9 +785,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('FICC_IB');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         $tradingAt = function (float $volatilityRatio) use ($stock, $mathMock): float {
             $macro = \App\DTO\MacroStateDTO::fromArray([
@@ -881,9 +851,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('EVER');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         // Neutral baseline macro
         $macroNormal = \App\DTO\MacroStateDTO::fromArray([
@@ -920,9 +888,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GS');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         // Term structure slope = 0.065 - 0.040 = 0.025 (identical to DCM_NEUTRAL_CURVE_SLOPE)
         $macroNeutralSlope = \App\DTO\MacroStateDTO::fromArray([
@@ -960,9 +926,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('ECM_IB');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         // Depressed deal pipeline (dealActivityIndex = 70, so dealActivityShift = -0.30 < 0)
         $macroDepressedCalm = \App\DTO\MacroStateDTO::fromArray([
@@ -1093,9 +1057,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('FICC_IB');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         // 400 bps violent rate shock: policyRate = 0.08, policyRateEma = 0.04
         $macroViolent = \App\DTO\MacroStateDTO::fromArray([
@@ -1126,9 +1088,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GS');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
-        $mathMock->method('generateUniform')->willReturn(0.50);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
 
         // VIX at 0.60 -> varDeleverageFactor = 0.30 / 0.60 = 0.50
         $macroPanic = \App\DTO\MacroStateDTO::fromArray([
@@ -1164,11 +1124,9 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GS');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateUniform')->willReturn(0.50); // No regulatory fine
-
+        // No regulatory fine
         // 1. Corporate default rate doubles from baseline 0.018 to 0.036
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generateUniform: 0.50);
         $macroHighDefaults = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'             => 0.0,
             'policy_rate'                => 0.04,
@@ -1196,10 +1154,11 @@ class InvestmentBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.50, $resultDefaults->clampedMargin, 1e-9);
 
         // 2. Archegos single-counterparty tail blowup: eventZ < -3.00
-        $mathArchegos = $this->createStub(MathUtility::class);
-        $mathArchegos->method('generateUniform')->willReturn(0.50);
-        $mathArchegos->method('generateStandardNormal')->willReturn(-3.20);
-        $mathArchegos->method('generatePersistentZ')->willReturn(-3.20);
+        $mathArchegos = new ScriptedDraws(
+            generateUniform: 0.50,
+            generateStandardNormal: -3.20,
+            generatePersistentZ: -3.20,
+        );
 
         $macroNormal = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,
@@ -1228,12 +1187,9 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GS');
 
-        $mathMock = $this->createStub(MathUtility::class);
         // eventZ = +3.5 (> 2.80 MEGA_DEAL_WIN_Z_SCORE)
-        $mathMock->method('generateStandardNormal')->willReturn(3.50);
-        $mathMock->method('generatePersistentZ')->willReturn(3.50);
         // Regulatory fine fires (uniform = 0.01 <= 0.04)
-        $mathMock->method('generateUniform')->willReturn(0.01);
+        $mathMock = new ScriptedDraws(generateStandardNormal: 3.50, generatePersistentZ: 3.50, generateUniform: 0.01);
 
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema'          => 0.0,

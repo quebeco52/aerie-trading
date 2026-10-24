@@ -10,6 +10,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConglomerateBusinessModel;
 use App\Tests\Support\FloatBookCreditDrivers;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class ConglomerateBusinessModelTest extends TestCase
@@ -23,7 +24,7 @@ class ConglomerateBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new ConglomerateBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     /**
@@ -48,17 +49,7 @@ class ConglomerateBusinessModelTest extends TestCase
      */
     private function deterministicMath(): MathUtility
     {
-        return new class extends MathUtility {
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return 0.0;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     private function stock(string $ticker, string $beta): Stock

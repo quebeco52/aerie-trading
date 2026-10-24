@@ -10,6 +10,7 @@ use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -871,11 +872,6 @@ class SovereignFundSubsystemTest extends TestCase
     /** Every normal draw at zero. */
     private function stillMarket(): MathUtility
     {
-        return new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        return new ScriptedDraws();
     }
 }

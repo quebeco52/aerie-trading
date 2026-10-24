@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\ReorganizationPlanDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\ReorganizationEngine;
+use App\Tests\Support\BalanceSheetAssertions;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,6 +20,8 @@ use PHPUnit\Framework\TestCase;
  */
 final class ReorganizationEngineTest extends TestCase
 {
+    use BalanceSheetAssertions;
+
     private const EXIT_RATE = 0.05;
     private const REQUIRED_COVERAGE = 3.5;
 
@@ -80,7 +83,7 @@ final class ReorganizationEngineTest extends TestCase
     public function testConfirmationSwapsDebtForEquityAndTheSheetStillBalances(): void
     {
         $stock = $this->ledgeredFirm(wholesale: 1_500.0, revolver: 300.0);
-        $this->assertBalanced($stock);
+        $this->assertBalanceSheetBalances($stock, relativeTolerance: 0.0, absoluteTolerance: 1e-6);
         $equityBefore = (float) $stock->getTotalEquity();
 
         (new ReorganizationEngine())->applyPlan($stock, $this->plan(claims: 1_800.0, exitDebt: 200.0, oldEquityShare: 0.0, equityValue: 500.0));
@@ -88,13 +91,13 @@ final class ReorganizationEngineTest extends TestCase
         $this->assertEqualsWithDelta(200.0, (float) $stock->getRevolverDrawn(), 1e-9, 'the senior revolver is reinstated first');
         $this->assertEqualsWithDelta(0.0, (float) $stock->getWholesaleDebt(), 1e-9, 'the term notes take the exchange');
         $this->assertEqualsWithDelta($equityBefore + 1_600.0, (float) $stock->getTotalEquity(), 1e-6);
-        $this->assertBalanced($stock);
+        $this->assertBalanceSheetBalances($stock, relativeTolerance: 0.0, absoluteTolerance: 1e-6);
 
         $stock = $this->ledgeredFirm(wholesale: 1_500.0, revolver: 100.0);
         (new ReorganizationEngine())->applyPlan($stock, $this->plan(claims: 1_600.0, exitDebt: 400.0, oldEquityShare: 0.0, equityValue: 500.0));
         $this->assertEqualsWithDelta(100.0, (float) $stock->getRevolverDrawn(), 1e-9);
         $this->assertEqualsWithDelta(300.0, (float) $stock->getWholesaleDebt(), 1e-9);
-        $this->assertBalanced($stock);
+        $this->assertBalanceSheetBalances($stock, relativeTolerance: 0.0, absoluteTolerance: 1e-6);
     }
 
     /**
@@ -189,11 +192,6 @@ final class ReorganizationEngineTest extends TestCase
         $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
 
         return $stock;
-    }
-
-    private function assertBalanced(Stock $stock): void
-    {
-        $this->assertEqualsWithDelta($stock->getTotalAssets() - $stock->getTotalLiabilities(), (float) $stock->getTotalEquity(), 1e-6, 'assets less liabilities must equal equity');
     }
 
     private function macro(): MacroStateDTO

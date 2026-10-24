@@ -17,6 +17,7 @@ use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Tests\Support\MacroStateBuilder;
+use App\Tests\Support\ScriptedDraws;
 use App\Tests\Support\StockBuilder;
 use App\Tests\Support\YieldCurveProbe;
 use PHPUnit\Framework\TestCase;
@@ -217,17 +218,7 @@ class FinancialInvariantTest extends TestCase
     public function testMetzlerInventoryOverhangDissipationAndOutputGapImpact(): void
     {
         // No Gaussian noise and no demand disaster, so the two runs differ only by the overhang.
-        $deterministicMath = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $deterministicMath = new ScriptedDraws();
         $aggregateSubsystem = MacroAggregateSubsystem::headless($deterministicMath);
 
         $stateClean = MacroStateBuilder::create()
@@ -380,17 +371,7 @@ class FinancialInvariantTest extends TestCase
     public function testOutputGapBoundedWithinRealisticHistoricalBounds(): void
     {
         // No diffusion and no jump arrivals: the uniform gate sits above every per-tick jump probability.
-        $deterministicMath = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            public function generateUniform(): float
-            {
-                return 0.5;
-            }
-        };
+        $deterministicMath = new ScriptedDraws(generateUniform: 0.5);
         $aggregateSubsystem = MacroAggregateSubsystem::headless($deterministicMath);
 
         $state = MacroStateBuilder::create()
@@ -520,18 +501,8 @@ class FinancialInvariantTest extends TestCase
 
     public function testSupplyShocksAreSymmetricProvidingTailwindsWhenBelowBaseline(): void
     {
-        $deterministicMath = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            // The disaster gate is the only randomness left; a jump in one leg would swamp the difference.
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        // The disaster gate, the only randomness left, stays shut: a jump in one leg would swamp the difference.
+        $deterministicMath = new ScriptedDraws();
         $aggregate = MacroAggregateSubsystem::headless($deterministicMath);
 
         $stateNeutral = MacroStateBuilder::create()
@@ -574,18 +545,8 @@ class FinancialInvariantTest extends TestCase
      */
     public function testMonetaryEasingLiftsARecessionAsMuchAsTighteningRestrains(): void
     {
-        $deterministicMath = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            // The disaster gate is the only randomness left; a jump in one leg would swamp the difference.
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        // The disaster gate, the only randomness left, stays shut: a jump in one leg would swamp the difference.
+        $deterministicMath = new ScriptedDraws();
 
         $gapAt = static function (float $policyRate, float $yield5y) use ($deterministicMath): float {
             $aggregate = MacroAggregateSubsystem::headless($deterministicMath);
@@ -783,19 +744,9 @@ class FinancialInvariantTest extends TestCase
      */
     public function testRestrictivePolicyHeldKeepsTheContractionOpenInProportionToTheStance(): void
     {
-        $deterministicMath = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            // This scenario is restrictive policy held against a contraction, not a disaster arriving on
-            // top of one. The jump gate is the only randomness left in the subsystem, so hold it shut.
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        // This scenario is restrictive policy held against a contraction, not a disaster arriving on
+        // top of one. The jump gate is the only randomness left in the subsystem, so hold it shut.
+        $deterministicMath = new ScriptedDraws();
 
         /** @return non-empty-list<float> The output gap each quarter for three years under a held stance. */
         $pathAt = static function (float $policyRate, float $yield5y) use ($deterministicMath): array {

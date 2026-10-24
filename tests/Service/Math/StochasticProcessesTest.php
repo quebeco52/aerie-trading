@@ -7,6 +7,7 @@ namespace App\Tests\Service\Math;
 use App\Service\Math\MathUtility;
 use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -104,29 +105,15 @@ class StochasticProcessesTest extends TestCase
 
     public function testKouCompensatorIsWhatTheCompensatedJumpSubtracts(): void
     {
-        $jumping = new class extends MathUtility {
-            public function generateUniform(): float
-            {
-                return 0.0; // the gate opens and the jump goes up
-            }
-
-            public function generateExponential(float $rate = 1.0): float
-            {
-                return 0.05;
-            }
-        };
+        // The gate opens and a zero uniform sends the jump up.
+        $jumping = new ScriptedDraws(checkProbability: true, generateExponential: 0.05);
         $args = [0.2, 0.25, 13.6, 12.4, 0.175, 1.0 / 360.0];
 
         $compensator = StochasticProcesses::calculateKouCompensator(...$args);
         $this->assertLessThan(0.0, $compensator, 'Down-heavy disasters: the expected jump is negative.');
         $this->assertEqualsWithDelta(0.05, $jumping->calculateCompensatedKouJump(...$args) + $compensator, 1e-15);
 
-        $quiet = new class extends MathUtility {
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $this->assertSame(-StochasticProcesses::calculateKouCompensator(...$args), $quiet->calculateCompensatedKouJump(...$args));
         $this->assertSame(0.0, StochasticProcesses::calculateKouCompensator(0.0, 0.25, 13.6, 12.4, 0.175, 0.25));
     }

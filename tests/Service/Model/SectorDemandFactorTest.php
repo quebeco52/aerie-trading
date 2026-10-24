@@ -6,14 +6,13 @@ namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BaseFinancialBusinessModel;
 use App\Service\Model\Sector\BiotechBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HeavyManufacturingBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,14 +20,12 @@ use PHPUnit\Framework\TestCase;
  * peers in one sector must share part of each quarter's innovation, and a macro state without the factor
  * must leave the one-factor firm model untouched so existing calibrations and tests hold.
  */
-#[AllowMockObjectsWithoutExpectations]
 class SectorDemandFactorTest extends TestCase
 {
     public function testTwoFactorInnovationCompositionKeepsUnitVarianceAndSharesSectorTerm(): void
     {
         // Firm draw F = 1.0, idiosyncratic u = 0.0; sector realization S = 2.0.
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-        $math->method('generateStandardNormal')->willReturnOnConsecutiveCalls(1.0, 0.0);
+        $math = new ScriptedDraws(generateStandardNormal: [1.0, 0.0]);
 
         $ctx = new StreamContext([], $math, 0.60, 2.0, 0.40);
         $z = $ctx->generateZ('sales', 0.0);
@@ -39,8 +36,7 @@ class SectorDemandFactorTest extends TestCase
 
     public function testSectorLoadingIsIgnoredWithoutASectorRealization(): void
     {
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-        $math->method('generateStandardNormal')->willReturnOnConsecutiveCalls(1.0, 0.0);
+        $math = new ScriptedDraws(generateStandardNormal: [1.0, 0.0]);
 
         $ctx = new StreamContext([], $math, 0.60, null, 0.40);
         $z = $ctx->generateZ('sales', 0.0);
@@ -51,8 +47,7 @@ class SectorDemandFactorTest extends TestCase
 
     public function testExogenousStreamsNeverLoadOnTheSectorFactor(): void
     {
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math = new ScriptedDraws();
 
         $ctx = new StreamContext([], $math, 0.60, 3.0, 0.40);
         $this->assertEqualsWithDelta(0.0, $ctx->generateExogenousZ('event', 0.0), 1e-9);
@@ -71,8 +66,7 @@ class SectorDemandFactorTest extends TestCase
             $stock->setBeta('1.0');
 
             // Every own draw is zero: whatever remains in the stream Z is the shared sector term.
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-            $math->method('generateStandardNormal')->willReturn(0.0);
+            $math = new ScriptedDraws();
 
             $results[$ticker] = $model->computeActualFinancials($stock, 100_000_000.0, 0.45, 20_000_000.0, 0.10, $macro, $math);
         }

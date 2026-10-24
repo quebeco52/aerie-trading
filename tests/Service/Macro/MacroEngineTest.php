@@ -17,15 +17,13 @@ use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Tests\Support\ScriptedDraws;
 use App\Tests\Support\YieldCurveProbe;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class MacroEngineTest extends TestCase
 {
-    private MathUtility&MockObject $mathUtilityMock;
+    private ScriptedDraws $mathUtilityMock;
     private MonetaryPolicySubsystem $monetarySubsystem;
     private LaborMarketSubsystem $laborSubsystem;
     private MacroAggregateSubsystem $aggregateSubsystem;
@@ -34,11 +32,8 @@ class MacroEngineTest extends TestCase
 
     protected function setUp(): void
     {
-        // Use a partial mock so the actual math methods run, but we can control randomness
-        $this->mathUtilityMock = $this->getMockBuilder(MathUtility::class)
-            // Storm arrivals are a Poisson count, mocked to zero so a neutral tick stays neutral.
-            ->onlyMethods(['generateStandardNormal', 'checkProbability', 'generatePoissonCount'])
-            ->getMock();
+        // Scripted draws: the steps run their own maths on zero noise.
+        $this->mathUtilityMock = new ScriptedDraws();
 
         $this->monetarySubsystem = new MonetaryPolicySubsystem($this->mathUtilityMock);
         $this->laborSubsystem = new LaborMarketSubsystem();
@@ -56,7 +51,6 @@ class MacroEngineTest extends TestCase
     public function testTheOpeningStateStepsToAPlausibleEconomy(): void
     {
         // Neutral shocks
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $result = $this->engine->step(new MacroState(), 1.0);
 
@@ -81,7 +75,6 @@ class MacroEngineTest extends TestCase
     public function testAStrategicDividendIsReadForItsOwnTickAndNeverReplayed(): void
     {
         $state = new MacroState();
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $paid = $this->engine->step($state, 1.0 / 360.0, new BoardReadingDTO(strategicStakeCash: 2.5e8));
         $this->assertSame(2.5e8, $paid->strategicStakeCash);
@@ -97,7 +90,6 @@ class MacroEngineTest extends TestCase
     public function testTheBoardIndicesCompoundItsTickReturns(): void
     {
         $state = new MacroState();
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $first = $this->engine->step($state, 1.0 / 360.0, new BoardReadingDTO(floatCap: 1.0e12, priceReturn: 0.01, dividendCash: 1.0e9));
         $second = $this->engine->step($state, 1.0 / 360.0, new BoardReadingDTO(floatCap: 1.0e12, priceReturn: -0.02));
@@ -121,7 +113,7 @@ class MacroEngineTest extends TestCase
         ];
 
         // Force a severe negative shock to output gap and inflation
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-2.0);
+        $this->mathUtilityMock->script(generateStandardNormal: -2.0);
 
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.25); // Advance by 1 quarter
 
@@ -152,7 +144,6 @@ class MacroEngineTest extends TestCase
     {
         $calm = ['natural_rate' => MacroConstants::BASE_NATURAL_RATE, 'tfp_shock_level' => 0.0];
         $shocked = ['tfp_shock_level' => 0.05] + $calm;
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $withoutShock = $this->engine->step(MacroState::fromArray($calm), 0.25);
         $withShock = $this->engine->step(MacroState::fromArray($shocked), 0.25);
@@ -167,8 +158,6 @@ class MacroEngineTest extends TestCase
      */
     public function testTheTickQuotesTheBreakevenNetOfTheBondPremium(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray(['excess_bond_premium' => 0.02]), 0.25);
 
         $this->assertGreaterThan(0.0, $result->excessBondPremium);
@@ -189,7 +178,6 @@ class MacroEngineTest extends TestCase
             'balance_sheet_intensity' => 0.0,
             'qe_active' => false,
         ]);
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $result = $this->engine->step($state, 0.25);
 
@@ -212,7 +200,7 @@ class MacroEngineTest extends TestCase
             'nominal_gdp_index' => 1.10,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(1.0);
+        $this->mathUtilityMock->script(generateStandardNormal: 1.0);
 
         // Advance by a smaller time step (0.05) so the economy has time to hike taxes
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.05);
@@ -245,8 +233,6 @@ class MacroEngineTest extends TestCase
             'yield_10y' => 0.065,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.25);
 
         $this->assertGreaterThan(100.0, $result->exchangeRateIndex, 'High domestic policy rate should drive currency appreciation via UIP.');
@@ -268,8 +254,6 @@ class MacroEngineTest extends TestCase
             'yield_5y' => 0.01,
             'yield_10y' => 0.02,
         ];
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.25);
 
@@ -297,8 +281,6 @@ class MacroEngineTest extends TestCase
             'yield_10y' => 0.04,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.50);
 
         $this->assertGreaterThan(100.0, $result->industrialMetalsIndex, 'Positive output gap should drive positive supercycle drift in metals.');
@@ -322,8 +304,6 @@ class MacroEngineTest extends TestCase
             'policy_rate' => 0.02,
             'policy_rate_ema' => 0.02,
         ];
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.50);
 
@@ -350,8 +330,6 @@ class MacroEngineTest extends TestCase
             'yield_5y' => 0.075,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.25);
 
         $this->assertLessThan(100.0, $result->commercialPropertyIndex, 'Elevated cap rates and high unemployment should crush commercial property valuations.');
@@ -373,8 +351,6 @@ class MacroEngineTest extends TestCase
             'retail_default_rate' => 0.025,
             'retail_default_rate_ema' => 0.025,
         ];
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.25);
 
@@ -399,8 +375,6 @@ class MacroEngineTest extends TestCase
             'yield_10y' => 0.045,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.25);
 
         $this->assertGreaterThan(0.0, $result->agriculturalCommodityIndex);
@@ -424,8 +398,6 @@ class MacroEngineTest extends TestCase
             'yield_5y' => 0.05,
             'yield_10y' => 0.0564,
         ];
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $result = $this->engine->step(MacroState::fromArray($neutralState), 0.25);
 
@@ -452,8 +424,6 @@ class MacroEngineTest extends TestCase
             'yield_10y' => 0.045,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.25);
 
         $this->assertGreaterThan(MacroConstants::FREIGHT_BASELINE, $result->freightRateIndex, 'Strong world demand should push freight rates above baseline.');
@@ -479,8 +449,6 @@ class MacroEngineTest extends TestCase
             'yield_10y' => 0.045,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray($glutState), 0.25);
 
         $this->assertLessThan(MacroConstants::FREIGHT_BASELINE, $result->freightRateIndex, 'Fleet capacity overhang during trade contraction should depress freight rates.');
@@ -505,8 +473,6 @@ class MacroEngineTest extends TestCase
             'output_gap' => -0.02,
             'output_gap_ema' => -0.02,
         ];
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $result = $this->engine->step(MacroState::fromArray($existingState), 0.25);
 
@@ -539,8 +505,6 @@ class MacroEngineTest extends TestCase
             'yield_5y' => 0.044,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray($neutralState), 0.25);
 
         $this->assertEqualsWithDelta(100.0, $result->commercialPropertyIndex, 0.5, 'Commercial property index should remain at 100 in neutral macro conditions.');
@@ -565,8 +529,6 @@ class MacroEngineTest extends TestCase
             'output_gap_ema' => 0.0,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray($neutralState), 0.25);
 
         $this->assertEqualsWithDelta(100.0, $result->residentialPropertyIndex, 0.5, 'Residential property index should remain at 100 in neutral macro conditions.');
@@ -590,8 +552,6 @@ class MacroEngineTest extends TestCase
             'output_gap' => 0.02,
             'output_gap_ema' => 0.02,
         ];
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $result = $this->engine->step(MacroState::fromArray($boomState), 0.25);
 
@@ -624,8 +584,6 @@ class MacroEngineTest extends TestCase
             'yield_5y' => 0.044,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $resultPositive = $this->engine->step(MacroState::fromArray($positiveOverhangState), 0.25);
         $resultNegative = $this->engine->step(MacroState::fromArray($negativeOverhangState), 0.25);
 
@@ -656,8 +614,6 @@ class MacroEngineTest extends TestCase
             'energy_price_index' => 100.0,
             'energy_price_index_ema' => 100.0,
         ];
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $result = $this->engine->step(MacroState::fromArray($neutralState), 0.25);
 
@@ -690,8 +646,6 @@ class MacroEngineTest extends TestCase
             'energy_price_index_ema' => 140.0,
         ];
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $result = $this->engine->step(MacroState::fromArray($crisisState), 0.25);
 
         $this->assertLessThan(
@@ -703,9 +657,8 @@ class MacroEngineTest extends TestCase
 
     public function testModiglianiWealthEffectDragsOutputGap(): void
     {
-        // 1. Arrange: Create MathUtility with mocked 0.0 standard normal to eliminate noise
-        $mathUtility = $this->createMock(MathUtility::class);
-        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
+        // 1. Arrange: zero draws to eliminate noise, the demand disaster's compensator included
+        $mathUtility = new ScriptedDraws(calculateCompensatedKouJump: 0.0);
 
         $aggregateSubsystem = MacroAggregateSubsystem::headless($mathUtility);
 
@@ -759,8 +712,6 @@ class MacroEngineTest extends TestCase
 
     public function testCapitalStockOverhangAccumulatesDuringBoomAndDecaysDuringRecession(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $state = new MacroState();
         $state->outputGap = 0.05; // 5% Boom
         $state->capitalStockOverhang = 0.0;
@@ -788,8 +739,7 @@ class MacroEngineTest extends TestCase
 
     public function testSolowSwanSmoothPotentialGdpGrowth(): void
     {
-        $mathUtility = $this->createMock(MathUtility::class);
-        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
+        $mathUtility = new ScriptedDraws();
 
         $aggregateSubsystem = MacroAggregateSubsystem::headless($mathUtility);
 
@@ -819,8 +769,7 @@ class MacroEngineTest extends TestCase
 
     public function testSolowSwanOutputGapImpactsNominalGdp(): void
     {
-        $mathUtility = $this->createMock(MathUtility::class);
-        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
+        $mathUtility = new ScriptedDraws();
 
         $aggregateSubsystem = MacroAggregateSubsystem::headless($mathUtility);
 
@@ -844,10 +793,8 @@ class MacroEngineTest extends TestCase
 
     public function testSolowSwanTfpCanContractDuringSevereRecession(): void
     {
-        $mathUtility = $this->createMock(MathUtility::class);
-
         // Severe negative productivity shock (e.g. supply chain disruption)
-        $mathUtility->method('generateStandardNormal')->willReturn(-3.0);
+        $mathUtility = new ScriptedDraws(generateStandardNormal: -3.0);
 
         $aggregateSubsystem = MacroAggregateSubsystem::headless($mathUtility);
 
@@ -874,8 +821,6 @@ class MacroEngineTest extends TestCase
 
         $stateNeutralFx = new MacroState();
         $stateNeutralFx->exchangeRateIndexEma = 100.0; // Neutral
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $gapStrongFx = $this->aggregateSubsystem->calculateOutputGap($stateStrongFx, 0.05, 0.02, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $gapNeutralFx = $this->aggregateSubsystem->calculateOutputGap($stateNeutralFx, 0.05, 0.02, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
@@ -918,8 +863,6 @@ class MacroEngineTest extends TestCase
         $stateAnchored->inflationEma = 0.02; // Firmly anchored
         $stateAnchored->outputGap = 0.0;
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-
         $infHigh = $this->aggregateSubsystem->calculateInflation($stateHighEma, 0.02, MacroConstants::TFP_DRIFT, 0.25);
         $infAnchored = $this->aggregateSubsystem->calculateInflation($stateAnchored, 0.02, MacroConstants::TFP_DRIFT, 0.25);
 
@@ -955,8 +898,6 @@ class MacroEngineTest extends TestCase
         $state->outputGap = 0.0;
         $state->energyPriceShock = 50.0; // +50% energy price spike
         $state->energyCostPushLag = 0.0;
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         // Quarter 1 step
         $infQ1 = $this->aggregateSubsystem->calculateInflation($state, MacroConstants::TARGET_INFLATION, MacroConstants::TFP_DRIFT, 0.25);
@@ -1245,7 +1186,7 @@ class MacroEngineTest extends TestCase
         $boomState->totalFactorProductivityIndex = 100.0;
         $boomState->outputGapEma = 0.03; // 3% boom
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturnOnConsecutiveCalls(1.5, -3.0);
+        $this->mathUtilityMock->script(generateStandardNormal: [1.5, -3.0]);
         $this->aggregateSubsystem->calculateTotalFactorProductivity($boomState, 0.25);
 
         $baselineDeterministicTfp = 100.0 * exp(MacroConstants::TFP_DRIFT * 0.25);
@@ -1285,7 +1226,6 @@ class MacroEngineTest extends TestCase
     public function testSymmetricWagePushAndWageDragInflationTransmission(): void
     {
         // Zero standard normal shocks to isolate deterministic wage transmission
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         // 1. Overheating wage scenario (w = 4.5% > 3.5% trend)
         $hotWageState = new MacroState();
@@ -1325,7 +1265,7 @@ class MacroEngineTest extends TestCase
         $neutralState->outputGapEma = 0.0;
 
         // Severe negative diffusion shock
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-3.0);
+        $this->mathUtilityMock->script(generateStandardNormal: -3.0);
 
         // Calculate TFP with dt = 1/3600 (tick-level)
         $dt = 1.0 / 3600.0;
@@ -1707,9 +1647,6 @@ class MacroEngineTest extends TestCase
         $stateStressed->interbankLiquiditySpread = MacroConstants::INTERBANK_BASELINE_SPREAD;
         $stateStressed->marketVolatilityEma = 0.30;
 
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
         $creditSubsystem->calculateInterbankLiquiditySpread($stateCalm);
         $creditSubsystem->calculateInterbankLiquiditySpread($stateStressed);
 
@@ -1803,8 +1740,6 @@ class MacroEngineTest extends TestCase
             'policy_rate_ema' => 0.035,
             'total_factor_productivity_index' => 100.0,
         ];
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $dtoHigh = $this->engine->step(MacroState::fromArray($stateHighRstar), 0.25);
         $dtoBase = $this->engine->step(MacroState::fromArray($stateBaseRstar), 0.25);

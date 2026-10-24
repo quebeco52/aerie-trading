@@ -9,8 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FirmEconomics;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\MiningBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 final class MiningBusinessModelTest extends TestCase
@@ -23,21 +23,9 @@ final class MiningBusinessModelTest extends TestCase
     }
 
     /** Every stream, realization and event draw at a fixed Z, so the benchmark price is the only thing moving. */
-    private function fixedDraws(float $z = 0.0): MathUtility
+    private function fixedDraws(float $z = 0.0): ScriptedDraws
     {
-        return new class ($z) extends MathUtility {
-            public function __construct(private readonly float $z) {}
-
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return $this->z;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        return new ScriptedDraws(generatePersistentZ: $z);
     }
 
     /**

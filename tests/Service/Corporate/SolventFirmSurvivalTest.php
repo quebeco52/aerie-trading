@@ -17,6 +17,7 @@ use App\Service\Corporate\TreasuryEngine;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Tests\Support\DebtHealthBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -366,24 +367,14 @@ class SolventFirmSurvivalTest extends TestCase
             ebitda: -500_000_000.0,
         );
 
-        return new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.03,
-            isSevereNegativeCarry: false,
-            interestCoverage: 0.4,
-            wantsToPaydownDebt: false,
-            canIssueDebt: false,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: $metrics,
-            isLiquidityCrisis: true,
-            isLiquidityWarning: true,
-            isUnderLeveraged: false,
-            hasMarketAccess: false,
-        );
+        return DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.03)
+            ->withCoverage(0.4)
+            ->withDebtIssuance(false)
+            ->withMetrics($metrics)
+            ->withLiquidityStress(true, true)
+            ->withMarketAccess(false)
+            ->build();
     }
 
     private function neutralMacro(): MacroStateDTO

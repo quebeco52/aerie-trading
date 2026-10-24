@@ -13,6 +13,7 @@ use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class AssetMarketSubsystemTest extends TestCase
@@ -22,17 +23,8 @@ class AssetMarketSubsystemTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mathUtility = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            public function generateUniform(): float
-            {
-                return 1.0; // no jump strikes
-            }
-        };
+        // Every uniform at 1.0: no jump strikes.
+        $this->mathUtility = new ScriptedDraws(generateUniform: 1.0);
         $this->subsystem = new AssetMarketSubsystem($this->mathUtility);
     }
 
@@ -124,8 +116,7 @@ class AssetMarketSubsystemTest extends TestCase
 
     private function creFundamentalTick(float $yield10y, float $expectedInflation): float
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math = new ScriptedDraws();
 
         $state = new MacroState();
         $state->yield10yEma = $yield10y;
@@ -212,12 +203,7 @@ class AssetMarketSubsystemTest extends TestCase
      */
     public function testHousingStartsRestAtTheirBaselineWhenPricesAndCostsSitOnTheirTrends(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        $math = new ScriptedDraws();
         $state = $this->neutralBuildingState();
         $state->riskNeutral10yEma = MacroConstants::BASE_NATURAL_RATE + MacroConstants::TARGET_INFLATION;
         $state->residentialPropertyIndex = 94.0;
@@ -669,16 +655,10 @@ class AssetMarketSubsystemTest extends TestCase
     public function testPolicyUncertaintyLiftsTheVolatilityAnchor(): void
     {
         // Strip the process to its anchor: no jumps, and the variance step lands exactly on the long-run target.
-        $math = new class extends MathUtility {
-            public function calculateSVJJJumps(float $lambda, float $pUp, float $etaUp, float $etaDown, float $muV, float $dt): array
-            {
-                return ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0];
-            }
-            public function calculateQEVarianceStep(float $currentVar, float $theta, float $kappa, float $sigma, float $dt, ?float $varianceShock = null): float
-            {
-                return $theta;
-            }
-        };
+        $math = new ScriptedDraws(
+            calculateSVJJJumps: ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0],
+            calculateQEVarianceStep: static fn(float $currentVar, float $theta, float $kappa, float $sigma, float $dt, ?float $varianceShock): float => $theta,
+        );
         $subsystem = new AssetMarketSubsystem($math);
 
         $neutral = new MacroState();
@@ -703,16 +683,10 @@ class AssetMarketSubsystemTest extends TestCase
      */
     public function testTheVolatilityAnchorReadsThePremiumNotTheSpread(): void
     {
-        $math = new class extends MathUtility {
-            public function calculateSVJJJumps(float $lambda, float $pUp, float $etaUp, float $etaDown, float $muV, float $dt): array
-            {
-                return ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0];
-            }
-            public function calculateQEVarianceStep(float $currentVar, float $theta, float $kappa, float $sigma, float $dt, ?float $varianceShock = null): float
-            {
-                return $theta;
-            }
-        };
+        $math = new ScriptedDraws(
+            calculateSVJJJumps: ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0],
+            calculateQEVarianceStep: static fn(float $currentVar, float $theta, float $kappa, float $sigma, float $dt, ?float $varianceShock): float => $theta,
+        );
         $subsystem = new AssetMarketSubsystem($math);
         $drag = AssetMarketSubsystem::jumpVarianceDrag();
         $anchor = fn(float $vol): float => sqrt(($vol ** 2) + $drag);
@@ -753,16 +727,7 @@ class AssetMarketSubsystemTest extends TestCase
      */
     public function testAnAlliedBuildUpFadesOnItsFittedHalfLife(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $subsystem = new AssetMarketSubsystem($quiet);
         $state = new MacroState();
         $state->alliedDefenseSpendingIndex = 150.0;
@@ -786,26 +751,8 @@ class AssetMarketSubsystemTest extends TestCase
     /** A mobilisation lifts allied spending by the fitted jump at once, before any reversion to speak of. */
     public function testAnAlliedMobilisationArrivesWhole(): void
     {
-        $mobilised = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return true;
-            }
-        };
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $mobilised = new ScriptedDraws(checkProbability: true);
+        $quiet = new ScriptedDraws();
         $war = new MacroState();
         $peace = new MacroState();
         (new AssetMarketSubsystem($mobilised))->calculateAlliedDefenseSpending($war, 1.0 / 360.0);
@@ -817,12 +764,7 @@ class AssetMarketSubsystemTest extends TestCase
 
     public function testAStormSeasonDentsTheHousingStock(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $subsystem = new AssetMarketSubsystem($quiet);
 
         $averageHousing = new MacroState();
@@ -900,20 +842,9 @@ class AssetMarketSubsystemTest extends TestCase
     /** The quarter's gap innovation lands at the turn, and between turns there is none. */
     public function testTheMainlandsInnovationLandsAtTheTurn(): void
     {
-        $draws = new class extends MathUtility {
-            public int $calls = 0;
-            public function generateStandardNormal(): float
-            {
-                // The gap's draw leads each quarter; core inflation, the rate, a crash's size and the rest of the world
-                // follow.
-                return $this->calls++ % 5 === 0 ? 1.5 : 0.0;
-            }
-
-            public function generateUniform(): float
-            {
-                return 1.0; // no crash strikes
-            }
-        };
+        // The gap's draw leads the quarter; core inflation, the rate, a crash's size and the rest of the world follow.
+        // No crash strikes.
+        $draws = new ScriptedDraws(generateStandardNormal: [1.5]);
         $subsystem = new AssetMarketSubsystem($draws);
         $state = new MacroState();
 
@@ -934,17 +865,7 @@ class AssetMarketSubsystemTest extends TestCase
      */
     public function testAMainlandCrashLandsWholeInItsQuarter(): void
     {
-        $draws = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            public function generateUniform(): float
-            {
-                return 0.0; // a crash strikes
-            }
-        };
+        $draws = new ScriptedDraws(checkProbability: true);
         $subsystem = new AssetMarketSubsystem($draws);
         $state = new MacroState();
         $state->totalTime = 0.25;
@@ -967,36 +888,24 @@ class AssetMarketSubsystemTest extends TestCase
     /** The mainland's statistics and its rate decision arrive at the quarter's turn, not between. */
     public function testTheMainlandMovesOnlyAtTheTurnOfAQuarter(): void
     {
-        $draws = new class extends MathUtility {
-            public int $calls = 0;
-            public function generateStandardNormal(): float
-            {
-                $this->calls++;
-                return 0.0;
-            }
-
-            public function generateUniform(): float
-            {
-                return 1.0; // no crash strikes
-            }
-        };
+        $draws = new ScriptedDraws();
         $subsystem = new AssetMarketSubsystem($draws);
         $state = new MacroState();
         $state->domesticDemandGapEma = 0.04;
 
         $state->totalTime = 0.10;
         $subsystem->calculateForeignEconomy($state, 0.01);
-        $this->assertSame(0, $draws->calls, 'Inside a quarter nothing is released.');
+        $this->assertSame(0, $draws->callCount('generateStandardNormal'), 'Inside a quarter nothing is released.');
         $this->assertSame(0.0, $state->foreignOutputGap);
 
         $state->totalTime = 0.25;
         $subsystem->calculateForeignEconomy($state, 0.01);
-        $this->assertSame(5, $draws->calls, 'The turn releases the gap, core inflation, the rate decision, a crash\'s size and the rest of the world once.');
+        $this->assertSame(5, $draws->callCount('generateStandardNormal'), 'The turn releases the gap, core inflation, the rate decision, a crash\'s size and the rest of the world once.');
         $this->assertGreaterThan(0.0, $state->foreignOutputGap, 'and the district\'s boom shows in the mainland gap.');
 
         $state->totalTime = 1.25;
         $subsystem->calculateForeignEconomy($state, 1.0);
-        $this->assertSame(25, $draws->calls, 'A year-long step releases four quarters.');
+        $this->assertSame(25, $draws->callCount('generateStandardNormal'), 'A year-long step releases four quarters.');
     }
 
     public function testTheDistrictsBoomSpillsIntoTheMainlandOnlyInPart(): void
@@ -1187,18 +1096,8 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertLessThan(MacroConstants::EXCHANGE_RATE_QUARTERLY_VOLATILITY, sqrt($deviationQuarterVariance));
 
         // The step draws on that sigma: a unit draw from parity moves the log deviation by its conditional sd.
-        $unitDraw = new AssetMarketSubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 1.0;
-            }
-        });
-        $flat = new AssetMarketSubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        });
+        $unitDraw = new AssetMarketSubsystem(new ScriptedDraws(generateStandardNormal: 1.0));
+        $flat = new AssetMarketSubsystem(new ScriptedDraws());
         $up = new MacroState();
         $up->exchangeRateDeviation = 1.0;
         $still = new MacroState();

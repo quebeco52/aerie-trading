@@ -8,6 +8,7 @@ use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\AbstractBusinessModel;
+use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\Model\BareStandardModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
 use PHPUnit\Framework\TestCase;
@@ -42,23 +43,13 @@ final class StandardDebtPhysicsTraitTest extends TestCase
             ebitda: $ebit,
         );
 
-        return new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.03,
-            isSevereNegativeCarry: false,
-            interestCoverage: $interestExpense > 0 ? $ebit / $interestExpense : 999.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: $debtTolerance,
-            wacc: $wacc,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: $metrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        return DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.04, 0.03)
+            ->withCoverage($interestExpense > 0 ? $ebit / $interestExpense : 999.0)
+            ->withDebtTolerance($debtTolerance)
+            ->withCostOfCapital($wacc, 0.10)
+            ->withMetrics($metrics)
+            ->build();
     }
 
     /**

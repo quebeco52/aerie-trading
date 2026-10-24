@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate\Deal;
 
 use App\Data\Company\ManagementStyle;
-use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -17,6 +16,8 @@ use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -28,7 +29,7 @@ class AcquisitionEngineTest extends TestCase
 
     private MarketEventPublisher&Stub $marketEventPublisherMock;
     private DebtEngine&Stub $debtEngineMock;
-    private MathUtility&Stub $mathUtilityMock;
+    private ScriptedDraws $mathUtilityMock;
     private CorporateMetrics&Stub $corporateMetricsMock;
     private AcquisitionEngine $engine;
 
@@ -36,7 +37,7 @@ class AcquisitionEngineTest extends TestCase
     {
         $this->marketEventPublisherMock = $this->createStub(MarketEventPublisher::class);
         $this->debtEngineMock = $this->createStub(DebtEngine::class);
-        $this->mathUtilityMock = $this->createStub(MathUtility::class);
+        $this->mathUtilityMock = new ScriptedDraws();
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
 
         $this->engine = new AcquisitionEngine(
@@ -82,30 +83,22 @@ class AcquisitionEngineTest extends TestCase
             ebitda: 5500000000.0,
         );
 
-        $debtHealthMock = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.035,
-            isSevereNegativeCarry: false,
-            interestCoverage: 100.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 1.5,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: $debtMetricsMock,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $debtHealthMock = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.035)
+            ->withCoverage(100.0)
+            ->withDebtTolerance(1.5)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withMetrics($debtMetricsMock)
+            ->build();
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
-        $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
-        $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
+        $this->mathUtilityMock->script(
+            calculateLogNormalSynergy: 1.10,
+            checkProbability: true,
+            generateUniformBetween: 0.80,
+        );
         $this->marketEventPublisherMock->method('publish')->willReturn([]);
 
         $result = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
@@ -158,30 +151,22 @@ class AcquisitionEngineTest extends TestCase
             depreciation: 500000000.0,
             ebitda: 5500000000.0,
         );
-        $debtHealthMock = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.035,
-            isSevereNegativeCarry: false,
-            interestCoverage: 100.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 1.5,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: $debtMetricsMock,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $debtHealthMock = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.035)
+            ->withCoverage(100.0)
+            ->withDebtTolerance(1.5)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withMetrics($debtMetricsMock)
+            ->build();
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
-        $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
-        $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
+        $this->mathUtilityMock->script(
+            calculateLogNormalSynergy: 1.10,
+            checkProbability: true,
+            generateUniformBetween: 0.80,
+        );
         $this->marketEventPublisherMock->method('publish')->willReturn([]);
 
         $preDealCapital = $stock->getInvestedCapital();
@@ -303,30 +288,22 @@ class AcquisitionEngineTest extends TestCase
             depreciation: 500000000.0,
             ebitda: 5500000000.0,
         );
-        $debtHealthMock = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.035,
-            isSevereNegativeCarry: false,
-            interestCoverage: 100.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 1.5,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: $debtMetricsMock,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $debtHealthMock = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.035)
+            ->withCoverage(100.0)
+            ->withDebtTolerance(1.5)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withMetrics($debtMetricsMock)
+            ->build();
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(15000000000.0);
-        $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
-        $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
+        $this->mathUtilityMock->script(
+            calculateLogNormalSynergy: 1.10,
+            checkProbability: true,
+            generateUniformBetween: 0.80,
+        );
         $this->marketEventPublisherMock->method('publish')->willReturn([]);
 
         $grossBefore = (float) $stock->getGrossPpe();
@@ -1139,26 +1116,15 @@ class AcquisitionEngineTest extends TestCase
             depreciation: 500000000.0,
             ebitda: $ebit + 500000000.0,
         );
-        $health = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.035,
-            isSevereNegativeCarry: false,
-            interestCoverage: 100.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: $canIssueDebt,
-            debtTolerance: 1.5,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: $debtMetrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-            hasLeverageHeadroom: $hasLeverageHeadroom,
-            netDebtToEbitda: $hasLeverageHeadroom ? 0.2 : 4.0,
-            ebitdaCovenantLimit: 2.0,
-        );
+        $health = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.035)
+            ->withCoverage(100.0)
+            ->withDebtIssuance($canIssueDebt)
+            ->withDebtTolerance(1.5)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withMetrics($debtMetrics)
+            ->withCovenant($hasLeverageHeadroom ? 0.2 : 4.0, 2.0, $hasLeverageHeadroom)
+            ->build();
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($health);
@@ -1168,9 +1134,11 @@ class AcquisitionEngineTest extends TestCase
             static fn(Stock $stock, float $revenue): array => $capitalBase->resolveTangibleCapitalBase($stock, $revenue),
         );
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
-        $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
-        $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
+        $this->mathUtilityMock->script(
+            calculateLogNormalSynergy: 1.10,
+            checkProbability: true,
+            generateUniformBetween: 0.80,
+        );
         // The announcement comes back as published, so a test can read what the deal said about itself.
         $this->marketEventPublisherMock->method('publish')->willReturnCallback(
             static fn(mixed $asset, string $type, string $description, float $changePercent): array => ['type' => $type, 'description' => $description, 'change_percent' => $changePercent],

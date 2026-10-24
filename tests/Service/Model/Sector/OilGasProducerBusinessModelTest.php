@@ -11,8 +11,8 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\OilGasProducerBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 final class OilGasProducerBusinessModelTest extends TestCase
@@ -25,21 +25,9 @@ final class OilGasProducerBusinessModelTest extends TestCase
     }
 
     /** Every stream, basis and event draw at a fixed Z, so the benchmark prices are the only thing moving. */
-    private function fixedDraws(float $z = 0.0): MathUtility
+    private function fixedDraws(float $z = 0.0): ScriptedDraws
     {
-        return new class ($z) extends MathUtility {
-            public function __construct(private readonly float $z) {}
-
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return $this->z;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        return new ScriptedDraws(generatePersistentZ: $z);
     }
 
     /**

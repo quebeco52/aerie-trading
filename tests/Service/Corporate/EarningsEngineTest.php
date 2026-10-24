@@ -11,9 +11,6 @@ use App\DTO\DebtHealthDTO;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\CapExEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
@@ -25,7 +22,6 @@ use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
-use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Market\Pricing\MarketConsensusEngine;
@@ -39,8 +35,10 @@ use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HomebuilderBusinessModel;
 use App\Service\Model\Sector\TechBusinessModel;
-use App\Service\News\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
+use App\Tests\Support\BalanceSheetAssertions;
+use App\Tests\Support\CorporateEngineFactory;
+use App\Tests\Support\ScriptedDraws;
+use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -49,6 +47,9 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 class EarningsEngineTest extends TestCase
 {
+    use BalanceSheetAssertions;
+    use CorporateEngineFactory;
+
     private EarningsEngine $earningsEngine;
     private MathUtility $mathUtility;
 
@@ -60,41 +61,11 @@ class EarningsEngineTest extends TestCase
 
     private function buildEngine(EventDispatcherInterface $eventDispatcher, ?IndustryShareLedger $industryShareLedger = null, ?DebtEngine $debtEngine = null): EarningsEngine
     {
-        $corporateMetrics = new CorporateMetrics();
-        $debtEngine ??= new DebtEngine($this->mathUtility, $corporateMetrics);
-        $capExEngine = new CapExEngine();
-        $marketConsensusEngine = new MarketConsensusEngine();
-
-        $ledgerMock = $this->createStub(CorporateLedgerService::class);
-        $eventPublisherMock = $this->createStub(MarketEventPublisher::class);
-        $narrativeEngineMock = $this->createStub(NarrativeEngine::class);
-
-        $treasuryEngine = new TreasuryEngine(
-            $corporateMetrics,
-            $debtEngine,
-            $capExEngine,
+        return self::earningsEngine(
             $this->mathUtility,
-        );
-
-        $capitalAllocationEngine = new CapitalAllocationEngine(
-            $ledgerMock,
-            $corporateMetrics,
-            $debtEngine,
-            $this->mathUtility,
-            $treasuryEngine,
-        );
-
-        return new EarningsEngine(
             $eventDispatcher,
-            $eventPublisherMock,
-            $capitalAllocationEngine,
-            $debtEngine,
-            $capExEngine,
-            $this->mathUtility,
-            $corporateMetrics,
-            $narrativeEngineMock,
-            $marketConsensusEngine,
-            $industryShareLedger,
+            debtEngine: $debtEngine,
+            industryShareLedger: $industryShareLedger,
         );
     }
 
@@ -449,29 +420,7 @@ class EarningsEngineTest extends TestCase
 
     private function buildMatureIndustrial(string $ticker): Stock
     {
-        $stock = new Stock();
-        $stock->setTicker($ticker);
-        $stock->setIndustry('Auto Manufacturers');
-        $stock->setEarningsPerShare('2.50');
-        $stock->setSharesOutstanding('1000000000');
-        $stock->setPrice('50.00');
-        $stock->setVolatility('0.15');
-        $stock->setCurrentVolatility('0.15');
-        $stock->setBeta('1.0');
-        $stock->setTotalEquity('50000000000');
-        $stock->setWholesaleDebt('20000000000');
-        $stock->setCorporateTreasury('15000000000');
-        $stock->setRetainedEarnings('10000000000');
-        $stock->setTotalRevenue('80000000000');
-        $stock->setOperatingMargin('0.12');
-        $stock->setTargetPayoutRatio('0.30');
-        $stock->setDividendSpeed('1.00');
-        $stock->setLastDividend('0.00');
-        $stock->setFixedCostRatio(0.40);
-        $stock->setCapexRatio('0.20');
-        // Leave the structural variable cost ratio null: the engine derives it from margin and fixed cost ratio.
-
-        return $stock;
+        return StockBuilder::matureIndustrial($ticker)->build();
     }
 
     public function testQuarterlyReportClassifiesTheDickinsonLifecycleStageFromCashFlowSigns(): void
@@ -900,7 +849,6 @@ class EarningsEngineTest extends TestCase
      * a model that carried the cycle in its streams was missed every quarter for as long as the boom lasted.
      */
     #[DataProvider('industriesThatCarryTheCycleInTheirStreams')]
-    #[AllowMockObjectsWithoutExpectations]
     public function testASteadyBoomIsNotAStandingSurpriseOnceAnalystsSeeIt(string $industry): void
     {
         $captured = null;
@@ -909,12 +857,10 @@ class EarningsEngineTest extends TestCase
             $captured = $event->getContext();
         });
         // The firm draws nothing of its own: every quarter is the one analysts expect.
-        $quiet = $this->createPartialMock(MathUtility::class, ['generateStandardNormal', 'generateUniform', 'checkProbability', 'generatePoissonCount']);
-        $quiet->method('generateStandardNormal')->willReturn(0.0);
-        $quiet->method('generateUniform')->willReturn(0.5);
-        $quiet->method('checkProbability')->willReturn(false);
-        $quiet->method('generatePoissonCount')->willReturn(0);
-        $this->mathUtility = $quiet;
+        $this->mathUtility = new ScriptedDraws(
+            generateUniform: 0.5,
+            generateUniformBetween: static fn(float $min, float $max): float => $min + (0.5 * ($max - $min)),
+        );
         $engine = $this->buildEngine($dispatcher);
         $stock = $this->buildMatureIndustrial('BOOM');
         $stock->setIndustry($industry);
@@ -2358,9 +2304,7 @@ class EarningsEngineTest extends TestCase
         $businessModel = Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model'] ?? 'none';
         $strategy = Sectors::getBusinessModelStrategy($businessModel);
         $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
-        $assets = $stock->getTotalAssets($lease);
-        $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
-        $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-6), 'the balance sheet still balances after the write-off');
+        $this->assertBalanceSheetBalances($stock, 'the balance sheet still balances after the write-off', $lease);
     }
 
     /**
@@ -2574,9 +2518,7 @@ class EarningsEngineTest extends TestCase
 
         $strategy = Sectors::getBusinessModelStrategy(Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model']);
         $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
-        $assets = $stock->getTotalAssets($lease);
-        $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
-        $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-9), 'the released working capital must land in cash');
+        $this->assertBalanceSheetBalances($stock, 'the released working capital must land in cash', $lease, relativeTolerance: 1e-9);
 
         $annualizedRevenue = $captured->actualRevenue / FinancialConstants::QUARTER_YEARS;
         $this->assertLessThan(-0.25 * $annualizedRevenue, $captured->deltaWorkingCapital, 'the fixture must release more than the old clamp allowed');
@@ -2831,8 +2773,7 @@ class EarningsEngineTest extends TestCase
 
         $lease = (new CorporateMetrics())->resolveLeaseLiability($stock, (float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity($stock));
         $assets = $stock->getTotalAssets($lease);
-        $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
-        $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-6), 'a bank balance sheet balances');
+        $this->assertBalanceSheetBalances($stock, 'a bank balance sheet balances', $lease);
 
         // The three cash flow sections still sum to the cash that moved, deposits included.
         $this->assertEqualsWithDelta(

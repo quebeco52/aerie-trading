@@ -10,6 +10,8 @@ use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ClearingHouseBusinessModel;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class ClearingHouseBusinessModelTest extends TestCase
@@ -65,7 +67,7 @@ class ClearingHouseBusinessModelTest extends TestCase
             policyRateEma: 0.02,
             yield5yEma: 0.03,
         );
-        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock = new ScriptedDraws();
 
         $metrics = $this->model->getTargetMetrics($stockMock, $macroState, $mathMock);
 
@@ -105,7 +107,7 @@ class ClearingHouseBusinessModelTest extends TestCase
         $borrowed->setWholesaleDebt((string) 400e9);
         $borrowed->setCorporateTreasury((string) ((float) $borrowed->getCorporateTreasury() + 400e9));
 
-        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock = new ScriptedDraws();
         $this->assertSame(
             $this->model->getTargetMetrics($equityFunded, $macroState, $mathMock),
             $this->model->getTargetMetrics($borrowed, $macroState, $mathMock),
@@ -119,7 +121,7 @@ class ClearingHouseBusinessModelTest extends TestCase
     public function testClearingCapacityIsTangibleEquitySoAGoodwillWriteOffLeavesItWhole(): void
     {
         $macroState = $this->targetMacro();
-        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock = new ScriptedDraws();
 
         $beforeWriteOff = $this->model->getTargetMetrics($this->clearingHouse(equity: 90e9, goodwill: 60e9), $macroState, $mathMock);
         $afterWriteOff = $this->model->getTargetMetrics($this->clearingHouse(equity: 30e9, goodwill: 0.0), $macroState, $mathMock);
@@ -154,23 +156,14 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     private function health(float $debtTolerance): \App\DTO\DebtHealthDTO
     {
-        return new \App\DTO\DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.03,
-            isSevereNegativeCarry: false,
-            interestCoverage: 20.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: $debtTolerance,
-            wacc: 0.07,
-            costOfEquity: 0.09,
-            leveredBeta: 0.8,
-            rawMetrics: new \App\DTO\DebtMetricsDTO(interestExpense: 1e9, blendedRate: 0.05, historicalFixedRate: 0.05, dynamicSpread: 0.005, currentMarketRate: 0.05, wholesaleRate: 0.05, ebit: 20e9, revenue: 40e9, depreciation: 0.5e9, ebitda: 20.5e9),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        return DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.04, 0.03)
+            ->withCoverage(20.0)
+            ->withDebtTolerance($debtTolerance)
+            ->withCostOfCapital(0.07, 0.09)
+            ->withLeveredBeta(0.8)
+            ->withMetrics(new \App\DTO\DebtMetricsDTO(interestExpense: 1e9, blendedRate: 0.05, historicalFixedRate: 0.05, dynamicSpread: 0.005, currentMarketRate: 0.05, wholesaleRate: 0.05, ebit: 20e9, revenue: 40e9, depreciation: 0.5e9, ebitda: 20.5e9))
+            ->build();
     }
 
     /**
@@ -279,11 +272,7 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     private function quietDraws(): MathUtility
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('generatePersistentZ')->willReturn(0.0);
-
-        return $math;
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     public function testCalculateCashYieldUsesPolicyRate(): void
@@ -363,8 +352,7 @@ class ClearingHouseBusinessModelTest extends TestCase
             marketVolatilityEma: 0.18,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $calmMacro, $mathMock);
         $distressResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $distressMacro, $mathMock);
@@ -384,8 +372,7 @@ class ClearingHouseBusinessModelTest extends TestCase
     {
         $stock = (new Stock())->setTicker('ACC')->setBeta('0.8');
         $run = function (float $defaultZ, MacroStateDTO $macro) use ($stock): float {
-            $math = $this->createStub(MathUtility::class);
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $defaultZ : 0.0);
+            $math = new ScriptedDraws(generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $defaultZ : 0.0);
             $member = clone $stock;
             $member->setEarningsMomentumZ(['default' => -9.9]);
 

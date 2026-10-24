@@ -16,7 +16,6 @@ use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReitBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -25,7 +24,6 @@ use ReflectionMethod;
  * its earnings is never the trust's to reinvest. Before the rule, a REIT planned acquisitions out of the cash its
  * dividend needed and cut the dividend to nothing once the cash ran out.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class ReitDistributionRuleTest extends TestCase
 {
     private const QUARTERLY_NET_INCOME = 1_000_000_000.0;

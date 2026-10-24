@@ -16,6 +16,7 @@ use App\Service\Model\Sector\ConglomerateBusinessModel;
 use App\Service\Model\Sector\InvestmentCompanyBusinessModel;
 use App\Service\Model\Strategy\ValuationStrategyInterface;
 use App\Tests\Support\FloatBookCreditDrivers;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -137,17 +138,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
 
     private function deterministicMath(): MathUtility
     {
-        return new class extends MathUtility {
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return 0.0;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     /**

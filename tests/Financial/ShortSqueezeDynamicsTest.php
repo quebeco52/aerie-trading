@@ -12,7 +12,6 @@ use App\Service\Market\Trading\SecuritiesLendingDesk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -27,7 +26,6 @@ use PHPUnit\Framework\TestCase;
  * This test drives those components in sequence and asserts the loop closes. If a future change breaks any
  * link, the mechanic quietly stops existing — and nothing else would notice, because nothing else names it.
  */
-#[AllowMockObjectsWithoutExpectations]
 class ShortSqueezeDynamicsTest extends TestCase
 {
     private LiquidityEngine $liquidity;

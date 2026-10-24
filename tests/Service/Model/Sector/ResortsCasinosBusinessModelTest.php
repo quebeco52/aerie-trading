@@ -13,13 +13,13 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\ResortsCasinosBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\MacroStateBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Draw order in calculateSectorPhysics(): gaming, non_gaming, hold, event, then cre for a landlord.
  */
-#[AllowMockObjectsWithoutExpectations]
 class ResortsCasinosBusinessModelTest extends TestCase
 {
     private function createMacroState(
@@ -35,14 +35,11 @@ class ResortsCasinosBusinessModelTest extends TestCase
         float $retailDefaultRateEma = MacroConstants::RETAIL_DEFAULT_LONG_RUN_MEAN,
         float $consumerSentimentMood = 0.0,
     ): MacroStateDTO {
-        return new MacroStateDTO(
+        return MacroStateBuilder::flatCurveDto(
             outputGap: $outputGap,
             outputGapEma: $outputGap,
-            unemploymentRate: 0.04,
-            unemploymentRateEma: 0.04,
             energyPriceIndex: $energyPriceIndexEma,
             energyPriceIndexEma: $energyPriceIndexEma,
-            energyPriceShock: 0.0,
             energyCostPushLag: $energyCostPushLag,
             realWageGap: $realWageGap,
             consumerSentimentIndex: $consumerSentimentIndexEma,
@@ -50,32 +47,10 @@ class ResortsCasinosBusinessModelTest extends TestCase
             consumerSentimentMood: $consumerSentimentMood,
             inflation: $inflation,
             inflationEma: $inflation,
-            policyRate: 0.04,
-            policyRateEma: 0.04,
-            targetRate: 0.04,
-            yield2y: 0.04,
-            yield2yEma: 0.04,
-            yield5y: 0.04,
-            yield5yEma: 0.04,
             yield10y: $yield10y,
             yield10yEma: $yield10y,
-            yield30y: 0.04,
-            yield30yEma: 0.04,
-            marketVolatility: 0.15,
-            marketVolatilityEma: 0.15,
-            marketZ: 0.0,
-            corporateTaxRate: 0.21,
-            equityRiskPremium: 0.05,
             macroCreditSpread: $macroCreditSpread,
             macroCreditSpreadEma: $macroCreditSpread,
-            qeActive: false,
-            inversionDuration: 0.0,
-            nsLevel: 0.04,
-            nsSlope: 0.0,
-            nsSlopeEma: 0.0,
-            nsCurvature: 0.0,
-            potentialGdpIndex: 1.0,
-            nominalGdpIndex: 1.0,
             commercialPropertyIndex: $commercialPropertyIndexEma,
             commercialPropertyIndexEma: $commercialPropertyIndexEma,
             retailDefaultRateEma: $retailDefaultRateEma,
@@ -83,20 +58,10 @@ class ResortsCasinosBusinessModelTest extends TestCase
     }
 
     /** @param list<float> $persistentZCalls */
-    private function createMathUtilityMock(array $persistentZCalls = []): MathUtility
+    private function createMathUtilityMock(array $persistentZCalls = []): ScriptedDraws
     {
-        $mock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ', 'checkProbability'])
-            ->getMock();
-
-        if (!empty($persistentZCalls)) {
-            $mock->method('generatePersistentZ')
-                ->willReturnOnConsecutiveCalls(...array_values($persistentZCalls));
-        }
         // Regime exits never fire, so a crackdown's persistence is deterministic.
-        $mock->method('checkProbability')->willReturn(false);
-
-        return $mock;
+        return new ScriptedDraws(generatePersistentZ: $persistentZCalls === [] ? 0.0 : array_values($persistentZCalls));
     }
 
     private function stock(string $ticker, array $momentum = []): Stock
@@ -332,7 +297,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
             'share:cre'         => 0.50,
         ]);
 
-        $result = $model->computeActualFinancials($stock, 10_000.0, 0.33, 2000.0, 0.15, $this->createMacroState(), new MathUtility());
+        $result = $model->computeActualFinancials($stock, 10_000.0, 0.33, 2000.0, 0.15, $this->createMacroState(), MathUtility::ownStream(20261024));
 
         // Gaming active weight should drift up from 0.20
         $this->assertGreaterThan(0.20, $result->streamZ['weight:gaming']);

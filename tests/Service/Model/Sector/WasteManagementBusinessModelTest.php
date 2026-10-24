@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\WasteManagementBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class WasteManagementBusinessModelTest extends TestCase
@@ -18,7 +19,7 @@ class WasteManagementBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new WasteManagementBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testTriStreamArchitectureAndShares(): void
@@ -100,8 +101,7 @@ class WasteManagementBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('CORM');
         $stock->setBeta('1.0');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, new MacroStateDTO(energyPriceIndexEma: 100.0), $mathMock);
         $shockResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, new MacroStateDTO(energyPriceIndexEma: 200.0, energyCostPushLag: 0.0100), $mathMock);
 

@@ -6,6 +6,7 @@ namespace App\Tests\Service\Macro;
 
 use App\Service\Macro\MacroState;
 use App\Service\Macro\MacroStateStore;
+use App\Tests\Support\InMemoryRedis;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -79,7 +80,7 @@ class MacroStateStoreTest extends TestCase
      */
     public function testAStateLostAfterTheStoreSavedItIsNotReopened(): void
     {
-        $redis = self::inMemoryRedis();
+        $redis = new InMemoryRedis();
         $store = new MacroStateStore($redis);
 
         // No state yet is a world not opened: the first save opens it.
@@ -96,7 +97,7 @@ class MacroStateStoreTest extends TestCase
      */
     public function testASaveOverAFlushedStateStopsTheTicker(): void
     {
-        $redis = self::inMemoryRedis();
+        $redis = new InMemoryRedis();
         $redis->set(MacroStateStore::KEY, (string) json_encode((new MacroState())->toArray(), JSON_PRESERVE_ZERO_FRACTION));
         $store = new MacroStateStore($redis);
         $state = $store->alignClock(0.0);
@@ -119,7 +120,7 @@ class MacroStateStoreTest extends TestCase
         $state->policyRate = 0.0475;
         $state->sectorDemandZ = ['energy' => -0.4, 'tech' => 1.25];
         $state->eventType = 'BANK_RUN';
-        $store = new MacroStateStore(self::inMemoryRedis());
+        $store = new MacroStateStore(new InMemoryRedis());
 
         $store->save($state);
 
@@ -135,36 +136,5 @@ class MacroStateStoreTest extends TestCase
             $this->assertSame([], (new MacroStateStore($redis))->payload());
             $this->assertNull((new MacroStateStore($redis))->saved());
         }
-    }
-
-    /** Redis as far as the store uses it: get, and set with its only-if-present option; flushAll for the reset. */
-    private static function inMemoryRedis(): \Redis
-    {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $held = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->held[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): bool
-            {
-                if (is_array($options) && in_array('xx', $options, true) && !isset($this->held[$key])) {
-                    return false;
-                }
-                $this->held[$key] = (string) $value;
-
-                return true;
-            }
-
-            public function flushAll(?bool $sync = null): bool
-            {
-                $this->held = [];
-
-                return true;
-            }
-        };
     }
 }

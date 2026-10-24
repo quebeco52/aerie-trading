@@ -8,7 +8,6 @@ use App\Service\Market\Option\OptionMarginCalculator;
 use App\Service\Market\Trading\MarginEngine;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,7 +17,6 @@ use PHPUnit\Framework\TestCase;
  * part of deciding when that happens. The evaluate() path takes explicit balances so the accounting can be
  * checked without a database standing behind it.
  */
-#[AllowMockObjectsWithoutExpectations]
 class MarginEngineTest extends TestCase
 {
     private MarginEngine $engine;

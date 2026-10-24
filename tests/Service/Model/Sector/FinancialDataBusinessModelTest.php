@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\FinancialDataBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class FinancialDataBusinessModelTest extends TestCase
@@ -44,7 +45,7 @@ class FinancialDataBusinessModelTest extends TestCase
         $stock->setTicker('SHRK');
         $stock->setBeta('1.0');
 
-        $mathUtility = new MathUtility();
+        $mathUtility = MathUtility::ownStream(20261024);
 
         // Baseline macro: normal spreads, neutral output gap, calm VIX (0.15)
         $normalMacro = new MacroStateDTO(
@@ -79,9 +80,7 @@ class FinancialDataBusinessModelTest extends TestCase
     public function testTheVolatilityTermIsNeutralAtTheAnchor(): void
     {
         $model = new FinancialDataBusinessModel();
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
-        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $anchorVol = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $stock = (new Stock())->setTicker('SHRK');
 

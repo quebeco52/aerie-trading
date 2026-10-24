@@ -13,6 +13,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\IndependentPowerBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 final class IndependentPowerBusinessModelTest extends TestCase
@@ -33,29 +34,16 @@ final class IndependentPowerBusinessModelTest extends TestCase
      *
      * @param list<float> $zs
      */
-    private function draws(array $zs = [0.0, 0.0, 0.0], bool $exits = false): MathUtility
+    private function draws(array $zs = [0.0, 0.0, 0.0], bool $exits = false): ScriptedDraws
     {
-        return new class ($zs, $exits) extends MathUtility {
-            private int $call = 0;
+        $call = 0;
 
-            /** @param list<float> $zs */
-            public function __construct(private readonly array $zs, private readonly bool $exits) {}
-
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return $this->zs[$this->call++ % count($this->zs)];
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            public function checkProbability(float $probability): bool
-            {
-                return $this->exits;
-            }
-        };
+        return new ScriptedDraws(
+            generatePersistentZ: static function () use ($zs, &$call): float {
+                return $zs[$call++ % count($zs)];
+            },
+            checkProbability: $exits,
+        );
     }
 
     /** The gas season the smoothed gas index carries at a time. */

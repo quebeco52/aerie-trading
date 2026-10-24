@@ -9,14 +9,13 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConstructionBusinessModel;
 use App\Service\Model\Sector\EducationBusinessModel;
 use App\Service\Model\Sector\MedicalCareFacilityBusinessModel;
 use App\Service\Model\Sector\SecurityProtectionBusinessModel;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -24,7 +23,6 @@ use PHPUnit\Framework\TestCase;
  * before tax, as a share of revenue, which the market prices a change in public spending against
  * (App\Service\Market\Pricing\PolicyCapitalization::publicSpendingGap()).
  */
-#[AllowMockObjectsWithoutExpectations]
 class PublicSpendingExposureTest extends TestCase
 {
     /**
@@ -60,9 +58,7 @@ class PublicSpendingExposureTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('TEST');
         $stock->setBeta('0.5');
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-        $math->method('generatePersistentZ')->willReturn(0.0);
-        $math->method('checkProbability')->willReturn(false);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $macro = new MacroStateDTO(inflationEma: MacroConstants::TARGET_INFLATION, governmentSpendingIndexEma: MacroConstants::GOVT_SPENDING_BASELINE * (1.0 + $purchases));
 
         return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);

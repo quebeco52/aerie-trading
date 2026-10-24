@@ -14,10 +14,10 @@ use App\Repository\TradeOrderRepository;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\FailureSweep;
-use App\Service\Market\Pricing\StockTracker;
 use App\Service\Market\Trading\TradeExecutionService;
 use App\Service\News\MarketEventPublisher;
 use App\Service\User\Portfolio;
+use App\Tests\Support\StockTrackerFactory;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -29,6 +29,8 @@ use Psr\Log\LoggerInterface;
 #[AllowMockObjectsWithoutExpectations]
 class BankruptcyTest extends TestCase
 {
+    use StockTrackerFactory;
+
     private EntityManagerInterface&MockObject $entityManagerMock;
     private LoggerInterface&Stub $loggerMock;
     private MarketEventPublisher&MockObject $marketEventMock;
@@ -601,37 +603,18 @@ class BankruptcyTest extends TestCase
         $marketEngine = $this->createMock(\App\Service\Market\Pricing\MarketEngine::class);
         $earningsEngine = $this->createMock(EarningsEngine::class);
         $corpActionEngine = $this->createMock(\App\Service\Corporate\CorporateActionEngine::class);
-        $acquisitionEngine = $this->createStub(\App\Service\Corporate\Deal\AcquisitionEngine::class);
-        $divestitureEngine = $this->createStub(\App\Service\Corporate\Deal\DivestitureEngine::class);
-        $corpMetrics = $this->createStub(\App\Service\Corporate\CorporateMetrics::class);
 
         $marketEngine->expects($this->never())->method('calculateNextPrice');
         $earningsEngine->expects($this->never())->method('calculate');
         $corpActionEngine->expects($this->never())->method('processSplits');
 
-        $tracker = new StockTracker(
+        $tracker = self::stockTracker(
             $marketEngine,
             $earningsEngine,
             $corpActionEngine,
-            $acquisitionEngine,
-            $divestitureEngine,
-            $this->marketEventMock,
             $this->debtEngineMock,
-            $corpMetrics,
             new \App\Service\Market\Pricing\LiquidityEngine(new \App\Service\Math\MathUtility()),
-            new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-            new \App\Service\Market\Agent\AgentFlowEngine(
-                new \App\Service\Market\Agent\AgentPopulation(),
-                new \App\Service\Market\Agent\InMemoryAgentStateStore(),
-                new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-                [],
-            ),
-            // Stubbed maths, so checkProbability() is false and no succession fires in tests that
-            // are about something else.
-            new \App\Service\Corporate\ManagementSuccessionEngine(
-                $this->createStub(MarketEventPublisher::class),
-                $this->createStub(\App\Service\Math\MathUtility::class),
-            ),
+            publisher: $this->marketEventMock,
         );
 
         $result = $tracker->updateStocks([$stock], 0.01, false);

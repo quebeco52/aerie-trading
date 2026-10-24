@@ -17,12 +17,8 @@ use ReflectionClass;
  */
 class BusinessModelContractMatrixTest extends TestCase
 {
-    private MathUtility $mathUtility;
-
-    protected function setUp(): void
-    {
-        $this->mathUtility = new MathUtility();
-    }
+    /** The draw streams every invariant runs on; each is its own case, so a failure names its seed. */
+    private const SEEDS = [1, 2, 3];
 
     /**
      * @return array<string, array{class-string<BusinessModelInterface>}>
@@ -49,11 +45,24 @@ class BusinessModelContractMatrixTest extends TestCase
         return $models;
     }
 
+    /**
+     * @return iterable<string, array{class-string<BusinessModelInterface>, int}>
+     */
+    public static function businessModelAndSeedProvider(): iterable
+    {
+        foreach (self::businessModelProvider() as $name => [$className]) {
+            foreach (self::SEEDS as $seed) {
+                yield "{$name} seed {$seed}" => [$className, $seed];
+            }
+        }
+    }
+
     /** @param class-string<BusinessModelInterface> $modelClass */
-    #[DataProvider('businessModelProvider')]
-    public function testExtremeMacroStressInvariants(string $modelClass): void
+    #[DataProvider('businessModelAndSeedProvider')]
+    public function testExtremeMacroStressInvariants(string $modelClass, int $seed): void
     {
         $model = new $modelClass();
+        $draws = MathUtility::ownStream($seed);
 
         $stock = new Stock();
         $stock->setTicker('STRESS');
@@ -80,7 +89,7 @@ class BusinessModelContractMatrixTest extends TestCase
         );
 
         // 1. Target Metrics
-        $targetMetrics = $model->getTargetMetrics($stock, $stressMacro, $this->mathUtility);
+        $targetMetrics = $model->getTargetMetrics($stock, $stressMacro, $draws);
         $this->assertIsArray($targetMetrics);
         $this->assertArrayHasKey('invested_capital', $targetMetrics);
         $this->assertArrayHasKey('baseline_roic', $targetMetrics);
@@ -103,7 +112,7 @@ class BusinessModelContractMatrixTest extends TestCase
             fixedCosts: 50000000.0,
             baselineVol: 0.30,
             macroState: $stressMacro,
-            mathUtility: $this->mathUtility,
+            mathUtility: $draws,
         );
 
         $this->assertTrue(is_finite($actuals->actualRevenue), "Revenue in {$modelClass} must be finite");

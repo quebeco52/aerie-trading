@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\HeavyManufacturingBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class HeavyManufacturingBusinessModelTest extends TestCase
@@ -18,7 +19,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new HeavyManufacturingBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testDualStreamEmissionAndBacklogDamping(): void
@@ -108,10 +109,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
 
     private function zeroDraws(): MathUtility
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
-
-        return $math;
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     public function testExchangeRateExportDragAndMetalsCostPenalty(): void
@@ -119,8 +117,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('CATP');
         $stock->setBeta('1.2');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
 
         $baseResult = $run(new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0));
@@ -142,8 +139,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $scarcityMacro = new MacroStateDTO(capitalStockOverhangEma: -0.10);
         $overhangMacro = new MacroStateDTO(capitalStockOverhangEma: 0.10);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $scarcityResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $scarcityMacro, $mathMock);
         $overhangResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $overhangMacro, $mathMock);
@@ -168,8 +164,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $lowCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.70); // 70% low utilization
         $highCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.85); // 85% high utilization
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $lowCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $lowCuMacro, $mathMock);
         $highCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $highCuMacro, $mathMock);
@@ -186,8 +181,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $normalMacro = new MacroStateDTO(supplyChainPressureIndexEma: 0.0);
         $chokedMacro = new MacroStateDTO(supplyChainPressureIndexEma: 2.5);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $normalResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $normalMacro, $mathMock);
         $chokedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $chokedMacro, $mathMock);

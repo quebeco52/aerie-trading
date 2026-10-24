@@ -5,20 +5,18 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Pricing;
 
 use App\DTO\DebtHealthDTO;
-use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Deal\AcquisitionEngine;
-use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\MathUtility;
-use App\Service\News\MarketEventPublisher;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\StockTrackerFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -32,38 +30,11 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 final class StockTrackerFactorWiringTest extends TestCase
 {
+    use StockTrackerFactory;
+
     private function debtHealth(float $leveredBeta): DebtHealthDTO
     {
-        $metrics = new DebtMetricsDTO(
-            interestExpense: 0.0,
-            blendedRate: 0.05,
-            historicalFixedRate: 0.05,
-            dynamicSpread: 0.01,
-            currentMarketRate: 0.05,
-            wholesaleRate: 0.05,
-            ebit: 1000.0,
-            revenue: 5000.0,
-            depreciation: 100.0,
-            ebitda: 1100.0,
-        );
-
-        return new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: $leveredBeta,
-            rawMetrics: $metrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        return DebtHealthBuilder::healthy()->withLeveredBeta($leveredBeta)->build();
     }
 
     /**
@@ -113,37 +84,14 @@ final class StockTrackerFactorWiringTest extends TestCase
             $earnings->method('calculate')->willReturnCallback($earningsReport);
         }
 
-        $acquisitions = $acquisitionEngine;
-        if ($acquisitions === null) {
-            $acquisitions = $this->createStub(AcquisitionEngine::class);
-            $acquisitions->method('evaluatePrivateAcquisition')->willReturn(null);
-        }
-        $divestitures = $this->createStub(DivestitureEngine::class);
-        $divestitures->method('evaluateCorporateDivestiture')->willReturn(null);
-
-        return new StockTracker(
+        return self::stockTracker(
             $marketEngine,
             $earnings,
             $corporateActions,
-            $acquisitions,
-            $divestitures,
-            $this->createStub(MarketEventPublisher::class),
             $debtEngine,
-            $this->createStub(CorporateMetrics::class),
             new \App\Service\Market\Pricing\LiquidityEngine(new MathUtility()),
-            new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-            new \App\Service\Market\Agent\AgentFlowEngine(
-                new \App\Service\Market\Agent\AgentPopulation(),
-                new \App\Service\Market\Agent\InMemoryAgentStateStore(),
-                new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-                $agentStrategy === null ? [] : [$agentStrategy],
-            ),
-            // Stubbed maths, so checkProbability() is false and no succession fires in tests that
-            // are about something else.
-            new \App\Service\Corporate\ManagementSuccessionEngine(
-                $this->createStub(MarketEventPublisher::class),
-                $this->createStub(MathUtility::class),
-            ),
+            acquisitions: $acquisitionEngine,
+            agentStrategies: $agentStrategy === null ? [] : [$agentStrategy],
         );
     }
 

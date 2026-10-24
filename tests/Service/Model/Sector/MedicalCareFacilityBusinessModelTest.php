@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\MedicalCareFacilityBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class MedicalCareFacilityBusinessModelTest extends TestCase
@@ -19,7 +20,7 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new MedicalCareFacilityBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testTriStreamEmissionAndSumConsistency(): void
@@ -90,8 +91,7 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
      */
     public function testUnemploymentDefersElectiveProceduresButNotInpatientCare(): void
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $run = function (float $unemployment) use ($math): array {
             $stock = (new Stock())->setTicker('CRAN_JOBS')->setBeta('0.6');
@@ -148,8 +148,7 @@ class MedicalCareFacilityBusinessModelTest extends TestCase
         $shift = $this->model->resolveSectorActivityShift($stock, $recession);
         $this->assertEqualsWithDelta(-0.00498, $shift, 1e-9);
 
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $result = $this->model->computeActualFinancials($stock, 1000.0, 0.60, 50.0, 0.0, $recession, $math);
         $this->assertEqualsWithDelta($result->actualRevenue / 1000.0 - 1.0, $shift, 1e-9, 'The base staffs to the care delivered.');
     }

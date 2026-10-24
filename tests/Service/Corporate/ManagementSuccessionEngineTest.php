@@ -9,7 +9,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\ManagementSuccessionEngine;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
@@ -17,7 +17,6 @@ use PHPUnit\Framework\TestCase;
  * Management turnover is the mechanism behind Bertrand & Schoar (2003) rather than an ornament on it: the
  * style only means something if it can arrive, persist and be taken away again.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class ManagementSuccessionEngineTest extends TestCase
 {
     private MarketEventPublisher&Stub $publisher;
@@ -256,21 +255,18 @@ final class ManagementSuccessionEngineTest extends TestCase
      *
      * @param list<float> $draws
      */
-    private function drawing(array $draws): MathUtility&Stub
+    private function drawing(array $draws): ScriptedDraws
     {
-        $mathUtility = $this->createStub(MathUtility::class);
         $sequence = $draws;
-        $mathUtility->method('generateUniform')->willReturnCallback(
-            static function () use (&$sequence): float {
+
+        return new ScriptedDraws(
+            generateUniform: static function () use (&$sequence): float {
                 return array_shift($sequence) ?? 0.999;
             },
-        );
-        $mathUtility->method('checkProbability')->willReturnCallback(
-            static function (float $probability) use (&$sequence): bool {
+            checkProbability: static function (float $probability) use (&$sequence): bool {
                 return (array_shift($sequence) ?? 0.999) < $probability;
             },
+            calculateLogNormalSynergy: 0.0,
         );
-
-        return $mathUtility;
     }
 }

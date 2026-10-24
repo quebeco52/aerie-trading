@@ -7,9 +7,9 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -88,10 +88,7 @@ final class DefaultRateTrendTest extends TestCase
      */
     private function ebit(string $model, string $ticker, float $rateMultiple, float $trendMultiple, float $corporateScale = 1.0, float $retailScale = 1.0): float
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
-        $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('generateUniform')->willReturn(1.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0, generateUniform: 1.0);
 
         $macro = new MacroStateDTO(
             corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN * $rateMultiple * $corporateScale,

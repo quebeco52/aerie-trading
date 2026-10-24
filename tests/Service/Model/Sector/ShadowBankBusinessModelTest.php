@@ -14,7 +14,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
 use App\Tests\Support\OpeningCreditAtTrend;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class ShadowBankBusinessModelTest extends TestCase
@@ -25,7 +25,7 @@ class ShadowBankBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new ShadowBankBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testIndependentOriginationAndDirectLendingStreams(): void
@@ -154,14 +154,12 @@ class ShadowBankBusinessModelTest extends TestCase
      * does not move, keeps its yield, which is the repricing gap its overnight funding opens. The deal fees do not
      * move, and mortgage origination falls as the dearer rate prices buyers out.
      */
-    #[AllowMockObjectsWithoutExpectations]
     public function testARateRiseLandsInDirectLendingIncomeWithinAQuarterAndFeesDoNotReprice(): void
     {
         $stock = $this->pool();
         $opening = new MacroStateDTO();
         $raised = new MacroStateDTO(policyRateEma: $opening->policyRateEma + 0.01);
-        $mathMock = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ'])->getMock();
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $stock->setEarningsMomentumZ($this->model->computeActualFinancials($stock, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $opening, $mathMock)->streamZ);
         $carried = $stock->getEarningsMomentumZ();
@@ -320,8 +318,7 @@ class ShadowBankBusinessModelTest extends TestCase
     public function testOriginationAnswersTheMortgageRateSymmetricallyAroundItsNeutral(): void
     {
         $stock = $this->pool();
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $origination = fn(float $policyRate): float => $this->model->computeActualFinancials(
             $stock,
             100_000_000.0,
@@ -352,8 +349,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $calmMacro = new MacroStateDTO(interbankLiquiditySpreadEma: 0.0010);
         $tedSpikeMacro = new MacroStateDTO(interbankLiquiditySpreadEma: 0.0200);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $calmMacro, $mathMock);
         $spikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $tedSpikeMacro, $mathMock);
@@ -375,8 +371,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $neutralMacro = new MacroStateDTO(sloosTighteningIndexEma: 0.0, policyRateEma: 0.05);
         $tighteningMacro = new MacroStateDTO(sloosTighteningIndexEma: 0.40, policyRateEma: 0.05);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $neutralResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $neutralMacro, $mathMock);
         $tighteningResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $tighteningMacro, $mathMock);
@@ -437,8 +432,7 @@ class ShadowBankBusinessModelTest extends TestCase
             interbankLiquiditySpreadEma: 0.0010,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $neutralResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $neutralMacro, $mathMock);
         $widenedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $widenedMacro, $mathMock);

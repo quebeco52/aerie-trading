@@ -4,28 +4,26 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate\Deal;
 
-use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
-use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
 use App\Service\News\WireFormat;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class DivestitureEngineTest extends TestCase
 {
     use DealFixtures;
 
     private MarketEventPublisher&Stub $marketEventPublisherMock;
     private DebtEngine&Stub $debtEngineMock;
-    private MathUtility&Stub $mathUtilityMock;
+    private ScriptedDraws $mathUtilityMock;
     private CorporateMetrics&Stub $corporateMetricsMock;
     private DivestitureEngine $engine;
 
@@ -33,7 +31,7 @@ class DivestitureEngineTest extends TestCase
     {
         $this->marketEventPublisherMock = $this->createStub(MarketEventPublisher::class);
         $this->debtEngineMock = $this->createStub(DebtEngine::class);
-        $this->mathUtilityMock = $this->createStub(MathUtility::class);
+        $this->mathUtilityMock = new ScriptedDraws();
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
 
         $this->engine = new DivestitureEngine(
@@ -81,30 +79,24 @@ class DivestitureEngineTest extends TestCase
             ebitda: -500000.0,
         );
 
-        $debtHealthMock = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: -1.5,
-            wantsToPaydownDebt: true,
-            canIssueDebt: false,
-            debtTolerance: 1.0,
-            wacc: 0.12,
-            costOfEquity: 0.14,
-            leveredBeta: 1.5,
-            rawMetrics: $debtMetricsMock,
-            isLiquidityCrisis: true,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $debtHealthMock = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.02)
+            ->withCoverage(-1.5)
+            ->wantingToPayDownDebt()
+            ->withDebtIssuance(false)
+            ->withDebtTolerance(1.0)
+            ->withCostOfCapital(0.12, 0.14)
+            ->withLeveredBeta(1.5)
+            ->withMetrics($debtMetricsMock)
+            ->withLiquidityStress(true, false)
+            ->build();
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
         $this->corporateMetricsMock->method('calculateAddressableShare')->willReturn(0.10);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
-        $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.25); // Divest 25%
+        // Divest 25%
+        $this->mathUtilityMock->script(checkProbability: true, generateUniformBetween: 0.25);
         $this->marketEventPublisherMock->method('publish')->willReturn(['event_type' => 'DIVESTITURE']);
 
         $initialTreasury = (float) $stock->getCorporateTreasury();
@@ -504,31 +496,24 @@ class DivestitureEngineTest extends TestCase
             depreciation: 1000000000.0,
             ebitda: -500000000.0,
         );
-        $health = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: -1.5,
-            wantsToPaydownDebt: true,
-            canIssueDebt: false,
-            debtTolerance: 1.0,
-            wacc: 0.12,
-            costOfEquity: 0.14,
-            leveredBeta: 1.5,
-            rawMetrics: $debtMetrics,
-            isLiquidityCrisis: true,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $health = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.02)
+            ->withCoverage(-1.5)
+            ->wantingToPayDownDebt()
+            ->withDebtIssuance(false)
+            ->withDebtTolerance(1.0)
+            ->withCostOfCapital(0.12, 0.14)
+            ->withLeveredBeta(1.5)
+            ->withMetrics($debtMetrics)
+            ->withLiquidityStress(true, false)
+            ->build();
 
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($health);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
         $this->corporateMetricsMock->method('calculateAddressableShare')->willReturn(0.10);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
         // One draw serves the divested fraction and every other uniform the deal takes.
-        $this->mathUtilityMock->method('generateUniformBetween')->willReturn($fraction);
+        $this->mathUtilityMock->script(checkProbability: true, generateUniformBetween: $fraction);
         $this->marketEventPublisherMock->method('publish')->willReturn(['event_type' => 'DIVESTITURE']);
     }
 

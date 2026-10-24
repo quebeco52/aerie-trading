@@ -16,31 +16,23 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\MockObject;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class MarketEngineTest extends TestCase
 {
-    private MathUtility&MockObject $mathUtilityMock;
+    private ScriptedDraws $mathUtilityMock;
     private MarketEngine $engine;
 
     protected function setUp(): void
     {
-        // Use a partial mock so the actual math methods run, but we can control randomness
-        $this->mathUtilityMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal', 'checkProbability'])
-            ->getMock();
+        $this->mathUtilityMock = new ScriptedDraws();
 
         $this->engine = new MarketEngine($this->mathUtilityMock);
     }
 
     public function testCalculateNextPriceWithoutJump(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
         $ctx = new MarketPricingContext(
             currentPrice: 100.0,
             currentVolatility: 0.2,
@@ -70,8 +62,7 @@ class MarketEngineTest extends TestCase
 
     public function testCalculateNextPriceWithGuaranteedJump(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
+        $this->mathUtilityMock->script(checkProbability: true);
 
         $ctx = new MarketPricingContext(
             currentPrice: 100.0,
@@ -94,9 +85,6 @@ class MarketEngineTest extends TestCase
 
     public function testReversionToFairValue(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
         $ctx = new MarketPricingContext(
             currentPrice: 50.0,
             currentVolatility: 0.2,
@@ -117,9 +105,6 @@ class MarketEngineTest extends TestCase
 
     public function testEvaluateFundamentalStateLowMarginHighRevenueNotInflated(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
         $ctx = new MarketPricingContext(
             currentPrice: 40.0,
             currentVolatility: 0.2,
@@ -142,9 +127,6 @@ class MarketEngineTest extends TestCase
 
     public function testEstarReversionAndFundingLiquidityDampening(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
         // Calculate with 0 macro stress
         $normalCtx = new MarketPricingContext(
             currentPrice: 100.0,
@@ -182,8 +164,6 @@ class MarketEngineTest extends TestCase
      */
     public function testAnInflationPrintWithAnchoredExpectationsLeavesTheFairValue(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $fair = fn(float $inflation, float $breakeven): float => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 100.0,
             currentVolatility: 0.2,
@@ -213,8 +193,6 @@ class MarketEngineTest extends TestCase
      */
     public function testAPolicyGapIsCapitalizedOnTheClampedPerpetualGrowth(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $levy = PolicyCapitalization::LONG_RUN_BANK_LEVY_RATE;
         $value = fn(float $expectedLevy): float => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 100.0,
@@ -259,8 +237,6 @@ class MarketEngineTest extends TestCase
      */
     public function testAnExpectedLawIsWorthNoMoreThanTheEarningsItMoves(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $carbon = 80.0;
         $priced = fn(float $expected, float $previous, float $return = 0.06): array => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 20.0,
@@ -331,8 +307,6 @@ class MarketEngineTest extends TestCase
      */
     public function testAnExpectedDividendTaxCostsPayersOnly(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $longRun = PolicyCapitalization::LONG_RUN_DIVIDEND_TAX_RATE;
         $value = fn(float $expectedRate, float $payout): float => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 100.0,
@@ -364,8 +338,6 @@ class MarketEngineTest extends TestCase
 
     public function testARevisedForecastMovesThePriceWithTheTarget(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $inForce = PolicyCapitalization::LONG_RUN_CORPORATE_TAX_SHIFT;
         $levy = PolicyCapitalization::LONG_RUN_BANK_LEVY_RATE;
         $macro = static fn(float $expectedTax, float $expectedLevy, float $previousTax, float $previousLevy, float $expectedRules = 0.0): MacroStateDTO => new MacroStateDTO(
@@ -452,11 +424,10 @@ class MarketEngineTest extends TestCase
      */
     public function testAFairValueStrikeMatchesThePriceStepAndDrawsNothing(): void
     {
-        $this->mathUtilityMock->expects($this->never())->method('generateStandardNormal');
-        $this->mathUtilityMock->expects($this->never())->method('checkProbability');
         $context = $this->incomeContext(1.0, 0.5, 0.2, 'tech');
 
         $strike = $this->engine->strikeFairValue($context);
+        $this->assertSame(0, $this->mathUtilityMock->callCount());
 
         $stepping = new MarketEngine(new MathUtility());
         $step = $stepping->calculateNextPrice($context);
@@ -471,8 +442,6 @@ class MarketEngineTest extends TestCase
      */
     public function testTheFundsImpactVarianceComesOutOfTheMarketFactorDiffusion(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $spread = function (float $fundVariance): float {
             $at = fn(float $z): float => log($this->engine->calculateNextPrice(new MarketPricingContext(
                 currentPrice: 100.0,
@@ -501,8 +470,6 @@ class MarketEngineTest extends TestCase
      */
     public function testTheMarketShockIsLoadedAtThePriorMarketVol(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $spread = function (?float $priorVol, float $vol): float {
             $at = fn(float $z): float => log($this->engine->calculateNextPrice(new MarketPricingContext(
                 currentPrice: 100.0,
@@ -531,8 +498,6 @@ class MarketEngineTest extends TestCase
      */
     public function testAFairlyPricedNamesLogPriceGrowsAtTheCostOfEquityLessTheJumpsLogMean(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $dt = 1.0 / 252.0;
         $step = function (float $vol, float $beta, float $lambda) use ($dt): float {
             $context = fn(float $price): MarketPricingContext => new MarketPricingContext(
@@ -581,8 +546,6 @@ class MarketEngineTest extends TestCase
      */
     public function testIncomeValuePricesTheDividendPolicyNotTheLastCheque(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $income = fn(float $dividend, float $payout, float $speed): float => $this->engine->calculateNextPrice($this->incomeContext($dividend, $payout, $speed))['analyst_targets']['income_analyst'];
 
         $atOnce = $income(1.0, 0.5, 1.0);
@@ -606,8 +569,6 @@ class MarketEngineTest extends TestCase
      */
     public function testAnOperatingCompanysDividendReachesValueOnlyThroughTheGrowthItsRetentionFunds(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
         $fairValue = fn(float $dividend, float $payout): float => $this->engine->calculateNextPrice($this->incomeContext($dividend, $payout, 0.05, 'tech'))['perceived_fair_value'];
 
         $paying = $fairValue(1.0, 0.5);
@@ -619,9 +580,6 @@ class MarketEngineTest extends TestCase
 
     public function testTechSectorIgnoresBookValueInValuation(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
         $techCtx = new MarketPricingContext(
             currentPrice: 150.0,
             currentVolatility: 0.2,
@@ -643,8 +601,7 @@ class MarketEngineTest extends TestCase
 
     public function testMarketShocksAreStrictlyBoundedToThirtyPercent(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
+        $this->everyJumpFiresAtASeededSize();
 
         for ($i = 0; $i < 500; $i++) {
             $ctx = new MarketPricingContext(
@@ -668,8 +625,7 @@ class MarketEngineTest extends TestCase
 
     public function testSafeReinsuranceMarketJumpStaysWithinBoundedLimits(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
+        $this->everyJumpFiresAtASeededSize();
 
         $ctx = new MarketPricingContext(
             currentPrice: 1500.0,
@@ -699,9 +655,6 @@ class MarketEngineTest extends TestCase
      */
     public function testAFinancialsBookLegIsStruckOnTangibleBook(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
         $valueAnalyst = fn(float $roe, ?float $tangibleBook, string $model = 'commercial_bank'): float => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 50.0,
             currentVolatility: 0.2,
@@ -733,9 +686,6 @@ class MarketEngineTest extends TestCase
      */
     public function testFairValueIsDiscountedAtTheCostOfEquity(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
         $priced = fn(float $costOfEquity): array => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 80.0,
             currentVolatility: 0.25,
@@ -761,9 +711,6 @@ class MarketEngineTest extends TestCase
      */
     public function testAReturnAboveItsLongRunLevelIsValuedAsItFades(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
-
         $fairValue = fn(float $trailing, ?float $longRun): float => $this->engine->calculateNextPrice(new MarketPricingContext(
             currentPrice: 80.0,
             currentVolatility: 0.25,
@@ -786,6 +733,17 @@ class MarketEngineTest extends TestCase
             $fairValue(TimeSeries::persistentEquivalentReturn(0.20, 0.12, 0.10), null),
             $fairValue(0.20, 0.12),
             1e-9,
+        );
+    }
+
+    /** Every jump fires, its direction and size drawn from a seeded stream, so a sweep of steps reaches both caps. */
+    private function everyJumpFiresAtASeededSize(): void
+    {
+        $sizes = MathUtility::ownStream(20261024);
+        $this->mathUtilityMock->script(
+            checkProbability: true,
+            generateUniform: static fn(): float => $sizes->generateUniform(),
+            generateExponential: static fn(float $rate): float => $sizes->generateExponential($rate),
         );
     }
 }

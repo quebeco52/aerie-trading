@@ -7,13 +7,13 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\AdvertisingAgencyBusinessModel;
 use App\Service\Model\Sector\InternetRetailBusinessModel;
 use App\Service\Model\Sector\LuxuryBusinessModel;
 use App\Service\Model\Sector\RestaurantBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -94,8 +94,7 @@ class SentimentResidualTest extends TestCase
 
     private function assertStreamElasticity(BusinessModelInterface $model, string $ticker, string $stream, float $gapCoefficient): void
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $revenue = fn(float $gap): float => $model->computeActualFinancials(self::stock($ticker), 100.0, 0.30, 10.0, 0.10, self::onTheFit($gap), $math)->streamRevenue[$stream];
 
         $elasticity = (($revenue(self::GAP) / $revenue(0.0)) - 1.0) / self::GAP;

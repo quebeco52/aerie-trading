@@ -15,6 +15,7 @@ use App\Service\Politics\Diet\OpinionPolls;
 use App\Service\Politics\Policy\BudgetRound;
 use App\Service\Politics\PoliticsEngine as Politics;
 use App\Service\Politics\PoliticsState;
+use App\Tests\Support\InMemoryRedis;
 use PHPUnit\Framework\TestCase;
 
 class ElectionForecastTest extends TestCase
@@ -330,21 +331,6 @@ class ElectionForecastTest extends TestCase
 
     private function inMemoryRedis(): \Redis
     {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
+        return new InMemoryRedis();
     }
 }

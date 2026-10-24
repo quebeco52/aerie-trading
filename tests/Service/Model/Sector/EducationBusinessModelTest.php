@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\EducationBusinessModel;
 use App\Service\Model\StreamContext;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class EducationBusinessModelTest extends TestCase
@@ -19,7 +20,7 @@ class EducationBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new EducationBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testCounterCyclicalTuitionAndLmsStreams(): void
@@ -67,7 +68,7 @@ class EducationBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(governmentSpendingIndexEma: 100.0);
         $expansionMacro = new MacroStateDTO(governmentSpendingIndexEma: 130.0);
 
-        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock = new ScriptedDraws();
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $baseMacro, $mathMock);
         $expansionResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $expansionMacro, $mathMock);
 
@@ -83,8 +84,7 @@ class EducationBusinessModelTest extends TestCase
         $lowUnemploymentMacro = new MacroStateDTO(unemploymentRateEma: 0.040);
         $highUnemploymentMacro = new MacroStateDTO(unemploymentRateEma: 0.080);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $lowUnemploymentMacro, $mathMock);
         $surgeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $highUnemploymentMacro, $mathMock);

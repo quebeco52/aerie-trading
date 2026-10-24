@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate\Deal;
 
 use App\Entity\Stock;
+use App\Tests\Support\BalanceSheetAssertions;
 
 /** A listed firm with every operating ledger open, and the balance-sheet check both sides of a deal are held to. */
 trait DealFixtures
 {
+    use BalanceSheetAssertions;
+
     private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock
     {
         $stock = new Stock();
@@ -42,11 +45,9 @@ trait DealFixtures
         return $stock;
     }
 
-    /** Assets equal liabilities plus equity. The lease is the same figure on both sides, so it is left out. */
+    /** Both sides of a deal balance to a part in a billion of total assets. */
     private function assertBalanced(Stock $stock, string $context): void
     {
-        $assets = $stock->getTotalAssets();
-        $claims = $stock->getTotalLiabilities() + (float) $stock->getTotalEquity();
-        $this->assertEqualsWithDelta($assets, $claims, max(1.0, abs($assets) * 1e-9), "Balance sheet failed to balance after {$context}");
+        $this->assertBalanceSheetBalances($stock, "Balance sheet failed to balance after {$context}", relativeTolerance: 1e-9);
     }
 }

@@ -9,14 +9,12 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Model\Sector\CommunicationEquipmentBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class CommunicationEquipmentBusinessModelTest extends TestCase
 {
     private const EXPECTED_REVENUE = 100_000_000.0;
@@ -42,9 +40,10 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $stock = (new Stock())->setTicker('ERNE_TEST')->setBeta('0.85');
         $stock->setEarningsMomentumZ($momentum);
 
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-        $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $scriptedZ : 0.0);
-        $math->method('checkProbability')->willReturnCallback(fn(float $p): bool => in_array($p, $hazardFires, true));
+        $math = new ScriptedDraws(
+            generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $scriptedZ : 0.0,
+            checkProbability: fn(float $p): bool => in_array($p, $hazardFires, true),
+        );
 
         return $this->model->computeActualFinancials(
             $stock,

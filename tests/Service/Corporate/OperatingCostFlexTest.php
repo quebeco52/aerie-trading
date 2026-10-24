@@ -8,25 +8,18 @@ use App\Data\Company\Sectors;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\CapExEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\Earnings\OperatingCapacityEngine;
 use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\TreasuryEngine;
-use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
-use App\Service\News\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\CorporateEngineFactory;
+use App\Tests\Support\ScriptedDraws;
+use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Capacity cost is committed, not chosen quarter by quarter.
@@ -40,65 +33,22 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  * The adjustment laws are exercised directly because they are a deterministic function of three context
  * fields; the trajectory test at the end runs the real pipeline to prove the channel is actually reached.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class OperatingCostFlexTest extends TestCase
 {
+    use CorporateEngineFactory;
+
     private const AUTO_MANUFACTURER = 'auto_manufacturer';
 
     private function buildEngine(?MathUtility $mathUtility = null): EarningsEngine
     {
         $mathUtility ??= new MathUtility();
-        $corporateMetrics = new CorporateMetrics();
-        $debtEngine = new DebtEngine($mathUtility, $corporateMetrics);
-        $capExEngine = new CapExEngine();
-        $treasuryEngine = new TreasuryEngine($corporateMetrics, $debtEngine, $capExEngine, $mathUtility);
 
-        $capitalAllocationEngine = new CapitalAllocationEngine(
-            $this->createStub(CorporateLedgerService::class),
-            $corporateMetrics,
-            $debtEngine,
-            $mathUtility,
-            $treasuryEngine,
-        );
-
-        return new EarningsEngine(
-            $this->createStub(EventDispatcherInterface::class),
-            $this->createStub(MarketEventPublisher::class),
-            $capitalAllocationEngine,
-            $debtEngine,
-            $capExEngine,
-            $mathUtility,
-            $corporateMetrics,
-            $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine(),
-            null,
-        );
+        return self::earningsEngine($mathUtility);
     }
 
     private function buildMatureIndustrial(string $ticker): Stock
     {
-        $stock = new Stock();
-        $stock->setTicker($ticker);
-        $stock->setIndustry('Auto Manufacturers');
-        $stock->setEarningsPerShare('2.50');
-        $stock->setSharesOutstanding('1000000000');
-        $stock->setPrice('50.00');
-        $stock->setVolatility('0.15');
-        $stock->setCurrentVolatility('0.15');
-        $stock->setBeta('1.0');
-        $stock->setTotalEquity('50000000000');
-        $stock->setWholesaleDebt('20000000000');
-        $stock->setCorporateTreasury('15000000000');
-        $stock->setRetainedEarnings('10000000000');
-        $stock->setTotalRevenue('80000000000');
-        $stock->setOperatingMargin('0.12');
-        $stock->setTargetPayoutRatio('0.30');
-        $stock->setDividendSpeed('1.00');
-        $stock->setLastDividend('0.00');
-        $stock->setFixedCostRatio(0.40);
-        $stock->setCapexRatio('0.20');
-
-        return $stock;
+        return StockBuilder::matureIndustrial($ticker)->build();
     }
 
     /**
@@ -397,12 +347,7 @@ final class OperatingCostFlexTest extends TestCase
      */
     public function testVariableCostIsPerUnitSoAContractionLeavesItsRatioAlone(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $operations = $this->buildOperations($quiet);
 
         $realizedRatio = function (float $priorExpectedRevenue) use ($operations): float {

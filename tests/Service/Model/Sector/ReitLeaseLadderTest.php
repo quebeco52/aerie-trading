@@ -6,9 +6,8 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReitBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,7 +18,6 @@ use PHPUnit\Framework\TestCase;
  * keep catching up for years, and after a bust in-place rents sit above market and grind down as space
  * rolls, which is the negative re-leasing spread that does the real damage to a landlord.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class ReitLeaseLadderTest extends TestCase
 {
     /**
@@ -32,11 +30,7 @@ final class ReitLeaseLadderTest extends TestCase
         $stock->setTicker('ZZZZ');
         $stock->setBeta('0.8');
 
-        $math = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal', 'checkProbability'])
-            ->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('checkProbability')->willReturn(false);
+        $math = new ScriptedDraws();
 
         $macro = new MacroStateDTO(
             commercialPropertyIndexEma: $propertyIndex,

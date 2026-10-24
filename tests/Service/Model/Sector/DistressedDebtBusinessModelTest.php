@@ -11,11 +11,10 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DistressedDebtBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class DistressedDebtBusinessModelTest extends TestCase
 {
     /** Recovery's share of the default mix: the activity shift is the distress multiplier at this weight. */
@@ -30,7 +29,7 @@ class DistressedDebtBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new DistressedDebtBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testCreditSpreadBlowoutSurgesTurnaroundRevenue(): void
@@ -106,12 +105,8 @@ class DistressedDebtBusinessModelTest extends TestCase
             highYieldCreditSpreadEma: 0.132,
         );
 
-        $mathStub = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
-            ->getMock();
-
         // High positive recovery shock Z = 2.0 (triggers event)
-        $mathStub->method('generatePersistentZ')->willReturn(2.0);
+        $mathStub = new ScriptedDraws(generatePersistentZ: 2.0);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -171,10 +166,7 @@ class DistressedDebtBusinessModelTest extends TestCase
             corporateDefaultRateEma: 0.060,   // Surging to 6.0% (+200% shift)
         );
 
-        $mathMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
-            ->getMock();
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, $calmMacro, $mathMock);
         $spikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, $hySpikeMacro, $mathMock);
@@ -201,10 +193,7 @@ class DistressedDebtBusinessModelTest extends TestCase
             corporateDefaultRateEma: 0.250,
         );
 
-        $mathMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
-            ->getMock();
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $expectedRevenue = 100_000_000.0;
         $result = $this->model->computeActualFinancials($stock, $expectedRevenue, 0.40, 10_000_000.0, 0.0, $apocalypseMacro, $mathMock);
@@ -320,10 +309,7 @@ class DistressedDebtBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('VULT');
 
-        $mathStub = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
-            ->getMock();
-        $mathStub->method('generatePersistentZ')->willReturn(2.0);
+        $mathStub = new ScriptedDraws(generatePersistentZ: 2.0);
 
         $easy = $this->quarterAtTrend(['corporateDefaultRateEma' => 0.014, 'outputGapEma' => 0.01]);
         $result = $this->model->computeActualFinancials($stock, 50_000_000.0, 0.35, 5_000_000.0, 0.20, $easy, $mathStub);

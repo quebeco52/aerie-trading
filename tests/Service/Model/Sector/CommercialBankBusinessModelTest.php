@@ -14,10 +14,9 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class CommercialBankBusinessModelTest extends TestCase
 {
     private CommercialBankBusinessModel $model;
@@ -26,7 +25,7 @@ class CommercialBankBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new CommercialBankBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     /**
@@ -113,25 +112,14 @@ class CommercialBankBusinessModelTest extends TestCase
         );
     }
 
-    private function createMathUtilityMock(array $persistentZCalls = []): MathUtility
+    /** The given stream Z's in call order, then zero. */
+    private function createMathUtilityMock(array $persistentZCalls = []): ScriptedDraws
     {
-        $mock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
-            ->getMock();
+        $queue = array_values($persistentZCalls);
 
-        $callIndex = 0;
-        $mock->method('generatePersistentZ')
-            ->willReturnCallback(function ($prevZ, $phi) use (&$callIndex, $persistentZCalls) {
-                if (isset($persistentZCalls[$callIndex])) {
-                    $val = $persistentZCalls[$callIndex];
-                    $callIndex++;
-                    return $val;
-                }
-                $callIndex++;
-                return 0.0;
-            });
-
-        return $mock;
+        return new ScriptedDraws(generatePersistentZ: static function () use (&$queue): float {
+            return array_shift($queue) ?? 0.0;
+        });
     }
 
     /**
@@ -1098,8 +1086,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $stock->setTotalEquity('100.0');
         $stock->setIndustry('Banks - Regional');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws();
 
         $run = function (float $share, float $shareEma) use ($stock, $mathMock): float {
             $macro = MacroStateDTO::fromArray([
@@ -1129,8 +1116,7 @@ class CommercialBankBusinessModelTest extends TestCase
         $stock->setTicker('LAKE');
         $stock->setTotalEquity('100.0');
         $stock->setIndustry('Banks - Regional');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws();
 
         $deposits = 1000.0;
         foreach ([[0.0125, 0.0], [0.0, 0.0125]] as [$shareMove, $emaMove]) {
@@ -1152,8 +1138,7 @@ class CommercialBankBusinessModelTest extends TestCase
 
     public function testDepositBaseGrowsWithNominalIncomeWhateverTheBanksLeverage(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws();
         $macro = MacroStateDTO::fromArray([
             'inflation_ema' => 0.03,
             'policy_rate_ema' => 0.05,
@@ -1184,8 +1169,7 @@ class CommercialBankBusinessModelTest extends TestCase
 
     public function testDepositGrowthAtTrendIsNotNews(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws();
         $stock = new Stock();
         $stock->setTicker('LAKE');
         $stock->setTotalEquity('100.0');
@@ -1268,8 +1252,7 @@ class CommercialBankBusinessModelTest extends TestCase
     /** @return array{change: float, events: list<array<string, mixed>>} */
     private function depositQuarter(MacroStateDTO $macro, float $z): array
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generateStandardNormal')->willReturn($z);
+        $math = new ScriptedDraws(generateStandardNormal: $z);
         $deposits = 400_000_000_000.0;
         $state = ['customerDeposits' => $deposits, 'treasury' => 50_000_000_000.0, 'events' => []];
 

@@ -7,8 +7,8 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ComputerHardwareBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class ComputerHardwareBusinessModelTest extends TestCase
@@ -36,8 +36,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
             industrialMetalsIndexEma: 100.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baseResult = $this->model->computeActualFinancials(
             $stock,
@@ -76,8 +75,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
                 $stock = new Stock();
                 $stock->setTicker($ticker);
                 $stock->setBeta('1.0');
-                $math = $this->createStub(MathUtility::class);
-                $math->method('generatePersistentZ')->willReturn(0.0);
+                $math = new ScriptedDraws(generatePersistentZ: 0.0);
                 $macro = new MacroStateDTO(consumerSentimentIndexEma: $sentiment);
 
                 return $this->model->computeActualFinancials($stock, 100_000_000.0, $variableCostRatio, 20_000_000.0, 0.10, $macro, $math)->clampedMargin;
@@ -96,8 +94,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('HPE');
         $stock->setBeta('1.0');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, new MacroStateDTO(industrialMetalsIndexEma: 100.0), $mathMock);
         $metalsSpikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, new MacroStateDTO(industrialMetalsIndexEma: 150.0), $mathMock);
 
@@ -117,8 +114,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
         $shift = $this->model->resolveSectorActivityShift($stock, $recession);
         $this->assertEqualsWithDelta(-0.09425, $shift, 1e-9);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $booked = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 300.0, 0.0, $recession, $mathMock)->actualRevenue / 1000.0 - 1.0;
         $this->assertEqualsWithDelta($booked, $shift, 1e-9, 'The base staffs to the units the books ship.');
     }
@@ -127,16 +123,13 @@ class ComputerHardwareBusinessModelTest extends TestCase
      * A component shortage is a supply-chain crisis, not a private draw: the GSCPI and the firm's own stress add, so a
      * draw that is harmless in a calm market rations shipments when the index runs two standard deviations hot.
      */
-    #[\PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations]
     public function testSupplyChainPressureBringsShortagesOnAtMilderFirmStress(): void
     {
         $run = function (MacroStateDTO $macro): \App\DTO\ActualFinancialsDTO {
             $stock = (new Stock())->setTicker('PENG_TEST')->setBeta('1.0');
             $stock->setEarningsMomentumZ(['event' => -9.9]);
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
             $draw = ComputerHardwareBusinessModel::SEMICONDUCTOR_SHORTAGE_Z_SCORE + 1.0;
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $draw : 0.0);
-            $math->method('checkProbability')->willReturn(false);
+            $math = new ScriptedDraws(generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $draw : 0.0);
 
             return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.70, 20_000_000.0, 0.0, $macro, $math);
         };

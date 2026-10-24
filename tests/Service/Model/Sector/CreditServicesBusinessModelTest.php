@@ -11,6 +11,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\CreditServicesBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class CreditServicesBusinessModelTest extends TestCase
@@ -21,7 +22,7 @@ class CreditServicesBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new CreditServicesBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     /**
@@ -161,8 +162,7 @@ class CreditServicesBusinessModelTest extends TestCase
         $lowRecessionMacro = new MacroStateDTO(recessionProbabilityEma: 0.05, macroCreditSpreadEma: 0.020);
         $highRecessionMacro = new MacroStateDTO(recessionProbabilityEma: 0.60, macroCreditSpreadEma: 0.020);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $lowResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $lowRecessionMacro, $mathMock);
         $highResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $highRecessionMacro, $mathMock);
@@ -201,8 +201,7 @@ class CreditServicesBusinessModelTest extends TestCase
         $looseMacro = new MacroStateDTO(sloosTighteningIndexEma: -0.10);
         $tightMacro = new MacroStateDTO(sloosTighteningIndexEma: 0.50);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $looseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $looseMacro, $mathMock);
         $tightResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $tightMacro, $mathMock);

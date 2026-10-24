@@ -15,16 +15,20 @@ use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\StockTrackerFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
-
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class StockTrackerTest extends TestCase
 {
+    use StockTrackerFactory;
+
     private EntityManagerInterface&MockObject $entityManagerMock;
     private MarketEngine&Stub $marketEngineMock;
     private EarningsEngine&Stub $earningsEngineMock;
@@ -33,7 +37,6 @@ class StockTrackerTest extends TestCase
     private DivestitureEngine&Stub $divestitureEngineMock;
     private MarketEventPublisher&Stub $marketEventMock;
     private DebtEngine&Stub $debtEngineMock;
-    private MathUtility&Stub $mathUtilityMock;
     private CorporateMetrics&Stub $corporateMetricsMock;
     private \App\Service\Market\Flow\InMemoryOrderFlowStore $orderFlow;
     private StockTracker $tracker;
@@ -48,70 +51,23 @@ class StockTrackerTest extends TestCase
         $this->divestitureEngineMock = $this->createStub(DivestitureEngine::class);
         $this->marketEventMock = $this->createStub(MarketEventPublisher::class);
         $this->debtEngineMock = $this->createStub(DebtEngine::class);
-        $this->mathUtilityMock = $this->createStub(MathUtility::class);
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
 
-        $this->mathUtilityMock->method('calculateSVJJJumps')->willReturn([
-            'price_multiplier' => 1.0,
-            'var_jump' => 0.0,
-            'shock_pct' => null,
-        ]);
-
-        $debtMetrics = new \App\DTO\DebtMetricsDTO(
-            interestExpense: 0.0,
-            blendedRate: 0.05,
-            historicalFixedRate: 0.05,
-            dynamicSpread: 0.01,
-            currentMarketRate: 0.05,
-            wholesaleRate: 0.05,
-            ebit: 1000.0,
-            revenue: 5000.0,
-            depreciation: 100.0,
-            ebitda: 1100.0,
-        );
-        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn(new \App\DTO\DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: $debtMetrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        ));
+        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn(DebtHealthBuilder::healthy()->build());
 
         $this->orderFlow = new \App\Service\Market\Flow\InMemoryOrderFlowStore();
 
-        $this->tracker = new StockTracker(
+        $this->tracker = self::stockTracker(
             $this->marketEngineMock,
             $this->earningsEngineMock,
             $this->corporateActionEngineMock,
-            $this->acquisitionEngineMock,
-            $this->divestitureEngineMock,
-            $this->marketEventMock,
             $this->debtEngineMock,
-            $this->corporateMetricsMock,
             new \App\Service\Market\Pricing\LiquidityEngine(new MathUtility()),
-            $this->orderFlow,
-            new \App\Service\Market\Agent\AgentFlowEngine(
-                new \App\Service\Market\Agent\AgentPopulation(),
-                new \App\Service\Market\Agent\InMemoryAgentStateStore(),
-                new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
-                [],
-            ),
-            // Stubbed maths, so checkProbability() is false and no succession fires in tests that
-            // are about something else.
-            new \App\Service\Corporate\ManagementSuccessionEngine(
-                $this->createStub(MarketEventPublisher::class),
-                $this->createStub(MathUtility::class),
-            ),
+            acquisitions: $this->acquisitionEngineMock,
+            divestitures: $this->divestitureEngineMock,
+            publisher: $this->marketEventMock,
+            metrics: $this->corporateMetricsMock,
+            orderFlow: $this->orderFlow,
         );
     }
 

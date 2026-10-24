@@ -6,9 +6,9 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -58,10 +58,7 @@ final class OneOffChargeTest extends TestCase
     /** @param class-string<OperatingStrategyInterface> $model */
     private function report(string $model, float $z, float $uniform): \App\DTO\ActualFinancialsDTO
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn($z);
-        $math->method('generateStandardNormal')->willReturn($z);
-        $math->method('generateUniform')->willReturn($uniform);
+        $math = new ScriptedDraws(generatePersistentZ: $z, generateStandardNormal: $z, generateUniform: $uniform);
 
         $stock = (new Stock())->setTicker('ONEOFF')->setBeta('1.0')->setTotalEquity('500000000');
 

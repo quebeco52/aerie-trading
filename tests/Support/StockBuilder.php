@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Support;
 
 use App\Entity\Stock;
+use App\Service\Math\Decimal;
 
 /**
  * Fluent builder for creating isolated, valid Stock entity instances in tests.
@@ -37,9 +38,137 @@ class StockBuilder
         return new self($ticker, $name);
     }
 
+    /** A bare entity with only its ticker, for a fixture whose arithmetic needs every other field at its default. */
+    public static function blank(string $ticker): self
+    {
+        $builder = new self($ticker);
+        $builder->stock = (new Stock())->setTicker($ticker);
+
+        return $builder;
+    }
+
+    /**
+     * A mature auto maker on a bare entity: $80B of revenue at a 12% margin with 40% of costs fixed, $50B of equity,
+     * $20B of debt and a 30% payout target. The structural variable cost ratio stays null, so the engine derives it
+     * from the margin and the fixed cost ratio.
+     */
+    public static function matureIndustrial(string $ticker): self
+    {
+        return self::blank($ticker)
+            ->withIndustry('Auto Manufacturers')
+            ->withEarningsPerShare('2.50')
+            ->withSharesOutstanding('1000000000')
+            ->withPrice('50.00')
+            ->withVolatility('0.15')
+            ->withCurrentVolatility('0.15')
+            ->withBeta('1.0')
+            ->withTotalEquity('50000000000')
+            ->withWholesaleDebt('20000000000')
+            ->withCorporateTreasury('15000000000')
+            ->withRetainedEarnings('10000000000')
+            ->withRevenue('80000000000')
+            ->withOperatingMargin('0.12')
+            ->withTargetPayoutRatio('0.30')
+            ->withDividendSpeed('1.00')
+            ->withLastDividend('0.00')
+            ->withFixedCostRatio(0.40)
+            ->withCapexRatio('0.20');
+    }
+
     public function withSector(string $sector): self
     {
         $this->stock->setSector($sector);
+        return $this;
+    }
+
+    /** The industry, which picks the firm's business model and its sector's covenants and depreciation. */
+    public function withIndustry(string $industry): self
+    {
+        $this->stock->setIndustry($industry);
+        return $this;
+    }
+
+    public function withCreditRating(string $rating): self
+    {
+        $this->stock->setCreditRating($rating);
+        return $this;
+    }
+
+    /** Annual revenue. */
+    public function withRevenue(float|string $revenue): self
+    {
+        $this->stock->setTotalRevenue(Decimal::of($revenue, 4));
+        return $this;
+    }
+
+    public function withOperatingMargin(float|string $margin): self
+    {
+        $this->stock->setOperatingMargin(Decimal::of($margin, 4));
+        return $this;
+    }
+
+    /** The share of the cost base that does not move with revenue. */
+    public function withFixedCostRatio(float $ratio): self
+    {
+        $this->stock->setFixedCostRatio($ratio);
+        return $this;
+    }
+
+    /** Sets net income from EPS on the shares outstanding at the time, so it goes after withSharesOutstanding(). */
+    public function withEarningsPerShare(float|string $eps): self
+    {
+        $this->stock->setEarningsPerShare(Decimal::of($eps, 8));
+        return $this;
+    }
+
+    public function withRetainedEarnings(float|string $retained): self
+    {
+        $this->stock->setRetainedEarnings(Decimal::of($retained, 4));
+        return $this;
+    }
+
+    public function withBaselineRoic(float|string $roic): self
+    {
+        $this->stock->setBaselineRoic(Decimal::of($roic, 4));
+        return $this;
+    }
+
+    public function withCapexRatio(float|string $ratio): self
+    {
+        $this->stock->setCapexRatio(Decimal::of($ratio, 4));
+        return $this;
+    }
+
+    public function withTargetPayoutRatio(float|string $ratio): self
+    {
+        $this->stock->setTargetPayoutRatio(Decimal::of($ratio, 4));
+        return $this;
+    }
+
+    /** How fast the dividend closes on its target each quarter, 1.0 being at once. */
+    public function withDividendSpeed(float|string $speed): self
+    {
+        $this->stock->setDividendSpeed(Decimal::of($speed, 4));
+        return $this;
+    }
+
+    public function withCustomerDeposits(float|string $deposits): self
+    {
+        $this->stock->setCustomerDeposits(Decimal::of($deposits, 4));
+        return $this;
+    }
+
+    /** The blended coupon on the debt already issued. */
+    public function withHistoricalFixedRate(float|string $rate): self
+    {
+        $this->stock->setHistoricalFixedRate(Decimal::of($rate, 4));
+        return $this;
+    }
+
+    /** The firm's credit spread over the risk-free curve. */
+    public function withCreditSpread(float|string $spread): self
+    {
+        $this->stock->setCreditSpread(Decimal::of($spread, 4));
         return $this;
     }
 
@@ -94,7 +223,7 @@ class StockBuilder
 
     public function withTotalEquity(float|string $equity): self
     {
-        $this->stock->setTotalEquity(\App\Service\Math\Decimal::of($equity, 4));
+        $this->stock->setTotalEquity(Decimal::of($equity, 4));
         return $this;
     }
 

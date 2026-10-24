@@ -9,9 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
-use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Deal\AcquisitionEngine;
-use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
@@ -22,7 +20,8 @@ use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
-use App\Service\News\MarketEventPublisher;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\StockTrackerFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -40,6 +39,8 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class OrderFlowImpactWiringTest extends TestCase
 {
+    use StockTrackerFactory;
+
     private InMemoryOrderFlowStore $orderFlow;
     private LiquidityEngine $liquidity;
 
@@ -52,34 +53,7 @@ class OrderFlowImpactWiringTest extends TestCase
     /** A healthy, unremarkable balance sheet: nothing here is what the tests are about. */
     private function debtHealth(): \App\DTO\DebtHealthDTO
     {
-        return new \App\DTO\DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: new \App\DTO\DebtMetricsDTO(
-                interestExpense: 0.0,
-                blendedRate: 0.05,
-                historicalFixedRate: 0.05,
-                dynamicSpread: 0.01,
-                currentMarketRate: 0.05,
-                wholesaleRate: 0.05,
-                ebit: 1000.0,
-                revenue: 5000.0,
-                depreciation: 100.0,
-                ebitda: 1100.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        return DebtHealthBuilder::healthy()->build();
     }
 
     private function tracker(
@@ -136,32 +110,16 @@ class OrderFlowImpactWiringTest extends TestCase
 
             return $shock === null ? null : ['event' => ['type' => 'ACQUISITION', 'description' => ''], 'shock' => $shock];
         });
-        $divestitures = $this->createStub(DivestitureEngine::class);
-        $divestitures->method('evaluateCorporateDivestiture')->willReturn(null);
 
-        return new StockTracker(
+        return self::stockTracker(
             $marketEngine,
             $earnings,
             $corporateActions,
-            $acquisitions,
-            $divestitures,
-            $this->createStub(MarketEventPublisher::class),
             $debtEngine,
-            $this->createStub(CorporateMetrics::class),
             $this->liquidity,
-            $this->orderFlow,
-            new \App\Service\Market\Agent\AgentFlowEngine(
-                new \App\Service\Market\Agent\AgentPopulation(),
-                $agentStateStore ?? new \App\Service\Market\Agent\InMemoryAgentStateStore(),
-                new InMemoryOrderFlowStore(),
-                [],
-            ),
-            // Stubbed maths, so checkProbability() is false and no succession fires in tests that
-            // are about something else.
-            new \App\Service\Corporate\ManagementSuccessionEngine(
-                $this->createStub(MarketEventPublisher::class),
-                $this->createStub(MathUtility::class),
-            ),
+            acquisitions: $acquisitions,
+            orderFlow: $this->orderFlow,
+            agentStates: $agentStateStore,
         );
     }
 

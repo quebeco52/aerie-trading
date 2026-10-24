@@ -10,8 +10,8 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\RefiningBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 final class RefiningBusinessModelTest extends TestCase
@@ -28,21 +28,9 @@ final class RefiningBusinessModelTest extends TestCase
         $this->model = new RefiningBusinessModel();
     }
 
-    private function fixedDraws(float $z = 0.0): MathUtility
+    private function fixedDraws(float $z = 0.0): ScriptedDraws
     {
-        return new class ($z) extends MathUtility {
-            public function __construct(private readonly float $z) {}
-
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return $this->z;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        return new ScriptedDraws(generatePersistentZ: $z);
     }
 
     /**

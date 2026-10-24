@@ -13,15 +13,13 @@ use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class UtilityBusinessModelTest extends TestCase
 {
     public function testAStrongMerchantGenerationQuarterRaisesRevenue(): void
@@ -31,17 +29,12 @@ class UtilityBusinessModelTest extends TestCase
         $stock->setTicker('UTIL');
         $stock->setBeta('0.5');
 
-        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
         // Sequence of generateStandardNormal calls:
         // 1. firm-wide demand innovation = 0.0
         // 2. regulatedZ = 0.0
         // 3. unregulatedZ idiosyncratic = 2.5 (composite 2.0: a strong wind and solar quarter)
         // 4. eventZ = 0.0
-        $mathUtilityMock->expects($this->exactly(4))
-            ->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5, 0.0);
+        $mathUtilityMock = new ScriptedDraws(generateStandardNormal: [0.0, 0.0, 2.5, 0.0]);
 
         $macroState = MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
         $result = $model->computeActualFinancials(
@@ -54,6 +47,7 @@ class UtilityBusinessModelTest extends TestCase
             $mathUtilityMock,
         );
 
+        $this->assertSame(4, $mathUtilityMock->callCount('generateStandardNormal'));
         // More merchant generation at the same wholesale price is more revenue
         $this->assertGreaterThan(1000.0, $result->actualRevenue);
     }
@@ -154,11 +148,12 @@ class UtilityBusinessModelTest extends TestCase
             $stock->setBeta('1.0');
             // The rate case is held level, so the tariff lag does not move between the quarters compared.
             $stock->setEarningsMomentumZ([...$momentum, UtilityBusinessModel::STATE_TARIFF_SHORTFALL => 0.0]);
-            // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            // Stream draws and regime dice are scripted; the mix-drift weight math stays real.
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
-            $math->method('checkProbability')->willReturn($exits);
+            $math = new ScriptedDraws(
+                generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0,
+                checkProbability: $exits,
+            );
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
 
@@ -196,10 +191,8 @@ class UtilityBusinessModelTest extends TestCase
             $stock->setBeta('1.0');
             $stock->setTotalEquity('400000000');
             $momentum = [UtilityBusinessModel::STATE_OPENING_ROE => $roeAt(0.04), UtilityBusinessModel::STATE_AUTHORISED_ROE => $roeAt(0.04)];
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generatePersistentZ')->willReturn(0.0);
             // Every pending case is decided the quarter after it is filed.
-            $math->method('checkProbability')->willReturn(true);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0, checkProbability: true);
             $result = null;
             for ($quarter = 0; $quarter < 40; $quarter++) {
                 $stock->setEarningsMomentumZ($momentum);
@@ -230,9 +223,7 @@ class UtilityBusinessModelTest extends TestCase
             $stock->setTicker('UTIL');
             $stock->setBeta('0.5');
             $stock->setEarningsMomentumZ($momentum);
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generatePersistentZ')->willReturn(0.0);
-            $math->method('checkProbability')->willReturn(false);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0);
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
 
@@ -249,8 +240,7 @@ class UtilityBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker($ticker);
         $stock->setBeta('0.5');
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math = new ScriptedDraws();
         $macro = new MacroStateDTO(inflationEma: 0.02, naturalGasPriceIndexEma: $gasIndexEma, wholesalePowerPriceIndexEma: $powerIndexEma);
 
         return $this->unhedgedModel()->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
@@ -275,8 +265,7 @@ class UtilityBusinessModelTest extends TestCase
     {
         $quarter = function (float $powerIndexEma): ActualFinancialsDTO {
             $stock = (new Stock())->setTicker('BIRD')->setBeta('0.5');
-            $math = $this->createStub(MathUtility::class);
-            $math->method('generateStandardNormal')->willReturn(0.0);
+            $math = new ScriptedDraws();
             $macro = new MacroStateDTO(inflationEma: 0.02, wholesalePowerPriceIndexEma: $powerIndexEma);
 
             return (new UtilityBusinessModel())->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
@@ -299,8 +288,7 @@ class UtilityBusinessModelTest extends TestCase
         $shortfall = 0.05;
         $stock = (new Stock())->setTicker('BIRD')->setBeta('0.5');
         $stock->setEarningsMomentumZ([UtilityBusinessModel::STATE_TARIFF_SHORTFALL => $shortfall]);
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math = new ScriptedDraws();
         $macro = new MacroStateDTO(inflationEma: 0.02, wholesalePowerPriceIndexEma: MacroConstants::WHOLESALE_POWER_BASELINE);
         $model = $this->unhedgedModel();
 
@@ -415,9 +403,7 @@ class UtilityBusinessModelTest extends TestCase
         $quarter = function (array $momentum, float $burden, float $totalTime, bool $exits) use ($model): ActualFinancialsDTO {
             $stock = (new Stock())->setTicker('UTIL')->setBeta('0.5');
             $stock->setEarningsMomentumZ($momentum);
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generatePersistentZ')->willReturn(0.0);
-            $math->method('checkProbability')->willReturn($exits);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0, checkProbability: $exits);
             // The smoothed stock of open claims sits high throughout: it is not what the trigger reads.
             $macro = new MacroStateDTO(inflationEma: 0.02, catastropheLossIndex: $burden, catastropheLossIndexEma: 9.0, totalTime: $totalTime);
 
@@ -456,9 +442,9 @@ class UtilityBusinessModelTest extends TestCase
                 FinancialConstants::STATE_CATASTROPHE_BURDEN_AT_REPORT => 1.0,
                 FinancialConstants::STATE_CATASTROPHE_BURDEN_READ_AT => 10.0,
             ]);
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generatePersistentZ')->willReturnCallback(static fn(float $prev): float => $prev === -9.9 ? $eventZ : 0.0);
-            $math->method('checkProbability')->willReturn(false);
+            $math = new ScriptedDraws(
+                generatePersistentZ: static fn(float $prev): float => $prev === -9.9 ? $eventZ : 0.0,
+            );
             $macro = new MacroStateDTO(inflationEma: 0.02, catastropheLossIndex: $burden, totalTime: 10.25);
 
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
@@ -501,9 +487,7 @@ class UtilityBusinessModelTest extends TestCase
             $stock = new Stock();
             $stock->setTicker($ticker);
             $stock->setBeta('0.5');
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generatePersistentZ')->willReturn(0.0);
-            $math->method('checkProbability')->willReturn(false);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0);
             $uplift = CommodityLogisticsSubsystem::carbonPowerPriceUplift($carbon);
             $macro = new MacroStateDTO(inflationEma: 0.02, carbonPrice: $carbon, wholesalePowerPriceIndexEma: MacroConstants::WHOLESALE_POWER_BASELINE * (1.0 + $uplift));
 

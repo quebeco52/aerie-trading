@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate;
 
 use App\DTO\CapitalAllocationContext;
-use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\MaturityRollDTO;
@@ -18,12 +17,16 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LogisticsBusinessModel;
+use App\Tests\Support\CorporateEngineFactory;
+use App\Tests\Support\DebtHealthBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class RunawayFeedbackLoopTest extends TestCase
 {
+    use CorporateEngineFactory;
+
     private CorporateMetrics $corporateMetrics;
     private DebtEngine $debtEngine;
     private CapExEngine $capExEngine;
@@ -101,23 +104,16 @@ class RunawayFeedbackLoopTest extends TestCase
             ebitda: 3_000_000_000.0,
         );
 
-        $ctx->health = new DebtHealthDTO(
-            grossCost: 0.06,
-            effectiveCost: 0.05,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: 0.25, // Distressed ICR
-            wantsToPaydownDebt: false,
-            canIssueDebt: false, // Cannot borrow debt!
-            debtTolerance: 1.5,
-            wacc: 0.12,
-            costOfEquity: 0.14,
-            leveredBeta: 1.2,
-            rawMetrics: $debtMetrics,
-            isLiquidityCrisis: true,
-            isLiquidityWarning: true,
-            isUnderLeveraged: false,
-        );
+        $ctx->health = DebtHealthBuilder::healthy()
+            ->withCarry(0.06, 0.05, 0.02)
+            ->withCoverage(0.25) // Distressed ICR
+            ->withDebtIssuance(false) // Cannot borrow debt!
+            ->withDebtTolerance(1.5)
+            ->withCostOfCapital(0.12, 0.14)
+            ->withLeveredBeta(1.2)
+            ->withMetrics($debtMetrics)
+            ->withLiquidityStress(true, true)
+            ->build();
 
         $this->treasuryEngine->finalizeLiquidity($ctx);
 
@@ -162,41 +158,17 @@ class RunawayFeedbackLoopTest extends TestCase
         );
         $debtEngine->method('calculateInterestExpense')->willReturn($debtMetrics);
         $debtEngine->method('reviewRatingAndPriceDebt')->willReturn($debtMetrics);
-        $health = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: $debtMetrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $health = DebtHealthBuilder::healthy()->withMetrics($debtMetrics)->build();
         $debtEngine->method('analyzeDebtHealth')->willReturn($health);
         $debtEngine->method('analyzeTrailingDebtHealth')->willReturn($health);
 
-        $marketEventPublisher = $this->createStub(\App\Service\News\MarketEventPublisher::class);
-        $narrativeEngine = $this->createStub(\App\Service\News\NarrativeEngine::class);
-        $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
-        $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();
-
-        $engine = new EarningsEngine(
-            $eventDispatcher,
-            $marketEventPublisher,
-            $capitalAllocationEngine,
-            $debtEngine,
-            $this->capExEngine,
+        $engine = self::earningsEngine(
             $this->mathUtility,
-            $this->corporateMetrics,
-            $narrativeEngine,
-            $consensusEngine,
+            eventDispatcher: $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class),
+            capitalAllocation: $capitalAllocationEngine,
+            debtEngine: $debtEngine,
+            capExEngine: $this->capExEngine,
+            metrics: $this->corporateMetrics,
         );
 
         $stock = new Stock();
@@ -267,41 +239,17 @@ class RunawayFeedbackLoopTest extends TestCase
         );
         $debtEngine->method('calculateInterestExpense')->willReturn($debtMetrics);
         $debtEngine->method('reviewRatingAndPriceDebt')->willReturn($debtMetrics);
-        $health = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: $debtMetrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $health = DebtHealthBuilder::healthy()->withMetrics($debtMetrics)->build();
         $debtEngine->method('analyzeDebtHealth')->willReturn($health);
         $debtEngine->method('analyzeTrailingDebtHealth')->willReturn($health);
 
-        $marketEventPublisher = $this->createStub(\App\Service\News\MarketEventPublisher::class);
-        $narrativeEngine = $this->createStub(\App\Service\News\NarrativeEngine::class);
-        $eventDispatcher = $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class);
-        $consensusEngine = new \App\Service\Market\Pricing\MarketConsensusEngine();
-
-        $engine = new EarningsEngine(
-            $eventDispatcher,
-            $marketEventPublisher,
-            $capitalAllocationEngine,
-            $debtEngine,
-            $this->capExEngine,
+        $engine = self::earningsEngine(
             $this->mathUtility,
-            $this->corporateMetrics,
-            $narrativeEngine,
-            $consensusEngine,
+            eventDispatcher: $this->createMock(\Symfony\Contracts\EventDispatcher\EventDispatcherInterface::class),
+            capitalAllocation: $capitalAllocationEngine,
+            debtEngine: $debtEngine,
+            capExEngine: $this->capExEngine,
+            metrics: $this->corporateMetrics,
         );
 
         $macro = MacroStateDTO::fromArray([

@@ -16,11 +16,9 @@ use App\Service\News\NarrativeEngine;
 use App\Service\News\SystemicEventReporter;
 use App\Service\Politics\Department\Office;
 use Doctrine\ORM\EntityManagerInterface;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
-#[AllowMockObjectsWithoutExpectations]
 class SystemicEventReporterTest extends TestCase
 {
     /** @var list<DistrictNews> */

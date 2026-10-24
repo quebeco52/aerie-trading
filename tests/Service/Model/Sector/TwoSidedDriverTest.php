@@ -6,9 +6,9 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -88,10 +88,7 @@ final class TwoSidedDriverTest extends TestCase
      */
     private function revenue(string $model, string $stream, array $macro): float
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
-        $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('generateUniform')->willReturn(1.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0, generateUniform: 1.0);
 
         $stock = (new Stock())->setTicker('TWOSIDE')->setBeta('1.0')->setTotalEquity('500000000');
         $result = (new $model())->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, new MacroStateDTO(...$macro), $math);

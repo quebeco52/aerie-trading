@@ -12,7 +12,7 @@ use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,7 +20,6 @@ use PHPUnit\Framework\TestCase;
  * matching unit of variable cost, and a firm's real pricing must be visible to the engine as the gap
  * between its selling price and its input cost level.
  */
-#[AllowMockObjectsWithoutExpectations]
 class PriceVolumeSplitTest extends TestCase
 {
     public function testTemplateMethodAppliesVariableCostToVolumeRevenueOnly(): void
@@ -66,8 +65,7 @@ class PriceVolumeSplitTest extends TestCase
         $stock->setTicker('REIT');
         $stock->setBeta('0.5');
 
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $result = $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, new MacroStateDTO(), $math);
 

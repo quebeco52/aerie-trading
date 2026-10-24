@@ -7,22 +7,15 @@ namespace App\Tests\Service\Corporate;
 use App\Data\Company\IndustryBetas;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\CapExEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\CorporateLedgerService;
-use App\Service\Corporate\CorporateMetrics;
-use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\TreasuryEngine;
-use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\MathUtility;
-use App\Service\News\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
+use App\Tests\Support\CorporateEngineFactory;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 class RevenueDrainSimulationTest extends TestCase
 {
+    use CorporateEngineFactory;
+
     /**
      * A rate-hiking cycle squeezes a fixed-price contractor's margins (credit drag on commercial orders,
      * material inflation, floating-rate interest) and must show up in ROIC. It must not shrink the firm's
@@ -177,29 +170,8 @@ class RevenueDrainSimulationTest extends TestCase
     private function createEngine(): EarningsEngine
     {
         $mathUtility = new MathUtility();
-        $corporateMetrics = new CorporateMetrics();
-        $debtEngine = new DebtEngine($mathUtility, $corporateMetrics);
-        $capExEngine = new CapExEngine();
-        $treasuryEngine = new TreasuryEngine($corporateMetrics, $debtEngine, $capExEngine, $mathUtility);
-        $capitalAllocationEngine = new CapitalAllocationEngine(
-            $this->createStub(CorporateLedgerService::class),
-            $corporateMetrics,
-            $debtEngine,
-            $mathUtility,
-            $treasuryEngine,
-        );
 
-        return new EarningsEngine(
-            $this->createStub(EventDispatcherInterface::class),
-            $this->createStub(MarketEventPublisher::class),
-            $capitalAllocationEngine,
-            $debtEngine,
-            $capExEngine,
-            $mathUtility,
-            $corporateMetrics,
-            $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine(),
-        );
+        return self::earningsEngine($mathUtility);
     }
 
     private function createStockFromInitialMarket(string $ticker, string $industry): Stock

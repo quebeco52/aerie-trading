@@ -6,7 +6,7 @@ namespace App\Tests\Service\Macro;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
-use App\Service\Math\MathUtility;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -81,17 +81,7 @@ class PolicyLoopRingDownTest extends TestCase
         foreach ([0.0, $kickSize] as $kick) {
             // Common random numbers: a few draws bypass the zeroed methods, so both runs replay the same stream.
             mt_srand(42);
-            $math = new class extends MathUtility {
-                public function generateStandardNormal(): float
-                {
-                    return 0.0;
-                }
-
-                public function checkProbability(float $probability): bool
-                {
-                    return false;
-                }
-            };
+            $math = new ScriptedDraws();
             $engine = MacroEngine::headless($math);
             $economy = new MacroState();
             for ($tick = 0; $tick < self::BURN_IN_YEARS * self::TICKS_PER_YEAR; $tick++) {

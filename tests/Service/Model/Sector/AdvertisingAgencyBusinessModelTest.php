@@ -19,7 +19,7 @@ class AdvertisingAgencyBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new AdvertisingAgencyBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testTriStreamArchitectureAndShares(): void

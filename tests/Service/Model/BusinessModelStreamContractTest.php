@@ -14,13 +14,14 @@ use ReflectionClass;
 
 class BusinessModelStreamContractTest extends TestCase
 {
+    /** The draw streams every contract runs on; each is its own case, so a failure names its seed. */
+    private const SEEDS = [1, 2, 3];
+
     private MacroStateDTO $macro;
-    private MathUtility $mathUtility;
 
     protected function setUp(): void
     {
         $this->macro = new MacroStateDTO();
-        $this->mathUtility = new MathUtility();
     }
 
     /**
@@ -48,11 +49,24 @@ class BusinessModelStreamContractTest extends TestCase
         return $models;
     }
 
+    /**
+     * @return iterable<string, array{class-string<OperatingStrategyInterface>, int}>
+     */
+    public static function businessModelAndSeedProvider(): iterable
+    {
+        foreach (self::businessModelProvider() as $name => [$className]) {
+            foreach (self::SEEDS as $seed) {
+                yield "{$name} seed {$seed}" => [$className, $seed];
+            }
+        }
+    }
+
     /** @param class-string<OperatingStrategyInterface> $modelClass */
-    #[DataProvider('businessModelProvider')]
-    public function testStreamKeyConsistencyAndPersistence(string $modelClass): void
+    #[DataProvider('businessModelAndSeedProvider')]
+    public function testStreamKeyConsistencyAndPersistence(string $modelClass, int $seed): void
     {
         $model = new $modelClass();
+        $draws = MathUtility::ownStream($seed);
 
         $stock = new Stock();
         $stock->setTicker('TEST');
@@ -65,7 +79,7 @@ class BusinessModelStreamContractTest extends TestCase
 
         // Quarter 1: Initial invocation without prior momentum
         $stock->setEarningsMomentumZ(null);
-        $q1 = $model->computeActualFinancials($stock, 100000000.0, 0.40, 20000000.0, 0.05, $this->macro, $this->mathUtility);
+        $q1 = $model->computeActualFinancials($stock, 100000000.0, 0.40, 20000000.0, 0.05, $this->macro, $draws);
         $z1 = $q1->streamZ;
 
         $this->assertNotEmpty($z1, "Model {$modelClass} must emit at least one stream Z-score");
@@ -77,7 +91,7 @@ class BusinessModelStreamContractTest extends TestCase
         }
         $stock->setEarningsMomentumZ($mockZ);
 
-        $q2 = $model->computeActualFinancials($stock, 100000000.0, 0.40, 20000000.0, 0.05, $this->macro, $this->mathUtility);
+        $q2 = $model->computeActualFinancials($stock, 100000000.0, 0.40, 20000000.0, 0.05, $this->macro, $draws);
         $z2 = $q2->streamZ;
 
         // A launch adds a cohort to a pipeline model's state, so launch-cohort keys may grow between quarters.
@@ -95,10 +109,11 @@ class BusinessModelStreamContractTest extends TestCase
     }
 
     /** @param class-string<OperatingStrategyInterface> $modelClass */
-    #[DataProvider('businessModelProvider')]
-    public function testStreamStationarityAcrossHorizons(string $modelClass): void
+    #[DataProvider('businessModelAndSeedProvider')]
+    public function testStreamStationarityAcrossHorizons(string $modelClass, int $seed): void
     {
         $model = new $modelClass();
+        $draws = MathUtility::ownStream($seed);
 
         $stock = new Stock();
         $stock->setTicker('TEST');
@@ -112,7 +127,7 @@ class BusinessModelStreamContractTest extends TestCase
         $currentZ = null;
         for ($quarter = 1; $quarter <= 50; $quarter++) {
             $stock->setEarningsMomentumZ($currentZ);
-            $result = $model->computeActualFinancials($stock, 100000000.0, 0.40, 20000000.0, 0.05, $this->macro, $this->mathUtility);
+            $result = $model->computeActualFinancials($stock, 100000000.0, 0.40, 20000000.0, 0.05, $this->macro, $draws);
             $currentZ = $result->streamZ;
 
             foreach ($currentZ as $key => $val) {

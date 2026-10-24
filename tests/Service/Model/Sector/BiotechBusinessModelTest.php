@@ -10,11 +10,9 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BiotechBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\MockObject;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class BiotechBusinessModelTest extends TestCase
 {
     private const EXPECTED_REVENUE = 100_000_000.0;
@@ -27,15 +25,13 @@ class BiotechBusinessModelTest extends TestCase
      * @param list<int>   $readouts      Consecutive generatePoissonCount() returns (pivotal readouts this quarter).
      * @param list<bool>  $probabilities Consecutive checkProbability() returns (one per readout: approved or not).
      */
-    private function mockMath(array $persistentZ, array $readouts = [], array $probabilities = []): MathUtility&MockObject
+    private function mockMath(array $persistentZ, array $readouts = [], array $probabilities = []): ScriptedDraws
     {
-        $mock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ', 'checkProbability', 'generatePoissonCount'])
-            ->getMock();
-
-        $mock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(...$persistentZ);
-        $mock->method('generatePoissonCount')->willReturnOnConsecutiveCalls(...($readouts ?: [0]));
-        $mock->method('checkProbability')->willReturnOnConsecutiveCalls(...($probabilities ?: [false]));
+        $mock = new ScriptedDraws(
+            generatePersistentZ: $persistentZ,
+            generatePoissonCount: ($readouts ?: [0]),
+            checkProbability: ($probabilities ?: [false]),
+        );
 
         return $mock;
     }
@@ -496,16 +492,14 @@ class BiotechBusinessModelTest extends TestCase
         $model = new BiotechBusinessModel();
         $means = [];
 
-        $math = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ', 'checkProbability', 'generatePoissonCount'])
-            ->getMock();
-        $math->method('generatePersistentZ')->willReturn(0.0);
-        $math->method('checkProbability')->willReturn(false);
-        $math->method('generatePoissonCount')->willReturnCallback(function (float $mean) use (&$means): int {
-            $means[] = $mean;
+        $math = new ScriptedDraws(
+            generatePersistentZ: 0.0,
+            generatePoissonCount: function (float $mean) use (&$means): int {
+                $means[] = $mean;
 
-            return 0;
-        });
+                return 0;
+            },
+        );
 
         $perProgramme = 1.0 / (4.0 * BiotechBusinessModel::PHASE_III_DURATION_YEARS);
         $assets = BiotechBusinessModel::DEFAULT_LATE_STAGE_ASSETS;

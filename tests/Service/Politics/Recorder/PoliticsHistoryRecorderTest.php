@@ -14,6 +14,7 @@ use App\Service\Politics\Department\MonetaryAuthority;
 use App\Service\Politics\Department\Office;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\Recorder\PoliticsHistoryRecorder;
+use App\Tests\Support\InMemoryRedis;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -126,21 +127,6 @@ class PoliticsHistoryRecorderTest extends TestCase
 
     private function inMemoryRedis(): \Redis
     {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
+        return new InMemoryRedis();
     }
 }

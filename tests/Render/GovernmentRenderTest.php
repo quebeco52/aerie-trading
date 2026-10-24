@@ -16,31 +16,23 @@ use App\Repository\ElectionOddsRepository;
 use App\Repository\MacroReportHistoryRepository;
 use App\Repository\RateDecisionRepository;
 use App\Repository\StockRepository;
-use App\Service\Corporate\CapExEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\CorporateLedgerService;
-use App\Service\Corporate\CorporateMetrics;
-use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\TreasuryEngine;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
-use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
-use App\Service\News\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
 use App\Service\Politics\Policy\BudgetRound;
 use App\Service\Politics\PoliticsEngine;
 use App\Service\Politics\Recorder\ElectionRecorder;
 use App\Service\Politics\Recorder\PoliticsHistoryRecorder;
 use App\Service\View\GovernmentPageBuilder;
+use App\Tests\Support\CorporateEngineFactory;
+use App\Tests\Support\InMemoryRedis;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Renders the government pages and every party page from a headless run of the economy and the politics, for a
@@ -49,6 +41,8 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  */
 final class GovernmentRenderTest extends KernelTestCase
 {
+    use CorporateEngineFactory;
+
     /** Weekly steps: enough for elections and budget rounds to land where they would live. */
     private const TICKS_PER_YEAR = 52;
 
@@ -58,22 +52,7 @@ final class GovernmentRenderTest extends KernelTestCase
         $seed = (int) (getenv('SEED') ?: 7);
 
         $math = new MathUtility();
-        $redis = new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
+        $redis = new InMemoryRedis();
         $economy = MacroEngine::headless($math);
         $state = new MacroState();
         $engine = new PoliticsEngine(MathUtility::ownStream($seed), $redis);
@@ -125,20 +104,7 @@ final class GovernmentRenderTest extends KernelTestCase
         $reports->method('inflation')->willReturnCallback(static fn(int $quarters): array => array_slice($inflation, -$quarters));
         // The opening board, each firm through one quarter's report so its models record what each law reaches.
         $opening = $container->get(OpeningBoardBuilder::class);
-        $metrics = new CorporateMetrics();
-        $debt = new DebtEngine($math, $metrics);
-        $capex = new CapExEngine();
-        $earnings = new EarningsEngine(
-            $this->createStub(EventDispatcherInterface::class),
-            $this->createStub(MarketEventPublisher::class),
-            new CapitalAllocationEngine($this->createStub(CorporateLedgerService::class), $metrics, $debt, $math, new TreasuryEngine($metrics, $debt, $capex, $math)),
-            $debt,
-            $capex,
-            $math,
-            $metrics,
-            $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine(),
-        );
+        $earnings = self::earningsEngine($math);
         $board = [];
         foreach (InitialMarket::STOCKS as $row) {
             $stock = (new Stock())->setTicker($row['ticker']);

@@ -17,6 +17,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BrokerageBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class BrokerageBusinessModelTest extends TestCase
@@ -28,7 +29,7 @@ class BrokerageBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new BrokerageBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testRookIsRegisteredInInitialMarketAndBrokeragesIndustry(): void
@@ -58,8 +59,7 @@ class BrokerageBusinessModelTest extends TestCase
         $stock->setTicker('ROOK');
         $stock->setOperatingMargin('0.30');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         // Macro state with elevated VIX (30% against the 15% anchor)
         $macroState = MacroStateDTO::fromArray([
@@ -97,8 +97,7 @@ class BrokerageBusinessModelTest extends TestCase
     public function testTheVolatilityTermIsNeutralAtTheAnchor(): void
     {
         $stock = (new Stock())->setTicker('ROOK');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $anchor = new MacroStateDTO(marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR);
         $quiet = new MacroStateDTO(marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR - 0.05);
 
@@ -120,8 +119,7 @@ class BrokerageBusinessModelTest extends TestCase
     public function testBroadMoneyEntersTheTradingStreamOnce(): void
     {
         $stock = (new Stock())->setTicker('ROOK');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $deviation = 0.05;
         $atTrend = new MacroStateDTO(marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR);
         $flush = new MacroStateDTO(
@@ -277,8 +275,7 @@ class BrokerageBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('ROOK');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baselineMacro = new MacroStateDTO(
             dealActivityIndexEma: 100.0,
@@ -330,8 +327,7 @@ class BrokerageBusinessModelTest extends TestCase
     {
         $stock = new Stock();
         $stock->setTicker('ROOK');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $founding = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20), $mathMock);
         $taxed = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20, stampDutyRate: \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE + 0.001), $mathMock);
@@ -347,8 +343,7 @@ class BrokerageBusinessModelTest extends TestCase
      */
     public function testTheMarketsBaseIsWhatTheCommissionsLeave(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $duty = \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE + 0.001;
         $contribution = static fn(\App\DTO\ActualFinancialsDTO $report): float => $report->actualRevenue - $report->actualVariableCosts;
 

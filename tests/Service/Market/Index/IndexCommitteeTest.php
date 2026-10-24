@@ -13,6 +13,7 @@ use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Ticker\IndexFundPhase;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Tests\Support\InMemoryRedis;
 use App\Tests\Support\StockBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
@@ -28,31 +29,13 @@ class IndexCommitteeTest extends TestCase
 {
     private InMemoryIndexMembershipStore $store;
     private EtfTracker $etfTracker;
-    /** @var array<string, string> */
-    private array $redisStore = [];
 
     protected function setUp(): void
     {
         $this->store = new InMemoryIndexMembershipStore();
-        $this->redisStore = [];
 
         // A Redis stand-in holding just the divisor, which is the only key the tracker touches here.
-        $redis = new class ($this->redisStore) extends \Redis {
-            /** @param array<string, string> $backing */
-            public function __construct(private array &$backing) {}
-
-            public function get(mixed $key): string|false
-            {
-                return $this->backing[$key] ?? false;
-            }
-
-            public function set(mixed $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->backing[$key] = (string) $value;
-
-                return true;
-            }
-        };
+        $redis = new InMemoryRedis();
 
         $this->etfTracker = new EtfTracker(
             $this->createStub(EntityManagerInterface::class),

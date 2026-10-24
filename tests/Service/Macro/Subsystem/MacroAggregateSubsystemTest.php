@@ -27,6 +27,7 @@ use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class MacroAggregateSubsystemTest extends TestCase
@@ -36,20 +37,10 @@ class MacroAggregateSubsystemTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mathUtility = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            // The rare demand disaster is the only probabilistic gate in this subsystem. Held shut so a
-            // neutral tick stays neutral; its compensator still rides on every tick and cancels in the
-            // state-vs-state differences these tests assert on.
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        // The rare demand disaster is the only probabilistic gate in this subsystem. Held shut so a
+        // neutral tick stays neutral; its compensator still rides on every tick and cancels in the
+        // state-vs-state differences these tests assert on.
+        $this->mathUtility = new ScriptedDraws();
         $this->subsystem = MacroAggregateSubsystem::headless($this->mathUtility);
     }
 
@@ -295,8 +286,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $stateEnergy = clone $stateNormal;
         $stateEnergy->energyPriceShock = 100.0; // 100% price surge (doubling)
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws();
 
         $subsystemWithMock = MacroAggregateSubsystem::headless($mathMock);
 
@@ -789,36 +779,14 @@ class MacroAggregateSubsystemTest extends TestCase
      */
     public function testDemandDisturbanceDecaysAtItsReversionSpeedRatherThanPerTick(): void
     {
-        $draws = new class extends MathUtility {
-            public int $calls = 0;
-            public function generateStandardNormal(): float
-            {
-                // One unit innovation on the first tick, silence afterwards.
-                return $this->calls++ === 0 ? 1.0 : 0.0;
-            }
-
-            // Hold the demand-disaster gate shut so the tick is deterministic.
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        // One unit innovation on the first tick, silence afterwards; the demand-disaster gate stays shut.
+        $draws = new ScriptedDraws(generateStandardNormal: [1.0]);
         $subsystem = MacroAggregateSubsystem::headless($draws);
 
         // The disaster jump's compensator rides on every tick regardless of the innovation, so measure the
         // impulse against a control run that takes the same ticks without it. The disturbance is linear, so
         // the difference between the two is the impulse alone and decays at the reversion speed.
-        $control = MacroAggregateSubsystem::headless(new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        });
+        $control = MacroAggregateSubsystem::headless(new ScriptedDraws());
 
         $state = new MacroState();
         $state->outputGap = 0.0;
@@ -1629,37 +1597,13 @@ class MacroAggregateSubsystemTest extends TestCase
     public function testDemandDisturbanceAndGapDiffusionDrawSeparateInnovations(): void
     {
         $dt = 0.25;
-        $math = new class extends MathUtility {
-            /** @var list<float> */
-            private array $draws = [];
-            private int $calls = 0;
-
-            public function script(float ...$draws): void
-            {
-                $this->draws = array_values($draws);
-                $this->calls = 0;
-            }
-
-            public function drawCount(): int
-            {
-                return $this->calls;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return $this->draws[$this->calls++] ?? 0.0;
-            }
-
-            // Hold the demand-disaster gate shut so the tick is deterministic.
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        // The demand-disaster gate stays shut so the tick is deterministic.
+        $math = new ScriptedDraws();
         $subsystem = MacroAggregateSubsystem::headless($math);
 
         $run = function (float $demandDraw, float $diffusionDraw, float $inventoryDraw = 0.0, float $timingDraw = 0.0) use ($subsystem, $math, $dt): array {
-            $math->script($demandDraw, $diffusionDraw, $inventoryDraw, $timingDraw);
+            $math->script(generateStandardNormal: [$demandDraw, $diffusionDraw, $inventoryDraw, $timingDraw]);
+            $drawn = $math->callCount('generateStandardNormal');
             $state = new MacroState();
             $state->outputGap = 0.0;
             $state->inflation = 0.02;
@@ -1667,7 +1611,7 @@ class MacroAggregateSubsystemTest extends TestCase
             $state->wageGrowth = 0.035;
             $gap = $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
 
-            return [$gap, $state->demandShock, $math->drawCount(), $state->inventoryCostShock, $state->spendingTimingShock];
+            return [$gap, $state->demandShock, $math->callCount('generateStandardNormal') - $drawn, $state->inventoryCostShock, $state->spendingTimingShock];
         };
 
         [$neutralGap, $neutralShock, $calls] = $run(0.0, 0.0);
@@ -1784,22 +1728,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
     private function probedSubsystem(OutputGapProbe $probe, float $normal): MacroAggregateSubsystem
     {
-        $math = new class ($normal) extends MathUtility {
-            public function __construct(private readonly float $normal) {}
-
-            public function generateStandardNormal(): float
-            {
-                return $this->normal;
-            }
-
-            // Hold the demand-disaster gate shut so the tick is deterministic.
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
-
-        return MacroAggregateSubsystem::headless($math, $probe);
+        // The demand-disaster gate stays shut so the tick is deterministic.
+        return MacroAggregateSubsystem::headless(new ScriptedDraws(generateStandardNormal: $normal), $probe);
     }
 
     private function probedState(): MacroState
@@ -1900,30 +1830,8 @@ class MacroAggregateSubsystemTest extends TestCase
     {
         $probe = new OutputGapProbe();
         $probe->enable();
-        $math = new class extends MathUtility {
-            private int $gate = 0;
-
-            public function generateStandardNormal(): float
-            {
-                return 0.3;
-            }
-
-            // Exactly one disaster, on the first tick.
-            public function checkProbability(float $probability): bool
-            {
-                return $this->gate++ === 0;
-            }
-
-            public function generateUniform(): float
-            {
-                return 0.99; // down
-            }
-
-            public function generateExponential(float $rate = 1.0): float
-            {
-                return 0.04;
-            }
-        };
+        // Exactly one disaster, on the first tick: down (a uniform above the up share), of size 0.04.
+        $math = new ScriptedDraws(generateStandardNormal: 0.3, checkProbability: [true], generateUniform: 0.99, generateExponential: 0.04);
         $subsystem = MacroAggregateSubsystem::headless($math, $probe);
         $state = $this->probedState();
         $dt = 1.0 / 360.0;
@@ -2385,12 +2293,7 @@ class MacroAggregateSubsystemTest extends TestCase
      */
     public function testACarbonPriceStepsThePriceLevelByElectricitysWeight(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $subsystem = MacroAggregateSubsystem::headless($quiet);
         $free = new MacroState();
         $free->inflationEma = MacroConstants::TARGET_INFLATION;
@@ -2446,26 +2349,8 @@ class MacroAggregateSubsystemTest extends TestCase
      */
     public function testInflationAndProducerPricesCarryNoTickRateNoise(): void
     {
-        $high = MacroAggregateSubsystem::headless(new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 3.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        });
-        $low = MacroAggregateSubsystem::headless(new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return -3.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        });
+        $high = MacroAggregateSubsystem::headless(new ScriptedDraws(generateStandardNormal: 3.0));
+        $low = MacroAggregateSubsystem::headless(new ScriptedDraws(generateStandardNormal: -3.0));
 
         foreach ([0.25, 1.0 / 54000.0] as $dt) {
             $up = $this->neutralBorrowingState();

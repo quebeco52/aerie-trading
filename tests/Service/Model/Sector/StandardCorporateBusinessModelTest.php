@@ -8,10 +8,8 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class StandardCorporateBusinessModelTest extends TestCase
 {
     private StandardCorporateBusinessModel $model;
@@ -20,7 +18,7 @@ class StandardCorporateBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new StandardCorporateBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testGetTargetMetricsBlendsBaselineAndTtmRoic(): void

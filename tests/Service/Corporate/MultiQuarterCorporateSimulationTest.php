@@ -7,21 +7,15 @@ namespace App\Tests\Service\Corporate;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\CapExEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\TreasuryEngine;
-use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
-use App\Service\News\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
+use App\Tests\Support\BalanceSheetAssertions;
+use App\Tests\Support\CorporateEngineFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Exhaustive Closed-Loop Multi-Quarter Simulation Invariant Test.
@@ -33,48 +27,16 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  */
 class MultiQuarterCorporateSimulationTest extends TestCase
 {
+    use BalanceSheetAssertions;
+    use CorporateEngineFactory;
+
     private EarningsEngine $earningsEngine;
     private MathUtility $mathUtility;
 
     protected function setUp(): void
     {
         $this->mathUtility = new MathUtility();
-        $corporateMetrics = new CorporateMetrics();
-        $debtEngine = new DebtEngine($this->mathUtility, $corporateMetrics);
-        $capExEngine = new CapExEngine();
-        $marketConsensusEngine = new MarketConsensusEngine();
-
-        $ledgerMock = $this->createStub(CorporateLedgerService::class);
-        $eventPublisherMock = $this->createStub(MarketEventPublisher::class);
-        $narrativeEngineMock = $this->createStub(NarrativeEngine::class);
-        $eventDispatcherMock = $this->createStub(EventDispatcherInterface::class);
-
-        $treasuryEngine = new TreasuryEngine(
-            $corporateMetrics,
-            $debtEngine,
-            $capExEngine,
-            $this->mathUtility,
-        );
-
-        $capitalAllocationEngine = new CapitalAllocationEngine(
-            $ledgerMock,
-            $corporateMetrics,
-            $debtEngine,
-            $this->mathUtility,
-            $treasuryEngine,
-        );
-
-        $this->earningsEngine = new EarningsEngine(
-            $eventDispatcherMock,
-            $eventPublisherMock,
-            $capitalAllocationEngine,
-            $debtEngine,
-            $capExEngine,
-            $this->mathUtility,
-            $corporateMetrics,
-            $narrativeEngineMock,
-            $marketConsensusEngine,
-        );
+        $this->earningsEngine = self::earningsEngine($this->mathUtility);
 
         // These are stochastic multi-year simulations checked against hard collapse thresholds. Left unseeded
         // they inherit whatever global mt_rand state ran before them, so adding a test anywhere earlier in the
@@ -276,7 +238,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
                 $this->assertGreaterThan(0.0, $book, "The earning-asset book collapsed in Q{$quarter} for {$industry}");
                 $this->assertGreaterThanOrEqual(0.0, $allowance, "The credit-loss allowance went negative in Q{$quarter} for {$industry}");
                 $this->assertLessThanOrEqual($book, $allowance, "The allowance exceeded the book it covers in Q{$quarter} for {$industry}");
-                $this->assertBalanceSheetBalances($stock, $lease, $industry, $quarter);
+                $this->assertBalanceSheetBalances($stock, "Balance sheet failed to balance in Q{$quarter} for {$industry}", $lease);
                 continue;
             }
 
@@ -300,21 +262,8 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             // catches a ledger drifting free of the capital it was carved out of. (A negative-working-capital
             // business legitimately carries more plant than invested capital, because its suppliers fund
             // part of it, which is why a plant-to-capital bound was the wrong invariant here.)
-            $this->assertBalanceSheetBalances($stock, $lease, $industry, $quarter);
+            $this->assertBalanceSheetBalances($stock, "Balance sheet failed to balance in Q{$quarter} for {$industry}", $lease);
         }
-    }
-
-    /** Every asset is claimed by a creditor or a shareholder and nothing is left over. */
-    private function assertBalanceSheetBalances(Stock $stock, float $lease, string $industry, int $quarter): void
-    {
-        $assets = $stock->getTotalAssets($lease);
-        $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
-        $this->assertEqualsWithDelta(
-            $assets,
-            $claims,
-            max(1.0, $assets * 1e-6),
-            "Balance sheet failed to balance in Q{$quarter} for {$industry}",
-        );
     }
 
     /**

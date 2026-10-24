@@ -7,8 +7,8 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ToolsAndAccessoriesBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -28,8 +28,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
      */
     public function testSecondsCostMoreThanTradeToolsAtAnyFirmRatio(): void
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $ratio = fn(float $housingStarts): float => $this->model->computeActualFinancials(
             (new Stock())->setTicker('CBIL'),
             100.0,
@@ -63,8 +62,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
             consumerSentimentIndexEma: 100.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baseResult = $this->model->computeActualFinancials(
             $stock,
@@ -125,7 +123,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker($ticker);
         $stock->setBeta('1.0');
-        $quiet = $this->createStub(MathUtility::class);
+        $quiet = new ScriptedDraws();
         $expectedRevenue = 100_000_000.0;
 
         // Each gap comes with the confidence it implies, so the sentiment residual is nil and only the gap moves.
@@ -159,7 +157,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('XTLS');
         $stock->setBeta('1.0');
-        $quiet = $this->createStub(MathUtility::class);
+        $quiet = new ScriptedDraws();
 
         $run = fn(float $sentiment) => $this->model->computeActualFinancials(
             $stock,

@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\HedgeFundBusinessModel;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class HedgeFundBusinessModelTest extends TestCase
@@ -21,7 +22,7 @@ class HedgeFundBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new HedgeFundBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testGetTargetMetricsCalculatesEarningAssetsAndRoic(): void
@@ -58,11 +59,7 @@ class HedgeFundBusinessModelTest extends TestCase
 
     private function zeroAlphaMath(): MathUtility
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
-        $math->method('generateStandardNormal')->willReturn(0.0);
-
-        return $math;
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     private function swan(): Stock
@@ -156,10 +153,11 @@ class HedgeFundBusinessModelTest extends TestCase
             'macro_credit_spread_ema' => 0.02,
         ]);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
-            return $prevZ > 1.0 ? 1.50 : 0.0;
-        });
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: function ($prevZ, $phi) {
+                return $prevZ > 1.0 ? 1.50 : 0.0;
+            },
+        );
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -193,10 +191,11 @@ class HedgeFundBusinessModelTest extends TestCase
             'macro_credit_spread_ema' => 0.055, // 550bps > 400bps margin call threshold
         ]);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
-            return $prevZ < 0 ? -1.50 : 0.0;
-        });
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: function ($prevZ, $phi) {
+                return $prevZ < 0 ? -1.50 : 0.0;
+            },
+        );
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -232,10 +231,11 @@ class HedgeFundBusinessModelTest extends TestCase
             'macro_credit_spread_ema' => 0.015,
         ]);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
-            return $prevZ > 1.0 ? 2.0 : 0.0;
-        });
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: function ($prevZ, $phi) {
+                return $prevZ > 1.0 ? 2.0 : 0.0;
+            },
+        );
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -269,10 +269,11 @@ class HedgeFundBusinessModelTest extends TestCase
             'macro_credit_spread_ema' => 0.02, // Below margin call threshold to isolate blowup
         ]);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
-            return $prevZ < -2.0 ? -2.50 : 0.0;
-        });
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: function ($prevZ, $phi) {
+                return $prevZ < -2.0 ? -2.50 : 0.0;
+            },
+        );
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -305,8 +306,7 @@ class HedgeFundBusinessModelTest extends TestCase
             $stock->setTotalEquity('100.0');
             $stock->setWholesaleDebt($debt);
             $stock->setEarningsMomentumZ(['directional_bets' => $alphaZ, 'quant_alpha' => 0.0, 'management_fees' => 0.0]);
-            $math = $this->createStub(MathUtility::class);
-            $math->method('generatePersistentZ')->willReturnCallback(static fn(float $prevZ): float => $prevZ);
+            $math = new ScriptedDraws(generatePersistentZ: static fn(float $prevZ): float => $prevZ);
 
             return $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $math)->streamRevenue['directional_bets'];
         };
@@ -394,19 +394,12 @@ class HedgeFundBusinessModelTest extends TestCase
 
     public function testDebtExpansionCapacityGatedDuringCreditFreeze(): void
     {
-        $normalHealth = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.03,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 3.0,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.5,
-            rawMetrics: new DebtMetricsDTO(
+        $normalHealth = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.03)
+            ->withDebtTolerance(3.0)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withLeveredBeta(1.5)
+            ->withMetrics(new DebtMetricsDTO(
                 interestExpense: 2.5,
                 blendedRate: 0.05,
                 historicalFixedRate: 0.05,
@@ -417,25 +410,17 @@ class HedgeFundBusinessModelTest extends TestCase
                 revenue: 100.0,
                 depreciation: 2.0,
                 ebitda: 32.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+            ))
+            ->build();
 
-        $frozenHealth = new DebtHealthDTO(
-            grossCost: 0.12,
-            effectiveCost: 0.12,
-            cashYield: 0.03,
-            isSevereNegativeCarry: true,
-            interestCoverage: 2.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 3.0,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.5,
-            rawMetrics: new DebtMetricsDTO(
+        $frozenHealth = DebtHealthBuilder::healthy()
+            ->withCarry(0.12, 0.12, 0.03)
+            ->withSevereNegativeCarry()
+            ->withCoverage(2.0)
+            ->withDebtTolerance(3.0)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withLeveredBeta(1.5)
+            ->withMetrics(new DebtMetricsDTO(
                 interestExpense: 6.0,
                 blendedRate: 0.12,
                 historicalFixedRate: 0.05,
@@ -446,11 +431,8 @@ class HedgeFundBusinessModelTest extends TestCase
                 revenue: 100.0,
                 depreciation: 2.0,
                 ebitda: 32.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+            ))
+            ->build();
 
         $normalCapacity = $this->model->calculateDebtExpansionCapacity(100.0, 50.0, 50.0, $normalHealth, 0.05, 30.0, 2.0);
         $frozenCapacity = $this->model->calculateDebtExpansionCapacity(100.0, 50.0, 50.0, $frozenHealth, 0.12, 30.0, 2.0);
@@ -458,19 +440,16 @@ class HedgeFundBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $normalCapacity);
         $this->assertEqualsWithDelta($normalCapacity * HedgeFundBusinessModel::DEBT_GATE_FREEZE_SCALAR, $frozenCapacity, 0.01);
 
-        $criticalHealth = new DebtHealthDTO(
-            grossCost: 0.18,
-            effectiveCost: 0.18,
-            cashYield: 0.03,
-            isSevereNegativeCarry: true,
-            interestCoverage: 0.5,
-            wantsToPaydownDebt: true,
-            canIssueDebt: false,
-            debtTolerance: 3.0,
-            wacc: 0.08,
-            costOfEquity: 0.12,
-            leveredBeta: 1.5,
-            rawMetrics: new DebtMetricsDTO(
+        $criticalHealth = DebtHealthBuilder::healthy()
+            ->withCarry(0.18, 0.18, 0.03)
+            ->withSevereNegativeCarry()
+            ->withCoverage(0.5)
+            ->wantingToPayDownDebt()
+            ->withDebtIssuance(false)
+            ->withDebtTolerance(3.0)
+            ->withCostOfCapital(0.08, 0.12)
+            ->withLeveredBeta(1.5)
+            ->withMetrics(new DebtMetricsDTO(
                 interestExpense: 10.0,
                 blendedRate: 0.18,
                 historicalFixedRate: 0.05,
@@ -481,11 +460,9 @@ class HedgeFundBusinessModelTest extends TestCase
                 revenue: 100.0,
                 depreciation: 2.0,
                 ebitda: 7.0,
-            ),
-            isLiquidityCrisis: true,
-            isLiquidityWarning: true,
-            isUnderLeveraged: false,
-        );
+            ))
+            ->withLiquidityStress(true, true)
+            ->build();
         $criticalCapacity = $this->model->calculateDebtExpansionCapacity(100.0, 50.0, 50.0, $criticalHealth, 0.18, 5.0, 2.0);
         $this->assertSame(0.0, $criticalCapacity);
     }
@@ -522,10 +499,11 @@ class HedgeFundBusinessModelTest extends TestCase
             'macro_credit_spread_ema' => 0.02,
         ]);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
-            return $prevZ > 0 ? 2.0 : 0.0;
-        });
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: function ($prevZ, $phi) {
+                return $prevZ > 0 ? 2.0 : 0.0;
+            },
+        );
 
         $result = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathMock);
 
@@ -548,17 +526,17 @@ class HedgeFundBusinessModelTest extends TestCase
         ]);
 
         // Case 1: Neutral Alpha (dirZ = 0, quantZ = 0 -> composite = 0 > -1.0 floor)
-        $mathNeutral = $this->createStub(MathUtility::class);
-        $mathNeutral->method('generatePersistentZ')->willReturn(0.0);
+        $mathNeutral = new ScriptedDraws(generatePersistentZ: 0.0);
         $resultNeutral = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathNeutral);
         $neutralMgmtRev = $resultNeutral->streamRevenue['management_fees'];
 
         // Case 2: Moderate Negative Alpha (dirZ = -2.0, quantZ = -2.0 -> composite = -2.0)
         // Deficit below -1.0 floor = 1.0 unit * 0.10 scalar = 10% drag
-        $mathNegative = $this->createStub(MathUtility::class);
-        $mathNegative->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
-            return $prevZ < 0 ? -2.0 : 0.0;
-        });
+        $mathNegative = new ScriptedDraws(
+            generatePersistentZ: function ($prevZ, $phi) {
+                return $prevZ < 0 ? -2.0 : 0.0;
+            },
+        );
         $stock->setEarningsMomentumZ([
             'directional_bets' => -2.0,
             'quant_alpha'      => -2.0,
@@ -573,10 +551,11 @@ class HedgeFundBusinessModelTest extends TestCase
 
         // Case 3: Catastrophic Alpha (dirZ = -5.0, quantZ = -5.0 -> composite = -5.0)
         // Deficit = 4.0 units * 0.10 = 40% -> capped at MAX_REDEMPTION_DRAG (30%)
-        $mathSevere = $this->createStub(MathUtility::class);
-        $mathSevere->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
-            return $prevZ < 0 ? -5.0 : 0.0;
-        });
+        $mathSevere = new ScriptedDraws(
+            generatePersistentZ: function ($prevZ, $phi) {
+                return $prevZ < 0 ? -5.0 : 0.0;
+            },
+        );
         $stock->setEarningsMomentumZ([
             'directional_bets' => -5.0,
             'quant_alpha'      => -5.0,
@@ -638,8 +617,7 @@ class HedgeFundBusinessModelTest extends TestCase
         ]);
 
         // Neutral Alpha -> No excess performance fees -> Normal variable margin
-        $mathNeutral = $this->createStub(MathUtility::class);
-        $mathNeutral->method('generatePersistentZ')->willReturn(0.0);
+        $mathNeutral = new ScriptedDraws(generatePersistentZ: 0.0);
         $stock->setEarningsMomentumZ([
             'directional_bets' => 0.0,
             'quant_alpha'      => 0.0,
@@ -648,8 +626,7 @@ class HedgeFundBusinessModelTest extends TestCase
         $neutralResult = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathNeutral);
 
         // Huge Alpha -> Performance fee bonus crystallizes -> Bonus pool expense flexes variable margin upwards
-        $mathBoom = $this->createStub(MathUtility::class);
-        $mathBoom->method('generatePersistentZ')->willReturn(3.0);
+        $mathBoom = new ScriptedDraws(generatePersistentZ: 3.0);
         $stock->setEarningsMomentumZ([
             'directional_bets' => 3.0,
             'quant_alpha'      => 3.0,
@@ -698,7 +675,6 @@ class HedgeFundBusinessModelTest extends TestCase
      * An incentive fee is a call on alpha: over the alpha draw's distribution the fee a quarter books averages what
      * the average year already carries, so the directional book earns its expected revenue on average.
      */
-    #[\PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations]
     public function testIncentiveFeesAverageWhatTheAverageYearCarries(): void
     {
         $neutral = new MacroStateDTO();
@@ -706,9 +682,7 @@ class HedgeFundBusinessModelTest extends TestCase
         // Expected revenue as the engine hands it over, the root shift inside, on a structural base of 100.
         $expected = 100.0 * (1.0 + $this->model->getMacroPhysics(clone $stock, $neutral)['macro_demand_shift']);
         $directional = function (float $z) use ($stock, $expected, $neutral): float {
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'checkProbability'])->getMock();
-            $math->method('generateStandardNormal')->willReturn(0.0);
-            $math->method('checkProbability')->willReturn(false);
+            $math = new ScriptedDraws();
             $quarter = clone $stock;
             $quarter->setEarningsMomentumZ(['directional_bets' => $z / HedgeFundBusinessModel::DIR_PERSISTENCE]);
 
@@ -731,7 +705,6 @@ class HedgeFundBusinessModelTest extends TestCase
      * The bonus pool is a call on each alpha stream's beat, and the planned cost ratio carries its average quarter:
      * over the alpha draws at a neutral cycle the cost base averages the planned ratio, so the fund earns its margin.
      */
-    #[\PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations]
     public function testTheBonusPoolAveragesWhatThePlannedCostCarries(): void
     {
         $neutral = new MacroStateDTO(marketVolatilityEma: HedgeFundBusinessModel::VIX_ALPHA_BASELINE);
@@ -740,9 +713,7 @@ class HedgeFundBusinessModelTest extends TestCase
         $expected = 100.0 * (1.0 + $this->model->getMacroPhysics(clone $stock, $neutral)['macro_demand_shift']);
         $plannedRatio = 0.40;
         $poolOverPlan = function (float $z) use ($stock, $expected, $neutral, $plannedRatio): float {
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'checkProbability'])->getMock();
-            $math->method('generateStandardNormal')->willReturn(0.0);
-            $math->method('checkProbability')->willReturn(false);
+            $math = new ScriptedDraws();
             $quarter = clone $stock;
             $quarter->setEarningsMomentumZ([
                 'directional_bets' => $z / HedgeFundBusinessModel::DIR_PERSISTENCE,

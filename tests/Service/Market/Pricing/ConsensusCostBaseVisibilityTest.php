@@ -9,8 +9,7 @@ use App\DTO\SectorCoverageProfile;
 use App\Entity\Stock;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,7 +20,6 @@ use PHPUnit\Framework\TestCase;
  * ANALYST_COST_BASE_VISIBILITY, so a lasting shock is missed once, when it arrives, rather than every quarter; the
  * firm's own cost news (its margin draw, a stream's mix) is heard at coverage visibility.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class ConsensusCostBaseVisibilityTest extends TestCase
 {
     private const REVENUE = 1_000_000_000.0;
@@ -40,8 +38,7 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
     /** The estimated cost ratio, on noise-free coverage of the given visibility. */
     private function expectedCostRatio(ActualFinancialsDTO $actuals, ActualFinancialsDTO $public, float $inputCostDragChange, float $visibility = 1.0): float
     {
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math = new ScriptedDraws();
         $consensus = (new MarketConsensusEngine())->generateConsensus(
             $actuals,
             $public,
@@ -87,8 +84,7 @@ final class ConsensusCostBaseVisibilityTest extends TestCase
 
     public function testCostRatioIsChargedAgainstVolumeRevenueOnly(): void
     {
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math = new ScriptedDraws();
         $withPrice = self::quarter(0.60, 0.2 * self::REVENUE);
         $consensus = (new MarketConsensusEngine())->generateConsensus($withPrice, $withPrice, new SectorCoverageProfile(baseVisibility: 1.0, errorStdDev: 0.0, minVisibility: 1.0), $math, new Stock(), 0.15, self::REVENUE);
 

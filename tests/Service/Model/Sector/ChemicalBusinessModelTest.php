@@ -8,13 +8,11 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ChemicalBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class ChemicalBusinessModelTest extends TestCase
 {
     private ChemicalBusinessModel $model;
@@ -59,13 +57,14 @@ class ChemicalBusinessModelTest extends TestCase
             energyPriceIndexEma: 100.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $mathMock->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 1.0,
-            'shock_pct' => null,
-            'exponent' => null,
-        ]);
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: 0.0,
+            calculateJumpDiffusion: [
+                'multiplier' => 1.0,
+                'shock_pct' => null,
+                'exponent' => null,
+            ],
+        );
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -152,13 +151,14 @@ class ChemicalBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO();
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $mathMock->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 1.20, // +20% weather surge jump
-            'shock_pct' => 20.0,
-            'exponent' => 0.1823,
-        ]);
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: 0.0,
+            calculateJumpDiffusion: [
+                'multiplier' => 1.20, // +20% weather surge jump
+                'shock_pct' => 20.0,
+                'exponent' => 0.1823,
+            ],
+        );
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -248,14 +248,14 @@ class ChemicalBusinessModelTest extends TestCase
         $macro = new MacroStateDTO();
 
         // 4 calls: basePetroZ, specialtyZ, agriZ, feedstockZ (-2.50 triggers crack spread squeeze)
-        $mathMock = $this->createMock(MathUtility::class);
-        $mathMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.50);
-        $mathMock->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 1.0,
-            'shock_pct' => null,
-            'exponent' => null,
-        ]);
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: [0.0, 0.0, 0.0, -2.50],
+            calculateJumpDiffusion: [
+                'multiplier' => 1.0,
+                'shock_pct' => null,
+                'exponent' => null,
+            ],
+        );
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -279,14 +279,14 @@ class ChemicalBusinessModelTest extends TestCase
         $macro = new MacroStateDTO();
 
         // 4 calls: basePetroZ, specialtyZ, agriZ (+2.50), feedstockZ (0.0)
-        $mathMock = $this->createMock(MathUtility::class);
-        $mathMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.50, 0.0);
-        $mathMock->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 1.25, // weather multiplier > 1.15
-            'shock_pct' => 25.0,
-            'exponent' => 0.223,
-        ]);
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: [0.0, 0.0, 2.50, 0.0],
+            calculateJumpDiffusion: [
+                'multiplier' => 1.25, // weather multiplier > 1.15
+                'shock_pct' => 25.0,
+                'exponent' => 0.223,
+            ],
+        );
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -339,11 +339,8 @@ class ChemicalBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('FULM_FEED');
         $stock->setBeta('1.0');
-        // Partial mock: draws and the weather dice are scripted flat, the jump and mix maths stay real.
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generatePersistentZ', 'checkProbability'])->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('generatePersistentZ')->willReturn(0.0);
-        $math->method('checkProbability')->willReturn(false);
+        // Draws and the weather dice are scripted flat; the jump and mix maths stay real.
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             agriculturalCommodityIndexEma: $agriIndex,

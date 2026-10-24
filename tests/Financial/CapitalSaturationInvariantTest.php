@@ -9,20 +9,12 @@ use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\CapExEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\TreasuryEngine;
-use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\MathUtility;
-use App\Service\News\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
+use App\Tests\Support\CorporateEngineFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Growth has a terminal state.
@@ -47,6 +39,8 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  */
 final class CapitalSaturationInvariantTest extends TestCase
 {
+    use CorporateEngineFactory;
+
     private const YEARS = 48;
     private const TICKS_PER_YEAR = 252;
     private const NOMINAL_GDP_GROWTH = 0.04;
@@ -65,23 +59,8 @@ final class CapitalSaturationInvariantTest extends TestCase
     private function buildEngine(): EarningsEngine
     {
         $math = new MathUtility();
-        $metrics = new CorporateMetrics();
-        $debt = new DebtEngine($math, $metrics);
-        $capex = new CapExEngine();
-        $treasury = new TreasuryEngine($metrics, $debt, $capex, $math);
-        $allocation = new CapitalAllocationEngine($this->createStub(CorporateLedgerService::class), $metrics, $debt, $math, $treasury);
 
-        return new EarningsEngine(
-            $this->createStub(EventDispatcherInterface::class),
-            $this->createStub(MarketEventPublisher::class),
-            $allocation,
-            $debt,
-            $capex,
-            $math,
-            $metrics,
-            $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine(),
-        );
+        return self::earningsEngine($math);
     }
 
     /** The run's clock moves with the quarters, so a sector's secular excess fades as it does in the simulation. */

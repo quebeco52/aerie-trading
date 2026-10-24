@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -46,7 +46,7 @@ class TangibleCapitalInvariantTest extends TestCase
     {
         $strategy = Sectors::getBusinessModelStrategy(Sectors::INDUSTRY_METRICS[$industry]['business_model']);
         $macroState = new MacroStateDTO(policyRate: 0.03, equityRiskPremium: 0.05, corporateTaxRate: 0.20, policyRateEma: 0.03, yield5yEma: 0.04, yield2yEma: 0.035, yield10yEma: 0.045, nominalGdpIndex: 1.0);
-        $math = $this->createStub(MathUtility::class);
+        $math = new ScriptedDraws();
 
         $beforeWriteOff = $strategy->getTargetMetrics($this->firm($industry, equity: 80e9, goodwill: 30e9), $macroState, $math);
         $afterWriteOff = $strategy->getTargetMetrics($this->firm($industry, equity: 50e9, goodwill: 0.0), $macroState, $math);

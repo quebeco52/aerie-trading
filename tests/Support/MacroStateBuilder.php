@@ -13,6 +13,47 @@ use App\Service\Math\MacroConstants;
  */
 class MacroStateBuilder
 {
+    /** The flat-curve preset's fields, by MacroStateDTO constructor argument. */
+    private const FLAT_CURVE = [
+        'outputGap' => 0.0,
+        'outputGapEma' => 0.0,
+        'unemploymentRate' => 0.04,
+        'unemploymentRateEma' => 0.04,
+        'energyPriceIndex' => 100.0,
+        'energyPriceIndexEma' => 100.0,
+        'energyPriceShock' => 0.0,
+        'consumerSentimentIndex' => 100.0,
+        'consumerSentimentIndexEma' => 100.0,
+        'inflation' => 0.02,
+        'inflationEma' => 0.02,
+        'policyRate' => 0.04,
+        'policyRateEma' => 0.04,
+        'targetRate' => 0.04,
+        'yield2y' => 0.04,
+        'yield2yEma' => 0.04,
+        'yield5y' => 0.04,
+        'yield5yEma' => 0.04,
+        'yield10y' => 0.04,
+        'yield10yEma' => 0.04,
+        'yield30y' => 0.04,
+        'yield30yEma' => 0.04,
+        'marketVolatility' => 0.15,
+        'marketVolatilityEma' => 0.15,
+        'marketZ' => 0.0,
+        'corporateTaxRate' => 0.21,
+        'equityRiskPremium' => 0.05,
+        'macroCreditSpread' => 0.015,
+        'macroCreditSpreadEma' => 0.015,
+        'qeActive' => false,
+        'inversionDuration' => 0.0,
+        'nsLevel' => 0.04,
+        'nsSlope' => 0.0,
+        'nsSlopeEma' => 0.0,
+        'nsCurvature' => 0.0,
+        'potentialGdpIndex' => 1.0,
+        'nominalGdpIndex' => 1.0,
+    ];
+
     private MacroState $state;
 
     public function __construct()
@@ -57,6 +98,15 @@ class MacroStateBuilder
     public static function create(): self
     {
         return new self();
+    }
+
+    /**
+     * A calm economy on a flat 4% curve, as a MacroStateDTO: output at trend, 2% inflation, policy at 4%, 15%
+     * volatility and a 150bp IG spread. Named arguments override any field, so a test states only what it moves.
+     */
+    public static function flatCurveDto(mixed ...$overrides): MacroStateDTO
+    {
+        return new MacroStateDTO(...array_merge(self::FLAT_CURVE, $overrides));
     }
 
     public function asExpansion(): self
@@ -181,22 +231,6 @@ class MacroStateBuilder
         return $this;
     }
 
-    public function withCreditSpread(float $igSpread, float $hySpread): self
-    {
-        $this->state->macroCreditSpread = $igSpread;
-        $this->state->macroCreditSpreadEma = $igSpread;
-        $this->state->highYieldCreditSpread = $hySpread;
-        $this->state->highYieldCreditSpreadEma = $hySpread;
-        return $this;
-    }
-
-    public function withEnergyInventory(float $inventory): self
-    {
-        $this->state->energyInventoryIndex = $inventory;
-        $this->state->energyInventoryIndexEma = $inventory;
-        return $this;
-    }
-
     public function withInventoryGap(float $inventoryGap): self
     {
         $this->state->inventoryStockGap = $inventoryGap;
@@ -207,10 +241,5 @@ class MacroStateBuilder
     public function build(): MacroState
     {
         return clone $this->state;
-    }
-
-    public function buildDTO(): MacroStateDTO
-    {
-        return MacroStateDTO::fromMacroState($this->state);
     }
 }

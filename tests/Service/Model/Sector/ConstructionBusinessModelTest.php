@@ -10,10 +10,9 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConstructionBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class ConstructionBusinessModelTest extends TestCase
 {
     private ConstructionBusinessModel $model;
@@ -22,7 +21,7 @@ class ConstructionBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new ConstructionBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testTriStreamEmissionAndSumConsistency(): void
@@ -77,8 +76,7 @@ class ConstructionBusinessModelTest extends TestCase
             energyPriceIndexEma: 100.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -112,8 +110,7 @@ class ConstructionBusinessModelTest extends TestCase
             producerPriceInflationEma: 0.06,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $resultDefault = $this->model->computeActualFinancials(
             $stockDefault,
@@ -148,8 +145,7 @@ class ConstructionBusinessModelTest extends TestCase
             residentialPropertyIndexEma: 110.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $baseMacro, $mathMock);
         $boostResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $boostMacro, $mathMock);
@@ -167,8 +163,7 @@ class ConstructionBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('IBHI');
         $stock->setBeta('1.0');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $commercial = fn(float $index, float $trend): float => $this->model->computeActualFinancials(
             $stock,
             100_000_000.0,
@@ -214,11 +209,12 @@ class ConstructionBusinessModelTest extends TestCase
             $stock->setTicker('IBHI');
             $stock->setBeta('1.0');
             $stock->setEarningsMomentumZ($momentum);
-            // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            // Stream draws and regime dice are scripted; the mix-drift weight math stays real.
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
-            $math->method('checkProbability')->willReturn($exits);
+            $math = new ScriptedDraws(
+                generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0,
+                checkProbability: $exits,
+            );
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
 
@@ -252,8 +248,7 @@ class ConstructionBusinessModelTest extends TestCase
             $stock = new Stock();
             $stock->setTicker('GEN_CONST');
             $stock->setBeta('1.0');
-            $math = $this->createStub(MathUtility::class);
-            $math->method('generatePersistentZ')->willReturn(0.0);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0);
             $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: $policyRate, inflationEma: 0.02, tipsBreakevenEma: 0.02);
 
             return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->streamRevenue['commercial_epc'];
@@ -276,8 +271,7 @@ class ConstructionBusinessModelTest extends TestCase
             $stock = new Stock();
             $stock->setTicker('GEN_CONST');
             $stock->setBeta('1.0');
-            $math = $this->createStub(MathUtility::class);
-            $math->method('generatePersistentZ')->willReturn(0.0);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0);
             $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: \App\Service\Math\MacroConstants::BASE_NATURAL_RATE, inflationEma: 0.02, catastropheLossIndexEma: $burden);
 
             return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math)->streamRevenue['civil_infrastructure'];

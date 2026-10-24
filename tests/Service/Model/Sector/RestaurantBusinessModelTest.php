@@ -10,10 +10,9 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\RestaurantBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class RestaurantBusinessModelTest extends TestCase
 {
     private RestaurantBusinessModel $model;
@@ -22,7 +21,7 @@ class RestaurantBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new RestaurantBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testRestaurantTriStreamStructure(): void
@@ -88,8 +87,7 @@ class RestaurantBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('MCD');
         $stock->setBeta('1.0');
-        $mathUtilityMock = $this->createStub(MathUtility::class);
-        $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathUtilityMock = new ScriptedDraws();
         $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 1_000.0, 0.25, 100.0, 0.10, $macro, $mathUtilityMock);
 
         $baseline = $run(new MacroStateDTO(consumerSentimentIndexEma: 100.0, agriculturalCommodityIndexEma: 100.0, inflationEma: 0.02));
@@ -107,8 +105,7 @@ class RestaurantBusinessModelTest extends TestCase
         $stock->setTicker('MCD');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
-        $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathUtilityMock = new ScriptedDraws();
 
         $macroNormalLabor = new MacroStateDTO(
             consumerSentimentIndexEma: 100.0,
@@ -166,11 +163,12 @@ class RestaurantBusinessModelTest extends TestCase
             $stock->setTicker('MCD');
             $stock->setBeta('1.0');
             $stock->setEarningsMomentumZ($momentum);
-            // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            // Stream draws and regime dice are scripted; the mix-drift weight math stays real.
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
-            $math->method('checkProbability')->willReturn($exits);
+            $math = new ScriptedDraws(
+                generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0,
+                checkProbability: $exits,
+            );
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
 

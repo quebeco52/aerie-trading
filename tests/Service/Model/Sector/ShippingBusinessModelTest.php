@@ -8,13 +8,11 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ShippingBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class ShippingBusinessModelTest extends TestCase
 {
     public function testContinuousSpotRateElasticity(): void
@@ -24,8 +22,7 @@ class ShippingBusinessModelTest extends TestCase
         $stock->setTicker('SHIP');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
-        $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathUtilityMock = new ScriptedDraws();
 
         // Positive output gap -> continuous positive spot rate multiplier
         $macroStatePositive = MacroStateDTO::fromArray(['output_gap_ema' => 0.010, 'inflation_ema' => 0.02]);
@@ -61,8 +58,7 @@ class ShippingBusinessModelTest extends TestCase
         $stock->setTicker('SHIP');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
-        $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathUtilityMock = new ScriptedDraws();
 
         $baseMacro = new MacroStateDTO(freightRateIndexEma: 100.0);
         $surgeMacro = new MacroStateDTO(freightRateIndexEma: 140.0);
@@ -117,11 +113,12 @@ class ShippingBusinessModelTest extends TestCase
             $stock->setTicker('SHIP');
             $stock->setBeta('1.0');
             $stock->setEarningsMomentumZ($momentum);
-            // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            // Stream draws and regime dice are scripted; the mix-drift weight math stays real.
             // The onset stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0);
-            $math->method('checkProbability')->willReturn($exits);
+            $math = new ScriptedDraws(
+                generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $onsetZ : 0.0,
+                checkProbability: $exits,
+            );
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
 
@@ -162,7 +159,7 @@ class ShippingBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('XSHP');
         $stock->setBeta('1.0');
-        $quiet = $this->createStub(MathUtility::class);
+        $quiet = new ScriptedDraws();
         $run = fn(MacroStateDTO $state) => $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $state, $quiet);
         $cargoElasticity = ShippingBusinessModel::OPERATING_CYCLICALITY * ShippingBusinessModel::MACRO_DEMAND_SCALAR;
 
@@ -205,7 +202,7 @@ class ShippingBusinessModelTest extends TestCase
         $home = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroConstants::TRADE_BALANCE_BASELINE);
         $abroad = new MacroStateDTO(outputGapEma: 0.0, tradeBalanceToGdpEma: MacroConstants::TRADE_BALANCE_BASELINE, foreignOutputGapEma: 0.03);
 
-        $quiet = $this->createStub(MathUtility::class);
+        $quiet = new ScriptedDraws();
         $spotHome = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $home, $quiet)->streamRevenue['spot'];
         $spotAbroad = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $abroad, $quiet)->streamRevenue['spot'];
 

@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AutoManufacturerBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class AutoManufacturerBusinessModelTest extends TestCase
@@ -22,7 +23,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new AutoManufacturerBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     /**
@@ -85,8 +86,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         // A neutral real rate as well as a closed gap, so no purchase swing moves the mix.
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: self::NEUTRAL_POLICY_RATE, yield10yEma: 0.04, yield2yEma: 0.03);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -112,8 +112,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
      */
     public function testTheApexLineFeelsLessOfThePurchaseSwingThanTheFleet(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $stock = (new Stock())->setTicker('FALC');
         $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, $macro, $mathMock);
 
@@ -136,8 +135,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setTicker('FALC');
         $stock->setBeta('1.75');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $neutralMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: self::NEUTRAL_POLICY_RATE, equityWealthRatio: 2.0e13, equityWealthTrend: 2.0e13);
         $wealthBoomMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: self::NEUTRAL_POLICY_RATE, equityWealthRatio: 2.5e13, equityWealthTrend: 2.0e13);
@@ -152,8 +150,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
     public function testLaborStrikeObservableShockBounded(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(-3.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: -3.0);
 
         $stock = new Stock();
         $stock->setTicker('GEN_AUTO');
@@ -190,8 +187,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
     public function testProductRecallEventAndObservableShock(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(-2.30); // Triggers recall event between -2.20 and -2.50
+        // Triggers recall event between -2.20 and -2.50
+        $mathMock = new ScriptedDraws(generatePersistentZ: -2.30);
 
         $stock = new Stock();
         $stock->setTicker('GEN_AUTO');
@@ -221,8 +218,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
     public function testExchangeRateExportDragIsCarriedOnceAtTheDeclaredExposure(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $stock = function (): Stock {
             $stock = new Stock();
             $stock->setTicker('GEN_AUTO');
@@ -256,8 +252,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GEN_AUTO');
         $stock->setBeta('1.0');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $macro, $mathMock);
 
         $calm = $run(new MacroStateDTO(freightRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0, inflationEma: 0.02));
@@ -324,7 +319,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('XAUT');
         $stock->setBeta('1.0');
-        $quiet = $this->createStub(MathUtility::class);
+        $quiet = new ScriptedDraws();
         $expectedRevenue = 100_000_000.0;
 
         $stateAt = fn(float $gap): MacroStateDTO => new MacroStateDTO(
@@ -377,8 +372,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setTicker('FALC');
         $stock->setBeta('1.35');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $macro = new MacroStateDTO(
             outputGapEma: -0.02,
@@ -415,8 +409,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setTicker('OEM');
         $stock->setBeta('1.2');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $macroNormal = new MacroStateDTO(
             outputGapEma: 0.0,
@@ -457,8 +450,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setTicker('OEM_PLANT');
         $stock->setBeta('1.0');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $macroNormal = new MacroStateDTO(
             outputGapEma: 0.0,
@@ -501,8 +493,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
      */
     public function testCreditCostsLandOnTheLoanBookNotTheTelematicsLine(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $run = function (string $ticker, MacroStateDTO $macro) use ($mathMock) {
             $stock = new Stock();
             $stock->setTicker($ticker);

@@ -15,14 +15,12 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Tests\Support\StockBuilder;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 /**
  * A firm the regulator governs is quoted on tangible book and shown the ratio it would be closed on, against
  * the lines the regulator acts on. An operating company is shown neither.
  */
-#[AllowMockObjectsWithoutExpectations]
 class CompanySnapshotCapitalTest extends TestCase
 {
     private DebtEngine $debtEngine;

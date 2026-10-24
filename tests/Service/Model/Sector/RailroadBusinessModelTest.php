@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\RailroadBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class RailroadBusinessModelTest extends TestCase
@@ -39,7 +40,7 @@ class RailroadBusinessModelTest extends TestCase
             fixedCosts: 1_500_000_000.0,
             baselineVol: 0.10,
             macroState: $macro,
-            mathUtility: $this->mathUtility,
+            mathUtility: MathUtility::ownStream(20261024),
         );
 
         $this->assertArrayHasKey('intermodal_freight', $result->streamRevenue);
@@ -70,8 +71,7 @@ class RailroadBusinessModelTest extends TestCase
         $stock->setTicker('UNP');
         $stock->setBeta('1.0');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baseResult = $this->model->computeActualFinancials(clone $stock, 1_000_000.0, 0.40, 200_000.0, 0.0, new MacroStateDTO(freightRateIndexEma: 100.0, agriculturalCommodityIndexEma: 100.0), $mathMock);
         $surgeResult = $this->model->computeActualFinancials(clone $stock, 1_000_000.0, 0.40, 200_000.0, 0.0, new MacroStateDTO(freightRateIndexEma: 140.0, agriculturalCommodityIndexEma: 130.0), $mathMock);
@@ -90,7 +90,7 @@ class RailroadBusinessModelTest extends TestCase
             fixedCosts: 1_500_000_000.0,
             baselineVol: 0.10,
             macroState: new MacroStateDTO(outputGapEma: 0.02),
-            mathUtility: $this->mathUtility,
+            mathUtility: MathUtility::ownStream(20261024),
         );
 
         $this->assertArrayNotHasKey('transit_subscriptions', $result->streamRevenue);

@@ -7,8 +7,8 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InternetRetailBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class InternetRetailStreamCostTest extends TestCase
@@ -21,10 +21,8 @@ class InternetRetailStreamCostTest extends TestCase
     {
         $model = new InternetRetailBusinessModel();
         $run = function (float $tpZ) use ($model) {
-            $math = $this->createStub(MathUtility::class);
-            $math->method('generateStandardNormal')->willReturn(0.0);
             // fp, tp, ads, event
-            $math->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, $tpZ, 0.0, 0.0);
+            $math = new ScriptedDraws(generatePersistentZ: [0.0, $tpZ, 0.0, 0.0]);
             $stock = (new Stock())->setTicker('WEAV')->setBeta('1.0');
             $macro = new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL);
 
@@ -54,8 +52,7 @@ class InternetRetailStreamCostTest extends TestCase
     {
         $model = new InternetRetailBusinessModel();
         $ratio = function (float $engineRatio) use ($model): float {
-            $math = $this->createStub(MathUtility::class);
-            $math->method('generatePersistentZ')->willReturn(0.0);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0);
             $macro = new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL, exchangeRateIndexEma: 100.0);
 
             return $model->computeActualFinancials((new Stock())->setTicker('JDAW'), 1000.0, $engineRatio, 0.0, 0.0, $macro, $math)->clampedMargin;

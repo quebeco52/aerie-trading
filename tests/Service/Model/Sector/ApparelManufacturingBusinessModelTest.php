@@ -12,10 +12,9 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ApparelManufacturingBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class ApparelManufacturingBusinessModelTest extends TestCase
 {
     private ApparelManufacturingBusinessModel $model;
@@ -63,8 +62,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             energyPriceIndexEma: 100.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -142,8 +140,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $neutralMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
         $weakCurrencyMacro = new MacroStateDTO(exchangeRateIndexEma: 80.0); // index below base = weaker currency
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $neutralResult = $this->model->computeActualFinancials(
             $stock,
@@ -185,8 +182,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('SHER');
         $stock->setBeta('1.0');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.22, 20_000_000.0, 0.15, $macro, $mathMock);
         $base = $run(new MacroStateDTO(agriculturalCommodityIndexEma: 100.0, freightRateIndexEma: 100.0));
@@ -206,9 +202,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $macro = new MacroStateDTO();
 
         // 4 calls: dtcZ, wholesaleZ, contractZ, eventZ (-2.50 triggers disruption)
-        $mathMock = $this->createMock(MathUtility::class);
-        $mathMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.50);
+        $mathMock = new ScriptedDraws(generatePersistentZ: [0.0, 0.0, 0.0, -2.50]);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -235,9 +229,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $macro = new MacroStateDTO();
 
         // 4 calls: dtcZ, wholesaleZ, contractZ, eventZ (+2.60 triggers viral product)
-        $mathMock = $this->createMock(MathUtility::class);
-        $mathMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 2.60);
+        $mathMock = new ScriptedDraws(generatePersistentZ: [0.0, 0.0, 0.0, 2.60]);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -331,7 +323,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $neutralMacro = new MacroStateDTO(outputGapEma: 0.0);
         $recessionMacro = new MacroStateDTO(outputGapEma: -0.06);
 
-        $mathUtility = new MathUtility();
+        $mathUtility = MathUtility::ownStream(20261024);
 
         $neutralResult = $this->model->computeActualFinancials(
             $stock,
@@ -366,7 +358,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('SHER');
         $stock->setBeta('1.0');
-        $mathUtility = new MathUtility();
+        $mathUtility = MathUtility::ownStream(20261024);
 
         $run = fn(float $realWageGap) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, new MacroStateDTO(realWageGap: $realWageGap), $mathUtility);
         $neutralResult = $run(0.0);

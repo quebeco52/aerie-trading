@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\Data\Company\Sectors;
-use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Entity\Stock;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Tests\Support\DebtHealthBuilder;
 use PHPUnit\Framework\TestCase;
 
 class BusinessModelThresholdsAndPolymorphismTest extends TestCase
@@ -113,23 +113,13 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
         $fin = new CommercialBankBusinessModel();
 
         $metrics = new DebtMetricsDTO(100.0, 0.05, 0.05, 0.01, 0.05, 0.05, 1000.0, 5000.0, 50.0, 1050.0);
-        $health = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.03,
-            isSevereNegativeCarry: false,
-            interestCoverage: 10.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 1.0,
-            wacc: 0.08,
-            costOfEquity: 0.12,
-            leveredBeta: 1.0,
-            rawMetrics: $metrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $health = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.04, 0.03)
+            ->withCoverage(10.0)
+            ->withDebtTolerance(1.0)
+            ->withCostOfCapital(0.08, 0.12)
+            ->withMetrics($metrics)
+            ->build();
 
         $this->assertEquals(0.08, $corp->getHurdleRate($health));
         $this->assertEquals(0.12, $fin->getHurdleRate($health));

@@ -7,21 +7,14 @@ namespace App\Tests\Service\Corporate;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\CapExEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\TreasuryEngine;
-use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\CorporateEngineFactory;
 use PHPUnit\Framework\TestCase;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Negative earnings pre-announcements (Kasznik & Lev 1995, "To Warn or Not to Warn").
@@ -36,9 +29,10 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  * ratio, so the squeeze that report booked is in the estimate; only what the closing quarter adds to it, at
  * the share analysts cannot read off published input-price series, is worth guiding on.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class EarningsPreAnnouncementTest extends TestCase
 {
+    use CorporateEngineFactory;
+
     private const TICKS_PER_YEAR = 252;
 
     /** Quarterly revenue is $1bn and the cost base is 60% of it, against $100m of quarterly operating earnings. */
@@ -65,23 +59,7 @@ final class EarningsPreAnnouncementTest extends TestCase
         );
 
         $math = new MathUtility();
-        $metrics = new CorporateMetrics();
-        $debtEngine = new DebtEngine($math, $metrics);
-        $capEx = new CapExEngine();
-        $treasury = new TreasuryEngine($metrics, $debtEngine, $capEx, $math);
-        $allocation = new CapitalAllocationEngine($this->createStub(CorporateLedgerService::class), $metrics, $debtEngine, $math, $treasury);
-
-        $this->engine = new EarningsEngine(
-            $this->createStub(EventDispatcherInterface::class),
-            $publisher,
-            $allocation,
-            $debtEngine,
-            $capEx,
-            $math,
-            $metrics,
-            $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine(),
-        );
+        $this->engine = self::earningsEngine($math, publisher: $publisher);
     }
 
     private function makeStock(

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -12,6 +11,8 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class PrivateEquityBusinessModelTest extends TestCase
@@ -26,7 +27,7 @@ class PrivateEquityBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new PrivateEquityBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testGetTargetMetricsCalculatesEarningAssetsAndRoic(): void
@@ -137,8 +138,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         $stock->setWholesaleDebt('50.0');
         $stock->setEarningsMomentumZ(['carried_interest' => 0.0, 'management_fees' => 0.0]);
         // A quarter just under the trend cliff: it misses at trend, clears once the spread is 20 bps under it.
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(PrivateEquityBusinessModel::HURDLE_RATE_Z_CLIFF - 0.01);
+        $mathMock = new ScriptedDraws(generatePersistentZ: PrivateEquityBusinessModel::HURDLE_RATE_Z_CLIFF - 0.01);
 
         $atTrend = $this->model->computeActualFinancials($stock, 100.0, 0.35, 10.0, 0.10, self::atTrend(), $mathMock);
         $tight = $this->model->computeActualFinancials($stock, 100.0, 0.35, 10.0, 0.10, self::atTrend(['high_yield_credit_spread_ema' => self::HY_TREND - 0.002]), $mathMock);
@@ -161,10 +161,11 @@ class PrivateEquityBusinessModelTest extends TestCase
             'high_yield_credit_spread_ema' => 0.12,
         ]);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
-            return $prevZ < 0 ? -2.0 : 0.0;
-        });
+        $mathMock = new ScriptedDraws(
+            generatePersistentZ: function ($prevZ, $phi) {
+                return $prevZ < 0 ? -2.0 : 0.0;
+            },
+        );
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -265,19 +266,11 @@ class PrivateEquityBusinessModelTest extends TestCase
 
     public function testDebtExpansionCapacityGatedDuringCreditFreeze(): void
     {
-        $normalHealth = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.03,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.5,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: new DebtMetricsDTO(
+        $normalHealth = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.03)
+            ->withDebtTolerance(2.5)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withMetrics(new DebtMetricsDTO(
                 interestExpense: 2.5,
                 blendedRate: 0.05,
                 historicalFixedRate: 0.05,
@@ -288,25 +281,16 @@ class PrivateEquityBusinessModelTest extends TestCase
                 revenue: 100.0,
                 depreciation: 5.0,
                 ebitda: 35.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+            ))
+            ->build();
 
-        $frozenHealth = new DebtHealthDTO(
-            grossCost: 0.12,
-            effectiveCost: 0.12,
-            cashYield: 0.03,
-            isSevereNegativeCarry: true,
-            interestCoverage: 2.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.5,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: new DebtMetricsDTO(
+        $frozenHealth = DebtHealthBuilder::healthy()
+            ->withCarry(0.12, 0.12, 0.03)
+            ->withSevereNegativeCarry()
+            ->withCoverage(2.0)
+            ->withDebtTolerance(2.5)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withMetrics(new DebtMetricsDTO(
                 interestExpense: 6.0,
                 blendedRate: 0.12,
                 historicalFixedRate: 0.05,
@@ -317,11 +301,8 @@ class PrivateEquityBusinessModelTest extends TestCase
                 revenue: 100.0,
                 depreciation: 5.0,
                 ebitda: 35.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+            ))
+            ->build();
 
         $normalCapacity = $this->model->calculateDebtExpansionCapacity(100.0, 50.0, 50.0, $normalHealth, 0.05, 30.0, 5.0);
         $frozenCapacity = $this->model->calculateDebtExpansionCapacity(100.0, 50.0, 50.0, $frozenHealth, 0.12, 30.0, 5.0);
@@ -336,19 +317,11 @@ class PrivateEquityBusinessModelTest extends TestCase
         $sectorTolerance = (float) \App\Data\Company\Sectors::INDUSTRY_METRICS['Private Equity']['equity_limit'];
         $this->assertGreaterThan($this->model->getWholesaleLeverageLimit(), $sectorTolerance);
 
-        $health = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.03,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: $sectorTolerance,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: new DebtMetricsDTO(
+        $health = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.03)
+            ->withDebtTolerance($sectorTolerance)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withMetrics(new DebtMetricsDTO(
                 interestExpense: 2.5,
                 blendedRate: 0.05,
                 historicalFixedRate: 0.05,
@@ -359,11 +332,8 @@ class PrivateEquityBusinessModelTest extends TestCase
                 revenue: 100.0,
                 depreciation: 5.0,
                 ebitda: 35.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+            ))
+            ->build();
 
         // Under-levered means "should borrow", so it must never be true where there is nothing left to borrow:
         // a financial flagged under-levered skips investment and buys back stock, and one that also cannot
@@ -388,8 +358,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         $stock->setWholesaleDebt('50.0');
         $stock->setEarningsMomentumZ(['carried_interest' => 0.0, 'management_fees' => 0.0]);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $trend = self::atTrend([
             'output_gap_ema' => 0.0,
@@ -415,8 +384,7 @@ class PrivateEquityBusinessModelTest extends TestCase
         $stock->setWholesaleDebt('50.0');
         $stock->setEarningsMomentumZ(['carried_interest' => 0.0, 'management_fees' => 0.0]);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baselineMacro = self::atTrend([
             'output_gap_ema' => 0.0,

@@ -9,9 +9,7 @@ use App\DTO\MarketPricingContext;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\MockObject;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,21 +24,15 @@ use PHPUnit\Framework\TestCase;
  * Randomness is stubbed to zero so every price here is deterministic: two runs that differ in exactly one
  * input differ in the price by exactly that input's contribution.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class PriceFactorTransmissionTest extends TestCase
 {
-    private MathUtility&MockObject $mathUtility;
+    private ScriptedDraws $mathUtility;
     private MarketEngine $engine;
 
     protected function setUp(): void
     {
-        $this->mathUtility = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal', 'checkProbability'])
-            ->getMock();
-
         // No idiosyncratic diffusion shock and no idiosyncratic jump, so only the common factors move price.
-        $this->mathUtility->method('generateStandardNormal')->willReturn(0.0);
-        $this->mathUtility->method('checkProbability')->willReturn(false);
+        $this->mathUtility = new ScriptedDraws();
 
         $this->engine = new MarketEngine($this->mathUtility);
     }

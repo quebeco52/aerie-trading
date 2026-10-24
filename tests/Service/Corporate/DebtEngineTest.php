@@ -19,6 +19,8 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\News\MarketEventPublisher;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -28,7 +30,7 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class DebtEngineTest extends TestCase
 {
-    private MathUtility&Stub $mathUtilityMock;
+    private ScriptedDraws $mathUtilityMock;
     private CorporateMetrics&Stub $corporateMetricsMock;
     private CreditRatingAgency $creditRatingAgency;
     private MarketEventPublisher&MockObject $marketEventPublisherMock;
@@ -36,7 +38,7 @@ class DebtEngineTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mathUtilityMock = $this->createStub(MathUtility::class);
+        $this->mathUtilityMock = new ScriptedDraws();
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->creditRatingAgency = new CreditRatingAgency();
         $this->marketEventPublisherMock = $this->createMock(MarketEventPublisher::class);
@@ -1024,23 +1026,13 @@ class DebtEngineTest extends TestCase
             ebitda: 3_500_000_000.0,
         );
 
-        return new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.03,
-            isSevereNegativeCarry: false,
-            interestCoverage: $interestCoverage,
-            wantsToPaydownDebt: false,
-            canIssueDebt: $interestCoverage > 3.5,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: $metrics,
-            isLiquidityCrisis: $interestCoverage < 0.0,
-            isLiquidityWarning: $interestCoverage < 2.0,
-            isUnderLeveraged: false,
-        );
+        return DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.03)
+            ->withCoverage($interestCoverage)
+            ->withDebtIssuance($interestCoverage > 3.5)
+            ->withMetrics($metrics)
+            ->withLiquidityStress($interestCoverage < 0.0, $interestCoverage < 2.0)
+            ->build();
     }
 
     /**

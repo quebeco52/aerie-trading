@@ -6,9 +6,9 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SpecialtyIndustrialMachineryBusinessModel;
 use App\Service\Model\StreamContext;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
@@ -40,8 +40,7 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
             energyPriceIndexEma: 100.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baseResult = $this->model->computeActualFinancials(
             $stock,
@@ -88,8 +87,7 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
         $scarcityMacro = new MacroStateDTO(capitalStockOverhangEma: -0.10);
         $overhangMacro = new MacroStateDTO(capitalStockOverhangEma: 0.10);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $scarcityResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $scarcityMacro, $mathMock);
         $overhangResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $overhangMacro, $mathMock);
@@ -112,8 +110,7 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
         $orders = (new \ReflectionMethod($this->model, 'resolveEquipmentOrderShift'))->invoke($this->model, $stock, $recession);
         $this->assertLessThan(-0.05, $orders);
 
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $result = $this->model->computeActualFinancials($stock, 100.0, 0.30, 0.0, 0.0, $recession, $math);
 
         $burn = SpecialtyIndustrialMachineryBusinessModel::EQUIPMENT_BACKLOG_BURN_RATE;
@@ -130,8 +127,7 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
         $normalMacro = new MacroStateDTO(supplyChainPressureIndexEma: 0.0);
         $delayedMacro = new MacroStateDTO(supplyChainPressureIndexEma: 2.0);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $normalResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $normalMacro, $mathMock);
         $delayedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $delayedMacro, $mathMock);

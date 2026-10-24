@@ -9,24 +9,21 @@ use App\DTO\ConsensusDTO;
 use App\DTO\SectorCoverageProfile;
 use App\Entity\Stock;
 use App\Service\Market\Pricing\MarketConsensusEngine;
-use App\Service\Math\MathUtility;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\Stub;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Analysts know the public quarter (the firm's physics averaged over its private draws) and hear the firm's own news
  * at their coverage visibility.
  */
-#[AllowMockObjectsWithoutExpectations]
 class MarketConsensusEngineTest extends TestCase
 {
-    private MathUtility&Stub $mathUtilityMock;
+    private ScriptedDraws $mathUtilityMock;
     private MarketConsensusEngine $engine;
 
     protected function setUp(): void
     {
-        $this->mathUtilityMock = $this->createStub(MathUtility::class);
+        $this->mathUtilityMock = new ScriptedDraws();
         $this->engine = new MarketConsensusEngine();
     }
 
@@ -48,7 +45,6 @@ class MarketConsensusEngineTest extends TestCase
 
     public function testThePrivateNewsIsHeardAtVisibility(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.05, minVisibility: 0.20);
 
         // Public quarter 1000, actual 1100: half the private 10% is heard, a fresh signal of 1050.
@@ -68,7 +64,6 @@ class MarketConsensusEngineTest extends TestCase
      */
     public function testAPublicMoveIsHeardInFullWhateverTheCoverage(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $estimate = fn(float $visibility): float => $this->consensus(self::quarter(1500.0), self::quarter(1500.0), new SectorCoverageProfile(baseVisibility: $visibility, errorStdDev: 0.05), base: 1500.0)
             ->analystUnbiasedRevenue;
 
@@ -79,7 +74,7 @@ class MarketConsensusEngineTest extends TestCase
     public function testVisibilityIsClampedToItsFloor(): void
     {
         // Analyst error -10.0 * 0.05 = -0.50 takes visibility below the floor.
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-10.0);
+        $this->mathUtilityMock->script(generateStandardNormal: -10.0);
         $consensus = $this->consensus(self::quarter(1200.0), self::quarter(1000.0), new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.05, minVisibility: 0.25));
 
         $this->assertSame(0.25, $consensus->dynamicVisibility);
@@ -87,7 +82,7 @@ class MarketConsensusEngineTest extends TestCase
 
     public function testVisibilityIsClampedToOne(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(10.0);
+        $this->mathUtilityMock->script(generateStandardNormal: 10.0);
         $consensus = $this->consensus(self::quarter(1100.0), self::quarter(1000.0), new SectorCoverageProfile(baseVisibility: 0.80, errorStdDev: 0.05, minVisibility: 0.20));
 
         $this->assertSame(1.0, $consensus->dynamicVisibility);
@@ -97,7 +92,6 @@ class MarketConsensusEngineTest extends TestCase
 
     public function testAPublicEventOpensTheEventVisibility(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         // Routine visibility is low (0.10); an announced event lifts it to 0.90.
         $coverage = new SectorCoverageProfile(baseVisibility: 0.10, errorStdDev: 0.05, minVisibility: 0.0, eventBaseVisibility: 0.90, eventMinVisibility: 0.50);
 
@@ -116,7 +110,6 @@ class MarketConsensusEngineTest extends TestCase
      */
     public function testTheCostRatioIsThePublicQuartersPlusPrivateNewsAtVisibility(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.05, minVisibility: 0.0);
 
         $consensus = $this->engine->generateConsensus(self::quarter(1000.0, 0.50), self::quarter(1000.0, 0.44), $coverage, $this->mathUtilityMock, new Stock(), 0.15, 1000.0, 0.04);
@@ -132,7 +125,6 @@ class MarketConsensusEngineTest extends TestCase
         // Analysts forecast off disclosed capacity. A base that grew 20% since the last report lifts the
         // anchor 20% before it is blended — frozen in dollars, a sector with a wide coverage error closed
         // under a quarter of the gap each report and a fast-growing firm beat every quarter forever.
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.15, minVisibility: 0.20);
 
         $stock = new Stock();
@@ -146,7 +138,6 @@ class MarketConsensusEngineTest extends TestCase
 
     public function testWithoutAKnownPriorBaseTheAnchorStaysSticky(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.15, minVisibility: 0.20);
 
         $stock = new Stock();
@@ -160,7 +151,6 @@ class MarketConsensusEngineTest extends TestCase
 
     public function testTheRollForwardIsBoundedSoACapacityCapOrCollapseIsNotExtrapolated(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.15, minVisibility: 0.20);
 
         $stock = new Stock();
@@ -178,7 +168,6 @@ class MarketConsensusEngineTest extends TestCase
         // A flat base, quarter after quarter: the published number settles one walkdown below the base,
         // not lower. Anchored on the shaded figure, a sticky sector compounded the bias into a standing
         // deficit several times its size.
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.15, minVisibility: 0.20);
         $stock = new Stock();
 

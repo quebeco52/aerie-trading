@@ -7,8 +7,8 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\SteelManufacturingBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class SteelManufacturingBusinessModelTest extends TestCase
@@ -40,8 +40,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
             freightRateIndexEma: 100.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baseResult = $this->model->computeActualFinancials(
             $stock,
@@ -80,8 +79,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('STLD');
         $stock->setBeta('1.2');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $run = fn(MacroStateDTO $macro) => $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $macro, $mathMock);
 
         $base = $run(new MacroStateDTO(energyPriceIndexEma: 100.0, freightRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0));
@@ -99,8 +97,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
      */
     public function testAPermanentMetalsMoveIsRecoveredOnce(): void
     {
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $settle = function (float $metalsIndex) use ($mathMock): \App\DTO\ActualFinancialsDTO {
             $stock = new Stock();
             $stock->setTicker('STLD');
@@ -163,8 +160,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
             industrialMetalsIndexEma: 100.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $neutralResult = $this->model->computeActualFinancials(
             $stock,
@@ -204,7 +200,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('XSTL');
         $stock->setBeta('1.0');
-        $quiet = $this->createStub(MathUtility::class);
+        $quiet = new ScriptedDraws();
         $expectedRevenue = 100_000_000.0;
 
         // Total revenue response: the root shift scales expected revenue, the streams act on it.
@@ -247,7 +243,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
     public function testATariffShiftsTonnageAndPriceToTheHomeMills(): void
     {
         $stock = (new Stock())->setTicker('XSTL')->setBeta('1.0');
-        $quiet = $this->createStub(MathUtility::class);
+        $quiet = new ScriptedDraws();
         $tariff = log(1.25);
         $open = new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0);
         $protected = new MacroStateDTO(exchangeRateIndexEma: 100.0, industrialMetalsIndexEma: 100.0, tariffTradeLag: $tariff);

@@ -10,6 +10,7 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReinsuranceBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class ReinsuranceBusinessModelTest extends TestCase
@@ -20,7 +21,7 @@ class ReinsuranceBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new ReinsuranceBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testDualRevenueStreams(): void
@@ -77,9 +78,7 @@ class ReinsuranceBusinessModelTest extends TestCase
             ReinsuranceBusinessModel::STATE_PREMIUM_FRANCHISE_SHARE => 40_000_000_000.0 / \App\Service\Corporate\CorporateMetrics::BASELINE_SECTOR_TAM,
         ]);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
@@ -119,11 +118,9 @@ class ReinsuranceBusinessModelTest extends TestCase
         $stock->setBeta('0.9');
         $stock->setTotalEquity('30000000000');
 
-        $mathMock = $this->createStub(MathUtility::class);
         // treatyZ = 0.0, catBondZ = 0.0, claimZ = -3.0: a large loss of the reinsurer's own in a heavy district season.
-        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -3.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: [0.0, 0.0, -3.0]);
         $volumeStock = clone $stock;
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
 
         // Six times the quarter's average district losses.
         $burden = 6.0;
@@ -176,9 +173,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $stock->setBeta('0.9');
         $stock->setTotalEquity('30000000000');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -3.0);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: [0.0, 0.0, -3.0]);
 
         $expectedRevenue = 10_000_000_000.0;
         $result = $this->model->computeActualFinancials(
@@ -202,10 +197,8 @@ class ReinsuranceBusinessModelTest extends TestCase
         $stock->setBeta('0.9');
         $stock->setTotalEquity('30000000000');
 
-        $mathMock = $this->createStub(MathUtility::class);
         // Extreme black swan catastrophe: claimZ = -12.0
-        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -12.0);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: [0.0, 0.0, -12.0]);
 
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
@@ -267,9 +260,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $stock->setTicker('REIN');
         $stock->setBeta('0.9');
         $stock->setTotalEquity('30000000000');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, $catBondZ, $claimZ);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: [0.0, $catBondZ, $claimZ]);
         $macro = new MacroStateDTO(...['outputGapEma' => 0.0, 'yield10yEma' => 0.04, 'policyRateEma' => 0.02, ...DistrictCatastropheWindow::prime($stock, $burden)]);
 
         return $this->model->computeActualFinancials($stock, 10_000_000_000.0, 0.60, 1_000_000_000.0, 0.10, $macro, $mathMock);

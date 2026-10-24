@@ -8,7 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,16 +21,7 @@ class MortgageLtvCapTest extends TestCase
 
     protected function setUp(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $math = new ScriptedDraws();
         $this->subsystem = new CreditFiscalSubsystem($math);
     }
 

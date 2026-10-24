@@ -7,7 +7,6 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ApparelManufacturingBusinessModel;
 use App\Service\Model\Sector\CommunicationEquipmentBusinessModel;
 use App\Service\Model\Sector\ComputerHardwareBusinessModel;
@@ -16,6 +15,7 @@ use App\Service\Model\Sector\MerchantHouseBusinessModel;
 use App\Service\Model\Sector\RailroadBusinessModel;
 use App\Service\Model\Sector\ShippingBusinessModel;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -44,7 +44,7 @@ final class TradeVolumeIsNotTheTradeBalanceTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('TRDE');
         $stock->setBeta('1.2');
-        $quiet = $this->createStub(MathUtility::class);
+        $quiet = new ScriptedDraws();
 
         $revenue = static fn(float $tradeBalance): float => $model->computeActualFinancials(
             $stock,

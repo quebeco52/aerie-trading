@@ -7,11 +7,10 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\ReinsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -20,7 +19,6 @@ use PHPUnit\Framework\TestCase;
  * premiums are filed on past losses and catch up a year or so later, so an inflation surge lifts the loss ratio
  * and a return to target lets it fall back (US personal auto, 2022-24).
  */
-#[AllowMockObjectsWithoutExpectations]
 final class InsuranceClaimsInflationTest extends TestCase
 {
     /** @return array<string, array{class-string<InsuranceBusinessModel>}> */
@@ -44,11 +42,7 @@ final class InsuranceClaimsInflationTest extends TestCase
         $stock->setTicker('ZZZZ');
         $stock->setBeta('0.5');
 
-        $math = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal', 'checkProbability'])
-            ->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('checkProbability')->willReturn(false);
+        $math = new ScriptedDraws();
 
         $state = $openingState;
         $costRatio = 0.0;

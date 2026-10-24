@@ -9,10 +9,9 @@ use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LawFirmBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class LawFirmBusinessModelTest extends TestCase
 {
     private LawFirmBusinessModel $model;
@@ -21,7 +20,7 @@ class LawFirmBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new LawFirmBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testTriStreamEmissionAndSumConsistency(): void
@@ -107,9 +106,7 @@ class LawFirmBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, macroCreditSpread: 0.015, macroCreditSpreadTrend: 0.015);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -136,8 +133,7 @@ class LawFirmBusinessModelTest extends TestCase
     public function testRestructuringReadsTheSpotSpreadEvenAtItsOpeningValue(): void
     {
         $stock = (new Stock())->setTicker('CLAW');
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $atOpening = static fn(float $smoothed): MacroStateDTO => new MacroStateDTO(
             outputGapEma: 0.0,
@@ -157,8 +153,7 @@ class LawFirmBusinessModelTest extends TestCase
         $stock->setTicker('CLAW');
         $stock->setBeta('0.3');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baselineMacro = new MacroStateDTO(
             outputGapEma: 0.0,
@@ -243,8 +238,7 @@ class LawFirmBusinessModelTest extends TestCase
     public function testAVerdictIsTheEventDrawNotTheSettlementFlowsTail(): void
     {
         $quarter = function (float $litigationZ, float $eventZ): \App\DTO\ActualFinancialsDTO {
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-            $math->method('generateStandardNormal')->willReturn(0.0);
+            $math = new ScriptedDraws();
             $stock = (new Stock())->setTicker('CLAW')->setBeta('0.3');
             $stock->setEarningsMomentumZ(['litigation_settlements' => $litigationZ / 0.10, 'event' => $eventZ / 0.10]);
 

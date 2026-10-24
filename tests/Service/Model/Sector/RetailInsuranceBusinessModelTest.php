@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class RetailInsuranceBusinessModelTest extends TestCase
@@ -18,7 +19,7 @@ class RetailInsuranceBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new RetailInsuranceBusinessModel();
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
     public function testDistinctPncAndLifeStreams(): void
@@ -77,9 +78,7 @@ class RetailInsuranceBusinessModelTest extends TestCase
                 RetailInsuranceBusinessModel::STATE_PREMIUM_FRANCHISE_SHARE => 40_000_000_000.0 / \App\Service\Corporate\CorporateMetrics::BASELINE_SECTOR_TAM,
                 RetailInsuranceBusinessModel::STATE_OBSERVED_CAPACITY => 1.0,
             ]);
-            $mathMock = $this->createStub(MathUtility::class);
-            $mathMock->method('generatePersistentZ')->willReturn(0.0);
-            $mathMock->method('generateStandardNormal')->willReturn(0.0);
+            $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
             return $this->model->computeActualFinancials($stock, 10_000_000_000.0, 0.70, 1_000_000_000.0, 0.08, new MacroStateDTO(), $mathMock);
         };

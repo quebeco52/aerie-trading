@@ -13,6 +13,9 @@ use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\MacroStateBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -26,59 +29,24 @@ class ReitBusinessModelTest extends TestCase
         float $equityRiskPremium = 0.05,
         float $policyRate = 0.04,
     ): MacroStateDTO {
-        return new MacroStateDTO(
+        return MacroStateBuilder::flatCurveDto(
             outputGap: $outputGap,
             outputGapEma: $outputGap,
-            unemploymentRate: 0.04,
-            unemploymentRateEma: 0.04,
-            energyPriceIndex: 100.0,
-            energyPriceIndexEma: 100.0,
-            energyPriceShock: 0.0,
-            consumerSentimentIndex: 100.0,
-            consumerSentimentIndexEma: 100.0,
             inflation: $inflation,
             inflationEma: $inflation,
             policyRate: $policyRate,
             policyRateEma: $policyRate,
             targetRate: $policyRate,
-            yield2y: 0.04,
-            yield2yEma: 0.04,
-            yield5y: 0.04,
-            yield5yEma: 0.04,
             yield10y: $yield10y,
             yield10yEma: $yield10y,
-            yield30y: 0.04,
-            yield30yEma: 0.04,
-            marketVolatility: 0.15,
-            marketVolatilityEma: 0.15,
-            marketZ: 0.0,
-            corporateTaxRate: 0.21,
             equityRiskPremium: $equityRiskPremium,
-            macroCreditSpread: 0.015,
-            macroCreditSpreadEma: 0.015,
-            qeActive: false,
-            inversionDuration: 0.0,
-            nsLevel: 0.04,
-            nsSlope: 0.0,
-            nsSlopeEma: 0.0,
-            nsCurvature: 0.0,
-            potentialGdpIndex: 1.0,
-            nominalGdpIndex: 1.0,
         );
     }
 
-    private function createMathUtilityMock(array $persistentZCalls = []): MathUtility
+    /** The given stream Z's in call order; with none, every stream Z is zero. */
+    private function createMathUtilityMock(array $persistentZCalls = []): ScriptedDraws
     {
-        $mock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
-            ->getMock();
-
-        if (!empty($persistentZCalls)) {
-            $mock->method('generatePersistentZ')
-                ->willReturnOnConsecutiveCalls(...array_values($persistentZCalls));
-        }
-
-        return $mock;
+        return new ScriptedDraws(generatePersistentZ: $persistentZCalls === [] ? 0.0 : array_values($persistentZCalls));
     }
 
     public function testEffectiveTaxRateIsPassThroughZero(): void
@@ -428,7 +396,7 @@ class ReitBusinessModelTest extends TestCase
     {
         $ledgerService = $this->createMock(\App\Service\Corporate\CorporateLedgerService::class);
         $metrics = new \App\Service\Corporate\CorporateMetrics();
-        $math = new MathUtility();
+        $math = MathUtility::ownStream(20261024);
         $debtEngine = new \App\Service\Corporate\DebtEngine($math, $metrics);
         $capExEngine = new \App\Service\Corporate\CapExEngine();
         $treasuryEngine = new \App\Service\Corporate\TreasuryEngine($metrics, $debtEngine, $capExEngine, $math);
@@ -518,19 +486,11 @@ class ReitBusinessModelTest extends TestCase
 
     private function createDebtHealth(float $debtTolerance, float $interestExpense = 0.0): DebtHealthDTO
     {
-        return new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.03,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: $debtTolerance,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: new DebtMetricsDTO(
+        return DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.03)
+            ->withDebtTolerance($debtTolerance)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withMetrics(new DebtMetricsDTO(
                 interestExpense: $interestExpense,
                 blendedRate: 0.05,
                 historicalFixedRate: 0.05,
@@ -541,11 +501,8 @@ class ReitBusinessModelTest extends TestCase
                 revenue: 100.0,
                 depreciation: 5.0,
                 ebitda: 35.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+            ))
+            ->build();
     }
 
     public function testDebtExpansionCapacityUsesEbitDirectly(): void

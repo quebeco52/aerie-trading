@@ -12,14 +12,13 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The written share of Kenney capacity: a Winter (1994) / Gron (1994) supply curve in the full book's return over
  * the hurdle, reached through renewals (first-order partial adjustment over the policy term).
  */
-#[AllowMockObjectsWithoutExpectations]
 final class InsuranceWrittenCapacityTest extends TestCase
 {
     private const DISPERSION = 0.06;
@@ -125,12 +124,7 @@ final class InsuranceWrittenCapacityTest extends TestCase
 
     private function scriptedMath(): MathUtility
     {
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generatePersistentZ', 'checkProbability'])->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('generatePersistentZ')->willReturn(0.0);
-        $math->method('checkProbability')->willReturn(false);
-
-        return $math;
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     /**

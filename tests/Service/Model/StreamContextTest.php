@@ -6,10 +6,9 @@ namespace App\Tests\Service\Model;
 
 use App\Service\Math\MathUtility;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class StreamContextTest extends TestCase
 {
     private MathUtility $mathUtility;
@@ -237,8 +236,7 @@ class StreamContextTest extends TestCase
 
     public function testEvolveRegimeStartsOnOnsetHazardAndCountsQuarters(): void
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('checkProbability')->willReturnCallback(fn(float $p): bool => $p >= 0.5);
+        $math = new ScriptedDraws(checkProbability: fn(float $p): bool => $p >= 0.5);
 
         // Inactive with a certain onset: the regime starts this quarter.
         $context = new StreamContext([], $math);
@@ -258,8 +256,7 @@ class StreamContextTest extends TestCase
 
     public function testStartRegimeForcesOnsetAndIsIdempotentWhileActive(): void
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('checkProbability')->willReturn(false);
+        $math = new ScriptedDraws();
 
         $context = new StreamContext([], $math);
         $this->assertSame(0, $context->evolveRegime('price_war', 0.0, 0.25));
@@ -274,8 +271,7 @@ class StreamContextTest extends TestCase
     {
         // One-factor model: with the firm innovation pinned at +1 and idiosyncratic draws at 0,
         // every loaded stream returns rho * F and exogenous streams stay at zero.
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-        $math->method('generateStandardNormal')->willReturnOnConsecutiveCalls(1.0, 0.0, 0.0, 0.0, 0.0);
+        $math = new ScriptedDraws(generateStandardNormal: [1.0, 0.0, 0.0, 0.0, 0.0]);
 
         $context = new StreamContext([], $math, 0.60);
         $this->assertEqualsWithDelta(0.60, $context->generateZ('sales', 0.0), 1e-9);

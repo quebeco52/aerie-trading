@@ -12,6 +12,7 @@ use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\MacroStateBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class TradingEconomicsIndicatorsTest extends TestCase
@@ -23,12 +24,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mathUtility = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        $this->mathUtility = new ScriptedDraws();
         $this->macroAggregateSubsystem = MacroAggregateSubsystem::headless($this->mathUtility);
         $this->assetMarketSubsystem = new AssetMarketSubsystem($this->mathUtility);
         $this->monetaryPolicySubsystem = new MonetaryPolicySubsystem($this->mathUtility);

@@ -18,6 +18,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -37,7 +38,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setFloatingDebtRatio('0.5');
         $stock->setIndustry('Asset Management');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
+        $mathUtilityMock = new ScriptedDraws();
         $macroState = MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.04,
             'yield_5y_ema' => 0.04,
@@ -74,7 +75,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setFloatingDebtRatio('0.4');
         $stock->setIndustry('Private Equity');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
+        $mathUtilityMock = new ScriptedDraws();
         $macroState = MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.04,
             'yield_5y_ema' => 0.045,
@@ -128,8 +129,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(outputGapEma: 0.0);
 
         // Alpha Z = 2.50 (above 1.50 threshold), BaseFee Z = 0.0
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 2.50);
+        $mathMock = new ScriptedDraws(generatePersistentZ: [0.0, 2.50]);
 
         $result = $model->computeActualFinancials(
             $stock,
@@ -163,8 +163,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(outputGapEma: 0.0);
 
         // Alpha Z = -2.50 (severe redemptions below -1.50), BaseFee Z = 0.0
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, -2.50);
+        $mathMock = new ScriptedDraws(generatePersistentZ: [0.0, -2.50]);
 
         $result = $model->computeActualFinancials(
             $stock,
@@ -190,8 +189,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setTicker('SHRK');
         $stock->setBeta('1.0');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $run = function (MacroStateDTO $macro) use ($model, $stock, $mathMock): float {
             return $model->computeActualFinancials(
@@ -232,8 +230,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setTicker('SHRK');
         $stock->setBeta('1.0');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $run = function (float $share, float $shareEma) use ($model, $stock, $mathMock): float {
             return $model->computeActualFinancials(

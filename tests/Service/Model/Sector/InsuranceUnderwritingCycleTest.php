@@ -13,7 +13,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,7 +23,6 @@ use PHPUnit\Framework\TestCase;
  * for years after the capital has returned — the discipline lag the cycle is named for. Modelling it off
  * this quarter's surplus alone would give an instantaneous response and no cycle at all.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class InsuranceUnderwritingCycleTest extends TestCase
 {
     private const REGIME_KEY = StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;
@@ -165,7 +164,6 @@ final class InsuranceUnderwritingCycleTest extends TestCase
     }
 
     /** Reading the rate does not age it; the physics carries the level the quarter priced at. */
-    #[AllowMockObjectsWithoutExpectations]
     public function testGetMacroPhysicsDoesNotAgeTheEarnedRate(): void
     {
         $model = new InsuranceBusinessModel();
@@ -173,8 +171,7 @@ final class InsuranceUnderwritingCycleTest extends TestCase
         $first = $model->getMacroPhysics($stock, $this->makeMacro())['pricing_power_multiplier'];
         $this->assertSame($first, $model->getMacroPhysics($stock, $this->makeMacro())['pricing_power_multiplier']);
 
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math = new ScriptedDraws();
         $result = $model->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $this->makeMacro(), $math);
 
         $this->assertEqualsWithDelta($first, $result->streamZ[InsuranceBusinessModel::STATE_EARNED_RATE_LEVEL], 1e-12);
@@ -241,9 +238,8 @@ final class InsuranceUnderwritingCycleTest extends TestCase
     private function runQuarter(float $claimDraw, float $burden, float $totalTime = self::Q4_TIME): \App\DTO\ActualFinancialsDTO
     {
         $model = new InsuranceBusinessModel();
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
         // Firm factor, revenue Z, then the claim draw.
-        $math->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, $claimDraw);
+        $math = new ScriptedDraws(generateStandardNormal: [0.0, 0.0, $claimDraw]);
 
         $stock = $this->makeStock();
         $stock->setTotalEquity('600000000000');

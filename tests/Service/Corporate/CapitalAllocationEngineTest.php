@@ -16,9 +16,10 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Model\Sector\InsuranceBusinessModel;
+use App\Tests\Support\DebtHealthBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -29,7 +30,7 @@ class CapitalAllocationEngineTest extends TestCase
     private CorporateLedgerService&Stub $corporateLedgerServiceMock;
     private CorporateMetrics&Stub $corporateMetricsMock;
     private DebtEngine&Stub $debtEngineMock;
-    private MathUtility&Stub $mathUtilityMock;
+    private ScriptedDraws $mathUtilityMock;
     private TreasuryEngine&Stub $treasuryEngineMock;
     private CapitalAllocationEngine $engine;
     private DebtHealthDTO $debtHealth;
@@ -64,31 +65,21 @@ class CapitalAllocationEngineTest extends TestCase
             ebitda: 2500000.0,
         );
 
-        $debtHealthMock = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.04,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 1.5,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: $debtMetricsMock,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        $debtHealthMock = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.04)
+            ->withDebtTolerance(1.5)
+            ->withCostOfCapital(0.06, 0.08)
+            ->withMetrics($debtMetricsMock)
+            ->build();
 
         $this->debtHealth = $debtHealthMock;
         $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
         $this->debtEngineMock->method('analyzeTrailingDebtHealth')->willReturn($debtHealthMock);
 
-        $this->mathUtilityMock = $this->createStub(MathUtility::class);
         // The board's buyback appetite is a uniform draw; the stub draws the middle of whatever range it is asked for.
-        $this->mathUtilityMock->method('generateUniformBetween')->willReturnCallback(static fn(float $min, float $max): float => 0.5 * ($min + $max));
+        $this->mathUtilityMock = new ScriptedDraws(
+            generateUniformBetween: static fn(float $min, float $max): float => 0.5 * ($min + $max),
+        );
 
         $this->treasuryEngineMock = $this->createStub(TreasuryEngine::class);
 
@@ -241,24 +232,9 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertSame(0.05, $issued[0][1], 'Borrowed at its market rate, not a distress rate.');
 
         $refused = $this->createMock(DebtEngine::class);
-        $refused->method('analyzeTrailingDebtHealth')->willReturn(new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.04,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: false,
-            debtTolerance: 1.5,
-            wacc: 0.06,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: $this->debtHealth->rawMetrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-            hasMarketAccess: false,
-        ));
+        $refused->method('analyzeTrailingDebtHealth')->willReturn(
+            DebtHealthBuilder::from($this->debtHealth)->withDebtIssuance(false)->withMarketAccess(false)->build(),
+        );
         $refused->expects($this->never())->method('issueDebt');
         $unfunded = (new CapitalAllocationEngine($this->corporateLedgerServiceMock, $this->corporateMetricsMock, $refused, $this->mathUtilityMock, $this->treasuryEngineMock))
             ->allocateCapital($this->cashStrappedReit(), 9.00, 0.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), 1_000_000.0);
@@ -1015,19 +991,12 @@ class CapitalAllocationEngineTest extends TestCase
 
     private function buildHealth(bool $hasLeverageHeadroom = true, float $interestCoverage = 5.0, float $wacc = 0.06): DebtHealthDTO
     {
-        return new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.05,
-            cashYield: 0.04,
-            isSevereNegativeCarry: false,
-            interestCoverage: $interestCoverage,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 1.5,
-            wacc: $wacc,
-            costOfEquity: 0.08,
-            leveredBeta: 1.0,
-            rawMetrics: new DebtMetricsDTO(
+        return DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.05, 0.04)
+            ->withCoverage($interestCoverage)
+            ->withDebtTolerance(1.5)
+            ->withCostOfCapital($wacc, 0.08)
+            ->withMetrics(new DebtMetricsDTO(
                 interestExpense: 500000.0,
                 blendedRate: 0.05,
                 historicalFixedRate: 0.05,
@@ -1038,14 +1007,9 @@ class CapitalAllocationEngineTest extends TestCase
                 revenue: 10000000.0,
                 depreciation: 500000.0,
                 ebitda: 2500000.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-            hasLeverageHeadroom: $hasLeverageHeadroom,
-            netDebtToEbitda: $hasLeverageHeadroom ? 0.5 : 4.5,
-            ebitdaCovenantLimit: 2.0,
-        );
+            ))
+            ->withCovenant($hasLeverageHeadroom ? 0.5 : 4.5, 2.0, $hasLeverageHeadroom)
+            ->build();
     }
 
     /**
@@ -1370,19 +1334,13 @@ class CapitalAllocationEngineTest extends TestCase
         $repurchase = CapitalAllocationEngine::leverageTargetRepurchase(100_000_000.0, $netDebt, 0.75, $netDebt / 100_000_000.0);
         $stock->setCorporateTreasury((string) ($targetCash + $excessCash));
 
-        $health = new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.04,
-            isSevereNegativeCarry: $negativeCarry,
-            interestCoverage: 50.0,
-            wantsToPaydownDebt: $negativeCarry,
-            canIssueDebt: true,
-            debtTolerance: 1.5,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: new DebtMetricsDTO(
+        $health = DebtHealthBuilder::healthy()
+            ->withCarry(0.05, 0.04, 0.04)
+            ->withSevereNegativeCarry($negativeCarry)
+            ->withCoverage(50.0)
+            ->wantingToPayDownDebt($negativeCarry)
+            ->withDebtTolerance(1.5)
+            ->withMetrics(new DebtMetricsDTO(
                 interestExpense: 1_000_000.0,
                 blendedRate: 0.05,
                 historicalFixedRate: 0.05,
@@ -1393,16 +1351,11 @@ class CapitalAllocationEngineTest extends TestCase
                 revenue: 100_000_000.0,
                 depreciation: 0.0,
                 ebitda: 50_000_000.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: $underLevered,
-            hasLeverageHeadroom: $hasLeverageHeadroom,
-            netDebtToEbitda: $hasLeverageHeadroom ? 0.4 : 4.5,
-            ebitdaCovenantLimit: 3.5,
-            debtToEquity: $netDebt / 100_000_000.0,
-            leverageTarget: 0.75,
-        );
+            ))
+            ->underLeveraged($underLevered)
+            ->withCovenant($hasLeverageHeadroom ? 0.4 : 4.5, 3.5, $hasLeverageHeadroom)
+            ->withRecapitalization($netDebt / 100_000_000.0, 0.75)
+            ->build();
 
         $borrowed = [];
         $debtEngine = $this->createMock(DebtEngine::class);

@@ -7,14 +7,15 @@ namespace App\Tests\Service\Corporate;
 use App\Data\Company\ManagementProfile;
 use App\Data\Company\ManagementStyle;
 use App\DTO\DebtHealthDTO;
-use App\DTO\DebtMetricsDTO;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Deal\AcquisitionEngine;
 use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
+use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\MacroStateBuilder;
+use App\Tests\Support\ScriptedDraws;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -30,13 +31,13 @@ use PHPUnit\Framework\TestCase;
  */
 class MergerAndAcquisitionGateTest extends TestCase
 {
-    private MathUtility&Stub $math;
+    private ScriptedDraws $math;
     private DebtEngine&Stub $debt;
     private AcquisitionEngine $engine;
 
     protected function setUp(): void
     {
-        $this->math = $this->createStub(MathUtility::class);
+        $this->math = new ScriptedDraws(calculateLogNormalSynergy: 0.0);
         $this->debt = $this->createStub(DebtEngine::class);
         $this->engine = $this->engine($this->debt, $this->math);
     }
@@ -97,34 +98,31 @@ class MergerAndAcquisitionGateTest extends TestCase
     public function testARejectedGateDoesNoneOfTheExpensiveWork(): void
     {
         $dt = 1.0 / 14400.0;
-        $math = $this->createMock(MathUtility::class);
+        $math = new ScriptedDraws(checkProbability: function (float $hazard) use ($dt): bool {
+            // Struck at the ceiling, not at some smaller hazard the gate could not justify.
+            $this->assertContains(
+                round($hazard, 12),
+                [
+                    round(AcquisitionEngine::acquisitionHazardCeiling() * $dt, 12),
+                    round(DivestitureEngine::divestitureHazardCeiling() * $dt, 12),
+                ],
+            );
+
+            return false;
+        });
         $debt = $this->createMock(DebtEngine::class);
         $engine = $this->engine($debt, $math);
         $divestitures = $this->divestitureEngine($debt, $math);
 
-        $math->expects($this->exactly(2))
-            ->method('checkProbability')
-            ->willReturnCallback(function (float $hazard) use ($dt): bool {
-                // Struck at the ceiling, not at some smaller hazard the gate could not justify.
-                $this->assertContains(
-                    round($hazard, 12),
-                    [
-                        round(AcquisitionEngine::acquisitionHazardCeiling() * $dt, 12),
-                        round(DivestitureEngine::divestitureHazardCeiling() * $dt, 12),
-                    ],
-                );
-
-                return false;
-            });
         $debt->expects($this->never())->method('analyzeDebtHealth');
         $debt->expects($this->never())->method('analyzeTrailingDebtHealth');
-        $math->expects($this->never())->method('generateUniform');
 
         $stock = StockBuilder::create('GATE')->build();
         $macro = \App\DTO\MacroStateDTO::fromMacroState(MacroStateBuilder::create()->build());
 
         $this->assertNull($engine->evaluatePrivateAcquisition($stock, $macro, $dt));
         $this->assertNull($divestitures->evaluateCorporateDivestiture($stock, $macro, $dt));
+        $this->assertSame(2, $math->callCount(), 'the two gate checks are the only draws');
     }
 
     public function testTheSecondStageAcceptsAtTheRatioOfTheFirmsHazardToTheCeiling(): void
@@ -145,16 +143,14 @@ class MergerAndAcquisitionGateTest extends TestCase
 
         $this->debt->method('analyzeDebtHealth')->willReturn($this->healthyBalanceSheet());
         $this->debt->method('analyzeTrailingDebtHealth')->willReturn($this->healthyBalanceSheet());
-        $this->math->method('checkProbability')->willReturn(true);
+        $this->math->script(checkProbability: true);
 
         $macro = \App\DTO\MacroStateDTO::fromMacroState(MacroStateBuilder::create()->build());
         $ceiling = AcquisitionEngine::acquisitionHazardCeiling();
         $acceptance = AcquisitionEngine::MA_EMPIRE_BUILDER_PROB / $ceiling;
 
         // Just inside the acceptance band: a deal.
-        $this->math->method('generateUniform')->willReturn($acceptance * 0.999);
-        $this->math->method('generateUniformBetween')->willReturn(0.8);
-        $this->math->method('generateStandardNormal')->willReturn(0.0);
+        $this->math->script(generateUniform: $acceptance * 0.999, generateUniformBetween: 0.8);
 
         $deal = $this->engine->evaluatePrivateAcquisition($stock, $macro, $dt);
         $this->assertNotNull($deal, 'A conditional draw below the branch hazard must fire the deal.');
@@ -176,9 +172,8 @@ class MergerAndAcquisitionGateTest extends TestCase
 
         $this->debt->method('analyzeDebtHealth')->willReturn($this->healthyBalanceSheet());
         $this->debt->method('analyzeTrailingDebtHealth')->willReturn($this->healthyBalanceSheet());
-        $this->math->method('checkProbability')->willReturn(true);
         // The top of the conditional interval: above every hazard the ceiling admits.
-        $this->math->method('generateUniform')->willReturn(0.999999);
+        $this->math->script(checkProbability: true, generateUniform: 0.999999);
 
         $macro = \App\DTO\MacroStateDTO::fromMacroState(MacroStateBuilder::create()->build());
 
@@ -187,34 +182,6 @@ class MergerAndAcquisitionGateTest extends TestCase
 
     private function healthyBalanceSheet(): DebtHealthDTO
     {
-        return new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: 8.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: new DebtMetricsDTO(
-                interestExpense: 0.0,
-                blendedRate: 0.05,
-                historicalFixedRate: 0.05,
-                dynamicSpread: 0.01,
-                currentMarketRate: 0.05,
-                wholesaleRate: 0.05,
-                ebit: 1000.0,
-                revenue: 5000.0,
-                depreciation: 100.0,
-                ebitda: 1100.0,
-            ),
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-            hasLeverageHeadroom: true,
-        );
+        return DebtHealthBuilder::healthy()->withCoverage(8.0)->build();
     }
 }

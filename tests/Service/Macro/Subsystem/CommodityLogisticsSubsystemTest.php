@@ -12,6 +12,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class CommodityLogisticsSubsystemTest extends TestCase
@@ -86,12 +87,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
     public function testGoldRevertsTowardItsEquilibriumAtTheMeasuredSpeed(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $subsystem = new CommodityLogisticsSubsystem($quiet);
 
         $state = new MacroState();
@@ -172,12 +168,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
     public function testTheCrackPeaksInTheDrivingSeasonAndTroughsInAutumn(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $subsystem = new CommodityLogisticsSubsystem($quiet);
         $state = new MacroState();
         $state->globalDemandGapEma = 0.0;
@@ -278,8 +269,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
     /** With no noise the index closes on its congestion target at the reversion speed. */
     public function testSupplierDeliveryTimesRevertToTheirTarget(): void
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generateStandardNormal')->willReturn(0.0);
+        $math = new ScriptedDraws();
         $subsystem = new CommodityLogisticsSubsystem($math);
 
         $state = new MacroState();
@@ -328,16 +318,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
     public function testGasCarriesAWinterPremiumOverItsSummerPrice(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $subsystem = new CommodityLogisticsSubsystem($quiet);
 
         $winter = new MacroState();
@@ -354,16 +335,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
     public function testGasFollowsOilThroughTheRatio(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $subsystem = new CommodityLogisticsSubsystem($quiet);
 
         $cheapOil = new MacroState();
@@ -521,36 +493,24 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
     public function testAHeadlineStormIsRecordedOnTheTickItLands(): void
     {
-        $math = new class extends MathUtility {
-            public int $events = 0;
-            public float $severity = 0.0;
-            public function generatePoissonCount(float $mean): int
-            {
-                return $this->events;
-            }
-            public function generateParetoSeverity(float $scale, float $alpha, float $cap): float
-            {
-                return $this->severity;
-            }
-        };
+        $math = new ScriptedDraws();
         $subsystem = new CommodityLogisticsSubsystem($math);
         $state = new MacroState();
         $state->totalTime = 2.0;
         $state->catastropheLossIndex = 0.0; // a clean slate, so the two scripted events are all the burden there is
 
-        $math->events = 1;
-        $math->severity = CommodityLogisticsSubsystem::SYSTEMIC_CATASTROPHE_SEVERITY - 0.1;
+        $math->script(generatePoissonCount: 1, generateParetoSeverity: CommodityLogisticsSubsystem::SYSTEMIC_CATASTROPHE_SEVERITY - 0.1);
         $subsystem->calculateCatastropheLosses($state, 0.01);
         $this->assertSame(-1.0, $state->lastCatastropheAt, 'A routine event is claims, not news.');
 
         $state->totalTime = 2.01;
-        $math->severity = 4.0;
+        $math->script(generateParetoSeverity: 4.0);
         $subsystem->calculateCatastropheLosses($state, 0.01);
         $this->assertSame(2.01, $state->lastCatastropheAt);
         $this->assertSame(4.0, $state->lastCatastropheSeverity);
         $this->assertGreaterThan(4.0, $state->catastropheLossIndex, 'The burden carries both events.');
 
-        $math->events = 0;
+        $math->script(generatePoissonCount: 0);
         $state->totalTime = 2.51;
         $subsystem->calculateCatastropheLosses($state, 0.5);
         $this->assertEqualsWithDelta(exp(-CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY * 0.5), $state->catastropheLossIndex / (4.0 + (CommodityLogisticsSubsystem::SYSTEMIC_CATASTROPHE_SEVERITY - 0.1) * exp(-CommodityLogisticsSubsystem::CATASTROPHE_LOSS_DECAY * 0.01)), 0.01, 'and settles at the claims decay rate.');
@@ -560,16 +520,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
 
     private function quietCommoditySubsystem(): CommodityLogisticsSubsystem
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $quiet = new ScriptedDraws();
 
         return new CommodityLogisticsSubsystem($quiet);
     }
@@ -675,26 +626,7 @@ class CommodityLogisticsSubsystemTest extends TestCase
      */
     private function oneShockSubsystem(): CommodityLogisticsSubsystem
     {
-        $math = new class extends MathUtility {
-            private bool $landed = false;
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-            public function calculateJumpDiffusion(float $lambda, float $jumpMean, float $jumpVol, float $dt): array
-            {
-                if ($this->landed) {
-                    return ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null];
-                }
-                $this->landed = true;
-
-                return ['multiplier' => 1.5, 'shock_pct' => 50.0, 'exponent' => log(1.5)];
-            }
-        };
+        $math = new ScriptedDraws(calculateJumpDiffusion: [['multiplier' => 1.5, 'shock_pct' => 50.0, 'exponent' => log(1.5)]]);
 
         return new CommodityLogisticsSubsystem($math);
     }

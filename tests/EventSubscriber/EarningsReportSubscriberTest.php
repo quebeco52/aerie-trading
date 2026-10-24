@@ -16,6 +16,7 @@ use App\Service\Event\EarningsReportedEvent;
 use App\Service\Event\ShockEvent;
 use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Model\BusinessModelInterface;
+use App\Tests\Support\DebtHealthBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -441,23 +442,7 @@ class EarningsReportSubscriberTest extends TestCase
     /** A firm in good standing: the report files its cash yield and cost of equity off this. */
     private function health(DebtMetricsDTO $metrics): DebtHealthDTO
     {
-        return new DebtHealthDTO(
-            grossCost: 0.05,
-            effectiveCost: 0.04,
-            cashYield: 0.02,
-            isSevereNegativeCarry: false,
-            interestCoverage: 5.0,
-            wantsToPaydownDebt: false,
-            canIssueDebt: true,
-            debtTolerance: 2.0,
-            wacc: 0.08,
-            costOfEquity: 0.10,
-            leveredBeta: 1.0,
-            rawMetrics: $metrics,
-            isLiquidityCrisis: false,
-            isLiquidityWarning: false,
-            isUnderLeveraged: false,
-        );
+        return DebtHealthBuilder::healthy()->withMetrics($metrics)->build();
     }
 
     private function bankWithGoodwill(float $goodwill): Stock

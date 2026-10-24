@@ -12,6 +12,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\PoliticsEngine;
+use App\Tests\Support\InMemoryRedis;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -105,22 +106,7 @@ class ForecastElectionHandlerTest extends TestCase
 
     private function inMemoryRedis(): \Redis
     {
-        return new class extends \Redis {
-            /** @var array<string, string> */
-            private array $store = [];
-
-            public function get(mixed $key): mixed
-            {
-                return $this->store[(string) $key] ?? false;
-            }
-
-            public function set(string $key, mixed $value, mixed $options = null): \Redis|string|bool
-            {
-                $this->store[$key] = (string) $value;
-
-                return true;
-            }
-        };
+        return new InMemoryRedis();
     }
 }
 

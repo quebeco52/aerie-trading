@@ -16,10 +16,9 @@ use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\Sector\TelecomBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class TelecomBusinessModelTest extends TestCase
 {
     private TelecomBusinessModel $model;
@@ -38,8 +37,7 @@ class TelecomBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
 
         // Flat draws: no event, gross adds exactly replace churn, so the subscriber index holds at 1.0.
-        $mathStub = $this->createStub(MathUtility::class);
-        $mathStub->method('generatePersistentZ')->willReturn(0.0);
+        $mathStub = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -74,8 +72,7 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(4.0, array_sum($factors), 1e-9);
         $this->assertEqualsWithDelta(4.0, array_sum(TelecomBusinessModel::EQUIPMENT_SEASONALITY), 1e-9);
 
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
 
         $plans = [];
@@ -96,8 +93,7 @@ class TelecomBusinessModelTest extends TestCase
     {
         $stock = (new Stock())->setTicker('TEL')->setBeta('0.8');
         $factors = $this->model->resolveSeasonalityFactors($stock);
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
 
         $run = fn(int $quarter) => $this->model->computeActualFinancials((new Stock())->setTicker('TEL')->setBeta('0.8'), 100_000_000.0 * $factors[$quarter], 0.30, 20_000_000.0, 0.0, $macro, $math, $quarter);
@@ -122,13 +118,8 @@ class TelecomBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
 
-        $mathStub = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
-            ->getMock();
-
         // stream sequence: wireless_subscriptions Z = 0.0, equipment_sales Z = 0.0, event Z = -2.5 (price war)
-        $mathStub->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5);
+        $mathStub = new ScriptedDraws(generatePersistentZ: [0.0, 0.0, -2.5]);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -152,13 +143,8 @@ class TelecomBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02);
 
-        $mathStub = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ'])
-            ->getMock();
-
         // stream sequence: wireless_subscriptions Z = 0.0, equipment_sales Z = 0.0, event Z = 2.5 (spectrum auction)
-        $mathStub->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5);
+        $mathStub = new ScriptedDraws(generatePersistentZ: [0.0, 0.0, 2.5]);
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -187,8 +173,7 @@ class TelecomBusinessModelTest extends TestCase
         $highYieldMacro = new MacroStateDTO(yield10yEma: 0.08, inflationEma: 0.02);
         $normalYieldMacro = new MacroStateDTO(yield10yEma: 0.04, inflationEma: 0.02);
 
-        $mathStub = $this->createStub(MathUtility::class);
-        $mathStub->method('generatePersistentZ')->willReturn(0.0);
+        $mathStub = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $resultHigh = $this->model->computeActualFinancials(
             $stock,
@@ -239,9 +224,10 @@ class TelecomBusinessModelTest extends TestCase
             $stock->setTicker('TEL');
             $stock->setBeta('0.8');
             $stock->setEarningsMomentumZ($momentum);
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $eventZ : 0.0);
-            $math->method('checkProbability')->willReturn($warEnds);
+            $math = new ScriptedDraws(
+                generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $eventZ : 0.0,
+                checkProbability: $warEnds,
+            );
             return $this->model->computeActualFinancials($stock, 100_000_000.0, 0.45, 20_000_000.0, 0.10, $macro, $math);
         };
 
@@ -275,8 +261,7 @@ class TelecomBusinessModelTest extends TestCase
      */
     public function testUnemploymentOffTheNaturalRateMovesChurnBothWays(): void
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $run = function (float $unemployment) use ($math): float {
             $stock = (new Stock())->setTicker('LOON_JOBS')->setBeta('0.8');
@@ -312,8 +297,7 @@ class TelecomBusinessModelTest extends TestCase
     public function testAPriceWarARivalStartedReachesThisCarrierWithoutAnEvent(): void
     {
         $regimeKey = StreamContext::REGIME_STATE_PREFIX . TelecomBusinessModel::REGIME_PRICE_WAR;
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $run = function (?IndustryRegimeView $industry) use ($math) {
             $this->model->useIndustryRegimes($industry);
             $stock = (new Stock())->setTicker('TEL_RIVAL')->setBeta('0.8');
@@ -343,16 +327,24 @@ class TelecomBusinessModelTest extends TestCase
     /** The carrier that draws the onset starts the war for its industry, its length drawn once from the exit hazard. */
     public function testTheCarrierThatDrawsTheOnsetStartsTheWarForItsIndustry(): void
     {
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'generateGeometricCount'])->getMock();
         // subscriptions, equipment, event: the event Z is below the onset threshold.
-        $math->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5);
-        $math->expects($this->once())->method('generateGeometricCount')->with(TelecomBusinessModel::PRICE_WAR_EXIT_HAZARD)->willReturn(3);
+        $exitHazards = [];
+        $math = new ScriptedDraws(
+            generatePersistentZ: [0.0, 0.0, -2.5],
+            generateGeometricCount: static function (float $hazard) use (&$exitHazards): int {
+                $exitHazards[] = $hazard;
+
+                return 3;
+            },
+        );
 
         $industry = new IndustryRegimeView([], 1);
         $this->model->useIndustryRegimes($industry);
         $result = $this->model->computeActualFinancials((new Stock())->setTicker('TEL_START')->setBeta('0.8'), 100_000_000.0, 0.45, 20_000_000.0, 0.10, new MacroStateDTO(outputGapEma: 0.0), $math);
         $this->model->useIndustryRegimes(null);
 
+        $this->assertCount(1, $exitHazards, 'the length is drawn once');
+        $this->assertSame(TelecomBusinessModel::PRICE_WAR_EXIT_HAZARD, $exitHazards[0]);
         $this->assertSame(ShockEvent::TELECOM_PRICE_WAR, $result->eventType);
         $this->assertSame([TelecomBusinessModel::REGIME_PRICE_WAR => 3], $industry->startedRegimes());
         $this->assertSame(1.0, $result->streamZ[StreamContext::REGIME_STATE_PREFIX . TelecomBusinessModel::REGIME_PRICE_WAR]);
@@ -370,8 +362,7 @@ class TelecomBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($marketRate / 3.0, Distributions::standardNormalCdf(TelecomBusinessModel::priceWarOnsetThreshold(3)), 1e-6);
 
         $startsAWar = function (int $carriers): bool {
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ'])->getMock();
-            $math->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -2.1);
+            $math = new ScriptedDraws(generatePersistentZ: [0.0, 0.0, -2.1]);
             $industry = new IndustryRegimeView([], $carriers);
             $this->model->useIndustryRegimes($industry);
             $this->model->computeActualFinancials((new Stock())->setTicker('TEL_ONSET')->setBeta('0.8'), 100_000_000.0, 0.45, 20_000_000.0, 0.10, new MacroStateDTO(outputGapEma: 0.0), $math);
@@ -429,8 +420,7 @@ class TelecomBusinessModelTest extends TestCase
         $churn = StockModelTuning::resolve('SKUA', [ModelParam::BaseQuarterlyChurn->value => TelecomBusinessModel::BASE_QUARTERLY_CHURN])[ModelParam::BaseQuarterlyChurn];
         $this->assertGreaterThan(TelecomBusinessModel::BASE_QUARTERLY_CHURN, $churn, 'the challenger\'s prepaid-heavy base turns over faster');
 
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $run = function (string $ticker, int $warQuarter) use ($math) {
             $this->model->useIndustryRegimes(new IndustryRegimeView($warQuarter > 0 ? [TelecomBusinessModel::REGIME_PRICE_WAR => $warQuarter] : [], 2));
             $result = $this->model->computeActualFinancials((new Stock())->setTicker($ticker)->setBeta('0.8'), 100_000_000.0, 0.45, 20_000_000.0, 0.10, new MacroStateDTO(outputGapEma: 0.0), $math);

@@ -8,25 +8,20 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\MockObject\MockObject;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class SemiconductorBusinessModelTest extends TestCase
 {
     private SemiconductorBusinessModel $model;
-    private MathUtility&MockObject $mathUtilityMock;
+    private ScriptedDraws $mathUtilityMock;
 
     protected function setUp(): void
     {
         $this->model = new SemiconductorBusinessModel();
-        $this->mathUtilityMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
+        $this->mathUtilityMock = new ScriptedDraws();
     }
 
     /**
@@ -35,7 +30,6 @@ class SemiconductorBusinessModelTest extends TestCase
      */
     public function testTheWaferCostRatioDoesNotReadTheReinvestmentRate(): void
     {
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $costs = function (string $capexRatio): float {
             $stock = new Stock();
             $stock->setTicker('SEMI');
@@ -53,7 +47,6 @@ class SemiconductorBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('TSMC');
         $stock->setCapexRatio('0.80');
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $run = fn(array $macro) => $this->model->computeActualFinancials($stock, 1000.0, 0.30, 200.0, 0.20, MacroStateDTO::fromArray(['output_gap_ema' => 0.0] + $macro), $this->mathUtilityMock);
 
         $baseline = $run([]);
@@ -78,8 +71,6 @@ class SemiconductorBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('FOUNDRY');
         $stock->setCapexRatio('0.80');
-
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $macroNormal = MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
@@ -120,8 +111,7 @@ class SemiconductorBusinessModelTest extends TestCase
             $stock = new Stock();
             $stock->setTicker('FAB');
             $stock->setBeta('1.2');
-            $math = $this->createStub(MathUtility::class);
-            $math->method('generatePersistentZ')->willReturn(0.0);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0);
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, new MacroStateDTO(inventoryStockGapEma: $inventoryGap), $math);
         };
 

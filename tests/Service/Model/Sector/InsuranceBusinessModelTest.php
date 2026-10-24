@@ -13,10 +13,9 @@ use App\Service\Math\TimeSeries;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class InsuranceBusinessModelTest extends TestCase
 {
     public function testCalculateMinOperatingCashAndTargetCash(): void
@@ -114,12 +113,8 @@ class InsuranceBusinessModelTest extends TestCase
         $stock->setTicker('TEST');
         $stock->setBeta('0.6');
 
-        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
-        $mathUtilityMock->method('generateStandardNormal')
-            // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = -2.5 (Severe catastrophe)
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5);
+        // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = -2.5 (Severe catastrophe)
+        $mathUtilityMock = new ScriptedDraws(generateStandardNormal: [0.0, 0.0, -2.5]);
 
         $macroState = MacroStateDTO::fromArray([
             'inflation_ema' => 0.02,
@@ -194,12 +189,8 @@ class InsuranceBusinessModelTest extends TestCase
         // channel stays out of a test about the claim channel.
         $stock->setTotalEquity('26666666667.0');
 
-        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
         // Firm factor = 0.0, Revenue Z = 0.0, Claim Z = 2.0: nothing in the firm's own large-loss layer.
-        $mathUtilityMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.0);
+        $mathUtilityMock = new ScriptedDraws(generateStandardNormal: [0.0, 0.0, 2.0]);
 
         $quietBurden = 0.5;
         $window = DistrictCatastropheWindow::prime($stock, $quietBurden);
@@ -424,12 +415,8 @@ class InsuranceBusinessModelTest extends TestCase
         $baselineVol = 0.20; // with REVENUE_VARIANCE_SCALAR = 0.05, shock magnitude is vol * 0.05
 
         // 1. Negative Revenue Shock (Revenue drops, expense ratio as % of revenue rises due to operating overhead)
-        $mockNegRevenue = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
-        $mockNegRevenue->method('generateStandardNormal')
-            // Firm factor = 0.0, composite Revenue Z = -2.0 (financial loading 0.40), Claim Z = 0.0
-            ->willReturnOnConsecutiveCalls(0.0, -2.0 / sqrt(1.0 - 0.16), 0.0);
+        // Firm factor = 0.0, composite Revenue Z = -2.0 (financial loading 0.40), Claim Z = 0.0
+        $mockNegRevenue = new ScriptedDraws(generateStandardNormal: [0.0, -2.0 / sqrt(1.0 - 0.16), 0.0]);
 
         $resultNeg = $model->computeActualFinancials(
             $stock,
@@ -442,12 +429,8 @@ class InsuranceBusinessModelTest extends TestCase
         );
 
         // 2. Positive Revenue Shock (Revenue expands, expense ratio as % of revenue declines)
-        $mockPosRevenue = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
-        $mockPosRevenue->method('generateStandardNormal')
-            // Firm factor = 0.0, composite Revenue Z = 2.0 (financial loading 0.40), Claim Z = 0.0
-            ->willReturnOnConsecutiveCalls(0.0, 2.0 / sqrt(1.0 - 0.16), 0.0);
+        // Firm factor = 0.0, composite Revenue Z = 2.0 (financial loading 0.40), Claim Z = 0.0
+        $mockPosRevenue = new ScriptedDraws(generateStandardNormal: [0.0, 2.0 / sqrt(1.0 - 0.16), 0.0]);
 
         $resultPos = $model->computeActualFinancials(
             $stock,
@@ -950,11 +933,7 @@ class InsuranceBusinessModelTest extends TestCase
     /** Draws pinned so the claim Z carries no catastrophe: the capital channel is what is under test. */
     private function scriptedMath(): MathUtility
     {
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'checkProbability'])->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('checkProbability')->willReturn(false);
-
-        return $math;
+        return new ScriptedDraws();
     }
 
     /** A solvent underwriter with the given surplus, carrying no float large enough to imply runoff equity. */
@@ -1067,10 +1046,7 @@ class InsuranceBusinessModelTest extends TestCase
                 $stock->setTicker('CARR');
                 $stock->setBeta('0.6');
                 $stock->setTotalEquity('60000000000');
-                $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generatePersistentZ', 'checkProbability'])->getMock();
-                $math->method('generateStandardNormal')->willReturn(0.0);
-                $math->method('generatePersistentZ')->willReturn(0.0);
-                $math->method('checkProbability')->willReturn(false);
+                $math = new ScriptedDraws(generatePersistentZ: 0.0);
                 $macro = new MacroStateDTO(...['inflationEma' => 0.02, 'policyRateEma' => 0.03, 'yield10yEma' => 0.04, ...DistrictCatastropheWindow::prime($stock, $burden)]);
 
                 return $carrier->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $macro, $math)->actualVariableCosts;
@@ -1092,10 +1068,7 @@ class InsuranceBusinessModelTest extends TestCase
             $stock->setTicker('CARR');
             $stock->setBeta('0.6');
             $stock->setTotalEquity('200000000000'); // far above the Kenney target: no capital trigger
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generatePersistentZ', 'checkProbability'])->getMock();
-            $math->method('generateStandardNormal')->willReturn(0.0);
-            $math->method('generatePersistentZ')->willReturn(0.0);
-            $math->method('checkProbability')->willReturn(false);
+            $math = new ScriptedDraws(generatePersistentZ: 0.0);
             $macro = new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, catastropheLossIndexEma: $burden);
 
             return $model->computeActualFinancials($stock, 50_000_000_000.0, 0.60, 2_000_000_000.0, 0.15, $macro, $math)->streamZ;

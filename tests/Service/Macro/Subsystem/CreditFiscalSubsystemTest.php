@@ -21,6 +21,7 @@ use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 class CreditFiscalSubsystemTest extends TestCase
@@ -511,10 +512,7 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         // Pin the ASRF systemic noise draw: with the real RNG the calm state's random shock can outweigh
         // the freeze state's deterministic stress term, so the comparison must isolate the stress channel.
-        $mathUtility = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generateStandardNormal'])
-            ->getMock();
-        $mathUtility->expects($this->exactly(2))->method('generateStandardNormal')->willReturn(0.0);
+        $mathUtility = new ScriptedDraws();
         $subsystem = new CreditFiscalSubsystem($mathUtility);
 
         $stateCalm = new MacroState();
@@ -533,6 +531,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $subsystem->calculateRetailDefaultRate($stateCreditFreeze, 0.25);
 
+        $this->assertSame(2, $mathUtility->callCount('generateStandardNormal'));
         // Retail default rate must transmit wholesale credit stress into consumer distress
         $this->assertGreaterThan($stateCalm->retailDefaultRate, $stateCreditFreeze->retailDefaultRate);
     }
@@ -703,16 +702,7 @@ class CreditFiscalSubsystemTest extends TestCase
     /** Deterministic subsystem: no diffusion draw, no jump arrival. */
     private function quietSubsystem(): CreditFiscalSubsystem
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $math = new ScriptedDraws();
 
         return new CreditFiscalSubsystem($math);
     }
@@ -1568,20 +1558,10 @@ class CreditFiscalSubsystemTest extends TestCase
 
     public function testACrisisReleasesTheWholeBufferOnTheDay(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return true;
-            }
-            public function calculateJumpDiffusion(float $lambda, float $jumpMean, float $jumpVol, float $dt): array
-            {
-                return ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null];
-            }
-        };
+        $math = new ScriptedDraws(
+            checkProbability: true,
+            calculateJumpDiffusion: ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null],
+        );
         $state = new MacroState();
         $state->totalTime = 12.5;
         $state->creditToGdpGapEma = CreditFiscalSubsystem::CCYB_GAP_CEILING + 0.02;
@@ -1728,20 +1708,14 @@ class CreditFiscalSubsystemTest extends TestCase
     /** The unexplained household credit factor is state: a shock today is still in the default rate next quarter. */
     public function testTheHouseholdCreditFactorPersistsAcrossTicks(): void
     {
-        $math = new class extends MathUtility {
-            public float $draw = -1.0;
-            public function generateStandardNormal(): float
-            {
-                return $this->draw;
-            }
-        };
+        $math = new ScriptedDraws(generateStandardNormal: -1.0);
         $subsystem = new CreditFiscalSubsystem($math);
 
         $state = new MacroState();
         $state->unemploymentRateEma = $state->nairu;
         $subsystem->calculateRetailDefaultRate($state, 0.25);
         $shocked = $state->retailCreditFactor;
-        $math->draw = 0.0;
+        $math->script(generateStandardNormal: 0.0);
         $subsystem->calculateRetailDefaultRate($state, 0.25);
 
         $this->assertLessThan(0.0, $shocked);
@@ -1923,20 +1897,10 @@ class CreditFiscalSubsystemTest extends TestCase
 
     public function testACrisisBooksADragScaledByTheBoomAndForcesTheFundingRun(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return true;
-            }
-            public function calculateJumpDiffusion(float $lambda, float $jumpMean, float $jumpVol, float $dt): array
-            {
-                return ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null];
-            }
-        };
+        $math = new ScriptedDraws(
+            checkProbability: true,
+            calculateJumpDiffusion: ['multiplier' => 1.0, 'shock_pct' => null, 'exponent' => null],
+        );
         $subsystem = new CreditFiscalSubsystem($math);
 
         $state = new MacroState();
@@ -1999,12 +1963,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
     public function testThinCapitalDeepensEveryCrisisDrag(): void
     {
-        $math = new class extends MathUtility {
-            public function checkProbability(float $probability): bool
-            {
-                return true;
-            }
-        };
+        $math = new ScriptedDraws(checkProbability: true);
         $state = new MacroState();
         $state->totalTime = 12.5;
         (new CreditFiscalSubsystem($math))->calculateCreditCrisisHazard($state, 1.0 / 3600.0);
@@ -2035,12 +1994,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertLessThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(\App\Service\Politics\Department\FinancialRegulator::STRICTEST_REQUIREMENT), 'The strictest head softens the drag the most.');
         $this->assertGreaterThan(CreditFiscalSubsystem::thinCapitalDragScale($opening), CreditFiscalSubsystem::thinCapitalDragScale(0.0843));
 
-        $math = new class extends MathUtility {
-            public function checkProbability(float $probability): bool
-            {
-                return true;
-            }
-        };
+        $math = new ScriptedDraws(checkProbability: true);
         $crisis = static function (float $requirement, float $built) use ($math): float {
             $state = new MacroState();
             $state->totalTime = 12.5;
@@ -2107,16 +2061,7 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testACrisisTightensLendingStandardsThroughThePremiumItBooks(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return true;
-            }
-        };
+        $math = new ScriptedDraws(checkProbability: true);
         $subsystem = new CreditFiscalSubsystem($math);
         $quiet = $this->quietSubsystem();
 
@@ -2257,16 +2202,7 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testAShockMovesAHighPremiumFurtherThanALowOne(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 1.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $math = new ScriptedDraws(generateStandardNormal: 1.0);
         $subsystem = new CreditFiscalSubsystem($math);
         $shift = CreditFiscalSubsystem::EBP_DISPLACEMENT;
 
@@ -2285,16 +2221,7 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testThePremiumCannotFallThroughItsDisplacement(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return -8.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return true;
-            }
-        };
+        $math = new ScriptedDraws(generateStandardNormal: -8.0, checkProbability: true);
         $subsystem = new CreditFiscalSubsystem($math);
 
         $state = new MacroState();
@@ -2307,16 +2234,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
     public function testACrisisBooksThe2008PremiumJump(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return true;
-            }
-        };
+        $math = new ScriptedDraws(checkProbability: true);
         $subsystem = new CreditFiscalSubsystem($math);
 
         $state = new MacroState();
@@ -2340,16 +2258,7 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testTheCreditBlockHasNoLoop(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-        };
+        $math = new ScriptedDraws();
         $credit = new CreditFiscalSubsystem($math);
         $assets = new AssetMarketSubsystem($math);
 
@@ -2378,20 +2287,9 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testSpreadsAndStandardsFadeWhileTheGapStaysDeep(): void
     {
-        $math = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-            public function checkProbability(float $probability): bool
-            {
-                return false;
-            }
-            public function calculateSVJJJumps(float $lambda, float $pUp, float $etaUp, float $etaDown, float $muV, float $dt): array
-            {
-                return ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0];
-            }
-        };
+        $math = new ScriptedDraws(
+            calculateSVJJJumps: ['price_multiplier' => 1.0, 'var_jump' => 0.0, 'shock_pct' => 0.0],
+        );
         $credit = new CreditFiscalSubsystem($math);
         $assets = new AssetMarketSubsystem($math);
 

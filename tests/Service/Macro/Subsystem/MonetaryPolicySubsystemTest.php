@@ -14,6 +14,7 @@ use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Tests\Support\ScriptedDraws;
 use App\Tests\Support\YieldCurveProbe;
 use PHPUnit\Framework\TestCase;
 
@@ -667,12 +668,7 @@ class MonetaryPolicySubsystemTest extends TestCase
 
     public function testBroadMoneyGrowsWithTheLabourForce(): void
     {
-        $quiet = new MonetaryPolicySubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        });
+        $quiet = new MonetaryPolicySubsystem(new ScriptedDraws());
         $neutralGrowth = MacroConstants::TARGET_INFLATION + MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE;
         $structural = new MacroState();
         $structural->moneySupplyGrowth = $neutralGrowth;
@@ -691,12 +687,7 @@ class MonetaryPolicySubsystemTest extends TestCase
      */
     public function testMoneyGrowthTrendIsADecadesAverageOfTheGrowth(): void
     {
-        $quiet = new MonetaryPolicySubsystem(new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        });
+        $quiet = new MonetaryPolicySubsystem(new ScriptedDraws());
         $neutralGrowth = MacroConstants::TARGET_INFLATION + MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE;
         $state = new MacroState();
         $state->moneySupplyGrowth = $neutralGrowth;
@@ -888,12 +879,7 @@ class MonetaryPolicySubsystemTest extends TestCase
 
     public function testTermPremiumShockDecaysAndRegimeRevertsToBaselineWithoutInnovations(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $subsystem = new MonetaryPolicySubsystem($quiet);
 
         $state = new MacroState();
@@ -910,12 +896,7 @@ class MonetaryPolicySubsystemTest extends TestCase
 
     public function testTermPremiumStatesAreClampedToTheirStructuralBounds(): void
     {
-        $extreme = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 40.0;
-            }
-        };
+        $extreme = new ScriptedDraws(generateStandardNormal: 40.0);
         $subsystem = new MonetaryPolicySubsystem($extreme);
 
         $state = new MacroState();
@@ -1433,23 +1414,13 @@ class MonetaryPolicySubsystemTest extends TestCase
 
     public function testExpectedPathShockDecaysAtItsOwnRateAndIsCapped(): void
     {
-        $quiet = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        $quiet = new ScriptedDraws();
         $state = new MacroState();
         $state->expectedPathShock = 0.03;
         (new MonetaryPolicySubsystem($quiet))->updateTermPremiumDynamics($state, 1.0);
         $this->assertEqualsWithDelta(0.03 * exp(-MonetaryPolicySubsystem::EXPECTED_PATH_SHOCK_KAPPA), $state->expectedPathShock, 0.00001, 'Without news the repricing fades at its OU rate, a half-life of months rather than years.');
 
-        $extreme = new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 40.0;
-            }
-        };
+        $extreme = new ScriptedDraws(generateStandardNormal: 40.0);
         $state = new MacroState();
         (new MonetaryPolicySubsystem($extreme))->updateTermPremiumDynamics($state, 1.0);
         $this->assertEqualsWithDelta(MonetaryPolicySubsystem::EXPECTED_PATH_SHOCK_CAP, $state->expectedPathShock, 0.00001, 'A repricing is capped: it is never a regime change.');

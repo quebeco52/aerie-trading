@@ -10,6 +10,7 @@ use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\HomebuilderBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 final class HomebuilderBusinessModelTest extends TestCase
@@ -29,17 +30,7 @@ final class HomebuilderBusinessModelTest extends TestCase
     /** Every order draw at zero, so housing starts and the house price are the only things moving. */
     private function quietDraws(): MathUtility
     {
-        return new class extends MathUtility {
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return 0.0;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
+        return new ScriptedDraws(generatePersistentZ: 0.0);
     }
 
     private function builder(): Stock

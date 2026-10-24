@@ -11,6 +11,7 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\PortTerminalBusinessModel;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
 final class PortTerminalBusinessModelTest extends TestCase
@@ -29,26 +30,12 @@ final class PortTerminalBusinessModelTest extends TestCase
      * Every demand draw at zero; the exogenous event draw (no common loading) at $eventZ, and the strike's exit
      * draw answering $settles.
      */
-    private function draws(float $eventZ = 0.0, bool $settles = false): MathUtility
+    private function draws(float $eventZ = 0.0, bool $settles = false): ScriptedDraws
     {
-        return new class ($eventZ, $settles) extends MathUtility {
-            public function __construct(private readonly float $eventZ, private readonly bool $settles) {}
-
-            public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
-            {
-                return $commonInnovation === null ? $this->eventZ : 0.0;
-            }
-
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-
-            public function checkProbability(float $probability): bool
-            {
-                return $this->settles;
-            }
-        };
+        return new ScriptedDraws(
+            generatePersistentZ: static fn(float $previousZ, float $phi, ?float $commonInnovation): float => $commonInnovation === null ? $eventZ : 0.0,
+            checkProbability: $settles,
+        );
     }
 
     private function terminal(): Stock

@@ -6,10 +6,9 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -18,7 +17,6 @@ use PHPUnit\Framework\TestCase;
  * cost is per unit, so it stays linear in the draw: a margin term that also lowered the cost ratio with the same draw
  * (scale, attach, learning-curve or cachet elasticities) counted the leverage twice and bent costs quadratic.
  */
-#[AllowMockObjectsWithoutExpectations]
 final class DemandDrawLeavesCostRatioTest extends TestCase
 {
     /**
@@ -58,10 +56,7 @@ final class DemandDrawLeavesCostRatioTest extends TestCase
      */
     private function quarter(string $model, string $stream, float $phi, float $z): array
     {
-        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal', 'generateUniform', 'checkProbability'])->getMock();
-        $math->method('generateStandardNormal')->willReturn(0.0);
-        $math->method('generateUniform')->willReturn(0.5);
-        $math->method('checkProbability')->willReturn(false);
+        $math = new ScriptedDraws(generateUniform: 0.5);
 
         $stock = (new Stock())->setTicker('DRAW')->setBeta('1.0')->setTotalEquity('500000000');
         $stock->setEarningsMomentumZ([$stream => $z / $phi]);

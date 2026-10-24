@@ -6,13 +6,11 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LogisticsBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class LogisticsBusinessModelTest extends TestCase
 {
     private LogisticsBusinessModel $model;
@@ -40,8 +38,7 @@ class LogisticsBusinessModelTest extends TestCase
             energyPriceIndexEma: 100.0,
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baseResult = $this->model->computeActualFinancials(
             $stock,
@@ -112,8 +109,7 @@ class LogisticsBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(energyPriceIndexEma: 100.0);
         $spikeMacro = new MacroStateDTO(energyPriceIndexEma: 160.0, energyCostPushLag: 0.0060);
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $baseMacro, $mathMock);
         $spikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $spikeMacro, $mathMock);
@@ -129,8 +125,7 @@ class LogisticsBusinessModelTest extends TestCase
     public function testSurgePricingIsTheTailOfTheSpotShockNotAMultiplierOnIt(): void
     {
         $spot = function (float $z): \App\DTO\ActualFinancialsDTO {
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
-            $math->method('generateStandardNormal')->willReturn(0.0);
+            $math = new ScriptedDraws();
             $stock = (new Stock())->setTicker('FDX')->setBeta('1.2');
             $stock->setEarningsMomentumZ(['spot_freight_brokerage' => $z / 0.15]);
 
@@ -153,8 +148,7 @@ class LogisticsBusinessModelTest extends TestCase
     /** Slow deliveries send shippers to the spot market and fast ones bring them back, by the same amount. */
     public function testSupplierDeliveryTimesMoveSpotDemandBothWays(): void
     {
-        $math = $this->createStub(MathUtility::class);
-        $math->method('generatePersistentZ')->willReturn(0.0);
+        $math = new ScriptedDraws(generatePersistentZ: 0.0);
         $run = fn(float $deliveries): float => $this->model->computeActualFinancials(
             (new Stock())->setTicker('FDX')->setBeta('1.2'),
             100_000_000.0,

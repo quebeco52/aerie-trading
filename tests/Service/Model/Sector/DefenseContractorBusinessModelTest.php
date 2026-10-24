@@ -11,10 +11,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use App\Service\Model\StreamContext;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use App\Tests\Support\MacroStateBuilder;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class DefenseContractorBusinessModelTest extends TestCase
 {
     private function createMacroState(
@@ -24,42 +24,14 @@ class DefenseContractorBusinessModelTest extends TestCase
         float $nominalGdpIndex = 1.0,
         float $energyPriceIndexEma = 100.0,
     ): MacroStateDTO {
-        return new MacroStateDTO(
-            outputGap: 0.0,
-            outputGapEma: 0.0,
-            unemploymentRate: 0.04,
-            unemploymentRateEma: 0.04,
+        return MacroStateBuilder::flatCurveDto(
             energyPriceIndex: $energyPriceIndexEma,
             energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: $energyPriceShock,
-            consumerSentimentIndex: 100.0,
-            consumerSentimentIndexEma: 100.0,
             inflation: $inflation,
             inflationEma: $inflation,
-            policyRate: 0.04,
-            policyRateEma: 0.04,
-            targetRate: 0.04,
-            yield2y: 0.04,
-            yield2yEma: 0.04,
-            yield5y: 0.04,
-            yield5yEma: 0.04,
-            yield10y: 0.04,
-            yield10yEma: 0.04,
-            yield30y: 0.04,
-            yield30yEma: 0.04,
-            marketVolatility: 0.15,
-            marketVolatilityEma: 0.15,
-            marketZ: 0.0,
-            corporateTaxRate: 0.21,
-            equityRiskPremium: 0.05,
             macroCreditSpread: $macroCreditSpread,
             macroCreditSpreadEma: $macroCreditSpread,
-            qeActive: false,
-            inversionDuration: 0.0,
-            nsLevel: 0.04,
-            nsSlope: 0.0,
-            nsSlopeEma: 0.0,
-            nsCurvature: 0.0,
             potentialGdpIndex: $nominalGdpIndex,
             nominalGdpIndex: $nominalGdpIndex,
         );
@@ -69,21 +41,12 @@ class DefenseContractorBusinessModelTest extends TestCase
      * Scripted stream draws; the overrun's onset dice are pinned, so a programme goes into overrun only where a test
      * says so.
      */
-    private function createMathUtilityMock(array $persistentZCalls = [], bool $overrunOnset = false): MathUtility
+    private function createMathUtilityMock(array $persistentZCalls = [], bool $overrunOnset = false): ScriptedDraws
     {
-        $mock = $this->getMockBuilder(MathUtility::class)
-            ->onlyMethods(['generatePersistentZ', 'checkProbability'])
-            ->getMock();
-
-        if (!empty($persistentZCalls)) {
-            $mock->method('generatePersistentZ')
-                ->willReturnOnConsecutiveCalls(...array_values($persistentZCalls));
-        }
-        $mock->method('checkProbability')->willReturnCallback(
-            static fn(float $probability): bool => $overrunOnset && $probability === DefenseContractorBusinessModel::PROGRAM_OVERRUN_ONSET_HAZARD,
+        return new ScriptedDraws(
+            generatePersistentZ: $persistentZCalls === [] ? 0.0 : array_values($persistentZCalls),
+            checkProbability: static fn(float $probability): bool => $overrunOnset && $probability === DefenseContractorBusinessModel::PROGRAM_OVERRUN_ONSET_HAZARD,
         );
-
-        return $mock;
     }
 
     /**
@@ -388,7 +351,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             'share:foreign_military_sales'   => 0.50,
         ]);
 
-        $mathUtility = new MathUtility();
+        $mathUtility = MathUtility::ownStream(20261024);
         $macroState = $this->createMacroState();
 
         $result1 = $model->computeActualFinancials(
@@ -425,8 +388,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock->setTicker('GRIP');
         $stock->setBeta('0.8');
 
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $run = fn(MacroStateDTO $macro) => $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock)->streamRevenue;
 
         $base = $run(new MacroStateDTO(alliedDefenseSpendingIndexEma: 100.0, exchangeRateIndexEma: 100.0));
@@ -452,8 +414,7 @@ class DefenseContractorBusinessModelTest extends TestCase
     public function testDistrictPurchasesBuyNoArmsButAlliedBudgetsDo(): void
     {
         $model = new DefenseContractorBusinessModel();
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $programmes = function (MacroStateDTO $macro) use ($model, $mathMock): float {
             $stock = new Stock();
             $stock->setTicker('GRIP');
@@ -477,8 +438,7 @@ class DefenseContractorBusinessModelTest extends TestCase
     {
         $model = new DefenseContractorBusinessModel();
         $macro = $this->createMacroState(inflation: MacroConstants::TARGET_INFLATION);
-        $mathMock = $this->createStub(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $seeded = new Stock();
         $seeded->setTicker('GRIP');
@@ -510,12 +470,11 @@ class DefenseContractorBusinessModelTest extends TestCase
             $stock->setTicker('DEF');
             $stock->setBeta('1.0');
             $stock->setEarningsMomentumZ($momentum);
-            // Partial mock: stream draws and regime dice are scripted, the mix-drift weight math stays real.
-            $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ', 'checkProbability'])->getMock();
+            // Stream draws and regime dice are scripted; the mix-drift weight math stays real.
             // The fixed-price stream is recognised by its sentinel previous value; every other draw is flat.
-            $math->method('generatePersistentZ')->willReturnCallback(fn(float $prev): float => $prev === -9.9 ? $fixedPriceZ : 0.0);
-            $math->method('checkProbability')->willReturnCallback(
-                static fn(float $p): bool => $p === DefenseContractorBusinessModel::PROGRAM_OVERRUN_ONSET_HAZARD ? $onset : $exits,
+            $math = new ScriptedDraws(
+                generatePersistentZ: fn(float $prev): float => $prev === -9.9 ? $fixedPriceZ : 0.0,
+                checkProbability: static fn(float $p): bool => $p === DefenseContractorBusinessModel::PROGRAM_OVERRUN_ONSET_HAZARD ? $onset : $exits,
             );
             return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.10, $macro, $math);
         };
