@@ -6,6 +6,10 @@ namespace App\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Macro\Subsystem\Aggregate\ConsumerPrices;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
+use App\Service\Macro\Subsystem\Aggregate\NationalAccounts;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
@@ -218,7 +222,7 @@ class AssetMarketSubsystem
      * home use are the mainland's exports, its main trading partner's, moving 1.4 times its demand (IMF WEO 2015) at
      * their share of its GDP, scaled to the mainland's size.
      */
-    public const FOREIGN_IMPORT_SPILLOVER = MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroConstants::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
+    public const FOREIGN_IMPORT_SPILLOVER = OpenEconomy::IMPORT_DEMAND_ELASTICITY * OpenEconomy::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroConstants::DISTRICT_GDP_USD / self::MAINLAND_GDP_USD;
     /** Guard on the mainland gap, beyond the deepest postwar CBO gap; the fitted process does not reach it. */
     public const MAX_FOREIGN_GAP = 0.10;
     /**
@@ -964,7 +968,7 @@ class AssetMarketSubsystem
      */
     public static function mainlandBreakeven(float $coreYearOnYear): float
     {
-        return MacroConstants::TARGET_INFLATION + (MacroAggregateSubsystem::BREAKEVEN_CORE_LOADING * ($coreYearOnYear - MacroConstants::TARGET_INFLATION));
+        return MacroConstants::TARGET_INFLATION + (ConsumerPrices::BREAKEVEN_CORE_LOADING * ($coreYearOnYear - MacroConstants::TARGET_INFLATION));
     }
 
     /**
@@ -982,7 +986,7 @@ class AssetMarketSubsystem
      */
     public function calculateConsumerSentiment(MacroState $state, float $dt): void
     {
-        $inflationYearOnYear = MacroAggregateSubsystem::consumerPriceInflationYearOnYear($state->consumerPriceMonthly) ?? $state->inflationEma;
+        $inflationYearOnYear = NationalAccounts::consumerPriceInflationYearOnYear($state->consumerPriceMonthly) ?? $state->inflationEma;
         $unemploymentChange = LaborMarketSubsystem::unemploymentChangeYearOnYear($state->unemploymentMonthly) ?? 0.0;
 
         $slack = self::SENTIMENT_SLACK_LOADING * ($state->unemploymentRate - $state->nairu);
@@ -1029,7 +1033,7 @@ class AssetMarketSubsystem
     {
         $creditZ = ($state->macroCreditSpreadEma - self::FCI_CREDIT_MEAN) / self::FCI_CREDIT_STD;
         $erpZ = ($state->equityRiskPremium - self::FCI_ERP_MEAN) / self::FCI_ERP_STD;
-        $fxZ = MacroAggregateSubsystem::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend) / self::FCI_FX_STD;
+        $fxZ = OpenEconomy::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend) / self::FCI_FX_STD;
         $slopeZ = - ($state->nsSlopeEma - self::FCI_SLOPE_MEAN) / self::FCI_SLOPE_STD;
         $volZ = ($state->marketVolatilityEma - self::FCI_VOL_MEAN) / self::FCI_VOL_STD;
         $sloosZ = ($state->sloosTighteningIndexEma - self::FCI_SLOOS_MEAN) / self::FCI_SLOOS_STD;
@@ -1116,7 +1120,7 @@ class AssetMarketSubsystem
      */
     public function calculateAlliedDefenseSpending(MacroState $state, float $dt): void
     {
-        // Its reader takes log(index / baseline) (MacroAggregateSubsystem::alliedDefenseGap()), so the log centres on
+        // Its reader takes log(index / baseline) (OpenEconomy::alliedDefenseGap()), so the log centres on
         // the baseline: the mobilisations' log drift lambda mu / kappa is netted out (Merton 1976), then Schwartz's
         // alpha.
         $jumpLogShift = StochasticProcesses::logOuJumpLogShift(self::ALLIED_MOBILISATION_PROBABILITY, self::ALLIED_DEFENSE_MEAN_REVERSION, self::ALLIED_MOBILISATION_MEAN);
@@ -1288,7 +1292,7 @@ class AssetMarketSubsystem
      * Mundell-Fleming Open Economy Trade Balance & Net Exports to GDP.
      *
      * The structural balance, plus the net exports the output gap already carries (the mainland's demand and the real
-     * exchange rate: MacroAggregateSubsystem::netExportGapAt), less the imports domestic demand draws in (IMF WEO
+     * exchange rate: OpenEconomy::netExportGapAt), less the imports domestic demand draws in (IMF WEO
      * October 2015, Ch. 3: 1.4% of imports for home use per 1% of domestic demand):
      *   NX/Y = Baseline + NetExportGap - M/Y * 1.4 * (OutputGap - NetExportGap)
      *
@@ -1300,7 +1304,7 @@ class AssetMarketSubsystem
         $domesticDemandGap = $state->outputGap - $state->netExportGap;
         $targetTradeBalance = MacroConstants::TRADE_BALANCE_BASELINE
             + $state->netExportGap
-            - (MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * $domesticDemandGap);
+            - (OpenEconomy::DISTRICT_DOMESTIC_IMPORT_SHARE * OpenEconomy::IMPORT_DEMAND_ELASTICITY * $domesticDemandGap);
 
         $targetTradeBalance = max(self::MIN_TRADE_BALANCE, min(self::MAX_TRADE_BALANCE, $targetTradeBalance));
 
@@ -1395,7 +1399,7 @@ class AssetMarketSubsystem
     private static function householdFormationStarts(MacroState $state): float
     {
         $gapChange = (($state->unemploymentRate - $state->unemploymentRateEma) - ($state->nairu - $state->nairuEma))
-            / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS;
+            / MovingAverages::STANDARD_EMA_HORIZON_YEARS;
 
         return -self::HEADSHIP_UNEMPLOYMENT_SEMI_ELASTICITY * $gapChange / self::HOUSING_STARTS_TO_STOCK;
     }

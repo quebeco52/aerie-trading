@@ -7,7 +7,7 @@ namespace App\Tests\Service\Politics\Department;
 use App\Data\Politics\AerieCouncil;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Politics\Council\CouncilAppointments as Appointments;
@@ -61,8 +61,8 @@ class FairTradingBoardTest extends TestCase
      */
     public function testAStanceRunsFromTheLightestGuidelinesToTheStrictest(): void
     {
-        $lightest = MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency(-1.0));
-        $strictest = MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency(1.0));
+        $lightest = MergerReview::reviewScreens(FairTradingBoard::leniency(-1.0));
+        $strictest = MergerReview::reviewScreens(FairTradingBoard::leniency(1.0));
         $this->assertEqualsWithDelta(0.25, $lightest['concentrated'], 1e-12);
         $this->assertEqualsWithDelta(0.02, $lightest['delta'], 1e-12);
         $this->assertSame(1.0, $lightest['shareCeiling']);

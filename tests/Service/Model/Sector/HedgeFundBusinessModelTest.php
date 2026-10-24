@@ -353,7 +353,7 @@ class HedgeFundBusinessModelTest extends TestCase
 
     /**
      * The treasury's expected yield is the mix's, and volatility is no drag on it: a crash reaches the co-investments
-     * through the board's own fall, at the mark (EarningsEngine::markEquitySleeve()), not a second time here.
+     * through the board's own fall, at the mark (InvestmentMarkLedger::markEquitySleeve()), not a second time here.
      */
     public function testTreasuryYieldAndItsEquitySleeve(): void
     {

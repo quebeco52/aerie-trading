@@ -7,9 +7,10 @@ namespace App\Tests\Service\Market\Pricing;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Deal\AcquisitionEngine;
+use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\MathUtility;
@@ -28,7 +29,8 @@ class StockTrackerTest extends TestCase
     private MarketEngine&Stub $marketEngineMock;
     private EarningsEngine&Stub $earningsEngineMock;
     private CorporateActionEngine&Stub $corporateActionEngineMock;
-    private MergerAndAcquisitionEngine&Stub $maEngineMock;
+    private AcquisitionEngine&Stub $acquisitionEngineMock;
+    private DivestitureEngine&Stub $divestitureEngineMock;
     private MarketEventPublisher&Stub $marketEventMock;
     private DebtEngine&Stub $debtEngineMock;
     private MathUtility&Stub $mathUtilityMock;
@@ -42,7 +44,8 @@ class StockTrackerTest extends TestCase
         $this->marketEngineMock = $this->createStub(MarketEngine::class);
         $this->earningsEngineMock = $this->createStub(EarningsEngine::class);
         $this->corporateActionEngineMock = $this->createStub(CorporateActionEngine::class);
-        $this->maEngineMock = $this->createStub(MergerAndAcquisitionEngine::class);
+        $this->acquisitionEngineMock = $this->createStub(AcquisitionEngine::class);
+        $this->divestitureEngineMock = $this->createStub(DivestitureEngine::class);
         $this->marketEventMock = $this->createStub(MarketEventPublisher::class);
         $this->debtEngineMock = $this->createStub(DebtEngine::class);
         $this->mathUtilityMock = $this->createStub(MathUtility::class);
@@ -90,7 +93,8 @@ class StockTrackerTest extends TestCase
             $this->marketEngineMock,
             $this->earningsEngineMock,
             $this->corporateActionEngineMock,
-            $this->maEngineMock,
+            $this->acquisitionEngineMock,
+            $this->divestitureEngineMock,
             $this->marketEventMock,
             $this->debtEngineMock,
             $this->corporateMetricsMock,

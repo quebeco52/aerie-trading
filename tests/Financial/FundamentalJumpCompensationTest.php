@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
-use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Earnings\OperatingCapacityEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Merton (1976) compensation of the fundamental jump that lands on a quarter's demand (EarningsEngine). The jump
- * is skewed down (mean -sigma/2 of the price jump), so uncompensated it lowered every firm's revenue by lambda x
+ * Merton (1976) compensation of the fundamental jump that lands on a quarter's demand (OperatingCapacityEngine). The
+ * jump is skewed down (mean -sigma/2 of the price jump), so uncompensated it lowered every firm's revenue by lambda x
  * E[e^J - 1] x dt each quarter, 0.2-0.7% at the seeded intensities, a level bias nothing else offset.
  */
 class FundamentalJumpCompensationTest extends TestCase
@@ -28,9 +28,9 @@ class FundamentalJumpCompensationTest extends TestCase
 
     public function testTheCompensatedJumpLeavesDemandUnbiased(): void
     {
-        $intensity = self::PRICE_JUMP_INTENSITY * EarningsEngine::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
-        $vol = self::PRICE_JUMP_VOL * EarningsEngine::FUNDAMENTAL_JUMP_VOL_SCALE;
-        $mean = -self::PRICE_JUMP_VOL * EarningsEngine::FUNDAMENTAL_JUMP_MEAN_SCALE;
+        $intensity = self::PRICE_JUMP_INTENSITY * OperatingCapacityEngine::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
+        $vol = self::PRICE_JUMP_VOL * OperatingCapacityEngine::FUNDAMENTAL_JUMP_VOL_SCALE;
+        $mean = -self::PRICE_JUMP_VOL * OperatingCapacityEngine::FUNDAMENTAL_JUMP_MEAN_SCALE;
         $dt = FinancialConstants::QUARTER_YEARS;
 
         $sum = 0.0;
@@ -43,7 +43,7 @@ class FundamentalJumpCompensationTest extends TestCase
             for ($i = 0; $i < self::QUARTERS_PER_SEED; ++$i) {
                 $draw = $math->calculateJumpDiffusion($intensity, $mean, $vol, $dt);
                 $jumps += $draw['multiplier'] !== 1.0 ? 1 : 0;
-                $term = EarningsEngine::compensatedFundamentalJump((float) $draw['multiplier'], $intensity, $mean, $vol, $dt);
+                $term = OperatingCapacityEngine::compensatedFundamentalJump((float) $draw['multiplier'], $intensity, $mean, $vol, $dt);
                 $sum += $term;
                 $sumSq += $term * $term;
                 ++$n;

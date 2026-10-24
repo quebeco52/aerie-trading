@@ -11,6 +11,7 @@ use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Corporate\Industry\IndustryRegimeView;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -369,7 +370,7 @@ trait StandardOperatingPhysicsTrait
      * The output gap as it has actually reached this firm, distributed over its transmission lag.
      *
      * The lag is the economy's, not the firm's: every firm with the same delay meets the same cycle, so the macro
-     * publishes it (MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS) and the model only reads it. Mid-downturn a
+     * publishes it (MovingAverages::DEMAND_TRANSMISSION_LAGS) and the model only reads it. Mid-downturn a
      * long-lag builder is still working through a boom-era book while a spot seller is already in the slump. At
      * zero lag the helper returns the macro series untouched.
      */

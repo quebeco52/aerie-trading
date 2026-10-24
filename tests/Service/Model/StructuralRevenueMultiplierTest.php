@@ -8,22 +8,13 @@ use App\Data\Company\Sectors;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\CapExEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\Corporate\DebtEngine;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\TreasuryEngine;
-use App\Service\Market\Pricing\MarketConsensusEngine;
+use App\Service\Corporate\Earnings\FixedAssetLedger;
+use App\Service\Corporate\Earnings\OperatingCapacityEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BiotechBusinessModel;
-use App\Service\News\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * A franchise level a model carries itself (an approved drug) is capacity: it reaches structural revenue, and with
@@ -35,26 +26,11 @@ final class StructuralRevenueMultiplierTest extends TestCase
     private const CAPITAL = 1_000_000_000.0;
     private const QUARTERLY_TURNOVER = 0.25;
 
-    private function buildEngine(): EarningsEngine
+    private function buildOperations(): OperatingCapacityEngine
     {
-        $mathUtility = new MathUtility();
         $corporateMetrics = new CorporateMetrics();
-        $debtEngine = new DebtEngine($mathUtility, $corporateMetrics);
-        $capExEngine = new CapExEngine();
-        $treasuryEngine = new TreasuryEngine($corporateMetrics, $debtEngine, $capExEngine, $mathUtility);
 
-        return new EarningsEngine(
-            $this->createStub(EventDispatcherInterface::class),
-            $this->createStub(MarketEventPublisher::class),
-            new CapitalAllocationEngine($this->createStub(CorporateLedgerService::class), $corporateMetrics, $debtEngine, $mathUtility, $treasuryEngine),
-            $debtEngine,
-            $capExEngine,
-            $mathUtility,
-            $corporateMetrics,
-            $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine(),
-            null,
-        );
+        return new OperatingCapacityEngine(new MathUtility(), $corporateMetrics, new FixedAssetLedger($corporateMetrics));
     }
 
     /**
@@ -72,8 +48,7 @@ final class StructuralRevenueMultiplierTest extends TestCase
         $ctx->assetTurnover = self::QUARTERLY_TURNOVER;
         $ctx->addressableShare = 0.0;
 
-        /** @var array{0: float, 1: float} */
-        return (new ReflectionMethod(EarningsEngine::class, 'capacityRevenueAt'))->invoke($this->buildEngine(), $ctx, 1.0, 1.0);
+        return $this->buildOperations()->capacityRevenueAt($ctx, 1.0, 1.0);
     }
 
     public function testAnApprovedFranchiseScalesCapacityNotUtilization(): void

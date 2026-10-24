@@ -18,7 +18,7 @@ use App\Repository\ElectionOddsRepository;
 use App\Repository\MacroReportHistoryRepository;
 use App\Repository\RateDecisionRepository;
 use App\Repository\StockRepository;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
@@ -498,7 +498,7 @@ class GovernmentPageBuilder
         foreach (LawCatalogue::ORDER as $lever) {
             $series[] = [LawCatalogue::name($lever), LawCatalogue::unit($lever), static fn(array $row): ?float => isset($row['levers'][$lever->value]) ? LawCatalogue::display($lever, $row['levers'][$lever->value]) : null];
         }
-        $series[] = [...self::DEPARTMENT_LAWS['mergerReviewLeniency'], static fn(array $row): ?float => isset($row['mergerReviewLeniency']) ? MergerAndAcquisitionEngine::reviewScreens($row['mergerReviewLeniency'])['concentrated'] : null];
+        $series[] = [...self::DEPARTMENT_LAWS['mergerReviewLeniency'], static fn(array $row): ?float => isset($row['mergerReviewLeniency']) ? MergerReview::reviewScreens($row['mergerReviewLeniency'])['concentrated'] : null];
         $series[] = [...self::DEPARTMENT_LAWS['capitalRequirement'], static fn(array $row): ?float => $row['capitalRequirement'] ?? null];
 
         $charts = [];

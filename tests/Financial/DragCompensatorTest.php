@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\Aggregate\DomesticDemand;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
@@ -38,8 +39,8 @@ class DragCompensatorTest extends TestCase
             $state->excessBondPremiumTrend = $state->excessBondPremium;
 
             $dt = 1.0 / 360.0;
-            $emaWeight = 1.0 - exp(-$dt / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS);
-            $trendWeight = 1.0 - exp(-$dt / MacroAggregateSubsystem::CREDIT_PREMIUM_TREND_YEARS);
+            $emaWeight = 1.0 - exp(-$dt / MovingAverages::STANDARD_EMA_HORIZON_YEARS);
+            $trendWeight = 1.0 - exp(-$dt / MovingAverages::CREDIT_PREMIUM_TREND_YEARS);
             for ($tick = 1; $tick <= 1000 * 360; ++$tick) {
                 $state->totalTime += $dt;
                 $credit->updateExcessBondPremium($state, 0.0, $dt);
@@ -60,8 +61,8 @@ class DragCompensatorTest extends TestCase
 
         // Four thousand years: the premium's average to about 2%, uncertainty's to about 5%; the catastrophe burden's
         // heavy tail leaves it about 10%.
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::CREDIT_PREMIUM_NOISE_ADVERSE_MEAN, $premium / $samples, 0.05 * MacroAggregateSubsystem::CREDIT_PREMIUM_NOISE_ADVERSE_MEAN);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::EPU_NOISE_ADVERSE_LOG_MEAN, $uncertainty / $samples, 0.10 * MacroAggregateSubsystem::EPU_NOISE_ADVERSE_LOG_MEAN);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::CATASTROPHE_ADVERSE_BURDEN_MEAN, $burden / $samples, 0.20 * MacroAggregateSubsystem::CATASTROPHE_ADVERSE_BURDEN_MEAN);
+        $this->assertEqualsWithDelta(DomesticDemand::CREDIT_PREMIUM_NOISE_ADVERSE_MEAN, $premium / $samples, 0.05 * DomesticDemand::CREDIT_PREMIUM_NOISE_ADVERSE_MEAN);
+        $this->assertEqualsWithDelta(DomesticDemand::EPU_NOISE_ADVERSE_LOG_MEAN, $uncertainty / $samples, 0.10 * DomesticDemand::EPU_NOISE_ADVERSE_LOG_MEAN);
+        $this->assertEqualsWithDelta(DomesticDemand::CATASTROPHE_ADVERSE_BURDEN_MEAN, $burden / $samples, 0.20 * DomesticDemand::CATASTROPHE_ADVERSE_BURDEN_MEAN);
     }
 }

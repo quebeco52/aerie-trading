@@ -146,7 +146,7 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertFalse($review['highlyConcentrated']);
         $this->assertEqualsWithDelta(0.30, $review['acquirerShare'], 1e-12);
         $this->assertEqualsWithDelta(0.60, $review['fringeShare'], 1e-12);
-        $this->assertEqualsWithDelta(\App\Service\Corporate\MergerAndAcquisitionEngine::maxClearedTargetShare(0.30, 0.10), $review['clearedShare'], 1e-12);
+        $this->assertEqualsWithDelta(\App\Service\Corporate\Deal\MergerReview::maxClearedTargetShare(0.30, 0.10), $review['clearedShare'], 1e-12);
         $this->assertEqualsWithDelta(0.01 / 0.60, $review['clearedShare'], 1e-12);
         $this->assertTrue($review['reviewBinds']);
     }

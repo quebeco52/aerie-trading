@@ -9,8 +9,9 @@ use App\Data\Company\ManagementStyle;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Deal\AcquisitionEngine;
+use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
 use App\Tests\Support\MacroStateBuilder;
@@ -31,7 +32,7 @@ class MergerAndAcquisitionGateTest extends TestCase
 {
     private MathUtility&Stub $math;
     private DebtEngine&Stub $debt;
-    private MergerAndAcquisitionEngine $engine;
+    private AcquisitionEngine $engine;
 
     protected function setUp(): void
     {
@@ -40,9 +41,19 @@ class MergerAndAcquisitionGateTest extends TestCase
         $this->engine = $this->engine($this->debt, $this->math);
     }
 
-    private function engine(DebtEngine $debt, MathUtility $math): MergerAndAcquisitionEngine
+    private function engine(DebtEngine $debt, MathUtility $math): AcquisitionEngine
     {
-        return new MergerAndAcquisitionEngine(
+        return new AcquisitionEngine(
+            $this->createStub(MarketEventPublisher::class),
+            $debt,
+            $math,
+            new CorporateMetrics(),
+        );
+    }
+
+    private function divestitureEngine(DebtEngine $debt, MathUtility $math): DivestitureEngine
+    {
+        return new DivestitureEngine(
             $this->createStub(MarketEventPublisher::class),
             $debt,
             $math,
@@ -52,23 +63,23 @@ class MergerAndAcquisitionGateTest extends TestCase
 
     public function testTheAcquisitionCeilingDominatesEveryBranchUnderTheMostAcquisitiveManager(): void
     {
-        $ceiling = MergerAndAcquisitionEngine::acquisitionHazardCeiling();
+        $ceiling = AcquisitionEngine::acquisitionHazardCeiling();
 
         foreach (ManagementStyle::cases() as $style) {
             $bias = ManagementProfile::forStyle($style, ManagementProfile::MAX_INTENSITY)->acquisitionBias();
 
             $branches = [
-                MergerAndAcquisitionEngine::MA_EMPIRE_BUILDER_PROB,
-                MergerAndAcquisitionEngine::MA_OVERVALUED_PROB * $bias,
-                MergerAndAcquisitionEngine::MA_MEGA_HOARDER_PROB * $bias,
-                MergerAndAcquisitionEngine::MA_HOARDER_PROB * $bias,
-                MergerAndAcquisitionEngine::MA_LOW_LEVERAGE_PROB * $bias,
-                MergerAndAcquisitionEngine::MA_MOD_LEVERAGE_PROB * $bias,
+                AcquisitionEngine::MA_EMPIRE_BUILDER_PROB,
+                AcquisitionEngine::MA_OVERVALUED_PROB * $bias,
+                AcquisitionEngine::MA_MEGA_HOARDER_PROB * $bias,
+                AcquisitionEngine::MA_HOARDER_PROB * $bias,
+                AcquisitionEngine::MA_LOW_LEVERAGE_PROB * $bias,
+                AcquisitionEngine::MA_MOD_LEVERAGE_PROB * $bias,
             ];
 
             // A primary branch and the cash fallback can both be live, so the union of the two must fit.
             foreach ($branches as $primary) {
-                $fallback = MergerAndAcquisitionEngine::MA_CASH_FALLBACK_PROB * $bias;
+                $fallback = AcquisitionEngine::MA_CASH_FALLBACK_PROB * $bias;
                 $this->assertGreaterThanOrEqual($primary + $fallback, $ceiling, $style->name);
             }
         }
@@ -76,11 +87,11 @@ class MergerAndAcquisitionGateTest extends TestCase
 
     public function testTheDivestitureCeilingDominatesEveryState(): void
     {
-        $ceiling = MergerAndAcquisitionEngine::divestitureHazardCeiling();
+        $ceiling = DivestitureEngine::divestitureHazardCeiling();
 
-        $this->assertGreaterThanOrEqual(MergerAndAcquisitionEngine::DIV_DYING_ANNUAL_PROB, $ceiling);
-        $this->assertGreaterThanOrEqual(MergerAndAcquisitionEngine::DIV_DISTRESSED_ANNUAL_PROB, $ceiling);
-        $this->assertGreaterThanOrEqual(MergerAndAcquisitionEngine::DIV_PREMIUM_ANNUAL_PROB, $ceiling);
+        $this->assertGreaterThanOrEqual(DivestitureEngine::DIV_DYING_ANNUAL_PROB, $ceiling);
+        $this->assertGreaterThanOrEqual(DivestitureEngine::DIV_DISTRESSED_ANNUAL_PROB, $ceiling);
+        $this->assertGreaterThanOrEqual(DivestitureEngine::DIV_PREMIUM_ANNUAL_PROB, $ceiling);
     }
 
     public function testARejectedGateDoesNoneOfTheExpensiveWork(): void
@@ -89,6 +100,7 @@ class MergerAndAcquisitionGateTest extends TestCase
         $math = $this->createMock(MathUtility::class);
         $debt = $this->createMock(DebtEngine::class);
         $engine = $this->engine($debt, $math);
+        $divestitures = $this->divestitureEngine($debt, $math);
 
         $math->expects($this->exactly(2))
             ->method('checkProbability')
@@ -97,8 +109,8 @@ class MergerAndAcquisitionGateTest extends TestCase
                 $this->assertContains(
                     round($hazard, 12),
                     [
-                        round(MergerAndAcquisitionEngine::acquisitionHazardCeiling() * $dt, 12),
-                        round(MergerAndAcquisitionEngine::divestitureHazardCeiling() * $dt, 12),
+                        round(AcquisitionEngine::acquisitionHazardCeiling() * $dt, 12),
+                        round(DivestitureEngine::divestitureHazardCeiling() * $dt, 12),
                     ],
                 );
 
@@ -112,7 +124,7 @@ class MergerAndAcquisitionGateTest extends TestCase
         $macro = \App\DTO\MacroStateDTO::fromMacroState(MacroStateBuilder::create()->build());
 
         $this->assertNull($engine->evaluatePrivateAcquisition($stock, $macro, $dt));
-        $this->assertNull($engine->evaluateCorporateDivestiture($stock, $macro, $dt));
+        $this->assertNull($divestitures->evaluateCorporateDivestiture($stock, $macro, $dt));
     }
 
     public function testTheSecondStageAcceptsAtTheRatioOfTheFirmsHazardToTheCeiling(): void
@@ -136,8 +148,8 @@ class MergerAndAcquisitionGateTest extends TestCase
         $this->math->method('checkProbability')->willReturn(true);
 
         $macro = \App\DTO\MacroStateDTO::fromMacroState(MacroStateBuilder::create()->build());
-        $ceiling = MergerAndAcquisitionEngine::acquisitionHazardCeiling();
-        $acceptance = MergerAndAcquisitionEngine::MA_EMPIRE_BUILDER_PROB / $ceiling;
+        $ceiling = AcquisitionEngine::acquisitionHazardCeiling();
+        $acceptance = AcquisitionEngine::MA_EMPIRE_BUILDER_PROB / $ceiling;
 
         // Just inside the acceptance band: a deal.
         $this->math->method('generateUniform')->willReturn($acceptance * 0.999);

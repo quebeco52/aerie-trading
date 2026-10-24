@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro;
 
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\Aggregate\IndustryIndicators;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
@@ -28,7 +29,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
                 return 0.0;
             }
         };
-        $this->macroAggregateSubsystem = new MacroAggregateSubsystem($this->mathUtility);
+        $this->macroAggregateSubsystem = MacroAggregateSubsystem::headless($this->mathUtility);
         $this->assetMarketSubsystem = new AssetMarketSubsystem($this->mathUtility);
         $this->monetaryPolicySubsystem = new MonetaryPolicySubsystem($this->mathUtility);
     }
@@ -55,7 +56,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
 
         $this->assertGreaterThan(50.0, $expansionState->manufacturingPmi, 'PMI must indicate expansion (>50) during an economic boom.');
         $this->assertGreaterThanOrEqual(52.0, $expansionState->manufacturingPmi);
-        $this->assertLessThanOrEqual(MacroAggregateSubsystem::MAX_PMI, $expansionState->manufacturingPmi);
+        $this->assertLessThanOrEqual(IndustryIndicators::MAX_PMI, $expansionState->manufacturingPmi);
 
         // 2. Contractionary scenario: negative output gap, depressed capacity utilization, inventory overhang
         $recessionState = (new MacroStateBuilder())
@@ -75,7 +76,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
 
         $this->assertLessThan(50.0, $recessionState->manufacturingPmi, 'PMI must indicate contraction (<50) during a recession.');
         $this->assertLessThanOrEqual(48.0, $recessionState->manufacturingPmi);
-        $this->assertGreaterThanOrEqual(MacroAggregateSubsystem::MIN_PMI, $recessionState->manufacturingPmi);
+        $this->assertGreaterThanOrEqual(IndustryIndicators::MIN_PMI, $recessionState->manufacturingPmi);
     }
 
     public function testProducerPriceInflationStageOfProcessingTransmission(): void
@@ -120,7 +121,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
 
         $this->assertGreaterThan($calmState->producerPriceInflation, $shockState->producerPriceInflation);
         $this->assertGreaterThan(0.050, $shockState->producerPriceInflation, 'Upstream wholesale cost surges must push PPI significantly higher.');
-        $this->assertLessThanOrEqual(MacroAggregateSubsystem::MAX_PPI_INFLATION, $shockState->producerPriceInflation);
+        $this->assertLessThanOrEqual(IndustryIndicators::MAX_PPI_INFLATION, $shockState->producerPriceInflation);
 
         // 3. The same expensive levels with the trend caught up: an index parked at 180 for a decade is an
         // expensive economy, not an inflating one. Reading that level as a rate was the bug.

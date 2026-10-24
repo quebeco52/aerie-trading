@@ -7,7 +7,7 @@ namespace App\Tests\Service\View;
 use App\Data\District\DistrictCalendar;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
@@ -89,9 +89,9 @@ final class DepartmentPageBuilderTest extends TestCase
         $this->assertSame('A strict enforcer against concentration', $panel['head']['stanceText']);
         $this->assertSame('a strict enforcer', $panel['head']['stanceClause']);
         $this->assertFalse($panel['head']['opening']);
-        $this->assertSame(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency(0.8)), $panel['screens']);
+        $this->assertSame(MergerReview::reviewScreens(FairTradingBoard::leniency(0.8)), $panel['screens']);
         $this->assertEqualsWithDelta(0.25, $panel['head']['passedOver'][0]['line'], 1e-12, 'The lightest candidate would draw the 2010 line.');
-        $this->assertEqualsWithDelta(MergerAndAcquisitionEngine::reviewScreens(0.5)['concentrated'], $panel['councilLine'], 1e-12);
+        $this->assertEqualsWithDelta(MergerReview::reviewScreens(0.5)['concentrated'], $panel['councilLine'], 1e-12);
         $this->assertEqualsWithDelta(0.30, $panel['rules']['strictest']['shareCeiling'], 1e-12);
         $this->assertSame(1.0, $panel['rules']['lightest']['shareCeiling']);
     }

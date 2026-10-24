@@ -9,21 +9,16 @@ use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
-use App\Service\Corporate\CapitalAllocationEngine;
-use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\TreasuryEngine;
-use App\Service\Market\Pricing\MarketConsensusEngine;
+use App\Service\Corporate\Earnings\CapitalBudgetEngine;
+use App\Service\Corporate\Earnings\FixedAssetLedger;
+use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReitBusinessModel;
-use App\Service\News\MarketEventPublisher;
-use App\Service\News\NarrativeEngine;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * A District REIT keeps its pass-through status only by distributing 85% of its taxable income, so that share of
@@ -76,13 +71,13 @@ final class ReitDistributionRuleTest extends TestCase
         $stock->setCorporateTreasury((string) ($floor + $cashOverFloor));
 
         // As the engine composes it: internal funds on the quarter's operating cash flow, less maintenance.
-        $engine = $this->buildEngine();
+        $budget = $this->buildCapitalBudget();
         $maintenance = $ctx->quarterlyDepreciation;
-        $funds = (new ReflectionMethod(EarningsEngine::class, 'resolveInternalFunds'))
-            ->invoke($engine, $ctx, $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation);
+        $funds = (new ReflectionMethod(CapitalBudgetEngine::class, 'resolveInternalFunds'))
+            ->invoke($budget, $ctx, $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation);
 
-        return (new ReflectionMethod(EarningsEngine::class, 'calculateGrowthCapEx'))
-            ->invoke($engine, $ctx, 1.0, $maintenance, max(0.0, $funds - $maintenance));
+        return (new ReflectionMethod(CapitalBudgetEngine::class, 'calculateGrowthCapEx'))
+            ->invoke($budget, $ctx, 1.0, $maintenance, max(0.0, $funds - $maintenance));
     }
 
     private function reitContext(): EarningsSimulationContext
@@ -107,25 +102,10 @@ final class ReitDistributionRuleTest extends TestCase
         return $ctx;
     }
 
-    private function buildEngine(): EarningsEngine
+    private function buildCapitalBudget(): CapitalBudgetEngine
     {
-        $mathUtility = new MathUtility();
         $corporateMetrics = new CorporateMetrics();
-        $debtEngine = new DebtEngine($mathUtility, $corporateMetrics);
-        $capExEngine = new CapExEngine();
-        $treasuryEngine = new TreasuryEngine($corporateMetrics, $debtEngine, $capExEngine, $mathUtility);
 
-        return new EarningsEngine(
-            $this->createStub(EventDispatcherInterface::class),
-            $this->createStub(MarketEventPublisher::class),
-            new CapitalAllocationEngine($this->createStub(CorporateLedgerService::class), $corporateMetrics, $debtEngine, $mathUtility, $treasuryEngine),
-            $debtEngine,
-            $capExEngine,
-            $mathUtility,
-            $corporateMetrics,
-            $this->createStub(NarrativeEngine::class),
-            new MarketConsensusEngine(),
-            null,
-        );
+        return new CapitalBudgetEngine(new CapExEngine(), $corporateMetrics, new FixedAssetLedger($corporateMetrics), new WorkingCapitalLedger($corporateMetrics));
     }
 }

@@ -21,7 +21,7 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
  *
  * That shared channel is the point. Agent flow that bypassed it would be a second, unbudgeted source of
  * price movement, and every name the agents traded would simply become more volatile — the failure the
- * order-flow budget in MarketEngine exists to prevent.
+ * order-flow budget in VarianceBudget exists to prevent.
  *
  * Agents act on the price they can see and their flow lands on the next tick. That lag is not an
  * approximation: a participant observes a price and then trades, and letting them move the price they were

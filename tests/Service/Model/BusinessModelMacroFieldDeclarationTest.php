@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -185,7 +185,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         if ($this->invokesHelper($modelClass, 'resolveLaggedOutputGap(')) {
             $lagYears = $model->getDemandLagYears();
             $actual[] = $lagYears > 0.0
-                ? MacroFieldRegistry::wireKeys()[MacroAggregateSubsystem::demandTransmissionLagField($lagYears)]
+                ? MacroFieldRegistry::wireKeys()[MovingAverages::demandTransmissionLagField($lagYears)]
                 : 'output_gap_ema';
             $actual = array_values(array_unique($actual));
         }

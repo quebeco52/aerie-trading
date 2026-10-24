@@ -7,14 +7,12 @@ namespace App\Tests\Service\Corporate;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Earnings\InvestmentMarkLedger;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
-use ReflectionMethod;
 
 /**
  * The governing invariant of the whole mechanism: an unrealized mark is not income.
@@ -32,20 +30,15 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
     /** Twelve quarters of a three-hundred point selloff, which is enough to mark a long book down hard. */
     private const QUARTERS = 12;
 
-    private EarningsEngine $engine;
-    private ReflectionMethod $roll;
+    private InvestmentMarkLedger $ledger;
 
     protected function setUp(): void
     {
-        // Only the securities roll is under test, and it collaborates with nothing but its own service,
-        // which the engine defaults. The rest of the pipeline is deliberately not constructed.
-        $this->engine = (new ReflectionClass(EarningsEngine::class))->newInstanceWithoutConstructor();
-        $securities = new \ReflectionProperty(EarningsEngine::class, 'securitiesBook');
-        $securities->setValue($this->engine, new \App\Service\Corporate\SecuritiesBookService(
+        // Only the securities roll is under test, and it collaborates with nothing but its own service. The rest of
+        // the pipeline is deliberately not constructed.
+        $this->ledger = new InvestmentMarkLedger(new \App\Service\Corporate\SecuritiesBookService(
             new \App\Service\Market\Bond\BondPricingEngine(),
         ));
-
-        $this->roll = new ReflectionMethod(EarningsEngine::class, 'rollForwardSecuritiesBook');
     }
 
     private function macro(float $policyRate, float $level): MacroStateDTO
@@ -95,7 +88,7 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
         $strategy = new InsuranceBusinessModel();
 
         $opening = $this->context($stock, $this->macro(0.03, 0.0425), $strategy);
-        $this->roll->invoke($this->engine, $opening);
+        $this->ledger->rollForwardSecuritiesBook($opening);
 
         $equityAfterOpen = (float) $stock->getTotalEquity();
         self::assertSame(0.0, (float) $stock->getUnrealizedSecuritiesMark(), 'A book opens marked flat.');
@@ -105,7 +98,7 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
 
         for ($quarter = 0; $quarter < self::QUARTERS; $quarter++) {
             $ctx = $this->context($stock, $hiked, $strategy);
-            $this->roll->invoke($this->engine, $ctx);
+            $this->ledger->rollForwardSecuritiesBook($ctx);
         }
 
         $mark = (float) $stock->getUnrealizedSecuritiesMark();
@@ -144,13 +137,13 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
         $strategy = new InsuranceBusinessModel();
         $hiked = $this->macro(0.06, 0.0725);
 
-        $this->roll->invoke($this->engine, $this->context($stock, $this->macro(0.03, 0.0425), $strategy));
-        $this->roll->invoke($this->engine, $this->context($stock, $hiked, $strategy));
+        $this->ledger->rollForwardSecuritiesBook($this->context($stock, $this->macro(0.03, 0.0425), $strategy));
+        $this->ledger->rollForwardSecuritiesBook($this->context($stock, $hiked, $strategy));
 
         $afterFirstShock = (float) $stock->getTotalEquity();
         $markAfterFirst = (float) $stock->getUnrealizedSecuritiesMark();
 
-        $this->roll->invoke($this->engine, $this->context($stock, $hiked, $strategy));
+        $this->ledger->rollForwardSecuritiesBook($this->context($stock, $hiked, $strategy));
 
         $afterSecond = (float) $stock->getTotalEquity();
 
@@ -169,7 +162,7 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
         $stock->setCorporateTreasury('10000000000');
 
         $ctx = new EarningsSimulationContext($stock, $this->macro(0.06, 0.0725), new StandardCorporateBusinessModel(), 'standard_corporate');
-        $this->roll->invoke($this->engine, $ctx);
+        $this->ledger->rollForwardSecuritiesBook($ctx);
 
         self::assertSame(50_000_000_000.0, (float) $stock->getTotalEquity(), 'Equity is not merely unchanged in value; the roll returned before touching it.');
         self::assertSame(0.0, (float) $stock->getUnrealizedSecuritiesMark());
@@ -193,10 +186,10 @@ final class SecuritiesMarkIsNotIncomeTest extends TestCase
         $base = $this->macro(0.03, 0.0425);
         $hiked = $this->macro(0.06, 0.0725);
 
-        $this->roll->invoke($this->engine, $this->context($bank, $base, new CommercialBankBusinessModel()));
-        $this->roll->invoke($this->engine, $this->context($insurer, $base, new InsuranceBusinessModel()));
-        $this->roll->invoke($this->engine, $this->context($bank, $hiked, new CommercialBankBusinessModel()));
-        $this->roll->invoke($this->engine, $this->context($insurer, $hiked, new InsuranceBusinessModel()));
+        $this->ledger->rollForwardSecuritiesBook($this->context($bank, $base, new CommercialBankBusinessModel()));
+        $this->ledger->rollForwardSecuritiesBook($this->context($insurer, $base, new InsuranceBusinessModel()));
+        $this->ledger->rollForwardSecuritiesBook($this->context($bank, $hiked, new CommercialBankBusinessModel()));
+        $this->ledger->rollForwardSecuritiesBook($this->context($insurer, $hiked, new InsuranceBusinessModel()));
 
         $bankRatio = (float) $bank->getUnrealizedSecuritiesMark() / 400_000_000_000.0;
         $insurerRatio = (float) $insurer->getUnrealizedSecuritiesMark() / 300_000_000_000.0;

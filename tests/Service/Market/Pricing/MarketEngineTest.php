@@ -9,6 +9,7 @@ use App\DTO\MarketPricingContext;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\PolicyCapitalization;
+use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -562,7 +563,7 @@ class MarketEngineTest extends TestCase
             MacroConstants::SYSTEMIC_JUMP_ETA_DOWN / 1.2,
             ...$caps,
         );
-        $eta = MarketEngine::calibratedJumpParameters(0.45, 0.0, 1.0, 0.05);
+        $eta = VarianceBudget::calibratedJumpParameters(0.45, 0.0, 1.0, 0.05);
         $idiosyncraticLogMean = 1.0 * StochasticProcesses::kouTruncatedMean(0.40, $eta['eta_up'], $eta['eta_down'], ...$caps);
 
         // The blend keeps w = e^(-kappa dt) of the step's drift: the pull holds the one-tick-stale fair value.

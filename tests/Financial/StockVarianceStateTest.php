@@ -7,6 +7,7 @@ namespace App\Tests\Financial;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use PHPUnit\Framework\TestCase;
@@ -91,9 +92,9 @@ final class StockVarianceStateTest extends TestCase
      */
     private function targetVariance(float $marketVol): float
     {
-        return MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA)
+        return VarianceBudget::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA)
             + ((self::BETA * $marketVol) ** 2)
-            + MarketEngine::systemicJumpMoments(self::BETA)['variance'];
+            + VarianceBudget::systemicJumpMoments(self::BETA)['variance'];
     }
 
     /**
@@ -103,15 +104,15 @@ final class StockVarianceStateTest extends TestCase
     public function testTheMarketJumpIsPaidForInTheSystematicBlock(): void
     {
         $anchor = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
-        $jump = MarketEngine::systemicJumpMoments(self::BETA)['variance'];
+        $jump = VarianceBudget::systemicJumpMoments(self::BETA)['variance'];
 
         self::assertGreaterThan(0.0, $jump);
         self::assertEqualsWithDelta(
             self::LONG_TERM_VOLATILITY ** 2,
-            MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA) + ((self::BETA * $anchor) ** 2) + $jump,
+            VarianceBudget::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA) + ((self::BETA * $anchor) ** 2) + $jump,
             1e-12,
         );
-        self::assertSame(0.0, MarketEngine::systemicJumpMoments(0.0)['variance']);
+        self::assertSame(0.0, VarianceBudget::systemicJumpMoments(0.0)['variance']);
         self::assertEqualsWithDelta($this->targetVariance(self::CALM_MARKET_VOL), $this->settledVariance(0.0), 1.0e-5, 'and the total settles on the configured variance');
     }
 
@@ -125,12 +126,12 @@ final class StockVarianceStateTest extends TestCase
     {
         $volatility = 0.12;
         $beta = 0.8;
-        $residualBudget = MarketEngine::longTermIdiosyncraticVariance($volatility, $beta);
+        $residualBudget = VarianceBudget::longTermIdiosyncraticVariance($volatility, $beta);
         self::assertEqualsWithDelta(0.2 * $volatility * $volatility, $residualBudget, 1e-12, 'control: the residual budget is at its floor');
 
         mt_srand(20261016);
         $engine = new MarketEngine(new MathUtility());
-        $loading = (($beta * self::CALM_MARKET_VOL) ** 2) + MarketEngine::systemicJumpMoments($beta)['variance'];
+        $loading = (($beta * self::CALM_MARKET_VOL) ** 2) + VarianceBudget::systemicJumpMoments($beta)['variance'];
         $state = sqrt($loading + $residualBudget);
         for ($tick = 0; $tick < 504; $tick++) {
             $context = $this->context($state, self::CALM_MARKET_VOL, self::CALM_MARKET_VOL, 0.0, 1.0e-6, self::DAILY, announcementVariance: 1.0, longTermVolatility: $volatility, beta: $beta);
@@ -152,12 +153,12 @@ final class StockVarianceStateTest extends TestCase
     {
         mt_srand(20261007);
         $engine = new MarketEngine(new MathUtility());
-        $longRunResidual = MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA);
-        $decay = exp(-MarketEngine::varianceReversionSpeed(0.0) * self::DAILY);
-        $marketJump = MarketEngine::systemicJumpMoments(self::BETA)['variance'];
+        $longRunResidual = VarianceBudget::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA);
+        $decay = exp(-VarianceBudget::varianceReversionSpeed(0.0) * self::DAILY);
+        $marketJump = VarianceBudget::systemicJumpMoments(self::BETA)['variance'];
 
         $marketVol = self::CALM_MARKET_VOL;
-        $residual = $longRunResidual * MarketEngine::commonIdiosyncraticVarianceScale($marketVol);
+        $residual = $longRunResidual * VarianceBudget::commonIdiosyncraticVarianceScale($marketVol);
         $volatility = sqrt($residual + ((self::BETA * $marketVol) ** 2) + $marketJump);
         $worst = 0.0;
 
@@ -171,7 +172,7 @@ final class StockVarianceStateTest extends TestCase
                 $this->context($volatility, $marketVol, $prior, 0.0, 1.0e-6, self::DAILY),
             )['next_volatility'];
 
-            $target = $longRunResidual * MarketEngine::commonIdiosyncraticVarianceScale($marketVol);
+            $target = $longRunResidual * VarianceBudget::commonIdiosyncraticVarianceScale($marketVol);
             $residual = $target + (($residual - $target) * $decay);
             $worst = max($worst, abs($volatility - sqrt($residual + ((self::BETA * $marketVol) ** 2) + $marketJump)));
         }
@@ -187,14 +188,14 @@ final class StockVarianceStateTest extends TestCase
     public function testResidualVarianceLoadsOnMarketVarianceAroundItsSettleLevel(): void
     {
         $anchor = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
-        $loading = MarketEngine::IDIOSYNCRATIC_COMMON_FACTOR_LOADING;
+        $loading = VarianceBudget::IDIOSYNCRATIC_COMMON_FACTOR_LOADING;
 
-        self::assertEqualsWithDelta(1.0, MarketEngine::commonIdiosyncraticVarianceScale($anchor), 1e-12);
-        self::assertEqualsWithDelta(1.0 + ($loading * 3.0), MarketEngine::commonIdiosyncraticVarianceScale(2.0 * $anchor), 1e-12);
-        self::assertGreaterThanOrEqual(0.0, MarketEngine::commonIdiosyncraticVarianceScale(0.0));
+        self::assertEqualsWithDelta(1.0, VarianceBudget::commonIdiosyncraticVarianceScale($anchor), 1e-12);
+        self::assertEqualsWithDelta(1.0 + ($loading * 3.0), VarianceBudget::commonIdiosyncraticVarianceScale(2.0 * $anchor), 1e-12);
+        self::assertGreaterThanOrEqual(0.0, VarianceBudget::commonIdiosyncraticVarianceScale(0.0));
         // Read against a measured trend, a market at its own trend leaves the residual alone wherever that trend sits.
-        self::assertEqualsWithDelta(1.0, MarketEngine::commonIdiosyncraticVarianceScale(0.18, 0.18 * 0.18), 1e-12);
-        self::assertEqualsWithDelta(1.0 + ($loading * 3.0), MarketEngine::commonIdiosyncraticVarianceScale(0.36, 0.18 * 0.18), 1e-12);
+        self::assertEqualsWithDelta(1.0, VarianceBudget::commonIdiosyncraticVarianceScale(0.18, 0.18 * 0.18), 1e-12);
+        self::assertEqualsWithDelta(1.0 + ($loading * 3.0), VarianceBudget::commonIdiosyncraticVarianceScale(0.36, 0.18 * 0.18), 1e-12);
 
         // Held at a turbulent market vol, the residual settles on the scaled target.
         mt_srand(20261008);
@@ -204,8 +205,8 @@ final class StockVarianceStateTest extends TestCase
         for ($tick = 0; $tick < 504; $tick++) {
             $volatility = $engine->calculateNextPrice($this->context($volatility, $turbulent, $turbulent, 0.0, 1.0e-6, self::DAILY))['next_volatility'];
         }
-        $residualTarget = MarketEngine::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA) * MarketEngine::commonIdiosyncraticVarianceScale($turbulent);
-        self::assertEqualsWithDelta($residualTarget + ((self::BETA * $turbulent) ** 2) + MarketEngine::systemicJumpMoments(self::BETA)['variance'], $volatility * $volatility, 1e-3 * $residualTarget);
+        $residualTarget = VarianceBudget::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA) * VarianceBudget::commonIdiosyncraticVarianceScale($turbulent);
+        self::assertEqualsWithDelta($residualTarget + ((self::BETA * $turbulent) ** 2) + VarianceBudget::systemicJumpMoments(self::BETA)['variance'], $volatility * $volatility, 1e-3 * $residualTarget);
 
         // A market that has been this turbulent for a whole cycle is at its trend: the residual is back at its own
         // level.
@@ -269,25 +270,25 @@ final class StockVarianceStateTest extends TestCase
     public function testTheVarianceJumpLoadIsBoundedAcrossTheBoard(): void
     {
         foreach ([0.1, 0.6, 1.5, 3.0] as $lambda) {
-            $kappa = MarketEngine::varianceReversionSpeed($lambda);
+            $kappa = VarianceBudget::varianceReversionSpeed($lambda);
             foreach ([self::DAILY, 1.0 / 14400.0] as $dt) {
-                self::assertLessThan(0.25, MarketEngine::varianceJumpLoad($lambda, $kappa, $dt));
+                self::assertLessThan(0.25, VarianceBudget::varianceJumpLoad($lambda, $kappa, $dt));
             }
         }
 
-        self::assertSame(0.0, MarketEngine::varianceJumpLoad(0.0, 6.0, self::DAILY));
+        self::assertSame(0.0, VarianceBudget::varianceJumpLoad(0.0, 6.0, self::DAILY));
     }
 
     /** At a fine tick the discrete load is the continuous-time one, lambda E[J] / kappa per unit variance. */
     public function testTheVarianceJumpLoadConvergesToContinuousTime(): void
     {
         $lambda = 1.0;
-        $kappa = MarketEngine::varianceReversionSpeed($lambda);
-        $perUnitJump = StochasticProcesses::meanVarianceJump(MarketEngine::jumpProbabilityUp(), 0.50);
+        $kappa = VarianceBudget::varianceReversionSpeed($lambda);
+        $perUnitJump = StochasticProcesses::meanVarianceJump(VarianceBudget::jumpProbabilityUp(), 0.50);
 
         self::assertEqualsWithDelta(
             $lambda * $perUnitJump / $kappa,
-            MarketEngine::varianceJumpLoad($lambda, $kappa, 1.0e-7),
+            VarianceBudget::varianceJumpLoad($lambda, $kappa, 1.0e-7),
             1.0e-6,
         );
     }

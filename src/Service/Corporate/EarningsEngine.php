@@ -4,22 +4,24 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
-use App\Data\Macro\CapitalGoodsPrices;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
+use App\Service\Corporate\Earnings\CapitalBudgetEngine;
+use App\Service\Corporate\Earnings\CreditLossLedger;
+use App\Service\Corporate\Earnings\FixedAssetLedger;
+use App\Service\Corporate\Earnings\IncomeTaxLedger;
+use App\Service\Corporate\Earnings\InvestmentMarkLedger;
+use App\Service\Corporate\Earnings\OperatingCapacityEngine;
+use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Ticker\TickCadence;
-use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
-use App\Service\Math\ResponseCurves;
-use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
 use App\Service\News\MarketEventPublisher;
@@ -28,49 +30,15 @@ use App\Service\News\WireFormat;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
- * Handles the simulation of quarterly earnings reports.
- * Models revenue, operating leverage, analyst consensus, and corporate saturation.
+ * Files a firm's quarterly earnings report: runs the quarter through its ledgers in order (the operating side,
+ * the plant, working capital, credit losses, income tax, the capital budget and the investment marks), strikes the
+ * income statement against consensus, lets the board allocate the cash, and prices the report.
  */
 class EarningsEngine
 {
-    // --- Credit Loss Allowance (ASC 326) ---
-    /**
-     * Time constant of a lender's loss rate reverting to its through-the-cycle level: US bank charge-offs have an
-     * annual autocorrelation of 0.79, ~4.2 years (FRED CORALACBN, 1985-2019).
-     */
-    public const CREDIT_LOSS_REVERSION_YEARS = 4.2;
-
-    // --- Capacity & Utilization ---
-    /** Absolute minimum capacity utilization (10%) to prevent negative revenue on dead companies. */
-    public const MIN_CAPACITY_UTILIZATION = 0.10;
-
-    // --- Margins & Volatility ---
-    /** Max quarterly asset turnover to prevent revenue hyperinflation. */
-    public const MAX_QUARTERLY_ASSET_TURNOVER = 3.0;
-
-    /** Cyclical shift coefficient for variable margins based on output gap. */
-    public const CYCLICAL_MARGIN_SHIFT_COEFFICIENT = 0.15;
-
-    /** Coefficient for margin volatility relative to baseline stock volatility. */
-    public const MARGIN_VOLATILITY_COEFFICIENT = 0.15;
-
+    // --- Expected EBIT ---
     /** Failsafe max expected EBIT loss relative to structural revenue. */
     public const MAX_EBIT_LOSS_RATIO = 0.50;
-
-    /** Multiplier applied to baseline volatility to derive base idiosyncratic revenue volatility. */
-    public const IDIOSYNCRATIC_REV_VOL_RATIO = 0.25;
-
-    // --- Capacity & Seasonality Limits ---
-    /** Hard ceiling on capacity utilization to bound physical operations and depreciation. */
-    public const MAX_CAPACITY_UTILIZATION = 1.50;
-
-    // --- Cost Convexity & Overtime ---
-    /** Capacity utilization threshold above which convex overtime cost penalties begin. */
-    public const CAPACITY_OVERTIME_THRESHOLD = 1.00;
-    /** Degree of power-law convexity for operating costs when capacity exceeds 100%. */
-    public const CAPACITY_OVERTIME_CONVEXITY = 1.50;
-    /** Scalar scaling the convex overtime penalty applied to variable cost ratio. */
-    public const CAPACITY_OVERTIME_SCALAR = 0.60;
 
     // --- Earnings Reporting Season ---
     /** Fraction of quarter that passes before the earnings reporting season opens (~14 ticks). */
@@ -119,68 +87,12 @@ class EarningsEngine
     /** Carried stream-state key: the surprise record's total weight. */
     public const STATE_SURPRISE_WEIGHT = self::CARRIED_STATE_PREFIX . 'surprise_weight';
 
-    // --- Price Level in Capacity ---
-    /** Stream-state key: the GDP deflator at the last report, so the next can measure the quarter's price growth. */
-    public const STATE_LAST_DEFLATOR = 'state:last_deflator';
-    /**
-     * Stream-state key: log gap between the price level and the one the plant's book carries at its planned nominal
-     * growth.
-     */
-    public const STATE_PRICE_LEVEL_SURPRISE = 'state:price_level_surprise';
-
     // --- Carried Stream State ---
     /**
      * Prefix for state kept on the stream map by anything outside the quarterly physics: each report rebuilds the map
      * from what the physics registers, and carries a key under this prefix until its owner removes it.
      */
     public const CARRIED_STATE_PREFIX = 'carry:';
-    /** Carried reading of the board's price index at the last report, for the treasury's equity sleeve. */
-    public const STATE_SLEEVE_PRICE_INDEX = self::CARRIED_STATE_PREFIX . 'equity_sleeve:price_index';
-    /** Carried reading of the board's total-return index at the last report, for the treasury's equity sleeve. */
-    public const STATE_SLEEVE_TOTAL_RETURN_INDEX = self::CARRIED_STATE_PREFIX . 'equity_sleeve:total_return_index';
-    /** Carried annual rate of the after-tax gains the equity sleeve's rebalancing realised over the trailing year. */
-    public const STATE_SLEEVE_TRAILING_GAINS = self::CARRIED_STATE_PREFIX . 'equity_sleeve:trailing_gains';
-    /** Mean age of a trailing year's flows, half a year: the lag the sleeve's realised gains are carried at. */
-    public const SLEEVE_GAINS_TRAILING_LAG_YEARS = 0.5;
-
-    // --- Capital-Goods Prices (BEA Fixed Assets, App\Data\Macro\CapitalGoodsPrices) ---
-    /**
-     * Carried stream-state key: simulated year the firm's capital-goods relative price was first read, where it is 1.
-     */
-    public const STATE_CAPITAL_GOODS_ANCHOR_TIME = self::CARRIED_STATE_PREFIX . 'capital_goods_anchor_time';
-    /**
-     * Carried stream-state key: the plant's capex-weighted capital-goods price against the GDP deflator, 1 at the
-     * anchor.
-     */
-    public const STATE_PPE_RELATIVE_PRICE = self::CARRIED_STATE_PREFIX . 'ppe_relative_price';
-
-    // --- Jump Diffusion (Fundamental vs Price) ---
-    /** Scale factor for fundamental jump intensity relative to price jumps. */
-    public const FUNDAMENTAL_JUMP_INTENSITY_SCALE = 0.25;
-    /** Scale factor for fundamental jump mean size relative to price jumps. */
-    public const FUNDAMENTAL_JUMP_MEAN_SCALE = 0.50;
-    /** Scale factor for fundamental jump volatility relative to price jumps. */
-    public const FUNDAMENTAL_JUMP_VOL_SCALE = 0.50;
-    /** Price jump intensity assumed for a stock seeded without one: two jumps a year. */
-    public const DEFAULT_PRICE_JUMP_INTENSITY = 2.0;
-    /** Price jump size volatility assumed for a stock seeded without one: about 10% a jump. */
-    public const DEFAULT_PRICE_JUMP_VOL = 0.10;
-
-    // --- Capacity Investment ---
-    /**
-     * Share of the log gap between demand-implied and installed capital a firm closes each year: 6.2% (Bloom, Bond &
-     * Van Reenen 2007, UK company panel, error-correction term).
-     */
-    public const CAPITAL_ERROR_CORRECTION_SPEED = 0.062;
-    /** Least the capex cycle scales every capex line to: half of plan in the deepest trough. */
-    public const MIN_CAPEX_CYCLE_MODIFIER = 0.50;
-    /** Most the capex cycle scales every capex line to: one and a half times plan at the peak. */
-    public const MAX_CAPEX_CYCLE_MODIFIER = 1.50;
-    /**
-     * Least share of its maintenance capex a firm cut off from borrowing keeps spending (20%): upkeep deferred further
-     * would idle the plant.
-     */
-    public const MIN_DISTRESSED_MAINTENANCE_SHARE = 0.20;
 
     // --- Institutional & Market Architecture ---
     /** Circuit breaker limiting the price move of a single quarterly earnings report to +/-40%. */
@@ -208,14 +120,6 @@ class EarningsEngine
      */
     public const PREANNOUNCEMENT_MIN_MARGIN_SCALE = 0.05;
 
-    // --- Industry Capacity & Cournot Pricing ---
-    /**
-     * Long-run supply elasticity of the competitive fringe (Forchheimer): fringe output ~ P^eta, so it cedes share when
-     * dominant firms overbuild and refills a hole when one exits; unit elasticity is the textbook constant-cost long
-     * run.
-     */
-    public const FRINGE_SUPPLY_ELASTICITY = 1.0;
-
     // --- Equity Grant Burn Rate ---
     /**
      * Most shares a large company grants in a year, as a share of shares outstanding, by GICS sector: ISS 2026 S&P 500
@@ -235,22 +139,6 @@ class EarningsEngine
     public const DEFAULT_EQUITY_BURN_RATE_CAP = 0.0077;
     /** Goodwill impairment smaller than this fraction of the goodwill balance is immaterial and not booked. */
     public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
-
-    // --- Corporate Taxation ---
-    /** Max % of taxable income that can be shielded by NOLs (e.g. 80% post-TCJA). */
-    public const NOL_MAX_SHIELD_RATIO = 0.80;
-    /**
-     * Quarters of pre-tax income the valuation-allowance test reads: three years, the cumulative-loss window ASC
-     * 740-10-30-21 practice treats as significant negative evidence.
-     */
-    public const VALUATION_ALLOWANCE_LOOKBACK_QUARTERS = 12;
-
-    // --- Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003) ---
-    /**
-     * Quarters of eliminated payroll recognised as one-time termination benefits when the committed base is cut (ASC
-     * 420-10).
-     */
-    public const RESTRUCTURING_SEVERANCE_QUARTERS = 2.0;
 
     // --- Earnings Management (Burgstahler & Dichev 1997) ---
     /**
@@ -276,72 +164,27 @@ class EarningsEngine
      */
     public const EARNINGS_MANAGEMENT_BEAT_CUSHION_PER_SHARE = 0.01;
 
-    // --- Deferred Taxes (ASC 740) ---
-    /**
-     * Declining-balance rate multiple for tax depreciation: the 200% method of the MACRS general depreciation system.
-     */
-    public const TAX_DEPRECIATION_ACCELERATION = 2.0;
-    /**
-     * Carried stream-state key: the tax rate the plant's deferred balance was last struck at, so a rate change
-     * re-strikes it.
-     */
-    public const STATE_PLANT_DEFERRED_TAX_RATE = self::CARRIED_STATE_PREFIX . 'plant_deferred_tax_rate';
-
-    // --- Inventory & Receivable Impairment ---
-    /**
-     * Capacity utilization below which unsold inventory starts failing the lower-of-cost-or-net-realizable-value test
-     * (ASC 330). Calibrated to this engine's utilization scale, which centres on 1.0 rather than the ~80% of the
-     * published manufacturing series.
-     */
-    public const INVENTORY_NRV_UTILIZATION_TRIGGER = 0.95;
-    /** Fraction of inventory written off at total demand collapse; scaled by how far utilization has fallen. */
-    public const INVENTORY_NRV_LOSS_RATE = 0.25;
-    /**
-     * Maximum share of the existing allowance that can be released in one quarter, so a recovery cannot be booked as
-     * instant profit.
-     */
-    public const MAX_ALLOWANCE_RELEASE_RATIO = 0.25;
-
-    // --- Fixed Asset Ledger (PP&E) ---
-    /** Floor on the cash share of the structural cost base once depreciation is carved out as its own expense line. */
-    public const MIN_CASH_COST_SHARE = 0.40;
-    /**
-     * Floor on the quarter's pricing-power multiplier where it divides a cost: a price collapse past half cannot
-     * inflate costs without bound.
-     */
-    public const MIN_PRICING_POWER_DIVISOR = 0.5;
-
-    // --- Earning Asset Ledger (Financials) ---
-    /**
-     * Share of the gap between the credit-loss allowance and its lifetime target closed each quarter, in either
-     * direction, so a build or release is a path and not a cliff.
-     */
-    public const CREDIT_ALLOWANCE_CONVERGENCE_RATIO = 0.25;
-
-    // --- Investment Securities & AOCI (ASC 320 / Basel III) ---
-    /**
-     * Default portfolio duration in years for a financial with no seeded figure; the middle of the range large lenders
-     * run.
-     */
-    public const DEFAULT_SECURITIES_DURATION_YEARS = 4.5;
-
-    // --- Equity Issuance & TAM Scaling Limits ---
-    /**
-     * Ceiling on structural revenue capacity, as a multiple of the firm's revenue at a full addressable share (150%).
-     */
-    public const MAX_SECTOR_TAM_CAPACITY_RATIO = 1.50;
-    /**
-     * The same ceiling for financial intermediaries, whose share is read on equity while revenue comes off the
-     * leveraged book (250%).
-     */
-    public const MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO = 2.50;
-
     // --- Profitability Persistence (Fama & French 2000; Ohlson 1995) ---
     /**
      * Time constant in years of each firm's measured long-run return, the level its profitability reverts to: five
      * years, the span Damodaran normalizes earnings over.
      */
     public const LONG_RUN_RETURN_EMA_YEARS = 5.0;
+
+    /** The quarter's operating side: capacity, revenue and the cost base. */
+    private readonly OperatingCapacityEngine $operations;
+    /** The plant's book: depreciation, write-downs, replacement cost and the PP&E roll-forward. */
+    private readonly FixedAssetLedger $plant;
+    /** The trade cycle's balances and the charges when they go bad. */
+    private readonly WorkingCapitalLedger $workingCapital;
+    /** A lender's earning-asset book and its credit-loss allowance. */
+    private readonly CreditLossLedger $creditLosses;
+    /** Income tax: carryforward, deferred balances and the after-tax figures. */
+    private readonly IncomeTaxLedger $incomeTax;
+    /** The capital budget and the free cash flow it leaves. */
+    private readonly CapitalBudgetEngine $capitalBudget;
+    /** The securities book and the treasury's equity sleeve, marked through other comprehensive income. */
+    private readonly InvestmentMarkLedger $investmentMarks;
 
     public function __construct(
         private EventDispatcherInterface $eventDispatcher,
@@ -366,13 +209,23 @@ class EarningsEngine
         /**
          * Investment securities mark. Defaulted so a harness or a unit test builds an engine without wiring the curve.
          */
-        private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine()),
+        SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine()),
         /**
          * Strikes fair value before and after a report; its revision is the report's price news. It draws nothing, so a
          * default is safe.
          */
         private MarketEngine $marketEngine = new MarketEngine(new MathUtility()),
-    ) {}
+    ) {
+        // Built here from the engine's own services, so every ledger draws from the one random stream and reads the
+        // one industry ledger the engine was given.
+        $this->plant = new FixedAssetLedger($corporateMetrics);
+        $this->operations = new OperatingCapacityEngine($mathUtility, $corporateMetrics, $this->plant, $industryShareLedger);
+        $this->workingCapital = new WorkingCapitalLedger($corporateMetrics);
+        $this->creditLosses = new CreditLossLedger($corporateMetrics);
+        $this->incomeTax = new IncomeTaxLedger($this->plant);
+        $this->capitalBudget = new CapitalBudgetEngine($capExEngine, $corporateMetrics, $this->plant, $this->workingCapital, $industryShareLedger);
+        $this->investmentMarks = new InvestmentMarkLedger($securitiesBook);
+    }
 
     /**
      * @return list<array<string, mixed>>|null The published earnings event, or null for a bankrupt firm or a tick that
@@ -405,27 +258,27 @@ class EarningsEngine
         // The curve moved under the securities book too, and for the same reason it is struck here: the
         // mark is a balance-sheet fact every downstream valuation reads, not an earnings one. It reaches
         // equity through other comprehensive income and never touches EBIT, EPS or the surprise.
-        $this->rollForwardSecuritiesBook($ctx);
+        $this->investmentMarks->rollForwardSecuritiesBook($ctx);
         // The equity the treasury holds is marked for the same reason, to the board's realised return.
-        $this->markEquitySleeve($ctx);
+        $this->investmentMarks->markEquitySleeve($ctx);
 
         $this->initializeContext($ctx);
         // Assets finished this quarter leave construction in progress; the ledger roll-forward below moves
         // them into gross PP&E, where they start earning revenue and start depreciating.
         $ctx->completedCip = $this->capExEngine->processCipQueue($ctx->stock);
-        $this->generateCapacityAndRevenue($ctx);
-        $this->processVariableMargins($ctx);
-        $this->calculateDepreciation($ctx);
+        $this->operations->generateCapacityAndRevenue($ctx);
+        $this->operations->processVariableMargins($ctx);
+        $this->plant->calculateDepreciation($ctx);
         $this->calculateExpectedVsActualFinancials($ctx);
-        $this->applyRestructuringCharge($ctx);
-        $this->applyWorkingCapitalCharges($ctx);
-        $this->applyPlantImpairment($ctx);
-        $this->rollForwardCreditLossAllowance($ctx);
+        $this->operations->applyRestructuringCharge($ctx);
+        $this->workingCapital->applyWorkingCapitalCharges($ctx);
+        $this->plant->applyPlantImpairment($ctx);
+        $this->creditLosses->rollForwardCreditLossAllowance($ctx);
         $this->calculateInterestAndRunRates($ctx);
         $this->reconcileTaxesAndNetIncome($ctx);
         $this->manageReportedEarnings($ctx);
         $this->calculateEPSAndSurprise($ctx);
-        $this->calculateFreeCashFlow($ctx);
+        $this->capitalBudget->calculateFreeCashFlow($ctx);
         $this->allocateCapital($ctx);
         $this->reportFreeCashFlow($ctx);
         $this->executeAnnouncementReturn($ctx);
@@ -614,71 +467,13 @@ class EarningsEngine
         $ctx->corporateTaxRate = $ctx->strategy->getEffectiveTaxRate($macroTaxRate);
 
         $this->seedFixedAssetLedgerIfNeeded($ctx);
-        $this->seedEarningAssetLedgerIfNeeded($ctx);
+        $this->creditLosses->seedEarningAssetLedgerIfNeeded($ctx);
 
         // Struck once the ledgers exist and before earnings or distributions move either side.
         if ($ctx->strategy->getTargetCapitalRatio($stock) !== null) {
             $openingAssets = $stock->getTotalAssets();
             $ctx->openingCapitalRatio = $openingAssets > 0.0 ? (float) $stock->getTotalEquity() / $openingAssets : null;
         }
-    }
-
-    /**
-     * Opens the earning-asset ledger for a balance-sheet business on its first report. The loan book is a balance:
-     * originations grow it, charge-offs and fire sales shrink it, and an allowance for the losses already expected
-     * sits against it.
-     */
-    private function seedEarningAssetLedgerIfNeeded(EarningsSimulationContext $ctx): void
-    {
-        $stock = $ctx->stock;
-        if ($stock->hasEarningAssetLedger() || !$ctx->strategy->isFinancial()) {
-            return;
-        }
-
-        $this->corporateMetrics->seedEarningAssetLedger($stock, $this->resolveLifetimeCreditLossRate($ctx));
-    }
-
-    /**
-     * The quarterly provision analysts carry for a lender: the allowance roll-forward run on the disclosed book with
-     * the public quarter's charge-offs, so both the replenishment and the convergence toward a lifetime target that
-     * moves with published spreads and recession odds are in the estimate. Only the losses the firm's own book takes
-     * beyond them surprise. Nothing for a firm that keeps no loan book.
-     */
-    private function resolveExpectedCreditLossProvision(EarningsSimulationContext $ctx): float
-    {
-        if (!$ctx->stock->hasEarningAssetLedger()) {
-            return 0.0;
-        }
-
-        return $this->advanceCreditLossAllowance(
-            $ctx,
-            (float) $ctx->stock->getEarningAssets(),
-            (float) $ctx->stock->getCreditLossAllowance(),
-            $ctx->publicActuals->creditLossProvision ?? 0.0,
-            $ctx->publicActuals->netChargeOffs ?? 0.0,
-        )['levelCharge'];
-    }
-
-    /**
-     * Lifetime expected loss rate on gross earning assets over the CECL horizon. Two departures from the
-     * through-the-cycle rate are added, not compounded: the forward outlook (spreads, recession risk) moves the
-     * estimate by (multiplier - 1) x TTC, and the losses the book is taking now revert to TTC over the horizon
-     * (ASC 326-20-30-9), adding (current - TTC) x (1 - e^(-H/tau)) / (H/tau). The outlook moves the TARGET the
-     * allowance converges to, so a deteriorating forecast is booked as a build once and released when it clears,
-     * rather than charged again every quarter it persists. Without a current rate (the opening seed) the book is
-     * taken to lose at TTC.
-     */
-    private function resolveLifetimeCreditLossRate(EarningsSimulationContext $ctx, ?float $currentLossRate = null): float
-    {
-        $throughTheCycle = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock));
-        $horizon = max(0.0, $ctx->strategy->getCreditLossHorizonYears());
-        $reversionShare = $horizon > 0.0
-            ? (1.0 - exp(-$horizon / self::CREDIT_LOSS_REVERSION_YEARS)) / ($horizon / self::CREDIT_LOSS_REVERSION_YEARS)
-            : 1.0;
-        $outlook = $throughTheCycle * max(0.0, $ctx->strategy->getForwardCreditLossMultiplier($ctx->stock, $ctx->macroState));
-        $currentConditions = (($currentLossRate ?? $throughTheCycle) - $throughTheCycle) * $reversionShare;
-
-        return max(0.0, $outlook + $currentConditions) * $horizon;
     }
 
     /**
@@ -708,7 +503,7 @@ class EarningsEngine
             $recordedRevenue = max(0.0, (float) $stock->getTotalRevenue());
             $structuralRevenue = $recordedRevenue > 0.0
                 ? $recordedRevenue
-                : abs($ctx->investedCapital) * $this->resolveAnnualCapitalTurnover($ctx);
+                : abs($ctx->investedCapital) * $this->operations->resolveAnnualCapitalTurnover($ctx);
             $structuralCashCosts = $structuralRevenue * (1.0 - $ctx->stableMargin);
             $this->corporateMetrics->buildWorkingCapitalBalances(
                 $stock,
@@ -746,424 +541,6 @@ class EarningsEngine
         );
     }
 
-    private function generateCapacityAndRevenue(EarningsSimulationContext $ctx): void
-    {
-        $stock = $ctx->stock;
-        $strategy = $ctx->strategy;
-        $macroState = $ctx->macroState;
-
-        $annualTurnover = $this->resolveAnnualCapitalTurnover($ctx);
-        $assetTurnover = min(self::MAX_QUARTERLY_ASSET_TURNOVER, $annualTurnover / 4.0);
-
-        // The firm as the macro physics first reads it, kept so the drivers can be measured on it afterwards.
-        $ctx->macroPhysicsBasis = clone $stock;
-        $macroPhysics = $strategy->getMacroPhysics($stock, $macroState);
-        $macroDemandShift = $macroPhysics['macro_demand_shift'];
-        $pricingPowerMultiplier = $macroPhysics['pricing_power_multiplier'];
-        // Input cost level; models that carry inflation inside their own physics leave it at the price level.
-        $inputCostMultiplier = (float) ($macroPhysics['input_cost_multiplier'] ?? $pricingPowerMultiplier);
-
-        // The firm's reach into the market it sells into, on the base the saturation physics uses. The
-        // industry ledger weighs both what this firm builds and what it takes from rivals by it.
-        $evaluationCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
-        $ctx->addressableShare = $this->corporateMetrics->calculateAddressableShare($stock, $evaluationCapital, $macroState);
-
-        // Zero-sum share: rivals' idiosyncratic gains booked since this firm's last report are taken from
-        // its demand in proportion to its size, scaled by how substitutable the industry's output is. The
-        // drain lands in EXPECTED revenue because analysts have already read the rivals' reports.
-        $rivalShareDrain = 0.0;
-        if ($this->industryShareLedger !== null) {
-            $rivalShareDrain = $strategy->getIndustrySubstitutability()
-                * $this->industryShareLedger->resolveRivalShareDrain($stock, $ctx->tickCount, $ctx->ticksPerYear);
-            $macroDemandShift += $rivalShareDrain;
-        }
-        $ctx->rivalShareDrain = $rivalShareDrain;
-
-        // Own-price demand response: only the REAL part of the firm's price change moves volume. The
-        // pricing-power multiplier carries expected inflation for the median firm, so a price setter's
-        // excess pass-through loses some units and a lagging regulated tariff wins some.
-        $realPriceChange = $pricingPowerMultiplier - $inputCostMultiplier;
-        $ownPriceVolumeShift = -$strategy->getPriceElasticityOfDemand() * $realPriceChange;
-        $macroDemandShift += $ownPriceVolumeShift;
-        $ctx->ownPriceVolumeShift = $ownPriceVolumeShift;
-
-        $revenueVol = $ctx->baselineVol * self::IDIOSYNCRATIC_REV_VOL_RATIO;
-        $z1 = $this->mathUtility->generateStandardNormal();
-
-        // A report is filed in the season after its quarter closes, so it covers the calendar quarter before
-        // the one it is filed in (as ReportCalendar labels it).
-        $ctx->calendarQuarter = self::coveredCalendarQuarter($ctx->tickCount, $ctx->ticksPerYear);
-        // Seasonality follows the calendar; the fiscal quarter only shifts annual events (impairment tests).
-        $ctx->fiscalQuarter = (($ctx->calendarQuarter - $strategy->getFiscalYearStartQuarter($stock)) % 4 + 4) % 4;
-        $factors = $strategy->resolveSeasonalityFactors($stock);
-        $ctx->seasonalFactor = $factors[$ctx->calendarQuarter] ?? 1.0;
-        $ctx->priorSeasonalFactor = $factors[($ctx->calendarQuarter + 3) % 4] ?? 1.0;
-
-        $priceJumpIntensity = (float) ($stock->getJumpIntensity() ?? self::DEFAULT_PRICE_JUMP_INTENSITY);
-        $priceJumpVol = (float) ($stock->getJumpVol() ?? self::DEFAULT_PRICE_JUMP_VOL);
-
-        $jumpIntensity = $priceJumpIntensity * self::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
-        $jumpVol = $priceJumpVol * self::FUNDAMENTAL_JUMP_VOL_SCALE;
-        $jumpMean = -$priceJumpVol * self::FUNDAMENTAL_JUMP_MEAN_SCALE;
-
-        $jumpData = $this->mathUtility->calculateJumpDiffusion($jumpIntensity, $jumpMean, $jumpVol, $ctx->dt);
-        $jumpMagnitude = self::compensatedFundamentalJump(exp((float) ($jumpData['exponent'] ?? 0.0)), $jumpIntensity, $jumpMean, $jumpVol, $ctx->dt);
-
-        $idiosyncraticDemandShock = $revenueVol * sqrt($ctx->dt) * $z1;
-
-        $ctx->idiosyncraticDemandShock = $idiosyncraticDemandShock;
-        $ctx->jumpMagnitude = $jumpMagnitude;
-        $ctx->capacityUtilization = $this->capacityUtilizationAt($ctx, $macroDemandShift);
-        // Capital tied up in construction earns nothing yet, but only so much of the base may be excluded:
-        // a firm mid-megaproject still runs the plant it already has. Goodwill earns nothing either — it is
-        // the premium paid over the plant — so an impairment cannot shrink capacity. A financial's base is
-        // its earning assets, which never contained goodwill.
-        $revenueGeneratingCapital = CorporateMetrics::revenueGeneratingCapital(
-            $ctx->investedCapital,
-            $stock->getTotalCipAmount(),
-            $strategy->isFinancial() ? 0.0 : (float) $stock->getGoodwill(),
-        );
-        // Plant is booked at historical cost but sells its output at today's prices. Expected inflation already reaches
-        // the book through capex planned at nominal growth, so what the book cannot see is a price level that runs
-        // ahead of expectation: that surprise is carried on the plant's capacity the quarter it lands, and fades as new
-        // capex restates the book at today's prices. Working capital is already at current prices, and a lender's book
-        // is nominal, so neither is revalued.
-        if ($stock->getGrossPpe() !== null) {
-            $revenueGeneratingCapital += max(0.0, $stock->getNetPpe()) * (exp($this->resolvePriceLevelSurprise($ctx)) - 1.0);
-        }
-
-        $ctx->revenueGeneratingCapital = $revenueGeneratingCapital;
-        $ctx->assetTurnover = $assetTurnover;
-        [$ctx->structuralRevenue, $ctx->expectedRevenue] = $this->capacityRevenueAt($ctx, $pricingPowerMultiplier, $ctx->capacityUtilization);
-        // What the quarter would have run at and sold without its own demand shock and jump: the base analysts forecast
-        // from.
-        $ctx->capacityUtilizationBeforeShocks = $this->capacityUtilizationAt($ctx, $macroDemandShift, false);
-        [, $ctx->expectedRevenueBeforeShocks] = $this->capacityRevenueAt($ctx, $pricingPowerMultiplier, $ctx->capacityUtilizationBeforeShocks);
-        // A model that moves its cycle through an order book or a fleet keeps it out of the engine's utilisation, so
-        // the plant's load puts it back for everything that reads the load: the committed base, overtime, inventory
-        // marks, trade terms and units-of-production depreciation. Read before the physics rolls the book on.
-        $ctx->sectorActivityFactor = max(0.0, 1.0 + $strategy->resolveSectorActivityShift($stock, $ctx->macroState));
-
-        // Industry capacity balance: total industry capacity relative to trend demand scales realized price level.
-        $industryPriceLevel = $this->resolveIndustryPriceLevel($ctx);
-        $ctx->industryPriceLevel = $industryPriceLevel;
-        $balancedStructuralRevenue = $ctx->structuralRevenue;
-        $ctx->structuralRevenue *= $industryPriceLevel;
-        $ctx->expectedRevenue *= $industryPriceLevel;
-        $ctx->expectedRevenueBeforeShocks *= $industryPriceLevel;
-
-        $fixedCostRatio = (float) $stock->getFixedCostRatio();
-        // The cost base inflates with INPUT prices (expected inflation), not with the firm's own selling
-        // price: a price setter's excess pass-through reaches its margin, a price taker's shortfall squeezes
-        // it. Scaling costs by the pricing-power multiplier gave every firm a fixed margin whatever it charged.
-        // A lender's cost base is struck on its book, not on its gross interest income: branches and staff do not
-        // cost more because the policy rate rose and the loans reprice (FDIC: noninterest expense ~2.6% of assets
-        // through rate cycles).
-        $costToEarningAssets = $strategy->getOperatingCostToEarningAssets($stock);
-        $structuralCosts = $costToEarningAssets !== null
-            ? $ctx->revenueGeneratingCapital * $costToEarningAssets / self::TTM_QUARTERS * ($inputCostMultiplier / max(self::MIN_PRICING_POWER_DIVISOR, $pricingPowerMultiplier))
-            : $balancedStructuralRevenue * ($inputCostMultiplier / max(self::MIN_PRICING_POWER_DIVISOR, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
-
-        // Carve structural depreciation out of cash operating costs so EBITDA sits above depreciation and EBIT below.
-        $ctx->structuralDepreciation = $this->resolveStructuralDepreciation($ctx);
-        $cashStructuralCosts = max(
-            $structuralCosts * self::MIN_CASH_COST_SHARE,
-            $structuralCosts - $ctx->structuralDepreciation,
-        );
-
-        // Payroll in the fixed base costs the real wage's gap to trend productivity: a LEVEL, so a real wage that
-        // stays high keeps costing until the labour market corrects it (downward rigidity lives in the wage equation).
-        $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $macroState->realWageGap / max(self::MIN_PRICING_POWER_DIVISOR, $pricingPowerMultiplier));
-        // Capacity cost is committed, not chosen quarter by quarter: a firm carries the base it was
-        // resourced for until it restructures, which is why the structural figure is what gets scaled.
-        // Rules that cost the firm productivity raise it per unit of capacity as they raise its unit costs.
-        $structuralFixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor * $strategy->getFixedCostFactor($macroState);
-        // A firm staffs, rents and stocks up for its peak and lets the extra go after it: the seasonal share of the
-        // base follows the season, the rest (rent, depreciation, head office) carries evenly through the year.
-        $seasonalShare = $strategy->getSeasonalFixedCostShare();
-        $ctx->seasonalFixedCostFactor = 1.0 - $seasonalShare + ($seasonalShare * $ctx->seasonalFactor);
-        $ctx->fixedCosts = $structuralFixedCosts * $this->resolveCommittedCostScale($ctx) * $ctx->seasonalFixedCostFactor;
-
-        $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);
-        $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
-    }
-
-    /**
-     * The log gap between today's price level and the one the plant's book carries at its planned nominal growth:
-     * each quarter's growth in the deflator beyond expected inflation is added, and the gap closes at the rate new
-     * capex restates the book, (g + pi + d) a year, the share of a steady-state book replaced at current prices. A
-     * firm that has never reported starts with no gap. Persisted on the stream map.
-     */
-    private function resolvePriceLevelSurprise(EarningsSimulationContext $ctx): float
-    {
-        $state = $ctx->stock->getEarningsMomentumZ() ?? [];
-        $deflator = max(0.01, $ctx->macroState->gdpDeflator);
-        $lastDeflator = (float) ($state[self::STATE_LAST_DEFLATOR] ?? $deflator);
-        $expectedInflation = max(0.0, $ctx->macroState->inflationEma);
-        $restatement = (max(0.0, $ctx->strategy->getFadedSecularGrowthRate($ctx->stock, $ctx->macroState->totalTime)) + $expectedInflation + $this->resolveDepreciationRate($ctx)) * $ctx->dt;
-
-        $quarterSurprise = isset($state[self::STATE_LAST_DEFLATOR])
-            ? log($deflator / max(0.01, $lastDeflator)) - ($expectedInflation * $ctx->dt)
-            : 0.0;
-        $ctx->priceLevelSurprise = ((float) ($state[self::STATE_PRICE_LEVEL_SURPRISE] ?? 0.0)) * (1.0 - min(1.0, $restatement)) + $quarterSurprise;
-
-        return $ctx->priceLevelSurprise;
-    }
-
-    /**
-     * The quarter's fundamental jump as a share of demand, Merton-compensated (Merton 1976): the jump's e^J - 1
-     * less its expected value lambda x E[e^J - 1] x dt, so a lost contract or a recall moves one quarter's
-     * revenue and not the firm's revenue on average.
-     */
-    public static function compensatedFundamentalJump(float $jumpMultiplier, float $intensity, float $jumpMean, float $jumpVol, float $dt): float
-    {
-        return ($jumpMultiplier - 1.0) - ($intensity * StochasticProcesses::lognormalJumpCompensator($jumpMean, $jumpVol) * $dt);
-    }
-
-    /**
-     * Capacity utilisation the quarter runs at under a given macro demand shift: the seasonal run rate lifted by
-     * demand and the quarter's own shocks, within the plant's physical bounds. Trend growth is not here: it is a rate,
-     * and it reaches revenue as the plant it builds (resolveExpansionBudget).
-     */
-    private function capacityUtilizationAt(EarningsSimulationContext $ctx, float $macroDemandShift, bool $withOwnShocks = true): float
-    {
-        $ownShocks = $withOwnShocks ? $ctx->idiosyncraticDemandShock + $ctx->jumpMagnitude : 0.0;
-        $rawUtilization = $ctx->seasonalFactor * (1.0 + $macroDemandShift + $ownShocks);
-
-        return max(self::MIN_CAPACITY_UTILIZATION, min(self::MAX_CAPACITY_UTILIZATION, $rawUtilization));
-    }
-
-    /**
-     * Structural and expected revenue at a given price level and utilisation, before the industry's price level:
-     * the firm's capital turned over at that price, capped at its addressable market, and run at that utilisation.
-     *
-     * @return array{0: float, 1: float} Structural revenue, expected revenue.
-     */
-    private function capacityRevenueAt(EarningsSimulationContext $ctx, float $pricingPowerMultiplier, float $capacityUtilization): array
-    {
-        $structuralRevenue = max(1.0, $ctx->revenueGeneratingCapital * $ctx->assetTurnover * $pricingPowerMultiplier
-            * $ctx->strategy->getStructuralRevenueMultiplier($ctx->stock));
-
-        // The firm's addressable market in the unit its capacity is measured in: its own structural revenue
-        // scaled up to a full addressable share, on the base every share reading uses (equity for a lender,
-        // whose book turns over a leveraged multiple of it; invested capital otherwise).
-        $fullMarketRevenue = $ctx->addressableShare > 0.0 ? $structuralRevenue / $ctx->addressableShare : INF;
-        $maxCapacity = $fullMarketRevenue * ($ctx->strategy->isFinancial()
-            ? self::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO
-            : self::MAX_SECTOR_TAM_CAPACITY_RATIO);
-
-        $cappedStructuralRevenue = min($maxCapacity, $structuralRevenue);
-
-        // Utilisation is held within the plant's bounds, so the market cap on structural revenue bounds the quarter
-        // too.
-        return [$cappedStructuralRevenue, $cappedStructuralRevenue * $capacityUtilization];
-    }
-
-    /**
-     * The committed cost base the firm is actually resourced for, as a fraction of the base its structural
-     * capacity implies.
-     *
-     * Anderson, Banker & Janakiraman (2003) measure what happens to operating costs when activity moves:
-     * they follow it up at one elasticity and down at a lower one, because a firm cannot unstaff a plant
-     * the quarter demand falls and does not re-staff one the quarter it returns. Written as a partial
-     * adjustment of the base toward the activity it is being asked to carry, their coefficients are ANNUAL
-     * (the base closes 36% of a fall in a year), so each quarter closes the share that compounds to that:
-     * one bad quarter barely trims the base, and a slump that persists restructures it over several years.
-     * This is the only stickiness in the cost structure; variable cost is strictly per unit. The ceiling at
-     * one keeps the boom side out of this channel: running above capacity is already paid for as the convex
-     * overtime premium on the variable margin.
-     */
-    private function resolveCommittedCostScale(EarningsSimulationContext $ctx): float
-    {
-        // A row seeded before the column existed is carrying its full structural base.
-        $prior = (float) $ctx->stock->getCommittedCostScale();
-        if ($prior <= 0.0) {
-            $prior = 1.0;
-        }
-
-        // The activity the base has to carry, with the seasonal swing the firm staffs through taken out, and
-        // the volume a model moves inside its own sector physics put back in.
-        $utilization = ($ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor)) * $ctx->sectorActivityFactor;
-        $activityGap = log(
-            max(self::MIN_CAPACITY_UTILIZATION, $utilization) / max(self::MIN_CAPACITY_UTILIZATION, $prior),
-        );
-
-        $annualElasticity = FinancialConstants::STICKY_COST_BETA_EXPANSION
-            + ($activityGap < 0.0 ? FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY : 0.0);
-        $speed = TimeSeries::periodAdjustmentSpeed($annualElasticity, $ctx->dt);
-
-        $scale = min(
-            1.0,
-            max(FinancialConstants::MIN_COMMITTED_COST_SCALE, $prior * exp($speed * $activityGap)),
-        );
-
-        $ctx->committedCostScale = $scale;
-        $ctx->committedCostCut = max(0.0, $prior - $scale);
-        $ctx->stock->setCommittedCostScale((string) $scale);
-
-        return $scale;
-    }
-
-    /**
-     * The price level this firm realizes given how much plant its industry has installed against trend
-     * demand: one for a balanced industry, below it for an overbuilt one. Financials sell a yield, not a
-     * unit, and are left at one; so is any firm whose model declares its output non-substitutable.
-     */
-    private function resolveIndustryPriceLevel(EarningsSimulationContext $ctx): float
-    {
-        $substitutability = $ctx->strategy->getIndustrySubstitutability();
-        if ($this->industryShareLedger === null || $ctx->strategy->isFinancial() || $substitutability <= 0.0) {
-            return 1.0;
-        }
-
-        // The roster is not the industry: the firm's build weighs on the industry price by its share of the
-        // market it sells into, the same share the saturation penalty is struck on.
-        $capacityRatio = $this->industryShareLedger->resolveIndustryCapacityRatio(
-            $ctx->stock,
-            $ctx->structuralRevenue * self::TTM_QUARTERS,
-            $ctx->addressableShare,
-            IndustryShareLedger::trendNominalGdp($ctx->macroState),
-            $ctx->macroState->totalTime,
-            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $ctx->stock),
-            $ctx->tickCount,
-            $ctx->ticksPerYear,
-        );
-
-        // The roster is priced as dominant firms against a competitive fringe that answers the price: an
-        // overbuild is partly absorbed by fringe exit, a hole left by a failed firm partly refilled.
-        $industryPrice = FirmEconomics::calculateFringeAdjustedPriceLevel(
-            $capacityRatio,
-            $this->industryShareLedger->resolveRosterTrendShare($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear),
-            FinancialConstants::COURNOT_DEMAND_ELASTICITY,
-            self::FRINGE_SUPPLY_ELASTICITY,
-        );
-        $firmResponse = $substitutability * ($industryPrice - 1.0);
-
-        return 1.0 + max(-FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, min(FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, $firmResponse));
-    }
-
-    /**
-     * The quarter's depreciation on the plant's schedule, which is what it charges at structural output
-     * (utilization 1.0). This is the amount carved out of the cash cost base; calculateDepreciation()
-     * charges it as it stands, or scales it by output for a units-of-production plant.
-     */
-    private function resolveStructuralDepreciation(EarningsSimulationContext $ctx): float
-    {
-        return max(0.0, $ctx->strategy->getDepreciableBase($ctx->stock)) * $this->resolveDepreciationRate($ctx) / 4.0;
-    }
-
-    /** Annual declining-balance depreciation rate: the stock's own rate, else its industry's. */
-    private function resolveDepreciationRate(EarningsSimulationContext $ctx): float
-    {
-        $custom = (float) $ctx->stock->getDepreciationRate();
-
-        return $custom > 0.0
-            ? $custom
-            : $this->corporateMetrics->getIndustryDepreciationRate($ctx->stock->getIndustry() ?: 'General');
-    }
-
-    /**
-     * Depreciation on the net book value of PP&E (ASC 360). A plant wears out on a schedule, so the charge is the
-     * same however hard the quarter runs it: a fixed cost, and a demand swing reaches EBIT in full. A plant used up
-     * by extraction is charged by units of production instead, so its charge follows output, and analysts forecast
-     * it on the output the quarter would have run at before its own shocks.
-     *
-     * The base is net PP&E, not invested capital. Goodwill is never depreciated — it is impairment-tested
-     * annually, which the engine already does — and working capital does not wear out. Construction in progress is
-     * likewise excluded: an asset not yet placed in service earns nothing and depreciates nothing.
-     */
-    private function calculateDepreciation(EarningsSimulationContext $ctx): void
-    {
-        $ctx->quarterlyDepreciation = $ctx->structuralDepreciation;
-        $ctx->expectedDepreciation = $ctx->structuralDepreciation;
-        if ($ctx->strategy->depreciatesByUnitsOfProduction()) {
-            $ctx->quarterlyDepreciation *= $ctx->capacityUtilization * $ctx->sectorActivityFactor;
-            $ctx->expectedDepreciation *= $ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor;
-        }
-    }
-
-    /**
-     * Annual capital turnover (revenue / invested capital), the DuPont component that fixes how much revenue a
-     * dollar of capital can generate: ROIC = after-tax margin x turnover.
-     *
-     * For physical businesses turnover is a technology parameter, so it is seeded once from the identity using the
-     * structural baseline ROIC and margin, persisted on the stock, and then held. Deriving it every quarter from
-     * the trailing-return blend would let a margin squeeze cut revenue capacity, a feedback loop with no
-     * physical counterpart (a plant does not shrink because last quarter was unprofitable). Growth in capacity
-     * flows only through invested capital (Damodaran: g = reinvestment x ROIC) and the sector TAM cap.
-     *
-     * Financial intermediaries keep the dynamic derivation: their target return carries net interest margin and
-     * cost-of-funds physics that genuinely move the yield on earning assets.
-     */
-    private function resolveAnnualCapitalTurnover(EarningsSimulationContext $ctx): float
-    {
-        if ($ctx->strategy->isFinancial()) {
-            // The book turns over at the yield it earns: no floor, or a lender whose yield fell in an easing cycle
-            // booked revenue its book never earned.
-            return FirmEconomics::structuralAssetTurnover($ctx->baselineRoic, $ctx->stableMargin, $ctx->corporateTaxRate);
-        }
-
-        $stored = $ctx->stock->getAssetTurnover();
-        if ($stored !== null && (float) $stored > 0.0) {
-            return (float) $stored;
-        }
-
-        $structuralTurnover = FirmEconomics::structuralAssetTurnover(max(0.01, (float) $ctx->stock->getBaselineRoic()), $ctx->stableMargin, $ctx->corporateTaxRate);
-        $ctx->stock->setAssetTurnover((string) $structuralTurnover);
-
-        return $structuralTurnover;
-    }
-
-    private function processVariableMargins(EarningsSimulationContext $ctx): void
-    {
-        $stock = $ctx->stock;
-        $strategy = $ctx->strategy;
-
-        $kappa = $strategy->getMarginReversionSpeed();
-        $outputGap = $ctx->macroState->outputGapEma;
-        $cyclicality = $strategy->getOperatingCyclicality($stock);
-
-        $cyclicalMarginShift = $outputGap * $cyclicality * self::CYCLICAL_MARGIN_SHIFT_COEFFICIENT;
-        $dynamicVariableTheta = min(0.99, max(0.01, $ctx->baselineVariableMargin - $cyclicalMarginShift));
-
-        $z2 = $this->mathUtility->generateStandardNormal();
-        $marginVol = $ctx->baselineVol * self::MARGIN_VOLATILITY_COEFFICIENT;
-
-        if ($stock->getStructuralVariableMargin() !== null) {
-            $currentVariableMargin = max(0.01, min(0.99, (float) $stock->getStructuralVariableMargin()));
-        } else {
-            // With no prior state the process starts at its own long-run mean, which is the structural
-            // variable cost ratio computed above, which carries the depreciation carve-out.
-            $currentVariableMargin = max(0.01, min(0.99, $ctx->baselineVariableMargin));
-        }
-
-        $realizedVariableMargin = StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, $z2);
-        // What the ratio was expected to run at: the same step without its draw, at the output the quarter was
-        // expected to sell.
-        $ctx->publicVariableMargin = min(0.99, max(0.01, StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, 0.0)
-            + self::overtimePremium($ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor, $ctx->seasonalFactor)));
-
-        $stock->setStructuralVariableMargin($realizedVariableMargin);
-
-        // Variable cost is per unit: cost stickiness (Anderson, Banker & Janakiraman 2003) lives in the committed
-        // base alone (resolveCommittedCostScale), so a fall in volume is not charged as sticky twice.
-        $ctx->realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin + self::overtimePremium($ctx->capacityUtilization * $ctx->sectorActivityFactor, $ctx->seasonalFactor)));
-    }
-
-    /**
-     * Overtime cost: the convex penalty on deseasonalized capacity utilization above the overtime threshold. A firm
-     * keeps capacity for its calendar's own peak, so a retailer at 1.35x in its holiday quarter is at structural
-     * demand and pays nothing.
-     */
-    public static function overtimePremium(float $capacityUtilization, float $seasonalFactor): float
-    {
-        return ResponseCurves::calculateConvexPenalty(
-            ($capacityUtilization / max(0.01, $seasonalFactor)) - self::CAPACITY_OVERTIME_THRESHOLD,
-            self::CAPACITY_OVERTIME_CONVEXITY,
-            self::CAPACITY_OVERTIME_SCALAR,
-        );
-    }
-
     /**
      * What each macro input the model reads did to each of its revenue streams this quarter, through both paths it
      * takes: the firm-wide demand and pricing the macro physics sets, and the model's own stream physics. For each
@@ -1189,7 +566,7 @@ class EarningsEngine
                 + $ctx->rivalShareDrain
                 - ($ctx->strategy->getPriceElasticityOfDemand() * ($pricingPowerMultiplier - $inputCostMultiplier));
 
-            [, $expectedRevenue] = $this->capacityRevenueAt($ctx, $pricingPowerMultiplier, $this->capacityUtilizationAt($ctx, $macroDemandShift));
+            [, $expectedRevenue] = $this->operations->capacityRevenueAt($ctx, $pricingPowerMultiplier, $this->operations->capacityUtilizationAt($ctx, $macroDemandShift));
             $counterfactuals[$field] = [$state, $expectedRevenue * $ctx->industryPriceLevel];
         }
 
@@ -1327,7 +704,7 @@ class EarningsEngine
         // charge follows output, and only the part its own shocks move can surprise. A lender's
         // provision is the same kind of line: the through-the-cycle charge on a disclosed book is forecast,
         // and only the cyclical excess the sector physics adds on top of it can surprise.
-        $ctx->expectedCreditLossProvision = $this->resolveExpectedCreditLossProvision($ctx);
+        $ctx->expectedCreditLossProvision = $this->creditLosses->resolveExpectedCreditLossProvision($ctx);
         $expectedEbit = $analystRevenueForEarnings - $ctx->fixedCosts - $ctx->analystExpectedVariableCosts
             - $ctx->expectedDepreciation - $ctx->expectedCreditLossProvision;
         $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $expectedEbit);
@@ -1349,8 +726,8 @@ class EarningsEngine
         // forward with the firm's growth instead of freezing it at today's dollar size.
         $streamState[self::STATE_LAST_EXPECTED_REVENUE] = $ctx->expectedRevenueBeforeShocks;
         // The price level the plant capacity was last struck against, and the surprise it carries.
-        $streamState[self::STATE_LAST_DEFLATOR] = max(0.01, $ctx->macroState->gdpDeflator);
-        $streamState[self::STATE_PRICE_LEVEL_SURPRISE] = $ctx->priceLevelSurprise;
+        $streamState[OperatingCapacityEngine::STATE_LAST_DEFLATOR] = max(0.01, $ctx->macroState->gdpDeflator);
+        $streamState[OperatingCapacityEngine::STATE_PRICE_LEVEL_SURPRISE] = $ctx->priceLevelSurprise;
         // State the physics does not own (the fixed-asset ledger's capital-goods vintage, rolled forward after the cash
         // flows; a distress episode the divestiture engine opened) is carried until its owner removes it. A physics key
         // it stopped registering is gone, so a list it shortens does not come back.
@@ -1468,84 +845,8 @@ class EarningsEngine
 
     private function reconcileTaxesAndNetIncome(EarningsSimulationContext $ctx): void
     {
+        $this->incomeTax->bookIncomeTax($ctx);
         $stock = $ctx->stock;
-        $expectedEbt = $ctx->expectedEbit - $ctx->expectedInterestExpense + $ctx->quarterlyInterestIncome;
-        $actualEbt = $ctx->ebit - $ctx->quarterlyInterestExpense + $ctx->quarterlyInterestIncome;
-
-        $rate = $ctx->corporateTaxRate;
-        $nol = (float) $stock->getNetOperatingLoss();
-
-        // The first report under the rule recognizes the asset a loss already carried was, against retained
-        // earnings (a cumulative-effect adjustment, ASC 250) rather than as one quarter's income.
-        $history = $stock->getPretaxIncomeHistory();
-        $openingDta = $stock->getDeferredTaxAsset();
-        if ($history === null) {
-            // The years before the first report are seeded at structural pre-tax income, as the trailing net income
-            // is, so a new listing's first loss quarter is not read as three years of them.
-            $structuralPretax = ($ctx->structuralRevenue * $ctx->stableMargin) - $ctx->quarterlyInterestExpense + $ctx->quarterlyInterestIncome;
-            $history = array_fill(0, self::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS - 1, $structuralPretax);
-            $openingDta = $rate * max(0.0, $nol);
-            if ($openingDta > 0.0) {
-                $stock->setDeferredTaxAsset($openingDta);
-                $stock->setTotalEquity(\bcadd($stock->getTotalEquity(), Decimal::format($openingDta, 4), 4));
-                $stock->setRetainedEarnings(\bcadd($stock->getRetainedEarnings(), Decimal::format($openingDta, 4), 4));
-                $ctx->cumulativeEffectAdjustment += $openingDta;
-            }
-        }
-        $isAllowanceRequired = static fn(float $quarter): bool => array_sum(array_slice([...$history, $quarter], -self::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS)) < 0.0;
-        $stock->setPretaxIncomeHistory(array_values(array_map('floatval', array_slice([...$history, $actualEbt], -self::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS))));
-
-        // Taxable income is book income less the timing differences the plant opens. Accelerated tax depreciation is
-        // one. A write-down is the other: the tax books allow it only through the depreciation still to come on the
-        // basis it never left, so it is added back now and carried as a deductible difference, and the plant is
-        // deducted once. The liability accrues on both and the loss carryforward on the taxable loss, so a loss
-        // quarter's excess tax depreciation is carried forward rather than lost.
-        $plantTax = $this->rollForwardTaxDepreciation($ctx);
-        $recurringTiming = $plantTax['timing'];
-        $timingDifference = $recurringTiming - $ctx->plantImpairment;
-        $ctx->taxDepreciation = $plantTax['taxDepreciation'];
-
-        // The plant's deferred balance is held at today's rate (ASC 740-10-35-4): a rate change re-strikes the gap the
-        // quarter opened with, a deferred charge or benefit the estimate carries too, since the law is public.
-        $streamState = $stock->getEarningsMomentumZ() ?? [];
-        $remeasurement = ($rate - (float) ($streamState[self::STATE_PLANT_DEFERRED_TAX_RATE] ?? $rate)) * $plantTax['openingGap'];
-        if ($stock->getGrossPpe() !== null) {
-            $streamState[self::STATE_PLANT_DEFERRED_TAX_RATE] = $rate;
-            $stock->setEarningsMomentumZ($streamState);
-        }
-        $openingDtl = max(0.0, (float) $stock->getDeferredTaxLiability());
-        $plantDeferred = max(-$openingDtl, ($timingDifference * $rate) + $remeasurement);
-        $stock->setDeferredTaxLiability((string) ($openingDtl + $plantDeferred));
-
-        $ctx->taxableIncome = $actualEbt - $timingDifference;
-        $actual = self::resolveIncomeTax($ctx->taxableIncome, $nol, $openingDta, $isAllowanceRequired($actualEbt), $rate);
-        $stock->setNetOperatingLoss((string) $actual['nol']);
-        $stock->setDeferredTaxAsset($actual['dta']);
-        $ctx->deferredTaxExpense = $plantDeferred + $actual['deferred'];
-        $ctx->cashTaxPaid = $actual['current'];
-        $ctx->actualQuarterlyNetIncome = $actualEbt - $actual['current'] - $ctx->deferredTaxExpense;
-
-        // Analysts read the same disclosed schedule, carryforward and allowance, and forecast no write-down.
-        $expected = self::resolveIncomeTax($expectedEbt - $recurringTiming, $nol, $openingDta, $isAllowanceRequired($expectedEbt), $rate);
-        $expectedPlantDeferred = max(-$openingDtl, ($recurringTiming * $rate) + $remeasurement);
-        $ctx->expectedQuarterlyNetIncome = $expectedEbt - $expected['current'] - $expectedPlantDeferred - $expected['deferred'];
-
-        $ctx->preTaxIncome = $actualEbt;
-        // Reported tax expense is current plus deferred; the cash figure is on the context separately.
-        $ctx->taxPaid = $actualEbt - $ctx->actualQuarterlyNetIncome;
-
-        // A bank levy is charged on the balance sheet, not on profit, and is not deductible (UK Finance Act 2011,
-        // Schedule 19), so it comes off below the tax line; the rate is public, so the estimate carries it too.
-        $ctx->bankLevy = $ctx->strategy->calculateAnnualBankLevy($stock, $ctx->macroState) / 4.0;
-        $ctx->actualQuarterlyNetIncome -= $ctx->bankLevy;
-        $ctx->expectedQuarterlyNetIncome -= $ctx->bankLevy;
-
-        // The run rate is taxed as the quarter is, on the same carryforward, allowance and recurring timing difference,
-        // with the levy below it: a loss earns its tax benefit where the books recognise one, and a lender pays its
-        // levy.
-        $runRateEbt = $ctx->seasonallyAdjustedEbit - $ctx->quarterlyInterestExpense + $ctx->quarterlyInterestIncome;
-        $runRate = self::resolveIncomeTax($runRateEbt - $recurringTiming, $nol, $openingDta, $isAllowanceRequired($runRateEbt), $rate);
-        $ctx->seasonallyAdjustedNetIncome = $runRateEbt - $runRate['current'] - ($recurringTiming * $rate) - $runRate['deferred'] - $ctx->bankLevy;
 
         // Analysts walk the EPS estimate down to a figure the firm can beat (Richardson, Teoh & Wysocki 2004;
         // Matsumoto 2002), by as much as the firm's own record says it can miss by. Struck on revenue, so the cushion
@@ -1773,114 +1074,6 @@ class EarningsEngine
     }
 
     /**
-     * The quarter's operating capital spending and the free cash flow to the firm it leaves: maintenance at the
-     * replacement cost of the plant worn out, growth capex through the NPV gate, the capex the sector physics
-     * schedules, and the working capital the quarter builds. The plant ledger rolls forward on what is bought outright.
-     */
-    private function calculateFreeCashFlow(EarningsSimulationContext $ctx): void
-    {
-        $stock = $ctx->stock;
-
-        if ($ctx->sharesOutstanding <= 0) {
-            $fcfData = ['fcf_per_share' => 0.0, 'capex' => 0.0, 'direct_capex' => 0.0];
-        } else {
-            $cycleSignal = $ctx->strategy->getCapexCycleSignal($stock, $ctx->macroState);
-            $capexCyclicality = $ctx->strategy->getCapexCyclicality();
-            $cycleCapExModifier = max(self::MIN_CAPEX_CYCLE_MODIFIER, min(self::MAX_CAPEX_CYCLE_MODIFIER, 1.0 + ($cycleSignal * $capexCyclicality)));
-
-            // Operational CapEx:
-            // 1. Maintenance CapEx: replaces depreciating physical capital in ongoing operations, at the capital-goods
-            //    replacement cost of the plant worn out, scaled with the capex cycle.
-            $ctx->replacementCostRatio = $this->resolveReplacementCostRatio($ctx);
-            $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier;
-            if ($ctx->strategy->isFinancial()) {
-                // A balance-sheet business keeps no plant ledger: what it spends to stand still (branches,
-                // systems) is expensed as it is spent, so the cash out is the depreciation charge and nothing
-                // is capitalized. Any other figure would leave cash without an asset or a charge behind it.
-                $maintenanceCapEx = $ctx->quarterlyDepreciation;
-            }
-
-            $currentAnnualizedRevenue = $ctx->actualRevenue / max(0.001, $ctx->dt);
-            $priorNwcStr = $stock->getNetWorkingCapital();
-            $currentNwc = $this->rollForwardWorkingCapitalLedger($ctx, $currentAnnualizedRevenue);
-
-            // Seed on first report; no spurious one-time swing. The ledger has already moved to the new
-            // balances, so cash moves by exactly that much: clamping only the cash leg put the difference on
-            // the balance sheet with no account behind it.
-            $priorNwc = $priorNwcStr === null ? $currentNwc : (float) $priorNwcStr;
-            $deltaNwc = $currentNwc - $priorNwc;
-            $ctx->deltaWorkingCapital = $deltaNwc;
-
-            // Stock-based compensation is a non-cash expense: added back to operating cash flow (ASC 718).
-            // Inventory writedowns and credit-loss provisions are non-cash, exactly like depreciation and
-            // equity compensation: they hit reported earnings but no money moves, so they come back here.
-            $operatingCashFlow = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation + $ctx->stockCompensation
-                + $ctx->inventoryWriteDown + $ctx->plantImpairment + $ctx->receivablesProvision + $ctx->creditLossProvision + $ctx->deferredTaxExpense
-                - $deltaNwc;
-            $internalFunds = $this->resolveInternalFunds($ctx, $operatingCashFlow);
-
-            // A firm in breach of its maintenance covenants (coverage under the minimum, or leverage over the limit)
-            // gets no new money from its lenders, so it builds only what the quarter's cash and its spare cash pay
-            // for: the scheduled outlays it is committed to first, then upkeep down to the least that keeps the plant
-            // running, then growth.
-            $isFundingConstrained = !$ctx->strategy->isFinancial()
-                && (!$ctx->health->hasLeverageHeadroom || $ctx->health->interestCoverage < $ctx->strategy->getMinIcr());
-            if ($isFundingConstrained) {
-                $maintenanceCapEx = self::fundingConstrainedMaintenance($maintenanceCapEx, $ctx->scheduledCapex, $internalFunds);
-            }
-            $ctx->maintenanceCapex = $maintenanceCapEx;
-
-            // 2. Growth CapEx: fundamental reinvestment planned on normalized earnings power, gated by the NPV
-            //    hurdle and bounded by the internal funds the maintenance spend leaves (and, constrained, the
-            //    scheduled spend too).
-            $committedSpend = $maintenanceCapEx + ($isFundingConstrained ? $ctx->scheduledCapex : 0.0);
-            $growthCapEx = $this->calculateGrowthCapEx($ctx, $cycleCapExModifier, $maintenanceCapEx, max(0.0, $internalFunds - $committedSpend));
-
-            // 3. Scheduled CapEx: outlays the sector physics itself commits (spectrum licences, grid rebuilds).
-            //    Committed, so no funding gate cuts it; a cash shortfall is the treasury's problem. The asset is
-            //    not productive on day one, so it is queued as construction-in-progress.
-            $deploysIntoEarningAssets = $ctx->strategy->isFinancial() && $stock->hasEarningAssetLedger();
-            if ($ctx->scheduledCapex > 0.0 && !$deploysIntoEarningAssets) {
-                $this->capExEngine->allocateGrowthCapEx($stock, $ctx->scheduledCapex);
-            }
-
-            // A lender's growth spend is loans made, not plant built: it lands on the earning-asset ledger
-            // the day the cash leaves, with no construction lag.
-            if ($deploysIntoEarningAssets && ($growthCapEx + $ctx->scheduledCapex) > 0.0) {
-                $deployed = $growthCapEx + $ctx->scheduledCapex;
-                $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() + $deployed));
-                $ctx->netLoanOriginations += $deployed;
-            }
-
-            $actualCapEx = $maintenanceCapEx + $growthCapEx + $ctx->scheduledCapex;
-
-            $fcff = $operatingCashFlow - $actualCapEx;
-            $ctx->operatingCashFlow = $operatingCashFlow;
-            $ctx->investingCashFlow = -$actualCapEx;
-
-            $fcfData = [
-                'fcf_per_share' => $fcff / $ctx->sharesOutstanding,
-                'capex' => $actualCapEx,
-                // Only spend that buys an asset outright lands in PP&E this quarter. Scheduled CapEx is
-                // queued as construction in progress and reaches the ledger when it is placed in service,
-                // so counting it here as well would capitalize the same dollar twice.
-                'direct_capex' => $maintenanceCapEx + $growthCapEx,
-            ];
-        }
-
-        $ctx->freeCashFlowPerShare = $fcfData['fcf_per_share'];
-        $ctx->operatingCapex = $fcfData['capex'];
-
-        // Replacement CapEx is the bar the firm has to clear to stand still, so the reinvestment ratio is
-        // measured against the depreciation charge restated at today's prices, not the historical-cost charge.
-        $replacementDepreciation = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio;
-        $reinvestmentRatio = $replacementDepreciation > 0 ? ($fcfData['capex'] / $replacementDepreciation) : 1.0;
-        $ctx->strategy->recordReinvestmentRatio($stock, $reinvestmentRatio, $ctx->dt);
-
-        $this->rollForwardFixedAssetLedger($ctx, $fcfData['direct_capex']);
-    }
-
-    /**
      * The board's capital allocation on the quarter's earnings and free cash flow (CapitalAllocationEngine): dividends,
      * buybacks, issuance, expansion and debt, booked to the cash-flow statement at the cash that moved; then the
      * quarter's equity compensation vests in new shares.
@@ -1974,690 +1167,6 @@ class EarningsEngine
         $quarterlyAccruals = ($ctx->actualQuarterlyNetIncome + $ctx->managedAccrual) - $ctx->operatingCashFlow;
         $accrualsRatio = ($quarterlyAccruals * 4.0) / $totalAssets;
         $stock->setAccrualsRatio($accrualsRatio);
-    }
-
-    /**
-     * Income tax on a quarter's taxable income under ASC 740 with the TCJA loss rules: a profit is taxed after the
-     * carryforward shields up to 80% of it, a loss adds to the carryforward, and the carryforward is carried as a
-     * deferred tax asset at today's rate (so a rate change remeasures it) unless a valuation allowance is required.
-     * The deferred charge is the asset's fall: the carryforward used, written down under an allowance, or a negative
-     * charge (a benefit) as a loss builds it. A loss therefore prints at (1 - t) of itself, as it does for any firm
-     * expected to earn it back, and a firm with a run of losses gets no benefit until it returns to profit.
-     *
-     * @return array{current: float, deferred: float, nol: float, dta: float}
-     */
-    public static function resolveIncomeTax(float $taxableIncome, float $nol, float $openingDta, bool $allowanceRequired, float $rate): array
-    {
-        $nol = max(0.0, $nol);
-        if ($taxableIncome > 0.0) {
-            $shielded = min($taxableIncome * self::NOL_MAX_SHIELD_RATIO, $nol);
-            $current = ($taxableIncome - $shielded) * $rate;
-            $nolAfter = $nol - $shielded;
-        } else {
-            $current = 0.0;
-            $nolAfter = $nol - $taxableIncome;
-        }
-
-        $dta = $allowanceRequired ? 0.0 : $rate * $nolAfter;
-
-        return ['current' => $current, 'deferred' => $openingDta - $dta, 'nol' => $nolAfter, 'dta' => $dta];
-    }
-
-    /**
-     * The tax basis a going concern's plant opens at. A firm investing steadily at nominal growth g, writing its plant
-     * off at book rate d and tax rate 2d, carries a tax basis of (g + d)/(g + 2d) of book value, so a listing opens
-     * mid-life on the tax books as on the book ones, with the deferred tax on the gap booked against retained earnings
-     * (ASC 250 cumulative effect).
-     */
-    private function openSteadyStateTaxBasis(EarningsSimulationContext $ctx): float
-    {
-        $stock = $ctx->stock;
-        $netPpe = max(0.0, $stock->getNetPpe());
-        $bookRate = $this->resolveDepreciationRate($ctx);
-        $growth = max(0.0, $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + max(0.0, $ctx->macroState->inflationEma));
-        $denominator = $growth + ($bookRate * self::TAX_DEPRECIATION_ACCELERATION);
-        $basis = $denominator > 0.0 ? $netPpe * ($growth + $bookRate) / $denominator : $netPpe;
-
-        $openingDeferral = $ctx->corporateTaxRate * ($netPpe - $basis);
-        if ($openingDeferral > 0.0) {
-            $stock->setDeferredTaxLiability((string) ((float) $stock->getDeferredTaxLiability() + $openingDeferral));
-            $stock->setTotalEquity(\bcsub($stock->getTotalEquity(), Decimal::format($openingDeferral, 4), 4));
-            $stock->setRetainedEarnings(\bcsub($stock->getRetainedEarnings(), Decimal::format($openingDeferral, 4), 4));
-            $ctx->cumulativeEffectAdjustment -= $openingDeferral;
-        }
-
-        return $basis;
-    }
-
-    /**
-     * Advances the separate tax basis of PP&E: the quarter's tax depreciation, its timing difference against the book
-     * charge, and the gap between the plant's book value and its tax basis as the quarter opened.
-     *
-     * Tax depreciation uses the 200% declining balance method (the MACRS general depreciation system): the
-     * same asset is written off faster for the tax authority than for shareholders. Early in an asset's
-     * life tax depreciation exceeds book, so taxable income is lower than book income and the unpaid tax
-     * accumulates as a deferred liability. On an ageing asset the two cross over and the liability unwinds.
-     *
-     * A firm investing steadily therefore carries a permanently growing deferred balance, which is why
-     * capital-hungry companies pay a cash tax rate well below the statutory one for decades at a time.
-     *
-     * @return array{taxDepreciation: float, timing: float, openingGap: float}
-     */
-    private function rollForwardTaxDepreciation(EarningsSimulationContext $ctx): array
-    {
-        $stock = $ctx->stock;
-        if ($stock->getGrossPpe() === null) {
-            // Financial balance sheets keep no plant, so there is no timing difference to track.
-            return ['taxDepreciation' => $ctx->quarterlyDepreciation, 'timing' => 0.0, 'openingGap' => 0.0];
-        }
-
-        $basis = $stock->getPpeTaxBasis() !== null ? (float) $stock->getPpeTaxBasis() : $this->openSteadyStateTaxBasis($ctx);
-        // The quarter's write-down is already off the book; the book the quarter opened with still carried it.
-        $openingGap = max(0.0, $stock->getNetPpe()) + $ctx->plantImpairment - $basis;
-
-        $taxRate = $this->resolveDepreciationRate($ctx) * self::TAX_DEPRECIATION_ACCELERATION;
-        $taxDepreciation = min($basis, max(0.0, $basis) * $taxRate / 4.0);
-
-        // Additions join the basis in the ledger roll-forward, alongside the book ledger they also enter.
-        $stock->setPpeTaxBasis((string) max(0.0, $basis - $taxDepreciation));
-
-        return ['taxDepreciation' => $taxDepreciation, 'timing' => $taxDepreciation - $ctx->quarterlyDepreciation, 'openingGap' => $openingGap];
-    }
-
-    /**
-     * Rebuilds the working capital balances from the cash conversion cycle and returns the new net figure.
-     *
-     * Carried as real balances, receivables and inventory can be impaired: a customer stops paying, or goods sit
-     * unsold until they are worth less than they cost. Both are ordinary recession charges and neither is
-     * forecastable, which is why they show up as misses.
-     *
-     * Receivables scale with revenue (they are billed sales); inventory and payables scale with the cost
-     * base (they are carried at cost, not at what the firm hopes to sell them for).
-     */
-    private function rollForwardWorkingCapitalLedger(EarningsSimulationContext $ctx, float $annualizedRevenue): float
-    {
-        $stock = $ctx->stock;
-
-        $baseDays = $ctx->strategy->getWorkingCapitalDays($stock);
-        $deseasonalizedUtilization = $ctx->capacityUtilization * $ctx->sectorActivityFactor / max(0.01, $ctx->seasonalFactor);
-        $shifts = FirmEconomics::calculateWorkingCapitalDayShifts(
-            creditSpread: $ctx->macroState->macroCreditSpreadEma,
-            creditSpreadTrend: $ctx->macroState->macroCreditSpreadTrend,
-            capacityUtilization: $deseasonalizedUtilization,
-            interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma,
-            interbankLiquiditySpreadTrend: $ctx->macroState->interbankLiquiditySpreadTrend,
-        );
-
-        // A macro shift stretches an existing cycle; it cannot conjure one. A firm that carries no inventory
-        // does not start accumulating it because demand fell, and a bank with no trade receivables does not
-        // acquire some because credit spreads widened. Only components the model actually declares move.
-        $shiftDays = static fn(float $base, float $shift): float => $base > 0.0 ? max(0.0, $base + $shift) : 0.0;
-
-        $dso = $shiftDays($baseDays['dso'] ?? 0.0, $shifts['dso'] ?? 0.0);
-        $dio = $shiftDays($baseDays['dio'] ?? 0.0, $shifts['dio'] ?? 0.0);
-        $dpo = $shiftDays($baseDays['dpo'] ?? 0.0, $shifts['dpo'] ?? 0.0);
-
-        $annualizedCosts = max(0.0, ($ctx->actualVariableCosts + $ctx->fixedCosts) / max(0.001, $ctx->dt));
-
-        // Inventory allowance release: unwinds prior-period inventory allowances as goods turn over.
-        $allowance = (float) $stock->getInventoryAllowance();
-        $openingAllowance = max(0.0, $allowance - max(0.0, $ctx->inventoryWriteDown));
-        if ($openingAllowance > 0.0) {
-            $turnover = $dio > 0.0 ? min(1.0, ($ctx->dt * FinancialConstants::DAYS_PER_YEAR) / $dio) : 1.0;
-            $stock->setInventoryAllowance((string) max(0.0, $allowance - ($openingAllowance * $turnover)));
-        }
-
-        return $this->corporateMetrics->buildWorkingCapitalBalances(
-            $stock,
-            ['dso' => $dso, 'dio' => $dio, 'dpo' => $dpo],
-            $annualizedRevenue,
-            $annualizedCosts,
-        );
-    }
-
-    /**
-     * One-time termination benefits for the capacity just cut (ASC 420-10), recognised in the quarter the
-     * plan is committed rather than spread over the savings it buys. Only the labour share carries
-     * severance — exiting a lease or mothballing a line does not — and no analyst forecasts the charge, so
-     * expectedEbit is deliberately left alone and a restructuring quarter reports as a miss. That cost is
-     * the reason a firm does not resize on the first soft quarter.
-     */
-    private function applyRestructuringCharge(EarningsSimulationContext $ctx): void
-    {
-        if ($ctx->committedCostCut <= 0.0 || $ctx->committedCostScale <= 0.0) {
-            return;
-        }
-
-        $structuralFixedCosts = $ctx->fixedCosts / ($ctx->committedCostScale * $ctx->seasonalFixedCostFactor);
-        $charge = $ctx->committedCostCut
-            * $structuralFixedCosts
-            * $ctx->strategy->getLaborCostShare()
-            * self::RESTRUCTURING_SEVERANCE_QUARTERS;
-
-        if ($charge <= 0.0) {
-            return;
-        }
-
-        // Severance sits in operating expense, so it reduces EBITDA and EBIT alike.
-        $ctx->ebitda -= $charge;
-        $ctx->ebit -= $charge;
-        $ctx->restructuringCharge += $charge;
-    }
-
-    /**
-     * Impairs the working capital balances that can go bad.
-     *
-     * Inventory (ASC 330, lower of cost and net realizable value): when the plant is running well below
-     * capacity the goods are not moving, and stock that has to be cleared goes out below cost. The charge
-     * scales with how far demand has fallen.
-     *
-     * Receivables (ASC 326, expected credit losses): the allowance is a level, not a flow, so a provision is
-     * booked when the expected loss rate RISES and released slowly when it falls. Modelling it as a flow
-     * would charge a firm every quarter of a downturn rather than at the point the outlook deteriorates.
-     *
-     * Both are non-cash and neither is in the analyst forecast, so they land as negative surprises. They
-     * are deducted after consensus is formed for exactly that reason. The cash a write-down foretells, the
-     * replacement of the impaired stock, leaves later through the working capital roll-forward as the
-     * allowance unwinds.
-     */
-    private function applyWorkingCapitalCharges(EarningsSimulationContext $ctx): void
-    {
-        $stock = $ctx->stock;
-        if (!$stock->hasWorkingCapitalLedger()) {
-            return; // No ledger yet (first report, or a balance-sheet business that keeps no trade cycle).
-        }
-
-        $ctx->inventoryWriteDown = $this->resolveInventoryWriteDown($ctx);
-        $ctx->receivablesProvision = $this->resolveReceivablesProvision($ctx);
-
-        $totalCharge = $ctx->inventoryWriteDown + $ctx->receivablesProvision;
-        if ($totalCharge === 0.0) {
-            return;
-        }
-
-        // Both charges sit in operating expense, so they reduce EBITDA and EBIT alike. Analysts do not
-        // forecast them, so expectedEbit is deliberately left untouched.
-        $ctx->ebitda -= $totalCharge;
-        $ctx->ebit -= $totalCharge;
-        $ctx->impairmentCharges += $totalCharge;
-    }
-
-    /**
-     * Writes down the long-lived assets the business model's own impairment test found impaired (ASC 360-10): a
-     * builder's land the homes on it can no longer pay for. Like the inventory write-down it sits in operating
-     * expense, is non-cash and is not in the analyst forecast. It is held in accumulated depreciation and
-     * impairment, so the carrying value and the depreciation struck on it both fall.
-     */
-    private function applyPlantImpairment(EarningsSimulationContext $ctx): void
-    {
-        $stock = $ctx->stock;
-        $charge = $stock->getGrossPpe() === null ? 0.0 : min($stock->getNetPpe(), max(0.0, $ctx->plantImpairment));
-        $ctx->plantImpairment = $charge;
-        if ($charge <= 0.0) {
-            return;
-        }
-
-        $stock->setAccumulatedDepreciation((string) ((float) $stock->getAccumulatedDepreciation() + $charge));
-        $ctx->ebitda -= $charge;
-        $ctx->ebit -= $charge;
-        $ctx->impairmentCharges += $charge;
-    }
-
-    /**
-     * Marks the equity the treasury holds to the board's realised return since the last report (FVOCI, IFRS 9 5.7.5):
-     * the price move goes to book value and the treasury the sleeve sits in, net of the tax its quarterly rebalance
-     * realises, and never through earnings; the dividends it was paid are booked as income instead of the expected
-     * return (calculateInterestAndRunRates()). A first report has no earlier reading, so it marks nothing.
-     */
-    private function markEquitySleeve(EarningsSimulationContext $ctx): void
-    {
-        $stock = $ctx->stock;
-        $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $priceThen = $momentum[self::STATE_SLEEVE_PRICE_INDEX] ?? null;
-        $totalReturnThen = $momentum[self::STATE_SLEEVE_TOTAL_RETURN_INDEX] ?? null;
-        $priceNow = $ctx->macroState->boardPriceIndex;
-        $totalReturnNow = $ctx->macroState->boardTotalReturnIndex;
-
-        $sleeve = $ctx->strategy->resolveEquitySleeve($stock, $ctx->macroState);
-        if ($sleeve['value'] <= 0.0 && $priceThen === null) {
-            return;
-        }
-
-        $years = max(FinancialConstants::QUARTER_YEARS, $ctx->dt);
-        $mark = 0.0;
-        if ($sleeve['value'] > 0.0 && $priceThen !== null && $totalReturnThen !== null && (float) $priceThen > 0.0 && (float) $totalReturnThen > 0.0) {
-            $priceReturn = ($priceNow / (float) $priceThen) - 1.0;
-            $ctx->equitySleeveDividendReturn = (($totalReturnNow / (float) $totalReturnThen) - ($priceNow / (float) $priceThen)) / $years;
-            $mark = $sleeve['value'] * $priceReturn * (1.0 - $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
-        }
-
-        $momentum[self::STATE_SLEEVE_PRICE_INDEX] = $priceNow;
-        $momentum[self::STATE_SLEEVE_TOTAL_RETURN_INDEX] = $totalReturnNow;
-        $momentum[self::STATE_SLEEVE_TRAILING_GAINS] = TimeSeries::calculateDistributedLag(
-            currentLaggedValue: (float) ($momentum[self::STATE_SLEEVE_TRAILING_GAINS] ?? 0.0),
-            targetValue: $mark / $years,
-            dt: $years,
-            lagTimeConstant: self::SLEEVE_GAINS_TRAILING_LAG_YEARS,
-        );
-        $stock->setEarningsMomentumZ($momentum);
-        if ($mark === 0.0) {
-            return;
-        }
-        // Book value takes the mark now, as every downstream valuation reads it; the cash leg lands once the quarter's
-        // interest is booked, which accrued on the treasury the quarter opened with (calculateInterestAndRunRates()).
-        $stock->setTotalEquity(\bcadd($stock->getTotalEquity(), Decimal::format($mark, 4), 4));
-        $ctx->equitySleeveMark = $mark;
-    }
-
-    /**
-     * Remarks the investment securities book against the curve (ASC 320).
-     *
-     * Available-for-sale moves total equity now; held-to-maturity is disclosed on the report and stays out
-     * of reported equity until a sale recognises it. Neither reaches earnings. The distinction is the whole
-     * mechanism: a firm can carry an intact capital ratio and a hollowed-out balance sheet at the same time,
-     * and only a forced sale collapses the two back together.
-     */
-    private function rollForwardSecuritiesBook(EarningsSimulationContext $ctx): void
-    {
-        $stock = $ctx->stock;
-        $book = $ctx->strategy->resolveSecuritiesBook($stock);
-        $opening = (float) $stock->getUnrealizedSecuritiesMark();
-
-        if ($book <= 0.0 && $opening === 0.0) {
-            return;
-        }
-
-        $mark = $this->securitiesBook->roll(
-            bookValue: $book,
-            openingMark: $opening,
-            carryingYield: $stock->getSecuritiesCarryingYield(),
-            curve: $ctx->macroState->sovereignCurve(),
-            duration: $stock->getSecuritiesDuration() ?? self::DEFAULT_SECURITIES_DURATION_YEARS,
-            floatingShare: $ctx->strategy->getSecuritiesFloatingShare($stock),
-            fallbackYield: $ctx->macroState->yield10yEma,
-        );
-
-        $stock->setSecuritiesCarryingYield($mark->carryingYield);
-        $stock->setUnrealizedSecuritiesMark(Decimal::format($mark->totalMark, 4));
-
-        // The mark is reported in other comprehensive income net of tax (ASC 320; ASC 740-20-45-11): a deferred tax
-        // liability on an unrealized gain, an asset on a loss, at today's rate on the mark the sheet recognizes.
-        $openingDeferred = $stock->getSecuritiesDeferredTax();
-        $closingDeferred = $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate) * $stock->getRecognizedSecuritiesMark();
-        $stock->setSecuritiesDeferredTax($closingDeferred);
-        $netOfTax = $mark->afsEquityDelta - ($closingDeferred - $openingDeferred);
-
-        if ($netOfTax !== 0.0) {
-            // Other comprehensive income is inside total equity and outside retained earnings, which is why
-            // this is a bcadd on the balance sheet and not a line in the income statement.
-            $stock->setTotalEquity(
-                \bcadd($stock->getTotalEquity(), Decimal::format($netOfTax, 4), 4),
-            );
-        }
-
-        $ctx->unrealizedSecuritiesMark = $mark->totalMark;
-    }
-
-    /**
-     * Rolls the allowance for credit losses on the earning-asset book (ASC 326).
-     *
-     * Charge-offs are the loans that actually went bad: they leave the gross book and consume the allowance,
-     * which is what the allowance was built for, so they hit no one's earnings on the way out. The provision
-     * then puts back what they consumed and walks whatever gap is left a quarter-step toward the lifetime
-     * expected loss on the book that remains. Both halves reach EBIT here; the excess the sector physics
-     * already charged to the margin is carried alongside them and is not charged twice.
-     *
-     * The replenishment term is what makes the level correction a controller with no steady-state error. A
-     * bare proportional step cannot close a gap that charge-offs reopen every quarter, so the allowance
-     * settles permanently below target and the provision permanently below realized losses. Feeding the
-     * charge-offs forward fixes the point exactly on target, and at steady state the provision equals the
-     * losses — which is the whole content of "a bank earns its credit spread and pays it back out".
-     *
-     * Every part is non-cash. The full provision is added back to operating cash flow below, which is what
-     * keeps cash out of the picture: the book falls by the provision and equity falls by the same amount.
-     */
-    private function rollForwardCreditLossAllowance(EarningsSimulationContext $ctx): void
-    {
-        $stock = $ctx->stock;
-        if (!$stock->hasEarningAssetLedger()) {
-            $ctx->creditLossProvision = 0.0;
-            $ctx->netChargeOffs = 0.0;
-
-            return;
-        }
-
-        $explicitProvision = $ctx->creditLossProvision;
-        [
-            'levelCharge' => $levelCharge,
-            'grossBook' => $grossBook,
-            'allowance' => $allowance,
-            'chargeOffs' => $chargeOffs,
-        ] = $this->advanceCreditLossAllowance($ctx, (float) $stock->getEarningAssets(), (float) $stock->getCreditLossAllowance(), $explicitProvision, $ctx->netChargeOffs);
-
-        $stock->setEarningAssets((string) max(0.0, $grossBook));
-        $stock->setCreditLossAllowance((string) $allowance);
-
-        $ctx->ebitda -= $levelCharge;
-        $ctx->ebit -= $levelCharge;
-        $ctx->impairmentCharges += $levelCharge;
-        $ctx->creditLossProvision = $explicitProvision + $levelCharge;
-        $ctx->netChargeOffs = $chargeOffs;
-    }
-
-    /**
-     * One quarter of a lender's allowance (ASC 326): charge-offs leave the book against the reserve, the reserve is
-     * put back and walks a quarter-step toward its lifetime target, and losses past it are charged at once.
-     *
-     * @return array{levelCharge: float, grossBook: float, allowance: float, chargeOffs: float}
-     */
-    private function advanceCreditLossAllowance(EarningsSimulationContext $ctx, float $grossBook, float $allowance, float $explicitProvision, float $reportedChargeOffs): array
-    {
-        // A model whose credit physics is expressed only as a margin shock reports no dollar charge-offs;
-        // its realized losses then run at the through-the-cycle rate, or the allowance would be built every
-        // quarter by a charge nothing ever consumed and released back as income that was never earned.
-        $throughTheCycleCharge = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock)) / 4.0 * $grossBook;
-        $chargeOffs = min($grossBook, $reportedChargeOffs > 0.0 ? $reportedChargeOffs : $throughTheCycleCharge);
-        $currentLossRate = $grossBook > 0.0 ? $chargeOffs * FinancialConstants::QUARTERS_PER_YEAR / $grossBook : null;
-
-        // Loans that went bad leave the book and consume the reserve held against them. No earnings effect:
-        // the loss was recognised when the reserve was built.
-        $allowance += $explicitProvision - $chargeOffs;
-        $grossBook -= $chargeOffs;
-
-        // Put back what the charge-offs consumed, then walk a quarter-step of whatever gap to the lifetime
-        // target is left, in either direction — so a recovery releases reserves gradually and a depleted
-        // allowance is rebuilt rather than left empty.
-        $replenishment = $chargeOffs;
-        $allowance += $replenishment;
-
-        $target = $grossBook * $this->resolveLifetimeCreditLossRate($ctx, $currentLossRate);
-        $convergence = ($target - max(0.0, $allowance)) * self::CREDIT_ALLOWANCE_CONVERGENCE_RATIO;
-        $allowance += $convergence;
-
-        $levelCharge = $replenishment + $convergence;
-
-        if ($allowance < 0.0) {
-            // Losses ran past the reserve: the uncovered part is charged now, not carried as a negative asset.
-            $levelCharge -= $allowance;
-            $allowance = 0.0;
-        }
-
-        return ['levelCharge' => $levelCharge, 'grossBook' => $grossBook, 'allowance' => $allowance, 'chargeOffs' => $chargeOffs];
-    }
-
-    /**
-     * Lower-of-cost-or-net-realizable-value writedown on inventory the firm cannot move (ASC 330).
-     *
-     * Charged against the carrying value, so stock already written down is not written down again, and held
-     * as an allowance against the gross balance rather than cut from it, since the gross figure is rebuilt from the
-     * trade cycle every quarter. The allowance unwinds in the roll-forward as the
-     * impaired stock turns, which is when the replacement cash actually leaves.
-     */
-    private function resolveInventoryWriteDown(EarningsSimulationContext $ctx): float
-    {
-        $inventory = $ctx->stock->getNetInventory();
-        if ($inventory <= 0.0) {
-            return 0.0;
-        }
-
-        $trigger = self::INVENTORY_NRV_UTILIZATION_TRIGGER;
-        $utilization = $ctx->capacityUtilization * $ctx->sectorActivityFactor / max(0.01, $ctx->seasonalFactor);
-        if ($utilization >= $trigger) {
-            return 0.0;
-        }
-
-        // Stock still maturing is sold years on, after the slump: only the goods on sale now are marked down.
-        $exposed = $inventory * (1.0 - $ctx->strategy->getMaturingInventoryShare($ctx->stock));
-        $severity = min(1.0, ($trigger - $utilization) / $trigger);
-        $charge = $exposed * self::INVENTORY_NRV_LOSS_RATE * $severity;
-
-        $ctx->stock->setInventoryAllowance((string) ((float) $ctx->stock->getInventoryAllowance() + $charge));
-
-        return $charge;
-    }
-
-    /** Expected credit loss allowance on trade receivables, provisioned to a level (ASC 326). */
-    private function resolveReceivablesProvision(EarningsSimulationContext $ctx): float
-    {
-        $receivables = (float) ($ctx->stock->getReceivables() ?? 0.0);
-        if ($receivables <= 0.0) {
-            return 0.0;
-        }
-
-        $defaultRate = max(0.0, min(1.0, $ctx->macroState->corporateDefaultRateEma));
-        $targetAllowance = $receivables * $defaultRate * FinancialConstants::TRADE_RECEIVABLE_LGD;
-        $currentAllowance = (float) $ctx->stock->getReceivablesAllowance();
-
-        $provision = $targetAllowance - $currentAllowance;
-        if ($provision < 0.0) {
-            // A recovery is released gradually: an improving outlook is not instant profit.
-            $provision = -min(abs($provision), $currentAllowance * self::MAX_ALLOWANCE_RELEASE_RATIO);
-        }
-
-        $ctx->stock->setReceivablesAllowance((string) max(0.0, $currentAllowance + $provision));
-
-        return $provision;
-    }
-
-    /**
-     * How far a maintenance dollar has to stretch: the current capital-goods price level over the price
-     * level the existing plant was bought at. One when prices have not moved since the plant was built.
-     *
-     * The vintage is seeded to the current level for a firm that has never reported, so nobody inherits a
-     * replacement bill for inflation that happened before they existed.
-     */
-    private function resolveReplacementCostRatio(EarningsSimulationContext $ctx): float
-    {
-        $stock = $ctx->stock;
-
-        // No plant, no replacement cost. Financial models never open a fixed-asset ledger, so their vintage
-        // would never roll forward and the ratio would climb with the price level forever, charging a bank
-        // an ever-growing cash premium to replace machinery it does not own.
-        if ($stock->getGrossPpe() === null) {
-            return 1.0;
-        }
-
-        $currentDeflator = max(0.01, $ctx->macroState->gdpDeflator);
-        $vintage = $stock->getPpeVintageDeflator();
-
-        if ($vintage === null || (float) $vintage <= 0.0) {
-            $stock->setPpeVintageDeflator((string) $currentDeflator);
-
-            return 1.0;
-        }
-
-        // Replacement is bought at today's capital-goods prices, which drift against the deflator by industry.
-        return max(0.0, ($currentDeflator / (float) $vintage) * ($this->resolveCapitalGoodsRelativePrice($ctx) / $this->resolvePpeRelativePrice($ctx)));
-    }
-
-    /**
-     * The firm's capital goods priced against the GDP deflator: its industry's measured drift (BEA Fixed Assets,
-     * CapitalGoodsPrices) compounded from the year the firm was first read, where it is 1. Measuring from the firm's
-     * own anchor lets a running game take the drift on without restating the plant it already owns.
-     */
-    private function resolveCapitalGoodsRelativePrice(EarningsSimulationContext $ctx): float
-    {
-        $state = $ctx->stock->getEarningsMomentumZ() ?? [];
-        $anchor = (float) ($state[self::STATE_CAPITAL_GOODS_ANCHOR_TIME] ?? $ctx->macroState->totalTime);
-
-        return exp(CapitalGoodsPrices::driftFor($ctx->strategy) * ($ctx->macroState->totalTime - $anchor));
-    }
-
-    /** The relative price the plant on the books was bought at, capex-weighted; today's, for a firm not yet tracked. */
-    private function resolvePpeRelativePrice(EarningsSimulationContext $ctx): float
-    {
-        $state = $ctx->stock->getEarningsMomentumZ() ?? [];
-
-        return max(0.01, (float) ($state[self::STATE_PPE_RELATIVE_PRICE] ?? $this->resolveCapitalGoodsRelativePrice($ctx)));
-    }
-
-    /**
-     * Perpetual-inventory roll-forward of the fixed-asset ledger.
-     *
-     * Gross cost rises by the capital actually placed in service this quarter: CapEx that buys an asset
-     * outright, plus construction finally completed. Accumulated depreciation rises by the quarter's charge.
-     *
-     * Fully depreciated cost is then retired from both sides at the useful-life rate. Without retirement the
-     * gross balance would grow forever while net book value plateaued, so the asset-age ratio would march to
-     * 1.0 and never come back — a firm that had replaced its entire plant would still look ancient. Retiring
-     * a cohort each quarter is what a real fixed-asset register does when equipment reaches the end of its
-     * life and leaves the books.
-     */
-    private function rollForwardFixedAssetLedger(EarningsSimulationContext $ctx, float $directCapex): void
-    {
-        $stock = $ctx->stock;
-        if ($stock->getGrossPpe() === null) {
-            return; // Financial balance sheets never open a plant ledger.
-        }
-
-        $openingNetPpe = $stock->getNetPpe();
-        $additions = max(0.0, $directCapex) + max(0.0, $ctx->completedCip);
-
-        $grossPpe = (float) $stock->getGrossPpe() + $additions;
-        $accumulated = (float) $stock->getAccumulatedDepreciation() + max(0.0, $ctx->quarterlyDepreciation);
-
-        // The plant's vintage is the CapEx-weighted price level it was bought at: this quarter's additions
-        // come in at today's prices and pull the average forward, while the assets still on the books keep
-        // theirs. A firm replacing its plant steadily converges on the current price level; one that has
-        // stopped investing keeps an old vintage, and its eventual replacement bill grows accordingly.
-        $currentDeflator = max(0.01, $ctx->macroState->gdpDeflator);
-        $vintage = (float) ($stock->getPpeVintageDeflator() ?? $currentDeflator);
-        $vintageBase = max(0.0, $openingNetPpe) + $additions;
-        if ($vintageBase > 0.0) {
-            $vintage = ((max(0.0, $openingNetPpe) * $vintage) + ($additions * $currentDeflator)) / $vintageBase;
-        }
-        $stock->setPpeVintageDeflator((string) max(0.01, $vintage));
-
-        // The same weighting on the capital-goods price against the deflator, kept on the stream map.
-        $relativePrice = $this->resolveCapitalGoodsRelativePrice($ctx);
-        $ppeRelativePrice = $this->resolvePpeRelativePrice($ctx);
-        if ($vintageBase > 0.0) {
-            $ppeRelativePrice = ((max(0.0, $openingNetPpe) * $ppeRelativePrice) + ($additions * $relativePrice)) / $vintageBase;
-        }
-        $state = $stock->getEarningsMomentumZ() ?? [];
-        $state[self::STATE_CAPITAL_GOODS_ANCHOR_TIME] = (float) ($state[self::STATE_CAPITAL_GOODS_ANCHOR_TIME] ?? $ctx->macroState->totalTime);
-        $state[self::STATE_PPE_RELATIVE_PRICE] = max(0.01, $ppeRelativePrice);
-        $stock->setEarningsMomentumZ($state);
-
-        $retired = min($accumulated, $grossPpe * $this->resolveDepreciationRate($ctx) / 4.0);
-        $grossPpe -= $retired;
-        $accumulated -= $retired;
-
-        $stock->setGrossPpe((string) max(0.0, $grossPpe));
-        $stock->setAccumulatedDepreciation((string) max(0.0, min($accumulated, $grossPpe)));
-
-        // New assets enter the tax basis at cost, exactly as they enter the book ledger, and then start
-        // depreciating on their own accelerated schedule from next quarter.
-        if ($additions > 0.0 && $stock->getPpeTaxBasis() !== null) {
-            $stock->setPpeTaxBasis((string) ((float) $stock->getPpeTaxBasis() + $additions));
-        }
-    }
-
-    /**
-     * Growth CapEx follows the fundamental reinvestment identity (Damodaran): the capital budget is planned on
-     * normalized earnings power (structural ROIC x invested capital), not on the current quarter's reported
-     * profit. A loss-making growth firm therefore keeps investing from its cash pile while a boom quarter does
-     * not trigger a one-off splurge. The stock's capexRatio is its reinvestment rate (g = reinvestment x ROIC).
-     *
-     * Three real-world gates apply:
-     *  1. NPV rule: no growth investment while the structural return fails the model's hurdle rate.
-     *  2. Demand: no more plant than the flexible accelerator allows (resolveExpansionBudget()).
-     *  3. Funding constraint: spend is bounded by the internal funds the quarter's other plant spend leaves.
-     * What the accelerator still allows after this spend is left on the context for the treasury.
-     */
-    private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $fundingCapacity): float
-    {
-        $stock = $ctx->stock;
-        $manager = $stock->getManagementProfile();
-        $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $manager->reinvestmentBias();
-        $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
-
-        // Jensen (1986): the agency cost of free cash flow is not spending more, it is accepting projects
-        // that do not clear the cost of capital. The style bends the hurdle management applies, so an
-        // empire builder keeps growing through returns a disciplined board would refuse to fund — and the
-        // ROIC reversion downstream then prices exactly that value destruction.
-        $appliedHurdle = $manager->appliedHurdle($hurdleRate);
-
-        $expansionBudget = $this->resolveExpansionBudget($ctx, $cycleCapExModifier, $maintenanceCapEx);
-        $ctx->expansionBudget = $expansionBudget;
-
-        if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $appliedHurdle) {
-            return 0.0;
-        }
-
-        $structuralQuarterlyNopat = $ctx->baselineRoic * abs($ctx->investedCapital) / 4.0;
-        $plannedGrowthCapEx = $structuralQuarterlyNopat * $reinvestmentRate * $cycleCapExModifier;
-        if ($expansionBudget !== null) {
-            $plannedGrowthCapEx = min($plannedGrowthCapEx, $expansionBudget);
-        }
-
-        $growthCapEx = min($plannedGrowthCapEx, $fundingCapacity);
-        if ($expansionBudget !== null) {
-            $ctx->expansionBudget = max(0.0, $expansionBudget - $growthCapEx);
-        }
-
-        return $growthCapEx;
-    }
-
-    /**
-     * The cash the firm can put into plant without borrowing: the quarter's operating cash flow less what a
-     * pass-through must distribute, plus the treasury above its operating floor, or less what the treasury is short
-     * of it, since a treasury below its floor is refilled before anything is built (Fazzari, Hubbard & Petersen 1988).
-     */
-    private function resolveInternalFunds(EarningsSimulationContext $ctx, float $operatingCashFlow): float
-    {
-        $stock = $ctx->stock;
-        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
-        $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        // What a pass-through must distribute is not the firm's to reinvest: a REIT's acquisitions are funded
-        // from what the distribution rule leaves it, its spare cash and its borrowing, never from the dividend.
-        $requiredDistribution = max(0.0, $ctx->actualQuarterlyNetIncome) * $ctx->strategy->getMinimumDistributionRatio();
-
-        return $operatingCashFlow - $requiredDistribution + ((float) $stock->getCorporateTreasury() - $minOperatingCash);
-    }
-
-    /**
-     * The upkeep a firm cut off from borrowing can pay for (Campello, Graham & Harvey 2010: constrained firms cut
-     * investment to their own cash): what its internal funds leave after its committed outlays, never above the plan
-     * and never below the share that keeps the plant running.
-     */
-    public static function fundingConstrainedMaintenance(float $plannedMaintenance, float $committedOutlays, float $internalFunds): float
-    {
-        $floor = $plannedMaintenance * self::MIN_DISTRESSED_MAINTENANCE_SHARE;
-
-        return max($floor, min($plannedMaintenance, $internalFunds - $committedOutlays));
-    }
-
-    /**
-     * Growth plant the quarter's demand calls for, by the flexible accelerator in error-correction form: the
-     * plant grows with the nominal demand its sector sees and closes a share of the gap between the plant the
-     * firm's share of trend demand implies and the plant it runs (Chenery 1952; speed from Bloom, Bond & Van
-     * Reenen 2007). A firm that has built ahead of its market adds nothing until demand catches up; one that
-     * has fallen behind builds faster. The cycle signal scales it as it scales every capex line.
-     *
-     * Replacement-cost maintenance has already carried part of the price level onto the plant ledger this
-     * quarter (the slice it replaced dearer than it was booked), so only the remainder is growth spend. Null
-     * for a lender, whose expansion is a loan book sized by its funding and capital, not plant.
-     */
-    private function resolveExpansionBudget(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx): ?float
-    {
-        if ($ctx->strategy->isFinancial()) {
-            return null;
-        }
-
-        $stock = $ctx->stock;
-        $trendNominalGrowth = max(0.0, $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + max(0.0, $ctx->macroState->inflationEma));
-        $capitalGap = $this->industryShareLedger?->resolveTrendCapacityGap(
-            $stock,
-            $ctx->macroState,
-            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock),
-        ) ?? 0.0;
-        $plantGrowth = Valuation::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, self::CAPITAL_ERROR_CORRECTION_SPEED);
-
-        $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
-        $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
-
-        return max(0.0, $plantBase * $plantGrowth * $ctx->dt * $cycleCapExModifier - $revaluationAlreadyBooked);
     }
 
     /**

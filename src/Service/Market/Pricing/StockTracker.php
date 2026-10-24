@@ -9,9 +9,10 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Deal\AcquisitionEngine;
+use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Market\Index\IndexCommittee;
 use App\Service\Math\Decimal;
@@ -114,7 +115,8 @@ class StockTracker
         private MarketEngine $marketEngine,
         private EarningsEngine $earningsEngine,
         private CorporateActionEngine $corporateActionEngine,
-        private MergerAndAcquisitionEngine $maEngine,
+        private AcquisitionEngine $acquisitionEngine,
+        private DivestitureEngine $divestitureEngine,
         private MarketEventPublisher $eventService,
         private DebtEngine $debtEngine,
         private CorporateMetrics $corporateMetrics,
@@ -154,7 +156,7 @@ class StockTracker
             $this->marketVarianceTrend ?? (MacroConstants::MACRO_VOL_BASE_ANCHOR ** 2),
             $marketVol * $marketVol,
             $dt,
-            MarketEngine::MARKET_VARIANCE_TREND_YEARS,
+            VarianceBudget::MARKET_VARIANCE_TREND_YEARS,
         );
         // The stamp duty the Diet has in force thins every name's turnover, and so its depth, this tick.
         $this->liquidityEngine->setStampDutyRate($macroDTO->stampDutyRate);
@@ -236,7 +238,7 @@ class StockTracker
     /** An acquisition, or failing one a divestiture: a company won't acquire and divest in the exact same tick. */
     private function strikeDeals(StockTick $tick, BoardTick $board): void
     {
-        $maResult = $this->maEngine->evaluatePrivateAcquisition($tick->stock, $board->macro, $board->dt, $board->tickCount, $board->ticksPerYear);
+        $maResult = $this->acquisitionEngine->evaluatePrivateAcquisition($tick->stock, $board->macro, $board->dt, $board->tickCount, $board->ticksPerYear);
         if ($maResult) {
             $board->events[] = $maResult['event'];
             $tick->dealShock = $maResult['shock'];
@@ -245,7 +247,7 @@ class StockTracker
             return;
         }
 
-        $divestResult = $this->maEngine->evaluateCorporateDivestiture($tick->stock, $board->macro, $board->dt);
+        $divestResult = $this->divestitureEngine->evaluateCorporateDivestiture($tick->stock, $board->macro, $board->dt);
         if ($divestResult) {
             $board->events[] = $divestResult['event'];
             $tick->dealShock = $divestResult['shock'];

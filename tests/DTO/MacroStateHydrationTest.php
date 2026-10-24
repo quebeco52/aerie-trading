@@ -6,8 +6,10 @@ namespace App\Tests\DTO;
 
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\Aggregate\InventoryAndTiming;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
+use App\Service\Macro\Subsystem\Aggregate\OutputGap;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -158,7 +160,7 @@ class MacroStateHydrationTest extends TestCase
         $dto = MacroStateDTO::fromArray($payload);
 
         $this->assertEqualsWithDelta(log(1.3), $state->alliedDefenseDeliveryLag, 1e-15);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::netExportGapAt(0.01, 0.0, log(1.3)), $state->netExportGap, 1e-15);
+        $this->assertEqualsWithDelta(OpenEconomy::netExportGapAt(0.01, 0.0, log(1.3)), $state->netExportGap, 1e-15);
         $this->assertEqualsWithDelta($state->alliedDefenseDeliveryLag, $dto->alliedDefenseDeliveryLag, 1e-15);
         $this->assertEqualsWithDelta($state->netExportGap, $dto->netExportGap, 1e-15);
 
@@ -176,14 +178,14 @@ class MacroStateHydrationTest extends TestCase
         $payload = ['exchange_rate_index_ema' => 92.0, 'exchange_rate_trend' => 100.0, 'foreign_output_gap_ema' => 0.012];
         $state = MacroState::fromArray($payload);
 
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::importPriceLevelTarget(92.0), $state->importPriceLevel, 1e-15);
+        $this->assertEqualsWithDelta(OpenEconomy::importPriceLevelTarget(92.0), $state->importPriceLevel, 1e-15);
         $this->assertEqualsWithDelta(log(0.92), $state->realExchangeRateTradeLag, 1e-15);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::netExportGapAt(0.012, log(0.92), 0.0), $state->netExportGap, 1e-15);
+        $this->assertEqualsWithDelta(OpenEconomy::netExportGapAt(0.012, log(0.92), 0.0), $state->netExportGap, 1e-15);
         $this->assertGreaterThan(0.0, $state->netExportGap, 'A cheap currency and a mainland boom both sell exports.');
 
         // Finance output opens where the credit balances stand, so the upgrade reprices no output.
         $financed = ['credit_to_gdp_gap' => 0.05, 'credit_to_gdp_trend' => 1.0, 'equity_wealth_ratio' => 0.9, 'equity_wealth_trend' => 1.0];
-        $expected = MacroAggregateSubsystem::financeOutputGapAt(log(1.05));
+        $expected = OutputGap::financeOutputGapAt(log(1.05));
         $this->assertEqualsWithDelta($expected, MacroState::fromArray($financed)->financeOutputGap, 1e-15);
         $this->assertEqualsWithDelta($expected, MacroStateDTO::fromArray($financed)->financeOutputGap, 1e-15);
         $this->assertSame(MacroStateDTO::fromMacroState($state)->toArray(), MacroStateDTO::fromArray($payload)->toArray(), 'The snapshot reader opens them the same way.');
@@ -202,14 +204,14 @@ class MacroStateHydrationTest extends TestCase
             'inventory_investment_gap' => 0.0, 'finance_market_trend' => 1.4, 'finance_market_trend_slope' => 0.005,
             'credit_to_gdp_gap' => 0.05, 'credit_to_gdp_trend' => 1.0, 'equity_wealth_ratio' => 1.6,
         ];
-        $credit = MacroAggregateSubsystem::financeOutputGapAt(log(1.05));
-        $kept = 0.01 + ((0.012 - $credit) / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT);
+        $credit = OutputGap::financeOutputGapAt(log(1.05));
+        $kept = 0.01 + ((0.012 - $credit) / OutputGap::DOMESTIC_GAP_WEIGHT);
 
         $state = MacroState::fromArray($payload);
         $this->assertSame(0.02, $state->outputGap, 'GDP is what it was.');
         $this->assertEqualsWithDelta($credit, $state->financeOutputGap, 1e-15);
         $this->assertEqualsWithDelta($kept, $state->domesticDemandGapEma, 1e-15);
-        $this->assertEqualsWithDelta(MacroAggregateSubsystem::domesticDemandGap($state), (0.02 - $credit) / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT, 1e-15, 'Domestic demand holds the old market leg.');
+        $this->assertEqualsWithDelta(OutputGap::domesticDemandGap($state), (0.02 - $credit) / OutputGap::DOMESTIC_GAP_WEIGHT, 1e-15, 'Domestic demand holds the old market leg.');
         $this->assertArrayNotHasKey('finance_market_trend', $state->toArray());
 
         $snapshot = MacroStateDTO::fromArray($payload);
@@ -229,16 +231,16 @@ class MacroStateHydrationTest extends TestCase
     public function testAPayloadPredatingInventoryInvestmentLoadsWithoutMovingGdp(): void
     {
         $payload = ['output_gap' => -0.02, 'output_gap_ema' => -0.015, 'domestic_demand_gap_ema' => -0.02, 'inventory_stock_gap' => 0.05];
-        $sales = -0.02 / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT;
+        $sales = -0.02 / OutputGap::DOMESTIC_GAP_WEIGHT;
         $miss = -0.02 - $sales;
-        $flow = MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT * ((MacroAggregateSubsystem::INVENTORY_SURPRISE_SENSITIVITY * $miss)
-            - (MacroAggregateSubsystem::INVENTORY_ADJUSTMENT_SPEED * MacroAggregateSubsystem::INVENTORY_TO_ANNUAL_SALES * 0.05));
+        $flow = OutputGap::DOMESTIC_GAP_WEIGHT * ((InventoryAndTiming::INVENTORY_SURPRISE_SENSITIVITY * $miss)
+            - (InventoryAndTiming::INVENTORY_ADJUSTMENT_SPEED * InventoryAndTiming::INVENTORY_TO_ANNUAL_SALES * 0.05));
 
         $state = MacroState::fromArray($payload);
         $this->assertSame(-0.02, $state->outputGap, 'GDP is what it was.');
         $this->assertEqualsWithDelta($flow, $state->inventoryInvestmentGap, 1e-15);
         $this->assertLessThan(0.0, $state->inventoryInvestmentGap, 'An overhang being worked off is investment below normal.');
-        $this->assertEqualsWithDelta($miss, $state->domesticDemandGapEma - MacroAggregateSubsystem::domesticDemandGap($state), 1e-15, 'No sales surprise opens.');
+        $this->assertEqualsWithDelta($miss, $state->domesticDemandGapEma - OutputGap::domesticDemandGap($state), 1e-15, 'No sales surprise opens.');
         $this->assertEqualsWithDelta($state->inventoryInvestmentGap, MacroStateDTO::fromArray($payload)->inventoryInvestmentGap, 1e-15, 'The snapshot reader opens it the same way.');
 
         $saved = $state->toArray();
@@ -256,7 +258,7 @@ class MacroStateHydrationTest extends TestCase
 
         $this->assertSame(-0.02, $state->outputGap, 'GDP is what it was.');
         $this->assertLessThan(0.0, $state->inventoryInvestmentGap);
-        $this->assertEqualsWithDelta(0.005 / MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT, $state->domesticDemandGapEma - MacroAggregateSubsystem::domesticDemandGap($state), 1e-15);
+        $this->assertEqualsWithDelta(0.005 / OutputGap::DOMESTIC_GAP_WEIGHT, $state->domesticDemandGapEma - OutputGap::domesticDemandGap($state), 1e-15);
     }
 
     /**

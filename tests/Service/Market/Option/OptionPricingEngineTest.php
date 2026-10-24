@@ -8,7 +8,7 @@ use App\DTO\SovereignCurveDTO;
 use App\Entity\OptionContract;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Option\OptionPricingEngine;
-use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
@@ -131,14 +131,14 @@ class OptionPricingEngineTest extends TestCase
         $lambda = 4.0;
         $configuredJumpVol = 0.90;
 
-        $calibrated = MarketEngine::calibratedJumpParameters($longRunVol, 1.0, $lambda, $configuredJumpVol);
+        $calibrated = VarianceBudget::calibratedJumpParameters($longRunVol, 1.0, $lambda, $configuredJumpVol);
         $this->assertLessThan($configuredJumpVol, $calibrated['scale'], 'the budget should have bound here');
 
         $surface = $this->engine->surface($longRunVol, $longRunVol, 1.0, $lambda, $configuredJumpVol, 0.25);
 
         $caps = ['cap_up' => FinancialConstants::MAX_JUMP_LOG_RETURN, 'cap_down' => abs(FinancialConstants::MIN_JUMP_LOG_RETURN)];
-        $own = ['lambda' => $lambda, 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $calibrated['eta_up'], 'eta_down' => $calibrated['eta_down']] + $caps;
-        $market = MarketEngine::systemicJumpParameters(1.0) + $caps;
+        $own = ['lambda' => $lambda, 'p_up' => VarianceBudget::jumpProbabilityUp(), 'eta_up' => $calibrated['eta_up'], 'eta_down' => $calibrated['eta_down']] + $caps;
+        $market = VarianceBudget::systemicJumpParameters(1.0) + $caps;
         $variance = static fn(array $jump): float => $jump['lambda'] * StochasticProcesses::kouTruncatedMoment(2, $jump['p_up'], $jump['eta_up'], $jump['eta_down'], $caps['cap_up'], $caps['cap_down']);
         $expected = OptionPricing::calculateMultiJumpDiffusionShape(
             max(0.0, (($longRunVol * OptionPricingEngine::OPTION_VARIANCE_RISK_PREMIUM) ** 2) - $variance($own) - $variance($market)),
@@ -162,9 +162,9 @@ class OptionPricingEngineTest extends TestCase
         $this->assertNotEqualsWithDelta($jumpless['skewness'], $jumpy['skewness'], 1e-6);
 
         // And the two components the shape is built from add back to exactly that variance.
-        $calibrated = MarketEngine::calibratedJumpParameters(0.30, 1.0, 3.0, 0.10);
-        $own = ['lambda' => 3.0, 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $calibrated['eta_up'], 'eta_down' => $calibrated['eta_down']];
-        $market = MarketEngine::systemicJumpParameters(1.0);
+        $calibrated = VarianceBudget::calibratedJumpParameters(0.30, 1.0, 3.0, 0.10);
+        $own = ['lambda' => 3.0, 'p_up' => VarianceBudget::jumpProbabilityUp(), 'eta_up' => $calibrated['eta_up'], 'eta_down' => $calibrated['eta_down']];
+        $market = VarianceBudget::systemicJumpParameters(1.0);
         $shape = OptionPricing::calculateMultiJumpDiffusionShape(
             max(0.0, ($jumpy['atm_volatility'] ** 2)
                 - (3.0 * OptionPricing::calculateKouJumpMoment(2, $own['p_up'], $own['eta_up'], $own['eta_down']))

@@ -18,7 +18,7 @@ use App\Repository\ElectionOddsRepository;
 use App\Repository\MacroReportHistoryRepository;
 use App\Repository\RateDecisionRepository;
 use App\Repository\StockRepository;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
@@ -1033,7 +1033,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertCount(2 * 7 - 1, explode(' ', $levy['line']), 'Each point after the first is a step: across, then up or down.');
         $this->assertTrue($charts['Corporate tax rate']['flat']);
         $this->assertSame(0, $charts['Corporate tax rate']['changes']);
-        $this->assertEqualsWithDelta(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::FOUNDING_LENIENCY)['concentrated'], $charts['Merger review line']['now'], 1e-12, 'The Board\'s line is charted beside the Diet\'s laws.');
+        $this->assertEqualsWithDelta(MergerReview::reviewScreens(FairTradingBoard::FOUNDING_LENIENCY)['concentrated'], $charts['Merger review line']['now'], 1e-12, 'The Board\'s line is charted beside the Diet\'s laws.');
         $this->assertArrayHasKey('Core capital requirement', $charts);
 
         $this->assertCount(2, $laws['cabinets']);

@@ -9,7 +9,7 @@ use App\DTO\SovereignCurveDTO;
 use App\Entity\OptionContract;
 use App\Entity\Stock;
 use App\Service\Market\Bond\BondPricingEngine;
-use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\OptionPricing;
@@ -33,8 +33,8 @@ use App\Service\Math\StochasticProcesses;
  *      spot volatility instead asserts that today's shock lasts undiminished to expiry, which is wrong in
  *      the same direction on every contract at once after any shock.
  *   2. The shape comes from the jumps the price process will actually realize: the name's own, taken through
- *      MarketEngine::calibratedJumpParameters(), and the market's, through the levered beta the price step
- *      trades it on (MarketEngine::systemicJumpParameters()), so that the desk and the tape agree. A desk
+ *      VarianceBudget::calibratedJumpParameters(), and the market's, through the levered beta the price step
+ *      trades it on (VarianceBudget::systemicJumpParameters()), so that the desk and the tape agree. A desk
  *      quoting the seed's uncalibrated jump, or the name's alone, would be selling a distribution the market
  *      never produces.
  *   3. The level is marked up by the variance risk premium, because a desk that quotes its own forecast of
@@ -110,20 +110,20 @@ final class OptionPricingEngine
         $expectedVolatility = StochasticProcesses::averageMeanRevertingVolatility(
             $spotVolatility,
             $longRunVolatility,
-            MarketEngine::varianceReversionSpeed($lambda),
+            VarianceBudget::varianceReversionSpeed($lambda),
             $timeToExpiry,
         );
 
         $atmVolatility = $expectedVolatility * self::OPTION_VARIANCE_RISK_PREMIUM;
         $totalVariance = $atmVolatility * $atmVolatility;
 
-        $jump = MarketEngine::calibratedJumpParameters($longRunVolatility, $beta, $lambda, $jumpVol);
+        $jump = VarianceBudget::calibratedJumpParameters($longRunVolatility, $beta, $lambda, $jumpVol);
         // The name gaps on its own news and on the market's crashes, which reach it through its beta; the tape
         // delivers both, so the desk writes both, at the caps the tape clamps every jump to.
         $caps = ['cap_up' => FinancialConstants::MAX_JUMP_LOG_RETURN, 'cap_down' => abs(FinancialConstants::MIN_JUMP_LOG_RETURN)];
         $jumps = [
-            ['lambda' => max(0.0, $lambda), 'p_up' => MarketEngine::jumpProbabilityUp(), 'eta_up' => $jump['eta_up'], 'eta_down' => $jump['eta_down']] + $caps,
-            MarketEngine::systemicJumpParameters($beta) + $caps,
+            ['lambda' => max(0.0, $lambda), 'p_up' => VarianceBudget::jumpProbabilityUp(), 'eta_up' => $jump['eta_up'], 'eta_down' => $jump['eta_down']] + $caps,
+            VarianceBudget::systemicJumpParameters($beta) + $caps,
         ];
 
         // The jumps' share of that variance, so the diffusion is handed the REMAINDER and the shape function

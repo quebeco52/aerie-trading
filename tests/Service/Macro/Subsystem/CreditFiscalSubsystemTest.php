@@ -6,6 +6,8 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\Aggregate\DomesticDemand;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
@@ -1047,7 +1049,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateSovereignDebt($neutral, 0.25);
         $this->subsystem->calculateSovereignDebt($tariffed, 0.25);
 
-        $revenue = 0.10 * MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE * MacroAggregateSubsystem::GOODS_SHARE_OF_IMPORTS * (1.10 ** -MacroAggregateSubsystem::IMPORT_PRICE_ELASTICITY);
+        $revenue = 0.10 * OpenEconomy::DISTRICT_IMPORT_SHARE * OpenEconomy::GOODS_SHARE_OF_IMPORTS * (1.10 ** -OpenEconomy::IMPORT_PRICE_ELASTICITY);
         $this->assertEqualsWithDelta(-$revenue, $tariffed->primaryDeficitToGdp - $neutral->primaryDeficitToGdp, 1e-12);
     }
 
@@ -1101,7 +1103,7 @@ class CreditFiscalSubsystemTest extends TestCase
      */
     public function testASlumpThatRecoversLeavesNoGrowthErosionBehind(): void
     {
-        $aggregate = new MacroAggregateSubsystem(new MathUtility());
+        $aggregate = MacroAggregateSubsystem::headless(new MathUtility());
         $state = new MacroState();
         $state->laborForceGrowthRate = 0.0;
         $state->domesticInflation = 0.0;
@@ -1131,7 +1133,7 @@ class CreditFiscalSubsystemTest extends TestCase
         $state->gdpDeflator = 1.0;
         $state->nominalGdpIndex = 1.0;
         $state->outputGap = $gap;
-        (new MacroAggregateSubsystem(new MathUtility()))->calculatePotentialAndNominalGdp($state, $dt, 0.0);
+        (MacroAggregateSubsystem::headless(new MathUtility()))->calculatePotentialAndNominalGdp($state, $dt, 0.0);
 
         return $state->nominalGdpGrowth * $dt;
     }
@@ -1802,10 +1804,10 @@ class CreditFiscalSubsystemTest extends TestCase
         $calm = new MacroState();
         $subsystem->calculateSloosCreditStandards($calm, 0.25);
         $premium = new MacroState();
-        $premium->excessBondPremium = MacroAggregateSubsystem::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01;
+        $premium->excessBondPremium = DomesticDemand::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01;
         $subsystem->calculateSloosCreditStandards($premium, 0.25);
         $this->assertEqualsWithDelta($premium->sloosTighteningIndex, $short->sloosTighteningIndex, 1e-12, 'A point short tightens standards as the premium the demand drag reads it as does.');
-        $target = CreditFiscalSubsystem::SLOOS_PREMIUM_SENSITIVITY * MacroAggregateSubsystem::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01;
+        $target = CreditFiscalSubsystem::SLOOS_PREMIUM_SENSITIVITY * DomesticDemand::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * 0.01;
         $this->assertEqualsWithDelta(0.076, $target, 0.001, 'A point short pulls standards toward ~8 points of net tightening.');
         $this->assertEqualsWithDelta($target * CreditFiscalSubsystem::SLOOS_KAPPA * 0.25, $short->sloosTighteningIndex - $calm->sloosTighteningIndex, 1e-9);
 
@@ -1977,7 +1979,7 @@ class CreditFiscalSubsystemTest extends TestCase
             1e-9,
         );
         $this->assertEqualsWithDelta(0.25 * 0.06, CreditFiscalSubsystem::crisisHouseholdRepayment(0.06), 1e-15);
-        $this->assertEqualsWithDelta(0.06, CreditFiscalSubsystem::crisisDirectDrag(0.06) + (CreditFiscalSubsystem::crisisHouseholdRepayment(0.06) * MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING), 1e-15, 'Nothing lost, nothing counted twice.');
+        $this->assertEqualsWithDelta(0.06, CreditFiscalSubsystem::crisisDirectDrag(0.06) + (CreditFiscalSubsystem::crisisHouseholdRepayment(0.06) * DomesticDemand::KALDOR_HOUSEHOLD_NEW_BORROWING), 1e-15, 'Nothing lost, nothing counted twice.');
     }
 
     public function testTheDistrictsWholesaleFundingLiftsTheCrisisHazardAboveThePanel(): void

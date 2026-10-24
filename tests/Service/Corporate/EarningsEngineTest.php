@@ -16,12 +16,18 @@ use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Earnings\CapitalBudgetEngine;
+use App\Service\Corporate\Earnings\FixedAssetLedger;
+use App\Service\Corporate\Earnings\IncomeTaxLedger;
+use App\Service\Corporate\Earnings\InvestmentMarkLedger;
+use App\Service\Corporate\Earnings\OperatingCapacityEngine;
+use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Event\EarningsReportedEvent;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
@@ -874,7 +880,8 @@ class EarningsEngineTest extends TestCase
         $ctx->corporateTaxRate = 0.20;
         $ctx->baselineRoic = 0.004;
 
-        $turnover = (new \ReflectionMethod(EarningsEngine::class, 'resolveAnnualCapitalTurnover'))->invoke($this->buildEngine(new EventDispatcher()), $ctx);
+        $corporateMetrics = new CorporateMetrics();
+        $turnover = (new OperatingCapacityEngine(new MathUtility(), $corporateMetrics, new FixedAssetLedger($corporateMetrics)))->resolveAnnualCapitalTurnover($ctx);
 
         $this->assertEqualsWithDelta(0.004 / 0.8 / 0.30, $turnover, 1e-12, 'a 1.67% yield, not the floor\'s 4.17%');
     }
@@ -920,7 +927,7 @@ class EarningsEngineTest extends TestCase
             'outputGapEma' => $gap,
             'foreignOutputGapEma' => $gap,
             'manufacturingPmiEma' => MacroConstants::PMI_BASELINE + 2.0,
-            ...array_fill_keys(array_keys(MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS), $gap),
+            ...array_fill_keys(array_keys(MovingAverages::DEMAND_TRANSMISSION_LAGS), $gap),
         ]);
 
         for ($quarter = 0; $quarter < 12; ++$quarter) {
@@ -1132,12 +1139,12 @@ class EarningsEngineTest extends TestCase
      */
     public function testAConstrainedFirmsUpkeepIsWhatItsFundsLeaveAfterCommittedOutlays(): void
     {
-        $floor = 100.0 * EarningsEngine::MIN_DISTRESSED_MAINTENANCE_SHARE;
+        $floor = 100.0 * CapitalBudgetEngine::MIN_DISTRESSED_MAINTENANCE_SHARE;
 
-        $this->assertSame(100.0, EarningsEngine::fundingConstrainedMaintenance(100.0, 50.0, 400.0));
-        $this->assertSame(60.0, EarningsEngine::fundingConstrainedMaintenance(100.0, 50.0, 110.0));
-        $this->assertSame($floor, EarningsEngine::fundingConstrainedMaintenance(100.0, 50.0, 40.0), 'Committed outlays come first.');
-        $this->assertSame($floor, EarningsEngine::fundingConstrainedMaintenance(100.0, 0.0, -500.0));
+        $this->assertSame(100.0, CapitalBudgetEngine::fundingConstrainedMaintenance(100.0, 50.0, 400.0));
+        $this->assertSame(60.0, CapitalBudgetEngine::fundingConstrainedMaintenance(100.0, 50.0, 110.0));
+        $this->assertSame($floor, CapitalBudgetEngine::fundingConstrainedMaintenance(100.0, 50.0, 40.0), 'Committed outlays come first.');
+        $this->assertSame($floor, CapitalBudgetEngine::fundingConstrainedMaintenance(100.0, 0.0, -500.0));
     }
 
     /**
@@ -1189,7 +1196,7 @@ class EarningsEngineTest extends TestCase
         foreach (['leverage' => ['hasLeverageHeadroom' => false], 'coverage' => ['interestCoverage' => 1.0]] as $covenant => $breach) {
             $breached = $run($breach)->maintenanceCapex;
             $this->assertLessThan($plan, $breached, "Breach of the {$covenant} covenant.");
-            $this->assertGreaterThanOrEqual($plan * EarningsEngine::MIN_DISTRESSED_MAINTENANCE_SHARE - 1.0, $breached);
+            $this->assertGreaterThanOrEqual($plan * CapitalBudgetEngine::MIN_DISTRESSED_MAINTENANCE_SHARE - 1.0, $breached);
         }
     }
 
@@ -1214,8 +1221,8 @@ class EarningsEngineTest extends TestCase
             $stock->setAccumulatedDepreciation('20000000000');
             $stock->setPpeVintageDeflator('1.000000');
             $stock->setEarningsMomentumZ([
-                EarningsEngine::STATE_CAPITAL_GOODS_ANCHOR_TIME => 0.0,
-                EarningsEngine::STATE_PPE_RELATIVE_PRICE => $ppeRelativePrice,
+                FixedAssetLedger::STATE_CAPITAL_GOODS_ANCHOR_TIME => 0.0,
+                FixedAssetLedger::STATE_PPE_RELATIVE_PRICE => $ppeRelativePrice,
             ]);
 
             $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, gdpDeflator: 1.0, totalTime: $years);
@@ -1243,11 +1250,11 @@ class EarningsEngineTest extends TestCase
         $engine = $this->buildEngine(new EventDispatcher());
         mt_srand(9091);
         $stock = $this->buildMatureIndustrial('EPIS');
-        $stock->setEarningsMomentumZ([\App\Service\Corporate\MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE => 4.25]);
+        $stock->setEarningsMomentumZ([\App\Service\Corporate\Deal\DivestitureEngine::STATE_DISTRESS_SALE_EPISODE => 4.25]);
 
         $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, gdpDeflator: 1.0, totalTime: 5.0), EarningsEngine::resolveReportingTick('EPIS', 252), 252);
 
-        $this->assertSame(4.25, $stock->getEarningsMomentumZ()[\App\Service\Corporate\MergerAndAcquisitionEngine::STATE_DISTRESS_SALE_EPISODE] ?? null);
+        $this->assertSame(4.25, $stock->getEarningsMomentumZ()[\App\Service\Corporate\Deal\DivestitureEngine::STATE_DISTRESS_SALE_EPISODE] ?? null);
     }
 
     /**
@@ -1268,7 +1275,7 @@ class EarningsEngineTest extends TestCase
         $state = $stock->getEarningsMomentumZ() ?? [];
         $this->assertSame(7.0, $state[$carried] ?? null);
         $this->assertArrayNotHasKey('state:probe', $state);
-        $this->assertArrayHasKey(EarningsEngine::STATE_LAST_DEFLATOR, $state, 'the rebuilt map still carries what the report registers');
+        $this->assertArrayHasKey(OperatingCapacityEngine::STATE_LAST_DEFLATOR, $state, 'the rebuilt map still carries what the report registers');
     }
 
     /**
@@ -1439,7 +1446,7 @@ class EarningsEngineTest extends TestCase
         $this->assertNotNull($captured);
 
         $this->assertLessThan(
-            EarningsEngine::INVENTORY_NRV_UTILIZATION_TRIGGER,
+            WorkingCapitalLedger::INVENTORY_NRV_UTILIZATION_TRIGGER,
             $captured->capacityUtilization,
             'fixture must be running below the writedown trigger for this test to mean anything',
         );
@@ -1525,7 +1532,7 @@ class EarningsEngineTest extends TestCase
         $this->assertNotNull($captured);
 
         $this->assertGreaterThanOrEqual(
-            EarningsEngine::INVENTORY_NRV_UTILIZATION_TRIGGER,
+            WorkingCapitalLedger::INVENTORY_NRV_UTILIZATION_TRIGGER,
             $captured->capacityUtilization / max(0.01, $captured->seasonalFactor),
         );
         $this->assertEquals(0.0, $captured->inventoryWriteDown);
@@ -1915,7 +1922,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('ODTA', 252), 252);
         $this->assertNotNull($captured);
 
-        $this->assertCount(EarningsEngine::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS, $stock->getPretaxIncomeHistory() ?? []);
+        $this->assertCount(IncomeTaxLedger::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS, $stock->getPretaxIncomeHistory() ?? []);
         $this->assertEqualsWithDelta(0.21 * (float) $stock->getNetOperatingLoss(), $stock->getDeferredTaxAsset(), 1.0);
         $this->assertEqualsWithDelta($captured->preTaxIncome * 0.79, $captured->actualQuarterlyNetIncome, 1.0, 'the quarter is taxed at the rate; the opening asset is not income');
         // Retained earnings move by the quarter's income less its dividend plus the opening balances, and nothing else.
@@ -1976,23 +1983,23 @@ class EarningsEngineTest extends TestCase
      */
     public function testALossBooksADeferredTaxAssetAndItsRecoveryIsTaxedAtTheStatutoryRate(): void
     {
-        $loss = EarningsEngine::resolveIncomeTax(-100.0, 0.0, 0.0, false, 0.21);
+        $loss = IncomeTaxLedger::resolveIncomeTax(-100.0, 0.0, 0.0, false, 0.21);
         $this->assertSame(0.0, $loss['current']);
         $this->assertEqualsWithDelta(-21.0, $loss['deferred'], 1e-12, 'the loss is a tax benefit');
         $this->assertEqualsWithDelta(21.0, $loss['dta'], 1e-12);
         $this->assertEqualsWithDelta(100.0, $loss['nol'], 1e-12);
 
-        $recovery = EarningsEngine::resolveIncomeTax(50.0, $loss['nol'], $loss['dta'], false, 0.21);
-        $this->assertEqualsWithDelta(0.21 * 50.0 * (1.0 - EarningsEngine::NOL_MAX_SHIELD_RATIO), $recovery['current'], 1e-12, 'cash tax falls by the shield');
+        $recovery = IncomeTaxLedger::resolveIncomeTax(50.0, $loss['nol'], $loss['dta'], false, 0.21);
+        $this->assertEqualsWithDelta(0.21 * 50.0 * (1.0 - IncomeTaxLedger::NOL_MAX_SHIELD_RATIO), $recovery['current'], 1e-12, 'cash tax falls by the shield');
         $this->assertEqualsWithDelta(0.21 * 50.0, $recovery['current'] + $recovery['deferred'], 1e-12, 'book tax stays at the statutory rate');
 
         // A run of losses (the valuation allowance) gets no benefit, and the asset already on the books is written off.
-        $allowance = EarningsEngine::resolveIncomeTax(-100.0, 100.0, 21.0, true, 0.21);
+        $allowance = IncomeTaxLedger::resolveIncomeTax(-100.0, 100.0, 21.0, true, 0.21);
         $this->assertSame(0.0, $allowance['dta']);
         $this->assertEqualsWithDelta(21.0, $allowance['current'] + $allowance['deferred'], 1e-12, 'the allowance is a charge, not a benefit');
 
         // A rate cut remeasures the asset at the new rate (ASC 740-10-35-4).
-        $remeasured = EarningsEngine::resolveIncomeTax(0.0, 100.0, 21.0, false, 0.15);
+        $remeasured = IncomeTaxLedger::resolveIncomeTax(0.0, 100.0, 21.0, false, 0.15);
         $this->assertEqualsWithDelta(6.0, $remeasured['deferred'], 1e-12);
     }
 
@@ -2087,7 +2094,7 @@ class EarningsEngineTest extends TestCase
             $stock->setPpeTaxBasis('20000000000');
             $stock->setDeferredTaxLiability('10000000000');
             if ($struckRate !== null) {
-                $stock->setEarningsMomentumZ([EarningsEngine::STATE_PLANT_DEFERRED_TAX_RATE => $struckRate]);
+                $stock->setEarningsMomentumZ([IncomeTaxLedger::STATE_PLANT_DEFERRED_TAX_RATE => $struckRate]);
             }
             $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('RATE', 252), 252);
             $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
@@ -2110,7 +2117,7 @@ class EarningsEngineTest extends TestCase
             1.0,
             'the law is public, so the estimate carries the re-strike, and the walk-down is struck on revenue it does not move',
         );
-        $this->assertSame($rate, ($risenStock->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_PLANT_DEFERRED_TAX_RATE] ?? null);
+        $this->assertSame($rate, ($risenStock->getEarningsMomentumZ() ?? [])[IncomeTaxLedger::STATE_PLANT_DEFERRED_TAX_RATE] ?? null);
     }
 
     /**
@@ -2132,7 +2139,7 @@ class EarningsEngineTest extends TestCase
         $stock->setAssetTurnover('0.10');
         $stock->setWholesaleDebt('100000000000');
         // Three profitable years behind it, so the loss is recognised with no valuation allowance.
-        $stock->setPretaxIncomeHistory(array_fill(0, EarningsEngine::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS - 1, 5.0e9));
+        $stock->setPretaxIncomeHistory(array_fill(0, IncomeTaxLedger::VALUATION_ALLOWANCE_LOOKBACK_QUARTERS - 1, 5.0e9));
 
         $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('RUNL', 252), 252);
         $this->assertNotNull($captured);
@@ -2440,7 +2447,7 @@ class EarningsEngineTest extends TestCase
             mt_srand(7531);
             $stock = $this->buildProfitableIndustrial('PLVL');
             // The last report saw a price level of 1.0, and no inflation was expected: the whole move is a surprise.
-            $stock->setEarningsMomentumZ([EarningsEngine::STATE_LAST_DEFLATOR => 1.0]);
+            $stock->setEarningsMomentumZ([OperatingCapacityEngine::STATE_LAST_DEFLATOR => 1.0]);
             $this->buildEngine($dispatcher)->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, gdpDeflator: $deflator, inflationEma: 0.0), EarningsEngine::resolveReportingTick('PLVL', 252), 252);
             $this->assertNotNull($captured);
 
@@ -3188,7 +3195,7 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, $macro($priceIndex, $totalReturnIndex), $tick + 63);
         $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
 
-        return [$captured, (float) $stock->getTotalEquity(), (float) (($stock->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_SLEEVE_TRAILING_GAINS] ?? 0.0)];
+        return [$captured, (float) $stock->getTotalEquity(), (float) (($stock->getEarningsMomentumZ() ?? [])[InvestmentMarkLedger::STATE_SLEEVE_TRAILING_GAINS] ?? 0.0)];
     }
 
     /**
@@ -3233,7 +3240,7 @@ class EarningsEngineTest extends TestCase
         $quarter = FinancialConstants::QUARTER_YEARS;
         $this->assertGreaterThan(0.0, $up->equitySleeveMark);
         $this->assertEqualsWithDelta(
-            ($up->equitySleeveMark / $quarter) * (1.0 - exp(-$quarter / EarningsEngine::SLEEVE_GAINS_TRAILING_LAG_YEARS)),
+            ($up->equitySleeveMark / $quarter) * (1.0 - exp(-$quarter / InvestmentMarkLedger::SLEEVE_GAINS_TRAILING_LAG_YEARS)),
             $gains,
             1.0,
         );
@@ -3501,14 +3508,14 @@ class EarningsEngineTest extends TestCase
     public function testOvertimePenaltyIsMeasuredAgainstDeseasonalizedUtilization(): void
     {
         $holiday = 1.35;
-        $threshold = EarningsEngine::CAPACITY_OVERTIME_THRESHOLD;
+        $threshold = OperatingCapacityEngine::CAPACITY_OVERTIME_THRESHOLD;
 
-        $this->assertSame(0.0, EarningsEngine::overtimePremium($threshold * $holiday, $holiday), 'structural demand at the seasonal peak is not overtime');
-        $this->assertSame(0.0, EarningsEngine::overtimePremium($threshold, 1.0));
-        $this->assertGreaterThan(0.0, EarningsEngine::overtimePremium($threshold * $holiday, 1.0), 'the same run rate off-season is overtime');
+        $this->assertSame(0.0, OperatingCapacityEngine::overtimePremium($threshold * $holiday, $holiday), 'structural demand at the seasonal peak is not overtime');
+        $this->assertSame(0.0, OperatingCapacityEngine::overtimePremium($threshold, 1.0));
+        $this->assertGreaterThan(0.0, OperatingCapacityEngine::overtimePremium($threshold * $holiday, 1.0), 'the same run rate off-season is overtime');
         $this->assertEqualsWithDelta(
-            ResponseCurves::calculateConvexPenalty(0.10, EarningsEngine::CAPACITY_OVERTIME_CONVEXITY, EarningsEngine::CAPACITY_OVERTIME_SCALAR),
-            EarningsEngine::overtimePremium(($threshold + 0.10) * $holiday, $holiday),
+            ResponseCurves::calculateConvexPenalty(0.10, OperatingCapacityEngine::CAPACITY_OVERTIME_CONVEXITY, OperatingCapacityEngine::CAPACITY_OVERTIME_SCALAR),
+            OperatingCapacityEngine::overtimePremium(($threshold + 0.10) * $holiday, $holiday),
             1e-12,
             'overtime is the overshoot of the deseasonalized run rate, not of the seasonal peak',
         );

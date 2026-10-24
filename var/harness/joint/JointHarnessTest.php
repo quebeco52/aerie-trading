@@ -184,7 +184,8 @@ class JointHarnessTest extends KernelTestCase
                     }
                 }
             }
-            // TICK_CSV: price and shares of every name each tick (header row first); bad macro fields and prices to ANOM_OUT.
+            // TICK_CSV: price and shares of every name each tick (header row first); bad macro fields and prices to
+            // ANOM_OUT.
             if (getenv('TICK_CSV')) {
                 if ($tick === 1) {
                     file_put_contents((string) getenv('TICK_CSV'), 'tick,' . implode(',', array_map(fn($s) => $s->getTicker() . '_p,' . $s->getTicker() . '_n', $list)) . "\n");
@@ -330,7 +331,7 @@ class JointHarnessTest extends KernelTestCase
 
     /**
      * TRACE: the pricing context's scalar inputs and the engine's own fundamental state for one name, struck as
-     * MarketEngine::strikeFairValue does (no draw).
+     * MarketEngine::strikeFairValue does (FairValue::fundamentalStateFor(), no draw).
      *
      * @return array<string, mixed>
      */
@@ -350,7 +351,7 @@ class JointHarnessTest extends KernelTestCase
                 $row['c_' . $k] = $v;
             }
         }
-        $fs = (new ReflectionMethod($this->fvEngine, 'fundamentalStateFor'))->invoke($this->fvEngine, $ctx);
+        $fs = App\Service\Market\Pricing\FairValue::fundamentalStateFor($ctx);
         $row['f_fv'] = $fs['perceived_fair_value'];
         $row['f_policy'] = $fs['policy_repricing'] ?? null;
         $row['f_targets'] = $fs['analyst_targets'];
@@ -358,12 +359,15 @@ class JointHarnessTest extends KernelTestCase
         return $row;
     }
 
-    /** A recording predating the output gap's published lags gets them filtered off its own gap path, as the macro would. */
+    /**
+     * A recording predating the output gap's published lags gets them filtered off its own gap path, as the macro
+     * would.
+     */
     private function withDemandLags(MacroStateDTO $recorded, float $dt): MacroStateDTO
     {
         $vars = (fn(): array => get_object_vars($this))->call($recorded);
         $math = new App\Service\Math\MathUtility();
-        foreach (App\Service\Macro\Subsystem\MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
+        foreach (App\Service\Macro\Subsystem\Aggregate\MovingAverages::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
             $this->replayLags[$field] = TimeSeries::calculateDistributedLag($this->replayLags[$field] ?? App\Data\Macro\MacroFieldRegistry::defaults()[$field], $vars['outputGapEma'], $dt, $lagYears);
         }
 
@@ -439,8 +443,8 @@ class JointHarnessTest extends KernelTestCase
             'prov' => (float) ($report->getCreditLossProvision() ?? 0.0),
             'allow' => (float) ($report->getCreditLossAllowance() ?? 0.0),
             'ii' => (float) ($report->getInterestIncome() ?? 0.0),
-            // Batch D2: insurer regime and earned rate, ILS principal, float, equity sleeve (value, expected return, the
-            // board price index the sleeve was last marked at), the macro board index and the effective tax rate.
+            // Batch D2: insurer regime and earned rate, ILS principal, float, equity sleeve (value, expected return,
+            // the board price index the sleeve was last marked at), the macro board index and the effective tax rate.
             'hm' => (float) (($report->getStock()->getEarningsMomentumZ() ?? [])['state:regime:hard_market'] ?? 0.0),
             'erl' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:capacity:earned_rate_level'] ?? null,
             'tgain' => ($report->getStock()->getEarningsMomentumZ() ?? [])['carry:equity_sleeve:trailing_gains'] ?? null,
@@ -492,7 +496,8 @@ class JointHarnessTest extends KernelTestCase
 
     /**
      * FVX=1: the fair-value build MarketEngine::evaluateFundamentalState would strike right now, piece by piece, so a
-     * move in the fair P/E can be attributed to the hurdle, the structural return, growth, accruals or the EPS smoothing.
+     * move in the fair P/E can be attributed to the hurdle, the structural return, growth, accruals or the EPS
+     * smoothing.
      *
      * @return array<string, float>
      */

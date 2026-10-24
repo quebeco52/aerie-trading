@@ -13,7 +13,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Market\Bond\CreditRatingAgency;
-use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -1424,7 +1424,7 @@ class DebtEngineTest extends TestCase
         $bank->setJumpIntensity('1.5');
 
         // A lender's asset vol is the de-levered identity, so at E = D it is half the horizon equity vol.
-        $horizonVol = StochasticProcesses::averageMeanRevertingVolatility(0.40, 0.20, MarketEngine::varianceReversionSpeed(1.5), 5.0);
+        $horizonVol = StochasticProcesses::averageMeanRevertingVolatility(0.40, 0.20, VarianceBudget::varianceReversionSpeed(1.5), 5.0);
 
         $this->assertEqualsWithDelta(0.5 * $horizonVol, $engine->resolveAssetVolatility($bank, 1_000_000_000.0, 1_000_000_000.0, 0.04), 1e-12);
     }

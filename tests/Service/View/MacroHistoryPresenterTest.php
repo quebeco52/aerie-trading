@@ -24,7 +24,7 @@ class MacroHistoryPresenterTest extends TestCase
     {
         $probe = new OutputGapProbe();
         $probe->enable();
-        $subsystem = new MacroAggregateSubsystem(new MathUtility(), $probe);
+        $subsystem = MacroAggregateSubsystem::headless(new MathUtility(), $probe);
 
         $state = new MacroState();
         $state->inflation = MacroConstants::TARGET_INFLATION;

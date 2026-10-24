@@ -4,31 +4,20 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Pricing;
 
-use App\DTO\MacroStateDTO;
-use App\Service\Macro\MacroEngine;
+use App\DTO\MarketPricingContext;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
-use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
-use App\Service\Math\Valuation;
 
 /**
  * Stock price step: a Kou double-exponential jump process with stochastic variance (SVJJ), a systematic loading on
  * the market factor, and a pull toward a multi-leg fair value.
+ *
+ * The step draws, in order, the jumps, the variance step and the diffusion; what each source of variance may supply
+ * is VarianceBudget's, and the fair value the price is pulled toward is FairValue's.
  */
 class MarketEngine
 {
-    // Volatility Bounds
-    private const MIN_VOLATILITY = 0.01; // 1% absolute floor
-    private const MAX_VOLATILITY = 1.50; // 150% absolute ceiling
-
-    // Jump Diffusion Constants
-    private const SVJJ_P_UP = 0.40;
-
-    // Analyst Multipliers
-    private const VALUE_ANALYST_BOOK_MULT = 0.80;
-
     // --- Fair-Value Pull ---
     /**
      * Half-life of a mispricing, in years: log P = log F + a stationary gap (Summers 1986; Poterba & Summers 1988).
@@ -41,79 +30,12 @@ class MarketEngine
      */
     public const FAIR_VALUE_PULL_SPEED = M_LN2 / self::FAIR_VALUE_PULL_HALF_LIFE_YEARS;
 
-    // --- Variance Process Calibration ---
-    /**
-     * Speed the idiosyncratic variance reverts to its long-run level, in reversions per year; a shock is most of the
-     * way gone inside two months.
-     */
-    public const BASE_VARIANCE_REVERSION_SPEED = 6.0;
-
-    // --- Variance Budget ---
-    /**
-     * Ceiling on the share of a name's long-run IDIOSYNCRATIC variance its OWN jump process may supply; the jump
-     * component of single-stock return variance is a minority of the total (Huang & Tauchen 2005).
-     */
-    private const MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE = 0.25;
+    // --- Sector Factor ---
     /**
      * Fraction of a stock's non-market variance loaded onto its sector factor, setting within- vs cross-sector
      * correlation.
      */
     public const SECTOR_FACTOR_VARIANCE_SHARE = 0.20;
-
-    // --- Common Idiosyncratic Volatility (Herskovic, Kelly, Lustig & Van Nieuwerburgh 2016) ---
-    /**
-     * Loading of a firm's residual variance on the common idiosyncratic factor: 0.71-1.54 by size quintile, about one
-     * (HKLV, calibration table). Market variance stands in for the factor, which tracks it (correlation 0.64, annual
-     * levels 1926-2010).
-     */
-    public const IDIOSYNCRATIC_COMMON_FACTOR_LOADING = 1.0;
-    /**
-     * Years the market variance trend averages over: one postwar business cycle, 58.4 months of expansion plus 11.1 of
-     * contraction (NBER, 1945-2009).
-     */
-    public const MARKET_VARIANCE_TREND_YEARS = (58.4 + 11.1) / 12.0;
-    /**
-     * Floor on the share of a name's configured variance that stays idiosyncratic, for a configuration whose beta alone
-     * already consumes the whole of its stated volatility.
-     */
-    private const MIN_IDIOSYNCRATIC_VARIANCE_SHARE = 0.20;
-
-    // --- Volatility Process ---
-    /** Mean of the contemporaneous variance jump, as a share of the name's current variance. */
-    private const VARIANCE_JUMP_MEAN_SHARE = 0.50;
-    /**
-     * Sensitivity of the variance reversion speed to jump intensity; a jumpier name pulls back to its long-run level
-     * faster rather than having its target clamped.
-     */
-    private const JUMP_REGIME_KAPPA_SENSITIVITY = 0.15;
-    /** Ratio of the down-jump scale to the up-jump scale, the Kou left-tail skew a single name carries. */
-    private const JUMP_DOWNSIDE_SCALE_RATIO = 1.25;
-    /** Floor on the jump scale parameter, so a name configured with no jump size cannot divide by it. */
-    private const MIN_JUMP_SCALE = 0.01;
-
-    // --- Revenue Floor (Margin-Adjusted Price-to-Sales) ---
-    /**
-     * Floor on the P/E anchor the price-to-sales multiple is struck from, so a distressed multiple does not erase the
-     * revenue floor entirely.
-     */
-    private const MIN_PS_ANCHOR_PE = 10.0;
-    /** Bounds on the implied net margin the price-to-sales multiple is built on. */
-    private const MIN_IMPLIED_NET_MARGIN = 0.01;
-    private const MAX_IMPLIED_NET_MARGIN = 0.30;
-
-    // --- Dividend Discount Support ---
-    /** Floor on the required yield used to discount the dividend stream. */
-    private const MIN_DIVIDEND_REQUIRED_YIELD = 0.02;
-    /** Cap on the fundamental growth a retained-earnings calculation may imply for the dividend stream. */
-    private const MAX_DIVIDEND_IMPLIED_GROWTH = 0.04;
-
-    // --- Relative Valuation Shrinkage (Vasicek 1973) ---
-    /** Minimum price-to-sales multiple clamp during valuation stress. */
-    public const MIN_PS_FALLBACK_MULT = 0.2;
-    /** Maximum price-to-sales multiple clamp during valuation expansion. */
-    public const MAX_PS_FALLBACK_MULT = 5.0;
-    /** Multiplier scaling liquidity drag as macro stress rises: the recession gap plus inflation's miss of target. */
-    public const FUNDING_LIQUIDITY_STRESS_FACTOR = 2.0;
 
     // --- Institutional & Market Architecture ---
     /**
@@ -122,198 +44,9 @@ class MarketEngine
      */
     public const MAX_DAILY_PRICE_CIRCUIT_BREAKER = 0.40;
 
-    // --- Market Microstructure: Order Flow Variance Budget ---
-    /** Ceiling on the share of long-run variance order flow may reclaim from the diffusion. */
-    public const MAX_IMPACT_VARIANCE_DRAG_SHARE = 0.25;
-
     public function __construct(
         private MathUtility $mathUtility,
     ) {}
-
-    /**
-     * The long-run variance a name carries on its own, once its market loading has been paid for.
-     *
-     * A name's market loading is beta * marketVol by definition, so the diffusion supplies it outright and
-     * the stochastic volatility process carries only what is left. The market-wide jump reaches the name through
-     * the same beta, so it is systematic variance too and is paid for here, not out of the name's own budget.
-     *
-     * The target is struck against the market's BASELINE volatility, so the configured figure is the name's
-     * total volatility in normal conditions and total volatility then rises with the market's through beta.
-     *
-     * A configuration whose beta already consumes the whole of its stated volatility is infeasible; the name
-     * keeps a guaranteed idiosyncratic share and ends up more volatile than its configured figure, which is
-     * the visible failure mode rather than the silent one.
-     *
-     * @param float $longTermVolatility The name's configured total volatility.
-     * @param float $beta               Its market loading.
-     * @return float Annualized variance, excluding the systematic loading.
-     */
-    public static function longTermIdiosyncraticVariance(float $longTermVolatility, float $beta): float
-    {
-        $longTermVar = $longTermVolatility * $longTermVolatility;
-        $baselineSystematicVar = (($beta * MacroConstants::MACRO_VOL_BASE_ANCHOR) ** 2) + self::systemicJumpMoments($beta)['variance'];
-
-        return max($longTermVar * self::MIN_IDIOSYNCRATIC_VARIANCE_SHARE, $longTermVar - $baselineSystematicVar);
-    }
-
-    /**
-     * The annual compensator, mean and second moment of the market-wide Kou jump as a name of this beta takes it.
-     *
-     * The jump reaches the stock as beta * J, so these are the moments of the SCALED jump, not beta times the unscaled
-     * ones: scaling an exponential divides its rate, and a negative beta swaps the two tails outright, so an inverse
-     * name gains on the market's crashes.
-     *
-     * @return array{compensator: float, mean: float, variance: float}
-     */
-    public static function systemicJumpMoments(float $beta): array
-    {
-        $jump = self::systemicJumpParameters($beta);
-        if ($jump['lambda'] <= 0.0) {
-            return ['compensator' => 0.0, 'mean' => 0.0, 'variance' => 0.0];
-        }
-
-        $capUp = FinancialConstants::MAX_JUMP_LOG_RETURN;
-        $capDown = abs(FinancialConstants::MIN_JUMP_LOG_RETURN);
-        [$pUp, $etaUp, $etaDown] = [$jump['p_up'], $jump['eta_up'], $jump['eta_down']];
-
-        return [
-            'compensator' => $jump['lambda'] * StochasticProcesses::kouTruncatedCompensator($pUp, $etaUp, $etaDown, $capUp, $capDown),
-            'mean' => $jump['lambda'] * StochasticProcesses::kouTruncatedMean($pUp, $etaUp, $etaDown, $capUp, $capDown),
-            'variance' => $jump['lambda'] * StochasticProcesses::kouTruncatedSecondMoment($pUp, $etaUp, $etaDown, $capUp, $capDown),
-        ];
-    }
-
-    /**
-     * The market-wide Kou jump as a name of this beta takes it: the market's arrival rate, and the rates of the jump
-     * scaled by the beta (a negative beta swaps the tails). The option desk quotes a name's smile on these.
-     *
-     * @return array{lambda: float, p_up: float, eta_up: float, eta_down: float}
-     */
-    public static function systemicJumpParameters(float $beta): array
-    {
-        $exposure = abs($beta);
-        if ($exposure <= 0.0) {
-            return ['lambda' => 0.0, 'p_up' => MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP, 'eta_up' => 0.0, 'eta_down' => 0.0];
-        }
-
-        $scaledEtaUp = MacroConstants::SYSTEMIC_JUMP_ETA_UP / $exposure;
-        $scaledEtaDown = MacroConstants::SYSTEMIC_JUMP_ETA_DOWN / $exposure;
-
-        return [
-            'lambda' => MacroConstants::SYSTEMIC_JUMP_INTENSITY,
-            'p_up' => $beta > 0.0 ? MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP : 1.0 - MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP,
-            'eta_up' => $beta > 0.0 ? $scaledEtaUp : $scaledEtaDown,
-            'eta_down' => $beta > 0.0 ? $scaledEtaDown : $scaledEtaUp,
-        ];
-    }
-
-    /**
-     * The Kou jump rates a name actually gaps at, after its jump is held to its variance budget.
-     *
-     * The jump scale is held to the share of the name's variance a jump process is entitled to, so the jump is an
-     * overlay on the diffusion and not the whole of it. Scaling the size rather than the arrival rate keeps the
-     * seed's statement about how OFTEN a name gaps, which is a property of its business.
-     *
-     * Public and shared rather than inline in the price step, because the option desk writes contracts on
-     * exactly this jump: the smile it quotes is the skewness and kurtosis these two rates imply, and a desk
-     * quoting the seed's uncalibrated figures would be selling a different distribution from the one the
-     * price process goes on to realize.
-     *
-     * @param float $longTermVolatility The name's configured total volatility.
-     * @param float $beta               Its market loading.
-     * @param float $lambda             Jump intensity, arrivals per year.
-     * @param float $jumpVol            The configured jump scale, before calibration.
-     * @return array{eta_up: float, eta_down: float, scale: float} Exponential rates and the scale behind them.
-     */
-    public static function calibratedJumpParameters(
-        float $longTermVolatility,
-        float $beta,
-        float $lambda,
-        float $jumpVol,
-    ): array {
-        $jumpScale = max(self::MIN_JUMP_SCALE, $jumpVol);
-
-        if ($lambda > 0.0) {
-            // Untruncated second moment of the Kou jump, 2 * scale^2 * (pUp + pDown * ratio^2), which is
-            // monotone in the scale and therefore invertible for the budget. Truncation only removes mass,
-            // so solving on it and deducting the truncated figure at the budget can never over-reclaim.
-            $rawSecondMomentPerUnit = OptionPricing::calculateKouJumpMoment(
-                2,
-                self::SVJJ_P_UP,
-                1.0,
-                1.0 / self::JUMP_DOWNSIDE_SCALE_RATIO,
-            );
-            $budget = self::longTermIdiosyncraticVariance($longTermVolatility, $beta)
-                * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE;
-            $configured = $lambda * $rawSecondMomentPerUnit * $jumpScale * $jumpScale;
-
-            if ($configured > $budget && $configured > 0.0) {
-                $jumpScale = max(self::MIN_JUMP_SCALE, $jumpScale * sqrt($budget / $configured));
-            }
-        }
-
-        return [
-            'eta_up' => 1.0 / $jumpScale,
-            'eta_down' => 1.0 / ($jumpScale * self::JUMP_DOWNSIDE_SCALE_RATIO),
-            'scale' => $jumpScale,
-        ];
-    }
-
-    /**
-     * The scale on a name's long-run residual variance from the common idiosyncratic factor: market variance over its
-     * measured trend, at the firm loading, so residual volatility rises in a turbulent market and falls in a calm one
-     * and is unchanged on average. Without a trend it reads the level the market settles at. Floored at zero.
-     *
-     * @param float|null $marketVarianceTrend Measured trend of market variance (StockTracker).
-     */
-    public static function commonIdiosyncraticVarianceScale(float $marketVol, ?float $marketVarianceTrend = null): float
-    {
-        $trend = $marketVarianceTrend ?? (MacroConstants::MACRO_VOL_BASE_ANCHOR * MacroConstants::MACRO_VOL_BASE_ANCHOR);
-        $marketVarianceRatio = $trend > 0.0 ? ($marketVol * $marketVol) / $trend : 1.0;
-
-        return max(0.0, 1.0 + (self::IDIOSYNCRATIC_COMMON_FACTOR_LOADING * ($marketVarianceRatio - 1.0)));
-    }
-
-    /** Probability that a single-name jump is upwards; the behavioural skew the price process carries. */
-    public static function jumpProbabilityUp(): float
-    {
-        return self::SVJJ_P_UP;
-    }
-
-    /**
-     * The speed the variance process actually reverts at, once its jump regime is accounted for.
-     *
-     * A jumpier name pulls back to its long-run level faster rather than having its target clamped, which is
-     * what keeps a jump from permanently raising the volatility it was budgeted out of. The option desk
-     * needs the same figure: the volatility it writes a contract at is the variance expected over the
-     * contract's life, and that expectation is an integral whose only shape parameter is this speed.
-     *
-     * @param float $lambda    Jump intensity, arrivals per year.
-     * @param float $baseKappa  Reversion speed before the jump regime scales it.
-     */
-    public static function varianceReversionSpeed(float $lambda, float $baseKappa = self::BASE_VARIANCE_REVERSION_SPEED): float
-    {
-        return $baseKappa * (1.0 + ($lambda * self::JUMP_REGIME_KAPPA_SENSITIVITY));
-    }
-
-    /**
-     * Share of the idiosyncratic variance target given back to the variance jumps (Duffie, Pan & Singleton 2000).
-     *
-     * The jump mean is proportional to the state (muV = c v), so one step of the QE scheme plus a jump has
-     * stationary mean theta_a / (1 - L), L = lambda dt c m / (1 - e^(-kappa dt)), with m the mean jump per
-     * unit muV. Striking theta_a = theta (1 - L) lands the process on theta; L tends to lambda c m / kappa as
-     * dt goes to zero.
-     */
-    public static function varianceJumpLoad(float $lambda, float $kappa, float $dt): float
-    {
-        if ($lambda <= 0.0 || $kappa <= 0.0 || $dt <= 0.0) {
-            return 0.0;
-        }
-
-        $meanJumpShare = StochasticProcesses::meanVarianceJump(self::SVJJ_P_UP, self::VARIANCE_JUMP_MEAN_SHARE);
-
-        return ($lambda * $dt * $meanJumpShare) / (1.0 - exp(-$kappa * $dt));
-    }
 
     /**
      * Calculates the next stock price: diffusion on the market and sector factors, Kou jumps held to the variance
@@ -321,152 +54,43 @@ class MarketEngine
      *
      * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value, the reversion speed that was applied and the policy news multiplier the price took.
      */
-    public function calculateNextPrice(\App\DTO\MarketPricingContext $ctx): array
+    public function calculateNextPrice(MarketPricingContext $ctx): array
     {
         $currentPrice = $ctx->currentPrice;
-        $currentVolatility = $ctx->currentVolatility;
-        $longTermVolatility = $ctx->longTermVolatility;
         $dt = $ctx->dt;
         $lambda = $ctx->lambda;
-        $jumpVol = $ctx->jumpVol;
         $beta = $ctx->beta;
         $marketZ = $ctx->marketZ;
         $sectorZ = $ctx->sectorZ;
         $marketJumpMultiplier = $ctx->marketJumpMultiplier;
-        $marketVol = $ctx->marketVol;
-        $kappa = $ctx->kappa;
         $volOfVol = $ctx->volOfVol;
         $maShock = $ctx->maShock;
         $dividendPerShare = $ctx->dividendPerShare;
-        $liveCostOfEquity = $ctx->liveCostOfEquity;
-        $orderFlowVariance = $ctx->orderFlowVariance;
 
-        $capUp = FinancialConstants::MAX_JUMP_LOG_RETURN;
-        $capDown = abs(FinancialConstants::MIN_JUMP_LOG_RETURN);
-
-        // State Variables
-        $currentVar = $currentVolatility * $currentVolatility;
-
-        // SYSTEMATIC / IDIOSYNCRATIC SPLIT
-        // See longTermIdiosyncraticVariance() for why the loading is delivered outright rather than implied.
-        $systematicVar = ($beta * $marketVol) * ($beta * $marketVol);
-
-        // The sovereign fund trades every name in proportion to its float, so the impact it measurably supplies is
-        // systematic variance: the market factor's diffusion gives it back, floored at zero, as the idiosyncratic
-        // diffusion gives back the name's own flow.
-        // The shock is loaded at the market vol known before it arrives: MacroEngine updates marketVolatility with this
-        // tick's own innovation (the leverage effect), so the updated vol is correlated with marketZ and E[vol * z] < 0
-        // would drift every name down by beta times that. An Ito integrand is non-anticipating (Kloeden & Platen 1992).
-        $shockMarketVol = $ctx->priorMarketVol ?? $marketVol;
-        $shockSystematicVar = ($beta * $shockMarketVol) * ($beta * $shockMarketVol);
-        $fundImpactVariance = min(max(0.0, $ctx->fundImpactVariance), $shockSystematicVar);
-        $diffusionMarketVol = $shockSystematicVar > 0.0 ? $shockMarketVol * sqrt(1.0 - ($fundImpactVariance / $shockSystematicVar)) : $shockMarketVol;
-        $longTermIdiosyncraticVar = self::longTermIdiosyncraticVariance($longTermVolatility, $beta);
-
-        // IDIOSYNCRATIC JUMP CALIBRATION
-        $jumpParameters = self::calibratedJumpParameters($longTermVolatility, $beta, $lambda, $jumpVol);
-        $dynamicEtaUp = $jumpParameters['eta_up'];
-        $dynamicEtaDown = $jumpParameters['eta_down'];
-
-        // Merton jump compensation: adjust CAPM drift by the jump arrival compensator to preserve expected return.
-        $jumpCompensator = $lambda * StochasticProcesses::kouTruncatedCompensator(
-            self::SVJJ_P_UP,
-            $dynamicEtaUp,
-            $dynamicEtaDown,
-            $capUp,
-            $capDown,
-        );
-
-        // The market-wide jump as this name takes it, through its beta (systemicJumpMoments()).
-        $systemicJump = self::systemicJumpMoments($beta);
-        $systemicCompensator = $systemicJump['compensator'];
-        $systemicJumpMean = $systemicJump['mean'];
-        $systemicJumpVariance = $systemicJump['variance'];
+        // What each source of variance supplies this step, and the idiosyncratic state left to the diffusion.
+        $budget = VarianceBudget::forStep($ctx);
 
         // Expected total return is the cost of equity the fair value is discounted at (CAPM on the 10Y,
         // DebtEngine::calculateHealth()), so a fairly priced name drifts at the rate it is valued at; the
         // dividend leaves the price on the ex-date.
-        $finalDrift = $liveCostOfEquity
-            - $jumpCompensator
-            - $systemicCompensator;
-
-        $commonIdiosyncraticScale = self::commonIdiosyncraticVarianceScale($marketVol, $ctx->marketVarianceTrend);
-
-        // Dynamically scale variance reversion speed (kappa) during jump diffusion regimes
-        // instead of linearly clamping theta, preventing artificial volatility suppression
-        $dynamicKappa = self::varianceReversionSpeed($lambda, $kappa);
-
-        // Idiosyncratic jump variance budget: deduct stock jump variance at truncated second moment.
-        $idiosyncraticJumpVariance = $lambda > 0.0
-            ? min(
-                $lambda * StochasticProcesses::kouTruncatedSecondMoment(
-                    self::SVJJ_P_UP,
-                    $dynamicEtaUp,
-                    $dynamicEtaDown,
-                    $capUp,
-                    $capDown,
-                ),
-                $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE,
-            )
-            : 0.0;
-
-        // Order-flow variance budget: deduct measured impact variance from diffusion variance.
-        $impactVariance = min(
-            max(0.0, $orderFlowVariance),
-            $longTermIdiosyncraticVar * self::MAX_IMPACT_VARIANCE_DRAG_SHARE,
-        );
-
-        // Announcement variance budget: a report or a warning is a scheduled jump (Dubinsky, Johannes, Kaeck &
-        // Seeger 2019), so the diffusion gives back what the name's own announcements measurably supplied,
-        // within the same minority bound as its unscheduled jumps.
-        $announcementVariance = min(
-            max(0.0, $ctx->announcementVariance),
-            $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE,
-        );
-
-        // What the idiosyncratic diffusion is left with once the name's own other sources of variance have been paid
-        // for, which is the only bucket that can flex: the market's diffusion and its jump reach the name through beta
-        // and were paid for before the idiosyncratic budget was struck (longTermIdiosyncraticVariance()).
-        // The variance jumps below add to the stationary mean, so the target is struck low enough that the
-        // process still settles on it: see varianceJumpLoad().
-        // The name's own sources besides its diffusion, deducted here, stripped from the state and added back to the
-        // reported total below: one sum, so the three can never list different sources.
-        $ownSourceVariance = $idiosyncraticJumpVariance + $impactVariance + $announcementVariance;
-        $adjustedTheta = max(
-            0.0001,
-            (($longTermIdiosyncraticVar * $commonIdiosyncraticScale) - $ownSourceVariance)
-                * (1.0 - self::varianceJumpLoad($lambda, $dynamicKappa, $dt)),
-        );
-
-        // The state arrives as the name's TOTAL variance, which is what every other part of the system
-        // reads, so every source the engine adds back below is stripped out before the process steps
-        // forward. The systematic part is stripped at the market vol it was added at, last tick's, so a
-        // move in market vol does not leak into the idiosyncratic state. The state is held at zero, not at any
-        // floor above it: clamped up to a floor its target sits below, the process would settle above its target.
-        $priorMarketVol = $ctx->priorMarketVol ?? $marketVol;
-        $priorSystematicVar = ($beta * $priorMarketVol) * ($beta * $priorMarketVol);
-        $currentIdiosyncraticVar = max(
-            0.0,
-            $currentVar - $priorSystematicVar - $systemicJumpVariance - $ownSourceVariance,
-        );
+        $finalDrift = $budget->jumpCompensatedDrift($ctx->liveCostOfEquity);
 
         // The SVJJ Jump Process (Kou Distribution). The variance jump scales with the name's own
-        // idiosyncratic variance: the systematic loading is pinned at beta * marketVol, and a market-wide
-        // spike must not inflate a single name's jumps on top of it.
+        // idiosyncratic variance (VarianceBudget::varianceJumpMean()).
         $jumpData = $this->mathUtility->calculateSVJJJumps(
             lambda: $lambda,
-            pUp: self::SVJJ_P_UP,
-            etaUp: $dynamicEtaUp,
-            etaDown: $dynamicEtaDown,
-            muV: max(0.0, $currentIdiosyncraticVar) * self::VARIANCE_JUMP_MEAN_SHARE,
+            pUp: VarianceBudget::jumpProbabilityUp(),
+            etaUp: $budget->etaUp,
+            etaDown: $budget->etaDown,
+            muV: $budget->varianceJumpMean(),
             dt: $dt,
         );
 
         // Variance Process via Quadratic-Exponential (QE) Scheme, run on the idiosyncratic variance.
         $nextIdiosyncraticVar = $this->mathUtility->calculateQEVarianceStep(
-            currentVar: $currentIdiosyncraticVar,
-            theta: $adjustedTheta,
-            kappa: $dynamicKappa,
+            currentVar: $budget->idiosyncraticVar,
+            theta: $budget->theta,
+            kappa: $budget->kappa,
             sigma: $volOfVol,
             dt: $dt,
         );
@@ -474,21 +98,9 @@ class MarketEngine
         // Add the contemporaneous volatility jump from the SVJJ model
         $nextIdiosyncraticVar += $jumpData['var_jump'];
 
-        // Back to a TOTAL variance for everything downstream: the liquidity engine's spread and turnover,
-        // the agents' risk charge, and the UI all read this as the name's volatility, and all of them want
-        // what the name actually realizes. That includes the variance its jumps, its order flow and its
-        // announcements deliver — reporting the diffusion alone would understate the name by exactly what the
-        // budget just deducted, and the spread and turnover models would be calibrated against a number the tape
-        // never prints.
-        $nextVar = $nextIdiosyncraticVar + $systematicVar + $systemicJumpVariance + $ownSourceVariance;
+        $nextVolatility = $budget->totalVolatility($nextIdiosyncraticVar);
 
-        // Convert back to volatility for the return payload.
-        $nextVolatility = sqrt(max(0.0, $nextVar));
-
-        // Enforce bounds to prevent flatlining in extreme bull markets and runaway chaos in crashes
-        $nextVolatility = max(self::MIN_VOLATILITY, min(self::MAX_VOLATILITY, $nextVolatility));
-
-        $fundamentalState = $this->fundamentalStateFor($ctx);
+        $fundamentalState = FairValue::fundamentalStateFor($ctx);
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
         $dynamicReversion = $fundamentalState['dynamic_reversion'];
@@ -504,15 +116,10 @@ class MarketEngine
         // per year is the same at any tick rate.
         $reversionWeight = max(0.0, min(1.0, exp(-$dynamicReversion * $dt)));
 
-        // Median-unbiased pull: the drift gives back the log losses the engine's own processes create, Ito on the
-        // diffusion and the convexity of the Merton-compensated jumps, E[e^J - 1 - J]. A fairly priced name's log price
-        // then grows with log fair value and the log pull settles at zero (Summers 1986 log noise), not -var/(2 kappa).
-        $idiosyncraticJumpMean = $lambda > 0.0
-            ? $lambda * StochasticProcesses::kouTruncatedMean(self::SVJJ_P_UP, $dynamicEtaUp, $dynamicEtaDown, $capUp, $capDown)
-            : 0.0;
-        $finalDrift += 0.5 * ((($beta * $diffusionMarketVol) ** 2) + max(0.0, $currentIdiosyncraticVar))
-            + ($jumpCompensator - $idiosyncraticJumpMean)
-            + ($systemicCompensator - $systemicJumpMean);
+        // Median-unbiased pull: the drift gives back the log losses the engine's own processes create, so a fairly
+        // priced name's log price grows with log fair value and the log pull settles at zero (Summers 1986 log noise),
+        // not -var/(2 kappa).
+        $finalDrift += $budget->logLossCompensation();
 
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
@@ -523,12 +130,12 @@ class MarketEngine
         // share of the NON-market residual, so total step variance is unchanged either way.
         $gbmPrice = StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: $currentPrice,
-            idiosyncraticVolatility: sqrt(max(0.0, $currentIdiosyncraticVar)),
+            idiosyncraticVolatility: $budget->idiosyncraticVolatility(),
             drift: $finalDrift,
             gravityDrift: 0.0, // Set to zero, handled below
             dt: $dt,
             beta: $beta,
-            marketVol: $diffusionMarketVol,
+            marketVol: $budget->diffusionMarketVol,
             marketZ: $marketZ,
             w1: $idiosyncraticShock,
             sectorZ: $sectorZ,
@@ -591,338 +198,10 @@ class MarketEngine
      *
      * @return array{perceived_fair_value: float, analyst_targets: array<string, float>}
      */
-    public function strikeFairValue(\App\DTO\MarketPricingContext $ctx): array
+    public function strikeFairValue(MarketPricingContext $ctx): array
     {
-        $state = $this->fundamentalStateFor($ctx);
+        $state = FairValue::fundamentalStateFor($ctx);
 
         return ['perceived_fair_value' => $state['perceived_fair_value'], 'analyst_targets' => $state['analyst_targets']];
-    }
-
-    /**
-     * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array<string, float>}
-     */
-    private function fundamentalStateFor(\App\DTO\MarketPricingContext $ctx): array
-    {
-        return $this->evaluateFundamentalState(
-            $ctx->macroState->outputGap ?? 0.0,
-            $ctx->macroState->inflation ?? 0.02,
-            $ctx->beta,
-            $ctx->costOfDebt,
-            $ctx->reversionSpeed,
-            $ctx->roicTtm,
-            $ctx->macroState->policyRate ?? 0.04,
-            $ctx->bookValuePerShare,
-            $ctx->dividendPerShare,
-            $ctx->baselineIndustryPE,
-            $ctx->revenuePerShare,
-            $ctx->businessModel,
-            $ctx->liveCostOfEquity,
-            $ctx->netDebtPerShare,
-            $ctx->secularGrowth,
-            $ctx->baselineRoic,
-            $ctx->baselineMargin,
-            $ctx->accrualsRatio,
-            $ctx->investedCapitalPerShare,
-            $ctx->macroState,
-            $ctx->tangibleBookValuePerShare,
-            $ctx->targetPayoutRatio,
-            $ctx->dividendAdjustmentSpeed,
-            $ctx->policyBasesPerShare,
-            $ctx->longRunReturn,
-            $ctx->excessCashPerShare,
-        );
-    }
-
-    /**
-     * Evaluates the fundamental fair value and dynamic reversion speed of a company
-     * by combining structural ROIC, cost of capital and the structural EPS run-rate. The reversion speed is
-     * the constant pull, slowed when funding liquidity dries up.
-     *
-     * @param float $outputGap           The macroeconomic output gap (boom vs bust).
-     * @param float $inflation           The current inflation rate, read as stress; growth carries the breakeven.
-     * @param float $beta                The stock's sensitivity to systemic market moves.
-     * @param float|null $costOfDebt     The firm's pre-tax marginal borrowing rate; null prices it at the 10Y plus the
-     *                                   IG spread.
-     * @param float $reversionSpeed      The baseline speed at which the stock reverts to fair value.
-     * @param float $roicTtm             The Trailing Twelve Month ROIC (or ROE).
-     * @param float $riskFreeRate        The central bank's policy rate.
-     * @param float $bookValuePerShare   The equity value per share.
-     * @param float $dividendPerShare    The absolute quarterly dividend per share.
-     * @param float $baselineIndustryPE  The standard P/E multiple for this industry.
-     * @param float $revenuePerShare     The total revenue per share.
-     * @param string $businessModel      The type of business (e.g., 'tech', 'bank', 'retail').
-     * @param float $liveCostOfEquity    The Cost of Equity (CAPM on the 10Y), the hurdle every equity leg is discounted
-     *                                   at.
-     * @param float $netDebtPerShare     The net debt per share.
-     * @param float $secularGrowth       The long-term growth rate of the sector/economy.
-     * @param float $baselineRoic        The historical average ROIC.
-     * @param float $baselineMargin      The historical average net margin.
-     * @param float $accrualsRatio       The accruals-to-assets ratio.
-     * @param float|null $tangibleBookValuePerShare Book equity less goodwill per share; a financial's P/B leg is struck
-     *                                              on it.
-     * @param float $targetPayoutRatio   The payout ratio the firm's dividend policy steers to.
-     * @param float $dividendAdjustmentSpeed Share of the gap to its target dividend the firm closes each quarter.
-     * @param array<string, float> $policyBasesPerShare What each law the firm's accounts answer to is charged on or
-     *                                                  moves, per share, keyed by lever.
-     * @param float|null $longRunReturn  The firm's measured long-run return; the trailing return's gap to it is valued
-     *                                   as it fades.
-     * @param float $excessCashPerShare  Cash beyond what the business needs to run, valued at face beside it.
-     * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
-     */
-    private function evaluateFundamentalState(
-        float $outputGap,
-        float $inflation,
-        float $beta,
-        ?float $costOfDebt,
-        float $reversionSpeed,
-        float $roicTtm,
-        float $riskFreeRate,
-        float $bookValuePerShare,
-        float $dividendPerShare,
-        float $baselineIndustryPE,
-        float $revenuePerShare,
-        string $businessModel,
-        float $liveCostOfEquity,
-        float $netDebtPerShare,
-        float $secularGrowth,
-        float $baselineRoic,
-        float $baselineMargin,
-        float $accrualsRatio,
-        float $investedCapitalPerShare,
-        ?MacroStateDTO $macroState,
-        ?float $tangibleBookValuePerShare,
-        float $targetPayoutRatio,
-        float $dividendAdjustmentSpeed,
-        array $policyBasesPerShare,
-        ?float $longRunReturn,
-        float $excessCashPerShare,
-    ): array {
-
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
-        $macro = $macroState ?? new MacroStateDTO();
-
-        // Cash beyond what the business needs is worth its face: every leg below values the business on the book it
-        // runs on, and the surplus is added back after at face.
-        $bookValuePerShare = max(0.0, $bookValuePerShare - $excessCashPerShare);
-
-        // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, the dividends its policy
-        // pays. All are discounted at the cost of equity on the return the firm earns on its equity (Damodaran 2012,
-        // ch. 18-20); WACC belongs to unlevered cash flows, which nothing here capitalises.
-        $hurdleRate = $liveCostOfEquity;
-        $afterTaxCostOfDebt = ($costOfDebt ?? ($macro->yield10yEma + $macro->macroCreditSpread))
-            * (1.0 - $strategy->getEffectiveTaxRate($macro->corporateTaxRate));
-
-        // Structural ROIC is determined by the business model strategy, allowing sectors like Insurance
-        // to smooth out extreme catastrophic volatility and price based on through-the-cycle baseline capacity.
-        $structuralRoic = $strategy->calculateStructuralRoic(
-            $strategy->getValuationReturn($roicTtm, $longRunReturn, $liveCostOfEquity),
-            $baselineRoic,
-            $revenuePerShare,
-            $bookValuePerShare,
-            $baselineMargin,
-            $hurdleRate,
-        );
-
-        // Without a balance sheet there is no leverage to apply, and the operating return stands in.
-        $equityReturn = $investedCapitalPerShare > 0.0
-            ? $strategy->getEquityReturn($structuralRoic, $investedCapitalPerShare, $bookValuePerShare, $afterTaxCostOfDebt)
-            : $structuralRoic;
-
-        // MACROECONOMIC STRESS INDEX (MSI)
-        $recessionStress = max(0.0, -$outputGap);
-        $inflationStress = abs($inflation - MacroConstants::TARGET_INFLATION);
-        $systemicStressIndex = $recessionStress + $inflationStress;
-
-        $trueStructuralEps = $strategy->calculateStructuralEps(
-            $bookValuePerShare,
-            $structuralRoic,
-            $revenuePerShare,
-            $riskFreeRate,
-            $afterTaxCostOfDebt,
-            // Real capital employed when the caller supplied a balance sheet; the model's structural
-            // approximation from revenue and book value otherwise.
-            $investedCapitalPerShare > 0.0 ? $investedCapitalPerShare : null,
-        );
-
-        // The value legs struck on one set of earnings, so a law that moves the earnings moves every leg they reach,
-        // floors and all.
-        $strikeLegs = function (float $equityReturn, float $structuralEps) use (
-            $strategy,
-            $macro,
-            $macroState,
-            $hurdleRate,
-            $outputGap,
-            $beta,
-            $secularGrowth,
-            $baselineIndustryPE,
-            $accrualsRatio,
-            $revenuePerShare,
-            $netDebtPerShare,
-            $bookValuePerShare,
-            $tangibleBookValuePerShare,
-            $dividendPerShare,
-            $targetPayoutRatio,
-            $dividendAdjustmentSpeed
-        ): array {
-            // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
-            // The growth transmission and the Sloan accruals discount live in Valuation because the corporate
-            // engines strike the same multiple when management decides on a buyback, an offering or a deal.
-            // Perpetual growth carries the inflation the hurdle does: the ten-year breakeven inside the CAPM's 10Y,
-            // not this quarter's print, so an oil spike does not read as faster growth forever.
-            $expectedGrowth = Valuation::calculateFundableGrowth(
-                Valuation::calculateExpectedNominalGrowth(
-                    $secularGrowth,
-                    $outputGap,
-                    $beta,
-                    $macro->tipsBreakeven,
-                    $hurdleRate,
-                ),
-                $equityReturn,
-                $targetPayoutRatio,
-                $macro->tipsBreakeven,
-            );
-
-            $fairValuePE = Valuation::calculateQualityAdjustedFairValuePE(
-                $hurdleRate,
-                $equityReturn,
-                $expectedGrowth,
-                $baselineIndustryPE,
-                $accrualsRatio,
-                Valuation::sectorHurdleShift($hurdleRate, $beta, $macro->tipsBreakeven),
-            );
-
-            // The structural run-rate is the normalized EPS: the trailing print already reaches it once, through the
-            // persistent-equivalent return (Ohlson 1995), and blending the print in again would count it twice.
-            $normalizedEps = max(0.01, $structuralEps);
-
-            $peFairValue = max(0.00, $normalizedEps * $fairValuePE);
-
-            // THE ZOMBIE FIX: Revenue Floor (Margin-Adjusted Price-to-Sales) High-turnover physical corporations
-            // (retail, grocers) have thin net margins and cannot support software-like P/S multiples.
-            $trueMargin = $structuralEps > 0
-                ? $structuralEps / max(0.01, $revenuePerShare)
-                : self::MIN_IMPLIED_NET_MARGIN;
-            $impliedMargin = max(self::MIN_IMPLIED_NET_MARGIN, min(self::MAX_IMPLIED_NET_MARGIN, $trueMargin));
-
-            $psMultiple = max(
-                self::MIN_PS_FALLBACK_MULT,
-                min(self::MAX_PS_FALLBACK_MULT, max(self::MIN_PS_ANCHOR_PE, $fairValuePE) * $impliedMargin),
-            );
-            $revenueFloorValue = $revenuePerShare * $psMultiple;
-            $revenueFloorEquityValue = max(0.01, $revenueFloorValue - $netDebtPerShare);
-
-            // The earnings leg: the value-driver P/E value, never below what the model's revenue floor is worth.
-            $earningsValue = $strategy->calculateEarningsValue($revenueFloorEquityValue, $peFairValue);
-
-            // Dividend Discount Model (Gordon 1962) on the dividends the firm's own policy will pay: its target payout
-            // of normalized earnings, growing at the rate its retained earnings compound at (Higgins 1977), plus the
-            // present value of today's gap to that target while partial adjustment closes it (Lintner 1956). Struck on
-            // the policy rather than the last cheque, a cut costs what is missed while the dividend recovers, and there
-            // is no step at zero. Only the models that price on income read it; an operating company's value does not
-            // turn on its payout.
-            $dividendSupportValue = 0.0;
-            if ($targetPayoutRatio > 0.0 && $normalizedEps > 0.0) {
-                $requiredYield = max(self::MIN_DIVIDEND_REQUIRED_YIELD, $hurdleRate);
-                $payoutRatio = min(1.0, $targetPayoutRatio);
-                $returnOnEquity = $bookValuePerShare > 0.0 ? $normalizedEps / $bookValuePerShare : 0.0;
-                $sustainableGrowth = max(0.0, min(self::MAX_DIVIDEND_IMPLIED_GROWTH, $returnOnEquity * (1.0 - $payoutRatio)));
-                $targetDividend = $normalizedEps * $payoutRatio;
-
-                $dividendSupportValue = max(
-                    0.0,
-                    Valuation::calculateDividendDiscountModel($targetDividend, $requiredYield, $sustainableGrowth)
-                        + Valuation::calculateDividendAdjustmentValue(($dividendPerShare * 4.0) - $targetDividend, $requiredYield, $dividendAdjustmentSpeed),
-                );
-            }
-
-            // Intrinsic Price-to-Book (P/B) Valuation
-            // The multiple belongs to the business model: plant earning above its hurdle is worth more than the
-            // plant, while a portfolio of marketable stakes is worth the portfolio, so a trust declares 1.0 and
-            // this term hands its model net asset value per share rather than a multiple of it.
-            $pbFairValue = $bookValuePerShare * $strategy->getIntrinsicPbMultiple($equityReturn, $hurdleRate);
-
-            // A financial is valued on tangible book, since its regulator deducts goodwill from capital. The same
-            // earnings over the smaller base give the same value wherever the multiple is interior; the change is
-            // that the floor and ceiling then bound price to TANGIBLE book, so goodwill cannot prop up the floor.
-            // A financial's equity return is its return on capital (BaseFinancialBusinessModel::getEquityReturn()).
-            if ($strategy->isFinancial() && $tangibleBookValuePerShare !== null && $bookValuePerShare > 0.0) {
-                $tangibleBook = max(0.0, $tangibleBookValuePerShare);
-                $returnOnTangible = $tangibleBook > 0.0 ? $equityReturn * $bookValuePerShare / $tangibleBook : 0.0;
-                $pbFairValue = $tangibleBook * $strategy->getIntrinsicPbMultiple($returnOnTangible, $hurdleRate);
-            }
-
-            // PERFECTED WEIGHTED CONSENSUS MODEL
-            $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps, $dividendSupportValue);
-
-            // Closed-end structures trade below the assets they hold, by a gap that moves with the cycle. Applied
-            // here rather than inside the consensus so it reaches the reversion target: the price is pulled toward
-            // the discounted value, which is what makes a widening discount a fall rather than a mispricing.
-            $fairValue *= (1.0 - $strategy->getStructuralValuationDiscount($macroState ?? new MacroStateDTO()));
-
-            return [
-                'fair_value' => $fairValue,
-                'earnings_value' => $earningsValue,
-                'dividend_value' => $dividendSupportValue,
-                'book_value' => $pbFairValue,
-                'expected_growth' => $expectedGrowth,
-                'normalized_eps' => $normalizedEps,
-            ];
-        };
-
-        $legs = $strikeLegs($equityReturn, $trueStructuralEps);
-
-        // The laws the market expects rather than the ones the trailing earnings carry (PolicyCapitalization), struck
-        // into the earnings every leg is valued on, so a firm held at its book floor loses no more than the floor gives
-        // up. A forecast revised this tick moves the price with the target, as news does, rather than leaving it to
-        // drift there.
-        $policyRepricing = 1.0;
-        if ($macroState !== null) {
-            // Capitalized on the same perpetual growth the multiple is struck on: the raw outlook can sit within a few
-            // basis points of the hurdle in an inflationary boom, and a policy gap spread over that would wipe out
-            // value.
-            $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - Valuation::perpetualGrowthRate($hurdleRate, $legs['expected_growth']));
-            // The dividend its policy pays, as the income leg strikes it, over the value before the laws: the yield its
-            // holders' tax is charged on. A dividend omitted for a quarter is still the policy's, and still taxed.
-            $policyDividend = $legs['normalized_eps'] * min(1.0, $targetPayoutRatio * Valuation::dividendTaxPayoutScale($macroState->dividendTaxRate));
-            $dividendYield = $policyDividend / max(0.01, $legs['fair_value']);
-
-            $underExpectedLaws = function (bool $previous) use ($strikeLegs, $strategy, $macroState, $policyBasesPerShare, $capRate, $dividendYield, $equityReturn, $trueStructuralEps, $bookValuePerShare): array {
-                $taxExpected = $strategy->getEffectiveTaxRate($macroState->corporateTaxRate + PolicyCapitalization::corporateTaxShiftGap($macroState, $capRate, $previous));
-                $taxScale = PolicyCapitalization::afterTaxScale($strategy->getEffectiveTaxRate($macroState->corporateTaxRate), $taxExpected);
-                $earningsGap = PolicyCapitalization::earningsGap($macroState, $policyBasesPerShare, $taxExpected, $capRate, $previous);
-                $returnGap = $bookValuePerShare > 0.0 ? $earningsGap / $bookValuePerShare : 0.0;
-
-                $legs = $strikeLegs(($equityReturn * $taxScale) + $returnGap, ($trueStructuralEps * $taxScale) + $earningsGap);
-                $legs['fair_value'] = max(0.01, $legs['fair_value'])
-                    * Valuation::dividendTaxValueScale($dividendYield, $capRate, PolicyCapitalization::expectedDividendTaxRate($macroState, $capRate, $previous));
-
-                return $legs;
-            };
-
-            $legs = $underExpectedLaws(false);
-            // Laws unrevised would strike the same legs again, a ratio of exactly one.
-            $policyRepricing = $macroState->lawsAheadRevised()
-                ? ($legs['fair_value'] + $excessCashPerShare) / ($underExpectedLaws(true)['fair_value'] + $excessCashPerShare)
-                : 1.0;
-        }
-
-        $perceivedFairValue = max(0.01, $legs['fair_value'] + $excessCashPerShare);
-
-        // Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
-        // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained
-        // arbitrageurs pull back, slowing down market efficiency and price correction speed.
-        $liquidityDampener = 1.0 / (1.0 + ($systemicStressIndex * self::FUNDING_LIQUIDITY_STRESS_FACTOR));
-        $dynamicReversion = $reversionSpeed * $liquidityDampener;
-
-        return [
-            'perceived_fair_value' => $perceivedFairValue,
-            'dynamic_reversion'    => $dynamicReversion,
-            'policy_repricing'     => $policyRepricing,
-            'analyst_targets'      => [
-                'growth_analyst' => max(0.01, $legs['earnings_value'] + $excessCashPerShare),
-                'income_analyst' => max(0.01, $legs['dividend_value'] + $excessCashPerShare),
-                'value_analyst'  => max(0.01, ($legs['book_value'] * self::VALUE_ANALYST_BOOK_MULT) + $excessCashPerShare),
-            ],
-        ];
     }
 }

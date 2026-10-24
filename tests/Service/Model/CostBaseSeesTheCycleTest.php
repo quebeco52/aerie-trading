@@ -13,7 +13,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The sticky committed cost base (EarningsEngine::resolveCommittedCostScale) reads activity as the root
+ * The sticky committed cost base (OperatingCapacityEngine::resolveCommittedCostScale) reads activity as the root
  * macro_demand_shift plus resolveSectorActivityShift(). A model that zeroes the root shift to apply the cycle
  * per stream must hand the same activity back through resolveSectorActivityShift(), or its cost base never
  * sees a recession and never restructures.

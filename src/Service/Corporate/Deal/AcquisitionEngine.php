@@ -2,24 +2,27 @@
 
 declare(strict_types=1);
 
-namespace App\Service\Corporate;
+namespace App\Service\Corporate\Deal;
 
 use App\DTO\AcquisitionContext;
-use App\DTO\DivestitureContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\ManagementValuation;
 use App\Service\Math\MathUtility;
-use App\Service\Math\Valuation;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\News\MarketEventPublisher;
 use App\Service\News\WireFormat;
 
 /**
- * Service responsible for executing Mergers and Acquisitions.
- * Injects fresh Market Cap into the simulation by having public titans acquire private, off-board companies.
+ * A listed firm buying a private, off-board company, which brings fresh market cap onto the board: the hazard gate,
+ * the deal its manager and balance sheet choose, the target's economics and price, the funding in cash, debt or
+ * shares, the purchase accounting at closing, and the announcement. MergerReview holds the approval gates its size
+ * has to clear.
  */
-class MergerAndAcquisitionEngine
+class AcquisitionEngine
 {
     // --- M&A Deal Parameters ---
     /** Minimum size for a deal to be executed, at the District's $12T scale. */
@@ -66,29 +69,6 @@ class MergerAndAcquisitionEngine
     /** Most of a target's net identifiable assets that can be trade cycle rather than plant. */
     public const MA_MAX_WORKING_CAPITAL_SHARE = 0.90;
 
-    // --- Horizontal Merger Review (2023 Merger Guidelines §2.1; 2010 Horizontal Merger Guidelines §5.3) ---
-    /**
-     * HHI increase above which a merger significantly increases concentration under the 2023 guidelines (100 points).
-     */
-    public const MERGER_REVIEW_HHI_DELTA = 0.0100;
-    /** Post-merger HHI above which the market is highly concentrated under the 2023 guidelines (1,800 points). */
-    public const MERGER_REVIEW_CONCENTRATED_HHI = 0.1800;
-    /**
-     * Merged market share above which a deal that also passes the HHI delta is presumed illegal under the 2023
-     * guidelines (Philadelphia National Bank, 1963).
-     */
-    public const MERGER_REVIEW_SHARE_CEILING = 0.30;
-    /**
-     * HHI increase a merger into a highly concentrated market must pass to be presumed to enhance market power under
-     * the 2010 guidelines (200 points).
-     */
-    public const MERGER_REVIEW_LENIENT_HHI_DELTA = 0.0200;
-    /**
-     * Post-merger HHI above which the market is highly concentrated under the 2010 guidelines (2,500 points); they
-     * carry no market-share presumption.
-     */
-    public const MERGER_REVIEW_LENIENT_CONCENTRATED_HHI = 0.2500;
-
     // --- Deal Sizing Limits (named in the deal announcement) ---
     /** The acquirer's cash, borrowing room or shares times the fraction it chose to spend. */
     public const LIMIT_BUYING_POWER = 'buying power';
@@ -127,64 +107,6 @@ class MergerAndAcquisitionEngine
     /** Highest operating margin of a target as a share of the acquirer's own (95%). */
     public const MA_TARGET_MARGIN_SHARE_MAX = 0.95;
 
-    // --- Divestiture Parameters ---
-    /** Minimum fraction for dying company divestiture. */
-    public const DIV_DYING_FRACTION_MIN = 0.30;
-    /** Maximum fraction for dying company divestiture. */
-    public const DIV_DYING_FRACTION_MAX = 0.50;
-    /** Minimum sale multiple for dying company. */
-    public const DIV_DYING_MULTIPLE_MIN = 3.0;
-    /** Maximum sale multiple for dying company. */
-    public const DIV_DYING_MULTIPLE_MAX = 5.0;
-    /** Annual probability for dying company divestiture. */
-    public const DIV_DYING_ANNUAL_PROB = 2.0;
-
-    /** Minimum fraction for distressed company divestiture. */
-    public const DIV_DISTRESSED_FRACTION_MIN = 0.15;
-    /** Maximum fraction for distressed company divestiture. */
-    public const DIV_DISTRESSED_FRACTION_MAX = 0.30;
-    /** Minimum sale multiple for distressed company. */
-    public const DIV_DISTRESSED_MULTIPLE_MIN = 6.0;
-    /** Maximum sale multiple for distressed company. */
-    public const DIV_DISTRESSED_MULTIPLE_MAX = 10.0;
-    /** Annual probability for distressed company divestiture. */
-    public const DIV_DISTRESSED_ANNUAL_PROB = 0.30;
-
-    /** Minimum fraction for premium company divestiture. */
-    public const DIV_PREMIUM_FRACTION_MIN = 0.05;
-    /** Maximum fraction for premium company divestiture. */
-    public const DIV_PREMIUM_FRACTION_MAX = 0.10;
-    /** Minimum sale multiple for premium company. */
-    public const DIV_PREMIUM_MIN_MULTIPLE = 8.0;
-    /** Maximum sale multiple for premium company. */
-    public const DIV_PREMIUM_MAX_MULTIPLE = 18.0;
-    /** Annual probability for premium company divestiture. */
-    public const DIV_PREMIUM_ANNUAL_PROB = 0.05;
-
-    /** P/E threshold for divestiture consideration. */
-    public const DIV_PE_THRESHOLD = 30.0;
-    /** Minimum net income for divestiture consideration, at the District's $12T scale. */
-    public const DIV_MIN_NET_INCOME = 2_500_000_000.0;
-    /** Long-run return below the business's cost of capital at which a firm sheds a division as distressed (-2pp). */
-    public const DIV_DISTRESS_EVA_THRESHOLD = -0.02;
-    /** Long-run return below which the business loses money through the cycle and is dying (0%). */
-    public const DIV_DYING_RETURN_THRESHOLD = 0.00;
-    /** Long-run return below the business's cost of capital at which the firm is dying (-5pp). */
-    public const DIV_DYING_EVA_THRESHOLD = -0.05;
-
-    /** Cash fortress ratio to prevent divestitures. */
-    public const DIV_CASH_FORTRESS_RATIO = 0.10;
-
-    /**
-     * Discount a distressed seller takes to the market value of the assets it sells (~14%; Pulvino 1998, aircraft fire
-     * sales).
-     */
-    public const DIV_FIRE_SALE_DISCOUNT = 0.14;
-    /**
-     * Carried stream-state key: the time of the distress sale the firm's current episode has had; cleared once its
-     * return has recovered.
-     */
-    public const STATE_DISTRESS_SALE_EPISODE = EarningsEngine::CARRIED_STATE_PREFIX . 'distress_sale_episode';
     /** Ceiling on the acquisition hazard, cached: the styles and constants it is built from never change. */
     private static ?float $acquisitionHazardCeiling = null;
 
@@ -223,51 +145,6 @@ class MergerAndAcquisitionEngine
         return self::$acquisitionHazardCeiling = $primary + (self::MA_CASH_FALLBACK_PROB * $maxBias);
     }
 
-    /**
-     * The screens horizontal merger review applies, between the 2023 guidelines (leniency 0: 1,800 points, a
-     * 100-point delta, and a 30% share presumption) and the 2010 guidelines (leniency 1: 2,500 points, a
-     * 200-point delta, no share presumption), where the Fair Trading Board's head sets it
-     * (App\Service\Politics\Department\FairTradingBoard::leniency()).
-     *
-     * @return array{delta: float, concentrated: float, shareCeiling: float} The HHI delta, the highly concentrated
-     *         line, and the merged share presumed illegal (1.0: none).
-     */
-    public static function reviewScreens(float $leniency): array
-    {
-        $weight = max(0.0, min(1.0, $leniency));
-
-        return [
-            'delta' => self::MERGER_REVIEW_HHI_DELTA + ($weight * (self::MERGER_REVIEW_LENIENT_HHI_DELTA - self::MERGER_REVIEW_HHI_DELTA)),
-            'concentrated' => self::MERGER_REVIEW_CONCENTRATED_HHI + ($weight * (self::MERGER_REVIEW_LENIENT_CONCENTRATED_HHI - self::MERGER_REVIEW_CONCENTRATED_HHI)),
-            'shareCeiling' => self::MERGER_REVIEW_SHARE_CEILING + ($weight * (1.0 - self::MERGER_REVIEW_SHARE_CEILING)),
-        ];
-    }
-
-    /**
-     * The largest share of its market an acquirer can buy and still clear horizontal merger review
-     * (reviewScreens()). A deal is presumed to lessen competition when it raises the HHI by more than the
-     * delta and either leaves the market highly concentrated or creates a firm above the share ceiling. The
-     * target comes out of the competitive fringe, so buying share t at share s raises the HHI by 2st and
-     * leaves it at H + t² + 2st. Clearance is the union of two intervals from zero: the delta safe harbour
-     * t ≤ Δ/2s, and t ≤ min(ceiling − s, √(s² + line − H) − s) while both screens hold.
-     */
-    public static function maxClearedTargetShare(float $acquirerShare, float $herfindahl, float $leniency = 0.0): float
-    {
-        $screens = self::reviewScreens($leniency);
-        $share = max(0.0, $acquirerShare);
-        $safeHarbour = $share > 0.0 ? $screens['delta'] / (2.0 * $share) : 1.0;
-        $belowConcentration = sqrt(($share * $share) + max(0.0, $screens['concentrated'] - $herfindahl)) - $share;
-        $belowScreens = min($screens['shareCeiling'] - $share, $belowConcentration);
-
-        return min(1.0, max(0.0, $safeHarbour, $belowScreens));
-    }
-
-    /** The largest annual divestiture hazard any state assigns; the bound its rejection gate is struck at. */
-    public static function divestitureHazardCeiling(): float
-    {
-        return max(self::DIV_DYING_ANNUAL_PROB, self::DIV_DISTRESSED_ANNUAL_PROB, self::DIV_PREMIUM_ANNUAL_PROB);
-    }
-
     public function __construct(
         private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine,
@@ -276,10 +153,6 @@ class MergerAndAcquisitionEngine
         /** Industry capacity balance; null (unit tests) leaves a deal's plant to be read as a build. */
         private ?IndustryShareLedger $industryShareLedger = null,
     ) {}
-
-    // =========================================================================
-    // ACQUISITION PIPELINE
-    // =========================================================================
 
     public function evaluatePrivateAcquisition(Stock $acquirer, MacroStateDTO $macroState, float $dt, int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
@@ -471,7 +344,7 @@ class MergerAndAcquisitionEngine
         }
 
         $ctx->config = $config;
-        $ctx->target = $this->generateProceduralTarget();
+        $ctx->target = PrivateCompany::procedural($this->mathUtility);
         $this->drawTargetEconomics($ctx);
 
         // The target is a private firm in the acquirer's own market, so the deal is sized to the largest
@@ -524,7 +397,7 @@ class MergerAndAcquisitionEngine
             return ['price' => INF, 'review_binds' => false];
         }
 
-        $reviewShare = self::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl'], $ctx->macroState->mergerReviewLeniency);
+        $reviewShare = MergerReview::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl'], $ctx->macroState->mergerReviewLeniency);
         $targetShare = min($market['fringe_share'], $reviewShare);
         $revenuePerDollar = $this->valueTarget($ctx, 1.0)['revenue'];
 
@@ -535,14 +408,10 @@ class MergerAndAcquisitionEngine
     }
 
     /**
-     * For a firm its capital ratio can close, the largest deal that keeps that ratio out of the grey zone
-     * once the goodwill is deducted: a bank must stay well capitalized to have a merger approved (Bank Merger
-     * Act; Regulation Y) and an insurer needs its regulator's Form A approval. Goodwill is linear in the
-     * price, and so are the leases the acquired revenue brings onto the balance sheet (IFRS 16), so the bound
-     * is closed-form. Paid in cash, the deal swaps cash for identifiable assets and goodwill, taking the
-     * goodwill off tangible capital and tangible assets alike; the part funded by new debt adds that debt to
-     * the assets as well. Paid in shares it adds its net assets to both sides and only raises the ratio.
-     * Unbounded for a firm the capital ratio does not govern.
+     * The largest deal the acquirer's prudential regulator approves (MergerReview::capitalClearedPrice()), struck on
+     * its tangible capital base and the goodwill and leases each dollar of price brings, at the floor of the grey
+     * zone. Paid in shares a deal adds its net assets to both sides and only raises the ratio, so it is unbounded,
+     * as it is for a firm the capital ratio does not govern.
      */
     private function resolveLargestCapitalClearedDeal(AcquisitionContext $ctx): float
     {
@@ -552,25 +421,11 @@ class MergerAndAcquisitionEngine
 
         $floor = $ctx->strategy->getWarningEquityThreshold() / 100.0;
         $base = $this->debtEngine->resolveTangibleCapitalBase($ctx->acquirer, (float) $ctx->acquirer->getTotalRevenue());
-        $headroom = $base['capital'] - ($floor * $base['assets']);
-        if ($headroom <= 0.0) {
-            return 0.0;
-        }
-
         $perDollar = $this->valueTarget($ctx, 1.0);
         $goodwillPerDollar = max(0.0, 1.0 - $perDollar['net_assets']);
         $leasePerDollar = $this->corporateMetrics->calculateLeaseLiability($perDollar['revenue'], $ctx->strategy->getLeaseIntensity($ctx->acquirer));
 
-        // Cash-funded: (C − gP) / (A − gP + ℓP) ≥ f.
-        $cashFundedRate = ($goodwillPerDollar * (1.0 - $floor)) + ($floor * $leasePerDollar);
-        $cashFunded = $cashFundedRate > 0.0 ? $headroom / $cashFundedRate : INF;
-        if ($cashFunded <= $ctx->usableTreasury) {
-            return $cashFunded;
-        }
-
-        // Past the usable cash the rest is borrowed: (C − gP) / (A − gP + ℓP + P − U) ≥ f.
-        return ($base['capital'] - ($floor * ($base['assets'] - $ctx->usableTreasury)))
-            / max(1e-9, $goodwillPerDollar + ($floor * (1.0 - $goodwillPerDollar + $leasePerDollar)));
+        return MergerReview::capitalClearedPrice($base['capital'], $base['assets'], $floor, $goodwillPerDollar, $leasePerDollar, $ctx->usableTreasury);
     }
 
     /**
@@ -719,7 +574,7 @@ class MergerAndAcquisitionEngine
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) ($currentRevenue + $acquiredRevenue));
         // Credit agreements measure a buyer pro forma, as if it had owned the target all year.
-        $this->restateOperatingHistory($stock, 1.0, $acquiredRevenue, $acquiredOperatingIncome);
+        ProForma::restateOperatingHistory($stock, 1.0, $acquiredRevenue, $acquiredOperatingIncome);
         $this->industryShareLedger?->recordAcquiredCapacity($stock, $acquiredRevenue, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
 
         // Operating income adds across the two businesses, so the combined margin is revenue-weighted.
@@ -744,27 +599,6 @@ class MergerAndAcquisitionEngine
 
         $currentEps = (float) $stock->getEarningsPerShare();
         $stock->setEarningsPerShare((string) ($currentEps + ($trueAcquiredNetIncome / max(1.0, $ctx->shares))));
-    }
-
-    /**
-     * Restates the trailing four quarters pro forma for a deal: each quarter keeps the retained share of what
-     * the firm earned and gains a quarter of the acquired business's annual revenue and operating income.
-     */
-    private function restateOperatingHistory(Stock $stock, float $retainedShare, float $acquiredAnnualRevenue, float $acquiredAnnualOperatingIncome): void
-    {
-        $history = $stock->getQuarterlyOperatingHistory();
-        if ($history === null || $history === []) {
-            return;
-        }
-
-        $quarters = EarningsEngine::TTM_QUARTERS;
-        $stock->setQuarterlyOperatingHistory(array_map(
-            static fn(array $quarter): array => [
-                'revenue' => ((float) $quarter['revenue'] * $retainedShare) + ($acquiredAnnualRevenue / $quarters),
-                'ebit' => ((float) $quarter['ebit'] * $retainedShare) + ($acquiredAnnualOperatingIncome / $quarters),
-            ],
-            array_values($history),
-        ));
     }
 
     /**
@@ -874,380 +708,5 @@ class MergerAndAcquisitionEngine
             'shock' => $ctx->eventShock / 100.0,
             'spent' => $ctx->purchasePrice,
         ];
-    }
-
-    // =========================================================================
-    // DIVESTITURE PIPELINE
-    // =========================================================================
-
-    public function evaluateCorporateDivestiture(Stock $seller, MacroStateDTO $macroState, float $dt): ?array
-    {
-        if ($seller->isBankrupt()) {
-            return null;
-        }
-
-        // The same rejection gate as evaluatePrivateAcquisition(): pass at the ceiling hazard first, work
-        // out which hazard actually applies only then.
-        if (!$this->mathUtility->checkProbability(self::divestitureHazardCeiling() * $dt)) {
-            return null;
-        }
-
-        $ctx = new DivestitureContext($seller, $macroState, $dt);
-
-        $this->initializeDivestitureContext($ctx);
-
-        if ($this->isInOpenDistressEpisode($ctx) || $this->shouldAbortDivestiture($ctx)) {
-            return null;
-        }
-
-        $this->determineDivestitureStrategy($ctx);
-        if (!$ctx->dealExecuted) {
-            return null;
-        }
-
-        $this->executeDivestitureSale($ctx);
-        $this->applyDivestitureAccounting($ctx);
-        if ($ctx->isDying || $ctx->isDistressed) {
-            self::openDistressEpisode($seller, $macroState->totalTime);
-        }
-
-        return $this->finalizeDivestitureEvent($ctx);
-    }
-
-    /**
-     * The hurdle the sale test reads: CAPM on the firm's own beta, its asset beta for an operating company and one that
-     * carries its structural leverage for a lender. It holds no distress premium, so dearer financing is not read as a
-     * business destroying value (Modigliani & Miller 1958).
-     */
-    public static function businessCostOfCapital(Stock $stock, MacroStateDTO $macroState): float
-    {
-        return Valuation::calculateCAPM($macroState->yield10y, (float) $stock->getBeta(), $macroState->equityRiskPremium);
-    }
-
-    /**
-     * One distress sale per episode: the slice is pro rata, so it leaves the return that triggered it where it was. The
-     * episode closes once the classification is healthy again, read before the cash-buffer exemption the proceeds meet.
-     */
-    private function isInOpenDistressEpisode(DivestitureContext $ctx): bool
-    {
-        if (!isset(($ctx->seller->getEarningsMomentumZ() ?? [])[self::STATE_DISTRESS_SALE_EPISODE])) {
-            return false;
-        }
-        if ($ctx->isDistressed || $ctx->isDying) {
-            return true;
-        }
-        self::closeDistressEpisode($ctx->seller);
-
-        return false;
-    }
-
-    private static function openDistressEpisode(Stock $stock, float $time): void
-    {
-        $state = $stock->getEarningsMomentumZ() ?? [];
-        $state[self::STATE_DISTRESS_SALE_EPISODE] = $time;
-        $stock->setEarningsMomentumZ($state);
-    }
-
-    private static function closeDistressEpisode(Stock $stock): void
-    {
-        $state = $stock->getEarningsMomentumZ() ?? [];
-        unset($state[self::STATE_DISTRESS_SALE_EPISODE]);
-        $stock->setEarningsMomentumZ($state);
-    }
-
-    private function initializeDivestitureContext(DivestitureContext $ctx): void
-    {
-        $stock = $ctx->seller;
-
-        $ctx->price = (float) $stock->getPrice();
-        $ctx->shares = max(1.0, (float) $stock->getSharesOutstanding());
-        $ctx->netIncome = (float) $stock->getTotalNetIncome();
-
-        $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState);
-        $ctx->wacc = $ctx->health->wacc;
-
-        $ctx->industry = $stock->getIndustry() ?: 'General';
-        $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);
-        $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
-
-        $ctx->currentReturn = $ctx->strategy->getTrueReturn($stock);
-        if ($ctx->currentReturn === 0.0) {
-            $ctx->currentReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->netIncome, $stock->getInvestedCapital());
-        }
-        // Whether the business earns its keep is read on its long-run return against the cost of capital of the
-        // business: a slump shorter than that horizon is not decline, and a distress premium on the firm's financing
-        // is not value destroyed by its operations.
-        $longRunReturn = $stock->getLongRunReturn();
-        $ctx->throughCycleReturn = $longRunReturn !== null ? (float) $longRunReturn : $ctx->currentReturn;
-        $ctx->hurdleRate = self::businessCostOfCapital($stock, $ctx->macroState);
-
-        $ctx->evaSpread = $ctx->throughCycleReturn - $ctx->hurdleRate;
-
-        $ctx->isDistressed = $ctx->evaSpread < self::DIV_DISTRESS_EVA_THRESHOLD;
-        $ctx->isDying = $ctx->throughCycleReturn < self::DIV_DYING_RETURN_THRESHOLD || $ctx->evaSpread < self::DIV_DYING_EVA_THRESHOLD;
-
-        $ctx->treasury = (float) $stock->getCorporateTreasury();
-        $ctx->operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
-        $ctx->hasCashBuffer = $ctx->treasury > ($ctx->operatingBase * self::DIV_CASH_FORTRESS_RATIO);
-
-        $ctx->currentEquity = (float) $stock->getTotalEquity();
-        $ctx->investedCapital = $stock->getInvestedCapital();
-        $ctx->evaluationCapital = $ctx->strategy->getEvaluationCapital($ctx->currentEquity, $ctx->investedCapital);
-
-        $ctx->structuralNetIncome = $ctx->evaluationCapital * $ctx->currentReturn;
-        $ctx->normalizedNetIncome = ($ctx->netIncome * 0.50) + ($ctx->structuralNetIncome * 0.50);
-
-        $ctx->normalizedEps = $ctx->normalizedNetIncome / $ctx->shares;
-        $ctx->currentPE = $ctx->normalizedEps > 0 ? $ctx->price / $ctx->normalizedEps : 0.0;
-
-        $ctx->targetCash = $stock->getManagementProfile()->managedTargetCash($ctx->strategy, $ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        $ctx->hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->treasury, $ctx->targetCash, $stock->getManagementProfile()->appliedHoardingBase($ctx->operatingBase), (float) $stock->getTotalDebt());
-
-        $ctx->nominalGdpIndex = $ctx->macroState->nominalGdpIndex;
-        $ctx->samRatio = (float) $stock->getSamRatio();
-        $ctx->scaleRatio = $this->corporateMetrics->calculateAddressableShare($stock, $ctx->evaluationCapital, $ctx->macroState);
-    }
-
-    private function shouldAbortDivestiture(DivestitureContext $ctx): bool
-    {
-        if ($ctx->hoardStatus['is_hoarder']) {
-            return true;
-        }
-
-        if ($ctx->hasCashBuffer && !($ctx->scaleRatio > 1.00)) {
-            $ctx->isDistressed = false;
-            $ctx->isDying = false;
-        }
-
-        if (!$ctx->isDistressed && ($ctx->currentPE < self::DIV_PE_THRESHOLD || $ctx->normalizedNetIncome < self::DIV_MIN_NET_INCOME)) {
-            return true;
-        }
-
-        return false;
-    }
-
-    private function determineDivestitureStrategy(DivestitureContext $ctx): void
-    {
-        if ($ctx->isDying) {
-            $ctx->divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_DYING_FRACTION_MIN, self::DIV_DYING_FRACTION_MAX);
-            $ctx->saleMultiple = $this->mathUtility->generateUniformBetween(self::DIV_DYING_MULTIPLE_MIN, self::DIV_DYING_MULTIPLE_MAX);
-            $ctx->annualProbability = self::DIV_DYING_ANNUAL_PROB;
-        } elseif ($ctx->isDistressed) {
-            $ctx->divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_DISTRESSED_FRACTION_MIN, self::DIV_DISTRESSED_FRACTION_MAX);
-            $ctx->saleMultiple = $this->mathUtility->generateUniformBetween(self::DIV_DISTRESSED_MULTIPLE_MIN, self::DIV_DISTRESSED_MULTIPLE_MAX);
-            $ctx->annualProbability = self::DIV_DISTRESSED_ANNUAL_PROB;
-        } else {
-            $ctx->divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_PREMIUM_FRACTION_MIN, self::DIV_PREMIUM_FRACTION_MAX);
-            $ctx->sectorPE = \App\Data\Company\Sectors::MACRO_SECTORS[$ctx->seller->getSector()] ?? 20.0;
-            $blendedMultiple = ($ctx->currentPE + $ctx->sectorPE) / 2.0;
-            $ctx->saleMultiple = min(self::DIV_PREMIUM_MAX_MULTIPLE, max(self::DIV_PREMIUM_MIN_MULTIPLE, $blendedMultiple));
-            $ctx->annualProbability = self::DIV_PREMIUM_ANNUAL_PROB;
-        }
-
-        // Second stage of the gate: accept with the ratio of this state's hazard to the ceiling. The dt
-        // cancels, so the comparison is between annual rates.
-        if ($this->mathUtility->generateUniform() * self::divestitureHazardCeiling() >= $ctx->annualProbability) {
-            $ctx->dealExecuted = false;
-            return;
-        }
-
-        $ctx->dealExecuted = true;
-    }
-
-    private function executeDivestitureSale(DivestitureContext $ctx): void
-    {
-        $ctx->lostNetIncome = $ctx->normalizedNetIncome * $ctx->divestedFraction;
-        $ctx->currentDebt = (float) $ctx->seller->getWholesaleDebt();
-        $ctx->lostDebt = $ctx->currentDebt * $ctx->divestedFraction;
-
-        // The book value leaving with the division is what its ledgers actually carry, less the debt the buyer
-        // assumes. Only a balance sheet with no modelled asset side (a bank's loan book) falls back to the
-        // strategy's capital-proxy estimate; anything else would state a gain against assets never retired.
-        $ctx->lostEquity = $ctx->seller->hasBalanceSheetLedger()
-            ? $this->calculateBookValueDisposed($ctx->seller, $ctx->divestedFraction) - $ctx->lostDebt
-            : $ctx->strategy->calculateDivestedEquity($ctx->seller, $ctx->divestedFraction, $ctx->currentEquity, $ctx->currentDebt, $ctx->treasury, $ctx->investedCapital, $ctx->lostDebt);
-
-        // What the assets fetch on their own: the market's value of the slice sold, less the discount a forced seller
-        // takes (Shleifer & Vishny 1992; Pulvino 1998). The floor reads the market, not the book: a firm trading
-        // below book has assets the market values below cost, and a floor on book sold them for more than they were
-        // worth. The buyer takes its share of the debt, so this is the slice's equity value, as the earnings price is.
-        // The cash over the business's needs and the listed stakes stay with the seller, so their value is not sold:
-        // the market's value less the cash at face, on the share of the rest that is operations.
-        $excessCash = CorporateMetrics::excessOperatingCash($ctx->seller);
-        $operatingNetAssets = max(1.0, (float) $ctx->seller->getTotalEquity() - $excessCash);
-        $operatingShare = max(0.0, min(1.0, 1.0 - ((float) ($ctx->seller->getListedStakesCarrying() ?? 0.0) / $operatingNetAssets)));
-        $ctx->soldValue = $ctx->divestedFraction * max(0.0, ($ctx->price * $ctx->shares) - $excessCash) * $operatingShare;
-        $fireSaleValue = $ctx->soldValue * (1.0 - self::DIV_FIRE_SALE_DISCOUNT);
-
-        $ctx->salePrice = $ctx->normalizedNetIncome > 0
-            ? max($ctx->lostNetIncome * $ctx->saleMultiple, $fireSaleValue)
-            : $fireSaleValue;
-
-        $currentTreasury = (float) $ctx->seller->getCorporateTreasury();
-        $ctx->newTreasury = $currentTreasury + $ctx->salePrice;
-        $ctx->seller->setCorporateTreasury((string) $ctx->newTreasury);
-    }
-
-    private function applyDivestitureAccounting(DivestitureContext $ctx): void
-    {
-        $stock = $ctx->seller;
-
-        $currentEps = (float) $stock->getEarningsPerShare();
-        $stock->setEarningsPerShare((string) ($currentEps * (1.0 - $ctx->divestedFraction)));
-
-        $stock->setWholesaleDebt((string) max(0.0, $ctx->currentDebt - $ctx->lostDebt));
-        // The buyer assumes its share of the debt, and with it that share of any principal already overdue.
-        $stock->setPrincipalArrears((string) ((float) $stock->getPrincipalArrears() * (1.0 - $ctx->divestedFraction)));
-
-        $ctx->strategy->shedDivestedLiabilities($stock, $ctx->divestedFraction, $ctx->treasury);
-
-        $currentRevenue = (float) $stock->getTotalRevenue();
-        $stock->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $ctx->divestedFraction)));
-        // ...and a seller as if the business it sold had never been its own.
-        $this->restateOperatingHistory($stock, 1.0 - $ctx->divestedFraction, 0.0, 0.0);
-        $this->industryShareLedger?->recordDivestedFraction($stock, $ctx->divestedFraction, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
-
-        $markSold = $stock->hasBalanceSheetLedger() ? $this->retireDivestedLedgers($stock, $ctx->divestedFraction) : 0.0;
-
-        // A gain on selling a business is taxable income (ASC 740), struck under the same carryforward rules as a
-        // quarter's (EarningsEngine::resolveIncomeTax()): it uses the carried loss up to its cap, and a loss adds to
-        // the carryforward. The current tax is paid from the proceeds.
-        $ctx->gainOnSale = $ctx->salePrice - $ctx->lostEquity;
-        $openingDta = $stock->getDeferredTaxAsset();
-        $nol = (float) $stock->getNetOperatingLoss();
-        // A loss carries no asset while the firm's recent pre-tax income, the sale's included, is a cumulative loss.
-        $allowanceRequired = array_sum($stock->getPretaxIncomeHistory() ?? []) + $ctx->gainOnSale < 0.0;
-        $tax = EarningsEngine::resolveIncomeTax($ctx->gainOnSale, $nol, $openingDta, $allowanceRequired, $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
-        $ctx->taxOnSale = $tax['current'] + $tax['deferred'];
-        $stock->setNetOperatingLoss((string) $tax['nol']);
-        $stock->setDeferredTaxAsset($tax['dta']);
-        $stock->setCorporateTreasury((string) ((float) $stock->getCorporateTreasury() - $tax['current']));
-
-        // Equity moves by the gain or loss on sale after its tax, struck on amortized cost, and by the slice's
-        // securities mark leaving other comprehensive income: proceeds in, book value and tax out. No floor, because a
-        // floor would invent equity with no asset behind it and unbalance the sheet.
-        $afterTaxGain = $ctx->gainOnSale - $ctx->taxOnSale;
-        $stock->setTotalEquity((string) ($ctx->currentEquity + $afterTaxGain - $markSold));
-        $currentRetained = (float) $stock->getRetainedEarnings();
-        $stock->setRetainedEarnings((string) ($currentRetained + $afterTaxGain));
-        // The division sold is a pro rata slice of the firm, so the business kept earns the same margin and
-        // return it did before. Distress does not make it more efficient.
-    }
-
-    /**
-     * Book value of the assets a divested division takes with it, before the debt the buyer assumes: a pro
-     * rata slice of every operating ledger. Goodwill follows the business it was paid for (ASC 350-20-40-1
-     * allocates it on relative value, which a fraction of the whole approximates), the trade cycle goes net of
-     * its credit-loss allowance and of the payables suppliers are owed, and the deferred tax on the plant's
-     * timing difference is a liability the buyer inherits with the plant.
-     */
-    private function calculateBookValueDisposed(Stock $stock, float $fraction): float
-    {
-        $assets = $stock->getNetPpe()
-            + (float) $stock->getCipBalance()
-            + (float) $stock->getGoodwill()
-            + $stock->getNetReceivables()
-            + $stock->getNetInventory()
-            + $stock->getNetEarningAssets();
-        $liabilities = (float) ($stock->getPayables() ?? 0.0) + (float) $stock->getDeferredTaxLiability();
-
-        if ($stock->hasEarningAssetLedger()) {
-            // A divested banking division takes its share of the cash reserves and the deposits that fund
-            // it, which is what the financial strategy sheds in shedDivestedLiabilities().
-            $assets += max(0.0, (float) $stock->getCorporateTreasury());
-            $liabilities += (float) $stock->getCustomerDeposits();
-        }
-
-        return ($assets - $liabilities) * $fraction;
-    }
-
-    /**
-     * Retires the divested fraction of every operating ledger, the same slice calculateBookValueDisposed()
-     * valued. Gross cost and accumulated depreciation leave together, which keeps the plant that stays at the
-     * same average age: selling a division tells you nothing about how worn the plant you kept is. The tax
-     * basis and deferred tax go with the plant, goodwill with the business, and the trade balances with the
-     * customers and suppliers who move to the buyer. Cash stays: the proceeds are already in treasury.
-     *
-     * @return float The slice's securities mark net of its deferred tax, which leaves other comprehensive income now
-     *               rather than at the next quarter's mark (ASC 320 recycling).
-     */
-    private function retireDivestedLedgers(Stock $stock, float $fraction): float
-    {
-        $retained = max(0.0, 1.0 - $fraction);
-        $markSold = 0.0;
-
-        if ($stock->hasEarningAssetLedger()) {
-            $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() * $retained));
-            $stock->setCreditLossAllowance((string) ((float) $stock->getCreditLossAllowance() * $retained));
-
-            // The securities sold take their recognised mark and its deferred tax with them.
-            $markSold = (1.0 - $retained) * ($stock->getRecognizedSecuritiesMark() - $stock->getSecuritiesDeferredTax());
-            $stock->setUnrealizedSecuritiesMark((string) ((float) $stock->getUnrealizedSecuritiesMark() * $retained));
-            $stock->setSecuritiesDeferredTax($stock->getSecuritiesDeferredTax() * $retained);
-        }
-        if ($stock->getGrossPpe() !== null) {
-            $stock->setGrossPpe((string) ((float) $stock->getGrossPpe() * $retained));
-            $stock->setAccumulatedDepreciation((string) ((float) $stock->getAccumulatedDepreciation() * $retained));
-        }
-        if ($stock->getPpeTaxBasis() !== null) {
-            $stock->setPpeTaxBasis((string) ((float) $stock->getPpeTaxBasis() * $retained));
-        }
-        $stock->setCipBalance((string) ((float) $stock->getCipBalance() * $retained));
-        $stock->setGoodwill((string) ((float) $stock->getGoodwill() * $retained));
-        $stock->setDeferredTaxLiability((string) ((float) $stock->getDeferredTaxLiability() * $retained));
-        // The unit's leases go with it (the ledger would otherwise run them off over years of no use); the loss
-        // carryforward and its asset stay with the seller, whose losses they were.
-        if ($stock->getLeaseLiability() !== null) {
-            $stock->setLeaseLiability($stock->getLeaseLiability() * $retained);
-        }
-
-        if ($stock->hasWorkingCapitalLedger()) {
-            $stock->setReceivables((string) ((float) $stock->getReceivables() * $retained));
-            $stock->setReceivablesAllowance((string) ((float) $stock->getReceivablesAllowance() * $retained));
-            $stock->setInventory((string) ((float) $stock->getInventory() * $retained));
-            $stock->setInventoryAllowance((string) ((float) $stock->getInventoryAllowance() * $retained));
-            $stock->setPayables((string) ((float) $stock->getPayables() * $retained));
-        }
-
-        return $markSold;
-    }
-
-    private function finalizeDivestitureEvent(DivestitureContext $ctx): array
-    {
-        $salePrice = WireFormat::money($ctx->salePrice);
-        $gainOrLoss = WireFormat::money(abs($ctx->gainOnSale));
-        $result = $ctx->gainOnSale >= 0.0 ? "generating a {$gainOrLoss} gain on sale" : "booking a {$gainOrLoss} loss on sale";
-        if ($ctx->taxOnSale !== 0.0) {
-            $result .= ' (' . WireFormat::money(abs($ctx->gainOnSale - $ctx->taxOnSale)) . ' after tax)';
-        }
-        $target = $this->generateProceduralTarget();
-        $desc = "{$ctx->seller->getName()} sold its {$target['name']} division for {$salePrice} in cash, {$result}.";
-
-        // The seller's announcement return is what the sale is worth to its shareholders over their stake. The
-        // market already values the division pro rata inside the firm, and the buyer takes its share of the
-        // debt with it, so the seller gives up the slice's market value and receives the price, less the tax:
-        // selling above its own valuation creates value (Hite, Owers & Rogers 1987), a fire sale below it
-        // destroys some. Limited liability is the only bound.
-        $marketCap = max(1.0, $ctx->price * $ctx->shares);
-        $ctx->eventShock = max(-100.0, (($ctx->salePrice - $ctx->taxOnSale - $ctx->soldValue) / $marketCap) * 100.0);
-
-        $event = $this->marketEvent->publish($ctx->seller, 'DIVESTITURE', $desc, $ctx->eventShock, dealShareOfValue: $ctx->salePrice / $marketCap);
-
-        return ['event' => $event, 'shock' => $ctx->eventShock / 100.0];
-    }
-
-    /**
-     * Procedurally generates a realistic sounding private company.
-     *
-     * @return array{name: string} An array containing the generated company name.
-     */
-    private function generateProceduralTarget(): array
-    {
-        $prefixes = ['Apex', 'Horizon', 'Vertex', 'Quantum', 'Cipher', 'Aegis', 'Omni', 'Vanguard', 'Pinnacle', 'Meridian'];
-        $suffixes = ['Dynamics', 'Holdings', 'Labs', 'Logistics', 'Networks', 'Heavy Industries', 'Capital', 'Technologies', 'Resources', 'Ventures'];
-
-        $name = $prefixes[$this->mathUtility->generateIndex(count($prefixes))] . ' ' . $suffixes[$this->mathUtility->generateIndex(count($suffixes))];
-
-        return ['name' => $name];
     }
 }

@@ -107,10 +107,12 @@ class MacroConstantOwnershipTest extends TestCase
     public function testASubsystemsOwnConstantIsNotReadFromOutsideIt(): void
     {
         $leaked = [];
-        foreach (glob(self::SRC_DIR . '/Service/Macro/Subsystem/*.php') ?: [] as $file) {
+        // A subsystem's parts, in a folder of its own, keep their constants on the same terms.
+        $files = [...(glob(self::SRC_DIR . '/Service/Macro/Subsystem/*.php') ?: []), ...(glob(self::SRC_DIR . '/Service/Macro/Subsystem/*/*.php') ?: [])];
+        foreach ($files as $file) {
             $subsystem = basename($file, '.php');
             /** @var class-string $class */
-            $class = 'App\\Service\\Macro\\Subsystem\\' . $subsystem;
+            $class = 'App\\Service\\Macro\\Subsystem\\' . str_replace('/', '\\', substr($file, strlen(self::SRC_DIR . '/Service/Macro/Subsystem/'), -4));
             foreach (array_keys((new \ReflectionClass($class))->getConstants()) as $name) {
                 foreach ($this->sources() as $path => $code) {
                     if (str_contains($path, '/Macro/Subsystem/') || str_ends_with($path, '.twig') || $this->isDescribing($path)) {

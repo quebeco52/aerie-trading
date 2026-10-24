@@ -7,6 +7,7 @@ namespace App\Service\Macro\Subsystem;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -750,7 +751,7 @@ class CommodityLogisticsSubsystem
             if (count(self::$smoothedSeasonMemo) >= self::SMOOTHED_SEASON_MEMO_CAPACITY) {
                 self::$smoothedSeasonMemo = [];
             }
-            self::$smoothedSeasonMemo[$key] = TimeSeries::exponentiallySmoothedSignal($season, $timeOfYear, MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS);
+            self::$smoothedSeasonMemo[$key] = TimeSeries::exponentiallySmoothedSignal($season, $timeOfYear, MovingAverages::STANDARD_EMA_HORIZON_YEARS);
         }
 
         return self::$smoothedSeasonMemo[$key];

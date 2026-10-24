@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\Aggregate\ConsumerPrices;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
@@ -40,9 +41,9 @@ class FinancialInvariantTest extends TestCase
 
     public function testConvexPhillipsCurveStrictMonotonicityAcrossEntireDomain(): void
     {
-        $kappa = MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA;
-        $yMax = MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY;
-        $rigidity = MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR;
+        $kappa = ConsumerPrices::PHILLIPS_CONVEX_KAPPA;
+        $yMax = ConsumerPrices::PHILLIPS_MAX_CAPACITY;
+        $rigidity = ConsumerPrices::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR;
 
         $previousPressure = -100.0;
 
@@ -64,9 +65,9 @@ class FinancialInvariantTest extends TestCase
 
     public function testConvexPhillipsCurveAcceleratingCurvatureInExpansion(): void
     {
-        $kappa = MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA;
-        $yMax = MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY;
-        $rigidity = MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR;
+        $kappa = ConsumerPrices::PHILLIPS_CONVEX_KAPPA;
+        $yMax = ConsumerPrices::PHILLIPS_MAX_CAPACITY;
+        $rigidity = ConsumerPrices::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR;
 
         // Compare incremental slopes on the approach to the ceiling: (f(y2)-f(y1)) vs (f(y3)-f(y2)). The probes
         // are placed relative to the ceiling because beyond it the formula's floor makes the curve linear.
@@ -86,9 +87,9 @@ class FinancialInvariantTest extends TestCase
 
     public function testDownwardRigidityPreventsDeflationaryCollapse(): void
     {
-        $kappa = MacroAggregateSubsystem::PHILLIPS_CONVEX_KAPPA;
-        $yMax = MacroAggregateSubsystem::PHILLIPS_MAX_CAPACITY;
-        $rigidity = MacroAggregateSubsystem::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR;
+        $kappa = ConsumerPrices::PHILLIPS_CONVEX_KAPPA;
+        $yMax = ConsumerPrices::PHILLIPS_MAX_CAPACITY;
+        $rigidity = ConsumerPrices::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR;
 
         $deepRecessionPressure = MacroTransmission::calculateConvexPhillipsCurve(-0.08, $yMax, $kappa, $rigidity);
         $depressionPressure = MacroTransmission::calculateConvexPhillipsCurve(-0.15, $yMax, $kappa, $rigidity);
@@ -227,7 +228,7 @@ class FinancialInvariantTest extends TestCase
                 return false;
             }
         };
-        $aggregateSubsystem = new MacroAggregateSubsystem($deterministicMath);
+        $aggregateSubsystem = MacroAggregateSubsystem::headless($deterministicMath);
 
         $stateClean = MacroStateBuilder::create()
             ->withOutputGap(0.0)
@@ -390,7 +391,7 @@ class FinancialInvariantTest extends TestCase
                 return 0.5;
             }
         };
-        $aggregateSubsystem = new MacroAggregateSubsystem($deterministicMath);
+        $aggregateSubsystem = MacroAggregateSubsystem::headless($deterministicMath);
 
         $state = MacroStateBuilder::create()
             ->withOutputGap(0.015)
@@ -531,7 +532,7 @@ class FinancialInvariantTest extends TestCase
                 return false;
             }
         };
-        $aggregate = new MacroAggregateSubsystem($deterministicMath);
+        $aggregate = MacroAggregateSubsystem::headless($deterministicMath);
 
         $stateNeutral = MacroStateBuilder::create()
             ->withOutputGap(0.0)
@@ -587,7 +588,7 @@ class FinancialInvariantTest extends TestCase
         };
 
         $gapAt = static function (float $policyRate, float $yield5y) use ($deterministicMath): float {
-            $aggregate = new MacroAggregateSubsystem($deterministicMath);
+            $aggregate = MacroAggregateSubsystem::headless($deterministicMath);
             // Recession state with blown-out credit spreads (450 bps IG, 60 bps interbank)
             $state = MacroStateBuilder::create()
                 ->withOutputGap(-0.025)
@@ -798,7 +799,7 @@ class FinancialInvariantTest extends TestCase
 
         /** @return non-empty-list<float> The output gap each quarter for three years under a held stance. */
         $pathAt = static function (float $policyRate, float $yield5y) use ($deterministicMath): array {
-            $aggregate = new MacroAggregateSubsystem($deterministicMath);
+            $aggregate = MacroAggregateSubsystem::headless($deterministicMath);
             // Contractionary onset: restrictive policy, inventory overhang (3%), starting negative gap (-0.5%)
             $state = MacroStateBuilder::create()
                 ->withOutputGap(-0.005)

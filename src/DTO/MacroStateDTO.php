@@ -7,6 +7,9 @@ namespace App\DTO;
 use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\Aggregate\DomesticDemand;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
@@ -44,7 +47,7 @@ readonly class MacroStateDTO
 
     /**
      * The output gap as it reaches order books 3 to 18 months behind the economy
-     * (MacroAggregateSubsystem::demandTransmissionLagField).
+     * (MovingAverages::demandTransmissionLagField).
      */
     public float $outputGapLag3m;
     public float $outputGapLag6m;
@@ -115,7 +118,7 @@ readonly class MacroStateDTO
         public float $energyPriceIndex = 100.0,
         public float $energyPriceIndexEma = 100.0,
         public float $energyPriceIndexTrend = 0.0,
-        /** Decade trend of the energy index the supply drag reads (MacroAggregateSubsystem::supplyCostShift()). */
+        /** Decade trend of the energy index the supply drag reads (DomesticDemand::supplyCostShift()). */
         public float $energyPriceIndexDecadeTrend = MacroConstants::ENERGY_BASELINE,
         /** Decade trend of the freight index the supply drag reads. */
         public float $freightRateIndexDecadeTrend = MacroConstants::FREIGHT_BASELINE,
@@ -286,7 +289,7 @@ readonly class MacroStateDTO
         public float $interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD,
         /**
          * The interbank spread's measured through-the-cycle level, a decade's exponential average
-         * (App\Service\Macro\Subsystem\MacroAggregateSubsystem::updateExponentialMovingAverages()). The spread never
+         * (App\Service\Macro\Subsystem\Aggregate\MovingAverages::updateExponentialMovingAverages()). The spread never
          * falls below its base, so a reader of its cyclical deviation reads it against this.
          */
         public float $interbankLiquiditySpreadTrend = MacroConstants::INTERBANK_BASELINE_SPREAD,
@@ -787,7 +790,7 @@ readonly class MacroStateDTO
             return $this->outputGapEma;
         }
 
-        return $this->{MacroAggregateSubsystem::demandTransmissionLagField($lagYears)};
+        return $this->{MovingAverages::demandTransmissionLagField($lagYears)};
     }
 
     /**
@@ -841,7 +844,7 @@ readonly class MacroStateDTO
      */
     public function exchangeRateGap(): float
     {
-        return MacroAggregateSubsystem::realExchangeRateGap($this->exchangeRateIndexEma, $this->exchangeRateTrend);
+        return OpenEconomy::realExchangeRateGap($this->exchangeRateIndexEma, $this->exchangeRateTrend);
     }
 
     /**
@@ -851,7 +854,7 @@ readonly class MacroStateDTO
      */
     public function importPriceDeviation(): float
     {
-        return $this->importPriceLevel - MacroAggregateSubsystem::importPriceLevelTarget($this->exchangeRateTrend);
+        return $this->importPriceLevel - OpenEconomy::importPriceLevelTarget($this->exchangeRateTrend);
     }
 
     /**

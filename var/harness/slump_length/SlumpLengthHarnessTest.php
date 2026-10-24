@@ -221,7 +221,7 @@ final class SlumpLengthHarnessTest extends KernelTestCase
                     'crisis_at' => $m->lastCreditCrisisAt,
                     'spread' => $m->sovereignRiskSpread, 'tax_rate' => $m->corporateTaxRate,
                     'pot' => $m->potentialGdpIndex, 'deflator' => $m->gdpDeflator, 'target' => $m->targetRate, 'rstar' => $m->naturalRate, 'shadow' => $m->policyRateShadow,
-                    'inv' => $m->inventoryInvestmentGap ?? 0.0, 'inv_stock' => $m->inventoryStockGap, 'inv_ema' => $m->inventoryStockGapEma, 'inv_shock' => $m->inventoryCostShock ?? 0.0, 'rgq' => $m->realGdpQuarterlyGrowth, 'rec' => $m->recessionDeclared, 'tim' => $m->spendingTimingGap ?? 0.0, 'tim_stock' => $m->spendingPulledForward ?? 0.0, 'W' => \App\Service\Macro\Subsystem\MacroAggregateSubsystem::DOMESTIC_GAP_WEIGHT,
+                    'inv' => $m->inventoryInvestmentGap ?? 0.0, 'inv_stock' => $m->inventoryStockGap, 'inv_ema' => $m->inventoryStockGapEma, 'inv_shock' => $m->inventoryCostShock ?? 0.0, 'rgq' => $m->realGdpQuarterlyGrowth, 'rec' => $m->recessionDeclared, 'tim' => $m->spendingTimingGap ?? 0.0, 'tim_stock' => $m->spendingPulledForward ?? 0.0, 'W' => \App\Service\Macro\Subsystem\Aggregate\OutputGap::DOMESTIC_GAP_WEIGHT,
                     'supercore' => $m->supercoreInflation, 'core_goods' => $m->coreGoodsInflation, 'wg' => $m->wageGrowth, 'be' => $m->tipsBreakeven, 'be_q' => $m->tipsBreakevenQuoted, 'nairu' => $m->nairu, 'svc_shock' => $m->servicesPriceShock ?? 0.0,
                     'rf' => $m->foreignPolicyRate, 'dis' => $m->demandDisasterShock, 'dis_n' => $disN, 'dshock' => $m->demandShock, 'dmain' => $m->demandMainlandShock ?? 0.0, 'fund_draw' => $m->sovereignFundDrawToGdp,
                 ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])
@@ -293,7 +293,7 @@ final class SlumpLengthHarnessTest extends KernelTestCase
     {
         $vars = (fn (): array => get_object_vars($this))->call($recorded);
         $math = new \App\Service\Math\MathUtility();
-        foreach (\App\Service\Macro\Subsystem\MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
+        foreach (\App\Service\Macro\Subsystem\Aggregate\MovingAverages::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
             $this->replayLags[$field] = TimeSeries::calculateDistributedLag($this->replayLags[$field] ?? \App\Data\Macro\MacroFieldRegistry::defaults()[$field], $vars['outputGapEma'], $dt, $lagYears);
         }
 

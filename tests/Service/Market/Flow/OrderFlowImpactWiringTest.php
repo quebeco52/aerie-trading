@@ -10,13 +10,15 @@ use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Deal\AcquisitionEngine;
+use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
+use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -127,20 +129,22 @@ class OrderFlowImpactWiringTest extends TestCase
         });
         $earnings->method('evaluatePreAnnouncement')->willReturn([]);
 
-        $ma = $this->createStub(MergerAndAcquisitionEngine::class);
+        $acquisitions = $this->createStub(AcquisitionEngine::class);
         // A test that strikes a deal hands in its announcement shock, one per tick; null strikes none.
-        $ma->method('evaluatePrivateAcquisition')->willReturnCallback(static function () use ($dealShock): ?array {
+        $acquisitions->method('evaluatePrivateAcquisition')->willReturnCallback(static function () use ($dealShock): ?array {
             $shock = $dealShock !== null ? $dealShock() : null;
 
             return $shock === null ? null : ['event' => ['type' => 'ACQUISITION', 'description' => ''], 'shock' => $shock];
         });
-        $ma->method('evaluateCorporateDivestiture')->willReturn(null);
+        $divestitures = $this->createStub(DivestitureEngine::class);
+        $divestitures->method('evaluateCorporateDivestiture')->willReturn(null);
 
         return new StockTracker(
             $marketEngine,
             $earnings,
             $corporateActions,
-            $ma,
+            $acquisitions,
+            $divestitures,
             $this->createStub(MarketEventPublisher::class),
             $debtEngine,
             $this->createStub(CorporateMetrics::class),
@@ -622,7 +626,7 @@ class OrderFlowImpactWiringTest extends TestCase
         $tracker->updateStocks([$this->stock()], $dt, false, new MacroStateDTO(marketVolatility: 0.30));
 
         $anchor = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
-        $expected = TimeSeries::ewmaLevel($anchor * $anchor, 0.09, $dt, MarketEngine::MARKET_VARIANCE_TREND_YEARS);
+        $expected = TimeSeries::ewmaLevel($anchor * $anchor, 0.09, $dt, VarianceBudget::MARKET_VARIANCE_TREND_YEARS);
         $this->assertNotNull($captured);
         $this->assertEqualsWithDelta($expected, $captured->marketVarianceTrend, 1e-15);
         $this->assertGreaterThan($anchor * $anchor, $captured->marketVarianceTrend, 'A turbulent tick lifts the trend, slowly.');

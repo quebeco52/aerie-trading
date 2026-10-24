@@ -250,6 +250,54 @@ class TradeExecutionService
      */
     public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null, ?string $stopPrice = null, ?string $origin = null): PlacedOrderDTO
     {
+        [$limitPrice, $stopPrice] = $this->validateTicket($action, $orderType, $quantity, $limitPrice, $stopPrice);
+
+        $placed = $this->inLockedAccount($user, function () use ($user, $ticker, $action, $orderType, $quantity, $limitPrice, $stopPrice, $origin): PlacedOrderDTO {
+            $asset = $this->resolveTradableAsset($ticker);
+
+            // An option settles in contracts, is paid for in full, and is collateralized against its
+            // underlying rather than against itself, so it is filled by its own desk. Routing here rather
+            // than at the controller keeps one front door: a player types a symbol, and what happens next is
+            // a property of the symbol.
+            if ($asset->entity instanceof OptionContract) {
+                return $this->executeOptionOrder($user, $asset, $asset->entity, $action, $orderType, $quantity);
+            }
+
+            $this->assertDeskTakes($asset, $action, $quantity);
+
+            $order = (new TradeOrder())
+                ->setUser($user)
+                ->setTicker($ticker)
+                ->setAssetType($asset->type)
+                ->setAction($action)
+                ->setOrderType($orderType)
+                ->setQuantity($quantity)
+                ->setLimitPrice($limitPrice)
+                ->setStopPrice($stopPrice)
+                ->setOrigin($origin);
+
+            $this->fillOrRest($user, $asset, $order);
+            $this->recordPlacement($user, $asset, $order);
+
+            return PlacedOrderDTO::fromOrder($order);
+        });
+
+        if ($placed->resting) {
+            $this->refreshBoundsAfterCommit($ticker);
+        }
+
+        return $placed;
+    }
+
+    /**
+     * Checks a ticket before the account is locked: a positive quantity, an action one of the desks knows, a listed
+     * order type, and the limit and stop prices that type needs, normalized for the escrow arithmetic. A price the type
+     * does not use is dropped.
+     *
+     * @return array{0: numeric-string|null, 1: numeric-string|null} The limit and stop prices the order carries.
+     */
+    private function validateTicket(string $action, string $orderType, int $quantity, ?string $limitPrice, ?string $stopPrice): array
+    {
         if ($quantity <= 0) {
             throw new TradeRejectedException('Invalid quantity.');
         }
@@ -279,94 +327,96 @@ class TradeExecutionService
             $stopPrice = null;
         }
 
-        $placed = $this->inLockedAccount($user, function () use ($user, $ticker, $action, $orderType, $quantity, $limitPrice, $stopPrice, $origin): PlacedOrderDTO {
-            $asset = $this->assetResolver->resolve($ticker);
+        return [$limitPrice, $stopPrice];
+    }
 
-            if ($asset === null) {
-                throw new TradeRejectedException('Asset not found.');
-            }
+    /** The asset a ticker names, refused when the desk does not know the symbol or its trading is halted. */
+    private function resolveTradableAsset(string $ticker): ResolvedAssetDTO
+    {
+        $asset = $this->assetResolver->resolve($ticker);
 
-            $haltReason = $asset->haltReason();
-            if ($haltReason !== null) {
-                throw new TradeRejectedException($haltReason);
-            }
-
-            // An option settles in contracts, is paid for in full, and is collateralized against its
-            // underlying rather than against itself, so it is filled by its own desk. Routing here rather
-            // than at the controller keeps one front door: a player types a symbol, and what happens next is
-            // a property of the symbol.
-            if ($asset->entity instanceof OptionContract) {
-                if ($orderType !== TradeOrder::TYPE_MARKET) {
-                    throw new TradeRejectedException('Listed options trade at market. A resting option order is not supported yet.');
-                }
-
-                $this->optionTradeService->execute($user, $asset->entity, $action, $quantity);
-
-                $this->em->flush();
-                $this->portfolio->recordUserSnapshot($user);
-                $this->em->flush();
-
-                return new PlacedOrderDTO('OPTION', $action, $quantity, $asset->ticker(), TradeOrder::TYPE_MARKET, null, null, false);
-            }
-
-            if (!in_array($action, self::VALID_ACTIONS, true)) {
-                throw new TradeRejectedException("{$action} is not an action on {$asset->ticker()}.");
-            }
-
-            // Size has to be checked against depth before anything else: past a couple of days' volume the
-            // square-root law is extrapolation, and quoting an extrapolated price would be a made-up number
-            // presented as a fill.
-            $stock = $asset->stock();
-            if ($stock !== null) {
-                $maximum = $this->liquidityEngine->maximumOrderSize($stock);
-                if ($quantity > $maximum) {
-                    throw new TradeRejectedException(sprintf(
-                        'Order exceeds available liquidity in %s. The desk will take up to %s shares at once; work larger positions in pieces.',
-                        $asset->ticker(),
-                        number_format(floor($maximum)),
-                    ));
-                }
-            }
-
-            $order = (new TradeOrder())
-                ->setUser($user)
-                ->setTicker($ticker)
-                ->setAssetType($asset->type)
-                ->setAction($action)
-                ->setOrderType($orderType)
-                ->setQuantity($quantity)
-                ->setLimitPrice($limitPrice)
-                ->setStopPrice($stopPrice)
-                ->setOrigin($origin);
-
-            // A marketable order fills at the live price, not at its limit, which is the better execution.
-            $quote = $this->quote($asset, $action, $quantity, $this->dealingPrice($asset));
-            if (self::fillsAt($order, $quote)) {
-                $refusal = $this->settle($user, $asset, $order, $quote, false);
-                if ($refusal !== null) {
-                    throw new TradeRejectedException($refusal);
-                }
-            } else {
-                $this->placeResting($user, $asset, $order);
-            }
-
-            $this->em->persist($order);
-            $this->em->persist($user);
-            $this->em->flush();
-            if ($asset->entity instanceof Bond && $order->getStatus() === TradeOrder::STATUS_FILLED) {
-                $this->stampBondMark($asset->entity);
-            }
-            $this->portfolio->recordUserSnapshot($user);
-            $this->em->flush();
-
-            return PlacedOrderDTO::fromOrder($order);
-        });
-
-        if ($placed->resting) {
-            $this->refreshBoundsAfterCommit($ticker);
+        if ($asset === null) {
+            throw new TradeRejectedException('Asset not found.');
         }
 
-        return $placed;
+        $haltReason = $asset->haltReason();
+        if ($haltReason !== null) {
+            throw new TradeRejectedException($haltReason);
+        }
+
+        return $asset;
+    }
+
+    /** Fills an option order on the option desk, which deals at market only, and records the account's snapshot. */
+    private function executeOptionOrder(User $user, ResolvedAssetDTO $asset, OptionContract $contract, string $action, string $orderType, int $quantity): PlacedOrderDTO
+    {
+        if ($orderType !== TradeOrder::TYPE_MARKET) {
+            throw new TradeRejectedException('Listed options trade at market. A resting option order is not supported yet.');
+        }
+
+        $this->optionTradeService->execute($user, $contract, $action, $quantity);
+
+        $this->em->flush();
+        $this->portfolio->recordUserSnapshot($user);
+        $this->em->flush();
+
+        return new PlacedOrderDTO('OPTION', $action, $quantity, $asset->ticker(), TradeOrder::TYPE_MARKET, null, null, false);
+    }
+
+    /**
+     * Refuses what this desk cannot take: an action that belongs to the option desk, or a size past the book's depth.
+     */
+    private function assertDeskTakes(ResolvedAssetDTO $asset, string $action, int $quantity): void
+    {
+        if (!in_array($action, self::VALID_ACTIONS, true)) {
+            throw new TradeRejectedException("{$action} is not an action on {$asset->ticker()}.");
+        }
+
+        // Size has to be checked against depth before anything else: past a couple of days' volume the
+        // square-root law is extrapolation, and quoting an extrapolated price would be a made-up number
+        // presented as a fill.
+        $stock = $asset->stock();
+        if ($stock !== null) {
+            $maximum = $this->liquidityEngine->maximumOrderSize($stock);
+            if ($quantity > $maximum) {
+                throw new TradeRejectedException(sprintf(
+                    'Order exceeds available liquidity in %s. The desk will take up to %s shares at once; work larger positions in pieces.',
+                    $asset->ticker(),
+                    number_format(floor($maximum)),
+                ));
+            }
+        }
+    }
+
+    /**
+     * Quotes a new order off the book and settles it there when it fills at that quote; otherwise rests it, taking its
+     * escrow. A refused fill is refused to the player.
+     */
+    private function fillOrRest(User $user, ResolvedAssetDTO $asset, TradeOrder $order): void
+    {
+        // A marketable order fills at the live price, not at its limit, which is the better execution.
+        $quote = $this->quote($asset, $order->getAction(), $order->getQuantity(), $this->dealingPrice($asset));
+        if (self::fillsAt($order, $quote)) {
+            $refusal = $this->settle($user, $asset, $order, $quote, false);
+            if ($refusal !== null) {
+                throw new TradeRejectedException($refusal);
+            }
+        } else {
+            $this->placeResting($user, $asset, $order);
+        }
+    }
+
+    /** Writes a placed order and its account, re-marks a bond the desk has just dealt, and records the snapshot. */
+    private function recordPlacement(User $user, ResolvedAssetDTO $asset, TradeOrder $order): void
+    {
+        $this->em->persist($order);
+        $this->em->persist($user);
+        $this->em->flush();
+        if ($asset->entity instanceof Bond && $order->getStatus() === TradeOrder::STATUS_FILLED) {
+            $this->stampBondMark($asset->entity);
+        }
+        $this->portfolio->recordUserSnapshot($user);
+        $this->em->flush();
     }
 
     /**
@@ -481,16 +531,7 @@ class TradeExecutionService
             if ($stock === null) {
                 return 'Only equities can be sold short.';
             }
-            if (!$user->isMarginEnabled()) {
-                return 'Short selling requires a margin account.';
-            }
-
-            $available = $this->lendingDesk->availableToBorrow($stock);
-            if (self::sharesBorrowed($held, $held - $quantity) > $available) {
-                return sprintf('Only %s shares of %s are available to borrow.', number_format(floor($available)), $stock->getTicker());
-            }
-
-            $refusal = $this->fundingRefusal($user, (float) $consideration, $action);
+            $refusal = $this->shortSaleRefusal($user, $stock, $held, $quantity, $consideration);
             if ($refusal !== null) {
                 return $refusal;
             }
@@ -516,6 +557,26 @@ class TradeExecutionService
         $this->recordFill($order, $asset, $quote, $duty);
 
         return null;
+    }
+
+    /**
+     * Why an account cannot sell this stock short, or null when it can: the margin account a short needs, the borrow
+     * the lending desk can locate for what the sale takes past the shares held, and the collateral for the proceeds.
+     *
+     * @param numeric-string $consideration
+     */
+    private function shortSaleRefusal(User $user, Stock $stock, int $held, int $quantity, string $consideration): ?string
+    {
+        if (!$user->isMarginEnabled()) {
+            return 'Short selling requires a margin account.';
+        }
+
+        $available = $this->lendingDesk->availableToBorrow($stock);
+        if (self::sharesBorrowed($held, $held - $quantity) > $available) {
+            return sprintf('Only %s shares of %s are available to borrow.', number_format(floor($available)), $stock->getTicker());
+        }
+
+        return $this->fundingRefusal($user, (float) $consideration, 'SHORT');
     }
 
     /**

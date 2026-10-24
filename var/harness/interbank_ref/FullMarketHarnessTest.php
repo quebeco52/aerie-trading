@@ -363,7 +363,7 @@ final class FullMarketHarnessTest extends KernelTestCase
     {
         $vars = (fn (): array => get_object_vars($this))->call($recorded);
         $math = new \App\Service\Math\MathUtility();
-        foreach (\App\Service\Macro\Subsystem\MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
+        foreach (\App\Service\Macro\Subsystem\Aggregate\MovingAverages::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
             $this->replayLags[$field] = TimeSeries::calculateDistributedLag($this->replayLags[$field] ?? \App\Data\Macro\MacroFieldRegistry::defaults()[$field], $vars['outputGapEma'], $dt, $lagYears);
         }
 

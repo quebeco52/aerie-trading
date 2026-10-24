@@ -601,7 +601,8 @@ class BankruptcyTest extends TestCase
         $marketEngine = $this->createMock(\App\Service\Market\Pricing\MarketEngine::class);
         $earningsEngine = $this->createMock(EarningsEngine::class);
         $corpActionEngine = $this->createMock(\App\Service\Corporate\CorporateActionEngine::class);
-        $maEngine = $this->createStub(\App\Service\Corporate\MergerAndAcquisitionEngine::class);
+        $acquisitionEngine = $this->createStub(\App\Service\Corporate\Deal\AcquisitionEngine::class);
+        $divestitureEngine = $this->createStub(\App\Service\Corporate\Deal\DivestitureEngine::class);
         $corpMetrics = $this->createStub(\App\Service\Corporate\CorporateMetrics::class);
 
         $marketEngine->expects($this->never())->method('calculateNextPrice');
@@ -612,7 +613,8 @@ class BankruptcyTest extends TestCase
             $marketEngine,
             $earningsEngine,
             $corpActionEngine,
-            $maEngine,
+            $acquisitionEngine,
+            $divestitureEngine,
             $this->marketEventMock,
             $this->debtEngineMock,
             $corpMetrics,

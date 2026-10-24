@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\Distributions;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -806,12 +806,12 @@ class CommodityLogisticsSubsystemTest extends TestCase
             * CommodityLogisticsSubsystem::resolvePowerSeasonalFactor($t);
         foreach ([0.13, 7.13, 123.37, 0.9999999, -0.4] as $time) {
             $this->assertEqualsWithDelta(
-                TimeSeries::exponentiallySmoothedSignal($power, $time, MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS),
+                TimeSeries::exponentiallySmoothedSignal($power, $time, MovingAverages::STANDARD_EMA_HORIZON_YEARS),
                 CommodityLogisticsSubsystem::smoothedPowerSeason($time),
                 1e-8,
             );
             $this->assertEqualsWithDelta(
-                TimeSeries::exponentiallySmoothedSignal(CommodityLogisticsSubsystem::gasSeasonalFactor(...), $time, MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS),
+                TimeSeries::exponentiallySmoothedSignal(CommodityLogisticsSubsystem::gasSeasonalFactor(...), $time, MovingAverages::STANDARD_EMA_HORIZON_YEARS),
                 CommodityLogisticsSubsystem::smoothedGasSeason($time),
                 1e-8,
             );

@@ -8,6 +8,8 @@ use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Macro\Subsystem\Aggregate\ConsumerPrices;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
@@ -312,7 +314,7 @@ class MonetaryPolicySubsystem
     private function realizedCoreInflation(MacroState $state, float $targetInflation): float
     {
         if ($state->supercoreInflationEma !== $targetInflation || $state->coreGoodsInflationEma !== $targetInflation) {
-            return MacroAggregateSubsystem::coreInflationEma($state);
+            return ConsumerPrices::coreInflationEma($state);
         }
 
         return $state->inflationEma;
@@ -354,7 +356,7 @@ class MonetaryPolicySubsystem
             return $state->outputGap - self::productivityGainSeenThrough($state) - $state->inventoryInvestmentGap - $state->spendingTimingGap;
         }
 
-        $trend = ($state->outputGap - $state->outputGapEma) / MacroAggregateSubsystem::STANDARD_EMA_HORIZON_YEARS;
+        $trend = ($state->outputGap - $state->outputGapEma) / MovingAverages::STANDARD_EMA_HORIZON_YEARS;
         $projection = $trend * self::TAYLOR_GAP_FORECAST_YEARS;
 
         return $state->outputGapEma

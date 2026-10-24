@@ -9,8 +9,8 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Corporate\Industry\IndustryShareLedger;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\BusinessModelInterface;
 
@@ -173,7 +173,7 @@ class IndustryPositionBuilder
 
     /**
      * The market as horizontal merger review sees it, read from the same ledger call the M&A engine sizes
-     * its deals on (MergerAndAcquisitionEngine::resolveLargestAvailableTarget): the roster's concentration,
+     * its deals on (AcquisitionEngine::resolveLargestAvailableTarget): the roster's concentration,
      * the competitive fringe still off the board, and the largest share a deal could add, the lesser of
      * that fringe and what clears the Fair Trading Board's screens in force, which it returns too. Null
      * before the ledger has priced the firm's market, which is also when the engine applies no review.
@@ -193,8 +193,8 @@ class IndustryPositionBuilder
             return null;
         }
 
-        $reviewCap = MergerAndAcquisitionEngine::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl'], $macroState->mergerReviewLeniency);
-        $screens = MergerAndAcquisitionEngine::reviewScreens($macroState->mergerReviewLeniency);
+        $reviewCap = MergerReview::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl'], $macroState->mergerReviewLeniency);
+        $screens = MergerReview::reviewScreens($macroState->mergerReviewLeniency);
 
         return [
             'herfindahl' => $market['herfindahl'],

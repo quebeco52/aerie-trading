@@ -8,7 +8,7 @@ use App\Service\Politics\PoliticsState;
 
 /**
  * The Fair Trading Board: a head the Council appoints for one fixed term, who sets the screens of horizontal merger
- * review (App\Service\Corporate\MergerAndAcquisitionEngine::reviewScreens()), as an agency's own guidelines. Each
+ * review (App\Service\Corporate\Deal\MergerReview::reviewScreens()), as an agency's own guidelines. Each
  * candidate holds a stance on competition, from light (-1) to strict (+1), drawn uniformly between the US agencies'
  * 2010 guidelines (light) and their 2023 ones (strict). The Council names the candidate nearest its median stance on
  * competition; the head sitting at Year 1 keeps the screens the District opened with.

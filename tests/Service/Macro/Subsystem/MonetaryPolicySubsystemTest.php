@@ -6,8 +6,8 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Macro\Subsystem\Aggregate\ConsumerPrices;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FixedIncome;
@@ -1348,8 +1348,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->inflation = 0.09; // Headline must not enter.
         $state->inflationEma = 0.09;
 
-        $coreWeight = MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE + MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS;
-        $core = ((MacroAggregateSubsystem::INFLATION_WEIGHT_SUPERCORE * 0.04) + (MacroAggregateSubsystem::INFLATION_WEIGHT_GOODS * 0.01)) / $coreWeight;
+        $coreWeight = ConsumerPrices::INFLATION_WEIGHT_SUPERCORE + ConsumerPrices::INFLATION_WEIGHT_GOODS;
+        $core = ((ConsumerPrices::INFLATION_WEIGHT_SUPERCORE * 0.04) + (ConsumerPrices::INFLATION_WEIGHT_GOODS * 0.01)) / $coreWeight;
         $expected = (MonetaryPolicySubsystem::TAYLOR_INFLATION_CORE_WEIGHT * $core)
             + (MonetaryPolicySubsystem::TAYLOR_INFLATION_ANCHOR_WEIGHT * 0.025);
 

@@ -13,6 +13,9 @@ use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Earnings\FixedAssetLedger;
+use App\Service\Corporate\Earnings\OperatingCapacityEngine;
+use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Market\Pricing\MarketConsensusEngine;
@@ -119,16 +122,22 @@ final class OperatingCostFlexTest extends TestCase
         return $ctx;
     }
 
+    private function buildOperations(?MathUtility $mathUtility = null): OperatingCapacityEngine
+    {
+        $corporateMetrics = new CorporateMetrics();
+
+        return new OperatingCapacityEngine($mathUtility ?? new MathUtility(), $corporateMetrics, new FixedAssetLedger($corporateMetrics));
+    }
+
     private function resolveScale(EarningsSimulationContext $ctx): float
     {
-        return (new ReflectionMethod(EarningsEngine::class, 'resolveCommittedCostScale'))
-            ->invoke($this->buildEngine(), $ctx);
+        return (new ReflectionMethod(OperatingCapacityEngine::class, 'resolveCommittedCostScale'))
+            ->invoke($this->buildOperations(), $ctx);
     }
 
     private function applyCharge(EarningsSimulationContext $ctx): void
     {
-        (new ReflectionMethod(EarningsEngine::class, 'applyRestructuringCharge'))
-            ->invoke($this->buildEngine(), $ctx);
+        $this->buildOperations()->applyRestructuringCharge($ctx);
     }
 
     /**
@@ -183,7 +192,7 @@ final class OperatingCostFlexTest extends TestCase
             $ctx->stock->setInventory('5000000000');
             $ctx->sectorActivityFactor = $sectorActivityFactor;
 
-            return (new ReflectionMethod(EarningsEngine::class, 'resolveInventoryWriteDown'))->invoke($this->buildEngine(), $ctx);
+            return (new ReflectionMethod(WorkingCapitalLedger::class, 'resolveInventoryWriteDown'))->invoke(new WorkingCapitalLedger(new CorporateMetrics()), $ctx);
         };
 
         $this->assertSame(0.0, $writeDown(1.0), 'At normal activity nothing is marked down.');
@@ -290,7 +299,7 @@ final class OperatingCostFlexTest extends TestCase
         $expected = $ctx->committedCostCut
             * $structuralFixedCosts
             * $ctx->strategy->getLaborCostShare()
-            * EarningsEngine::RESTRUCTURING_SEVERANCE_QUARTERS;
+            * OperatingCapacityEngine::RESTRUCTURING_SEVERANCE_QUARTERS;
 
         $this->assertGreaterThan(0.0, $expected);
         $this->assertEqualsWithDelta($expected, $ctx->restructuringCharge, 1e-6);
@@ -394,16 +403,15 @@ final class OperatingCostFlexTest extends TestCase
                 return 0.0;
             }
         };
-        $engine = $this->buildEngine($quiet);
-        $process = new ReflectionMethod(EarningsEngine::class, 'processVariableMargins');
+        $operations = $this->buildOperations($quiet);
 
-        $realizedRatio = function (float $priorExpectedRevenue) use ($engine, $process): float {
+        $realizedRatio = function (float $priorExpectedRevenue) use ($operations): float {
             $ctx = $this->buildContext(1.0, 1.0);
             $ctx->baselineVariableMargin = 0.60;
             $ctx->baselineVol = 0.15;
             $ctx->expectedRevenue = 20_000_000_000.0;
             $ctx->stock->setEarningsMomentumZ([EarningsEngine::STATE_LAST_EXPECTED_REVENUE => $priorExpectedRevenue]);
-            $process->invoke($engine, $ctx);
+            $operations->processVariableMargins($ctx);
 
             return $ctx->realizedVariableMargin;
         };

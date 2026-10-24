@@ -76,7 +76,7 @@ class MacroEngine
             new MacroSnapshotRecorder(),
             new MonetaryPolicySubsystem($math, diagnostics: $diagnostics),
             new LaborMarketSubsystem(diagnostics: $diagnostics),
-            new MacroAggregateSubsystem($math, $gapProbe, $diagnostics),
+            MacroAggregateSubsystem::headless($math, $gapProbe, $diagnostics),
             new CommodityLogisticsSubsystem($math, diagnostics: $diagnostics),
             new AssetMarketSubsystem($math, diagnostics: $diagnostics),
             new CreditFiscalSubsystem($math, diagnostics: $diagnostics),

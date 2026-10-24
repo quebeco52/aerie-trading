@@ -6,11 +6,19 @@ namespace App\Service\Macro;
 
 use App\Data\Politics\AerieCouncil;
 use App\Data\Politics\AerieDiet;
+use App\Service\Macro\Subsystem\Aggregate\ConsumerPrices;
+use App\Service\Macro\Subsystem\Aggregate\DomesticDemand;
+use App\Service\Macro\Subsystem\Aggregate\IndustryIndicators;
+use App\Service\Macro\Subsystem\Aggregate\InventoryAndTiming;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
+use App\Service\Macro\Subsystem\Aggregate\NationalAccounts;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
+use App\Service\Macro\Subsystem\Aggregate\OutputGap;
+use App\Service\Macro\Subsystem\Aggregate\ProductivityGrowth;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\CreditRisk;
@@ -59,7 +67,15 @@ final class MacroConfigFingerprint
         MacroEngine::class,
         MonetaryPolicySubsystem::class,
         LaborMarketSubsystem::class,
-        MacroAggregateSubsystem::class,
+        ProductivityGrowth::class,
+        DomesticDemand::class,
+        OutputGap::class,
+        InventoryAndTiming::class,
+        OpenEconomy::class,
+        ConsumerPrices::class,
+        IndustryIndicators::class,
+        NationalAccounts::class,
+        MovingAverages::class,
         CommodityLogisticsSubsystem::class,
         AssetMarketSubsystem::class,
         CreditFiscalSubsystem::class,

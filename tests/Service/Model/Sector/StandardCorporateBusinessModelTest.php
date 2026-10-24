@@ -49,7 +49,7 @@ class StandardCorporateBusinessModelTest extends TestCase
     }
 
     /**
-     * The target return is what EarningsEngine::calculateGrowthCapEx tests against the hurdle, so
+     * The target return is what CapitalBudgetEngine::calculateGrowthCapEx tests against the hurdle, so
      * saturation has to be able to push it BELOW the hurdle — that is the NPV rule doing its job. It used
      * to be floored at policy rate + ERP, which pinned it at the cost of equity from the first saturated
      * quarter on and left the growth gate reading a constant while capital ran past the whole market.

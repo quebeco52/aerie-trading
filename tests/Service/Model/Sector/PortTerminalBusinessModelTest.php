@@ -8,7 +8,7 @@ use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\PortTerminalBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -77,7 +77,7 @@ final class PortTerminalBusinessModelTest extends TestCase
 
     private static function exportShare(): float
     {
-        return MacroAggregateSubsystem::goodsExportShareOfTrade();
+        return OpenEconomy::goodsExportShareOfTrade();
     }
 
     /**
@@ -122,7 +122,7 @@ final class PortTerminalBusinessModelTest extends TestCase
     {
         $actuals = $this->report($this->terminal(), new MacroStateDTO(domesticDemandGapEma: -0.03));
 
-        $importShift = (1.0 - self::exportShare()) * MacroAggregateSubsystem::goodsImportVolumeGap(-0.03, 0.0);
+        $importShift = (1.0 - self::exportShare()) * OpenEconomy::goodsImportVolumeGap(-0.03, 0.0);
         $gatewayBase = self::EXPECTED_REVENUE * PortTerminalBusinessModel::GATEWAY_HANDLING_WEIGHT;
         $this->assertLessThan(0.0, $importShift);
         $this->assertEqualsWithDelta($gatewayBase * (1.0 + $importShift), $actuals->streamRevenue['gateway_handling'], 1e-9);
@@ -135,8 +135,8 @@ final class PortTerminalBusinessModelTest extends TestCase
         $actuals = $this->report($this->terminal(), new MacroStateDTO(tariffTradeLag: $duty));
 
         // Imports lose volume on the duty; exports on what partners answer with.
-        $expectedShift = (self::exportShare() * MacroAggregateSubsystem::goodsExportVolumeGap(0.0, 0.0, $duty))
-            + ((1.0 - self::exportShare()) * MacroAggregateSubsystem::goodsImportVolumeGap(0.0, 0.0, $duty));
+        $expectedShift = (self::exportShare() * OpenEconomy::goodsExportVolumeGap(0.0, 0.0, $duty))
+            + ((1.0 - self::exportShare()) * OpenEconomy::goodsImportVolumeGap(0.0, 0.0, $duty));
         $gatewayBase = self::EXPECTED_REVENUE * PortTerminalBusinessModel::GATEWAY_HANDLING_WEIGHT;
 
         $this->assertLessThan(0.0, $expectedShift);
@@ -152,7 +152,7 @@ final class PortTerminalBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($relayBase * (1.0 - (PortTerminalBusinessModel::TRANSSHIPMENT_TRADE_INCOME_ELASTICITY * 0.02)), $slump->streamRevenue['transshipment'], 1e-9);
 
         $dear = $this->report($this->terminal(), new MacroStateDTO(realExchangeRateTradeLag: 0.10));
-        $hubPriceLoss = MacroAggregateSubsystem::exportPriceVolumeLoss(0.10);
+        $hubPriceLoss = OpenEconomy::exportPriceVolumeLoss(0.10);
         $this->assertGreaterThan(0.0, $hubPriceLoss);
         $this->assertEqualsWithDelta($relayBase * (1.0 - $hubPriceLoss), $dear->streamRevenue['transshipment'], 1e-9);
     }
@@ -215,7 +215,7 @@ final class PortTerminalBusinessModelTest extends TestCase
         $stock = $this->terminal();
         $recession = new MacroStateDTO(domesticDemandGapEma: -0.03, foreignOutputGapEma: -0.03, worldActivityGap: -0.03);
 
-        $gatewayShift = (1.0 - self::exportShare()) * MacroAggregateSubsystem::goodsImportVolumeGap(-0.03, 0.0);
+        $gatewayShift = (1.0 - self::exportShare()) * OpenEconomy::goodsImportVolumeGap(-0.03, 0.0);
         $relayShift = PortTerminalBusinessModel::TRANSSHIPMENT_TRADE_INCOME_ELASTICITY * -0.03;
         $expected = (PortTerminalBusinessModel::GATEWAY_HANDLING_WEIGHT * $gatewayShift) + (PortTerminalBusinessModel::TRANSSHIPMENT_WEIGHT * $relayShift);
 

@@ -35,7 +35,7 @@ use App\Service\Model\ModelParameters;
  *      book experiences separately: **risk-free carry** on the cash leg, **mark-to-market repricing** as
  *      spreads gap wider (an immediate loss), **carry alpha** from deploying dry powder at an elevated
  *      spread level (a lagged, saturating gain), and **credit losses** as issuers default.
- * - Deals are NOT modelled here. MergerAndAcquisitionEngine already runs conglomerate acquisitions end to
+ * - Deals are NOT modelled here. AcquisitionEngine already runs conglomerate acquisitions end to
  *   end: hazard from ManagementProfile::acquisitionBias(), price from hubrisPremium(), funded against real
  *   leverage and cash tests and booked as a CONGLOMERATE EXPANSION. A revenue multiplier standing in for an
  *   acquisition here would be the same behaviour counted twice, which that engine has already been bitten

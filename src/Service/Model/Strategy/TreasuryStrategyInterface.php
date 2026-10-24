@@ -33,8 +33,8 @@ interface TreasuryStrategyInterface
     public function calculateCashYield(MacroStateDTO $macroState): float;
 
     /**
-     * The equity the firm's treasury holds and the return calculateInterestIncome() expects of it a year: the
-     * board's realised return replaces that expectation in the books (EarningsEngine::markEquitySleeve()). None for a
+     * The equity the firm's treasury holds and the return calculateInterestIncome() expects of it a year: the board's
+     * realised return replaces that expectation in the books (InvestmentMarkLedger::markEquitySleeve()). None for a
      * treasury of cash and bonds.
      *
      * @return array{value: float, expected_return: float}

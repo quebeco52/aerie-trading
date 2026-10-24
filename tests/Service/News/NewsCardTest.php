@@ -81,7 +81,7 @@ class NewsCardTest extends TestCase
     }
 
     /**
-     * Every literal type passed to MarketEventPublisher::publish in src, the literal deal types the M&A
+     * Every literal type passed to MarketEventPublisher::publish in src, the literal deal types the acquisition
      * engine configures, the two the debt engine picks between at run time, and the two district desks.
      *
      * @return iterable<string, array{string}>
@@ -97,7 +97,7 @@ class NewsCardTest extends TestCase
             }
             $source = (string) file_get_contents($file->getPathname());
             preg_match_all("/->publish\\(\\s*[^,]+,\\s*'([^']+)'/", $source, $published);
-            preg_match_all("/'type' => '([A-Z][A-Z -]+)'/", str_contains($file->getFilename(), 'MergerAndAcquisition') ? $source : '', $configured);
+            preg_match_all("/'type' => '([A-Z][A-Z -]+)'/", str_contains($file->getFilename(), 'AcquisitionEngine') ? $source : '', $configured);
             foreach ([...$published[1], ...$configured[1]] as $type) {
                 $types[$type] = true;
             }
@@ -109,12 +109,12 @@ class NewsCardTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string, string}> The deal type each business model gives each default the M&A
-     *                                                 engine offers it.
+     * @return iterable<string, array{string, string}> The deal type each business model gives each default the
+     *                                                 acquisition engine offers it.
      */
     public static function dealTypes(): iterable
     {
-        $source = (string) file_get_contents(dirname(__DIR__, 3) . '/src/Service/Corporate/MergerAndAcquisitionEngine.php');
+        $source = (string) file_get_contents(dirname(__DIR__, 3) . '/src/Service/Corporate/Deal/AcquisitionEngine.php');
         preg_match_all("/getAcquisitionType\\('([^']+)'\\)/", $source, $defaults);
 
         $seen = [];

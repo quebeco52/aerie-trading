@@ -489,7 +489,7 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
      */
     public function applyMaSpendCap(float $purchasePrice, float $equity): float
     {
-        return min($purchasePrice, max(0.0, $equity) * \App\Service\Corporate\MergerAndAcquisitionEngine::MA_FINANCIAL_EQUITY_CAP);
+        return min($purchasePrice, max(0.0, $equity) * \App\Service\Corporate\Deal\AcquisitionEngine::MA_FINANCIAL_EQUITY_CAP);
     }
 
     public function blendAcquisitionDNA(Stock $acquirer, float $oldCapitalBase, float $purchasePrice, float $effectiveTargetRoic, float $totalNewCapital): void

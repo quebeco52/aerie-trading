@@ -7,6 +7,8 @@ namespace App\Tests\Service\Macro;
 use App\DTO\BoardReadingDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\Aggregate\DomesticDemand;
+use App\Service\Macro\Subsystem\Aggregate\ProductivityGrowth;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
@@ -40,7 +42,7 @@ class MacroEngineTest extends TestCase
 
         $this->monetarySubsystem = new MonetaryPolicySubsystem($this->mathUtilityMock);
         $this->laborSubsystem = new LaborMarketSubsystem();
-        $this->aggregateSubsystem = new MacroAggregateSubsystem($this->mathUtilityMock);
+        $this->aggregateSubsystem = MacroAggregateSubsystem::headless($this->mathUtilityMock);
         $this->creditFiscalSubsystem = new CreditFiscalSubsystem($this->mathUtilityMock);
 
         $this->engine = MacroEngine::headless($this->mathUtilityMock);
@@ -705,7 +707,7 @@ class MacroEngineTest extends TestCase
         $mathUtility = $this->createMock(MathUtility::class);
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
 
-        $aggregateSubsystem = new MacroAggregateSubsystem($mathUtility);
+        $aggregateSubsystem = MacroAggregateSubsystem::headless($mathUtility);
 
         // Create a perfectly neutral baseline state
         $stateNeutral = new MacroState();
@@ -771,7 +773,7 @@ class MacroEngineTest extends TestCase
         $dtoBoom = $this->engine->step($state, 0.25);
 
         // Boom should accumulate capital stock overhang: dK = (y * ACCUMULATION_RATE - DECAY_RATE * K) * dt
-        $expectedBoomOverhang = (0.05 * MacroAggregateSubsystem::CAPITAL_ACCUMULATION_RATE - MacroAggregateSubsystem::CAPITAL_DECAY_RATE * 0.0) * 0.25;
+        $expectedBoomOverhang = (0.05 * DomesticDemand::CAPITAL_ACCUMULATION_RATE - DomesticDemand::CAPITAL_DECAY_RATE * 0.0) * 0.25;
         $this->assertGreaterThan(0.0, $dtoBoom->capitalStockOverhang, 'Capital stock overhang must accumulate during economic booms.');
         $this->assertEqualsWithDelta($expectedBoomOverhang, $dtoBoom->capitalStockOverhang, 0.0001);
 
@@ -779,7 +781,7 @@ class MacroEngineTest extends TestCase
         $dtoRecession = $this->engine->step($recessionState, 0.25);
 
         // Recession & decay: dK = (y * ACCUMULATION_RATE - DECAY_RATE * K) * dt
-        $expectedRecessionOverhang = 0.05 + ((-0.05 * MacroAggregateSubsystem::CAPITAL_ACCUMULATION_RATE - MacroAggregateSubsystem::CAPITAL_DECAY_RATE * 0.05) * 0.25);
+        $expectedRecessionOverhang = 0.05 + ((-0.05 * DomesticDemand::CAPITAL_ACCUMULATION_RATE - DomesticDemand::CAPITAL_DECAY_RATE * 0.05) * 0.25);
         $this->assertLessThan(0.05, $dtoRecession->capitalStockOverhang, 'Capital stock overhang must decay during recessions.');
         $this->assertEqualsWithDelta($expectedRecessionOverhang, $dtoRecession->capitalStockOverhang, 0.0001);
     }
@@ -789,7 +791,7 @@ class MacroEngineTest extends TestCase
         $mathUtility = $this->createMock(MathUtility::class);
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
 
-        $aggregateSubsystem = new MacroAggregateSubsystem($mathUtility);
+        $aggregateSubsystem = MacroAggregateSubsystem::headless($mathUtility);
 
         $state = new MacroState();
         $state->totalFactorProductivityIndex = 100.0;
@@ -820,7 +822,7 @@ class MacroEngineTest extends TestCase
         $mathUtility = $this->createMock(MathUtility::class);
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
 
-        $aggregateSubsystem = new MacroAggregateSubsystem($mathUtility);
+        $aggregateSubsystem = MacroAggregateSubsystem::headless($mathUtility);
 
         $state = new MacroState();
         $state->totalFactorProductivityIndex = 100.0;
@@ -847,7 +849,7 @@ class MacroEngineTest extends TestCase
         // Severe negative productivity shock (e.g. supply chain disruption)
         $mathUtility->method('generateStandardNormal')->willReturn(-3.0);
 
-        $aggregateSubsystem = new MacroAggregateSubsystem($mathUtility);
+        $aggregateSubsystem = MacroAggregateSubsystem::headless($mathUtility);
 
         $state = new MacroState();
         $state->totalFactorProductivityIndex = 120.0;
@@ -861,7 +863,7 @@ class MacroEngineTest extends TestCase
         // single log increment is a rate scaled by dt plus an innovation scaled by sqrt(dt), so a band in
         // annual rate units is narrower than the innovation it would be clipping and biases the drift onto
         // its own midpoint. A three-sigma quarter must therefore land below that band, not on it.
-        $rateFloorOverTheQuarter = 120.0 * exp(MacroAggregateSubsystem::MIN_TFP_GROWTH_RATE * 0.25);
+        $rateFloorOverTheQuarter = 120.0 * exp(ProductivityGrowth::MIN_TFP_GROWTH_RATE * 0.25);
         $this->assertLessThan($rateFloorOverTheQuarter, $state->totalFactorProductivityIndex, 'A three-sigma innovation must reach the index at full size, not be clipped to the annual growth-rate band.');
     }
 
@@ -1001,7 +1003,7 @@ class MacroEngineTest extends TestCase
         $this->aggregateSubsystem->calculateNaturalRate($state, $acceleratingTfp, $dt);
 
         $this->assertGreaterThan(MacroConstants::BASE_NATURAL_RATE, $state->naturalRate, 'Natural real rate r* must drift upward when TFP productivity growth accelerates.');
-        $this->assertLessThanOrEqual(MacroAggregateSubsystem::MAX_NATURAL_RATE, $state->naturalRate, 'Natural real rate must respect statutory upper bound.');
+        $this->assertLessThanOrEqual(ProductivityGrowth::MAX_NATURAL_RATE, $state->naturalRate, 'Natural real rate must respect statutory upper bound.');
 
         // 2. Depressed TFP growth (0.0% secular stagnation) -> r* should drift downward
         $stagnationState = new MacroState();
@@ -1009,7 +1011,7 @@ class MacroEngineTest extends TestCase
         $this->aggregateSubsystem->calculateNaturalRate($stagnationState, 0.00, $dt);
 
         $this->assertLessThan(MacroConstants::BASE_NATURAL_RATE, $stagnationState->naturalRate, 'Natural real rate r* must drift downward during secular productivity stagnation.');
-        $this->assertGreaterThanOrEqual(MacroAggregateSubsystem::MIN_NATURAL_RATE, $stagnationState->naturalRate, 'Natural real rate must respect statutory floor.');
+        $this->assertGreaterThanOrEqual(ProductivityGrowth::MIN_NATURAL_RATE, $stagnationState->naturalRate, 'Natural real rate must respect statutory floor.');
     }
 
     public function testQuantitativeTighteningRunsOffAPortfolioAndNeverGoesNetShort(): void
@@ -1259,14 +1261,14 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan(100.0, $slumpState->totalFactorProductivityIndex, 'TFP can and should contract during severe recessions with negative shocks.');
 
         // As above: the annual growth-rate band bounds the trend rate, never the realized increment.
-        $rateFloorOverTheQuarter = 100.0 * exp(MacroAggregateSubsystem::MIN_TFP_GROWTH_RATE * 0.25);
+        $rateFloorOverTheQuarter = 100.0 * exp(ProductivityGrowth::MIN_TFP_GROWTH_RATE * 0.25);
         $this->assertLessThan($rateFloorOverTheQuarter, $slumpState->totalFactorProductivityIndex, 'A three-sigma innovation must reach the index at full size, not be clipped to the annual growth-rate band.');
     }
 
     /** r* follows the trend growth of potential, which the labour force sets beside productivity, and not the cycle. */
     public function testNaturalRateFollowsTrendGrowthAndNotTheCycle(): void
     {
-        $aggregate = new MacroAggregateSubsystem(new MathUtility());
+        $aggregate = MacroAggregateSubsystem::headless(new MathUtility());
 
         $boom = new MacroState();
         $boom->outputGap = 0.03;
@@ -1826,8 +1828,8 @@ class MacroEngineTest extends TestCase
     {
         $this->assertEquals(0.20, MacroConstants::POLICY_RATE_CEILING);
         $this->assertEquals(0.0005, MacroConstants::BALANCE_SHEET_ACTIVE_THRESHOLD);
-        $this->assertEquals(-0.15, MacroAggregateSubsystem::CAPITAL_OVERHANG_MIN);
-        $this->assertEquals(0.15, MacroAggregateSubsystem::CAPITAL_OVERHANG_MAX);
+        $this->assertEquals(-0.15, DomesticDemand::CAPITAL_OVERHANG_MIN);
+        $this->assertEquals(0.15, DomesticDemand::CAPITAL_OVERHANG_MAX);
         $this->assertEquals(10.0, MacroEngine::STRESS_MULTIPLIER_GAP_SENSITIVITY);
     }
 

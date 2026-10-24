@@ -11,9 +11,10 @@ use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Deal\AcquisitionEngine;
+use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\MathUtility;
@@ -76,7 +77,7 @@ final class StockTrackerFactorWiringTest extends TestCase
         ?float $postSplitPrice = null,
         ?\App\Service\Market\Agent\AgentStrategyInterface $agentStrategy = null,
         ?\Closure $earningsReport = null,
-        ?MergerAndAcquisitionEngine $maEngine = null,
+        ?AcquisitionEngine $acquisitionEngine = null,
     ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
@@ -112,18 +113,20 @@ final class StockTrackerFactorWiringTest extends TestCase
             $earnings->method('calculate')->willReturnCallback($earningsReport);
         }
 
-        $ma = $maEngine;
-        if ($ma === null) {
-            $ma = $this->createStub(MergerAndAcquisitionEngine::class);
-            $ma->method('evaluatePrivateAcquisition')->willReturn(null);
-            $ma->method('evaluateCorporateDivestiture')->willReturn(null);
+        $acquisitions = $acquisitionEngine;
+        if ($acquisitions === null) {
+            $acquisitions = $this->createStub(AcquisitionEngine::class);
+            $acquisitions->method('evaluatePrivateAcquisition')->willReturn(null);
         }
+        $divestitures = $this->createStub(DivestitureEngine::class);
+        $divestitures->method('evaluateCorporateDivestiture')->willReturn(null);
 
         return new StockTracker(
             $marketEngine,
             $earnings,
             $corporateActions,
-            $ma,
+            $acquisitions,
+            $divestitures,
             $this->createStub(MarketEventPublisher::class),
             $debtEngine,
             $this->createStub(CorporateMetrics::class),
@@ -227,21 +230,20 @@ final class StockTrackerFactorWiringTest extends TestCase
 
     /**
      * The merger review reads the acquirer's rivals off the industry ledger, whose records are dated in
-     * ticks: the tracker hands the M&A engine the tick and the year's tick count so a failed peer's share
+     * ticks: the tracker hands the acquisition engine the tick and the year's tick count so a failed peer's share
      * returns to the fringe on the same clock the capacity balance uses.
      */
     public function testTheAcquisitionReviewIsDatedOnTheTrackersTick(): void
     {
         $stock = $this->stock();
-        $ma = $this->createMock(MergerAndAcquisitionEngine::class);
-        $ma->expects($this->once())
+        $acquisitions = $this->createMock(AcquisitionEngine::class);
+        $acquisitions->expects($this->once())
             ->method('evaluatePrivateAcquisition')
             ->with($stock, $this->anything(), 1.0 / 360.0, 7_205, 360)
             ->willReturn(null);
-        $ma->method('evaluateCorporateDivestiture')->willReturn(null);
 
         $captured = null;
-        $tracker = $this->buildTracker(1.0, [100.0], $captured, maEngine: $ma);
+        $tracker = $this->buildTracker(1.0, [100.0], $captured, acquisitionEngine: $acquisitions);
         $tracker->updateStocks([$stock], 1.0 / 360.0, false, new MacroStateDTO(), 7_205, 360);
     }
 

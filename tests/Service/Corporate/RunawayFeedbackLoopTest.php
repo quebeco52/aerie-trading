@@ -13,6 +13,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Earnings\OperatingCapacityEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Math\MathUtility;
@@ -236,7 +237,7 @@ class RunawayFeedbackLoopTest extends TestCase
         // Annualized totalRevenue = actualRevenue * 4 bounded by MAX_CAPACITY_UTILIZATION (1.50) on the capped
         // structural revenue
         $annualRevenue = (float) $stock->getTotalRevenue();
-        $this->assertLessThanOrEqual(750_000_000_000.0 * 4.0 * EarningsEngine::MAX_CAPACITY_UTILIZATION, $annualRevenue);
+        $this->assertLessThanOrEqual(750_000_000_000.0 * 4.0 * OperatingCapacityEngine::MAX_CAPACITY_UTILIZATION, $annualRevenue);
     }
 
     public function testEarningsEngineDoesNotBoundFinancialsToSectorTam(): void
@@ -339,7 +340,7 @@ class RunawayFeedbackLoopTest extends TestCase
         // The cap is struck in REVENUE at a full addressable share, on the financial ratio: a bank ten
         // times its market earns on 2.5 markets' worth of book, not on 1.5 (the corporate ratio) and not
         // on all ten. Same seed, so the two draws match and the ratio is the cap itself.
-        $this->assertEqualsWithDelta(EarningsEngine::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 0.05);
-        $this->assertGreaterThan(EarningsEngine::MAX_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 'financials are bounded by the looser ratio');
+        $this->assertEqualsWithDelta(OperatingCapacityEngine::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 0.05);
+        $this->assertGreaterThan(OperatingCapacityEngine::MAX_SECTOR_TAM_CAPACITY_RATIO, $tenTimesMarket / $atMarket, 'financials are bounded by the looser ratio');
     }
 }

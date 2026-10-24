@@ -529,7 +529,7 @@ class DebtEngine
         $equityVolatility = max(0.05, StochasticProcesses::averageMeanRevertingVolatility(
             $spotVolatility,
             $structuralVolatility,
-            \App\Service\Market\Pricing\MarketEngine::varianceReversionSpeed((float) $stock->getJumpIntensity()),
+            \App\Service\Market\Pricing\VarianceBudget::varianceReversionSpeed((float) $stock->getJumpIntensity()),
             self::MERTON_HORIZON_YEARS,
         ));
 
@@ -1159,7 +1159,7 @@ class DebtEngine
      * Records the net debt and trailing EBITDA this review rates on against the quarter the report has just added to
      * the operating history, after those the previous quarter's review recorded, and returns them newest first, as many
      * as CreditRatingAgency::timeWeightedLeverage() reads. The record travels with the history, so a deal that restates
-     * it pro forma (MergerAndAcquisitionEngine) starts the window over; a quarter reviewed twice rewrites its own
+     * it pro forma (Deal\ProForma) starts the window over; a quarter reviewed twice rewrites its own
      * entry.
      *
      * @return list<array{net_debt: float, ebitda: float}>

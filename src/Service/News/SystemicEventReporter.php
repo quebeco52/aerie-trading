@@ -11,10 +11,10 @@ use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DistrictNews;
 use App\Entity\Etf;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\Subsystem\Aggregate\NationalAccounts;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Math\MacroConstants;
@@ -133,7 +133,7 @@ class SystemicEventReporter
     private static function recessionCallContext(MacroStateDTO $macro): array
     {
         $callingQuarter = $macro->realGdpQuarterlyGrowth < 0.0
-            && $macro->gdpQuarterStreak === -(float) MacroAggregateSubsystem::RECESSION_CALL_QUARTERS;
+            && $macro->gdpQuarterStreak === -(float) NationalAccounts::RECESSION_CALL_QUARTERS;
 
         return $callingQuarter ? ['gdp_fall_pct' => number_format(-$macro->realGdpQuarterlyGrowth * 100.0, 1)] : [];
     }
@@ -445,8 +445,8 @@ class SystemicEventReporter
             return [];
         }
 
-        $line = static fn(float $stance): string => number_format(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($stance))['concentrated'], 0);
-        $ceiling = MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($head['stance']))['shareCeiling'];
+        $line = static fn(float $stance): string => number_format(MergerReview::reviewScreens(FairTradingBoard::leniency($stance))['concentrated'], 0);
+        $ceiling = MergerReview::reviewScreens(FairTradingBoard::leniency($head['stance']))['shareCeiling'];
         $screens = "a concentration line at {$line($head['stance'])} on the HHI"
             . ($ceiling < 1.0 ? ' and a merged firm presumed too big above ' . WireFormat::percent($ceiling, 0) . ' of its market' : ' and no cap on a merged firm\'s share');
 

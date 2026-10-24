@@ -10,11 +10,11 @@ use App\Data\Politics\AerieCouncil;
 use App\Data\Politics\StanceWords;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
-use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Corporate\Deal\MergerReview;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Politics\Council\CouncilAppointments;
 use App\Service\Politics\Department\Exchequer;
@@ -76,9 +76,9 @@ final class DepartmentPageBuilder
         return [
             'tariff' => $law('tariff', $tariff) + [
                 'retaliation' => MacroConstants::TARIFF_RETALIATION_RATIO * $tariff,
-                'revenueToGdp' => MacroAggregateSubsystem::tariffRevenueToGdp($tariff),
+                'revenueToGdp' => OpenEconomy::tariffRevenueToGdp($tariff),
                 'outputCost' => MacroConstants::TARIFF_OUTPUT_LOSS * $tariff,
-                'goodsImportsToGdp' => MacroAggregateSubsystem::goodsImportsToGdp(),
+                'goodsImportsToGdp' => OpenEconomy::goodsImportsToGdp(),
             ],
             'migration' => $law('laborGrowth', $politics->laborForceGrowthRate) + [
                 'structural' => MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE,
@@ -170,7 +170,7 @@ final class DepartmentPageBuilder
         }
 
         $time = $politics->totalTime;
-        $screens = static fn(float $stance): array => MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency($stance));
+        $screens = static fn(float $stance): array => MergerReview::reviewScreens(FairTradingBoard::leniency($stance));
 
         return [
             'head' => [

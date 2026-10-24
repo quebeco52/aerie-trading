@@ -6,8 +6,8 @@ namespace App\Tests\Service\Macro\Subsystem;
 
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroConstants;
@@ -1225,7 +1225,7 @@ class AssetMarketSubsystemTest extends TestCase
         $home = new MacroState();
         $home->outputGap = 0.0;
         // The mainland boom's exports, already part of the gap they lift, with domestic demand unmoved.
-        $exports = MacroAggregateSubsystem::netExportGapAt(0.03, 0.0, 0.0);
+        $exports = OpenEconomy::netExportGapAt(0.03, 0.0, 0.0);
         $abroad = new MacroState();
         $abroad->netExportGap = $exports;
         $abroad->outputGap = $exports;
@@ -1243,9 +1243,9 @@ class AssetMarketSubsystemTest extends TestCase
         for ($i = 0; $i < 400; $i++) {
             $this->subsystem->calculateTradeBalance($booming, 0.01);
         }
-        $this->assertLessThan(MacroAggregateSubsystem::DISTRICT_IMPORT_SHARE, MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE);
+        $this->assertLessThan(OpenEconomy::DISTRICT_IMPORT_SHARE, OpenEconomy::DISTRICT_DOMESTIC_IMPORT_SHARE);
         $this->assertEqualsWithDelta(
-            -MacroAggregateSubsystem::DISTRICT_DOMESTIC_IMPORT_SHARE * MacroAggregateSubsystem::IMPORT_DEMAND_ELASTICITY * 0.03,
+            -OpenEconomy::DISTRICT_DOMESTIC_IMPORT_SHARE * OpenEconomy::IMPORT_DEMAND_ELASTICITY * 0.03,
             $booming->tradeBalanceToGdp - $home->tradeBalanceToGdp,
             0.0005,
         );

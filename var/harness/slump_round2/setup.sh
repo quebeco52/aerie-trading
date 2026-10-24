@@ -20,11 +20,11 @@ for t in r2head:$OLD r2new:$REV; do d=${t%%:*}; rm -rf "$SNAP/$d"; mkdir -p "$SN
 git diff --name-only "$REV" -- src | while read -r f; do cp "$f" "$SNAP/r2new/$f"; echo "copied $f"; done
 D=Service/Macro/Subsystem
 AMS=$D/AssetMarketSubsystem.php
-MAS=$D/MacroAggregateSubsystem.php
+MAS=$D/Aggregate/ConsumerPrices.php
 LMS=$D/LaborMarketSubsystem.php
 ME=Service/Macro/MacroEngine.php
 NEW="$SNAP/r2new/src"
-for a in A G P1 P2 H2 N1 S1; do rm -rf "$SNAP/ovr$a"; mkdir -p "$SNAP/ovr$a/$D"; done
+for a in A G P1 P2 H2 N1 S1; do rm -rf "$SNAP/ovr$a"; mkdir -p "$SNAP/ovr$a/$D/Aggregate"; done
 
 edP() {
   sed -e '/private function stepMainlandQuarter/,/private static function mainlandCrashProbability/s/\$this->mathUtility->/$this->mainlandRng()->/g' \
@@ -53,7 +53,7 @@ chk ovrP2 $MAS 'PHILLIPS_DOWNWARD_RIGIDITY_FACTOR = 1.00;'; echo "    [1]"
 chk ovrH2 $AMS 'RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 0.0;'; chk ovrH2 $AMS 'RESIDENTIAL_INCOME_ELASTICITY = 2.75;'; echo "    [1 each]"
 chk ovrN1 $LMS '$nairuBefore = $state->nairu;'; chk ovrN1 $LMS '$state->crisisScarPending -= ($state->nairu - $nairuBefore) / self::OKUNS_COEFFICIENT;'; echo "    [1 each]"
 chk ovrS1 $ME 'STRESS_MULTIPLIER_GAP_SENSITIVITY = 0.0;'; echo "    [1]"
-for f in "$SNAP"/ovr*/$D/*.php "$SNAP"/ovrS1/$ME; do php -l "$f" > /dev/null && echo "  lint ok $f" || echo "LINT FAIL $f"; done
+for f in "$SNAP"/ovr*/$D/*.php "$SNAP"/ovr*/$D/Aggregate/*.php "$SNAP"/ovrS1/$ME; do php -l "$f" > /dev/null && echo "  lint ok $f" || echo "LINT FAIL $f"; done
 echo "diff line counts:"
 for a in A G P1 P2 H2 N1 S1; do for f in $AMS $MAS $LMS $ME; do
   [ -f "$SNAP/ovr$a/$f" ] || continue

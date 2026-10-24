@@ -9,12 +9,11 @@ use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
-use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\AbstractBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
 use ReflectionMethod;
 
 /**
@@ -130,8 +129,8 @@ class WorkingCapitalByStreamTest extends TestCase
             $ctx->capacityUtilization = 0.80;
             $ctx->seasonalFactor = 1.0;
 
-            return (new ReflectionMethod(EarningsEngine::class, 'resolveInventoryWriteDown'))
-                ->invoke((new ReflectionClass(EarningsEngine::class))->newInstanceWithoutConstructor(), $ctx);
+            return (new ReflectionMethod(WorkingCapitalLedger::class, 'resolveInventoryWriteDown'))
+                ->invoke(new WorkingCapitalLedger(new CorporateMetrics()), $ctx);
         };
 
         $finishedGoods = $writeDown('LARK', 'Household & Personal Products');

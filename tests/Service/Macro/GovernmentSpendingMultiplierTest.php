@@ -6,7 +6,7 @@ namespace App\Tests\Service\Macro;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\Aggregate\OutputGap;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
@@ -49,7 +49,7 @@ class GovernmentSpendingMultiplierTest extends TestCase
         // Spending lifts output, by no more than one for one once the imports it draws in have leaked abroad: across
         // countries multipliers run from about zero in open economies with floating currencies to about one in large
         // closed ones (Ilzetzki, Mendoza & Vegh 2013).
-        $leak = 1.0 - MacroAggregateSubsystem::EXCESS_IMPORT_LEAKAGE;
+        $leak = 1.0 - OutputGap::EXCESS_IMPORT_LEAKAGE;
         $this->assertGreaterThan(0.0, $multiplier, 'Purchases lift output.');
         $this->assertLessThanOrEqual(1.0 * $leak, $multiplier, 'By no more than one for one, net of the leak.');
     }

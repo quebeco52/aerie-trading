@@ -26,7 +26,7 @@ class MarketPricingContext
         public float $marketJumpMultiplier = 1.0,
         public float $marketVol = 0.15,
         public float $reversionSpeed = \App\Service\Market\Pricing\MarketEngine::FAIR_VALUE_PULL_SPEED,
-        public float $kappa = \App\Service\Market\Pricing\MarketEngine::BASE_VARIANCE_REVERSION_SPEED,
+        public float $kappa = \App\Service\Market\Pricing\VarianceBudget::BASE_VARIANCE_REVERSION_SPEED,
         public float $volOfVol = 0.3,
         public ?MacroStateDTO $macroState = null,
         public float $bookValuePerShare = 0.0,

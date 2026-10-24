@@ -10,7 +10,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
@@ -174,7 +174,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
      */
     public function getCapexCycleSignal(Stock $stock, MacroStateDTO $macroState): float
     {
-        return MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
+        return MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * OpenEconomy::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
     }
 
     // --- Secular Demand ---
@@ -287,7 +287,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // --- Allied Procurement & Cost-Plus Fiscal Physics ---
         // Programme awards are defence investment, which moves 1.54 times the allied budgets it comes out of.
-        $alliedOrders = MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * MacroAggregateSubsystem::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
+        $alliedOrders = MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * OpenEconomy::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma);
 
         // --- Program Execution, Forward Losses & Tail Shocks ---
         $costPlusMultiplier   = 1.0;

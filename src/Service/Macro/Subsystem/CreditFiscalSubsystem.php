@@ -9,6 +9,10 @@ use App\DTO\PublicAccountsDTO;
 use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
+use App\Service\Macro\Subsystem\Aggregate\DomesticDemand;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
+use App\Service\Macro\Subsystem\Aggregate\ProductivityGrowth;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
@@ -155,7 +159,7 @@ class CreditFiscalSubsystem
     public const FISCAL_STABILIZER_SENSITIVITY = self::FOUNDING_NET_TAX_RATE * (self::NET_TAX_OUTPUT_ELASTICITY - 1.0);
     /**
      * Mean lag, in years, of the tax a trailing year's earnings carry behind the tax charged: half the year, as a
-     * first-order lag (the convention of MacroAggregateSubsystem::DEMAND_TRANSMISSION_LAGS).
+     * first-order lag (the convention of MovingAverages::DEMAND_TRANSMISSION_LAGS).
      */
     public const TRAILING_EARNINGS_MEAN_LAG_YEARS = 0.5;
 
@@ -698,7 +702,7 @@ class CreditFiscalSubsystem
      * Storting, 2000-2001), so a tariff or a carbon price lowers the other taxes rather than running a surplus nobody
      * set. The corporate rate firms pay follows only the shift the Diet has legislated, at the same speed. Demand reads
      * the discretionary parts against their decade trends: the corporate rate and the stance, never the stabilisers'
-     * swing, which reaches it through the gap's own pull (MacroAggregateSubsystem::KALDOR_AUTOMATIC_STABILISER), nor
+     * swing, which reaches it through the gap's own pull (DomesticDemand::KALDOR_AUTOMATIC_STABILISER), nor
      * the levies' give-back, which leaves the take as a whole where it was.
      *
      * @param MacroState $state Current macroeconomic state.
@@ -905,7 +909,7 @@ class CreditFiscalSubsystem
         return new PublicAccountsDTO(
             netTaxes: $state->netTaxRate,
             corporateTax: $state->corporateTaxRate * self::CORPORATE_PROFITS_TO_GDP,
-            tariffs: MacroAggregateSubsystem::tariffRevenueToGdp($state->importTariffRate),
+            tariffs: OpenEconomy::tariffRevenueToGdp($state->importTariffRate),
             carbonPrice: $state->carbonPrice * self::POWER_SECTOR_CO2_PER_GDP_DOLLAR,
             // The board's banks' bill in currency, read through the fund's currency bridge (none before the fund
             // opens).
@@ -1213,7 +1217,7 @@ class CreditFiscalSubsystem
         $state->creditCrisisDrag += $crisisDrag;
         $this->diagnostics?->recordEvent('creditCrisis', $crisisDrag);
         // Cerra & Saxena (2008): the output a crisis destroys does not come back; potential takes the scar as the slump
-        // lasts (MacroAggregateSubsystem::absorbProductivityShocks()).
+        // lasts (ProductivityGrowth::absorbProductivityShocks()).
         $state->crisisScarPending -= self::CRISIS_POTENTIAL_SCAR * $thinCapital;
         // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.
         $state->excessBondPremium += self::EBP_CRISIS_JUMP;
@@ -1225,7 +1229,7 @@ class CreditFiscalSubsystem
      */
     public static function crisisHouseholdRepayment(float $creditCrisisDrag): float
     {
-        return self::CRISIS_HOUSEHOLD_REPAYMENT_SHARE * $creditCrisisDrag / MacroAggregateSubsystem::KALDOR_HOUSEHOLD_NEW_BORROWING;
+        return self::CRISIS_HOUSEHOLD_REPAYMENT_SHARE * $creditCrisisDrag / DomesticDemand::KALDOR_HOUSEHOLD_NEW_BORROWING;
     }
 
     /**
@@ -1407,7 +1411,7 @@ class CreditFiscalSubsystem
         // Macroeconomic Assessment Group (2010): banks building to a raised requirement or buffer ration credit through
         // their standards until the capital is built, at the premium the shortfall is worth to the demand drag;
         // capital already held rations nothing, and a cut eases nothing.
-        $capitalTightening = MacroAggregateSubsystem::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * self::capitalShortfall($state);
+        $capitalTightening = DomesticDemand::CAPITAL_SHORTFALL_PREMIUM_EQUIVALENT * self::capitalShortfall($state);
         $dW = $this->mathUtility->generateStandardNormal();
 
         $state->sloosTighteningIndex = CreditRisk::calculateSloosCreditStandards(

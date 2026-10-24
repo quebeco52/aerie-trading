@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Macro;
 
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\Aggregate\OutputGap;
 use App\Tests\Support\DistrictRun;
 use PHPUnit\Framework\TestCase;
 
@@ -46,7 +46,7 @@ class PlayedDistrictRealismTest extends TestCase
     {
         foreach (self::SEEDS as $seed) {
             $gaps = self::playedRun($seed)['gaps'];
-            $atClamp = count(array_filter($gaps, static fn(float $gap): bool => $gap < MacroAggregateSubsystem::OUTPUT_GAP_FLOOR + 0.01));
+            $atClamp = count(array_filter($gaps, static fn(float $gap): bool => $gap < OutputGap::OUTPUT_GAP_FLOOR + 0.01));
             $this->assertLessThanOrEqual(4, $atClamp, sprintf('Seed %d must not sit on the capacity clamp.', $seed));
 
             $longestDeepRun = 0;

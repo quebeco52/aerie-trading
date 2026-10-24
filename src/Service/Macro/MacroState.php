@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Macro;
 
 use App\Data\Macro\MacroFieldRegistry;
+use App\Service\Macro\Subsystem\Aggregate\InventoryAndTiming;
+use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
+use App\Service\Macro\Subsystem\Aggregate\OutputGap;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
@@ -43,7 +46,7 @@ class MacroState
     public float $outputGap;
     public float $outputGapEma;
     // The output gap as it reaches order books 3 to 18 months behind the economy
-    // (MacroAggregateSubsystem::demandTransmissionLagField).
+    // (MovingAverages::demandTransmissionLagField).
     public float $outputGapLag3m;
     public float $outputGapLag6m;
     public float $outputGapLag9m;
@@ -289,7 +292,7 @@ class MacroState
     // real exchange rate gap as trade volumes have absorbed it, and the log import price level relative to domestic
     // prices.
     public float $netExportGap;
-    // The mainland's cycle as a level part of the gap: MacroAggregateSubsystem::MAINLAND_CYCLE_LOADING times its gap.
+    // The mainland's cycle as a level part of the gap: OutputGap::MAINLAND_CYCLE_LOADING times its gap.
     public float $mainlandCycleGap;
     // Domestic demand's part of the gap, smoothed like the gap: what the inventory cycle's sales surprise is read
     // against.
@@ -759,19 +762,19 @@ class MacroState
         // stand, so their arrival reprices nothing: import prices have absorbed the currency, trade volumes too, and
         // the net export level is already part of the gap the payload carries.
         if (!isset($carried['importPriceLevel'])) {
-            $state->importPriceLevel = MacroAggregateSubsystem::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate);
+            $state->importPriceLevel = OpenEconomy::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate);
         }
         if (!isset($carried['realExchangeRateTradeLag'])) {
-            $state->realExchangeRateTradeLag = MacroAggregateSubsystem::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend);
+            $state->realExchangeRateTradeLag = OpenEconomy::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend);
         }
         if (!isset($carried['alliedDefenseDeliveryLag'])) {
-            $state->alliedDefenseDeliveryLag = MacroAggregateSubsystem::alliedDefenseGap($state->alliedDefenseSpendingIndexEma);
+            $state->alliedDefenseDeliveryLag = OpenEconomy::alliedDefenseGap($state->alliedDefenseSpendingIndexEma);
         }
         if (!isset($carried['mainlandDemandExportLag'])) {
             $state->mainlandDemandExportLag = $state->foreignOutputGapEma;
         }
         if (!isset($carried['netExportGap'])) {
-            $state->netExportGap = MacroAggregateSubsystem::netExportGapAt($state->mainlandDemandExportLag, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
+            $state->netExportGap = OpenEconomy::netExportGapAt($state->mainlandDemandExportLag, $state->realExchangeRateTradeLag, $state->alliedDefenseDeliveryLag, $state->tariffTradeLag);
         }
         // Finance output opens on the credit balances and deal flow as they stand. A state that still carries the
         // retired market-value trend (finance_market_trend) valued fund managers' output at the market: its finance
@@ -779,20 +782,20 @@ class MacroState
         // carried gap the market leg held, so the upgrade moves no GDP.
         if (!isset($carried['financeOutputGap']) || isset($data[self::RETIRED_FINANCE_MARKET_TREND_KEY])) {
             $carriedFinance = $state->financeOutputGap;
-            $state->financeOutputGap = MacroAggregateSubsystem::financeOutputGapAt(
-                MacroAggregateSubsystem::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
-                MacroAggregateSubsystem::dealActivityGap($state->dealActivityIndexEma, $state->dealActivityIndexTrend),
+            $state->financeOutputGap = OutputGap::financeOutputGapAt(
+                OutputGap::creditBalanceGap($state->creditToGdpGap, $state->creditToGdpTrend),
+                OutputGap::dealActivityGap($state->dealActivityIndexEma, $state->dealActivityIndexTrend),
             );
             if (isset($carried['financeOutputGap'], $carried['domesticDemandGapEma'])) {
-                $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, $state->financeOutputGap - $carriedFinance, 0.0, 0.0, 0.0);
+                $state->domesticDemandGapEma += OutputGap::domesticDemandGapAt(0.0, 0.0, 0.0, $state->financeOutputGap - $carriedFinance, 0.0, 0.0, 0.0);
             }
         }
         // The mainland's cycle opens as the part of the carried gap it stands for, taken out of domestic demand's
         // smoothed reading alike, so the upgrade moves no GDP and sets off no sales surprise.
         if (!isset($carried['mainlandCycleGap'])) {
-            $state->mainlandCycleGap = MacroAggregateSubsystem::mainlandCycleGapAt($state->foreignOutputGap);
+            $state->mainlandCycleGap = OutputGap::mainlandCycleGapAt($state->foreignOutputGap);
             if (isset($carried['domesticDemandGapEma'])) {
-                $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, $state->mainlandCycleGap);
+                $state->domesticDemandGapEma += OutputGap::domesticDemandGapAt(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, $state->mainlandCycleGap);
             }
         }
         // The capital built counted the requirement alone in a payload predating the last tick's requirement; the
@@ -805,13 +808,13 @@ class MacroState
         // The inventory cycle's reference opens where domestic demand's smoothed part of the gap stands, so the upgrade
         // sets off no sales surprise.
         if (!isset($carried['domesticDemandGapEma'])) {
-            $state->domesticDemandGapEma = MacroAggregateSubsystem::domesticDemandGapAt($state->outputGapEma, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap, $state->inventoryInvestmentGap, $state->spendingTimingGap, $state->mainlandCycleGap);
+            $state->domesticDemandGapEma = OutputGap::domesticDemandGapAt($state->outputGapEma, $state->productivitySupplyGap, $state->netExportGap, $state->financeOutputGap, $state->inventoryInvestmentGap, $state->spendingTimingGap, $state->mainlandCycleGap);
         }
         // Inventory investment opens at the flow the carried stock is already making, taken out of final sales and
         // their smoothed reading alike, so the upgrade moves no GDP and sets off no sales surprise.
         if (!isset($carried['inventoryInvestmentGap'])) {
-            $state->inventoryInvestmentGap = MacroAggregateSubsystem::plannedInventoryInvestment($state);
-            $state->domesticDemandGapEma += MacroAggregateSubsystem::domesticDemandGapAt(0.0, 0.0, 0.0, 0.0, $state->inventoryInvestmentGap, 0.0, 0.0);
+            $state->inventoryInvestmentGap = InventoryAndTiming::plannedInventoryInvestment($state);
+            $state->domesticDemandGapEma += OutputGap::domesticDemandGapAt(0.0, 0.0, 0.0, 0.0, $state->inventoryInvestmentGap, 0.0, 0.0);
         }
 
         return $state;

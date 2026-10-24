@@ -9,7 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -302,10 +302,10 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
      */
     private function resolveGatewayVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        $exportShare = MacroAggregateSubsystem::goodsExportShareOfTrade();
+        $exportShare = OpenEconomy::goodsExportShareOfTrade();
 
-        $exportVolume = MacroAggregateSubsystem::goodsExportVolumeGap($macroState->mainlandDemandExportLag, $macroState->realExchangeRateTradeLag, $macroState->tariffTradeLag);
-        $importVolume = MacroAggregateSubsystem::goodsImportVolumeGap($macroState->domesticDemandGapEma, $macroState->realExchangeRateTradeLag, $macroState->tariffTradeLag);
+        $exportVolume = OpenEconomy::goodsExportVolumeGap($macroState->mainlandDemandExportLag, $macroState->realExchangeRateTradeLag, $macroState->tariffTradeLag);
+        $importVolume = OpenEconomy::goodsImportVolumeGap($macroState->domesticDemandGapEma, $macroState->realExchangeRateTradeLag, $macroState->tariffTradeLag);
 
         return (($exportShare * $exportVolume) + ((1.0 - $exportShare) * $importVolume)) * $this->getOperatingCyclicality($stock);
     }
@@ -318,7 +318,7 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
     private function resolveTransshipmentVolumeShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $tradeGap = ($macroState->foreignOutputGapEma + $macroState->worldActivityGap) / 2.0;
-        $hubPriceLoss = MacroAggregateSubsystem::exportPriceVolumeLoss($macroState->realExchangeRateTradeLag);
+        $hubPriceLoss = OpenEconomy::exportPriceVolumeLoss($macroState->realExchangeRateTradeLag);
 
         return ((self::TRANSSHIPMENT_TRADE_INCOME_ELASTICITY * $tradeGap) - $hubPriceLoss) * $this->getOperatingCyclicality($stock);
     }
