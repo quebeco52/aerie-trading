@@ -1657,12 +1657,16 @@ class CreditFiscalSubsystemTest extends TestCase
         $neutral->unemploymentRateEma = $neutral->nairu;
         $neutral->residentialPropertyIndexEma = 100.0;
         $neutral->residentialWealthTrend = 100.0;
+        $neutral->macroCreditSpreadEma = $neutral->macroCreditSpreadTrend;
+        $neutral->interbankLiquiditySpreadEma = $neutral->interbankLiquiditySpreadTrend;
         $subsystem->calculateRetailDefaultRate($neutral, 0.25);
 
         $underwater = new MacroState();
         $underwater->unemploymentRateEma = $underwater->nairu;
         $underwater->residentialPropertyIndexEma = 80.0;
         $underwater->residentialWealthTrend = 100.0;
+        $underwater->macroCreditSpreadEma = $underwater->macroCreditSpreadTrend;
+        $underwater->interbankLiquiditySpreadEma = $underwater->interbankLiquiditySpreadTrend;
         $subsystem->calculateRetailDefaultRate($underwater, 0.25);
 
         $this->assertEqualsWithDelta(CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, trend spreads and trend prices the systematic factor is the intercept.');

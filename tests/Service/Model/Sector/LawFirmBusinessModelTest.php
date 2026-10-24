@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LawFirmBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -140,7 +141,7 @@ class LawFirmBusinessModelTest extends TestCase
 
         $atOpening = static fn(float $smoothed): MacroStateDTO => new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: \App\Service\Math\MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
             macroCreditSpreadEma: $smoothed,
         );
 
@@ -221,8 +222,8 @@ class LawFirmBusinessModelTest extends TestCase
     public function testTheCycleReachesTheCostBaseThroughTheStreamVolumes(): void
     {
         $stock = (new Stock())->setTicker('BRIEF_ACTIVITY')->setBeta('1.0');
-        // Spreads, defaults and deal flow at their baselines: only the gap moves.
-        $recession = new MacroStateDTO(outputGapEma: -0.03, exchangeRateIndexEma: 100.0);
+        // Spreads, defaults and deal flow at their trends: only the gap moves.
+        $recession = new MacroStateDTO(outputGapEma: -0.03, macroCreditSpread: MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN, exchangeRateIndexEma: 100.0);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 

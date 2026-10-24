@@ -13,6 +13,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
+use App\Tests\Support\OpeningCreditAtTrend;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -98,14 +99,14 @@ class ShadowBankBusinessModelTest extends TestCase
     }
 
     /**
-     * Fees are struck once so that, at the opening macro, fees at the lore margin plus the book's interest less the
-     * wholesale funding cost DebtEngine charges the lender and the steady-state credit provision earn its structural
-     * return.
+     * Fees are struck once so that, at the opening macro with credit at its trend, fees at the lore margin plus the
+     * book's interest less the wholesale funding cost DebtEngine charges the lender and the steady-state credit
+     * provision earn its structural return.
      */
     public function testTheFranchiseEarnsItsStructuralReturnAtTheOpeningMacro(): void
     {
         $stock = $this->pool();
-        $opening = new MacroStateDTO();
+        $opening = OpeningCreditAtTrend::macro();
         $metrics = $this->model->getTargetMetrics($stock, $opening, $this->mathUtility);
         $tax = $opening->corporateTaxRate;
         $feeRevenue = $metrics['invested_capital'] * $metrics['baseline_roic'] / (0.50 * (1.0 - $tax));
@@ -126,7 +127,7 @@ class ShadowBankBusinessModelTest extends TestCase
     public function testTheFranchiseHoldsItsReturnAsTheLegacyNotesRoll(): void
     {
         $stock = $this->pool();
-        $opening = new MacroStateDTO();
+        $opening = OpeningCreditAtTrend::macro();
         $engine = new DebtEngine($this->mathUtility, CorporateMetrics::getInstance());
         $roe = function () use ($stock, $opening, $engine): float {
             $metrics = $this->model->getTargetMetrics($stock, $opening, $this->mathUtility);

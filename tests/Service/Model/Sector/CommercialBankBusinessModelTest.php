@@ -849,15 +849,15 @@ class CommercialBankBusinessModelTest extends TestCase
         $bank->setCustomerDeposits('40000000000');
 
         $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
-        $macroLowRisk = new MacroStateDTO(outputGapEma: 0.0, recessionProbabilityEma: 0.10);
-        $macroHighRisk = new MacroStateDTO(outputGapEma: 0.0, recessionProbabilityEma: 0.70);
+        $macroLowRisk = new MacroStateDTO(outputGapEma: 0.0, macroCreditSpreadEma: MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN, recessionProbabilityEma: 0.10);
+        $macroHighRisk = new MacroStateDTO(outputGapEma: 0.0, macroCreditSpreadEma: MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN, recessionProbabilityEma: 0.70);
 
         $resultLowRisk = $this->model->computeActualFinancials($bank, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $macroLowRisk, $mathMock);
         $resultHighRisk = $this->model->computeActualFinancials($bank, 1_000_000_000.0, 0.50, 200_000_000.0, 0.0, $macroHighRisk, $mathMock);
 
         $this->assertEqualsWithDelta($resultLowRisk->clampedMargin, $resultHighRisk->clampedMargin, 1e-12, 'the forecast reserve is not a running cost');
 
-        $atBaseRate = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(recessionProbabilityEma: MacroConstants::RECESSION_PROBABILITY_LONG_RUN_MEAN));
+        $atBaseRate = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN, recessionProbabilityEma: MacroConstants::RECESSION_PROBABILITY_LONG_RUN_MEAN));
         $calm = $this->model->getForwardCreditLossMultiplier($bank, $macroLowRisk);
         $stressed = $this->model->getForwardCreditLossMultiplier($bank, $macroHighRisk);
         $this->assertEqualsWithDelta(1.0, $atBaseRate, 1e-9, 'at the base-rate outlook the estimate is the through-the-cycle one');
@@ -874,10 +874,10 @@ class CommercialBankBusinessModelTest extends TestCase
         );
 
         // Spreads: widening lifts the target, a benign market releases part of it, never past the floor.
-        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD + 0.03));
+        $wide = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN + 0.03));
         $this->assertEqualsWithDelta(1.0 + 0.03 * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $wide, 1e-9);
         $benign = $this->model->getForwardCreditLossMultiplier($bank, new MacroStateDTO(macroCreditSpreadEma: 0.0));
-        $this->assertEqualsWithDelta(1.0 - MacroConstants::BASE_CREDIT_SPREAD * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
+        $this->assertEqualsWithDelta(1.0 - MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN * CommercialBankBusinessModel::CECL_RESERVE_SPREAD_SENSITIVITY, $benign, 1e-9);
         $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::CECL_RESERVE_MULTIPLIER_FLOOR, $benign);
     }
 

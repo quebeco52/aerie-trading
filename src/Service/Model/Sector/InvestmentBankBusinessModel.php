@@ -236,19 +236,19 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         // every closed primary market migrated another slice of the book from earning to non-earning.
         $fundedBook = $this->resolveEarningAssets($stock);
 
-        // Benchmark client asset yield to realized wholesale rate (liability borrowing cost) to preserve spread
-        // economics.
-        $fundingBenchmark = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
+        // Both books are lent at the broker's base rate: the borrowed part at what the borrowing costs, the part the
+        // equity funds at the refinancing rate (resolveClientBookRate()).
+        $bookRate = $this->resolveClientBookRate($stock, $macroState, $fundedBook, $realizedWholesaleRate);
 
         // 1. Institutional Prime Brokerage & Secured Financing (Securities Lending & Margin Debits):
         // Investment banks lend wholesale funding to institutional hedge fund clients against liquid collateral.
-        $primeFinancingRate = $fundingBenchmark + self::PRIME_FINANCING_SPREAD;
+        $primeFinancingRate = $bookRate + self::PRIME_FINANCING_SPREAD;
         $primeFinancingAssets = $fundedBook * self::PRIME_BROKERAGE_ALLOCATION;
         $primeInterest = $primeFinancingAssets * $primeFinancingRate;
 
         // 2. Institutional Matched-Book Repo & Trading Inventory Financing:
         // The remainder of the book finances market-making inventory and reverse repo operations.
-        $inventoryFinancingYield = max(0.0, $fundingBenchmark - self::MATCHED_REPO_SPREAD_HAIRCUT);
+        $inventoryFinancingYield = max(0.0, $bookRate - self::MATCHED_REPO_SPREAD_HAIRCUT);
         $inventoryInterest = ($fundedBook * (1.0 - self::PRIME_BROKERAGE_ALLOCATION)) * $inventoryFinancingYield;
 
         // 3. Excess Corporate Treasury Yield

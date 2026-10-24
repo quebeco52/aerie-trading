@@ -5,8 +5,9 @@ the opening of the macro's credit indicators (household and corporate default ra
 trends) does to lender losses and ROE, the non-financial receivables provision and the board. Paired before (a HEAD
 worktree) vs after (the main working tree), live macro with the Diet.
 
-- Harness: `LenderQuarterHarnessTest.php`, a fork of `interbank_ref/FullMarketHarnessTest.php` (env in
-  `var/harness/full/RUN.md`). `LQ_OUT` adds, per lender (LAKE RIVR PLVR STRK EGRT BNTH POOL TALN), its calibration at
+- Harness: `LenderQuarterHarnessTest.php`, the shared whole-board run (`var/harness/lib/BoardRun.php`, env in
+  `var/harness/lib/README.md`) with interbank_ref's report fields and its board index (splits not restated).
+  `LQ_OUT` adds, per lender (LAKE RIVR PLVR STRK EGRT BNTH POOL TALN), its calibration at
   seed (`calib`: earning assets, calibration yield, opex ratio, TTC provision rate, interest expense, treasury income,
   ROE target) and every report's realised lines (`rows`: revenue, opex, provision, charge-offs, gross book, allowance,
   interest, PTI, NI, tangible equity) with the credit-cycle macro fields and the model's own readings; per

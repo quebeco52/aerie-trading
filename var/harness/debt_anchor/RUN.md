@@ -4,8 +4,8 @@ Question: with the Bohn reaction on GROSS debt (two-sided, 0.10 x (debt - 0.70))
 levies (PublicAccountsDTO::policyLevies()), where does gross debt/GDP settle? Sets MacroEngine::INITIAL_DEBT_TO_GDP.
 Paired follow-up: does the change move debt, fund/GDP and the primary balance in tariff quarters vs HEAD.
 
-- Harness: `var/harness/debt_anchor/FullMarketHarnessTest.php`, a fork of `var/harness/FullMarketHarnessTest.php`
-  whose FISCAL=1 rows also carry `nfl` (net financial liabilities), `tariff`, `y10`, `levies` (null on trees without
+- Harness: `var/harness/debt_anchor/FullMarketHarnessTest.php`, the shared whole-board run
+  (`var/harness/lib/BoardRun.php`, env in `var/harness/lib/README.md`) whose FISCAL=1 rows also carry `nfl` (net financial liabilities), `tariff`, `y10`, `levies` (null on trees without
   `policyLevies()`). Live macro, POLITICS=1 (the Diet sets tariffs), MACRO_OUT one row a quarter (+ founding row).
 - Run script: `run.sh after|before <seed>` (YEARS 100, TPY 360 by default; takes its own php-slot).
   Output `runs/<arm>-<seed>.macro.jsonl`.

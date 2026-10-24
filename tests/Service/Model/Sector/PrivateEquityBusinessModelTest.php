@@ -16,6 +16,10 @@ use PHPUnit\Framework\TestCase;
 
 class PrivateEquityBusinessModelTest extends TestCase
 {
+    private const NEUTRAL_RATE = 0.035;
+    private const INTERBANK_TREND = MacroConstants::INTERBANK_SPREAD_LONG_RUN_MEAN;
+    private const HY_TREND = MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
+
     private PrivateEquityBusinessModel $model;
     private MathUtility $mathUtility;
 
@@ -55,73 +59,92 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertLessThan(0.50, $metrics['baseline_roic']);
     }
 
-    public function testMacroPhysicsCompressesPricingPowerWhenCostOfDebtSpikes(): void
+    /**
+     * With rates, the interbank spread and the HY spread at their trends, buyout debt costs what it is underwritten at.
+     */
+    public function testCalmCreditAtTrendFreezesNothing(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('PE_CORP');
+        $physics = $this->model->getMacroPhysics(self::sponsor(), self::atTrend());
 
-        // Normal macro conditions (cost of debt below threshold)
-        $normalMacro = MacroStateDTO::fromArray([
-            'policy_rate_ema' => 0.03,
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
-        ]);
-        $normalPhysics = $this->model->getMacroPhysics($stock, $normalMacro);
-        $this->assertEqualsWithDelta(1.0, $normalPhysics['pricing_power_multiplier'], 0.001);
+        $this->assertEqualsWithDelta(1.0, $physics['pricing_power_multiplier'], 1e-12);
+    }
 
-        // High cost of debt macro: the floating reference rate 100 bps above the freeze threshold, spread 100 bps above
-        // baseline -> CoD +200 bps over baseline
-        $highCoDMacro = MacroStateDTO::fromArray([
-            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD - MacroConstants::INTERBANK_BASELINE_SPREAD + 0.010,
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.010,
+    /**
+     * A high-rate era the market has learned is the rate deals are underwritten at, so it freezes nothing; the same
+     * policy rate above a neutral the market still reads lower is a squeeze.
+     */
+    public function testTheFreezeReadsThePolicyRateAgainstTheNeutralTheMarketHasLearned(): void
+    {
+        $learned = self::atTrend(['policy_rate_ema' => 0.06, 'perceived_neutral_rate' => 0.06]);
+        $this->assertEqualsWithDelta(1.0, $this->model->getMacroPhysics(self::sponsor(), $learned)['pricing_power_multiplier'], 1e-12);
+
+        $squeeze = self::atTrend(['policy_rate_ema' => 0.06, 'perceived_neutral_rate' => 0.04]);
+        $expectedCarry = 1.0 - (0.02 * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY);
+        $this->assertEqualsWithDelta(0.35 + (0.65 * $expectedCarry), $this->model->getMacroPhysics(self::sponsor(), $squeeze)['pricing_power_multiplier'], 1e-12);
+    }
+
+    /** A real-rate squeeze and a credit squeeze add up: buyout debt pays both the reference rate and the HY spread. */
+    public function testARateAndCreditSqueezeCompressesMultiplesByBoth(): void
+    {
+        $squeeze = self::atTrend([
+            'policy_rate_ema' => self::NEUTRAL_RATE + 0.010,
+            'high_yield_credit_spread_ema' => self::HY_TREND + 0.010,
         ]);
-        $distressedPhysics = $this->model->getMacroPhysics($stock, $highCoDMacro);
-        $this->assertLessThan(1.0, $distressedPhysics['pricing_power_multiplier']);
+
         $expectedCarry = 1.0 - (0.020 * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY);
-        $expectedPricingPower = (0.35 * 1.0) + (0.65 * $expectedCarry);
-        $this->assertEqualsWithDelta($expectedPricingPower, $distressedPhysics['pricing_power_multiplier'], 0.001);
+        $this->assertEqualsWithDelta(0.35 + (0.65 * $expectedCarry), $this->model->getMacroPhysics(self::sponsor(), $squeeze)['pricing_power_multiplier'], 1e-12);
+    }
+
+    /** Debt cheaper than its trend lets sponsors pay more for the same deal, as dearer debt makes them pay less. */
+    public function testCheapBuyoutDebtExpandsMultiplesAsDearDebtCompressesThem(): void
+    {
+        $dear = $this->model->getMacroPhysics(self::sponsor(), self::atTrend(['high_yield_credit_spread_ema' => self::HY_TREND + 0.01]))['pricing_power_multiplier'];
+        $cheap = $this->model->getMacroPhysics(self::sponsor(), self::atTrend(['high_yield_credit_spread_ema' => self::HY_TREND - 0.01]))['pricing_power_multiplier'];
+
+        $this->assertEqualsWithDelta(1.0 - $dear, $cheap - 1.0, 1e-12);
+        $this->assertGreaterThan(1.0, $cheap);
     }
 
     public function testLboDebtIsPricedOffTheHighYieldTrancheNotInvestmentGrade(): void
     {
-        $stock = new Stock();
-        $stock->setTicker('PE_CORP');
+        // A 150 bps IG widening with HY at its trend is not a buyout financing shock: LBO debt is speculative grade.
+        $igOnly = self::atTrend(['macro_credit_spread_ema' => MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN + 0.015]);
+        $this->assertEqualsWithDelta(1.0, $this->model->getMacroPhysics(self::sponsor(), $igOnly)['pricing_power_multiplier'], 1e-12);
 
-        // A 150 bps IG widening with HY unchanged is not a buyout financing shock: LBO debt is speculative grade.
-        $igOnlyMacro = MacroStateDTO::fromArray([
-            'policy_rate_ema' => 0.03,
-            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD + 0.015,
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
-        ]);
-        $this->assertEqualsWithDelta(1.0, $this->model->getMacroPhysics($stock, $igOnlyMacro)['pricing_power_multiplier'], 0.001);
-
-        // The same 150 bps on the HY tranche, above a reference rate already at the freeze threshold, compresses
-        // multiples.
-        $hyMacro = MacroStateDTO::fromArray([
-            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD - MacroConstants::INTERBANK_BASELINE_SPREAD,
-            'macro_credit_spread_ema' => MacroConstants::BASE_CREDIT_SPREAD,
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE + 0.015,
-        ]);
+        $hy = self::atTrend(['high_yield_credit_spread_ema' => self::HY_TREND + 0.015]);
         $expectedCarryMultiple = 1.0 - (0.015 * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY);
-        $this->assertEqualsWithDelta(0.35 + (0.65 * $expectedCarryMultiple), $this->model->getMacroPhysics($stock, $hyMacro)['pricing_power_multiplier'], 0.001);
+        $this->assertEqualsWithDelta(0.35 + (0.65 * $expectedCarryMultiple), $this->model->getMacroPhysics(self::sponsor(), $hy)['pricing_power_multiplier'], 1e-12);
     }
 
     /**
      * Buyout loans reset over the floating reference rate, so an interbank freeze with the policy rate and the HY
-     * tranche where they were raises their cost by the premium and compresses multiples by it.
+     * tranche at their trends raises their cost by the premium and compresses multiples by it.
      */
     public function testAnInterbankFreezeRaisesTheCostOfBuyoutDebt(): void
     {
+        $premium = 0.0102;
+        $freeze = self::atTrend(['interbank_liquidity_spread_ema' => self::INTERBANK_TREND + $premium]);
+
+        $this->assertEqualsWithDelta(0.35 + (0.65 * (1.0 - ($premium * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY))), $this->model->getMacroPhysics(self::sponsor(), $freeze)['pricing_power_multiplier'], 1e-12);
+    }
+
+    /** Fewer exits clear the hurdle as the HY spread runs over its trend, and more as it runs under it. */
+    public function testTheHurdleCliffReadsTheHighYieldSpreadAgainstItsTrend(): void
+    {
         $stock = new Stock();
         $stock->setTicker('PE_CORP');
-        $atThreshold = [
-            'policy_rate_ema' => PrivateEquityBusinessModel::LBO_RATE_FREEZE_THRESHOLD - MacroConstants::INTERBANK_BASELINE_SPREAD,
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
-        ];
-        $premium = 0.0102;
+        $stock->setTotalEquity('100.0');
+        $stock->setWholesaleDebt('50.0');
+        $stock->setEarningsMomentumZ(['carried_interest' => 0.0, 'management_fees' => 0.0]);
+        // A quarter just under the trend cliff: it misses at trend, clears once the spread is 20 bps under it.
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(PrivateEquityBusinessModel::HURDLE_RATE_Z_CLIFF - 0.01);
 
-        $this->assertEqualsWithDelta(1.0, $this->model->getMacroPhysics($stock, MacroStateDTO::fromArray($atThreshold))['pricing_power_multiplier'], 1e-9);
-        $freeze = MacroStateDTO::fromArray($atThreshold + ['interbank_liquidity_spread_ema' => MacroConstants::INTERBANK_BASELINE_SPREAD + $premium]);
-        $this->assertEqualsWithDelta(0.35 + (0.65 * (1.0 - ($premium * PrivateEquityBusinessModel::LBO_COST_OF_DEBT_ELASTICITY))), $this->model->getMacroPhysics($stock, $freeze)['pricing_power_multiplier'], 1e-9);
+        $atTrend = $this->model->computeActualFinancials($stock, 100.0, 0.35, 10.0, 0.10, self::atTrend(), $mathMock);
+        $tight = $this->model->computeActualFinancials($stock, 100.0, 0.35, 10.0, 0.10, self::atTrend(['high_yield_credit_spread_ema' => self::HY_TREND - 0.002]), $mathMock);
+
+        $this->assertSame(ShockEvent::PE_HURDLE_RATE_MISSED, $atTrend->eventType);
+        $this->assertGreaterThan(0.0, $tight->streamRevenue['carried_interest']);
     }
 
     public function testCalculateSectorPhysicsCarriedInterestHurdleMiss(): void
@@ -159,33 +182,34 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $result->streamRevenue['carried_interest'] ?? 0.0, 0.001);
     }
 
-    public function testRescueCapitalIncreasesVariableMargin(): void
+    /**
+     * Portfolio companies need rescue capital only once the floating rate rises past the headroom over its
+     * through-the-cycle level, and then in proportion to the excess.
+     */
+    public function testRescueCapitalStartsPastTheHeadroomOverTheThroughTheCycleRate(): void
     {
         $stock = new Stock();
         $stock->setTicker('PE_CORP');
         $stock->setTotalEquity('100.0');
         $stock->setWholesaleDebt('50.0');
         $stock->setEarningsMomentumZ(['carried_interest' => 0.0, 'management_fees' => 0.0]);
-
-        // High policy rate creates rescue capital drag
-        $highRateMacro = MacroStateDTO::fromArray([
-            'policy_rate_ema' => 0.065, // 200bps above 4.5% threshold
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
-            'output_gap_ema' => 0.0,
-        ]);
-
-        $result = $this->model->computeActualFinancials(
+        $margin = fn(float $rateGap): float => $this->model->computeActualFinancials(
             $stock,
             100.0,
             0.40,
             10.0,
             0.05,
-            $highRateMacro,
+            self::atTrend(['policy_rate_ema' => self::NEUTRAL_RATE + $rateGap]),
             $this->mathUtility,
-        );
+        )->clampedMargin;
 
-        // Clamped variable margin should be higher than baseline 0.40 due to rescue capital drag
-        $this->assertGreaterThan(0.40, $result->clampedMargin);
+        $headroom = PrivateEquityBusinessModel::RESCUE_RATE_HEADROOM;
+        $this->assertEqualsWithDelta(0.40, $margin(0.0), 1e-12, 'At trend no capital is injected.');
+        $this->assertEqualsWithDelta(0.40, $margin(0.005), 1e-12, 'Half a point over trend is inside the headroom.');
+        $this->assertEqualsWithDelta(0.40, $margin($headroom), 1e-12, 'The headroom absorbs the first rise.');
+        $onePoint = $margin($headroom + 0.01) - 0.40;
+        $this->assertGreaterThan(0.0, $onePoint);
+        $this->assertEqualsWithDelta(2.0 * $onePoint, $margin($headroom + 0.02) - 0.40, 1e-12, 'The drag grows with the excess.');
     }
 
     /** The treasury's expected yield is the mix's; a crash reaches the co-investments at the mark, not here. */
@@ -367,10 +391,8 @@ class PrivateEquityBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $trend = MacroStateDTO::fromArray([
+        $trend = self::atTrend([
             'output_gap_ema' => 0.0,
-            'policy_rate_ema' => 0.03,
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroConstants::DEAL_ACTIVITY_BASELINE,
             'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
@@ -396,18 +418,14 @@ class PrivateEquityBusinessModelTest extends TestCase
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
-        $baselineMacro = MacroStateDTO::fromArray([
+        $baselineMacro = self::atTrend([
             'output_gap_ema' => 0.0,
-            'policy_rate_ema' => 0.03,
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroConstants::DEAL_ACTIVITY_BASELINE,
             'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
 
-        $hotDealMacro = MacroStateDTO::fromArray([
+        $hotDealMacro = self::atTrend([
             'output_gap_ema' => 0.0,
-            'policy_rate_ema' => 0.03,
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
             'deal_activity_index_ema' => MacroConstants::DEAL_ACTIVITY_BASELINE * 1.5,
             'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
         ]);
@@ -446,12 +464,10 @@ class PrivateEquityBusinessModelTest extends TestCase
         $stock->setVolatility('0.30');
         $stock->setTotalEquity('100.0');
         $stock->setWholesaleDebt('50.0');
-        $recession = MacroStateDTO::fromArray([
+        $recession = self::atTrend([
             'output_gap_ema' => -0.03,
             'deal_activity_index_ema' => MacroConstants::DEAL_ACTIVITY_BASELINE,
             'deal_activity_index_trend' => MacroConstants::DEAL_ACTIVITY_BASELINE,
-            'policy_rate_ema' => 0.03,
-            'high_yield_credit_spread_ema' => PrivateEquityBusinessModel::LBO_CREDIT_SPREAD_BASELINE,
         ]);
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
@@ -459,5 +475,32 @@ class PrivateEquityBusinessModelTest extends TestCase
         // Carry 0.65 x deal flow (-0.03 x 5) x vol 0.30 x 0.15 x 2.2 x leverage amplifier (1 + 0.5 x 0.8).
         $expected = 0.65 * (-0.03 * 5.0) * (0.30 * 0.15 * 2.2 * 1.4);
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
+
+    /**
+     * Credit at its trends: the policy rate at the neutral the market reads, the interbank and HY spreads at their
+     * decade trends and lending standards neutral.
+     *
+     * @param array<string, float> $overrides
+     */
+    private static function atTrend(array $overrides = []): MacroStateDTO
+    {
+        return MacroStateDTO::fromArray($overrides + [
+            'policy_rate_ema' => self::NEUTRAL_RATE,
+            'perceived_neutral_rate' => self::NEUTRAL_RATE,
+            'interbank_liquidity_spread_ema' => self::INTERBANK_TREND,
+            'interbank_liquidity_spread_trend' => self::INTERBANK_TREND,
+            'high_yield_credit_spread_ema' => self::HY_TREND,
+            'high_yield_credit_spread_trend' => self::HY_TREND,
+            'sloos_tightening_index_ema' => 0.0,
+        ]);
+    }
+
+    private static function sponsor(): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('PE_CORP');
+
+        return $stock;
     }
 }

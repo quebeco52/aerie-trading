@@ -129,8 +129,13 @@ final class MacroConstants
     public const PREFERRED_HABITAT_DURATION_SENSITIVITY = 1.0;
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
-    /** Through-the-cycle investment-grade spread (130 bps), the long-run median of IG OAS. */
+    /** Investment-grade spread the tranches are built at (130 bps), the long-run median of IG OAS. */
     public const BASE_CREDIT_SPREAD = 0.013;
+    /**
+     * The District's IG spread over its own cycle (~1.44%): where its measured trend opens, and with the HY multiple
+     * the HY spread's.
+     */
+    public const CREDIT_SPREAD_LONG_RUN_MEAN = 0.0144;
 
     // --- Dual-Tranche Corporate Credit Spreads ---
     /**
@@ -237,8 +242,10 @@ final class MacroConstants
     public const FREIGHT_BASELINE = 100.0;
 
     // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
-    /** Baseline interbank liquidity spread (FRA-OIS / TED Spread proxy) under normal conditions. */
+    /** Interbank liquidity spread (FRA-OIS / TED Spread proxy) in calm markets, and its floor. */
     public const INTERBANK_BASELINE_SPREAD = 0.0015;
+    /** The District's interbank spread over its own cycle (~24 bps): where its measured trend opens. */
+    public const INTERBANK_SPREAD_LONG_RUN_MEAN = 0.0024;
 
     // --- SOLOW-SWAN TOTAL FACTOR PRODUCTIVITY (TFP) ---
     /** Baseline index value for Total Factor Productivity (neutral technology baseline). */

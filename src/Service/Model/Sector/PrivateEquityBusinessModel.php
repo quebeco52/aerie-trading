@@ -12,6 +12,7 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\Distributions;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
@@ -22,11 +23,12 @@ use App\Service\Model\ModelParam;
  * Financial Physics:
  * - Base revenue comes from sticky AUM management fees.
  * - Massive volatility comes from "Carried Interest" (performance fees) and deal exits.
- * - LBO Cost of Debt Elasticity: Deal flow and multiples compress as total debt financing costs rise.
+ * - LBO Cost of Debt Elasticity: Deal multiples compress as buyout debt costs more than sponsors underwrite it at
+ *   through the cycle, and expand as it costs less.
  * - Mark-to-Market (MTM): Principal balance sheet investments suffer unrealized markdown penalties during credit
  *   freezes.
- * - Rescue Capital Drag: High policy rates force the GP to inject capital into distressed portfolio companies,
- *   inflating variable costs.
+ * - Rescue Capital Drag: A floating rate well above its through-the-cycle level forces the GP to inject capital into
+ *   distressed portfolio companies, inflating variable costs.
  */
 class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 {
@@ -65,31 +67,26 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
     // --- Cost of Debt & LBO Elasticity ---
     /**
-     * Through-the-cycle high-yield spread (~430 bps): LBO debt is leveraged loans and HY bonds, priced off HY not IG
-     * (Axelson, Jenkinson, Stromberg & Weisbach 2013).
-     */
-    public const LBO_CREDIT_SPREAD_BASELINE = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
-    /**
      * The sponsor's OWN through-the-cycle funding spread (IG): the management company borrows as a corporate, not as a
      * buyout target.
      */
     public const SPONSOR_CREDIT_SPREAD_BASELINE = MacroConstants::BASE_CREDIT_SPREAD;
     /**
-     * Floating reference rate (~4.65%: a 4.5% policy rate plus the calm interbank spread) above which LBO financing
-     * becomes distressed; buyout loans reset over it.
-     */
-    public const LBO_RATE_FREEZE_THRESHOLD  = 0.045 + MacroConstants::INTERBANK_BASELINE_SPREAD;
-    /**
-     * Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. Rescaled from 7.50
-     * for high-yield spread moves (~3.3x IG).
+     * Carry-deal multiple lost per unit of buyout debt cost over its through-the-cycle level, and gained per unit
+     * under it (2.27: 100 bps dearer takes 2.3% off).
      */
     public const LBO_COST_OF_DEBT_ELASTICITY = 2.27;
     /** Z-score cliff where economic conditions trigger a complete miss of the hurdle rate, wiping out carry. */
     public const HURDLE_RATE_Z_CLIFF = -1.00;
     /** Sensitivity of the hurdle rate cliff to widening credit spreads. */
     public const HURDLE_CREDIT_SPREAD_SCALAR = 10.0;
-    /** Multiplier for variable costs (rescue capital) when policy rates choke portfolio companies. */
+    /** Variable cost ratio per unit of floating rate past the headroom, on the carry stream's share (1.0). */
     public const RESCUE_CAPITAL_COST_SCALAR = 1.00;
+    /**
+     * Rise of the floating reference rate over its through-the-cycle level that buyouts' interest cover and rate hedges
+     * absorb before the sponsor must inject capital (100 bps).
+     */
+    public const RESCUE_RATE_HEADROOM = 0.01;
     /**
      * LBO financing per unit of net tightening in bank lending standards, both ways: +0.2 shrinks carry-deal multiples
      * 5%.
@@ -200,21 +197,35 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             ModelParam::CarriedInterestWeight->value => 0.65,
         ]);
 
-        // Credit cycle pricing power: LBO multiples compress when the Cost of Debt spikes. Buyout debt is
-        // speculative-grade floating loans, so it pays the high-yield tranche over the floating reference rate.
-        $lboCostOfDebt = $macroState->floatingReferenceRate() + $macroState->highYieldCreditSpreadEma;
-        $baselineCostOfDebt = self::LBO_RATE_FREEZE_THRESHOLD + self::LBO_CREDIT_SPREAD_BASELINE;
-        $debtCostDelta = max(0.0, $lboCostOfDebt - $baselineCostOfDebt);
-        // Bank lending standards ration buyout debt when tight and lend more against the same cash flow when loose.
-        $sloosLboDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_LBO_GATING_SCALAR;
-
-        $multipleCompression = max(0.0, 1.0 - ($debtCostDelta * self::LBO_COST_OF_DEBT_ELASTICITY) - $sloosLboDrag);
+        $multipleCompression = $this->resolveMultipleCompression($macroState);
         $blendedMultiplier = ($params[ModelParam::ManagementFeeWeight] * 1.0) + ($params[ModelParam::CarriedInterestWeight] * $multipleCompression);
 
         return [
             'macro_demand_shift'       => 0.0,
             'pricing_power_multiplier' => $blendedMultiplier,
         ];
+    }
+
+    /**
+     * Carry-deal multiples against their trend: buyout debt floats at the reference rate plus the high-yield spread,
+     * and sponsors pay more for a deal when it costs less than they underwrite it at through the cycle and less when it
+     * costs more (Axelson, Jenkinson, Stromberg & Weisbach 2013). Bank lending standards ration it both ways.
+     */
+    private function resolveMultipleCompression(\App\DTO\MacroStateDTO $macroState): float
+    {
+        $debtCostGap = $this->resolveReferenceRateGap($macroState) + ($macroState->highYieldCreditSpreadEma - $macroState->highYieldCreditSpreadTrend);
+        $sloosLboDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_LBO_GATING_SCALAR;
+
+        return max(0.0, 1.0 - ($debtCostGap * self::LBO_COST_OF_DEBT_ELASTICITY) - $sloosLboDrag);
+    }
+
+    /**
+     * The floating reference rate over the level buyouts are underwritten at: the market's perceived neutral policy
+     * rate plus the interbank spread's decade trend.
+     */
+    private function resolveReferenceRateGap(\App\DTO\MacroStateDTO $macroState): float
+    {
+        return $macroState->floatingReferenceRate() - FixedIncome::floatingReferenceRate($macroState->perceivedNeutralRate, $macroState->interbankLiquiditySpreadTrend);
     }
 
     /**
@@ -311,21 +322,14 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $outputGap = $macroState->outputGapEma;
         $dealFlowMultiplier = $this->resolveDealFlowMultiplier($macroState);
 
-        // 3. Cost of Debt LBO Elasticity (Multiple Compression): buyout debt pays the HY tranche over the floating
-        // reference rate.
-        $creditSpread = $macroState->highYieldCreditSpreadEma;
-        $referenceRate = $macroState->floatingReferenceRate();
-
-        $lboCostOfDebt = $referenceRate + $creditSpread;
-        $baselineCostOfDebt = self::LBO_RATE_FREEZE_THRESHOLD + self::LBO_CREDIT_SPREAD_BASELINE;
-        $debtCostDelta = max(0.0, $lboCostOfDebt - $baselineCostOfDebt);
-        $sloosLboDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_LBO_GATING_SCALAR;
-
-        $multipleCompression = max(0.0, 1.0 - ($debtCostDelta * self::LBO_COST_OF_DEBT_ELASTICITY) - $sloosLboDrag);
+        // 3. Cost of Debt LBO Elasticity (Multiple Compression)
+        $multipleCompression = $this->resolveMultipleCompression($macroState);
         $lboFinancingDrag = 1.0 - $multipleCompression; // % frozen
 
-        // 4. Credit-Condition Hurdle Cliff
-        $spreadFreezeDrag = max(0.0, ($creditSpread - self::LBO_CREDIT_SPREAD_BASELINE) * self::HURDLE_CREDIT_SPREAD_SCALAR)
+        // 4. Credit-Condition Hurdle Cliff: exits clear the hurdle less often as the HY spread runs over its trend, and
+        // more often under it.
+        $sloosLboDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_LBO_GATING_SCALAR;
+        $spreadFreezeDrag = (($macroState->highYieldCreditSpreadEma - $macroState->highYieldCreditSpreadTrend) * self::HURDLE_CREDIT_SPREAD_SCALAR)
             + ($sloosLboDrag * 0.50);
         $hurdleRateZCliff = self::HURDLE_RATE_Z_CLIFF + $spreadFreezeDrag;
         $economicCondition = $carryZ + $dealFlowMultiplier;
@@ -370,9 +374,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // --- 7. Cost & Margin Physics --- Rescue Capital Drag: a high floating rate chokes highly levered portfolio
-        // companies, requiring costly capital injections.
-        $rescueCapitalDrag = max(0.0, ($referenceRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::RESCUE_CAPITAL_COST_SCALAR) * $carryWeight;
+        // --- 7. Cost & Margin Physics --- Rescue Capital Drag: a floating rate past the headroom over its
+        // through-the-cycle level chokes highly levered portfolio companies, requiring costly capital injections.
+        $rescueRateExcess = max(0.0, $this->resolveReferenceRateGap($macroState) - self::RESCUE_RATE_HEADROOM);
+        $rescueCapitalDrag = $rescueRateExcess * self::RESCUE_CAPITAL_COST_SCALAR * $carryWeight;
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
 
@@ -503,6 +508,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             'high_yield_credit_spread_ema',
             'interbank_liquidity_spread_ema',
             'output_gap_ema',
+            'perceived_neutral_rate',
             'policy_rate_ema',
             'sloos_tightening_index_ema',
             'yield_10y_ema',

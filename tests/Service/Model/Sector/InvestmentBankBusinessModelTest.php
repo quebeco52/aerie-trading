@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model\Sector;
 
 use App\Data\Company\InitialMarket;
+use App\Data\Company\Sectors;
 use App\Data\Company\StockInfo;
 use App\Data\Company\StockModelTuning;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InvestmentBankBusinessModel;
@@ -450,6 +455,50 @@ class InvestmentBankBusinessModelTest extends TestCase
         );
     }
 
+    /**
+     * A bank lends its borrowing on at what it costs and the book its equity funds at the refinancing rate, so its
+     * notes' coupon reaches its return only through borrowed cash the book does not lend on: a bank whose book is
+     * larger than its borrowing opens on target whatever its notes pay, and one holding more cash than its equity
+     * earns the saving on cheap notes on the borrowing that cash is, as a fund does on all of its.
+     */
+    public function testTheCouponGapReachesABankOnlyThroughBorrowingItDoesNotLendOn(): void
+    {
+        $math = new MathUtility();
+        $opening = \App\Tests\Support\OpeningCreditAtTrend::macro();
+        $debtEngine = new DebtEngine($math, CorporateMetrics::getInstance());
+        $builder = new OpeningBoardBuilder($math, $debtEngine, new MarketEngine($math), new AnchorStakeLedger());
+        $lossGivenDefault = $this->model->getLossGivenDefault();
+        $lendsAllOnCheapNotes = 0;
+
+        foreach (InitialMarket::STOCKS as $row) {
+            if (!Sectors::strategyFor($row['industry']) instanceof InvestmentBankBusinessModel) {
+                continue;
+            }
+            $bank = (new Stock())->setTicker($row['ticker']);
+            $builder->open($bank, $row, $opening);
+            $bank->setEarningsMomentumZ([InvestmentBankBusinessModel::STATE_OPERATING_YIELD => (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $bank, $math)]);
+
+            $target = $this->model->getTargetMetrics($bank, $opening, $math);
+            $debt = $debtEngine->calculateInterestExpense($bank, $opening);
+            $operatingProfit = $target['invested_capital'] * $target['baseline_roic'] / (1.0 - $opening->corporateTaxRate);
+            $booked = ($operatingProfit - $debt->interestExpense + $this->model->calculateInterestIncome($bank, $opening, $debt->wholesaleRate))
+                * (1.0 - $opening->corporateTaxRate) / $bank->getTangibleEquity();
+
+            $idleBorrowing = max(0.0, (float) $bank->getTotalDebt() - $this->model->resolveEarningAssets($bank));
+            $paid = DebtEngine::chargedWholesaleRate($bank, $opening, $lossGivenDefault);
+            $rolled = DebtEngine::chargedWholesaleRate($bank, $opening, $lossGivenDefault, true);
+            $couponGap = $idleBorrowing * ($rolled - $paid) * (1.0 - $opening->corporateTaxRate) / $bank->getTangibleEquity();
+            $structural = (new \ReflectionMethod($this->model, 'resolveStructuralTargetRoe'))->invoke($this->model, $bank, $opening);
+
+            $this->assertEqualsWithDelta($structural + $couponGap, $booked, 1e-9, sprintf('%s opens on its structural return plus the gap on %.1f bn it does not lend on.', $row['ticker'], $idleBorrowing / 1e9));
+            if ($idleBorrowing === 0.0 && $rolled - $paid > 0.005) {
+                $lendsAllOnCheapNotes++;
+            }
+        }
+
+        $this->assertGreaterThan(0, $lendsAllOnCheapNotes, 'fixture guard: a seeded bank lends all its borrowing on notes well under the market');
+    }
+
     private function dealer(): Stock
     {
         return (new Stock())->setTicker('DEAL')->setIndustry('Investment Banking')
@@ -810,17 +859,21 @@ class InvestmentBankBusinessModelTest extends TestCase
             'interbank_liquidity_spread_ema' => 0.0,
         ]);
 
-        // Funded at the policy rate flat, so the book's own structure is all that moves the income.
+        // The borrowing funded at the policy rate flat, so the book's own structure is all that moves the income.
         $interestIncome = $this->model->calculateInterestIncome($stock, $macroState, 0.04);
 
-        // Funded book = equity + total debt - treasury = $50B + $100B - $25B = $125B
-        // 1. Prime financing: $125B * 70% * (0.04 + 0.0150) = $87.5B * 0.055 = $4.8125B
-        // 2. Repo inventory: $125B * 30% * max(0, 0.04 - 0.0025) = $37.5B * 0.0375 = $1.40625B
+        // Funded book = equity + total debt - treasury = $50B + $100B - $25B = $125B: the $100B the borrowing funds
+        // lent at the 4% it costs, the $25B the equity funds at the refinancing rate.
+        $refinancingRate = DebtEngine::chargedWholesaleRate($stock, $macroState, $this->model->getLossGivenDefault(), true);
+        $bookRate = ((100_000_000_000.0 * 0.04) + (25_000_000_000.0 * $refinancingRate)) / 125_000_000_000.0;
+        // 1. Prime financing: $125B * 70% * (bookRate + 0.0150)
+        // 2. Repo inventory: $125B * 30% * (bookRate - 0.0025)
         // 3. Min cash = max(operatingBase * 0.10, $100B * 0.10) = $10B
         //    Excess cash = $25B - $10B = $15B. Cash yield = max(0, 0.04 - 0.0025) = 0.0375
         //    Cash interest = $15B * 0.0375 = $0.5625B
-        // Total interest income = $4.8125B + $1.40625B + $0.5625B = $6.78125B
-        $this->assertEqualsWithDelta(6_781_250_000.0, $interestIncome, 1000.0);
+        $expected = (87_500_000_000.0 * ($bookRate + 0.0150)) + (37_500_000_000.0 * ($bookRate - 0.0025)) + 562_500_000.0;
+        $this->assertGreaterThan(0.04, $refinancingRate, 'The refinancing rate carries the firm\'s own spread.');
+        $this->assertEqualsWithDelta($expected, $interestIncome, 1000.0);
     }
 
     public function testWallStreetCompensationRatioOperatingLeverage(): void

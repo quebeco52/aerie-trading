@@ -39,8 +39,11 @@ fi
 
 status=0
 if (( ${#harness[@]} > 0 )); then
-    # The shared bootstrap declares HarnessKernel, which the harness tests boot; analysed beside them so it is known.
-    [[ " ${harness[*]} " == *" var/harness/bootstrap.php "* ]] || harness+=(var/harness/bootstrap.php)
+    # The shared bootstrap declares HarnessKernel, which the harness tests boot, and lib/ the run they extend; analysed
+    # beside them so they are known.
+    for shared in var/harness/bootstrap.php var/harness/lib/*.php; do
+        [[ " ${harness[*]} " == *" $shared "* ]] || harness+=("$shared")
+    done
     if out=$(bin/php-slot php vendor/bin/phpstan analyse --level 0 --memory-limit=2G --no-progress --error-format=raw "${harness[@]}" 2>&1); then
         echo "Harness: ${#harness[@]} files clean at PHPStan level 0"
     else

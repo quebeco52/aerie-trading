@@ -85,11 +85,12 @@ class FinancialDataBusinessModelTest extends TestCase
         $anchorVol = \App\Service\Math\MacroConstants::MACRO_VOL_BASE_ANCHOR;
         $stock = (new Stock())->setTicker('SHRK');
 
-        $anchor = new MacroStateDTO(marketVolatilityEma: $anchorVol);
+        $spreadAtTrend = \App\Service\Math\MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN;
+        $anchor = new MacroStateDTO(macroCreditSpreadEma: $spreadAtTrend, marketVolatilityEma: $anchorVol);
         $this->assertEqualsWithDelta(0.0, $model->resolveSectorActivityShift($stock, $anchor), 1e-12);
 
         $atAnchor = $model->computeActualFinancials((new Stock())->setTicker('SHRK'), 1000.0, 0.35, 50.0, 0.0, $anchor, $math);
-        $quiet = $model->computeActualFinancials((new Stock())->setTicker('SHRK'), 1000.0, 0.35, 50.0, 0.0, new MacroStateDTO(marketVolatilityEma: $anchorVol - 0.05), $math);
+        $quiet = $model->computeActualFinancials((new Stock())->setTicker('SHRK'), 1000.0, 0.35, 50.0, 0.0, new MacroStateDTO(macroCreditSpreadEma: $spreadAtTrend, marketVolatilityEma: $anchorVol - 0.05), $math);
         $this->assertEqualsWithDelta(1000.0, $atAnchor->actualRevenue, 1e-9);
         $this->assertEqualsWithDelta(
             1.0 - 0.05 * FinancialDataBusinessModel::MARKET_DATA_VOLATILITY_SENSITIVITY,

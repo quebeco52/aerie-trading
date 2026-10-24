@@ -4,8 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
+use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\MerchantHouseBusinessModel;
@@ -173,80 +179,62 @@ class MerchantHouseBusinessModelTest extends TestCase
     }
 
     /**
-     * Cargo and bills of lading are carried on short wholesale credit for about a quarter, so the funding
-     * rate is a direct charge on turnover. On a thin trading spread this is the leg that ends merchant
-     * houses, and a firm that never felt it would be carrying inventory for free.
+     * Cargo is financed on the group's floating debt, so a funding squeeze reaches RAVN once: an interbank freeze
+     * raises its interest by the premium on that debt, as DebtEngine charges it, and leaves its revenue and its cost
+     * of goods where they were.
      */
-    public function testFundingCostSqueezesTheWorkingCapitalBook(): void
-    {
-        $expensiveFunding = new MacroStateDTO(
-            outputGapEma: 0.0,
-            macroCreditSpread: 0.040,
-            macroCreditSpreadEma: 0.040,
-            policyRateEma: 0.070,
-        );
-
-        $calm = $this->model->computeActualFinancials($this->ravn(), 100_000_000.0, 0.80, 10_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath());
-        $squeezed = $this->model->computeActualFinancials($this->ravn(), 100_000_000.0, 0.80, 10_000_000.0, 0.0, $expensiveFunding, $this->deterministicMath());
-
-        $this->assertGreaterThan($calm->clampedMargin, $squeezed->clampedMargin);
-    }
-
-    /**
-     * The cargo's trade credit resets over the floating reference rate, so an interbank freeze alone charges the
-     * premium on the quarter of turnover it carries, on the merchant desk's share of revenue, and moves no revenue.
-     */
-    public function testAnInterbankFreezeRaisesTheCargoFundingCost(): void
+    public function testAFundingSqueezeReachesTheCargoOnceThroughInterest(): void
     {
         $premium = 0.0102;
-        $freeze = new MacroStateDTO(
-            outputGapEma: 0.0,
-            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
-            policyRateEma: self::NEUTRAL_POLICY_RATE,
-            interbankLiquiditySpreadEma: MacroConstants::INTERBANK_BASELINE_SPREAD + $premium,
-        );
+        $calmMacro = new MacroStateDTO();
+        $freeze = new MacroStateDTO(interbankLiquiditySpreadEma: $calmMacro->interbankLiquiditySpreadEma + $premium);
+        $ravn = $this->openedRavn();
 
-        $calm = $this->model->computeActualFinancials($this->ravn(), 100_000_000.0, 0.80, 10_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath());
-        $frozen = $this->model->computeActualFinancials($this->ravn(), 100_000_000.0, 0.80, 10_000_000.0, 0.0, $freeze, $this->deterministicMath());
-        $merchantShare = $calm->streamRevenue['merchant_trading'] / array_sum($calm->streamRevenue);
+        $calm = $this->model->computeActualFinancials($ravn, 100_000_000.0, 0.80, 10_000_000.0, 0.0, $calmMacro, $this->deterministicMath());
+        $frozen = $this->model->computeActualFinancials($ravn, 100_000_000.0, 0.80, 10_000_000.0, 0.0, $freeze, $this->deterministicMath());
 
         $this->assertEqualsWithDelta($calm->actualRevenue, $frozen->actualRevenue, 1e-6);
-        $this->assertEqualsWithDelta($premium * MerchantHouseBusinessModel::MERCHANT_INVENTORY_HOLDING_YEARS * $merchantShare, $frozen->clampedMargin - $calm->clampedMargin, 1e-9);
+        $this->assertEqualsWithDelta($calm->clampedMargin, $frozen->clampedMargin, 1e-12, 'The cargo\'s funding is not in its cost of goods.');
+
+        $debtEngine = new DebtEngine(new MathUtility(), CorporateMetrics::getInstance());
+        $interest = static fn(MacroStateDTO $macro): float => $debtEngine->calculateInterestExpense($ravn, $macro)->interestExpense;
+        $floatingDebt = (float) $ravn->getTotalDebt() * (float) $ravn->getFloatingDebtRatio();
+
+        $this->assertGreaterThan(0.0, $floatingDebt);
+        $this->assertEqualsWithDelta($floatingDebt * $premium, $interest($freeze) - $interest($calmMacro), 1.0, 'It is charged on the floating debt.');
     }
 
     /**
-     * The interbank leg reads the spread against its measured trend, not the base it never falls below: zero at
-     * trend however far above the base the trend sits, a cost above it and the same gain below it.
+     * The floating debt is what finances the cargo, so the seed sizes it to the working capital the group opens with:
+     * receivables and inventory less what its suppliers carry, within a tenth.
      */
-    public function testTheInterbankLegIsTwoSidedAboutItsTrend(): void
+    public function testItsFloatingDebtIsTheCargoItFinances(): void
     {
-        $trend = MacroConstants::INTERBANK_BASELINE_SPREAD + 0.0020;
-        $gap = 0.0010;
-        $at = fn(float $spread): float => $this->model->computeActualFinancials(
-            $this->ravn(),
-            100_000_000.0,
-            0.80,
-            10_000_000.0,
-            0.0,
-            new MacroStateDTO(
-                outputGapEma: 0.0,
-                macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
-                macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
-                policyRateEma: self::NEUTRAL_POLICY_RATE,
-                interbankLiquiditySpreadEma: $spread,
-                interbankLiquiditySpreadTrend: $trend,
-            ),
-            $this->deterministicMath(),
-        )->clampedMargin;
+        $ravn = $this->openedRavn();
+        $floatingDebt = (float) $ravn->getTotalDebt() * (float) $ravn->getFloatingDebtRatio();
+        $workingCapital = (float) $ravn->getNetWorkingCapital();
 
-        $neutral = $this->model->computeActualFinancials($this->ravn(), 100_000_000.0, 0.80, 10_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath());
-        $merchantShare = $neutral->streamRevenue['merchant_trading'] / array_sum($neutral->streamRevenue);
-        $expected = $gap * MerchantHouseBusinessModel::MERCHANT_INVENTORY_HOLDING_YEARS * $merchantShare;
+        $this->assertGreaterThan(0.0, $workingCapital);
+        $this->assertEqualsWithDelta(1.0, $floatingDebt / $workingCapital, 0.10, sprintf('%.1f bn floating against %.1f bn of cargo.', $floatingDebt / 1e9, $workingCapital / 1e9));
+    }
 
-        $this->assertEqualsWithDelta($neutral->clampedMargin, $at($trend), 1e-12, 'At its trend the spread charges nothing.');
-        $this->assertEqualsWithDelta($expected, $at($trend + $gap) - $at($trend), 1e-12, 'Above trend it charges the gap.');
-        $this->assertEqualsWithDelta($expected, $at($trend) - $at($trend - $gap), 1e-12, 'Below trend it earns the same gap back.');
+    /** RAVN as the seed opens it. */
+    private function openedRavn(): Stock
+    {
+        $seed = null;
+        foreach (InitialMarket::STOCKS as $row) {
+            if ($row['ticker'] === 'RAVN') {
+                $seed = $row;
+            }
+        }
+        $this->assertNotNull($seed);
+
+        $math = new MathUtility();
+        $debtEngine = new DebtEngine($math, CorporateMetrics::getInstance());
+        $stock = (new Stock())->setTicker('RAVN');
+        (new OpeningBoardBuilder($math, $debtEngine, new MarketEngine($math), new AnchorStakeLedger()))->open($stock, $seed, new MacroStateDTO());
+
+        return $stock;
     }
 
     /**

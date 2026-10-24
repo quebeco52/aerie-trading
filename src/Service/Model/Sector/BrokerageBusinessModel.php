@@ -241,7 +241,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      * structural return requires once the interest the firm books (calculateInterestIncome(), the same function the
      * books are kept with) has paid its funding, grossed up by the margin, between the operating-profit floor and the
      * gross-yield ceiling. The funding is the coupon the notes would refinance at, as the fee managers' is, so the
-     * yield holds once they have rolled; until then the margin book the equity funds earns the old coupon's gap.
+     * yield holds once they have rolled; until then only borrowed cash the book does not lend on earns the old
+     * coupon's gap.
      */
     protected function resolveOperatingYield(Stock $stock, MathUtility $mathUtility): float
     {
@@ -263,8 +264,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     /**
      * The wholesale rate where no realized rate from DebtEngine exists yet: the coupon the firm pays, as DebtEngine
      * charges it (DebtEngine::chargedWholesaleRate()), the spread through the cycle without the widening DebtEngine
-     * prices off the firm's live distance to default. Once a realized rate exists, client margin assets are priced off
-     * that (calculateInterestIncome()).
+     * prices off the firm's live distance to default. Once a realized rate exists, the client book its borrowing funds
+     * is priced off that (resolveClientBookRate()).
      */
     protected function calculateBlendedWholesaleRate(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
@@ -275,20 +276,13 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     {
         $policyRate = $macroState->policyRateEma;
 
-        // Client margin loans are funded one-for-one out of the firm's own wholesale book, so the asset yield
-        // must be built on the same realized rate DebtEngine charges on the liability side
-        // (DebtMetricsDTO::$wholesaleRate), dynamic credit-spread widening included. Pricing the asset leg off
-        // the bare policy rate while the liability leg paid the live distressed rate would book a
-        // matched-book carry that vanishes exactly when spreads blow out.
-        $fundingBenchmark = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
-
         // 1. Margin Loan Yield
-        // Brokerages lend their funding to clients as margin loans at a spread over their funding cost. The
-        // base is the whole funded book, not the term notes alone: DebtEngine charges interest on
+        // Brokerages lend to clients as margin loans at a spread over the book's base rate (resolveClientBookRate()).
+        // The book is the whole funded book, not the term notes alone: DebtEngine charges interest on
         // getTotalDebt(), so an asset leg struck on getWholesaleDebt() left every dollar of drawn revolver
         // paying a coupon and earning nothing at all.
-        $marginLoanYield = $fundingBenchmark + FinancialConstants::MARGIN_LOAN_SPREAD;
         $marginLoans = $this->resolveEarningAssets($stock);
+        $marginLoanYield = $this->resolveClientBookRate($stock, $macroState, $marginLoans, $realizedWholesaleRate) + FinancialConstants::MARGIN_LOAN_SPREAD;
         $marginInterest = $marginLoans * $marginLoanYield;
 
         // 2. Client Cash Sweep Net Interest Income (NII):
@@ -310,6 +304,23 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $cashInterest = $excessCash * $cashYield;
 
         return $marginInterest + $sweepInterest + $cashInterest;
+    }
+
+    /**
+     * The base rate the client book is lent at before its spread: the part the borrowing funds at what it costs
+     * (DebtEngine's realized rate, spread widening included), so the matched book keeps its spread whatever the notes
+     * pay, and the part the equity funds at the refinancing rate (DebtEngine::chargedWholesaleRate(), rolled).
+     *
+     * @param float      $clientBook            The book lent to clients (resolveEarningAssets()).
+     * @param float|null $realizedWholesaleRate The rate DebtEngine charges the funded book this quarter, if priced.
+     */
+    protected function resolveClientBookRate(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $clientBook, ?float $realizedWholesaleRate): float
+    {
+        $fundingRate = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
+        $refinancingRate = max(0.0, DebtEngine::chargedWholesaleRate($stock, $macroState, $this->getLossGivenDefault(), true));
+        $debtFunded = min($clientBook, max(0.0, (float) $stock->getTotalDebt()));
+
+        return (($debtFunded * $fundingRate) + (($clientBook - $debtFunded) * $refinancingRate)) / max(1.0, $clientBook);
     }
 
     /**
@@ -367,6 +378,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             'output_gap_ema',
             'policy_rate_ema',
             'stamp_duty_rate',
+            'yield_5y_ema',
         ];
     }
 }

@@ -17,14 +17,15 @@ use App\Service\Model\Sector\CustodyBankBusinessModel;
 use App\Service\Model\Sector\InvestmentBankBusinessModel;
 use App\Service\Model\Sector\PrivateBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
+use App\Tests\Support\OpeningCreditAtTrend;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
  * A lender's floating wholesale funding resets to the interbank rate, as every firm's floating debt does, so an
  * interbank freeze costs it in proportion to that funding, while deposits pay the rate they have repriced to. Its
- * franchise is struck on the funding DebtEngine charges it: the fixed notes at the coupon they carry, the floating at
- * the reference rate plus its own spread.
+ * franchise is struck on the funding DebtEngine charges it through the cycle: the fixed notes at the coupon they carry,
+ * the floating at the reference rate plus its own spread at the credit trend.
  */
 final class LenderInterbankFundingTest extends TestCase
 {
@@ -81,7 +82,7 @@ final class LenderInterbankFundingTest extends TestCase
         $stock = $this->lender($industry, true);
         $stock->setCorporateTreasury((string) $model->calculateTargetOperatingCash(self::EQUITY, self::DEPOSITS, self::WHOLESALE));
         $call = static fn(string $method, mixed ...$args): float => (float) (new \ReflectionMethod($model, $method))->invoke($model, ...$args);
-        $opening = new MacroStateDTO();
+        $opening = OpeningCreditAtTrend::macro();
 
         $earningAssets = $model->resolveEarningAssets($stock);
         $pretax = ($earningAssets * ($call('resolveCalibrationYield', $stock, $opening) - $call('resolveOperatingCostToEarningAssets', $stock)))
@@ -106,7 +107,7 @@ final class LenderInterbankFundingTest extends TestCase
         $engine = $this->engine();
         $stock = $this->lender($industry, true);
         $stock->setCorporateTreasury((string) $model->calculateTargetOperatingCash(self::EQUITY, self::DEPOSITS, self::WHOLESALE));
-        $opening = new MacroStateDTO();
+        $opening = OpeningCreditAtTrend::macro();
         $call = static fn(string $method, mixed ...$args): float => (float) (new \ReflectionMethod($model, $method))->invoke($model, ...$args);
         $roe = function () use ($model, $engine, $stock, $opening, $call): float {
             $earningAssets = $model->resolveEarningAssets($stock);

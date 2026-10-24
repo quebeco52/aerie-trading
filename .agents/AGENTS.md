@@ -77,6 +77,8 @@ spend them where the answer is emergent.
   not (read `<topic>/RUN.md` first; do not scan the whole directory). Stage 8, 16, then at most 48 seeds per arm;
   stop once the answer is clear. Ask before a sweep over 100 runs. `bin/verify` checks changed harness files at
   PHPStan level 0, and `bin/verify --harness` checks them all; a settled topic is deleted (git history keeps it).
+- **Harness library:** a whole-board harness extends `var/harness/lib/BoardRun.php` through its hooks rather than
+  copying the loop; `var/harness/lib/stats.py` gives the paired n, Δ, SE_Δ and t (`var/harness/lib/README.md`).
 - **What the live game is doing:** tell the user to run `make macro-dump` first; a harness only for the counterfactual.
 
 All PHP processes on the machine share 12 slots through `bin/php-slot`, at most 8 per session.

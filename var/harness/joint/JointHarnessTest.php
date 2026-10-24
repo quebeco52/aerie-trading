@@ -5,327 +5,136 @@ declare(strict_types=1);
 use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
-use App\Service\Corporate\EarningsEngine;
-use App\Service\Corporate\FailureSweep;
-use App\Service\Macro\MacroEngine;
-use App\Service\Macro\MacroStateStore;
+use App\Entity\StockEvent;
 use App\Service\Market\Pricing\StockTracker;
-use App\Service\Math\TimeSeries;
-use App\Service\Math\Valuation;
-use App\Service\Politics\PoliticsEngine;
-use Doctrine\DBAL\Connection;
-use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\EntityRepository;
-use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
-use Symfony\Component\Console\Tester\CommandTester;
+
+require_once __DIR__ . '/../lib/BoardRun.php';
 
 /**
- * Whole-board headless replay on the PRODUCTION service graph: real container, in-memory Redis, stub EM,
- * the live ticker's per-tick order (macro, the Diet if POLITICS=1, failure sweep every 1/24 year, stock update),
- * the macro fed every board input MarketTickerCommand feeds it, one tick behind: capitalisation, float, price return,
- * dividends, net issuance, stamp duty, strategic-stake cash and the bank levy.
+ * joint: the whole-board run (var/harness/lib/BoardRun.php) with working capital, leases, Street figures, lender and
+ * insurer lines on each report row, yields, household debt and growth on each macro row (CREDIT=1 adds the credit
+ * cycle), and every event's tick in the record.
  *
- * Env: YEARS TPY SEED OUT=<jsonl> MACRO_RECORD=<gz> | MACRO_REPLAY=<gz> POLITICS=1 (live macro only: the Diet
- * votes, budgets and hands its laws over as the ticker does; without it the opening laws stand).
+ * TRACE=<ticker>[,<ticker>...] TRACE_OUT=<jsonl>: those names' tracker update rows each tick with the pricing context.
+ * TICK_CSV=<csv>: price and shares of every name each tick; ANOM_OUT=<jsonl>: the first non-finite macro field and the
+ * first non-positive live price per name.
  */
-class JointHarnessTest extends KernelTestCase
+class JointHarnessTest extends BoardRun
 {
-    /** @var list<object> */
-    private array $persisted = [];
-    private bool $capturing = true;
-    /** @var array<string, list<array<string, float>>> */
-    private array $quarters = [];
-    private ?MacroStateDTO $currentMacro = null;
-    private float $currentTime = 0.0;
-    private ?App\Service\Corporate\DebtEngine $debtEngine = null;
-    private ?StockTracker $fvTracker = null;
-    /** @var array<string, list<array{t: float, d: string}>> */
-    private array $events = [];
-
-    protected static function getKernelClass(): string
-    {
-        return HarnessKernel::class;
-    }
-
-    public function testRun(): void
-    {
-        $years = (float) (getenv('YEARS') ?: 1);
-        $tpy = (int) (getenv('TPY') ?: 360);
-        $this->tpyRun = $tpy;
-        $seed = (int) (getenv('SEED') ?: 1);
-        $out = getenv('OUT') ?: null;
-        $recordPath = getenv('MACRO_RECORD') ?: null;
-        $replayPath = getenv('MACRO_REPLAY') ?: null;
-
-        mt_srand($seed);
-        $_SERVER['APP_ENV'] = $_ENV['APP_ENV'] = 'test';
-        $_SERVER['KERNEL_CLASS'] = 'App\Kernel';
-        self::bootKernel(['environment' => 'test', 'debug' => false]);
-        $c = static::getContainer();
-        $c->set('doctrine.orm.default_entity_manager', $this->buildEntityManager());
-
-        // --- Seed exactly as production does ---
-        $app = new Symfony\Bundle\FrameworkBundle\Console\Application(static::$kernel);
-        ob_start();
-        $seedTester = new CommandTester($app->find('app:market-seed'));
-        $seedStatus = $seedTester->execute([]);
-        ob_end_clean();
-        $this->assertSame(0, $seedStatus, 'the seed command failed: ' . substr($seedTester->getDisplay(), -600));
-
-        $stocks = [];
-        $id = 1;
-        foreach ($this->persisted as $e) {
-            if ($e instanceof Stock) {
-                (new ReflectionProperty(Stock::class, 'id'))->setValue($e, $id++);
-                $stocks[$e->getTicker()] = $e;
-            }
-        }
-        $this->persisted = [];
-        $this->capturing = false;
-        $this->assertNotEmpty($stocks, 'the seed command persisted no stocks');
-
-        $seedPrice = [];
-        foreach ($stocks as $t => $s) {
-            $seedPrice[$t] = (float) $s->getPrice();
-        }
-
-        $seedMargin = [];
-        $seedEquity = [];
-        foreach ($stocks as $t => $s) {
-            $seedMargin[$t] = (float) $s->getOperatingMargin();
-            $seedEquity[$t] = (float) $s->getTotalEquity();
-        }
-
-        $macro = $c->get(MacroEngine::class);
-        $macroStore = $c->get(MacroStateStore::class);
-        $economy = $macroStore->load();
-        $this->debtEngine = $c->get(App\Service\Corporate\DebtEngine::class);
-        $tracker = $c->get(StockTracker::class);
-        $this->fvTracker = $tracker;
-        $sweep = $c->get(FailureSweep::class);
-        // The Diet, as the ticker runs it: it reads this tick's economy and the economy reads its laws next tick.
-        $politicsEngine = getenv('POLITICS') && $replayPath === null ? $c->get(PoliticsEngine::class) : null;
-        $policy = $politicsEngine?->liveState()->policy();
-
-        $list = array_values($stocks);
-        $dt = 1.0 / $tpy;
-        $ticks = (int) round($years * $tpy);
-        // SIMCMD=1 mirrors app:market-simulate: no board cap fed to the macro, the operator every 100 ticks.
-        $operatorInterval = getenv('SIMCMD') ? 100 : (int) max(1, $tpy / 24);
-        $replay = $replayPath !== null ? unserialize((string) gzuncompress((string) file_get_contents($replayPath))) : null;
-        $recorded = [];
-        $reading = new App\DTO\BoardReadingDTO();
-        $dead = [];
-        $reorgs = [];
-        $defaults = [];
-        $t0 = microtime(true);
-
-        // TARGET_OUT: what the stock page shows before the ticker has published a target, then the published
-        // target against price and fair value at a few horizons.
-        $targetProbe = [];
-        $probeTicks = [1 => 'tick1', (int) round($tpy / 52) => '1w', (int) round($tpy / 12) => '1m', (int) round($tpy / 4) => '3m', (int) round($tpy / 2) => '6m', $tpy => '12m'];
-        if (getenv('TARGET_OUT')) {
-            $snapshots = $c->get(App\Service\View\CompanySnapshotBuilder::class);
-            foreach ($stocks as $t => $s) {
-                $page = (new ReflectionMethod($snapshots, 'analystTargets'))->invoke($snapshots, $s, new MacroStateDTO());
-                $targetProbe[$t]['page0'] = ['px' => (float) $s->getPrice(), 'consensus' => (float) ($page['consensus'] ?? 0.0), 'upside' => (float) ($page['upside_pct'] ?? 0.0), 'published' => $s->getAnalystPriceTarget()];
-            }
-        }
-
-        for ($tick = 1; $tick <= $ticks; $tick++) {
-            $m = $replay !== null ? $this->withDemandLags($replay[$tick - 1], $dt)
-                : $macro->step($economy, $dt, $reading, $policy);
-            if ($replay === null) {
-                $macroStore->save($economy);
-            }
-            if ($politicsEngine !== null) {
-                $policy = $politicsEngine->updatePolitics($m, $dt)->policy();
-            }
-            if ($recordPath !== null) {
-                $recorded[] = $m;
-            }
-            $this->currentMacro = $m;
-            $this->currentTime = $tick / $tpy;
-
-            if ($tick % $operatorInterval === 0) {
-                foreach ($list as $s) {
-                    if (!$s->isBankrupt() && $s->isPaymentDefault()) {
-                        $defaults[$s->getTicker()] = ($defaults[$s->getTicker()] ?? 0) + 1;
-                    }
-                }
-                foreach ($sweep->sweep($list, $m) as $ev) {
-                    $t = (string) ($ev['ticker'] ?? '');
-                    if (!isset($stocks[$t])) {
-                        continue;
-                    }
-                    if (($ev['type'] ?? '') === 'BANKRUPTCY') {
-                        $dead[$t] = round($tick / $tpy, 2);
-                    } elseif (($ev['type'] ?? '') === 'REORGANIZATION') {
-                        $reorgs[] = ['t' => $t, 'year' => round($tick / $tpy, 2)];
-                    }
-                }
-            }
-
-            if ($tick === 1 && getenv('OPENING_OUT')) {
-                $opening = [];
-                foreach ($stocks as $t => $s) {
-                    $opening[$t] = ['eps0' => (float) $s->getEarningsPerShare(), 'fv0x' => getenv('FVX') ? $this->fvRow($s) : [], 'px0' => (float) $s->getPrice(), 'sh0' => (float) $s->getSharesOutstanding(), 'industry' => $s->getIndustry(), 'fin' => App\Data\Company\Sectors::strategyFor($s->getIndustry())->isFinancial()];
-                }
-            }
-            $result = $tracker->updateStocks($list, $dt, false, $m, $tick, $tpy);
-            // TRACE=<ticker>[,<ticker>...]: those names' tracker update rows each tick, to TRACE_OUT.
-            if (getenv('TRACE')) {
-                foreach ($result['updates'] as $u) {
-                    if (in_array($u['ticker'], explode(',', (string) getenv('TRACE')), true)) {
-                        unset($u['analyst_targets']);
-                        file_put_contents((string) getenv('TRACE_OUT'), json_encode(['tick' => $tick] + $u + ['iv' => $stocks[$u['ticker']]->getImpactVarianceEma()] + $this->traceFv($stocks[$u['ticker']])) . "\n", FILE_APPEND);
-                    }
-                }
-            }
-            // TICK_CSV: price and shares of every name each tick (header row first); bad macro fields and prices to
-            // ANOM_OUT.
-            if (getenv('TICK_CSV')) {
-                if ($tick === 1) {
-                    file_put_contents((string) getenv('TICK_CSV'), 'tick,' . implode(',', array_map(fn($s) => $s->getTicker() . '_p,' . $s->getTicker() . '_n', $list)) . "\n");
-                }
-                file_put_contents((string) getenv('TICK_CSV'), $tick . ',' . implode(',', array_map(fn($s) => sprintf('%.6g,%.6g', (float) $s->getPrice(), (float) $s->getSharesOutstanding()), $list)) . "\n", FILE_APPEND);
-                foreach ((fn(): array => get_object_vars($this))->call($m) as $k => $v) {
-                    if (is_float($v) && !is_finite($v) && !isset($this->anomSeen[$k])) {
-                        $this->anomSeen[$k] = true;
-                        file_put_contents((string) getenv('ANOM_OUT'), json_encode(['t' => $tick / $tpy, 'macro' => $k, 'v' => (string) $v]) . "\n", FILE_APPEND);
-                    }
-                }
-                foreach ($list as $s) {
-                    $p = (float) $s->getPrice();
-                    if ((!is_finite($p) || $p <= 0.0) && !$s->isBankrupt() && !isset($this->anomSeen[$s->getTicker()])) {
-                        $this->anomSeen[$s->getTicker()] = true;
-                        file_put_contents((string) getenv('ANOM_OUT'), json_encode(['t' => $tick / $tpy, 'ticker' => $s->getTicker(), 'px' => (string) $p]) . "\n", FILE_APPEND);
-                    }
-                }
-            }
-            if (getenv('TARGET_OUT') && isset($probeTicks[$tick])) {
-                foreach ($result['updates'] as $u) {
-                    $target = (float) ($u['analyst_price_target'] ?? 0.0);
-                    $targetProbe[$u['ticker']][$probeTicks[$tick]] = ['px' => (float) $u['price'], 'fv' => (float) $u['perceived_fair_value'], 'target' => $target, 'upside' => $u['price'] > 0 ? 100.0 * ($target / (float) $u['price'] - 1.0) : 0.0];
-                }
-                if ($tick === $tpy || $tick === $ticks) {
-                    file_put_contents((string) getenv('TARGET_OUT'), json_encode($targetProbe));
-                }
-            }
-            if ($tick === 1 && getenv('OPENING_OUT')) {
-                foreach ($result['updates'] as $u) {
-                    $opening[$u['ticker']]['fv1'] = (float) $u['perceived_fair_value'];
-                    $opening[$u['ticker']]['px1'] = (float) $u['price'];
-                    $opening[$u['ticker']]['sh1'] = (float) $stocks[$u['ticker']]->getSharesOutstanding();
-                }
-                file_put_contents((string) getenv('OPENING_OUT'), json_encode($opening));
-            }
-            // SIMCMD mirrors app:market-simulate, which feeds the macro no board at all. Levels stand when not
-            // reported (as the ticker keeps the last); flows are this tick's.
-            if (!getenv('SIMCMD')) {
-                $reading = $reading->after($result);
-            }
-            // MACRO_OUT: one macro row a quarter, for the macro-market loop.
-            // FISCAL=1 adds the primary deficit and the net-tax rate, and a founding row at tick 1.
-            if (getenv('MACRO_OUT') && ($tick % max(1, intdiv($tpy, 4)) === 0 || ($tick === 1 && getenv('FISCAL')))) {
-                file_put_contents((string) getenv('MACRO_OUT'), json_encode([
-                    'seed' => $seed, 't' => round($tick / $tpy, 3), 'gap' => $m->outputGap, 'cap' => $reading->equityMarketCap,
-                    'nominal_gdp' => $m->nominalGdpIndex, 'ewr' => $m->equityWealthRatio, 'ewt' => $m->equityWealthTrend,
-                    'fin' => $m->financeOutputGap ?? 0.0, 'nx' => $m->netExportGap ?? 0.0, 'supply' => $m->productivitySupplyGap,
-                    'credit_gap' => $m->creditToGdpGap, 'policy' => $m->policyRate, 'infl' => $m->inflation, 'u' => $m->unemploymentRate,
-                    'fx' => $m->exchangeRateIndex, 'deal' => $m->dealActivityIndex, 'vol' => $m->marketVolatility, 'erp' => $m->equityRiskPremium,
-                    'fund' => $m->sovereignFundToGdp, 'fgap' => $m->foreignOutputGap, 'crisis' => $m->creditCrisisDrag,
-                    'allied' => $m->alliedDefenseSpendingIndexEma, 'oil' => $m->energyPriceIndexEma,
-                    'float' => $m->boardFloatCap, 'fund_own' => $m->sovereignFundOwnershipShare,
-                    'corp_tax_shift' => $m->corporateTaxPolicyShift, 'div_tax' => $m->dividendTaxRate, 'home_law' => $m->reserveHomeEquityShare,
-                    'debt' => $m->sovereignDebtToGdp, 'spend_law' => $m->publicSpendingShare,
-                    'net_debt' => $m->sovereignNetDebtToGdp,
-                    'crisis_at' => $m->lastCreditCrisisAt,
-                    'spread' => $m->sovereignRiskSpread, 'tax_rate' => $m->corporateTaxRate,
-                    'y10' => $m->yield10y ?? null, 'hh' => $m->householdDebtToIncome ?? null, 'gq' => $m->realGdpQuarterlyGrowth ?? null, 'scp' => $m->supplyChainPressureIndexEma, 'vol_ema' => $m->marketVolatilityEma,
-                ] + (getenv('BOARD_NI') ? $this->boardNetIncome($list) + ['gap_ema' => $m->outputGapEma, 'net_tax' => $m->netTaxRate ?? null] : [])
-                    + (getenv('FISCAL') ? ['primary' => $m->primaryDeficitToGdp, 'net_tax' => $m->netTaxRate, 'spend_idx' => $m->governmentSpendingIndex] : [])
-                    + (getenv('CREDIT') ? [
-                        'sloos' => $m->sloosTighteningIndexEma, 'sloos_raw' => $m->sloosTighteningIndex, 'ebp' => $m->excessBondPremium, 'ebp_trend' => $m->excessBondPremiumTrend,
-                        'cap_req' => $m->bankCapitalRequirement, 'ccyb' => $m->countercyclicalBufferRate, 'cap_built' => $m->bankCapitalBuilt,
-                        'infl_ema' => $m->inflationEma, 'bei' => $m->tipsBreakevenEma, 'supercore' => $m->supercoreInflationEma,
-                        'corp_dr' => $m->corporateDefaultRateEma, 'retail_dr' => $m->retailDefaultRateEma, 'starts' => $m->housingStartsIndex,
-                        'fci' => $m->financialConditionsIndex, 'cre' => $m->commercialPropertyIndexEma, 'freight' => $m->freightRateIndex,
-                        'recp' => $m->recessionProbability,
-                    ] : [])) . "\n", FILE_APPEND);
-            }
-        }
-
-        if ($recordPath !== null) {
-            file_put_contents($recordPath, gzcompress(serialize($recorded), 6));
-        }
-
-        $final = [];
-        foreach ($stocks as $t => $s) {
-            $final[$t] = [
-                'dead' => $s->isBankrupt(),
-                'om_seed' => round($seedMargin[$t], 4),
-                'eq_x' => round((float) $s->getTotalEquity() / max(1.0, $seedEquity[$t]), 3),
-                'px' => (float) $s->getPrice(),
-                'vol' => (float) $s->getCurrentVolatility(),
-                'q' => $this->quarters[$t] ?? [],
-            ];
-        }
-
-        $record = [
-            'seed' => $seed,
-            'years' => $years,
-            'tpy' => $tpy,
-            'secs' => round(microtime(true) - $t0, 1),
-            'dead' => $dead,
-            'reorgs' => $reorgs,
-            'defaults' => $defaults,
-            'final' => $final,
-            'events' => $this->events,
-            'event_ticks' => $this->eventTicks,
-            'event_types' => $this->eventTypes,
-        ];
-        if ($out !== null) {
-            file_put_contents($out, json_encode($record) . "\n", FILE_APPEND);
-        }
-        fwrite(STDERR, sprintf("seed %d: %d ticks in %.1fs, deaths %s, reorgs %d\n", $seed, $ticks, microtime(true) - $t0, json_encode($dead), count($reorgs)));
-
-        // RESET_PROBE: reopen the traded board exactly as app:market-reset does, one row at a time in seed order.
-        if (getenv('RESET_PROBE')) {
-            $builder = $c->get(App\Service\Market\Pricing\OpeningBoardBuilder::class);
-            $openingMacro = new MacroStateDTO();
-            $spheres = [];
-            foreach (App\Data\Company\InitialMarket::STOCKS as $row) {
-                $s = $stocks[$row['ticker']];
-                $s->resetToUnseeded();
-                $sphere = $builder->open($s, $row, $openingMacro);
-                if ($sphere !== null) {
-                    $spheres[] = $sphere;
-                }
-            }
-            $builder->openSpheres($spheres, $stocks, $openingMacro);
-            $probe = [];
-            foreach ($stocks as $t => $s) {
-                $probe[$t] = ['seed' => $seedPrice[$t], 'reset' => (float) $s->getPrice()];
-            }
-            file_put_contents((string) getenv('RESET_PROBE'), json_encode($probe));
-        }
-        $this->assertTrue(true);
-    }
-
-    /** One quarterly report as a named row, with the macro readings it was filed under. */
-    /** @var array<string, float> */
-    private array $replayLags = [];
-
     /** @var array<string, bool> */
     private array $anomSeen = [];
-
     /** @var array<string, list<int>> */
     private array $eventTicks = [];
-    /** @var array<string, list<array{t: float, e: string}>> insurer claim and cover event types (batch D2) */
+    /** @var array<string, list<array{t: float, e: string}>> insurer claim and cover event types */
     private array $eventTypes = [];
 
-    private int $tpyRun = 360;
+    protected function afterStocks(array $result): void
+    {
+        $tick = $this->tick;
+        $m = $this->currentMacro;
+        $list = $this->list;
+        // TRACE=<ticker>[,<ticker>...]: those names' tracker update rows each tick, to TRACE_OUT.
+        if (getenv('TRACE')) {
+            foreach ($result['updates'] as $u) {
+                if (in_array($u['ticker'], explode(',', (string) getenv('TRACE')), true)) {
+                    unset($u['analyst_targets']);
+                    file_put_contents((string) getenv('TRACE_OUT'), json_encode(['tick' => $tick] + $u + ['iv' => $this->stocks[$u['ticker']]->getImpactVarianceEma()] + $this->traceFv($this->stocks[$u['ticker']])) . "\n", FILE_APPEND);
+                }
+            }
+        }
+        // TICK_CSV: price and shares of every name each tick (header row first); bad macro fields and prices to
+        // ANOM_OUT.
+        if (getenv('TICK_CSV')) {
+            if ($tick === 1) {
+                file_put_contents((string) getenv('TICK_CSV'), 'tick,' . implode(',', array_map(fn($s) => $s->getTicker() . '_p,' . $s->getTicker() . '_n', $list)) . "\n");
+            }
+            file_put_contents((string) getenv('TICK_CSV'), $tick . ',' . implode(',', array_map(fn($s) => sprintf('%.6g,%.6g', (float) $s->getPrice(), (float) $s->getSharesOutstanding()), $list)) . "\n", FILE_APPEND);
+            foreach ((fn(): array => get_object_vars($this))->call($m) as $k => $v) {
+                if (is_float($v) && !is_finite($v) && !isset($this->anomSeen[$k])) {
+                    $this->anomSeen[$k] = true;
+                    file_put_contents((string) getenv('ANOM_OUT'), json_encode(['t' => $tick / $this->tpy, 'macro' => $k, 'v' => (string) $v]) . "\n", FILE_APPEND);
+                }
+            }
+            foreach ($list as $s) {
+                $p = (float) $s->getPrice();
+                if ((!is_finite($p) || $p <= 0.0) && !$s->isBankrupt() && !isset($this->anomSeen[$s->getTicker()])) {
+                    $this->anomSeen[$s->getTicker()] = true;
+                    file_put_contents((string) getenv('ANOM_OUT'), json_encode(['t' => $tick / $this->tpy, 'ticker' => $s->getTicker(), 'px' => (string) $p]) . "\n", FILE_APPEND);
+                }
+            }
+        }
+    }
+
+    protected function macroRow(array $row, MacroStateDTO $m): array
+    {
+        $row = self::insertAfter($row, 'tax_rate', [
+            'y10' => $m->yield10y ?? null, 'hh' => $m->householdDebtToIncome ?? null, 'gq' => $m->realGdpQuarterlyGrowth ?? null, 'scp' => $m->supplyChainPressureIndexEma, 'vol_ema' => $m->marketVolatilityEma,
+        ]);
+
+        return $row + (getenv('CREDIT') ? [
+            'sloos' => $m->sloosTighteningIndexEma, 'sloos_raw' => $m->sloosTighteningIndex, 'ebp' => $m->excessBondPremium, 'ebp_trend' => $m->excessBondPremiumTrend,
+            'cap_req' => $m->bankCapitalRequirement, 'ccyb' => $m->countercyclicalBufferRate, 'cap_built' => $m->bankCapitalBuilt,
+            'infl_ema' => $m->inflationEma, 'bei' => $m->tipsBreakevenEma, 'supercore' => $m->supercoreInflationEma,
+            'corp_dr' => $m->corporateDefaultRateEma, 'retail_dr' => $m->retailDefaultRateEma, 'starts' => $m->housingStartsIndex,
+            'fci' => $m->financialConditionsIndex, 'cre' => $m->commercialPropertyIndexEma, 'freight' => $m->freightRateIndex,
+            'recp' => $m->recessionProbability,
+        ] : []);
+    }
+
+    protected function reportRow(array $row, CorporateReport $report): array
+    {
+        $m = $this->currentMacro;
+        $kpis = $report->getReportedKpis() ?? [];
+        $row = self::insertAfter($row, 'ta', [
+            'lease' => (float) $report->getLeaseLiability(),
+            'recv' => (float) $report->getReceivables(),
+            'inv' => (float) $report->getInventory(),
+            'pay' => (float) $report->getPayables(),
+            'invwd' => (float) $report->getInventoryWriteDown(),
+            'recprov' => (float) $report->getReceivablesProvision(),
+            'reps' => (float) $report->getReportedEps(),
+            'ceps' => (float) $report->getConsensusEps(),
+            'crev' => (float) $report->getConsensusRevenue(),
+        ]);
+
+        return self::insertAfter($row, 'ea', [
+            'nco' => (float) ($report->getNetChargeOffs() ?? 0.0),
+            'prov' => (float) ($report->getCreditLossProvision() ?? 0.0),
+            'allow' => (float) ($report->getCreditLossAllowance() ?? 0.0),
+            'ii' => (float) ($report->getInterestIncome() ?? 0.0),
+            // Insurer regime and earned rate, ILS principal, float, equity sleeve (value, expected return, the board
+            // price index the sleeve was last marked at), the macro board index and the effective tax rate.
+            'hm' => (float) (($report->getStock()->getEarningsMomentumZ() ?? [])['state:regime:hard_market'] ?? 0.0),
+            'erl' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:capacity:earned_rate_level'] ?? null,
+            'tgain' => ($report->getStock()->getEarningsMomentumZ() ?? [])['carry:equity_sleeve:trailing_gains'] ?? null,
+            'ilsp' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:ils:principal_index'] ?? null,
+            'catb' => (float) (($report->getRevenueStreams() ?? [])['catastrophe_bonds'] ?? 0.0),
+            'lr' => isset($kpis['loss_ratio']) ? (float) $kpis['loss_ratio'] : null,
+            'xr' => isset($kpis['expense_ratio']) ? (float) $kpis['expense_ratio'] : null,
+            // The sector event (a claim headline, a cover attachment) rides on every stream detail entry.
+            'evt' => array_values(array_filter(array_map(static fn($e) => is_array($e) ? ($e['event'] ?? null) : null, $report->getStreamDetails() ?? [])))[0] ?? null,
+            'cdep' => (float) ($report->getStock()->getCustomerDeposits() ?? 0.0),
+            'sl_pi' => ($report->getStock()->getEarningsMomentumZ() ?? [])['carry:equity_sleeve:price_index'] ?? null,
+            'bpi' => $m?->boardPriceIndex ?? null,
+            'btri' => $m?->boardTotalReturnIndex ?? null,
+        ] + $this->sleeveRow($report->getStock()) + [
+            'ttc' => App\Data\Company\Sectors::strategyFor($report->getStock()->getIndustry())->getThroughTheCycleCreditLossRate($report->getStock()),
+        ]);
+    }
+
+    protected function onEvent(StockEvent $event): void
+    {
+        // Every event's tick, so a price jump can be told from a reported one.
+        $this->eventTicks[$event->getStock()->getTicker()][] = (int) round($this->currentTime * $this->tpy);
+        if (preg_match('/reinsur|claim|hard|catastroph/i', $event->getEventType())) {
+            $this->eventTypes[$event->getStock()->getTicker()][] = ['t' => round($this->currentTime, 3), 'e' => $event->getEventType()];
+        }
+    }
+
+    protected function record(array $record): array
+    {
+        return $record + ['event_ticks' => $this->eventTicks, 'event_types' => $this->eventTypes];
+    }
 
     /**
      * TRACE: the pricing context's scalar inputs and the engine's own fundamental state for one name, struck as
@@ -335,11 +144,11 @@ class JointHarnessTest extends KernelTestCase
      */
     private function traceFv(Stock $stock): array
     {
-        if ($this->debtEngine === null || $this->currentMacro === null || $this->fvTracker === null) {
+        if ($this->debtEngine === null || $this->currentMacro === null || $this->tracker === null) {
             return [];
         }
         $m = $this->currentMacro;
-        $ledger = (new ReflectionProperty(StockTracker::class, 'anchorStakes'))->getValue($this->fvTracker);
+        $ledger = (new ReflectionProperty(StockTracker::class, 'anchorStakes'))->getValue($this->tracker);
         $ctx = App\DTO\MarketPricingContext::forStock($stock, $m, $this->debtEngine->analyzeDebtHealth($stock, $m), $ledger);
         $row = [];
         foreach (get_object_vars($ctx) as $k => $v) {
@@ -357,42 +166,6 @@ class JointHarnessTest extends KernelTestCase
         return $row;
     }
 
-    /**
-     * A recording predating the output gap's published lags gets them filtered off its own gap path, as the macro
-     * would.
-     */
-    private function withDemandLags(MacroStateDTO $recorded, float $dt): MacroStateDTO
-    {
-        $vars = (fn(): array => get_object_vars($this))->call($recorded);
-        $math = new App\Service\Math\MathUtility();
-        foreach (App\Service\Macro\Subsystem\Aggregate\MovingAverages::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
-            $this->replayLags[$field] = TimeSeries::calculateDistributedLag($this->replayLags[$field] ?? App\Data\Macro\MacroFieldRegistry::defaults()[$field], $vars['outputGapEma'], $dt, $lagYears);
-        }
-
-        return new MacroStateDTO(...array_merge($vars, $this->replayLags));
-    }
-
-    /**
-     * BOARD_NI=1: the board's trailing net income (sum of Stock::totalNetIncome, the TTM figure EarningsEngine sets)
-     * over firms not bankrupt, and how many firms it covers.
-     *
-     * @param list<Stock> $list
-     * @return array{board_tni: float, board_n: int}
-     */
-    private function boardNetIncome(array $list): array
-    {
-        $sum = 0.0;
-        $n = 0;
-        foreach ($list as $s) {
-            if (!$s->isBankrupt()) {
-                $sum += (float) $s->getTotalNetIncome();
-                $n++;
-            }
-        }
-
-        return ['board_tni' => $sum, 'board_n' => $n];
-    }
-
     /** @return array{sl_v: float, sl_er: float, tax: float} */
     private function sleeveRow(Stock $stock): array
     {
@@ -401,177 +174,5 @@ class JointHarnessTest extends KernelTestCase
         $sl = method_exists($strategy, 'resolveEquitySleeve') ? $strategy->resolveEquitySleeve($stock, $m) : ['value' => 0.0, 'expected_return' => 0.0];
 
         return ['sl_v' => (float) $sl['value'], 'sl_er' => (float) $sl['expected_return'], 'tax' => $strategy->getEffectiveTaxRate($m->corporateTaxRate)];
-    }
-
-    private function captureReport(CorporateReport $report): void
-    {
-        if (getenv('DRIVERS_OUT')) {
-            file_put_contents((string) getenv('DRIVERS_OUT'), json_encode(['t' => round($this->currentTime, 3), 'ticker' => $report->getStock()->getTicker(), 'streams' => $report->getStreamDetails()]) . "\n", FILE_APPEND);
-        }
-        $m = $this->currentMacro;
-        $kpis = $report->getReportedKpis() ?? [];
-        $this->quarters[$report->getStock()->getTicker()][] = [
-            't' => round($this->currentTime, 3),
-            'rev' => (float) $report->getRevenue(),
-            'exp' => (float) (($report->getStock()->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_LAST_EXPECTED_REVENUE] ?? 0.0),
-            'ni' => (float) $report->getNetIncome(),
-            'om' => (float) $report->getOperatingMargin(),
-            'ebit' => (float) $report->getEbit(),
-            'eq' => (float) $report->getEquity(),
-            'cash' => (float) $report->getTreasury(),
-            'debt' => (float) $report->getTotalDebt(),
-            'div' => (float) $report->getDividendPaid(),
-            'bb' => (float) $report->getStockBuybacks(),
-            'capex' => (float) $report->getCapitalExpenditures(),
-            'dep' => (float) $report->getDepreciation(),
-            'gw' => (float) $report->getGoodwill(),
-            'ppe' => (float) $report->getNetPpe(),
-            'ta' => (float) $report->getTotalAssets(),
-            'lease' => (float) $report->getLeaseLiability(),
-            'recv' => (float) $report->getReceivables(),
-            'inv' => (float) $report->getInventory(),
-            'pay' => (float) $report->getPayables(),
-            'invwd' => (float) $report->getInventoryWriteDown(),
-            'recprov' => (float) $report->getReceivablesProvision(),
-            'reps' => (float) $report->getReportedEps(),
-            'ceps' => (float) $report->getConsensusEps(),
-            'crev' => (float) $report->getConsensusRevenue(),
-            'ea' => (float) $report->getEarningAssets(),
-            'nco' => (float) ($report->getNetChargeOffs() ?? 0.0),
-            'prov' => (float) ($report->getCreditLossProvision() ?? 0.0),
-            'allow' => (float) ($report->getCreditLossAllowance() ?? 0.0),
-            'ii' => (float) ($report->getInterestIncome() ?? 0.0),
-            // Batch D2: insurer regime and earned rate, ILS principal, float, equity sleeve (value, expected return,
-            // the board price index the sleeve was last marked at), the macro board index and the effective tax rate.
-            'hm' => (float) (($report->getStock()->getEarningsMomentumZ() ?? [])['state:regime:hard_market'] ?? 0.0),
-            'erl' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:capacity:earned_rate_level'] ?? null,
-            'tgain' => ($report->getStock()->getEarningsMomentumZ() ?? [])['carry:equity_sleeve:trailing_gains'] ?? null,
-            'ilsp' => ($report->getStock()->getEarningsMomentumZ() ?? [])['state:ils:principal_index'] ?? null,
-            'catb' => (float) (($report->getRevenueStreams() ?? [])['catastrophe_bonds'] ?? 0.0),
-            'lr' => isset($kpis['loss_ratio']) ? (float) $kpis['loss_ratio'] : null,
-            'xr' => isset($kpis['expense_ratio']) ? (float) $kpis['expense_ratio'] : null,
-            // The sector event (a claim headline, a cover attachment) rides on every stream detail entry.
-            'evt' => array_values(array_filter(array_map(static fn ($e) => is_array($e) ? ($e['event'] ?? null) : null, $report->getStreamDetails() ?? [])))[0] ?? null,
-            'cdep' => (float) ($report->getStock()->getCustomerDeposits() ?? 0.0),
-            'sl_pi' => ($report->getStock()->getEarningsMomentumZ() ?? [])['carry:equity_sleeve:price_index'] ?? null,
-            'bpi' => $m?->boardPriceIndex ?? null,
-            'btri' => $m?->boardTotalReturnIndex ?? null,
-        ] + $this->sleeveRow($report->getStock()) + [
-            'ttc' => App\Data\Company\Sectors::strategyFor($report->getStock()->getIndustry())->getThroughTheCycleCreditLossRate($report->getStock()),
-            'fin' => $report->getStock()->getCustomerDeposits() !== null && (float) $report->getStock()->getCustomerDeposits() > 0.0,
-            'rating' => $report->getStock()->getCreditRating(),
-            'int' => (float) $report->getInterestExpense(),
-            'ebitda' => (float) $report->getEbitda(),
-            'spread' => (float) $report->getStock()->getCreditSpread(),
-            'rev_drawn' => (float) $report->getStock()->getRevolverDrawn(),
-            'rev_commit' => (float) $report->getStock()->getRevolverCommitment(),
-            'wd' => (float) $report->getStock()->getWholesaleDebt(),
-            'qid' => $report->getStock()->getQuartersInDefault(),
-            'price' => (float) $report->getStock()->getPrice(),
-            'shares' => (float) $report->getStock()->getSharesOutstanding(),
-            'eps' => (float) $report->getStock()->getEarningsPerShare(),
-            'apt' => (float) $report->getStock()->getAnalystPriceTarget(),
-            'cvol' => (float) $report->getStock()->getCurrentVolatility(),
-            'aris' => $report->getStock()->isDividendAristocrat(),
-        ] + $this->healthRow($report->getStock()) + $this->fvRow($report->getStock()) + [
-            'tni' => (float) $report->getStock()->getTotalNetIncome(),
-            'crude' => $m?->energyPriceIndexEma ?? 0.0,
-            'crack' => $m?->refiningCrackSpreadEma ?? 0.0,
-            'gas' => $m?->naturalGasPriceIndexEma ?? 0.0,
-            'metals' => $m?->industrialMetalsIndexEma ?? 0.0,
-            'gold' => $m?->goldPriceIndexEma ?? 0.0,
-            'power' => $m?->wholesalePowerPriceIndexEma ?? 0.0,
-            'agri' => $m?->agriculturalCommodityIndexEma ?? 0.0,
-            'freight' => $m?->freightRateIndexEma ?? 0.0,
-            'gap' => $m?->outputGapEma ?? 0.0,
-            'rwg' => $m?->realWageGap ?? 0.0,
-            'wage' => $m?->wageGrowthEma ?? 0.0,
-            'hedge' => (float) ($kpis['hedge_gain'] ?? 0.0),
-            'capture' => (float) ($kpis['capture_rate'] ?? 0.0),
-            'power_kpi' => (float) ($kpis['power_price_index'] ?? 0.0),
-        ];
-    }
-
-    /**
-     * FVX=1: the fair value the market would strike on the stock right now (FairValue::fundamentalStateFor()), beside
-     * the inputs it is struck on, so a move in it can be read against the hurdle, the return, growth and accruals.
-     *
-     * @return array<string, float>
-     */
-    private function fvRow(\App\Entity\Stock $stock): array
-    {
-        if (!getenv('FVX') || $this->debtEngine === null || $this->currentMacro === null || $this->fvTracker === null) {
-            return [];
-        }
-        $m = $this->currentMacro;
-        $h = $this->debtEngine->analyzeTrailingDebtHealth($stock, $m);
-        $ledger = (new \ReflectionProperty(\App\Service\Market\Pricing\StockTracker::class, 'anchorStakes'))->getValue($this->fvTracker);
-        $ctx = \App\DTO\MarketPricingContext::forStock($stock, $m, $h, $ledger);
-        $fs = \App\Service\Market\Pricing\FairValue::fundamentalStateFor($ctx);
-
-        return ['x_rf' => (float) ($m->policyRate ?? 0.0), 'x_erp' => (float) ($m->equityRiskPremium ?? 0.0), 'x_gap' => (float) ($m->outputGap ?? 0.0),
-            'x_infl' => (float) ($m->inflation ?? 0.0), 'x_beta' => $ctx->beta, 'x_coe' => $ctx->liveCostOfEquity, 'x_roicTtm' => $ctx->roicTtm,
-            'x_roicBase' => $ctx->baselineRoic, 'x_longRun' => (float) ($ctx->longRunReturn ?? 0.0), 'x_sec' => $ctx->secularGrowth,
-            'x_payout' => $ctx->targetPayoutRatio, 'x_sectorPE' => $ctx->baselineIndustryPE, 'x_acc' => $ctx->accrualsRatio, 'x_eps' => (float) $stock->getEarningsPerShare(),
-            'x_vol' => $ctx->currentVolatility, 'x_bvps' => $ctx->bookValuePerShare, 'x_icps' => $ctx->investedCapitalPerShare, 'x_rps' => $ctx->revenuePerShare,
-            'x_fv' => (float) $fs['perceived_fair_value'], 'x_pull' => (float) $fs['dynamic_reversion'], 'x_policy' => (float) $fs['policy_repricing'],
-            'x_growthAn' => (float) $fs['analyst_targets']['growth_analyst'], 'x_valueAn' => (float) $fs['analyst_targets']['value_analyst'],
-            'x_incomeAn' => (float) $fs['analyst_targets']['income_analyst']];
-    }
-
-    /** @return array<string, float|bool> */
-    private function healthRow(Stock $stock): array
-    {
-        if ($this->debtEngine === null || $this->currentMacro === null || !getenv('HEALTH')) {
-            return [];
-        }
-        $h = $this->debtEngine->analyzeTrailingDebtHealth($stock, $this->currentMacro);
-
-        return ['uL' => $h->isUnderLeveraged, 'ndE' => $h->netDebtToEbitda, 'covL' => $h->ebitdaCovenantLimit, 'head' => $h->hasLeverageHeadroom,
-            'tol' => $h->debtTolerance, 'icr' => $h->interestCoverage, 'can' => $h->canIssueDebt, 'hEbitda' => $h->rawMetrics->ebitda, 'hEbit' => $h->rawMetrics->ebit];
-    }
-
-    private function buildEntityManager(): EntityManagerInterface
-    {
-        $em = $this->createStub(EntityManagerInterface::class);
-        $em->method('persist')->willReturnCallback(function (object $e): void {
-            if ($e instanceof CorporateReport) {
-                $this->captureReport($e);
-                return;
-            }
-            if ($e instanceof App\Entity\StockEvent && !$this->capturing) {
-                // Every event's tick, so a price jump can be told from a reported one.
-                $this->eventTicks[$e->getStock()->getTicker()][] = (int) round($this->currentTime * $this->tpyRun);
-                if (preg_match('/reinsur|claim|hard|catastroph/i', $e->getEventType())) {
-                    $this->eventTypes[$e->getStock()->getTicker()][] = ['t' => round($this->currentTime, 3), 'e' => $e->getEventType()];
-                }
-                // Treasury distress lines ride inside the earnings description as bullets: keep only those.
-                foreach (preg_split('/\n/', (string) $e->getDescription()) ?: [] as $line) {
-                    if (preg_match('/borrow|revolv|bond market|stave off|repay|default|record of dividend|Chapter|liquidat|rescue|covenant|restructur|in bonds for|Deployed/i', $line)) {
-                        $this->events[$e->getStock()->getTicker()][] = ['t' => round($this->currentTime, 3), 'd' => substr(ltrim($line, "• "), 0, 160)];
-                    }
-                }
-                return;
-            }
-            if ($this->capturing) {
-                $this->persisted[] = $e;
-            }
-        });
-        $em->method('getConnection')->willReturn($this->createStub(Connection::class));
-
-        $repositories = [];
-        $em->method('getRepository')->willReturnCallback(function (string $class) use (&$repositories) {
-            if (!isset($repositories[$class])) {
-                $repositoryClass = EntityRepository::class;
-                foreach ((new ReflectionClass($class))->getAttributes(Doctrine\ORM\Mapping\Entity::class) as $attribute) {
-                    $repositoryClass = $attribute->newInstance()->repositoryClass ?? EntityRepository::class;
-                }
-                $repositories[$class] = $this->createStub($repositoryClass);
-            }
-
-            return $repositories[$class];
-        });
-
-        return $em;
     }
 }

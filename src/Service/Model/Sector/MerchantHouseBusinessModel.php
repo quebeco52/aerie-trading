@@ -29,9 +29,9 @@ use App\Service\Math\StochasticProcesses;
  * - Dislocation, not direction, is the margin. Backwardation (Kaldor-Working: the convenience yield of
  *   holding the physical when inventories are short) and congested corridors widen the spread, because the
  *   party holding the berth and the bonded warehouse is the only one who can deliver today.
- * - Working capital is the risk. Cargo and bills of lading are financed on short wholesale credit for about
- *   a quarter, so the funding rate is a direct charge on turnover. On a thin trading spread this is the leg
- *   that ends merchant houses.
+ * - Working capital is the risk. Cargo and bills of lading are financed on short floating credit, the floating
+ *   share of the group's debt, so a funding squeeze reaches it once: as interest on that debt (DebtEngine), not
+ *   again in the desk's cost of goods. On a thin trading spread this is the leg that ends merchant houses.
  * - Terminal Tariffs: the berths, silos and bonded warehouses are a tollbooth, and inherit the parent's
  *   defensive staples physics unchanged.
  * - Trade Credit: secured inventory financing and treasury buffers run the parent's contrarian float book.
@@ -101,12 +101,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
      * slack ones price it away.
      */
     public const MERCHANT_DISRUPTION_SCALAR = 0.0057;
-
-    /**
-     * Years of turnover carried as financed inventory and bills of lading (~3 months). Multiplied by the funding rate
-     * it gives the carry cost as a fraction of turnover.
-     */
-    public const MERCHANT_INVENTORY_HOLDING_YEARS = 0.25;
 
     /**
      * Ceiling on the desk's net cost-ratio swing in either direction, so one quarter's dislocation cannot invert the
@@ -264,18 +258,16 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
     }
 
     /**
-     * Merchant cost ratio: spread dilution, dislocation rent, and the funding cost of physical inventory.
+     * Merchant cost ratio: spread dilution and dislocation rent. The cargo's funding is interest on the floating debt
+     * that finances it, charged in DebtEngine, not a cost of goods.
      *
-     * Three exact pieces, none of them a fitted curve:
+     * Two exact pieces, neither a fitted curve:
      *  1. Dilution. The desk earns a per-unit spread, so if the PRICE of the cargo rises by p with the dollar
      *     gross profit unchanged, the cost ratio moves from c to (p + c) / (1 + p) — a rise of
      *     p(1 - c) / (1 + p). This is why a merchant's reported margin percentage collapses in a commodity
      *     boom while its profits rise. Volume is deliberately excluded: shipping more tonnage scales revenue
      *     and cost of goods together, which leaves the ratio untouched.
      *  2. Dislocation rent (Kaldor-Working convenience yield plus corridor congestion).
-     *  3. Funding. Cargo carried on short trade credit for about a quarter, charged at the floating reference
-     *     rate plus the credit spread against where they sit at trend: the policy rate at neutral and both spreads
-     *     at their decade averages, so a freeze costs the desk and funding cheaper than usual earns it the gap.
      */
     private function resolveMerchantCostShift(
         MacroStateDTO $macroState,
@@ -290,11 +282,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         $dislocationRent = ($convenienceYield * self::MERCHANT_BACKWARDATION_SCALAR)
             + (($macroState->supplyChainPressureIndexEma - MacroConstants::GSCPI_BASELINE) * self::MERCHANT_DISRUPTION_SCALAR);
 
-        $fundingGap = ($macroState->floatingReferenceRate() + $macroState->macroCreditSpreadEma)
-            - ($macroState->perceivedNeutralRate + $macroState->interbankLiquiditySpreadTrend + $macroState->macroCreditSpreadTrend);
-        $carryCost = $fundingGap * self::MERCHANT_INVENTORY_HOLDING_YEARS;
-
-        $shift = $spreadDilution + $carryCost - $dislocationRent;
+        $shift = $spreadDilution - $dislocationRent;
 
         return max(-self::MAX_MERCHANT_COST_SWING, min(self::MAX_MERCHANT_COST_SWING, $shift));
     }
@@ -318,7 +306,6 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
             'foreign_output_gap_ema',
             'import_price_level',
             'industrial_metals_index_ema',
-            'interbank_liquidity_spread_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
             'manufacturing_pmi_ema',

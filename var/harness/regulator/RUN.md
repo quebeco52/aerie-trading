@@ -19,3 +19,9 @@ Evidence: `regulator_evidence.md`.
    channel as (step - off) - (noX - offX) and as step - noX; log real GDP peak / years 0-4 / 5-8, gap, hdti at year 4,
    SLOOS years 0-2; flags pairs whose post-step crisis dates differ.
 4. `var/harness/regulator/chan_setup.sh remove`.
+
+## Board probe (probe/)
+`probe/FullMarketHarnessTest.php` is the whole-board run (`../lib/BoardRun.php`) with the macro fed only the board
+cap and no Diet. It puts bank capital lines on each report row and the fund's weights on each macro row. `REQ=<ratio>`
+holds the capital requirement the stocks read. `probe/run.sh <label> <seed> [REQ]`: a `rec*` label records the macro
+path to `probe/runs/path-<seed>.gz`; any other label replays it.

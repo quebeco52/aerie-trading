@@ -2,8 +2,8 @@
 
 Question family: does the whole simulation behave sensibly after several merges, measured live (not replayed).
 
-- Harness: `var/harness/joint/JointHarnessTest.php`, a fork of `var/harness/FullMarketHarnessTest.php` (same env, see
-  `var/harness/full/RUN.md`). Additions:
+- Harness: `var/harness/joint/JointHarnessTest.php`, the shared whole-board run (`var/harness/lib/BoardRun.php`, env
+  in `var/harness/lib/README.md`) with hooks. Additions:
   - `MACRO_OUT` rows also carry `y10` (yield10y), `hh` (householdDebtToIncome), `gq` (realGdpQuarterlyGrowth).
   - `TICK_CSV=<csv>`: price and shares of every name every tick; `ANOM_OUT=<jsonl>`: first non-finite macro field
     and first non-positive live price per name.
@@ -11,7 +11,8 @@ Question family: does the whole simulation behave sensibly after several merges,
     the pricing context's scalars (`c_*`) and the engine's own `fundamentalStateFor` result (`f_fv`, `f_policy`,
     `f_targets`). At TPY=3600 eight names over two years write ~110 MB; delete it after. Draw-free; the
     seed-1 path was byte-identical with and without it.
-  - The inherited `FVX` probe is stale (calculateStructuralRoic now takes 6 args); use `TRACE` instead.
+  - `FVX=1` (from the library) puts the struck fair value and its inputs on every report row; `TRACE` follows a
+    few names every tick.
 - `aerie-joint` is a symlink to the checkout, passed as `BASE`, so the container cache is
   `var/harness/cache-aerie-joint` (fresh) rather than the stale `cache/` or `cache-aerie-trading`. Delete it after a
   constructor or service change in `src/`.

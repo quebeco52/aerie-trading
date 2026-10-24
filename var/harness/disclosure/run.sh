@@ -20,5 +20,5 @@ esac
 FORCE=()
 [ -n "${PWT:-}" ] && FORCE=(PWT="$PWT" EMS="$EMS")
 cd "$PROJ" && env "${FORCE[@]}" SEED="$2" YEARS="${YEARS:-30}" TPY="${TPY:-360}" DISC_OUT="$H/runs/$1-$2.json" \
-  bin/php-slot php -d memory_limit=3G vendor/bin/phpunit --bootstrap "$H/bootstrap.php" --no-configuration \
+  bin/php-slot php -d memory_limit=3G vendor/bin/phpunit --bootstrap "$H/../bootstrap.php" --no-configuration \
   "$H/DisclosureHarnessTest.php" > "$H/runs/$1-$2.log" 2>&1

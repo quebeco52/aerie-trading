@@ -164,7 +164,8 @@ final class MacroFieldRegistry
      * the `*Ema` naming convention does not already describe.
      *
      * A smoothed series with no history of its own has to start level with the series it smooths, or
-     * its first reading is a jump away from a value nothing ever observed.
+     * its first reading is a jump away from a value nothing ever observed. The credit spreads' decade trends are left
+     * out: one a payload lacks opens at the spread's measured average, not at the spread the payload carries.
      *
      * @var array<string, string>
      */
@@ -177,9 +178,6 @@ final class MacroFieldRegistry
         'sovereignNetDebtToGdp' => 'sovereignDebtToGdp',
         'sovereignNetFinancialLiabilitiesToGdp' => 'sovereignNetDebtToGdp',
         'sovereignCouponRate' => 'yield10y',
-        'macroCreditSpreadTrend' => 'macroCreditSpreadEma',
-        'interbankLiquiditySpreadTrend' => 'interbankLiquiditySpreadEma',
-        'highYieldCreditSpreadTrend' => 'highYieldCreditSpreadEma',
         'dealActivityIndexTrend' => 'dealActivityIndexEma',
         'treasuryVolatilityTrend' => 'treasuryVolatility',
         'corporateTaxRateTrend' => 'corporateTaxRate',

@@ -282,17 +282,19 @@ readonly class MacroStateDTO
         public float $macroCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD,
         /**
          * The IG spread's measured through-the-cycle level, a decade's exponential average
-         * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::updateCreditSpreadTrend()).
+         * (App\Service\Macro\Subsystem\CreditFiscalSubsystem::updateCreditSpreadTrend()). It opens at the spread's
+         * average over the District's cycle; the spread itself opens calm, at its base.
          */
-        public float $macroCreditSpreadTrend = MacroConstants::BASE_CREDIT_SPREAD,
+        public float $macroCreditSpreadTrend = MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN,
         public float $interbankLiquiditySpread = MacroConstants::INTERBANK_BASELINE_SPREAD,
         public float $interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD,
         /**
          * The interbank spread's measured through-the-cycle level, a decade's exponential average
          * (App\Service\Macro\Subsystem\Aggregate\MovingAverages::updateExponentialMovingAverages()). The spread never
-         * falls below its base, so a reader of its cyclical deviation reads it against this.
+         * falls below its base, so a reader of its cyclical deviation reads it against this. It opens at the spread's
+         * average over the District's cycle.
          */
-        public float $interbankLiquiditySpreadTrend = MacroConstants::INTERBANK_BASELINE_SPREAD,
+        public float $interbankLiquiditySpreadTrend = MacroConstants::INTERBANK_SPREAD_LONG_RUN_MEAN,
         public float $excessBondPremium = 0.0,
         /** Decade trend of the excess bond premium the credit drag reads. */
         public float $excessBondPremiumTrend = 0.0,
@@ -370,8 +372,8 @@ readonly class MacroStateDTO
         public float $coreGoodsInflationEma = MacroConstants::TARGET_INFLATION,
         public float $highYieldCreditSpread = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
         public float $highYieldCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
-        /** The HY spread's measured through-the-cycle level, a decade's exponential average, as the IG spread's. */
-        public float $highYieldCreditSpreadTrend = MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
+        /** The HY spread's measured through-the-cycle level, a decade's average, opening as the IG one's. */
+        public float $highYieldCreditSpreadTrend = MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
         public float $inventoryStockGap = 0.0,
         public float $inventoryStockGapEma = 0.0,
         public float $inventoryCostShock = 0.0,

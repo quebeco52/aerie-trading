@@ -4,8 +4,8 @@ Question family: what pricing floating debt off policy + interbank spread (`Fixe
 to lenders' ROE against target, lender profit in funding stress, non-financial interest burden and credit, and the
 board. Paired before (a HEAD worktree) vs after (the main working tree), live macro with the Diet.
 
-- Harness: `var/harness/interbank_ref/FullMarketHarnessTest.php`, a fork of `vol_report/FullMarketHarnessTest.php`
-  (env in `var/harness/full/RUN.md`). Adds to each quarterly report row: `pti` (pre-tax income), `teq` (tangible
+- Harness: `var/harness/interbank_ref/FullMarketHarnessTest.php`, the shared whole-board run
+  (`var/harness/lib/BoardRun.php`, env in `var/harness/lib/README.md`) with hooks. Adds to each quarterly report row: `pti` (pre-tax income), `teq` (tangible
   equity), `broe` (baseline ROE), `ib` (interbank spread EMA), `pol` (policy EMA), `open`
   (`DebtEngine::primaryMarketOpenTo`); `HEALTH=1` adds `icr`, `can`. The record adds `idx` (cap-weighted board return
   per tick), `macro` (tick 1 + one row a quarter), `mcoe0` ([tick-1, default-DTO] market cost of equity) and

@@ -210,7 +210,7 @@ class SecurityProtectionBusinessModelTest extends TestCase
             + (SecurityProtectionBusinessModel::RETAINER_WEIGHT * -0.03 * SecurityProtectionBusinessModel::CORPORATE_EXPANSION_SCALAR * $this->model->getOperatingCyclicality($stock))
             + (SecurityProtectionBusinessModel::EXPEDITIONARY_WEIGHT * (
                 ((0.30 - MacroConstants::MACRO_VOL_BASE_ANCHOR) * SecurityProtectionBusinessModel::FEAR_PREMIUM_SCALAR)
-                + ((0.035 - MacroConstants::BASE_CREDIT_SPREAD) * SecurityProtectionBusinessModel::CREDIT_STRESS_SCALAR)
+                + ((0.035 - MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN) * SecurityProtectionBusinessModel::CREDIT_STRESS_SCALAR)
             ));
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }

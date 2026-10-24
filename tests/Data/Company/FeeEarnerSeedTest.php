@@ -17,13 +17,15 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\BrokerageBusinessModel;
+use App\Tests\Support\OpeningCreditAtTrend;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
  * A fee earner's operating yield is struck once, on the balance sheet it opens with (resolveOperatingYield() on the
  * broker and the fee manager), and held. Every seeded broker and fee manager opens on its structural return at the
- * opening macro, so the board starts level and a later move in its return is the funding market's or the cycle's.
+ * opening macro with credit at its trend, so the board starts level and a later move in its return is the funding
+ * market's or the cycle's.
  */
 class FeeEarnerSeedTest extends TestCase
 {
@@ -81,7 +83,7 @@ class FeeEarnerSeedTest extends TestCase
     public function testItOpensOnItsStructuralReturn(array $row): void
     {
         [$stock, $strategy] = $this->open($row);
-        $opening = new MacroStateDTO();
+        $opening = OpeningCreditAtTrend::macro();
         $structural = (new \ReflectionMethod($strategy, 'resolveStructuralTargetRoe'))->invoke($strategy, $stock, $opening);
         $couponGap = $this->couponGap($stock, $strategy, $opening);
         $booked = $this->openingReturn($stock, $strategy, $opening);
@@ -155,7 +157,7 @@ class FeeEarnerSeedTest extends TestCase
     public function testItBooksItsStructuralReturnOnceItsNotesRoll(array $row): void
     {
         [$stock, $strategy] = $this->open($row);
-        $opening = new MacroStateDTO();
+        $opening = OpeningCreditAtTrend::macro();
         $structural = (new \ReflectionMethod($strategy, 'resolveStructuralTargetRoe'))->invoke($strategy, $stock, $opening);
         $yield = (new \ReflectionMethod($strategy, 'resolveOperatingYield'))->invoke($strategy, $stock, $this->math);
         $stock->setEarningsMomentumZ(array_merge($stock->getEarningsMomentumZ() ?? [], [BrokerageBusinessModel::STATE_OPERATING_YIELD => $yield]));

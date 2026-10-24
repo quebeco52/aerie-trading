@@ -225,9 +225,9 @@ class DistressedDebtBusinessModelTest extends TestCase
         $stock->setTicker('DD_TEST');
         $recession = new MacroStateDTO(
             outputGapEma: -0.03,
-            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
-            highYieldCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
+            macroCreditSpread: MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN,
+            macroCreditSpreadEma: MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN,
+            highYieldCreditSpreadEma: MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
             corporateDefaultRateEma: MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN,
         );
 
