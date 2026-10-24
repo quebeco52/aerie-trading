@@ -47,9 +47,9 @@ class ConsultingBusinessModelTest extends TestCase
      *
      * @param array<string, float> $momentum
      */
-    private function runQuarter(MacroStateDTO $macro, array $momentum = []): ActualFinancialsDTO
+    private function runQuarter(MacroStateDTO $macro, array $momentum = [], string $ticker = 'CONSULT_TEST'): ActualFinancialsDTO
     {
-        $stock = (new Stock())->setTicker('CONSULT_TEST')->setBeta('1.00');
+        $stock = (new Stock())->setTicker($ticker)->setBeta('1.00');
         $stock->setEarningsMomentumZ($momentum);
 
         return $this->model->computeActualFinancials(
@@ -77,6 +77,8 @@ class ConsultingBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(20_000_000.0, $result->streamRevenue['risk_and_restructuring'], 1.0);
         $this->assertEqualsWithDelta(self::EXPECTED_REVENUE, $result->actualRevenue, 1.0);
         $this->assertEqualsWithDelta(self::VARIABLE_COST_RATIO, $result->clampedMargin, 1e-9);
+        // A firm without an audit practice books none and reports no such line.
+        $this->assertArrayNotHasKey('audit_and_tax', $result->streamRevenue);
 
         // Orders replace what is billed, and the firm-wide book is each line's steady depth at its weight.
         $this->assertEqualsWithDelta(1.0, $result->kpis['book_to_bill'], 1e-9);
@@ -129,6 +131,22 @@ class ConsultingBusinessModelTest extends TestCase
         $next = $this->runQuarter(self::calmMacro(), $momentum);
         $this->assertGreaterThan(20_000_000.0, $next->streamRevenue['risk_and_restructuring']);
         $this->assertLessThan(1.0, $next->kpis['risk_and_restructuring_book_to_bill']);
+    }
+
+    public function testAnAuditPracticeHoldsThroughASlump(): void
+    {
+        // Avocet & Curlew keeps two-fifths of its revenue in audit and tax.
+        $calm = $this->runQuarter(self::calmMacro(), ticker: 'AVCT');
+        $this->assertEqualsWithDelta(40_000_000.0, $calm->streamRevenue['audit_and_tax'], 1.0);
+        $this->assertEqualsWithDelta(self::EXPECTED_REVENUE, $calm->actualRevenue, 1.0);
+
+        $slump = $this->runQuarter(self::calmMacro(outputGap: -0.03), ticker: 'AVCT');
+        $auditFall = 1.0 - ($slump->streamRevenue['audit_and_tax'] / $calm->streamRevenue['audit_and_tax']);
+        $strategyFall = 1.0 - ($slump->streamRevenue['strategy_advisory'] / $calm->streamRevenue['strategy_advisory']);
+
+        $burn = ConsultingBusinessModel::AUDIT_BURN_RATE;
+        $this->assertEqualsWithDelta($burn * 0.03 * ConsultingBusinessModel::AUDIT_GAP_SENSITIVITY, $auditFall, 1e-9);
+        $this->assertLessThan($strategyFall / 10.0, $auditFall);
     }
 
     public function testTheFirmIsStaffedToTheWorkInHand(): void

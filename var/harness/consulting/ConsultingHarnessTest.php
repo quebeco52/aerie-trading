@@ -14,13 +14,13 @@ use App\Entity\StockEvent;
  */
 final class ConsultingHarnessTest extends BoardRun
 {
-    private const FIRMS = ['GDWT', 'TSTN', 'CLAW', 'LYRE'];
+    private const FIRMS = ['GDWT', 'TSTN', 'AVCT', 'CLAW', 'LYRE'];
 
     /** @var array<string, mixed> */
     private array $out = ['opening' => [], 'q' => [], 'daily' => [], 'agg' => [], 'events' => []];
     private float $index = 1.0;
     /** @var array<string, float> */
-    private array $lastPx = [];
+    private array $lastCap = [];
 
     protected function onStart(): void
     {
@@ -34,30 +34,39 @@ final class ConsultingHarnessTest extends BoardRun
             ];
         }
         foreach ($this->list as $s) {
-            $this->lastPx[$s->getTicker()] = (float) $s->getPrice();
+            $this->out['board'][$s->getTicker()] = [
+                'px' => (float) $s->getPrice(), 'eps' => (float) $s->getEarningsPerShare(),
+                'bvps' => (float) $s->getBookValuePerShare(), 'beta' => (float) $s->getBeta(),
+                'payout' => (float) $s->getTargetPayoutRatio(), 'sector' => $s->getSector(),
+                'industry' => $s->getIndustry(),
+            ];
         }
     }
 
     protected function afterStocks(array $result): void
     {
-        // Cap-weighted board return over firms alive at both ends of the tick.
+        // Cap-weighted board return over firms alive at both ends of the tick, on market value so a split (shares up,
+        // price down) is not a loss. The first tick only records: the open strikes prices after onStart().
         $num = 0.0;
         $den = 0.0;
         foreach ($this->list as $s) {
             $t = $s->getTicker();
-            $px = (float) $s->getPrice();
-            $prev = $this->lastPx[$t] ?? 0.0;
-            if (!$s->isBankrupt() && $prev > 0.0 && $px > 0.0) {
-                $w = $prev * (float) $s->getSharesOutstanding();
-                $num += $w * ($px / $prev - 1.0);
-                $den += $w;
+            $cap = (float) $s->getPrice() * (float) $s->getSharesOutstanding();
+            $prev = $this->lastCap[$t] ?? 0.0;
+            if (!$s->isBankrupt() && $prev > 0.0 && $cap > 0.0) {
+                $num += $prev * ($cap / $prev - 1.0);
+                $den += $prev;
             }
-            $this->lastPx[$t] = $px;
+            $this->lastCap[$t] = $cap;
+            if ($this->tick === 1) {
+                $this->out['cap1'][$t] = $cap;
+            }
         }
         $this->index *= 1.0 + ($den > 0.0 ? $num / $den : 0.0);
         $row = ['i' => $this->index];
         foreach (self::FIRMS as $t) {
             $row[$t] = (float) $this->stocks[$t]->getPrice();
+            $row[$t . '_sh'] = (float) $this->stocks[$t]->getSharesOutstanding();
         }
         $this->out['daily'][] = $row;
     }
@@ -71,6 +80,9 @@ final class ConsultingHarnessTest extends BoardRun
         $ind = (string) $s->getIndustry();
         $this->out['agg'][$q]['ind'][$ind] = ($this->out['agg'][$q]['ind'][$ind] ?? 0.0) + $rev;
         $this->out['agg'][$q]['sec'][$s->getSector()] = ($this->out['agg'][$q]['sec'][$s->getSector()] ?? 0.0) + $rev;
+        if ((float) $s->getEarningsPerShare() > 0.0) {
+            $this->out['agg'][$q]['pe'][$t] = (float) $s->getPrice() / (float) $s->getEarningsPerShare();
+        }
         if (in_array($t, self::FIRMS, true)) {
             $m = $this->currentMacro;
             $this->out['q'][$t][] = [

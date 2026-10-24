@@ -13,3 +13,5 @@ LYRE.
 - Analysis: `analyse.py [arm]` per-seed table and means; `slopes.py <arm>...` revenue-on-gap slopes (NW SE).
 - After adding a model class in `src/`, delete `var/harness/cache/test` (the container is compiled once).
 - Evidence: `consulting_evidence.md`.
+- Opening board: `YEARS=0.1 run.sh open 1` writes every firm's opening price, EPS, book, beta and payout under `board`;
+  `agg[q].pe` holds every firm's P/E each quarter.

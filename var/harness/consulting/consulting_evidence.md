@@ -140,3 +140,35 @@ live   TSTN: slope on gap now -1.03 (0.46), gap 4q back -0.45 (0.43)
 after  GDWT: slope on gap now  1.19 (0.29), gap 4q back  1.14 (0.28) | worst-gap year: gap -3.5% rev +4.1pp; gap -2.2% rev -0.9pp; gap -2.8% rev -8.5pp; gap -1.3% rev +1.4pp
 after  TSTN: slope on gap now -1.74 (0.42), gap 4q back  0.11 (0.45)
 ```
+
+## 2026-10-25 (c): opening valuations against the run
+
+Opening P/E is the same every seed (`run.sh open 1`, YEARS 0.1; `board` in the JSON). Board of 91 at the open: median
+17.1, p25 14.5, p75 21.1, max 29.0 (SHRK). GDWT 22.0 (19th), TSTN 26.6 (3rd); P/B 5.15 and 5.32 against a board median
+of 3.47. Over years 2-20 (`run.sh pe 1|2`, `agg[q].pe` per firm): board median 16.6 / 16.5, so the board holds its
+opening multiple; the 23 top-quartile openers fall from 23.6 to 21.1 / 19.7. GDWT 22.0 -> 17.3 / 17.3, TSTN 26.6 ->
+24.2 / 18.5. The four after-arm seeds give medians GDWT 17.0, TSTN 20.0, CLAW 18.3 (open 23.1), LYRE 17.3 (open 21.6):
+the asset-light professional firms all open 4-6 points above where the market settles them.
+
+## 2026-10-25 (d): board index fixed; betas re-measured (arm `idx`, seeds 1-4, same constants as `after`)
+
+The harness index was a price-return index, so stock splits elsewhere on the board read as crashes (single days of
+-30% and -14%), and the first tick compared struck prices with onStart's provisional ones (index 1 -> 0.2). It now
+compounds market-value returns and records only on the first tick. Every beta reported before this section is void.
+Weekly beta to the board: GDWT 1.04, TSTN 0.66, CLAW 0.75, LYRE 0.89 (were reported 0.61, 0.36, 0.39, 0.46). Vols are
+unchanged (20.7%, 25.5%, 18.4%, 22.5%). Market value growth a year over 20 years: board 4.2%, GDWT 3.6%, LYRE 3.2%, CLAW
+2.4%, TSTN 2.0%. Annual EPS growth (`after` arm): GDWT 7.2%, LYRE 6.5%, TSTN 5.9%, CLAW 3.1%. Opening market value:
+board median $145bn; LYRE $79bn (75th of 91), GDWT $62bn (80th), TSTN $16bn (90th), CLAW $13bn (91st).
+
+## 2026-10-25 (e): AVCT added, GDWT x2.5 (arm `r4`, seeds 1-4, 20y, TPY 360, fixed index)
+
+Harness now also logs `cap1` (every firm's tick-1 market value) and daily shares (vol, beta and drawdown on split-adjusted prices). Tables `r4_4seed_20y.out`, `slopes_r4.out`:
+
+```
+r4     GDWT: slope on gap now  0.78 (0.22), gap 4q back  0.65 (0.23) | worst-gap year: s1 gap -3.2% rev -8.2pp; s2 gap -5.7% rev -4.6pp; s3 gap -5.4% rev -5.7pp; s4 gap -3.6% rev +2.6pp
+r4     TSTN: slope on gap now -1.42 (0.50), gap 4q back -0.08 (0.47)
+r4     AVCT: slope on gap now  0.06 (0.25), gap 4q back  0.47 (0.16) | worst-gap year: s1 gap -3.4% rev -1.3pp; s2 gap -5.7% rev +2.4pp; s3 gap -5.3% rev +2.9pp; s4 gap -3.6% rev +4.6pp
+r4     AVCT audit_and_tax: slope on gap now  0.18 (0.22), gap 4q back  0.51 (0.16)
+```
+
+GDWT's 'div cut' (1 per seed, DPS x0.26) is its 4:1 split read by analyse.py's div/shares; no real cuts. AVCT seed 4 t=1.31: revenue -17.9% q/q and margin -3.7% with book-to-bill 1.0 on every line, so not a booking move (a generic revenue shock). TSTN max drawdown -76%/-79% in seeds 2/4 (price 42.7 -> 6.0 in s4) with no distress. GDWT is now 29-42% of IT-sector revenue.

@@ -5,7 +5,7 @@ from pathlib import Path
 arm = sys.argv[1] if len(sys.argv) > 1 else 'live'
 runs = sorted(glob.glob(str(Path(__file__).parent / 'runs' / f'{arm}-s*.json')), key=lambda p: int(p.split('-s')[-1][:-5]))
 D = [json.load(open(p)) for p in runs]
-FIRMS = ['GDWT', 'TSTN', 'CLAW', 'LYRE']
+FIRMS = ['GDWT', 'TSTN', 'AVCT', 'CLAW', 'LYRE']
 rows = {}
 
 
@@ -41,6 +41,10 @@ for d in D:
         put('open om', f, o['om'])
         put('open P/E', f, o['px'] / o['eps'] if o['eps'] else float('nan'))
         put('open P/B', f, o['px'] / o['bvps'])
+        if 'cap1' in d:
+            caps = sorted(d['cap1'].values(), reverse=True)
+            put('open mkt value bn', f, d['cap1'][f] / 1e9)
+            put('open mkt value rank', f, f"{caps.index(d['cap1'][f]) + 1}/{len(caps)}")
         rev = [r['rev'] for r in q]; om = [r['om'] for r in q]; ni = [r['ni'] for r in q]; sh = [r['sh'] for r in q]
         nan_hits += sum(not math.isfinite(x) for x in rev + om + ni)
         ny = len(q) // 4
@@ -49,7 +53,14 @@ for d in D:
         put('om mean', f, st.fmean(om)); put('om min', f, min(om)); put('om max', f, max(om))
         eps_y = [sum(ni[4 * y:4 * y + 4]) / sh[4 * y + 3] for y in range(ny)]
         put('EPS g SD', f, st.stdev([(b - a) / abs(a) for a, b in zip(eps_y, eps_y[1:])]))
-        px = [r[f] for r in daily]
+        # Split-adjusted price: a share-count jump over 20% in a day rescales the earlier prices.
+        px, adj = [], 1.0
+        for i, r in enumerate(daily):
+            if i and f + '_sh' in r and daily[i - 1][f + '_sh'] > 0:
+                ratio = r[f + '_sh'] / daily[i - 1][f + '_sh']
+                if ratio > 1.2 or ratio < 0.8:
+                    adj *= ratio
+            px.append(r[f] * adj)
         lr = [math.log(b / a) for a, b in zip(px, px[1:])]
         put('vol', f, st.stdev(lr) * math.sqrt(len(daily) / ny))
         rw = [math.log(px[i + 5] / px[i]) for i in range(0, len(px) - 5, 5)]
@@ -68,13 +79,15 @@ for d in D:
         s0 = q[0]['rev'] / d['agg'][str(round(q[0]['t'], 2))]['sec'][sec]
         s1 = q[-1]['rev'] / d['agg'][str(round(q[-1]['t'], 2))]['sec'][sec]
         put('sector rev share 0->end', f, f'{s0:.3f}->{s1:.3f}')
-        if f not in ('GDWT', 'TSTN'):
+        if f not in ('GDWT', 'TSTN', 'AVCT'):
             continue
         b2b = [r['kpi']['book_to_bill'] for r in q]
         put('b2b p5', f, pct(b2b, 5)); put('b2b p95', f, pct(b2b, 95))
         bq = [r['kpi']['backlog_quarters'] for r in q]
         put('backlog q min', f, min(bq)); put('backlog q max', f, max(bq))
-        for s in ('strategy_advisory', 'technology_programmes', 'risk_and_restructuring'):
+        for s in ('strategy_advisory', 'technology_programmes', 'risk_and_restructuring', 'audit_and_tax'):
+            if s + '_backlog_quarters' not in q[0]['kpi']:
+                continue
             sbq = [r['kpi'][s + '_backlog_quarters'] for r in q]
             put(f'{s[:4]} backlog q min/max', f, f'{min(sbq):.2f}/{max(sbq):.2f}')
         gap = [r['gap'] for r in q]; spr = [r['spread'] for r in q]
@@ -104,7 +117,7 @@ for d in D:
             put(f'd rev % +{h}q', f, (rev[k + h] / rev[k] - 1) * 100)
 
 PCT = {'open om', 'rev CAGR', 'om mean', 'om min', 'om max', 'EPS g SD', 'vol', 'maxDD',
-       'stress rev yoy - mean', 'stress NI yoy - mean', 'slump rev yoy - mean', 'slump gap'}
+       'stress rev yoy - mean', 'stress NI yoy - mean', 'open om', 'slump rev yoy - mean', 'slump gap'}
 
 
 def fmt(m, v):

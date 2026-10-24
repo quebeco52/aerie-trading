@@ -16,15 +16,18 @@ use App\Service\Model\ModelParam;
 use App\Service\Model\StreamContext;
 
 /**
- * Earnings strategy for Consulting Services (strategy advice, technology programmes, risk and restructuring work).
+ * Earnings strategy for Consulting Services (strategy advice, technology programmes, risk and restructuring work, audit
+ * and tax).
  *
  * Financial Physics:
  * - Booked Work: a consultancy sells its staff's time under signed engagements. Each line of work books into its own
  *   backlog and bills as the work is done (ASC 606 over-time recognition), so the cycle shows in book-to-bill before
  *   it shows in revenue.
- * - Three Engagement Lengths: strategy advice is weeks of work bought from discretionary budgets, on the cycle and
- *   deal flow; technology programmes and managed services run for years against IT budgets set a year ahead; risk,
- *   regulatory and restructuring mandates follow credit stress and corporate failures, against the cycle.
+ * - Four Engagement Lengths: strategy advice is weeks of work bought from discretionary budgets, on the cycle and deal
+ *   flow; technology programmes and managed services run for years against IT budgets set a year ahead; risk,
+ *   regulatory and restructuring mandates follow credit stress and corporate failures, against the cycle; audit and
+ *   tax work is a yearly engagement every listed company must buy, so it follows the size of the client base, not the
+ *   cycle.
  * - The Bench: the firm staffs to the work it has in hand and its payroll is committed. When bookings fall, billable
  *   hours fall at once and headcount follows over the quarters after, so margin moves ahead of revenue.
  * - Talent Cost: consultants' pay is most of the cost base and follows the labour market; rate cards follow services
@@ -77,6 +80,8 @@ class ConsultingBusinessModel extends StandardCorporateBusinessModel
     public const TECHNOLOGY_PROGRAMME_WEIGHT = 0.45;
     /** Baseline fraction of revenue from risk, regulatory and restructuring mandates. */
     public const RISK_RESTRUCTURING_WEIGHT = 0.20;
+    /** Baseline fraction of revenue from statutory audit and tax work: none unless the firm keeps an audit practice. */
+    public const AUDIT_TAX_WEIGHT = 0.00;
 
     // --- Engagement Length ---
     /** Share of the strategy book billed each quarter (60%): engagements of eight to twelve weeks. */
@@ -85,6 +90,8 @@ class ConsultingBusinessModel extends StandardCorporateBusinessModel
     public const TECHNOLOGY_BURN_RATE = 0.15;
     /** Share of the risk and restructuring book billed each quarter (35%): workouts and remediation of about a year. */
     public const RISK_BURN_RATE = 0.35;
+    /** Share of the audit and tax book billed each quarter (30%): yearly engagements worked through the year. */
+    public const AUDIT_BURN_RATE = 0.30;
 
     // --- Booking Volatility ---
     /** Volatility multiplier on strategy bookings: engagements are won and lost one client at a time. */
@@ -93,6 +100,8 @@ class ConsultingBusinessModel extends StandardCorporateBusinessModel
     public const TECHNOLOGY_VARIANCE_SCALAR = 0.50;
     /** Volatility multiplier on risk and restructuring bookings: a few large mandates make the year. */
     public const RISK_VARIANCE_SCALAR = 0.40;
+    /** Volatility multiplier on audit and tax bookings: clients change auditor rarely, and only at a tender. */
+    public const AUDIT_VARIANCE_SCALAR = 0.15;
 
     // --- Demand Transmission Lag ---
     /**
@@ -115,6 +124,11 @@ class ConsultingBusinessModel extends StandardCorporateBusinessModel
      * double the trend adds 25%.
      */
     public const RISK_DEFAULT_SENSITIVITY = 0.25;
+    /**
+     * Audit and tax bookings per unit of output gap, both ways: audit hours follow clients' size and complexity, so a
+     * -3% gap cuts them 0.9% at beta 1.
+     */
+    public const AUDIT_GAP_SENSITIVITY = 0.30;
 
     // --- Secular Demand ---
     /**
@@ -181,7 +195,7 @@ class ConsultingBusinessModel extends StandardCorporateBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $shift = 0.0;
-        foreach (self::burnRates() as $key => $burnRate) {
+        foreach (self::lines() as $key => ['burn' => $burnRate]) {
             $shift += $weights[$key] * (StreamContext::openingWorkload($momentum, $key, $burnRate) - 1.0);
         }
 
@@ -192,25 +206,24 @@ class ConsultingBusinessModel extends StandardCorporateBusinessModel
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveTargetWeights($stock));
-
-        // Strategy wins persist a little; technology deals come through a pipeline the sales force works for quarters.
-        $draws = [
-            'strategy_advisory'      => $streams->generateZ('strategy_advisory', 0.30) * self::STRATEGY_VARIANCE_SCALAR,
-            'technology_programmes'  => $streams->generateZ('technology_programmes', 0.50) * self::TECHNOLOGY_VARIANCE_SCALAR,
-            'risk_and_restructuring' => $streams->generateZ('risk_and_restructuring', 0.40) * self::RISK_VARIANCE_SCALAR,
-        ];
+        // A firm without a line of work books none and draws nothing for it.
+        $targetWeights = array_filter($this->resolveTargetWeights($stock), static fn(float $weight): bool => $weight > 0.0);
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
         $bookingShifts = $this->resolveBookingShifts($stock, $macroState);
 
         $streamRevenues = [];
         $kpis = [];
         $orders = 0.0;
         $backlog = 0.0;
-        foreach (self::burnRates() as $key => $burnRate) {
+        foreach (self::lines() as $key => ['burn' => $burnRate, 'persistence' => $persistence, 'variance' => $varianceScalar]) {
+            if (!isset($activeWeights[$key])) {
+                continue;
+            }
+            $draw = $streams->generateZ($key, $persistence) * $varianceScalar;
             $book = $streams->recognizeBacklog(
                 $key,
                 $expectedRevenue * $activeWeights[$key],
-                max(0.0, 1.0 + ($draws[$key] * $baselineVol) + $bookingShifts[$key]),
+                max(0.0, 1.0 + ($draw * $baselineVol) + $bookingShifts[$key]),
                 $burnRate,
             );
             $streamRevenues[$key] = $book['revenue'];
@@ -246,10 +259,10 @@ class ConsultingBusinessModel extends StandardCorporateBusinessModel
     /**
      * Each line's bookings over their steady rate, every driver both ways: strategy on the output gap and deal flow;
      * technology on the gap a year back, when this year's IT budgets were set; risk and restructuring on credit
-     * spreads and corporate failures over their trends. Restructuring reads distress rather than the gap, so a slowdown
-     * without credit stress brings no workouts.
+     * spreads and corporate failures over their trends; audit and tax a little on the gap. Restructuring reads distress
+     * rather than the gap, so a slowdown without credit stress brings no workouts.
      *
-     * @return array{strategy_advisory: float, technology_programmes: float, risk_and_restructuring: float}
+     * @return array{strategy_advisory: float, technology_programmes: float, risk_and_restructuring: float, audit_and_tax: float}
      */
     private function resolveBookingShifts(Stock $stock, MacroStateDTO $macroState): array
     {
@@ -262,32 +275,44 @@ class ConsultingBusinessModel extends StandardCorporateBusinessModel
             'technology_programmes'  => $this->resolveLaggedOutputGap($macroState) * self::TECHNOLOGY_GAP_SENSITIVITY * $beta,
             'risk_and_restructuring' => ($spreadShift * self::RISK_SPREAD_SENSITIVITY)
                 + ($macroState->corporateDefaultDeviation() * self::RISK_DEFAULT_SENSITIVITY),
+            'audit_and_tax'          => $macroState->outputGapEma * self::AUDIT_GAP_SENSITIVITY * $beta,
         ];
     }
 
-    /** @return array{strategy_advisory: float, technology_programmes: float, risk_and_restructuring: float} */
+    /**
+     * @return array{strategy_advisory: float, technology_programmes: float, risk_and_restructuring: float, audit_and_tax: float}
+     */
     private function resolveTargetWeights(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::StrategyAdvisoryWeight->value    => self::STRATEGY_ADVISORY_WEIGHT,
             ModelParam::TechnologyProgrammeWeight->value => self::TECHNOLOGY_PROGRAMME_WEIGHT,
             ModelParam::RiskRestructuringWeight->value   => self::RISK_RESTRUCTURING_WEIGHT,
+            ModelParam::AuditTaxWeight->value            => self::AUDIT_TAX_WEIGHT,
         ]);
 
         return [
             'strategy_advisory'      => (float) $params[ModelParam::StrategyAdvisoryWeight],
             'technology_programmes'  => (float) $params[ModelParam::TechnologyProgrammeWeight],
             'risk_and_restructuring' => (float) $params[ModelParam::RiskRestructuringWeight],
+            'audit_and_tax'          => (float) $params[ModelParam::AuditTaxWeight],
         ];
     }
 
-    /** @return array{strategy_advisory: float, technology_programmes: float, risk_and_restructuring: float} */
-    private static function burnRates(): array
+    /**
+     * Each line of work's billing rate, the persistence of its booking draw and its booking volatility. Strategy wins
+     * persist a little; technology deals come through a pipeline the sales force works for quarters; an audit client
+     * stays for years.
+     *
+     * @return array<string, array{burn: float, persistence: float, variance: float}>
+     */
+    private static function lines(): array
     {
         return [
-            'strategy_advisory'      => self::STRATEGY_BURN_RATE,
-            'technology_programmes'  => self::TECHNOLOGY_BURN_RATE,
-            'risk_and_restructuring' => self::RISK_BURN_RATE,
+            'strategy_advisory'      => ['burn' => self::STRATEGY_BURN_RATE, 'persistence' => 0.30, 'variance' => self::STRATEGY_VARIANCE_SCALAR],
+            'technology_programmes'  => ['burn' => self::TECHNOLOGY_BURN_RATE, 'persistence' => 0.50, 'variance' => self::TECHNOLOGY_VARIANCE_SCALAR],
+            'risk_and_restructuring' => ['burn' => self::RISK_BURN_RATE, 'persistence' => 0.40, 'variance' => self::RISK_VARIANCE_SCALAR],
+            'audit_and_tax'          => ['burn' => self::AUDIT_BURN_RATE, 'persistence' => 0.60, 'variance' => self::AUDIT_VARIANCE_SCALAR],
         ];
     }
 

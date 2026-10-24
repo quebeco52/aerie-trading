@@ -75,10 +75,10 @@ final class InputOutputExposures
      */
     public const CONSTRUCTION = ['energy' => 0.028, 'metals' => 0.041, 'imports' => 0.078, 'labor' => 0.456];
     /**
-     * Management consulting (GDWT, TURN), computer systems design and custom programming (GDWT): BEA 541511, 541512,
-     * 541610.
+     * Management consulting (GDWT, TSTN, AVCT), computer systems design (GDWT, AVCT), custom programming (GDWT),
+     * accounting and tax (AVCT): BEA 541200, 541511, 541512, 541610.
      */
-    public const CONSULTING = ['imports' => 0.035, 'labor' => 0.629];
+    public const CONSULTING = ['imports' => 0.036, 'labor' => 0.626];
     /**
      * Tobacco, packaged foods, poultry and grain, personal and household products, wine and spirits (PHIL, SGRB, CROP,
      * LARK, PINT): BEA 1111B0, 112300, 311230, 311300, 311410, 312130, 312140, 312200, 325610, 325620.

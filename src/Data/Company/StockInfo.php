@@ -196,6 +196,8 @@ class StockInfo
         'GDWT' => "Godwit Consulting Group is the largest consultancy in the Aerie Autonomous District. It advises boards on strategy and operations, and designs, builds and runs the computer systems of banks, insurers and manufacturers across the District and the mainland.\n\nAbout a third of its revenue comes from strategy work sold in engagements of a few weeks. The rest comes from technology programmes and service contracts that run for years, so most of next year's revenue is already signed by the time it starts. The firm reports its order book every quarter.\n\nThe order book is the figure to watch. Strategy budgets are the first thing clients cut when profits fall, so new orders drop a quarter or two before revenue does. Consultants without a client are still paid, so a fall in orders cuts profit faster than revenue until the firm hires less, and a recovery reaches the top line slowly because the long contracts take years to turn over.",
 
         'TSTN' => "Turnstone Advisory is the firm District companies call when something has gone wrong. It runs restructurings for companies that cannot pay their debts, works with banks on what the Financial Regulator demands of them after a crisis, and investigates fraud and accounting failures for boards, lenders and the courts.\n\nIts work arrives with credit stress. When credit spreads widen and companies start to fail, its order book fills, and it stays busy for a year or more afterwards while workouts and remediation programmes run their course. In calm years it lives on smaller advisory and technology work, and its partners take a large share of the profit as pay.\n\nThe share price tends to lag the market in a long boom and to hold up, or rise, in a credit crunch. Orders lead revenue by a few quarters, so a widening of credit spreads shows in its order book well before it shows in earnings.",
+
+        'AVCT' => "Avocet & Curlew is the largest accounting firm in the Aerie Autonomous District. It audits most companies listed on the Aerie Exchange and prepares their tax returns, and sells consulting, deal and risk advice to the companies whose accounts it does not sign.\n\nThe Securities Commission requires every listed company to have its accounts audited each year, so the audit and tax practice, about two-fifths of revenue, is signed a year at a time and barely moves with the economy. Clients change auditor rarely, and only at a tender. Independence rules bar the firm from advising its own audit clients, so the rest of it works for the others and behaves like a consultancy: its strategy and technology work falls in a downturn, and its risk and restructuring practice fills when credit cracks.\n\nThe largest risk is an audit that misses a fraud. The fines, the lawsuits and the clients that leave afterwards cost far more than the fee ever earned, which is why the firm keeps more cash than its business needs.",
     ];
 
     public const QUOTES = [
@@ -290,6 +292,7 @@ class StockInfo
         'KTWK' => "Tariffs are the Diet's business. Boxes are ours.",
         'GDWT' => "Change is the only constant, and we bill it by the day.",
         'TSTN' => "Every boom leaves a bill. We are paid to read it.",
+        'AVCT' => "We sign the numbers everyone else trades on.",
     ];
 
     /**

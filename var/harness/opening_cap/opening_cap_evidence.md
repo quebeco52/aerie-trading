@@ -108,3 +108,20 @@ seed 33.0), KTWK 43.3 (1.4), LOON 153.2. Recommend 20.3e12 (unchanged from (a)).
 
 The OVR seed copies (`ovr_newfirms/`, `ovr_noplvr/`) were deleted 2026-10-22: they froze InitialMarket as of 10-18.
 `git checkout 2f8bc547 -- var/harness/opening_cap/ovr_newfirms var/harness/opening_cap/ovr_noplvr` restores them.
+
+## 2026-10-25: AVCT added, GDWT x2.5 (working tree) vs HEAD 301da484
+
+Arm `r4_1025` (92 firms): working tree. Arm `head1025` (91 firms): `git archive HEAD` at `base/head301da484` with a vendor *symlink* (a copied vendor fails: Composer's autoloader class is declared twice, since phpunit loads main's vendor first; the bootstrap prepends BASE's src, so the symlink is safe here). Seeds 1-16, TPY 360, one quarter. `bin/harness-batch var/harness/opening_cap/run.sh 1-16 r4_1025 && BASE=<abs>/var/harness/opening_cap/base/head301da484 bin/harness-batch var/harness/opening_cap/run.sh 1-16 head1025 && python3 -I var/harness/opening_cap/analyse_1025.py` (paired by seed). Table `opening_cap_1025.out`:
+
+```
+quantity                         head1025          r4_1025   paired diff (se)
+board tick 1, $T           21.567 (0.023)   21.786 (0.029)    +0.218 (0.040)
+board Q1 mean, $T          22.166 (0.186)   22.026 (0.194)    -0.140 (0.314)
+board Q1 end, $T           22.620 (0.396)   22.132 (0.378)    -0.488 (0.623)
+GDWT $B: seed 61.8 -> 154.5 (0.0); tick1 62.0 -> 154.7 (0.3); q1_end 64.3 -> 157.4 (3.3)
+TSTN $B: seed 16.0 -> 16.0 (0.0); tick1 15.9 -> 16.0 (0.1); q1_end 15.4 -> 15.7 (0.4)
+AVCT $B: seed - -> 122.8 (0.0); tick1 - -> 122.6 (0.2); q1_end - -> 123.2 (2.8)
+n_stocks 91 -> 92, n=16 per arm
+```
+
+Tick-1 gain +0.218T (0.040) = AVCT 122.6B + GDWT's +92.7B. HEAD alone already opens at 21.57T and averages 22.17T over Q1, so most of the gap to the 20.3e12 constant came from commits after 10-16. Q1 mean: working tree 22.03T (0.19); HEAD Q1 mean + paired tick-1 gain 22.38T. Recommend 22.0e12 (a 22.2e12 midpoint is inside the noise).

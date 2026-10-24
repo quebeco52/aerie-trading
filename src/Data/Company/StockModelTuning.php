@@ -885,6 +885,15 @@ class StockModelTuning
             ModelParam::PricingPowerIndex->value         => 0.75, // A crisis mandate is not shopped on price
         ],
 
+        // --- Avocet & Curlew (AVCT) ---
+        // Multidisciplinary accounting firm: statutory audit and tax beside consulting, deal and risk advice.
+        'AVCT' => [
+            ModelParam::StrategyAdvisoryWeight->value    => 0.15,
+            ModelParam::TechnologyProgrammeWeight->value => 0.30,
+            ModelParam::RiskRestructuringWeight->value   => 0.15,
+            ModelParam::AuditTaxWeight->value            => 0.40,
+        ],
+
         // =====================================================================
         // AUTO MANUFACTURER ARCHETYPES
         // =====================================================================

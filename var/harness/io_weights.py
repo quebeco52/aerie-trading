@@ -158,7 +158,7 @@ MAP = {
     'COMPUTER_HARDWARE': [['334111', '334112', '334118']],                                 # PENG
     'CONGLOMERATE': [['33399A', '335312', '336413', '3259A0']] * 3,                        # OWLS, TRIV, HARR (inherited by BRKW, RAVN)
     'CONSTRUCTION': [['2332A0', '2332C0', '233230', '2332D0', '233240']],                  # IBHI (engineering and construction)
-    'CONSULTING': [['541610', '541512', '541511'], ['541610']],                           # GDWT (strategy, systems design, programming), TURN
+    'CONSULTING': [['541610', '541512', '541511'], ['541610'], ['541200', '541610', '541512']],  # GDWT (strategy, systems design, programming), TSTN, AVCT (audit and tax)
     'CONSUMER_STAPLES': [['312200'], ['311300', '311410', '311230'], ['112300', '1111B0'], ['325620', '325610'], ['312130', '312140']],  # PHIL, SGRB, CROP, LARK, PINT
     'DEFENSE_CONTRACTOR': [['336411', '336412', '336413', '336414', '334511']] * 2,       # GRIP, PTAR
     'EDUCATION': [['611A00', '611B00']],                                                   # STAR
@@ -281,7 +281,7 @@ LABELS = {
     'COMMUNICATION_EQUIPMENT': 'Telephone, broadcast and wireless equipment', 'COMPUTER_HARDWARE': 'Computers, storage and peripherals (PENG)',
     'CONGLOMERATE': 'A diversified industrial blend: machinery, motors, aerospace parts, chemical products',
     'CONSTRUCTION': 'Nonresidential, infrastructure, manufacturing and power structures (IBHI)',
-    'CONSULTING': 'Management consulting (GDWT, TURN), computer systems design and custom programming (GDWT)',
+    'CONSULTING': 'Management consulting (GDWT, TSTN, AVCT), computer systems design (GDWT, AVCT), custom programming (GDWT), accounting and tax (AVCT)',
     'CONSUMER_STAPLES': 'Tobacco, packaged foods, poultry and grain, personal and household products, wine and spirits (PHIL, SGRB, CROP, LARK, PINT)',
     'DEFENSE_CONTRACTOR': 'Aircraft, engines, parts, missiles and navigation instruments', 'EDUCATION': 'Colleges and other educational services',
     'FINANCIAL_DATA': 'Securities intermediation and exchanges, data processing',

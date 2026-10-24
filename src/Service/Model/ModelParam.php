@@ -258,6 +258,7 @@ enum ModelParam: string
     case StrategyAdvisoryWeight = 'strategy_advisory_weight';
     case TechnologyProgrammeWeight = 'technology_programme_weight';
     case RiskRestructuringWeight = 'risk_restructuring_weight';
+    case AuditTaxWeight = 'audit_tax_weight';
 
     // --- Utilities & Waste Management ---
     case RegulatedBaseWeight = 'regulated_base_weight';
