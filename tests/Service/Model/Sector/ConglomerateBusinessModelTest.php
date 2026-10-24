@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConglomerateBusinessModel;
+use App\Tests\Support\FloatBookCreditDrivers;
 use PHPUnit\Framework\TestCase;
 
 class ConglomerateBusinessModelTest extends TestCase
@@ -311,5 +312,20 @@ class ConglomerateBusinessModelTest extends TestCase
         // A PMI of 47 adds 0.40 x (-0.06 x 0.40) x 0.90 to the industrial leg.
         $pmiSlump = new MacroStateDTO(outputGapEma: -0.03, manufacturingPmiEma: 47.0, exchangeRateIndexEma: 100.0);
         $this->assertEqualsWithDelta($expected + (0.40 * -0.06 * 0.40 * 0.90), $this->model->resolveSectorActivityShift($stock, $pmiSlump), 1e-9);
+    }
+
+    /**
+     * The drivers panel reads the float book's own arithmetic on the IG spread: the line for its level over trend is
+     * the deployment premium alone and the line for its move the mark alone, so the two add up to what the spread did,
+     * up to the product of the two.
+     */
+    public function testTheCreditSpreadDriversReadTheFloatBooksOwnArithmetic(): void
+    {
+        $drivers = FloatBookCreditDrivers::measure($this->model, $this->stock('TRIV', '0.6'));
+
+        // Each line is measured against the quarter with the other effect still in it.
+        $this->assertEqualsWithDelta($drivers['deployment'] / (1.0 + $drivers['mark']), $drivers['level'], 1e-12);
+        $this->assertEqualsWithDelta($drivers['mark'] / (1.0 + $drivers['deployment']), $drivers['move'], 1e-12);
+        $this->assertEqualsWithDelta($drivers['deployment'] + $drivers['mark'], $drivers['level'] + $drivers['move'], 2.0 * abs($drivers['deployment'] * $drivers['mark']));
     }
 }

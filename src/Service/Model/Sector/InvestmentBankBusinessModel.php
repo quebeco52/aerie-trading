@@ -539,6 +539,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             'deal_activity_index_ema',
             'high_yield_credit_spread',
             'high_yield_credit_spread_ema',
+            'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
             'market_volatility_ema',
             'money_supply_growth_ema',

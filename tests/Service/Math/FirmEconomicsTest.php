@@ -115,50 +115,34 @@ class FirmEconomicsTest extends TestCase
      */
     public function testWorkingCapitalDayShiftsRespondToTheirOwnDriverOnly(): void
     {
-        $neutral = FirmEconomics::calculateWorkingCapitalDayShifts(
-            0.016,
-            0.016,
-            1.0,
-            MacroConstants::INTERBANK_BASELINE_SPREAD,
-        );
+        $ib = 0.0025;
+        $neutral = FirmEconomics::calculateWorkingCapitalDayShifts(0.016, 0.016, 1.0, $ib, $ib);
 
         $this->assertEqualsWithDelta(0.0, $neutral['dso'], 0.0000001, 'At the spread\'s usual level receivables do not age, wherever that level sits.');
         $this->assertEqualsWithDelta(0.0, $neutral['dio'], 0.0000001, 'At full capacity inventory does not build.');
-        $this->assertEqualsWithDelta(0.0, $neutral['dpo'], 0.0000001, 'At baseline liquidity payables do not contract.');
+        $this->assertEqualsWithDelta(0.0, $neutral['dpo'], 0.0000001, 'At the interbank spread\'s usual level payables do not move, wherever that level sits.');
 
         // Dear credit stretches customer payment and cheap credit shortens it: DSO moves with the spread over its
         // trend.
-        $creditStress = FirmEconomics::calculateWorkingCapitalDayShifts(
-            0.026,
-            0.016,
-            1.0,
-            MacroConstants::INTERBANK_BASELINE_SPREAD,
-        );
+        $creditStress = FirmEconomics::calculateWorkingCapitalDayShifts(0.026, 0.016, 1.0, $ib, $ib);
         $this->assertEqualsWithDelta(0.010 * FirmEconomics::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $creditStress['dso'], 0.0000001, 'DSO must track the credit spread.');
         $this->assertEqualsWithDelta(0.0, $creditStress['dio'], 0.0000001, 'A credit shock must not move inventory days.');
         $this->assertEqualsWithDelta(0.0, $creditStress['dpo'], 0.0000001, 'A credit shock must not move payable days.');
-        $easyCredit = FirmEconomics::calculateWorkingCapitalDayShifts(0.011, 0.016, 1.0, MacroConstants::INTERBANK_BASELINE_SPREAD);
+        $easyCredit = FirmEconomics::calculateWorkingCapitalDayShifts(0.011, 0.016, 1.0, $ib, $ib);
         $this->assertEqualsWithDelta(-0.005 * FirmEconomics::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $easyCredit['dso'], 0.0000001, 'A spread below its trend shortens receivable days.');
 
         // Slack plants pile up unsold goods: DIO rises as utilisation falls.
-        $slack = FirmEconomics::calculateWorkingCapitalDayShifts(
-            0.016,
-            0.016,
-            0.80,
-            MacroConstants::INTERBANK_BASELINE_SPREAD,
-        );
+        $slack = FirmEconomics::calculateWorkingCapitalDayShifts(0.016, 0.016, 0.80, $ib, $ib);
         $this->assertEqualsWithDelta(0.20 * FirmEconomics::CCC_DIO_CAPACITY_SENSITIVITY, $slack['dio'], 0.0000001, 'DIO must track idle capacity.');
         $this->assertEqualsWithDelta(0.0, $slack['dso'], 0.0000001, 'Idle capacity must not move receivable days.');
 
-        // Interbank stress makes vendors demand cash sooner, so DPO contracts (negative shift).
-        $liquidityStress = FirmEconomics::calculateWorkingCapitalDayShifts(
-            0.016,
-            0.016,
-            1.0,
-            MacroConstants::INTERBANK_BASELINE_SPREAD + 0.004,
-        );
-        $this->assertEqualsWithDelta(-0.004 * FirmEconomics::CCC_DPO_LIQUIDITY_SENSITIVITY, $liquidityStress['dpo'], 0.0000001, 'DPO must contract under interbank stress.');
-        $this->assertLessThan(0.0, $liquidityStress['dpo'], 'Vendors demanding faster payment shortens the payable cycle.');
+        // A wholesale freeze makes vendors demand cash sooner, so DPO contracts (negative shift); funding cheaper than
+        // usual lets them wait.
+        $freeze = FirmEconomics::calculateWorkingCapitalDayShifts(0.016, 0.016, 1.0, $ib + 0.004, $ib);
+        $this->assertEqualsWithDelta(-0.004 * FirmEconomics::CCC_DPO_LIQUIDITY_SENSITIVITY, $freeze['dpo'], 0.0000001, 'DPO must contract under interbank stress.');
+        $this->assertEqualsWithDelta(0.0, $freeze['dso'], 0.0000001, 'A funding freeze must not move receivable days.');
+        $calm = FirmEconomics::calculateWorkingCapitalDayShifts(0.016, 0.016, 1.0, MacroConstants::INTERBANK_BASELINE_SPREAD, $ib);
+        $this->assertEqualsWithDelta(($ib - MacroConstants::INTERBANK_BASELINE_SPREAD) * FirmEconomics::CCC_DPO_LIQUIDITY_SENSITIVITY, $calm['dpo'], 0.0000001, 'The spread at its floor, under its trend, stretches payables.');
     }
 
     /**

@@ -373,11 +373,11 @@ class BrokerageBusinessModelTest extends TestCase
 
     /**
      * The return the broker books on a macro: operating profit on its struck yield plus the interest it nets, after
-     * tax.
+     * tax, its notes at the coupon they would refinance at.
      */
     private function bookedReturn(BrokerageBusinessModel $model, Stock $stock, MacroStateDTO $macro): float
     {
-        $fundingRate = (new \ReflectionMethod($model, 'calculateBlendedWholesaleRate'))->invoke($model, $stock, $macro);
+        $fundingRate = DebtEngine::chargedWholesaleRate($stock, $macro, $model->getLossGivenDefault(), true);
         $operatingYield = (new \ReflectionMethod($model, 'resolveOperatingYield'))->invoke($model, $stock, $this->mathUtility);
         $operatingProfit = $operatingYield * $model->resolveEarningAssets($stock) * (float) $stock->getOperatingMargin();
         $netInterest = $model->calculateInterestIncome($stock, $macro, $fundingRate) - ((float) $stock->getTotalDebt() * $fundingRate);
@@ -386,9 +386,10 @@ class BrokerageBusinessModelTest extends TestCase
     }
 
     /**
-     * At the macro its operating yield is struck at, the broker books its structural return: the target nets the
-     * interest its books show, margin interest on the whole book at its funding rate plus the sweep and the cash.
-     * Netted against margin interest on its debt alone at the policy rate, ROOK booked 31% against a 20% target.
+     * At the macro its operating yield is struck at, with its notes rolled, the broker books its structural return: the
+     * target nets the interest its books show, margin interest on the whole book at its funding rate plus the sweep and
+     * the cash. Netted against margin interest on its debt alone at the policy rate, ROOK booked 31% against a 20%
+     * target.
      */
     public function testTheOperatingTargetNetsTheInterestTheBookBooks(): void
     {
@@ -434,11 +435,12 @@ class BrokerageBusinessModelTest extends TestCase
     }
 
     /**
-     * The operating yield is struck on the coupon the broker pays, as DebtEngine charges it, so a broker whose notes
-     * carry a coupon far from the five-year still books its structural return at the opening macro: struck on the
-     * five-year plus the seeded spread, ROOK opened 5% under target.
+     * The operating yield is struck on the coupon the broker's notes would refinance at, as DebtEngine charges it, so a
+     * broker whose notes carry a coupon far from the market opens off its structural return by what that coupon does
+     * to its interest and books it once they have rolled: struck on the coupon it paid, ROOK drifted 0.2pp over target
+     * as its notes rolled. A dearer coupon raises the return here, the margin book the equity funds earning over it.
      */
-    public function testABrokerWhoseCouponIsOffTheFiveYearOpensOnTarget(): void
+    public function testABrokerWhoseCouponIsOffTheMarketSettlesOnTargetOnceItsNotesRoll(): void
     {
         $seed = null;
         foreach (InitialMarket::STOCKS as $row) {
@@ -450,19 +452,33 @@ class BrokerageBusinessModelTest extends TestCase
         $opening = new MacroStateDTO();
         $debtEngine = new DebtEngine($this->mathUtility, CorporateMetrics::getInstance());
         $builder = new OpeningBoardBuilder($this->mathUtility, $debtEngine, new MarketEngine($this->mathUtility), new AnchorStakeLedger());
-
-        foreach ([0.02, 0.08] as $coupon) {
-            $stock = (new Stock())->setTicker('ROOK');
-            $builder->open($stock, ['historical_fixed_rate' => $coupon] + $seed, $opening);
+        $lossGivenDefault = $this->model->getLossGivenDefault();
+        $booked = function (Stock $stock) use ($debtEngine, $opening): float {
             $target = $this->model->getTargetMetrics($stock, $opening, $this->mathUtility);
             $debt = $debtEngine->calculateInterestExpense($stock, $opening);
             $operatingProfit = $target['invested_capital'] * $target['baseline_roic'] / (1.0 - $opening->corporateTaxRate);
             $netInterest = $this->model->calculateInterestIncome($stock, $opening, $debt->wholesaleRate) - $debt->interestExpense;
-            $booked = ($operatingProfit + $netInterest) * (1.0 - $opening->corporateTaxRate) / $stock->getTangibleEquity();
-            $structural = (new \ReflectionMethod($this->model, 'resolveStructuralTargetRoe'))->invoke($this->model, $stock, $opening);
 
-            $this->assertNotEqualsWithDelta($opening->yield5yEma, $coupon, 0.01);
-            $this->assertEqualsWithDelta($structural, $booked, 1e-9, sprintf('A %.0f%% coupon', 100 * $coupon));
+            return ($operatingProfit + $netInterest) * (1.0 - $opening->corporateTaxRate) / $stock->getTangibleEquity();
+        };
+
+        foreach ([0.02, 0.08] as $coupon) {
+            $stock = (new Stock())->setTicker('ROOK');
+            $builder->open($stock, ['historical_fixed_rate' => $coupon] + $seed, $opening);
+            $stock->setEarningsMomentumZ([BrokerageBusinessModel::STATE_OPERATING_YIELD => (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $stock, $this->mathUtility)]);
+            $structural = (new \ReflectionMethod($this->model, 'resolveStructuralTargetRoe'))->invoke($this->model, $stock, $opening);
+            $marketCoupon = $opening->yield5yEma + DebtEngine::throughTheCycleCreditSpread($stock, $opening, $lossGivenDefault);
+            $paid = DebtEngine::chargedWholesaleRate($stock, $opening, $lossGivenDefault);
+            $rolled = DebtEngine::chargedWholesaleRate($stock, $opening, $lossGivenDefault, true);
+            $couponGap = ($this->model->calculateInterestIncome($stock, $opening, $paid) - $this->model->calculateInterestIncome($stock, $opening, $rolled) - ((float) $stock->getTotalDebt() * ($paid - $rolled)))
+                * (1.0 - $opening->corporateTaxRate) / $stock->getTangibleEquity();
+
+            $this->assertNotEqualsWithDelta($marketCoupon, $coupon, 0.01);
+            $this->assertEqualsWithDelta($structural + $couponGap, $booked($stock), 1e-9, sprintf('A %.0f%% coupon opens by its gap', 100 * $coupon));
+            $this->assertSame($coupon > $marketCoupon, $couponGap > 0.0, 'The equity-funded margin book earns the coupon it is priced on.');
+
+            $stock->setHistoricalFixedRate((string) $marketCoupon);
+            $this->assertEqualsWithDelta($structural, $booked($stock), 1e-5, sprintf('A %.0f%% coupon, rolled', 100 * $coupon));
         }
     }
 

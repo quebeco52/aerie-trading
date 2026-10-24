@@ -178,8 +178,9 @@ class CreditFiscalSubsystem
      */
     public const RETAIL_DEFAULT_BASELINE = 0.025;
     /**
-     * Household credit Z at NAIRU, base spreads and trend house prices: -0.06 (se 0.08), the intercept of the fit
-     * below; the US channels average -0.17 on top, which with it puts mean delinquency at the 2.5% the PD is struck at.
+     * Household credit Z at NAIRU and with spreads and house prices at their trends: -0.06 (se 0.08), the intercept of
+     * the fit below; the US channels average -0.17 on top, which with it puts mean delinquency at the 2.5% the PD is
+     * struck at.
      */
     public const RETAIL_CREDIT_INTERCEPT = -0.06;
     /**
@@ -187,10 +188,7 @@ class CreditFiscalSubsystem
      * consumer 30-day delinquency rate (FRED DRSFRMACBS, DRCLACBS) on the engine's own channels; R2 0.84.
      */
     public const RETAIL_UNEMPLOYMENT_SENSITIVITY = 18.3;
-    /**
-     * Household credit Z per unit of excess borrowing spread (IG over its base plus TED over its base): 17.7 (se 4.6),
-     * the same fit.
-     */
+    /** Household credit Z per unit of borrowing spread over its trend, IG plus TED: 17.7 (se 4.6), the same fit. */
     public const RETAIL_CREDIT_SPREAD_SENSITIVITY = 17.7;
     /**
      * Household credit Z per unit of log house price over its 5-year trend: 2.65 (se 0.61), the same fit; negative
@@ -613,11 +611,11 @@ class CreditFiscalSubsystem
      * Vasicek (2002) One-Factor Asymptotic Single Risk Factor (ASRF) Retail Default Model (Basel II/III).
      *
      * Derives the household default probability (PD) from a systematic factor: unemployment (job loss), borrowing
-     * spreads (refinancing), house prices against their trend (negative equity, the mortgage default trigger), and a
-     * persistent factor those channels leave unexplained, stepped as an exact OU so its effect does not depend on the
-     * tick length. The weights are a joint fit to US delinquency; inflation and the debt-service gap took the wrong
-     * sign there and are left out (the debt-service gap predicts crises a year or two ahead, Drehmann & Juselius
-     * 2014, and acts through the crisis hazard and deleveraging instead).
+     * spreads against their trends (refinancing), house prices against their trend (negative equity, the mortgage
+     * default trigger), and a persistent factor those channels leave unexplained, stepped as an exact OU so its effect
+     * does not depend on the tick length. The weights are a joint fit to US delinquency; inflation and the debt-service
+     * gap took the wrong sign there and are left out (the debt-service gap predicts crises a year or two ahead,
+     * Drehmann & Juselius 2014, and acts through the crisis hazard and deleveraging instead).
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -626,9 +624,10 @@ class CreditFiscalSubsystem
     {
         $unemploymentShock = ($state->unemploymentRateEma - $state->nairu) * self::RETAIL_UNEMPLOYMENT_SENSITIVITY;
 
-        $borrowingSpreadStress = max(0.0, $state->macroCreditSpreadEma - MacroConstants::BASE_CREDIT_SPREAD);
-        $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroConstants::INTERBANK_BASELINE_SPREAD);
-        $spreadShock = ($borrowingSpreadStress + $interbankStress) * self::RETAIL_CREDIT_SPREAD_SENSITIVITY;
+        // Refinancing is harder when borrowing and funding are dearer than usual, and easier when cheaper.
+        $borrowingSpreadGap = $state->macroCreditSpreadEma - $state->macroCreditSpreadTrend;
+        $interbankSpreadGap = $state->interbankLiquiditySpreadEma - $state->interbankLiquiditySpreadTrend;
+        $spreadShock = ($borrowingSpreadGap + $interbankSpreadGap) * self::RETAIL_CREDIT_SPREAD_SENSITIVITY;
 
         $housePriceGap = $state->residentialWealthTrend > 0.0 && $state->residentialPropertyIndexEma > 0.0
             ? log($state->residentialPropertyIndexEma / $state->residentialWealthTrend)

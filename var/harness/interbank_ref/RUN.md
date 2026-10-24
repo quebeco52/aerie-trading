@@ -23,3 +23,5 @@ board. Paired before (a HEAD worktree) vs after (the main working tree), live ma
   Non-financial = `Sectors::isFinancial` false. Downgrades = notches down between consecutive reports.
 - Runtime: ~7 s per simulated year; 4 seeds x 2 arms x 8 years in ~1-2 min wall.
 - Pairing: the arms share the macro path at tick 1 but diverge once the board feeds back (see the evidence file).
+- Board index: the per-tick return restates a split at constant shares (from 10-24). Index vol, drawdown and return in
+  runs made before then counted every 4-for-1 split as a 75% fall; firm-level figures were not affected.

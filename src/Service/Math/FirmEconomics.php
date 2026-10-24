@@ -17,7 +17,7 @@ final class FirmEconomics
     public const CCC_DSO_CREDIT_SPREAD_SENSITIVITY = 250.0;
     /** Sensitivity of Days Inventory Outstanding (DIO) to stranded capacity / inventory overhang. */
     public const CCC_DIO_CAPACITY_SENSITIVITY = 20.0;
-    /** Sensitivity of Days Payable Outstanding (DPO) contraction to interbank funding liquidity stress. */
+    /** Days Payable Outstanding (DPO) given up per unit of interbank spread over its trend (5 days per 100bp). */
     public const CCC_DPO_LIQUIDITY_SENSITIVITY = 500.0;
 
     // --- Structural Turnover ---
@@ -487,8 +487,8 @@ final class FirmEconomics
      * as real balances: a receivable that ages is exposed to customer default, while inventory that piles up
      * is exposed to writedown. Only the aggregate is a single number; the risks attach to the parts.
      *
-     * The declared days are the cycle's average, so receivables age against the spread's measured through-the-cycle
-     * level. Utilisation is centred on one already, and the interbank spread is a stress premium over its floor.
+     * The declared days are the cycle's average, so receivables age against the credit spread's measured
+     * through-the-cycle level and payables against the interbank spread's. Utilisation is centred on one already.
      *
      * @return array{dso: float, dio: float, dpo: float} Day-count shifts, signed as movements in each component.
      */
@@ -497,14 +497,15 @@ final class FirmEconomics
         float $creditSpreadTrend,
         float $capacityUtilization,
         float $interbankLiquiditySpread,
+        float $interbankLiquiditySpreadTrend,
     ): array {
         return [
             // Customers stretch payment when credit is dearer than it usually is.
             'dso' => ($creditSpread - $creditSpreadTrend) * self::CCC_DSO_CREDIT_SPREAD_SENSITIVITY,
             // Unsold goods pile up when the plant runs below capacity.
             'dio' => (1.0 - $capacityUtilization) * self::CCC_DIO_CAPACITY_SENSITIVITY,
-            // Under interbank liquidity stress, vendors demand faster payment (DPO contracts).
-            'dpo' => - ($interbankLiquiditySpread - MacroConstants::INTERBANK_BASELINE_SPREAD) * self::CCC_DPO_LIQUIDITY_SENSITIVITY,
+            // Vendors want paying sooner when their own funding is dearer than usual, and wait when it is cheaper.
+            'dpo' => -($interbankLiquiditySpread - $interbankLiquiditySpreadTrend) * self::CCC_DPO_LIQUIDITY_SENSITIVITY,
         ];
     }
 

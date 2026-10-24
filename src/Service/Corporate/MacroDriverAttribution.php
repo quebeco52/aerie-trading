@@ -29,9 +29,17 @@ final class MacroDriverAttribution
         'nominal_gdp_index' => 'potential_gdp_index',
         'equity_wealth_ratio' => 'equity_wealth_trend',
         'macro_credit_spread' => 'macro_credit_spread_trend',
+        'macro_credit_spread_ema' => 'macro_credit_spread_trend',
         'interbank_liquidity_spread_ema' => 'interbank_liquidity_spread_trend',
         'high_yield_credit_spread_ema' => 'high_yield_credit_spread_trend',
     ];
+
+    /**
+     * Smoothed series and their spot, for a model that reads both: one driver in two parts, the smoothed level over its
+     * trend and the spot's move off that level. The level's counterfactual carries the spot with it and the move's
+     * holds the spot at the level, so neither invents the other and the two add up to the spot over its trend.
+     */
+    public const SMOOTHED_SPOT = ['macro_credit_spread_ema' => 'macro_credit_spread'];
 
     /**
      * Trend series and the price level: references other readings are measured against, never a driver of their own.
@@ -50,18 +58,44 @@ final class MacroDriverAttribution
     public static function counterfactualStates(BusinessModelInterface $strategy, MacroStateDTO $macroState): array
     {
         $actual = $macroState->toArray();
+        $fields = $strategy->getOperatingMacroFields();
         $states = [];
 
-        foreach ($strategy->getOperatingMacroFields() as $field) {
-            $neutral = self::neutralReading($field, $actual);
-            if ($neutral === null || $neutral === $actual[$field]) {
-                continue;
+        foreach ($fields as $field) {
+            $readings = self::counterfactualReadings($field, $actual, $fields);
+            if ($readings !== null) {
+                $states[$field] = MacroStateDTO::fromArray(array_replace($actual, $readings));
             }
-
-            $states[$field] = MacroStateDTO::fromArray(array_replace($actual, [$field => $neutral]));
         }
 
         return $states;
+    }
+
+    /**
+     * The readings one input's counterfactual replaces, or null when the input is no driver or sits at its neutral: the
+     * input at its neutral reading, split into level and move beside its smoothed series or spot (SMOOTHED_SPOT).
+     *
+     * @param array<string, mixed> $actual MacroStateDTO::toArray() of the quarter.
+     * @param list<string>         $fields The inputs the model reads.
+     * @return array<string, int|float|bool>|null
+     */
+    public static function counterfactualReadings(string $field, array $actual, array $fields): ?array
+    {
+        $smoothed = array_search($field, self::SMOOTHED_SPOT, true);
+        $neutral = is_string($smoothed) && in_array($smoothed, $fields, true) && is_float($actual[$smoothed] ?? null)
+            ? $actual[$smoothed]
+            : self::neutralReading($field, $actual);
+        if ($neutral === null || !array_key_exists($field, $actual) || $neutral === $actual[$field]) {
+            return null;
+        }
+
+        $readings = [$field => $neutral];
+        $spot = self::SMOOTHED_SPOT[$field] ?? null;
+        if ($spot !== null && in_array($spot, $fields, true) && is_float($actual[$spot] ?? null) && is_float($neutral) && is_float($actual[$field])) {
+            $readings[$spot] = $actual[$spot] + ($neutral - $actual[$field]);
+        }
+
+        return $readings;
     }
 
     /**

@@ -386,6 +386,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     {
         return [
             'credit_to_gdp_gap_ema',
+            'high_yield_credit_spread_ema',
             'inflation_ema',
             'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',

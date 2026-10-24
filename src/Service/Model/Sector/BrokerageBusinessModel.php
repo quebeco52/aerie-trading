@@ -240,7 +240,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      * Operating revenue per unit of book, as struck, or struck now at the opening macro: the operating profit the
      * structural return requires once the interest the firm books (calculateInterestIncome(), the same function the
      * books are kept with) has paid its funding, grossed up by the margin, between the operating-profit floor and the
-     * gross-yield ceiling.
+     * gross-yield ceiling. The funding is the coupon the notes would refinance at, as the fee managers' is, so the
+     * yield holds once they have rolled; until then the margin book the equity funds earns the old coupon's gap.
      */
     protected function resolveOperatingYield(Stock $stock, MathUtility $mathUtility): float
     {
@@ -251,7 +252,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
         $opening = new \App\DTO\MacroStateDTO();
         $earningAssets = max(1.0, $this->resolveEarningAssets($stock));
-        $fundingRate = $this->calculateBlendedWholesaleRate($stock, $opening);
+        $fundingRate = DebtEngine::chargedWholesaleRate($stock, $opening, $this->getLossGivenDefault(), true);
         $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveStructuralTargetRoe($stock, $opening) / (1.0 - $opening->corporateTaxRate);
         $netInterest = $this->calculateInterestIncome($stock, $opening, $fundingRate) - ((float) $stock->getTotalDebt() * $fundingRate);
         $targetEbit = max($earningAssets * static::MIN_OPERATING_EBIT_YIELD, $targetEbt - $netInterest);
@@ -260,12 +261,10 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * The wholesale rate the operating yield is struck on, and the fallback where no realized rate from DebtEngine
-     * exists yet: the coupon the firm pays, as DebtEngine charges it (DebtEngine::chargedWholesaleRate()), so the
-     * equity-funded margin book earns at the strike what it earns in the books.
-     *
-     * It is the spread through the cycle, without the widening DebtEngine prices off the firm's live distance to
-     * default; once a realized rate exists, client margin assets are priced off that (calculateInterestIncome()).
+     * The wholesale rate where no realized rate from DebtEngine exists yet: the coupon the firm pays, as DebtEngine
+     * charges it (DebtEngine::chargedWholesaleRate()), the spread through the cycle without the widening DebtEngine
+     * prices off the firm's live distance to default. Once a realized rate exists, client margin assets are priced off
+     * that (calculateInterestIncome()).
      */
     protected function calculateBlendedWholesaleRate(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
@@ -359,6 +358,9 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     {
         return [
             'deal_activity_index_ema',
+            'high_yield_credit_spread_ema',
+            'interbank_liquidity_spread_ema',
+            'macro_credit_spread_ema',
             'market_volatility_ema',
             'money_supply_growth_ema',
             'money_supply_growth_trend',

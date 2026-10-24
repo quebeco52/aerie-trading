@@ -23,7 +23,7 @@ class PartyLeadersTest extends TestCase
         $state->authoritySalt = $salt;
         $state->totalTime = $time;
         $state->governingCoalition = AerieDiet::membership([AerieDiet::VANGUARD]);
-        Leaders::advance($state, 0.0, new MathUtility());
+        Leaders::advance($state, 0.0);
 
         return $state;
     }
@@ -70,7 +70,7 @@ class PartyLeadersTest extends TestCase
     public function testEveryPartyHasALeaderOfItsOwnAndTheyRepeatWithTheGame(): void
     {
         $unread = new PoliticsState();
-        Leaders::advance($unread, 0.0, new MathUtility());
+        Leaders::advance($unread, 0.0);
         $this->assertSame([], $unread->leaderNames, 'No leaders before the game\'s salt is drawn.');
 
         $state = self::game();
@@ -94,20 +94,19 @@ class PartyLeadersTest extends TestCase
      */
     public function testAVoteIsWeighedOnceItsCabinetTakesOfficeAgainstTheLeadersWhoFoughtIt(): void
     {
-        $math = new MathUtility();
         $state = self::game(time: 3.9);
         $state->totalTime = 4.0;
         $state->lastElectionAt = 4.0;
         $state->coalitionTakesOfficeAt = 4.1;
         $state->dietVoteSwings = array_fill_keys(AerieDiet::PARTIES, -0.30);
-        Leaders::advance($state, 0.1, $math);
+        Leaders::advance($state, 0.1);
         $this->assertSame(-1.0, $state->leadersReviewedElection, 'Not while the talks run.');
 
         $state->totalTime = 4.1;
         $state->coalitionTakesOfficeAt = -1.0;
         $state->leaderSince[AerieDiet::CHARTISTS] = 4.05;
         $used = $state->leaderHazardUsed;
-        Leaders::advance($state, 0.1, $math);
+        Leaders::advance($state, 0.1);
         $this->assertSame(4.0, $state->leadersReviewedElection);
         $this->assertSame(-1.0, $state->leaderExitAt[AerieDiet::CHARTISTS], 'A leader chosen after the vote is not weighed by it.');
         $this->assertGreaterThan($used[AerieDiet::CHARTISTS], $state->leaderHazardUsed[AerieDiet::CHARTISTS], 'and runs the hazard.');
@@ -127,11 +126,10 @@ class PartyLeadersTest extends TestCase
      */
     public function testANewLeaderOfThePrimeMinistersPartyIsPrimeMinister(): void
     {
-        $math = new MathUtility();
         $state = self::game(time: 2.0);
         $premier = $state->leaderNames[AerieDiet::VANGUARD];
         $state->leaderExitAt[AerieDiet::VANGUARD] = 2.0;
-        Leaders::advance($state, 0.0, $math);
+        Leaders::advance($state, 0.0);
 
         $this->assertNotSame($premier, $state->leaderNames[AerieDiet::VANGUARD]);
         $this->assertSame(2.0, $state->leaderSince[AerieDiet::VANGUARD]);
@@ -141,7 +139,7 @@ class PartyLeadersTest extends TestCase
 
         $state->totalTime = 2.5;
         $state->leaderExitAt[AerieDiet::EXCHANGE] = 2.5;
-        Leaders::advance($state, 0.0, $math);
+        Leaders::advance($state, 0.0);
         $this->assertSame(ShockEvent::PARTY_LEADER_CHANGED, PoliticsEngine::headline($state));
 
         $round = PoliticsState::fromArray(json_decode((string) json_encode($state->toArray()), true));
@@ -157,7 +155,6 @@ class PartyLeadersTest extends TestCase
      */
     public function testALongRunMatchesTheRecord(): void
     {
-        $math = new MathUtility();
         $state = self::game(time: 0.0);
         $dt = 1.0 / 12.0;
         $weighed = $left = 0;
@@ -171,11 +168,11 @@ class PartyLeadersTest extends TestCase
                 }
                 $fought = array_filter(AerieDiet::PARTIES, static fn(string $party): bool => $state->leaderSince[$party] < $state->totalTime);
                 $weighed += count($fought);
-                Leaders::advance($state, $dt, $math);
+                Leaders::advance($state, $dt);
                 $left += count(array_filter($fought, static fn(string $party): bool => $state->leaderExitAt[$party] >= 0.0 || $state->leaderSince[$party] === $state->totalTime));
                 continue;
             }
-            Leaders::advance($state, $dt, $math);
+            Leaders::advance($state, $dt);
         }
 
         $tenures = [];

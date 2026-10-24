@@ -112,7 +112,7 @@ class MarketEngine
     public const MIN_PS_FALLBACK_MULT = 0.2;
     /** Maximum price-to-sales multiple clamp during valuation expansion. */
     public const MAX_PS_FALLBACK_MULT = 5.0;
-    /** Multiplier scaling liquidity drag when systemic interbank funding spreads widen. */
+    /** Multiplier scaling liquidity drag as macro stress rises: the recession gap plus inflation's miss of target. */
     public const FUNDING_LIQUIDITY_STRESS_FACTOR = 2.0;
 
     // --- Institutional & Market Architecture ---
@@ -730,7 +730,7 @@ class MarketEngine
 
         // MACROECONOMIC STRESS INDEX (MSI)
         $recessionStress = max(0.0, -$outputGap);
-        $inflationStress = abs($inflation - 0.02);
+        $inflationStress = abs($inflation - MacroConstants::TARGET_INFLATION);
         $systemicStressIndex = $recessionStress + $inflationStress;
 
         $trueStructuralEps = $strategy->calculateStructuralEps(

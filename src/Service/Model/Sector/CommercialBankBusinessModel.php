@@ -1503,6 +1503,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'consumer_price_level',
             'corporate_default_rate_ema',
             'credit_to_gdp_gap_ema',
+            'high_yield_credit_spread_ema',
             'housing_starts_index_ema',
             'inflation_ema',
             'interbank_liquidity_spread_ema',

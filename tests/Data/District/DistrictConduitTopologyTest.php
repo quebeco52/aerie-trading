@@ -270,7 +270,7 @@ class DistrictConduitTopologyTest extends TestCase
             'credit_services' => ['credit_services', ['rate-council', 'credit-registry', 'statistical-office']],
             'shadow_bank' => ['shadow_bank', ['rate-council', 'credit-registry', 'land-registry', 'statistical-office']],
             'investment_bank' => ['investment_bank', ['rate-council', 'credit-registry', 'exchange-floor']],
-            'brokerage' => ['brokerage', ['rate-council', 'exchange-floor']],
+            'brokerage' => ['brokerage', ['rate-council', 'credit-registry', 'exchange-floor']],
             'clearing_house' => ['clearing_house', ['rate-council', 'credit-registry', 'exchange-floor', 'statistical-office']],
             'asset_manager' => ['asset_manager', ['rate-council']],
             'private_equity' => ['private_equity', ['rate-council', 'credit-registry', 'exchange-floor']],

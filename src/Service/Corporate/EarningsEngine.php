@@ -2085,6 +2085,7 @@ class EarningsEngine
             creditSpreadTrend: $ctx->macroState->macroCreditSpreadTrend,
             capacityUtilization: $deseasonalizedUtilization,
             interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma,
+            interbankLiquiditySpreadTrend: $ctx->macroState->interbankLiquiditySpreadTrend,
         );
 
         // A macro shift stretches an existing cycle; it cannot conjure one. A firm that carries no inventory

@@ -71,9 +71,9 @@ class FeeEarnerSeedTest extends TestCase
     }
 
     /**
-     * It books its structural return at the opening macro, a fee manager plus its coupon gap: its fees are struck on
-     * the coupon its notes would refinance at, so notes paying under the market earn it the difference until they roll.
-     * A broker is struck on the coupon it pays and has none.
+     * It books its structural return at the opening macro plus its coupon gap: its operating yield is struck on the
+     * coupon its notes would refinance at, so notes paying off the market move its interest until they roll. A fee
+     * manager's cheap notes earn it the saving; a broker's margin book, priced on its funding, gives some of it back.
      *
      * @param array<string, mixed> $row
      */
@@ -130,16 +130,39 @@ class FeeEarnerSeedTest extends TestCase
         return ($operatingProfit - $debt->interestExpense + $income) * (1.0 - $macro->corporateTaxRate) / $stock->getTangibleEquity();
     }
 
-    /** What a fee manager earns over its structural return while its notes pay under the coupon they would roll at. */
+    /**
+     * What a fee earner books over its structural return while its notes pay off the coupon they would roll at: the
+     * interest saved, less what the books it prices on its funding earn less for it.
+     */
     private function couponGap(Stock $stock, BusinessModelInterface $strategy, MacroStateDTO $macro): float
     {
-        if (!$strategy instanceof AssetManagementBusinessModel) {
-            return 0.0;
-        }
         $lossGivenDefault = $strategy->getLossGivenDefault();
-        $saving = DebtEngine::chargedWholesaleRate($stock, $macro, $lossGivenDefault, true) - DebtEngine::chargedWholesaleRate($stock, $macro, $lossGivenDefault);
+        $paid = DebtEngine::chargedWholesaleRate($stock, $macro, $lossGivenDefault);
+        $rolled = DebtEngine::chargedWholesaleRate($stock, $macro, $lossGivenDefault, true);
+        $income = static fn(float $rate): float => $strategy instanceof BrokerageBusinessModel ? $strategy->calculateInterestIncome($stock, $macro, $rate) : 0.0;
+        $gap = ((float) $stock->getTotalDebt() * ($rolled - $paid)) + $income($paid) - $income($rolled);
 
-        return (float) $stock->getTotalDebt() * $saving * (1.0 - $macro->corporateTaxRate) / $stock->getTangibleEquity();
+        return $gap * (1.0 - $macro->corporateTaxRate) / $stock->getTangibleEquity();
+    }
+
+    /**
+     * Once its notes have rolled to the coupon they refinance at, it books its structural return at the opening macro:
+     * the yield is struck on the funding it will carry, so its return does not drift as they roll.
+     *
+     * @param array<string, mixed> $row
+     */
+    #[DataProvider('feeEarnerProvider')]
+    public function testItBooksItsStructuralReturnOnceItsNotesRoll(array $row): void
+    {
+        [$stock, $strategy] = $this->open($row);
+        $opening = new MacroStateDTO();
+        $structural = (new \ReflectionMethod($strategy, 'resolveStructuralTargetRoe'))->invoke($strategy, $stock, $opening);
+        $yield = (new \ReflectionMethod($strategy, 'resolveOperatingYield'))->invoke($strategy, $stock, $this->math);
+        $stock->setEarningsMomentumZ(array_merge($stock->getEarningsMomentumZ() ?? [], [BrokerageBusinessModel::STATE_OPERATING_YIELD => $yield]));
+        $marketCoupon = $opening->yield5yEma + DebtEngine::throughTheCycleCreditSpread($stock, $opening, $strategy->getLossGivenDefault());
+        $stock->setHistoricalFixedRate((string) $marketCoupon);
+
+        $this->assertEqualsWithDelta($structural, $this->openingReturn($stock, $strategy, $opening), 1e-5, sprintf('%s, its notes rolled.', $row['ticker']));
     }
 
     /**

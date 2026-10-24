@@ -147,6 +147,18 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             $actual = array_values(array_unique($actual));
         }
 
+        // A lender's or broker's wholesale funding is priced in DebtEngine: the floating leg at the reference rate
+        // (policy plus the interbank spread), every leg at the issuer's credit spread through the cycle, and a rolled
+        // note at the five-year. Only a call on the live state couples the model; one on the opening state is struck
+        // once.
+        if ($this->invokesHelper($modelClass, '/DebtEngine::chargedWholesaleRate\(\$stock, \$macroState,/', regex: true)) {
+            array_push($actual, 'policy_rate_ema', 'interbank_liquidity_spread_ema', 'macro_credit_spread_ema', 'high_yield_credit_spread_ema');
+            if ($this->invokesHelper($modelClass, '/DebtEngine::chargedWholesaleRate\(\$stock, \$macroState,[^;]*(?:, true|rolled: true)\)/', regex: true)) {
+                $actual[] = 'yield_5y_ema';
+            }
+            $actual = array_values(array_unique($actual));
+        }
+
         // The rules on extraction are trait code as well, applied only by the models that extract.
         if ($this->invokesHelper($modelClass, 'underExtractionRules(')) {
             $actual[] = 'extraction_stringency';
@@ -208,11 +220,11 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
 
     /**
      * Whether the model's own operating physics (following parent and helper delegation, traits excluded)
-     * contains a call to the named shared helper.
+     * contains a call to the named shared helper; with $regex the needle is a pattern.
      *
      * @param class-string $concreteClass
      */
-    private function invokesHelper(string $concreteClass, string $needle): bool
+    private function invokesHelper(string $concreteClass, string $needle, bool $regex = false): bool
     {
         $fields = [];
         $visited = [];
@@ -225,7 +237,8 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             if (str_contains($class, '\\Trait\\') || !method_exists($class, $method)) {
                 continue;
             }
-            if (str_contains($this->methodSource(new ReflectionMethod($class, $method)), $needle)) {
+            $source = $this->methodSource(new ReflectionMethod($class, $method));
+            if ($regex ? preg_match($needle, $source) === 1 : str_contains($source, $needle)) {
                 return true;
             }
         }

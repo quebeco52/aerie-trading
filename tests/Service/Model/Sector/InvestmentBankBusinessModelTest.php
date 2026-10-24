@@ -422,15 +422,16 @@ class InvestmentBankBusinessModelTest extends TestCase
     /**
      * The bank's operating target is the broker's, struck on the interest its own books earn (prime financing, repo
      * inventory and cash): at the macro it is struck at, operating profit plus the interest it nets earns the
-     * structural return, and its first report persists the yield so the rate cycle moves profit through the interest,
-     * not through a target re-solved every quarter. Re-solved on its debt alone, PERE and CORV were struck 3pp high.
+     * structural return once its notes have rolled, and its first report persists the yield so the rate cycle moves
+     * profit through the interest, not through a target re-solved every quarter. Re-solved on its debt alone, PERE and
+     * CORV were struck 3pp high.
      */
     public function testTheOperatingTargetIsStruckOnceOnTheBanksOwnInterest(): void
     {
         $bank = $this->dealer();
         $math = new MathUtility();
         $opening = new \App\DTO\MacroStateDTO();
-        $fundingRate = (new \ReflectionMethod($this->model, 'calculateBlendedWholesaleRate'))->invoke($this->model, $bank, $opening);
+        $fundingRate = DebtEngine::chargedWholesaleRate($bank, $opening, $this->model->getLossGivenDefault(), true);
         $operatingYield = (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $bank, $math);
         $operatingProfit = $operatingYield * $this->model->resolveEarningAssets($bank) * (float) $bank->getOperatingMargin();
         $netInterest = $this->model->calculateInterestIncome($bank, $opening, $fundingRate) - ((float) $bank->getTotalDebt() * $fundingRate);

@@ -224,9 +224,9 @@ final class MacroConstants
 
     // --- Household Default Rate ---
     /**
-     * The District's household default rate over its own cycle (~2.25%): where the rate and its measured trend open.
+     * The District's household default rate over its own cycle (~2.15%): where the rate and its measured trend open.
      */
-    public const RETAIL_DEFAULT_LONG_RUN_MEAN = 0.0225;
+    public const RETAIL_DEFAULT_LONG_RUN_MEAN = 0.0215;
 
     // --- 2-FACTOR CORRELATED OU AGRICULTURAL COMMODITIES & WEATHER JUMPS ---
     /** Baseline agricultural commodity index value (neutral crop harvest). */

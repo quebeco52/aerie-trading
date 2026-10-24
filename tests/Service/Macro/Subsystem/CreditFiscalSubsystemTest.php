@@ -1663,10 +1663,40 @@ class CreditFiscalSubsystemTest extends TestCase
         $underwater->residentialWealthTrend = 100.0;
         $subsystem->calculateRetailDefaultRate($underwater, 0.25);
 
-        $this->assertEqualsWithDelta(CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, base spreads and trend prices the systematic factor is the intercept.');
+        $this->assertEqualsWithDelta(CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT, CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0), $neutral->retailDefaultRate, 1e-12, 'At NAIRU, trend spreads and trend prices the systematic factor is the intercept.');
         $expected = CreditRisk::calculateVasicekExpectedLoss(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + log(0.8) * CreditFiscalSubsystem::RETAIL_HOUSE_PRICE_SENSITIVITY, CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
         $this->assertEqualsWithDelta($expected, $underwater->retailDefaultRate, 1e-9, 'Homes 20% below trend default more households at the same unemployment.');
         $this->assertGreaterThan($neutral->retailDefaultRate, $underwater->retailDefaultRate);
+    }
+
+    /**
+     * Households read the borrowing and interbank spreads against their measured trends, both ways: spreads that sit
+     * high for a decade default no more households once they are the usual level, a freeze over the trend defaults
+     * more, and funding cheaper than usual fewer.
+     */
+    public function testRetailDefaultsReadTheSpreadsAgainstTheirTrends(): void
+    {
+        $subsystem = $this->quietSubsystem();
+        $at = function (float $igSpread, float $interbankSpread) use ($subsystem): float {
+            $state = new MacroState();
+            $state->unemploymentRateEma = $state->nairu;
+            $state->residentialPropertyIndexEma = 100.0;
+            $state->residentialWealthTrend = 100.0;
+            $state->macroCreditSpreadTrend = 0.016;
+            $state->interbankLiquiditySpreadTrend = 0.0025;
+            $state->macroCreditSpreadEma = $igSpread;
+            $state->interbankLiquiditySpreadEma = $interbankSpread;
+            $subsystem->calculateRetailDefaultRate($state, 0.25);
+
+            return $state->retailDefaultRate;
+        };
+        $pd = static fn(float $z): float => CreditRisk::calculateVasicekExpectedLoss($z, CreditFiscalSubsystem::RETAIL_DEFAULT_BASELINE, CreditRisk::RETAIL_ASRF_RHO, 1.0);
+        $sensitivity = CreditFiscalSubsystem::RETAIL_CREDIT_SPREAD_SENSITIVITY;
+
+        $this->assertEqualsWithDelta($pd(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT), $at(0.016, 0.0025), 1e-12, 'Spreads at their trends, above their bases, are neutral.');
+        $this->assertEqualsWithDelta($pd(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT - (0.0075 * $sensitivity)), $at(0.016, 0.010), 1e-12, 'A wholesale freeze defaults more households.');
+        $this->assertEqualsWithDelta($pd(CreditFiscalSubsystem::RETAIL_CREDIT_INTERCEPT + ((0.003 + 0.001) * $sensitivity)), $at(0.013, MacroConstants::INTERBANK_BASELINE_SPREAD), 1e-12, 'Spreads under their trends default fewer.');
+        $this->assertLessThan($at(0.016, 0.0025), $at(0.013, MacroConstants::INTERBANK_BASELINE_SPREAD));
     }
 
     /**

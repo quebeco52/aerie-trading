@@ -199,9 +199,16 @@ final class FullMarketHarnessTest extends KernelTestCase
                     $this->nonFinite++;
                     continue;
                 }
-                if (empty($u['is_bankrupt']) && isset($this->irPrev[$tk]) && $this->irPrev[$tk][0] > 0.0 && $px > 0.0) {
+                if (empty($u['is_bankrupt']) && isset($this->irPrev[$tk]) && $this->irPrev[$tk][0] > 0.0 && $this->irPrev[$tk][1] > 0.0 && $px > 0.0) {
+                    $ratio = $px / $this->irPrev[$tk][0];
+                    // A split moves the share count by its factor and the price by the inverse: restate it at constant
+                    // shares, or a 4-for-1 reads as a 75% fall.
+                    $shareRatio = ($cap / $px) / ($this->irPrev[$tk][1] / $this->irPrev[$tk][0]);
+                    if ($shareRatio >= 1.5 || $shareRatio <= 1.0 / 1.5) {
+                        $ratio *= $shareRatio;
+                    }
                     $wsum += $this->irPrev[$tk][1];
-                    $rsum += $this->irPrev[$tk][1] * ($px / $this->irPrev[$tk][0] - 1.0);
+                    $rsum += $this->irPrev[$tk][1] * ($ratio - 1.0);
                 }
                 $this->irPrev[$tk] = [$px, $cap];
             }

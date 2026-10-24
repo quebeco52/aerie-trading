@@ -15,6 +15,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConglomerateBusinessModel;
 use App\Service\Model\Sector\InvestmentCompanyBusinessModel;
 use App\Service\Model\Strategy\ValuationStrategyInterface;
+use App\Tests\Support\FloatBookCreditDrivers;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -727,5 +728,20 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         // Income weights 300 x 0.30 = 90, 600 x 0.035 = 21, 100 x 0.04 = 4; subsidiaries move -0.03 x 0.70 x 0.90.
         $expected = (90.0 / 115.0) * (-0.03 * 0.70 * 0.90);
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
+    }
+
+    /**
+     * The drivers panel reads the float book's own arithmetic on the IG spread: the line for its level over trend is
+     * the deployment premium alone and the line for its move the mark alone, so the two add up to what the spread did,
+     * up to the product of the two.
+     */
+    public function testTheCreditSpreadDriversReadTheFloatBooksOwnArithmetic(): void
+    {
+        $drivers = FloatBookCreditDrivers::measure($this->model, $this->brkw());
+
+        // Each line is measured against the quarter with the other effect still in it.
+        $this->assertEqualsWithDelta($drivers['deployment'] / (1.0 + $drivers['mark']), $drivers['level'], 1e-12);
+        $this->assertEqualsWithDelta($drivers['mark'] / (1.0 + $drivers['deployment']), $drivers['move'], 1e-12);
+        $this->assertEqualsWithDelta($drivers['deployment'] + $drivers['mark'], $drivers['level'] + $drivers['move'], 2.0 * abs($drivers['deployment'] * $drivers['mark']));
     }
 }

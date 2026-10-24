@@ -36,6 +36,31 @@ class MacroDriverAttributionTest extends TestCase
         $actual = (new MacroStateDTO(macroCreditSpread: 0.025, macroCreditSpreadEma: 0.024, macroCreditSpreadTrend: 0.018))->toArray();
 
         $this->assertSame(0.018, MacroDriverAttribution::neutralReading('macro_credit_spread', $actual));
+        $this->assertSame(0.018, MacroDriverAttribution::neutralReading('macro_credit_spread_ema', $actual));
+    }
+
+    /**
+     * Read beside its spot, the smoothed IG spread is the level and the spot the move: the level's counterfactual takes
+     * the spot with it, and the move's holds the spot at the level. A model reading only one of the two measures it
+     * against the trend.
+     */
+    public function testTheSmoothedSpreadAndItsSpotSplitIntoLevelAndMove(): void
+    {
+        $actual = (new MacroStateDTO(macroCreditSpread: 0.029, macroCreditSpreadEma: 0.025, macroCreditSpreadTrend: 0.015))->toArray();
+        $both = ['macro_credit_spread', 'macro_credit_spread_ema'];
+
+        $level = MacroDriverAttribution::counterfactualReadings('macro_credit_spread_ema', $actual, $both) ?? [];
+        $this->assertSame(['macro_credit_spread_ema', 'macro_credit_spread'], array_keys($level));
+        $this->assertEqualsWithDelta(0.015, $level['macro_credit_spread_ema'] ?? null, 1e-15);
+        $this->assertEqualsWithDelta(0.019, $level['macro_credit_spread'] ?? null, 1e-15, 'The spot keeps its 40 bps over the smoothed spread.');
+
+        $this->assertSame(['macro_credit_spread' => 0.025], MacroDriverAttribution::counterfactualReadings('macro_credit_spread', $actual, $both));
+        $this->assertSame(['macro_credit_spread' => 0.015], MacroDriverAttribution::counterfactualReadings('macro_credit_spread', $actual, ['macro_credit_spread']));
+        $this->assertSame(['macro_credit_spread_ema' => 0.015], MacroDriverAttribution::counterfactualReadings('macro_credit_spread_ema', $actual, ['macro_credit_spread_ema']));
+
+        // A spread that has not moved off its level has no move to attribute.
+        $plateau = (new MacroStateDTO(macroCreditSpread: 0.025, macroCreditSpreadEma: 0.025, macroCreditSpreadTrend: 0.015))->toArray();
+        $this->assertNull(MacroDriverAttribution::counterfactualReadings('macro_credit_spread', $plateau, $both));
     }
 
     /** The HY and interbank spreads are neutral at their decade trends, not the bases they are built from. */
