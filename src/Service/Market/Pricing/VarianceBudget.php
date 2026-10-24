@@ -145,10 +145,10 @@ final readonly class VarianceBudget
         // The shock is loaded at the market vol known before it arrives: MacroEngine updates marketVolatility with this
         // tick's own innovation (the leverage effect), so the updated vol is correlated with marketZ and E[vol * z] < 0
         // would drift every name down by beta times that. An Ito integrand is non-anticipating (Kloeden & Platen 1992).
-        $shockMarketVol = $ctx->priorMarketVol ?? $marketVol;
-        $shockSystematicVar = ($beta * $shockMarketVol) * ($beta * $shockMarketVol);
-        $fundImpactVariance = min(max(0.0, $ctx->fundImpactVariance), $shockSystematicVar);
-        $diffusionMarketVol = $shockSystematicVar > 0.0 ? $shockMarketVol * sqrt(1.0 - ($fundImpactVariance / $shockSystematicVar)) : $shockMarketVol;
+        $priorMarketVol = $ctx->priorMarketVol ?? $marketVol;
+        $priorSystematicVar = ($beta * $priorMarketVol) * ($beta * $priorMarketVol);
+        $fundImpactVariance = min(max(0.0, $ctx->fundImpactVariance), $priorSystematicVar);
+        $diffusionMarketVol = $priorSystematicVar > 0.0 ? $priorMarketVol * sqrt(1.0 - ($fundImpactVariance / $priorSystematicVar)) : $priorMarketVol;
         $longTermIdiosyncraticVar = self::longTermIdiosyncraticVariance($longTermVolatility, $beta);
 
         // IDIOSYNCRATIC JUMP CALIBRATION
@@ -224,8 +224,6 @@ final readonly class VarianceBudget
         // forward. The systematic part is stripped at the market vol it was added at, last tick's, so a
         // move in market vol does not leak into the idiosyncratic state. The state is held at zero, not at any
         // floor above it: clamped up to a floor its target sits below, the process would settle above its target.
-        $priorMarketVol = $ctx->priorMarketVol ?? $marketVol;
-        $priorSystematicVar = ($beta * $priorMarketVol) * ($beta * $priorMarketVol);
         $currentIdiosyncraticVar = max(
             0.0,
             $currentVar - $priorSystematicVar - $systemicJumpVariance - $ownSourceVariance,

@@ -7,6 +7,7 @@ namespace App\Service\Corporate\Earnings;
 use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\Decimal;
+use App\Service\Math\FirmEconomics;
 
 /**
  * Income tax under ASC 740: the loss carryforward and its deferred tax asset behind a valuation allowance, the
@@ -15,9 +16,6 @@ use App\Service\Math\Decimal;
  */
 final class IncomeTaxLedger
 {
-    // --- Corporate Taxation ---
-    /** Max % of taxable income that can be shielded by NOLs (e.g. 80% post-TCJA). */
-    public const NOL_MAX_SHIELD_RATIO = 0.80;
     /**
      * Quarters of pre-tax income the valuation-allowance test reads: three years, the cumulative-loss window ASC
      * 740-10-30-21 practice treats as significant negative evidence.
@@ -95,7 +93,7 @@ final class IncomeTaxLedger
         $stock->setDeferredTaxLiability((string) ($openingDtl + $plantDeferred));
 
         $ctx->taxableIncome = $actualEbt - $timingDifference;
-        $actual = self::resolveIncomeTax($ctx->taxableIncome, $nol, $openingDta, $isAllowanceRequired($actualEbt), $rate);
+        $actual = FirmEconomics::resolveIncomeTax($ctx->taxableIncome, $nol, $openingDta, $isAllowanceRequired($actualEbt), $rate);
         $stock->setNetOperatingLoss((string) $actual['nol']);
         $stock->setDeferredTaxAsset($actual['dta']);
         $ctx->deferredTaxExpense = $plantDeferred + $actual['deferred'];
@@ -103,7 +101,7 @@ final class IncomeTaxLedger
         $ctx->actualQuarterlyNetIncome = $actualEbt - $actual['current'] - $ctx->deferredTaxExpense;
 
         // Analysts read the same disclosed schedule, carryforward and allowance, and forecast no write-down.
-        $expected = self::resolveIncomeTax($expectedEbt - $recurringTiming, $nol, $openingDta, $isAllowanceRequired($expectedEbt), $rate);
+        $expected = FirmEconomics::resolveIncomeTax($expectedEbt - $recurringTiming, $nol, $openingDta, $isAllowanceRequired($expectedEbt), $rate);
         $expectedPlantDeferred = max(-$openingDtl, ($recurringTiming * $rate) + $remeasurement);
         $ctx->expectedQuarterlyNetIncome = $expectedEbt - $expected['current'] - $expectedPlantDeferred - $expected['deferred'];
 
@@ -121,35 +119,8 @@ final class IncomeTaxLedger
         // with the levy below it: a loss earns its tax benefit where the books recognise one, and a lender pays its
         // levy.
         $runRateEbt = $ctx->seasonallyAdjustedEbit - $ctx->quarterlyInterestExpense + $ctx->quarterlyInterestIncome;
-        $runRate = self::resolveIncomeTax($runRateEbt - $recurringTiming, $nol, $openingDta, $isAllowanceRequired($runRateEbt), $rate);
+        $runRate = FirmEconomics::resolveIncomeTax($runRateEbt - $recurringTiming, $nol, $openingDta, $isAllowanceRequired($runRateEbt), $rate);
         $ctx->seasonallyAdjustedNetIncome = $runRateEbt - $runRate['current'] - ($recurringTiming * $rate) - $runRate['deferred'] - $ctx->bankLevy;
-    }
-
-    /**
-     * Income tax on a quarter's taxable income under ASC 740 with the TCJA loss rules: a profit is taxed after the
-     * carryforward shields up to 80% of it, a loss adds to the carryforward, and the carryforward is carried as a
-     * deferred tax asset at today's rate (so a rate change remeasures it) unless a valuation allowance is required.
-     * The deferred charge is the asset's fall: the carryforward used, written down under an allowance, or a negative
-     * charge (a benefit) as a loss builds it. A loss therefore prints at (1 - t) of itself, as it does for any firm
-     * expected to earn it back, and a firm with a run of losses gets no benefit until it returns to profit.
-     *
-     * @return array{current: float, deferred: float, nol: float, dta: float}
-     */
-    public static function resolveIncomeTax(float $taxableIncome, float $nol, float $openingDta, bool $allowanceRequired, float $rate): array
-    {
-        $nol = max(0.0, $nol);
-        if ($taxableIncome > 0.0) {
-            $shielded = min($taxableIncome * self::NOL_MAX_SHIELD_RATIO, $nol);
-            $current = ($taxableIncome - $shielded) * $rate;
-            $nolAfter = $nol - $shielded;
-        } else {
-            $current = 0.0;
-            $nolAfter = $nol - $taxableIncome;
-        }
-
-        $dta = $allowanceRequired ? 0.0 : $rate * $nolAfter;
-
-        return ['current' => $current, 'deferred' => $openingDta - $dta, 'nol' => $nolAfter, 'dta' => $dta];
     }
 
     /**

@@ -7,11 +7,15 @@ namespace App\Service\Math;
 /**
  * Industrial organisation and the cost side of a firm: Cournot and fringe price levels, concentration, segment
  * counts, per-unit and productivity-loss cost factors, the REIT lease ladder, the inventory cycle, capacity
- * utilisation, the refining crack spread, power-price and hedge-ladder terms, working-capital days, and growth
- * contributions. Pure functions of their arguments.
+ * utilisation, the refining crack spread, power-price and hedge-ladder terms, working-capital days, the income tax
+ * with its loss carryforward, and growth contributions. Pure functions of their arguments.
  */
 final class FirmEconomics
 {
+    // --- Corporate Taxation ---
+    /** Max % of taxable income that can be shielded by NOLs (e.g. 80% post-TCJA). */
+    public const NOL_MAX_SHIELD_RATIO = 0.80;
+
     // --- Dynamic Cash Conversion Cycle & Working Capital (CCC) ---
     /** Sensitivity of Days Sales Outstanding (DSO) to corporate credit spread widening. */
     public const CCC_DSO_CREDIT_SPREAD_SENSITIVITY = 250.0;
@@ -589,5 +593,32 @@ final class FirmEconomics
             'dio' => $shares['inventory'] * FinancialConstants::DAYS_PER_YEAR / $costRatio,
             'dpo' => $shares['payables'] * FinancialConstants::DAYS_PER_YEAR / $costRatio,
         ];
+    }
+
+    /**
+     * Income tax on a quarter's taxable income under ASC 740 with the TCJA loss rules: a profit is taxed after the
+     * carryforward shields up to 80% of it, a loss adds to the carryforward, and the carryforward is carried as a
+     * deferred tax asset at today's rate (so a rate change remeasures it) unless a valuation allowance is required.
+     * The deferred charge is the asset's fall: the carryforward used, written down under an allowance, or a negative
+     * charge (a benefit) as a loss builds it. A loss therefore prints at (1 - t) of itself, as it does for any firm
+     * expected to earn it back, and a firm with a run of losses gets no benefit until it returns to profit.
+     *
+     * @return array{current: float, deferred: float, nol: float, dta: float}
+     */
+    public static function resolveIncomeTax(float $taxableIncome, float $nol, float $openingDta, bool $allowanceRequired, float $rate): array
+    {
+        $nol = max(0.0, $nol);
+        if ($taxableIncome > 0.0) {
+            $shielded = min($taxableIncome * self::NOL_MAX_SHIELD_RATIO, $nol);
+            $current = ($taxableIncome - $shielded) * $rate;
+            $nolAfter = $nol - $shielded;
+        } else {
+            $current = 0.0;
+            $nolAfter = $nol - $taxableIncome;
+        }
+
+        $dta = $allowanceRequired ? 0.0 : $rate * $nolAfter;
+
+        return ['current' => $current, 'deferred' => $openingDta - $dta, 'nol' => $nolAfter, 'dta' => $dta];
     }
 }

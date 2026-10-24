@@ -69,6 +69,32 @@ class AcquisitionEngine
     /** Most of a target's net identifiable assets that can be trade cycle rather than plant. */
     public const MA_MAX_WORKING_CAPITAL_SHARE = 0.90;
 
+    // --- Overvaluation Screen (a stock-for-stock merger pays in rich paper) ---
+    /** P/E past which the stock counts as rich, as a multiple of its fair P/E (1.5x). */
+    public const MA_OVERVALUED_PE_PREMIUM = 1.5;
+    /** P/E floor of the screen (25x), so a cheap market's premium alone does not read as rich paper. */
+    public const MA_OVERVALUED_MIN_PE = 25.0;
+    /** Price-to-book floor of the screen (2x). */
+    public const MA_OVERVALUED_MIN_PRICE_TO_BOOK = 2.0;
+
+    // --- Deal Spend (the most of its available capital each strategy puts into one deal) ---
+    /** An empire builder, funding on its debt capacity: 55%. */
+    public const MA_EMPIRE_BUILDER_SPEND = 0.55;
+    /** A stock-for-stock merger, of the paper it may issue: 50%. */
+    public const MA_OVERVALUED_SPEND = 0.50;
+    /** A mega-hoarder, of its usable cash: 60%. */
+    public const MA_MEGA_HOARDER_SPEND = 0.60;
+    /** A cash hoarder: 40%. */
+    public const MA_HOARDER_SPEND = 0.40;
+    /** A buyout at low leverage and cheap borrowing: 40%. */
+    public const MA_LOW_LEVERAGE_SPEND = 0.40;
+    /** A buyout at moderate leverage: 30%. */
+    public const MA_MOD_LEVERAGE_SPEND = 0.30;
+    /** The cash fallback, a strategic acquisition out of surplus cash: 20%. */
+    public const MA_CASH_FALLBACK_SPEND = 0.20;
+    /** Least of the strategy's spend a deal draws: the share is uniform on [50%, 100%] of it. */
+    public const MA_SPEND_DRAW_MIN = 0.50;
+
     // --- Deal Sizing Limits (named in the deal announcement) ---
     /** The acquirer's cash, borrowing room or shares times the fraction it chose to spend. */
     public const LIMIT_BUYING_POWER = 'buying power';
@@ -260,7 +286,7 @@ class AcquisitionEngine
         $ctx->currentPE = $normalizedEps > 0.0 ? $ctx->price / $normalizedEps : 0.0;
         $ctx->bookValuePerShare = max(0.01, $ctx->equity / max(1.0, $ctx->shares));
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;
-        $ctx->isOvervalued = $normalizedEps > 0.0 && $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
+        $ctx->isOvervalued = $normalizedEps > 0.0 && $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * self::MA_OVERVALUED_PE_PREMIUM) && $ctx->currentPE > self::MA_OVERVALUED_MIN_PE && $ctx->priceToBook > self::MA_OVERVALUED_MIN_PRICE_TO_BOOK;
 
         $ctx->isEmpireBuilder = $style === \App\Data\Company\ManagementStyle::EmpireBuilder;
         $ctx->hubrisPremium = $manager->hubrisPremium();
@@ -269,27 +295,25 @@ class AcquisitionEngine
         $config = match (true) {
             // Empire builders fund acquisitions via available debt capacity, falling through to cash if covenants bind.
             $ctx->isEmpireBuilder && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
-                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => 0.55, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true,
+                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => self::MA_EMPIRE_BUILDER_SPEND, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true,
             ],
             $ctx->isOvervalued => [
-                'prob' => self::MA_OVERVALUED_PROB, 'spend' => 0.50, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true,
+                'prob' => self::MA_OVERVALUED_PROB, 'spend' => self::MA_OVERVALUED_SPEND, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true,
             ],
             $ctx->isMegaHoarder => [
-                'prob' => self::MA_MEGA_HOARDER_PROB, 'spend' => 0.60, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false,
+                'prob' => self::MA_MEGA_HOARDER_PROB, 'spend' => self::MA_MEGA_HOARDER_SPEND, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false,
             ],
             $ctx->isHoarder => [
-                'prob' => self::MA_HOARDER_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false,
+                'prob' => self::MA_HOARDER_PROB, 'spend' => self::MA_HOARDER_SPEND, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false,
             ],
             $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->normalizedDebtUtilization < self::MA_LOW_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_LOW_RATE_CEILING => [
-                'prob' => self::MA_LOW_LEVERAGE_PROB, 'spend' => 0.40, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false,
+                'prob' => self::MA_LOW_LEVERAGE_PROB, 'spend' => self::MA_LOW_LEVERAGE_SPEND, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false,
             ],
             $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->normalizedDebtUtilization < self::MA_MOD_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_MOD_RATE_CEILING => [
-                'prob' => self::MA_MOD_LEVERAGE_PROB, 'spend' => 0.30, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false,
+                'prob' => self::MA_MOD_LEVERAGE_PROB, 'spend' => self::MA_MOD_LEVERAGE_SPEND, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false,
             ],
             default => null,
         };
-
-        $ctx->dealExecuted = false;
 
         // These hazards are annual and $dt is a fraction of a year. The empire builder's own branch already
         // carries its elevated rate in MA_EMPIRE_BUILDER_PROB, so the style bias must NOT be laid on top of
@@ -311,7 +335,7 @@ class AcquisitionEngine
             $ctx->dealExecuted = true;
         } elseif ($fallbackHazard > 0.0 && $draw < $primaryHazard + ((1.0 - $primaryHazard) * $fallbackHazard)) {
             $config = [
-                'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => 0.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false,
+                'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => self::MA_CASH_FALLBACK_SPEND, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false,
             ];
             $ctx->dealExecuted = true;
         }
@@ -332,7 +356,7 @@ class AcquisitionEngine
         }
 
         $ctx->availableCapital = $config['use_stock'] ? ($ctx->price * $ctx->shares * self::MA_STOCK_DILUTION_FRACTION) : ($config['use_leverage'] ? ($ctx->usableTreasury + $ctx->borrowingCapacity) : $ctx->usableTreasury);
-        $ctx->spendFraction = $this->mathUtility->generateUniformBetween(0.50, 1.0) * $config['spend'];
+        $ctx->spendFraction = $this->mathUtility->generateUniformBetween(self::MA_SPEND_DRAW_MIN, 1.0) * $config['spend'];
         $ctx->purchasePrice = $ctx->availableCapital * $ctx->spendFraction;
         $ctx->bindingLimit = self::LIMIT_BUYING_POWER;
 
@@ -382,8 +406,9 @@ class AcquisitionEngine
      * Price of the largest target the acquirer's market holds for it: the fringe still off the board, capped
      * at the share merger review clears, and whether the review rather than the fringe set it. Unbounded when
      * the ledger has not priced the firm's market.
+     *
+     * @return array{price: float, review_binds: bool}
      */
-    /** @return array{price: float, review_binds: bool} */
     private function resolveLargestAvailableTarget(AcquisitionContext $ctx): array
     {
         $market = $this->industryShareLedger?->describeMergerMarket(

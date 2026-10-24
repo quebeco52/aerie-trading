@@ -1983,23 +1983,23 @@ class EarningsEngineTest extends TestCase
      */
     public function testALossBooksADeferredTaxAssetAndItsRecoveryIsTaxedAtTheStatutoryRate(): void
     {
-        $loss = IncomeTaxLedger::resolveIncomeTax(-100.0, 0.0, 0.0, false, 0.21);
+        $loss = FirmEconomics::resolveIncomeTax(-100.0, 0.0, 0.0, false, 0.21);
         $this->assertSame(0.0, $loss['current']);
         $this->assertEqualsWithDelta(-21.0, $loss['deferred'], 1e-12, 'the loss is a tax benefit');
         $this->assertEqualsWithDelta(21.0, $loss['dta'], 1e-12);
         $this->assertEqualsWithDelta(100.0, $loss['nol'], 1e-12);
 
-        $recovery = IncomeTaxLedger::resolveIncomeTax(50.0, $loss['nol'], $loss['dta'], false, 0.21);
-        $this->assertEqualsWithDelta(0.21 * 50.0 * (1.0 - IncomeTaxLedger::NOL_MAX_SHIELD_RATIO), $recovery['current'], 1e-12, 'cash tax falls by the shield');
+        $recovery = FirmEconomics::resolveIncomeTax(50.0, $loss['nol'], $loss['dta'], false, 0.21);
+        $this->assertEqualsWithDelta(0.21 * 50.0 * (1.0 - FirmEconomics::NOL_MAX_SHIELD_RATIO), $recovery['current'], 1e-12, 'cash tax falls by the shield');
         $this->assertEqualsWithDelta(0.21 * 50.0, $recovery['current'] + $recovery['deferred'], 1e-12, 'book tax stays at the statutory rate');
 
         // A run of losses (the valuation allowance) gets no benefit, and the asset already on the books is written off.
-        $allowance = IncomeTaxLedger::resolveIncomeTax(-100.0, 100.0, 21.0, true, 0.21);
+        $allowance = FirmEconomics::resolveIncomeTax(-100.0, 100.0, 21.0, true, 0.21);
         $this->assertSame(0.0, $allowance['dta']);
         $this->assertEqualsWithDelta(21.0, $allowance['current'] + $allowance['deferred'], 1e-12, 'the allowance is a charge, not a benefit');
 
         // A rate cut remeasures the asset at the new rate (ASC 740-10-35-4).
-        $remeasured = IncomeTaxLedger::resolveIncomeTax(0.0, 100.0, 21.0, false, 0.15);
+        $remeasured = FirmEconomics::resolveIncomeTax(0.0, 100.0, 21.0, false, 0.15);
         $this->assertEqualsWithDelta(6.0, $remeasured['deferred'], 1e-12);
     }
 

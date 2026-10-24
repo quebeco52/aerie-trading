@@ -9,9 +9,9 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
-use App\Service\Corporate\Earnings\IncomeTaxLedger;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\News\MarketEventPublisher;
@@ -25,6 +25,8 @@ use App\Service\News\WireFormat;
 class DivestitureEngine
 {
     // --- Divestiture Parameters ---
+    /** Weight of the reported quarter in the income a sale is judged on; the rest is the structural return (half). */
+    public const DIV_REPORTED_INCOME_WEIGHT = 0.50;
     /** Minimum fraction for dying company divestiture. */
     public const DIV_DYING_FRACTION_MIN = 0.30;
     /** Maximum fraction for dying company divestiture. */
@@ -213,7 +215,7 @@ class DivestitureEngine
         $ctx->evaluationCapital = $ctx->strategy->getEvaluationCapital($ctx->currentEquity, $ctx->investedCapital);
 
         $ctx->structuralNetIncome = $ctx->evaluationCapital * $ctx->currentReturn;
-        $ctx->normalizedNetIncome = ($ctx->netIncome * 0.50) + ($ctx->structuralNetIncome * 0.50);
+        $ctx->normalizedNetIncome = ($ctx->netIncome * self::DIV_REPORTED_INCOME_WEIGHT) + ($ctx->structuralNetIncome * (1.0 - self::DIV_REPORTED_INCOME_WEIGHT));
 
         $ctx->normalizedEps = $ctx->normalizedNetIncome / $ctx->shares;
         $ctx->currentPE = $ctx->normalizedEps > 0 ? $ctx->price / $ctx->normalizedEps : 0.0;
@@ -328,14 +330,14 @@ class DivestitureEngine
         $markSold = $stock->hasBalanceSheetLedger() ? $this->retireDivestedLedgers($stock, $ctx->divestedFraction) : 0.0;
 
         // A gain on selling a business is taxable income (ASC 740), struck under the same carryforward rules as a
-        // quarter's (IncomeTaxLedger::resolveIncomeTax()): it uses the carried loss up to its cap, and a loss adds to
+        // quarter's (FirmEconomics::resolveIncomeTax()): it uses the carried loss up to its cap, and a loss adds to
         // the carryforward. The current tax is paid from the proceeds.
         $ctx->gainOnSale = $ctx->salePrice - $ctx->lostEquity;
         $openingDta = $stock->getDeferredTaxAsset();
         $nol = (float) $stock->getNetOperatingLoss();
         // A loss carries no asset while the firm's recent pre-tax income, the sale's included, is a cumulative loss.
         $allowanceRequired = array_sum($stock->getPretaxIncomeHistory() ?? []) + $ctx->gainOnSale < 0.0;
-        $tax = IncomeTaxLedger::resolveIncomeTax($ctx->gainOnSale, $nol, $openingDta, $allowanceRequired, $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
+        $tax = FirmEconomics::resolveIncomeTax($ctx->gainOnSale, $nol, $openingDta, $allowanceRequired, $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
         $ctx->taxOnSale = $tax['current'] + $tax['deferred'];
         $stock->setNetOperatingLoss((string) $tax['nol']);
         $stock->setDeferredTaxAsset($tax['dta']);

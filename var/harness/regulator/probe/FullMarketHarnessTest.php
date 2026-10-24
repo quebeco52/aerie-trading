@@ -35,7 +35,6 @@ final class FullMarketHarnessTest extends KernelTestCase
     private float $currentTime = 0.0;
     private ?\App\Service\Corporate\DebtEngine $debtEngine = null;
     private ?StockTracker $fvTracker = null;
-    private ?\App\Service\Market\Pricing\MarketEngine $fvEngine = null;
     /** @var array<string, list<array{t: float, d: string}>> */
     private array $events = [];
 
@@ -98,7 +97,6 @@ final class FullMarketHarnessTest extends KernelTestCase
         $this->debtEngine = $c->get(\App\Service\Corporate\DebtEngine::class);
         $tracker = $c->get(StockTracker::class);
         $this->fvTracker = $tracker;
-        $this->fvEngine = $c->get(\App\Service\Market\Pricing\MarketEngine::class);
         $sweep = $c->get(FailureSweep::class);
 
         $list = array_values($stocks);
@@ -352,49 +350,30 @@ final class FullMarketHarnessTest extends KernelTestCase
     }
 
     /**
-     * FVX=1: the fair-value build MarketEngine::evaluateFundamentalState would strike right now, piece by piece, so a
-     * move in the fair P/E can be attributed to the hurdle, the structural return, growth, accruals or the EPS smoothing.
+     * FVX=1: the fair value the market would strike on the stock right now (FairValue::fundamentalStateFor()), beside
+     * the inputs it is struck on, so a move in it can be read against the hurdle, the return, growth and accruals.
      *
      * @return array<string, float>
      */
     private function fvRow(\App\Entity\Stock $stock): array
     {
-        if (!getenv('FVX') || $this->debtEngine === null || $this->currentMacro === null || $this->fvEngine === null || $this->fvTracker === null) {
+        if (!getenv('FVX') || $this->debtEngine === null || $this->currentMacro === null || $this->fvTracker === null) {
             return [];
         }
         $m = $this->currentMacro;
-        $math = new \App\Service\Math\MathUtility();
         $h = $this->debtEngine->analyzeTrailingDebtHealth($stock, $m);
-        $ledger = (new \ReflectionProperty(StockTracker::class, 'anchorStakes'))->getValue($this->fvTracker);
-        $ctx = \App\DTO\MarketPricingContext::forStock($stock, $m, $h, $ledger, 0.0, 0.0);
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
-        $rf = $m->policyRate ?? 0.04;
-        $gap = $m->outputGap ?? 0.0;
-        $infl = $m->inflation ?? 0.02;
-        $hurdle = $strategy->isFinancial() ? $ctx->liveCostOfEquity : $ctx->liveWacc;
-        $sroic = $strategy->calculateStructuralRoic($ctx->roicTtm, $ctx->baselineRoic, $ctx->revenuePerShare, $ctx->bookValuePerShare, $ctx->baselineMargin);
-        $gNom = Valuation::calculateExpectedNominalGrowth($ctx->secularGrowth, $gap, $ctx->beta, $infl, $strategy->getMoatSpread());
-        $gFund = Valuation::calculateFundableGrowth($gNom, $sroic, $ctx->targetPayoutRatio, $infl);
-        $peRaw = Valuation::calculateIntrinsicFairValuePE($hurdle, $sroic, $gFund, null);
-        $peShrunk = Valuation::calculateIntrinsicFairValuePE($hurdle, $sroic, $gFund, $ctx->baselineIndustryPE);
-        $fvpe = Valuation::calculateQualityAdjustedFairValuePE($hurdle, $sroic, $gFund, $ctx->baselineIndustryPE, $ctx->accrualsRatio);
-        $structEps = $strategy->calculateStructuralEps($ctx->bookValuePerShare, $sroic, $ctx->revenuePerShare, $rf, $ctx->investedCapitalPerShare > 0.0 ? $ctx->investedCapitalPerShare : null);
-        $stress = max(0.0, -$gap) + abs($infl - 0.02);
-        $normEps = $math->calculateKalmanSmoothedEps(max(0.01, $structEps), $ctx->earningsPerShare, $ctx->currentVolatility, $stress);
-        $fs = (new \ReflectionMethod($this->fvEngine, 'evaluateFundamentalState'))->invoke($this->fvEngine,
-            $ctx->currentPrice, $gap, $infl, $ctx->beta, $ctx->liveWacc, $ctx->reversionSpeed, $ctx->earningsPerShare, $ctx->currentRoic, $ctx->roicTtm,
-            $rf, $ctx->bookValuePerShare, $ctx->dividendPerShare, $ctx->baselineIndustryPE, $ctx->revenuePerShare, $ctx->businessModel,
-            $ctx->liveCostOfEquity, $ctx->currentVolatility, $ctx->netDebtPerShare, $ctx->secularGrowth, $ctx->baselineRoic, $ctx->baselineMargin,
-            $ctx->accrualsRatio, $ctx->investedCapitalPerShare, $m, $ctx->tangibleBookValuePerShare, $ctx->targetPayoutRatio, $ctx->dividendAdjustmentSpeed);
+        $ledger = (new \ReflectionProperty(\App\Service\Market\Pricing\StockTracker::class, 'anchorStakes'))->getValue($this->fvTracker);
+        $ctx = \App\DTO\MarketPricingContext::forStock($stock, $m, $h, $ledger);
+        $fs = \App\Service\Market\Pricing\FairValue::fundamentalStateFor($ctx);
 
-        return ['x_rf' => $rf, 'x_erp' => (float) ($m->equityRiskPremium ?? 0.0), 'x_gap' => $gap, 'x_infl' => $infl, 'x_beta' => $ctx->beta,
-            'x_wacc' => $ctx->liveWacc, 'x_coe' => $ctx->liveCostOfEquity, 'x_hurdle' => $hurdle, 'x_roicTtm' => $ctx->roicTtm, 'x_roicBase' => $ctx->baselineRoic,
-            'x_sroic' => $sroic, 'x_sec' => $ctx->secularGrowth, 'x_gNom' => $gNom, 'x_gFund' => $gFund, 'x_payout' => $ctx->targetPayoutRatio,
-            'x_sectorPE' => $ctx->baselineIndustryPE, 'x_acc' => $ctx->accrualsRatio, 'x_peRaw' => $peRaw, 'x_peShrunk' => $peShrunk, 'x_fvpe' => $fvpe,
-            'x_eps' => $ctx->earningsPerShare, 'x_structEps' => $structEps, 'x_normEps' => $normEps, 'x_stress' => $stress, 'x_vol' => $ctx->currentVolatility,
-            'x_bvps' => $ctx->bookValuePerShare, 'x_icps' => $ctx->investedCapitalPerShare, 'x_rps' => $ctx->revenuePerShare,
-            'x_fv' => (float) $fs['perceived_fair_value'], 'x_growthAn' => (float) $fs['analyst_targets']['growth_analyst'],
-            'x_valueAn' => (float) $fs['analyst_targets']['value_analyst'], 'x_incomeAn' => (float) $fs['analyst_targets']['income_analyst']];
+        return ['x_rf' => (float) ($m->policyRate ?? 0.0), 'x_erp' => (float) ($m->equityRiskPremium ?? 0.0), 'x_gap' => (float) ($m->outputGap ?? 0.0),
+            'x_infl' => (float) ($m->inflation ?? 0.0), 'x_beta' => $ctx->beta, 'x_coe' => $ctx->liveCostOfEquity, 'x_roicTtm' => $ctx->roicTtm,
+            'x_roicBase' => $ctx->baselineRoic, 'x_longRun' => (float) ($ctx->longRunReturn ?? 0.0), 'x_sec' => $ctx->secularGrowth,
+            'x_payout' => $ctx->targetPayoutRatio, 'x_sectorPE' => $ctx->baselineIndustryPE, 'x_acc' => $ctx->accrualsRatio, 'x_eps' => (float) $stock->getEarningsPerShare(),
+            'x_vol' => $ctx->currentVolatility, 'x_bvps' => $ctx->bookValuePerShare, 'x_icps' => $ctx->investedCapitalPerShare, 'x_rps' => $ctx->revenuePerShare,
+            'x_fv' => (float) $fs['perceived_fair_value'], 'x_pull' => (float) $fs['dynamic_reversion'], 'x_policy' => (float) $fs['policy_repricing'],
+            'x_growthAn' => (float) $fs['analyst_targets']['growth_analyst'], 'x_valueAn' => (float) $fs['analyst_targets']['value_analyst'],
+            'x_incomeAn' => (float) $fs['analyst_targets']['income_analyst']];
     }
 
     /** @return array<string, float|bool> */

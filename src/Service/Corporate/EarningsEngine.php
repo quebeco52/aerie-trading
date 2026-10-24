@@ -137,6 +137,8 @@ class EarningsEngine
      * real estate): 0.77% a year.
      */
     public const DEFAULT_EQUITY_BURN_RATE_CAP = 0.0077;
+
+    // --- Goodwill Impairment ---
     /** Goodwill impairment smaller than this fraction of the goodwill balance is immaterial and not booked. */
     public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
 
@@ -1150,14 +1152,14 @@ class EarningsEngine
         $actualAnnualCapEx = $ctx->operatingCapex / max(0.001, $ctx->dt);
 
         $reportedOrganicCapex = $ctx->strategy->allowsPhysicalOrganicCapex() ? $organicCapex : 0.0;
-        $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
+        $annualizedOrganicCapex = $reportedOrganicCapex / max(0.001, $ctx->dt);
         $organicCapexPerShare = $ctx->sharesOutstanding > 0 ? ($annualizedOrganicCapex / $ctx->sharesOutstanding) : 0.0;
 
         $trueAnnualFcfPerShare = $annualFcfPerShare - $organicCapexPerShare;
         $stock->setFreeCashFlowPerShare((string) $trueAnnualFcfPerShare);
 
-        $ctx->totalReportedCapex = ($actualAnnualCapEx / 4.0) + $reportedOrganicCapex;
-        $ctx->trueQuarterlyFcf = ($trueAnnualFcfPerShare * $ctx->sharesOutstanding) / 4.0;
+        $ctx->totalReportedCapex = ($actualAnnualCapEx * $ctx->dt) + $reportedOrganicCapex;
+        $ctx->trueQuarterlyFcf = ($trueAnnualFcfPerShare * $ctx->sharesOutstanding) * $ctx->dt;
 
         // Sloan accruals ratio: difference between reported net income and operating cash flow, scaled by total assets.
         $totalAssets = $this->resolveTotalAssets($ctx);
@@ -1165,7 +1167,7 @@ class EarningsEngine
         // numerator: steering the headline with accruals is exactly the low-quality earnings the anomaly
         // detects, and it prices itself through the consensus discount without any further wiring.
         $quarterlyAccruals = ($ctx->actualQuarterlyNetIncome + $ctx->managedAccrual) - $ctx->operatingCashFlow;
-        $accrualsRatio = ($quarterlyAccruals * 4.0) / $totalAssets;
+        $accrualsRatio = ($quarterlyAccruals / max(0.001, $ctx->dt)) / $totalAssets;
         $stock->setAccrualsRatio($accrualsRatio);
     }
 
