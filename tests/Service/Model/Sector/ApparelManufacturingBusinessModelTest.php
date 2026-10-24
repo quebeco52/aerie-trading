@@ -13,8 +13,10 @@ use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ApparelManufacturingBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class ApparelManufacturingBusinessModelTest extends TestCase
 {
     private ApparelManufacturingBusinessModel $model;

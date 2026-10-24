@@ -16,6 +16,7 @@ use App\Service\View\CompanyProfilePageBuilder;
 use App\Service\View\PeerTableBuilder;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * keeps up with play.
  */
 #[AllowMockObjectsWithoutExpectations]
+#[Group('unit')]
 class CompanyProfilePageBuilderTest extends TestCase
 {
     /** @param array<string, Stock> $board */

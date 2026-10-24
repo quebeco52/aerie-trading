@@ -15,8 +15,10 @@ use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class CommercialBankBusinessModelTest extends TestCase
 {
     private CommercialBankBusinessModel $model;

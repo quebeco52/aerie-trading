@@ -10,8 +10,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AutoManufacturerBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class AutoManufacturerBusinessModelTest extends TestCase
 {
     /** A policy rate at the natural real rate plus expected inflation, so the real stance moves no purchases. */

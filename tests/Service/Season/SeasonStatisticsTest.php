@@ -10,6 +10,7 @@ use App\Entity\User;
 use App\Service\Season\SeasonService;
 use App\Service\Season\SeasonStanding;
 use App\Service\Season\SeasonStatistics;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -17,6 +18,7 @@ use PHPUnit\Framework\TestCase;
  * textbook formulas applied to the whole series, the drawdown must be the deepest peak-to-trough fall, and the
  * table must rank only qualified entries.
  */
+#[Group('unit')]
 final class SeasonStatisticsTest extends TestCase
 {
     private const WEEK = 1.0 / 52.0;

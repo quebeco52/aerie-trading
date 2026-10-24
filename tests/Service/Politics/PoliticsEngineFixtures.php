@@ -147,7 +147,7 @@ trait PoliticsEngineFixtures
 
     private function engine(MathUtility $draws): Politics
     {
-        return new Politics($draws, $this->inMemoryRedis());
+        return new Politics($draws, new InMemoryRedis());
     }
 
     /** Normals are zero, so the vote is its economic part alone and positions hold; the other draws stay live. */
@@ -159,10 +159,5 @@ trait PoliticsEngineFixtures
                 return 0.0;
             }
         };
-    }
-
-    private function inMemoryRedis(): \Redis
-    {
-        return new InMemoryRedis();
     }
 }

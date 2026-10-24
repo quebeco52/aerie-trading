@@ -2,12 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Support;
+namespace App\Tests\Meta;
 
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
 use Doctrine\ORM\Mapping\Column;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * dollar total is stored at DECIMAL(30,4), and the guards that clamp a total rebuilt from a per-share figure sit at
  * that same bound rather than at the old one.
  */
+#[Group('unit')]
 final class MoneyColumnCapacityTest extends TestCase
 {
     /** Wide decimal columns that hold a per-share price or a share count, not a dollar total. */

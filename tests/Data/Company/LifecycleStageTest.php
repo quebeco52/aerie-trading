@@ -6,8 +6,10 @@ namespace App\Tests\Data\Company;
 
 use App\Data\Company\LifecycleStage;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class LifecycleStageTest extends TestCase
 {
     /** @return array<string, array{bool, bool, bool, LifecycleStage}> Dickinson (2011) Table 1 */

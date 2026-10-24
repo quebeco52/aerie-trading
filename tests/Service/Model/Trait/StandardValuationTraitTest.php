@@ -6,11 +6,13 @@ namespace App\Tests\Service\Model\Trait;
 
 use App\Service\Math\FinancialConstants;
 use App\Tests\Support\Model\BareStandardModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The valuation a sector model inherits when it declares no rails of its own.
  */
+#[Group('unit')]
 final class StandardValuationTraitTest extends TestCase
 {
     private BareStandardModel $model;

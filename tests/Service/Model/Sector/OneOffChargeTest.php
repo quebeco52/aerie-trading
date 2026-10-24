@@ -10,6 +10,7 @@ use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -17,6 +18,7 @@ use PHPUnit\Framework\TestCase;
  * out of the run rate, the Street figure and the variable cost ratio. Booked in the cost ratio, one fine was carried
  * into the run rate and the trailing return as though it would recur, and valued that way.
  */
+#[Group('unit')]
 final class OneOffChargeTest extends TestCase
 {
     /**

@@ -10,6 +10,7 @@ use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -17,6 +18,7 @@ use PHPUnit\Framework\TestCase;
  * carries at the realised price level (EarningsEngine). An escalator, cost-plus or list-price term on the same surprise
  * in the sector physics counted it a second time, as a level that vanished when the surprise closed.
  */
+#[Group('unit')]
 final class InflationSurpriseCountedOnceTest extends TestCase
 {
     /** @return iterable<string, array{class-string<OperatingStrategyInterface>}> */

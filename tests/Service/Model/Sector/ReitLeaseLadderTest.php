@@ -8,6 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use PHPUnit\Framework\TestCase;
  * keep catching up for years, and after a bust in-place rents sit above market and grind down as space
  * rolls, which is the negative re-leasing spread that does the real damage to a landlord.
  */
+#[Group('unit')]
 final class ReitLeaseLadderTest extends TestCase
 {
     /**

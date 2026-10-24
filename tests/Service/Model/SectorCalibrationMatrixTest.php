@@ -21,6 +21,7 @@ use App\Service\Model\Sector\TelecomBusinessModel;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Tests\Support\Model\HookConstant;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -37,6 +38,7 @@ use ReflectionClass;
  * These are the declared calibration, not a simulated steady state: they are what the physics is handed
  * before any quarter is run, which is where a mis-tuning enters.
  */
+#[Group('unit')]
 final class SectorCalibrationMatrixTest extends TestCase
 {
     /**

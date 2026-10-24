@@ -16,6 +16,7 @@ use App\Service\Math\MathUtility;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * the ones the market engine forms for the same firm, struck on the firm's own sector multiple.
  */
 #[AllowMockObjectsWithoutExpectations]
+#[Group('unit')]
 class CompanySnapshotValuationTest extends TestCase
 {
     private function builder(): CompanySnapshotBuilder

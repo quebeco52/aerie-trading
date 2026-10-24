@@ -15,6 +15,7 @@ use App\Service\Model\Sector\RestaurantBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -22,6 +23,7 @@ use PHPUnit\Framework\TestCase;
  * confidence must read the residual, the mood, so when confidence sits exactly where the gap puts it with no mood in
  * it, demand moves through the gap channel alone.
  */
+#[Group('unit')]
 class SentimentResidualTest extends TestCase
 {
     private const GAP = -0.03;

@@ -8,8 +8,10 @@ use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
 use App\Service\Math\StochasticProcesses;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class MathUtilityTest extends TestCase
 {
     private MathUtility $mathUtility;

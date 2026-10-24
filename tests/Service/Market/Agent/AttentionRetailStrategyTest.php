@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market\Agent;
 use App\DTO\AgentMarketViewDTO;
 use App\Service\Market\Agent\AttentionRetailStrategy;
 use App\Service\Math\FinancialConstants;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -17,6 +18,7 @@ use ReflectionClass;
  * the SIZE of a move and not its sign, it reads volume against the name's own normal rather than in
  * absolute shares, and it never goes short.
  */
+#[Group('unit')]
 final class AttentionRetailStrategyTest extends TestCase
 {
     private AttentionRetailStrategy $strategy;

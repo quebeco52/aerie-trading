@@ -10,6 +10,7 @@ use App\Service\Corporate\SecuritiesBookService;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * right size and sign, it is convex, it heals at the book's own pace, and the held-to-maturity half stays
  * out of reported equity until something forces a sale.
  */
+#[Group('unit')]
 class SecuritiesBookServiceTest extends TestCase
 {
     private const BOOK = 100_000_000_000.0;

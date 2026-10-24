@@ -13,8 +13,10 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DistressedDebtBusinessModel;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class DistressedDebtBusinessModelTest extends TestCase
 {
     /** Recovery's share of the default mix: the activity shift is the distress multiplier at this weight. */

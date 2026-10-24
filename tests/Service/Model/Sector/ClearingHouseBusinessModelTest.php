@@ -12,8 +12,10 @@ use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ClearingHouseBusinessModel;
 use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class ClearingHouseBusinessModelTest extends TestCase
 {
     private ClearingHouseBusinessModel $model;

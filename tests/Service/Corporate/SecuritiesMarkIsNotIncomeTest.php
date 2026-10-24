@@ -12,6 +12,7 @@ use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -25,6 +26,7 @@ use PHPUnit\Framework\TestCase;
  *
  * If any assertion here fails, the mark has leaked into earnings and the phase is wrong.
  */
+#[Group('unit')]
 final class SecuritiesMarkIsNotIncomeTest extends TestCase
 {
     /** Twelve quarters of a three-hundred point selloff, which is enough to mark a long book down hard. */

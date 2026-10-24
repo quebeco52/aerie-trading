@@ -8,11 +8,13 @@ use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The formulas in App\Service\Math\FirmEconomics.
  */
+#[Group('unit')]
 class FirmEconomicsTest extends TestCase
 {
     public function testPerUnitCostsFallAsAShareOfRevenueWhenThePriceRises(): void

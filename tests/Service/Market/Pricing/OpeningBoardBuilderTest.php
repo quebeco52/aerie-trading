@@ -16,12 +16,14 @@ use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The seed and the reset both open the board through OpeningBoardBuilder, so what it opens is what every new market
  * starts from.
  */
+#[Group('unit')]
 class OpeningBoardBuilderTest extends TestCase
 {
     private MathUtility $math;

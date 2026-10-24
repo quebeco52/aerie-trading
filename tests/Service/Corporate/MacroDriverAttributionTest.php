@@ -8,8 +8,10 @@ use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Service\Corporate\MacroDriverAttribution;
 use App\Service\Math\MathUtility;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class MacroDriverAttributionTest extends TestCase
 {
     /** A mean-reverting input is neutral at the steady state the economy opens in. */

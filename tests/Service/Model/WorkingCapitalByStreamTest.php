@@ -13,6 +13,7 @@ use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\AbstractBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -21,6 +22,7 @@ use ReflectionMethod;
  * streams carry, and a firm only partly in stores leases floor space for that part. Each case is a listed firm,
  * read through its own tuning.
  */
+#[Group('unit')]
 class WorkingCapitalByStreamTest extends TestCase
 {
     /** @return array<string, array{string, string, bool}> ticker, industry, whether its streams hold goods */

@@ -11,6 +11,7 @@ use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use PHPUnit\Framework\TestCase;
  * built on: the public is a net BUYER, it buys out of the money, and in single names it buys calls until it
  * gets frightened.
  */
+#[Group('unit')]
 class OptionDemandEngineTest extends TestCase
 {
     private OptionDemandEngine $engine;

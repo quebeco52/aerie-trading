@@ -16,6 +16,7 @@ use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\Model\ConfiguredStandardModel;
 use App\Tests\Support\Model\HookConstant;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -25,6 +26,7 @@ use ReflectionClass;
  * the downturn when the next round of budgets is set. The delay is the economy's, so the macro publishes
  * the gap at each delay a model can declare and the model reads the one it declares.
  */
+#[Group('unit')]
 final class DemandTransmissionLagTest extends TestCase
 {
     private const BOOM = 0.04;

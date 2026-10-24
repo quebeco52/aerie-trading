@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Data\Politics;
 
 use App\Data\Politics\AerieCouncil;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class AerieCouncilTest extends TestCase
 {
     /** The Council sitting at Year 1 was seated before it, each councillor a full term before their term ends. */

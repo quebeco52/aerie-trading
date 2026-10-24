@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\Data\Company\Sectors;
 use App\Entity\Stock;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -13,6 +14,7 @@ use PHPUnit\Framework\TestCase;
  * overrode the coverage profile only to declare how visible an announced event is, and the override skipped the boost.
  * Event visibility is now a pair of hook constants the shared profile reads.
  */
+#[Group('unit')]
 final class CoverageBoostContractTest extends TestCase
 {
     public function testEveryModelGivesTitansAndSystemicFirmsTheCoverageBoost(): void

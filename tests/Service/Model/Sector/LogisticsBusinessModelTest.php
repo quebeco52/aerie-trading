@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Model\Sector\LogisticsBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class LogisticsBusinessModelTest extends TestCase
 {
     private LogisticsBusinessModel $model;

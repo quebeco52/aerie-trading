@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\DTO;
 
 use App\DTO\MacroStateDTO;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -15,6 +16,7 @@ use PHPUnit\Framework\TestCase;
  * written, so it fell back to a hardcoded "Expansion" — a word the live feed does not even use — until
  * the first WebSocket tick replaced it with "Boom", "Bust" or "Neutral".
  */
+#[Group('unit')]
 final class MacroStateCycleLabelTest extends TestCase
 {
     private function labelAt(float $outputGap): string

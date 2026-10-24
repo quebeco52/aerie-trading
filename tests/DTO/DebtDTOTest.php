@@ -6,8 +6,10 @@ namespace App\Tests\DTO;
 
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class DebtDTOTest extends TestCase
 {
     public function testDebtMetricsDTOInstantiation(): void

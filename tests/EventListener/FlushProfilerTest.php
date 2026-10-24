@@ -15,6 +15,7 @@ use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\Driver\AttributeDriver;
 use Doctrine\ORM\UnitOfWork;
 use Doctrine\Persistence\Mapping\RuntimeReflectionService;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * be told apart. What is pinned here is that the profiler stays silent until something asks for it, and that
  * a report describes ONE tick rather than the run so far.
  */
+#[Group('unit')]
 class FlushProfilerTest extends TestCase
 {
     /**

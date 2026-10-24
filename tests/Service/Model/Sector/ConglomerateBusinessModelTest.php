@@ -11,8 +11,10 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConglomerateBusinessModel;
 use App\Tests\Support\FloatBookCreditDrivers;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class ConglomerateBusinessModelTest extends TestCase
 {
     private ConglomerateBusinessModel $model;

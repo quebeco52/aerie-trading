@@ -45,10 +45,10 @@ test: up
 	$(EXEC_PHP) vendor/bin/phpunit --testsuite Fast --no-progress
 
 test-unit: up
-	$(EXEC_PHP) vendor/bin/phpunit --testsuite Unit --no-progress
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite Fast --group unit --no-progress
 
 test-integration: up
-	$(EXEC_PHP) vendor/bin/phpunit --testsuite Integration --no-progress
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite Integration --exclude-group unit --no-progress
 
 test-functional: up
 	$(EXEC_PHP) vendor/bin/phpunit --testsuite Functional --no-progress

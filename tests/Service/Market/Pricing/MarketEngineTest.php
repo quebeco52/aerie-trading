@@ -17,8 +17,10 @@ use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class MarketEngineTest extends TestCase
 {
     private ScriptedDraws $mathUtilityMock;

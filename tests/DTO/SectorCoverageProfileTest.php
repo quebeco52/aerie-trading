@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\DTO;
 
 use App\DTO\SectorCoverageProfile;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class SectorCoverageProfileTest extends TestCase
 {
     public function testSectorCoverageProfileDefaultsAndCustomValues(): void

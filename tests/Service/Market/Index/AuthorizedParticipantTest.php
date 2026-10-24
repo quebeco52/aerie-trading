@@ -6,6 +6,7 @@ namespace App\Tests\Service\Market\Index;
 
 use App\Service\Market\Index\AuthorizedParticipant;
 use App\Service\Math\FinancialConstants;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -15,6 +16,7 @@ use PHPUnit\Framework\TestCase;
  * buying a fund moved nothing — not the fund, and not the companies it holds. These are the properties that
  * make it a security rather than a computed number.
  */
+#[Group('unit')]
 final class AuthorizedParticipantTest extends TestCase
 {
     private const NET_ASSETS = 25_000_000_000.0;

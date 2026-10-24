@@ -9,12 +9,14 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\FinancialDataBusinessModel;
 use App\Service\Model\Sector\OilGasProducerBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * A sector's secular growth is trend growth plus its measured demand drift at the open, faded toward trend; every
  * consumer outside the models reads the faded rate, so no engine keeps a sector on its opening drift forever.
  */
+#[Group('unit')]
 final class SecularGrowthTest extends TestCase
 {
     public function testAFastSectorsExcessHalvesEveryHalfLifeAndSettlesOnTrend(): void

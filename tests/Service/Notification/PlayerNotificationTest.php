@@ -11,6 +11,7 @@ use App\Service\Notification\PriceAlertService;
 use App\Twig\DurationExtension;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -19,6 +20,7 @@ use Psr\Log\NullLogger;
  * the account alone, and watched-name news fanned out to watchers at publish. Plus the alert rules and the copy
  * helpers the messages are written with.
  */
+#[Group('unit')]
 final class PlayerNotificationTest extends TestCase
 {
     /**

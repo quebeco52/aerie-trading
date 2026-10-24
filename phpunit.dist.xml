@@ -41,13 +41,13 @@
             <directory>tests/Security</directory>
             <directory>tests/Financial</directory>
             <directory>tests/Service</directory>
-            <directory>tests/Support</directory>
+            <directory>tests/Meta</directory>
             <directory>tests/Repository</directory>
             <directory>tests/Controller</directory>
             <!-- Owned by the Realism suite. -->
             <exclude>tests/Service/Politics/PoliticsEngineRealismTest.php</exclude>
-            <exclude>tests/Service/Politics/Diet/OpinionPollsTest.php</exclude>
-            <exclude>tests/Service/Politics/Diet/ElectionForecastTest.php</exclude>
+            <exclude>tests/Service/Politics/Diet/OpinionPollsRealismTest.php</exclude>
+            <exclude>tests/Service/Politics/Diet/ElectionForecastRealismTest.php</exclude>
             <exclude>tests/Service/Macro/BusinessCycleRealismTest.php</exclude>
             <exclude>tests/Service/Macro/YieldCurveRealismTest.php</exclude>
             <exclude>tests/Service/Macro/PlayedDistrictRealismTest.php</exclude>
@@ -62,8 +62,8 @@
         <!-- Realism: multi-seed long-run runs, 10-60 s each. The full bin/verify runs them one process per file. -->
         <testsuite name="Realism">
             <file>tests/Service/Politics/PoliticsEngineRealismTest.php</file>
-            <file>tests/Service/Politics/Diet/OpinionPollsTest.php</file>
-            <file>tests/Service/Politics/Diet/ElectionForecastTest.php</file>
+            <file>tests/Service/Politics/Diet/OpinionPollsRealismTest.php</file>
+            <file>tests/Service/Politics/Diet/ElectionForecastRealismTest.php</file>
             <file>tests/Service/Macro/BusinessCycleRealismTest.php</file>
             <file>tests/Service/Macro/YieldCurveRealismTest.php</file>
             <file>tests/Service/Macro/PlayedDistrictRealismTest.php</file>
@@ -75,67 +75,8 @@
             <file>tests/Financial/CapitalSaturationInvariantTest.php</file>
         </testsuite>
 
-        <!-- Unit: no I/O, no kernel, no database. Pure collaborator-free logic. -->
-        <testsuite name="Unit">
-            <directory>tests/DTO</directory>
-            <directory>tests/Data</directory>
-            <directory>tests/Twig</directory>
-            <directory>tests/Service/Model</directory>
-            <directory>tests/Service/Math</directory>
-            <file>tests/Service/Corporate/CapExEngineTest.php</file>
-            <file>tests/Service/Market/Pricing/MarketEngineTest.php</file>
-            <file>tests/Service/User/PortfolioCalculationTest.php</file>
-            <file>tests/Service/Market/Option/OptionPricingEngineTest.php</file>
-            <file>tests/Service/Market/Option/OptionChainServiceTest.php</file>
-            <file>tests/Service/Market/Option/DealerGammaEngineTest.php</file>
-            <file>tests/Service/Market/Option/OptionDemandEngineTest.php</file>
-            <file>tests/Service/Market/Option/OptionSettlementTest.php</file>
-            <file>tests/Service/User/CashLedgerTest.php</file>
-            <file>tests/Service/View/OptionChainBuilderTest.php</file>
-            <file>tests/Service/Market/Option/OptionDeskCadenceTest.php</file>
-            <file>tests/Service/Market/Bond/CorporateBondDeskTest.php</file>
-            <file>tests/Service/Market/Bond/CorporateDefaultServiceTest.php</file>
-            <file>tests/Service/Market/Index/IndexCommitteeTest.php</file>
-            <file>tests/Service/Market/Index/IndexFundAccountantTest.php</file>
-            <file>tests/Service/Market/Ticker/BulkRowUpdateTest.php</file>
-            <file>tests/Service/Market/Ticker/StockTickColumnsTest.php</file>
-            <file>tests/Service/Market/Ticker/TickCadenceTest.php</file>
-            <file>tests/Service/Market/Ticker/ChartBufferWriterTest.php</file>
-            <file>tests/Service/Season/SeasonStatisticsTest.php</file>
-            <file>tests/Service/Notification/PlayerNotificationTest.php</file>
-            <file>tests/Service/Market/Option/OptionDeskSweepTest.php</file>
-            <file>tests/Service/Market/Option/OptionSettlementBatchTest.php</file>
-            <file>tests/Service/Market/Option/OptionChainListingTest.php</file>
-            <file>tests/EventListener/FlushProfilerTest.php</file>
-            <file>tests/EventListener/DeferredWriteAuditTest.php</file>
-            <file>tests/Service/Market/Ticker/SimulationClockTest.php</file>
-            <file>tests/Service/Market/Ticker/HistorySimTimeTest.php</file>
-            <file>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</file>
-            <file>tests/Service/Corporate/Holdings/AnchorStakeLedgerTest.php</file>
-            <file>tests/Service/Corporate/SecuritiesBookServiceTest.php</file>
-            <file>tests/Service/Corporate/SecuritiesEquityDisclosureTest.php</file>
-            <file>tests/Service/Corporate/SecuritiesMarkIsNotIncomeTest.php</file>
-            <file>tests/Service/Corporate/SecuritiesForcedSaleTest.php</file>
-            <file>tests/Service/Market/Agent/AttentionRetailStrategyTest.php</file>
-            <file>tests/Service/Market/Trading/StopOrderTriggerTest.php</file>
-            <file>tests/Service/Market/Pricing/AnalystPriceTargetTest.php</file>
-            <file>tests/Service/Market/Index/AuthorizedParticipantTest.php</file>
-            <file>tests/Service/View/CompanySnapshotNavTest.php</file>
-            <file>tests/Service/View/CompanySnapshotValuationTest.php</file>
-            <file>tests/Service/Market/Pricing/OpeningBoardBuilderTest.php</file>
-            <file>tests/Service/Corporate/MacroDriverAttributionTest.php</file>
-            <file>tests/Service/View/AnchorPortfolioBuilderTest.php</file>
-            <file>tests/Service/View/BusinessMapBuilderTest.php</file>
-            <file>tests/Service/View/CompanyProfilePageBuilderTest.php</file>
-            <file>tests/Service/Market/Chart/ChartRangeTest.php</file>
-            <file>tests/Service/Market/Chart/ChartBufferWritesTest.php</file>
-            <file>tests/Service/Market/Ticker/IndexFundPhaseTest.php</file>
-            <file>tests/Service/Market/Ticker/StockBarBookTest.php</file>
-            <file>tests/Service/Market/Ticker/TickProfilerTest.php</file>
-            <file>tests/Service/Market/Ticker/RestingOrderWatchTest.php</file>
-            <directory>tests/Support</directory>
-        </testsuite>
-
+        <!-- Unit and Integration: a collaborator-free test (no I/O, kernel or database) carries #[Group('unit')].
+             make test-unit runs Fast with group unit; make test-integration runs this suite without it. -->
         <testsuite name="Integration">
             <directory>tests/Service</directory>
             <directory>tests/Repository</directory>
@@ -143,68 +84,16 @@
             <directory>tests/MessageHandler</directory>
             <directory>tests/EventSubscriber</directory>
             <directory>tests/Security</directory>
-            <exclude>tests/Service/Model</exclude>
-            <exclude>tests/Service/Math</exclude>
             <!-- Owned by the Realism suite. -->
             <exclude>tests/Service/Politics/PoliticsEngineRealismTest.php</exclude>
-            <exclude>tests/Service/Politics/Diet/OpinionPollsTest.php</exclude>
-            <exclude>tests/Service/Politics/Diet/ElectionForecastTest.php</exclude>
+            <exclude>tests/Service/Politics/Diet/OpinionPollsRealismTest.php</exclude>
+            <exclude>tests/Service/Politics/Diet/ElectionForecastRealismTest.php</exclude>
             <exclude>tests/Service/Macro/BusinessCycleRealismTest.php</exclude>
             <exclude>tests/Service/Macro/YieldCurveRealismTest.php</exclude>
             <exclude>tests/Service/Macro/PlayedDistrictRealismTest.php</exclude>
             <exclude>tests/Service/Macro/HouseholdCreditCycleTest.php</exclude>
             <exclude>tests/Service/Macro/CreditCycleOpeningRealismTest.php</exclude>
             <exclude>tests/Service/Corporate/MultiQuarterCorporateSimulationTest.php</exclude>
-            <!-- Collaborator-free; owned by the Unit suite. Keep in step with its <file> list. -->
-            <exclude>tests/Service/Corporate/CapExEngineTest.php</exclude>
-            <exclude>tests/Service/Market/Pricing/MarketEngineTest.php</exclude>
-            <exclude>tests/Service/User/PortfolioCalculationTest.php</exclude>
-            <exclude>tests/Service/Market/Option/OptionPricingEngineTest.php</exclude>
-            <exclude>tests/Service/Market/Option/OptionChainServiceTest.php</exclude>
-            <exclude>tests/Service/Market/Option/DealerGammaEngineTest.php</exclude>
-            <exclude>tests/Service/Market/Option/OptionDemandEngineTest.php</exclude>
-            <exclude>tests/Service/Market/Option/OptionSettlementTest.php</exclude>
-            <exclude>tests/Service/User/CashLedgerTest.php</exclude>
-            <exclude>tests/Service/View/OptionChainBuilderTest.php</exclude>
-            <exclude>tests/Service/Market/Option/OptionDeskCadenceTest.php</exclude>
-            <exclude>tests/Service/Market/Bond/CorporateBondDeskTest.php</exclude>
-            <exclude>tests/Service/Market/Bond/CorporateDefaultServiceTest.php</exclude>
-            <exclude>tests/Service/Market/Index/IndexCommitteeTest.php</exclude>
-            <exclude>tests/Service/Market/Index/IndexFundAccountantTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/BulkRowUpdateTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/StockTickColumnsTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/TickCadenceTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/ChartBufferWriterTest.php</exclude>
-            <exclude>tests/Service/Season/SeasonStatisticsTest.php</exclude>
-            <exclude>tests/Service/Notification/PlayerNotificationTest.php</exclude>
-            <exclude>tests/Service/Market/Option/OptionDeskSweepTest.php</exclude>
-            <exclude>tests/Service/Market/Option/OptionSettlementBatchTest.php</exclude>
-            <exclude>tests/Service/Market/Option/OptionChainListingTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/SimulationClockTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/HistorySimTimeTest.php</exclude>
-            <exclude>tests/Service/Corporate/MergerAndAcquisitionGateTest.php</exclude>
-            <exclude>tests/Service/Corporate/Holdings/AnchorStakeLedgerTest.php</exclude>
-            <exclude>tests/Service/Corporate/SecuritiesBookServiceTest.php</exclude>
-            <exclude>tests/Service/Corporate/SecuritiesEquityDisclosureTest.php</exclude>
-            <exclude>tests/Service/Corporate/SecuritiesMarkIsNotIncomeTest.php</exclude>
-            <exclude>tests/Service/Corporate/SecuritiesForcedSaleTest.php</exclude>
-            <exclude>tests/Service/Market/Agent/AttentionRetailStrategyTest.php</exclude>
-            <exclude>tests/Service/Market/Trading/StopOrderTriggerTest.php</exclude>
-            <exclude>tests/Service/Market/Pricing/AnalystPriceTargetTest.php</exclude>
-            <exclude>tests/Service/Market/Index/AuthorizedParticipantTest.php</exclude>
-            <exclude>tests/Service/View/CompanySnapshotNavTest.php</exclude>
-            <exclude>tests/Service/View/CompanySnapshotValuationTest.php</exclude>
-            <exclude>tests/Service/Market/Pricing/OpeningBoardBuilderTest.php</exclude>
-            <exclude>tests/Service/Corporate/MacroDriverAttributionTest.php</exclude>
-            <exclude>tests/Service/View/AnchorPortfolioBuilderTest.php</exclude>
-            <exclude>tests/Service/View/BusinessMapBuilderTest.php</exclude>
-            <exclude>tests/Service/View/CompanyProfilePageBuilderTest.php</exclude>
-            <exclude>tests/Service/Market/Chart/ChartRangeTest.php</exclude>
-            <exclude>tests/Service/Market/Chart/ChartBufferWritesTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/IndexFundPhaseTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/StockBarBookTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/TickProfilerTest.php</exclude>
-            <exclude>tests/Service/Market/Ticker/RestingOrderWatchTest.php</exclude>
         </testsuite>
 
         <testsuite name="Functional">

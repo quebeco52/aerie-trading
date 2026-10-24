@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Service\User;
 
 use App\Entity\TradeOrder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class PortfolioCalculationTest extends TestCase
 {
     /**

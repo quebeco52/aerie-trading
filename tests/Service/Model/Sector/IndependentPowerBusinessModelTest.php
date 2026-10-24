@@ -14,8 +14,10 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\IndependentPowerBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class IndependentPowerBusinessModelTest extends TestCase
 {
     private const VOL = 0.30;

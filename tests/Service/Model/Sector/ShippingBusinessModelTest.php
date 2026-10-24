@@ -11,8 +11,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\ShippingBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class ShippingBusinessModelTest extends TestCase
 {
     public function testContinuousSpotRateElasticity(): void

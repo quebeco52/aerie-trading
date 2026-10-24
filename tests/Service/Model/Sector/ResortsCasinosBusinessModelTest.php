@@ -15,11 +15,13 @@ use App\Service\Model\Sector\ResortsCasinosBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Draw order in calculateSectorPhysics(): gaming, non_gaming, hold, event, then cre for a landlord.
  */
+#[Group('unit')]
 class ResortsCasinosBusinessModelTest extends TestCase
 {
     private function createMacroState(

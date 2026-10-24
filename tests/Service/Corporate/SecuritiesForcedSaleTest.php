@@ -12,6 +12,7 @@ use App\Service\Corporate\TreasuryEngine;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -27,6 +28,7 @@ use ReflectionProperty;
  * Before this existed the same path applied a flat five percent haircut and called it a fire sale, so the
  * depth of the discount never depended on what rates had actually done to the book.
  */
+#[Group('unit')]
 final class SecuritiesForcedSaleTest extends TestCase
 {
     private const GROSS_BOOK = 400_000_000_000.0;

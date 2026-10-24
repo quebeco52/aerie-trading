@@ -2,12 +2,15 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Support;
+namespace App\Tests\Meta;
 
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
+use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class ScriptedDrawsTest extends TestCase
 {
     /** MathUtility's public instance methods that are not draws. */

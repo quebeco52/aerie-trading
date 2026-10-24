@@ -13,6 +13,7 @@ use App\Service\Model\Sector\HeavyManufacturingBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * peers in one sector must share part of each quarter's innovation, and a macro state without the factor
  * must leave the one-factor firm model untouched so existing calibrations and tests hold.
  */
+#[Group('unit')]
 class SectorDemandFactorTest extends TestCase
 {
     public function testTwoFactorInnovationCompositionKeepsUnitVarianceAndSharesSectorTerm(): void

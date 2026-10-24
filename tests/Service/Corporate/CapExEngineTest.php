@@ -6,8 +6,10 @@ namespace App\Tests\Service\Corporate;
 
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class CapExEngineTest extends TestCase
 {
     private CapExEngine $engine;

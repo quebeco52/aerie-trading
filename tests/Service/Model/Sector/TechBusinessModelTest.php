@@ -10,8 +10,10 @@ use App\Service\Event\ShockEvent;
 use App\Service\Model\Sector\TechBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class TechBusinessModelTest extends TestCase
 {
     public function testTailEventPersistsAsAMarkovRegimeWithRandomExit(): void

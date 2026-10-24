@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\DTO;
 
 use App\DTO\BoardReadingDTO;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * What the economy reads of the board, one tick behind: levels stand until the board is priced again, flows are
  * spent on the tick that reads them, and the bank levy is a standing amount.
  */
+#[Group('unit')]
 final class BoardReadingTest extends TestCase
 {
     /**

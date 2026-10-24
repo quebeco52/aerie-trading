@@ -109,16 +109,18 @@ not the code. Comments wrap at 120 characters; `php bin/reflow-comments.php <fil
 
 ## Tests
 - PHPUnit. Every new model or mechanism gets a test.
-- Suite membership is explicit in `phpunit.dist.xml`; a test in an unlisted directory never runs.
+- Suite membership is explicit in `phpunit.dist.xml`; a test in an unlisted directory never runs. A collaborator-free
+  test (no I/O, kernel or database) carries `#[Group('unit')]`: `make test-unit` runs that group, Integration the rest.
 - Stochastic behaviour: invariant or distribution tests in `tests/Financial/`, not exact values. Break the guarded
   term by hand once to confirm the test fails.
 - Format: PER-CS 3.0 and `declare(strict_types=1)` in every file, through php-cs-fixer (`.php-cs-fixer.dist.php`). Run
   `bin/php-slot php vendor/bin/php-cs-fixer fix` or `make cs-fix` before handing back.
 - Tests and verification: `bin/verify` (PHPStan and format on changed files + quick tests, ~20 s; works in sandboxes
   without Docker).
-  With Docker: `make test-unit` (~0.2 s), `make test` (Fast suite, ~1 min), `make test-realism` (eight multi-seed
-  long-run tests, ~3.5 min serial), `make phpstan FILE=<path>`. Before committing: `bin/verify --full` (~1 min).
-- A realism test that runs over ~5 s belongs in the Realism suite in `phpunit.dist.xml`, not Fast.
+  With Docker: `make test-unit` (~3 s), `make test` (Fast suite, ~1 min), `make test-realism` (the multi-seed
+  long-run files, ~3.5 min serial), `make phpstan FILE=<path>`. Before committing: `bin/verify --full` (~1 min).
+- A realism test that runs over ~5 s belongs in the Realism suite in `phpunit.dist.xml`, not Fast. Beside fast tests it
+  moves to a `<Name>RealismTest` next to its file, the two sharing a fixtures trait.
 
 ## Database
 Change entities only. Never write or generate migrations; the user generates them with Doctrine. Say in your report

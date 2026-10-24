@@ -12,6 +12,7 @@ use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use App\Service\Model\Sector\HeavyManufacturingBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,6 +20,7 @@ use PHPUnit\Framework\TestCase;
  * so a defensive name with a noisy beta does not inherit a cyclical cost base, and per-ticker tuning can
  * still make one machinery maker more cyclical than another.
  */
+#[Group('unit')]
 class OperatingCyclicalityTest extends TestCase
 {
     public function testSectorConstantIsTheDefaultAndBetaIsIgnored(): void

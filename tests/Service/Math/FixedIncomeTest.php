@@ -7,6 +7,7 @@ namespace App\Tests\Service\Math;
 use App\DTO\MacroStateDTO;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -14,6 +15,7 @@ use PHPUnit\Framework\TestCase;
  * themselves: a discount factor, a duration and a yield all have known analytic values for a zero-coupon
  * bond, so each one is anchored to arithmetic that does not go through the function under test.
  */
+#[Group('unit')]
 class FixedIncomeTest extends TestCase
 {
     // --- Floating Reference Rate ---

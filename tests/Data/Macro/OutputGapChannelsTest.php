@@ -10,6 +10,7 @@ use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  * panel groups it. So the channels are taken from a real recorded window rather than written down
  * here, and the families are checked against what the engine actually produced.
  */
+#[Group('unit')]
 class OutputGapChannelsTest extends TestCase
 {
     /**

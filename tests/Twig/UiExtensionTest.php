@@ -7,11 +7,13 @@ namespace App\Tests\Twig;
 use App\Data\District\Institutions;
 use App\Service\View\FigureFormat;
 use App\Twig\Extension\UiExtension;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Twig\Environment;
 use Twig\Error\RuntimeError;
 use Twig\Loader\ArrayLoader;
 
+#[Group('unit')]
 final class UiExtensionTest extends TestCase
 {
     /** Exchange boards print an unchanged price in grey; colouring it green read as a gain that never happened. */

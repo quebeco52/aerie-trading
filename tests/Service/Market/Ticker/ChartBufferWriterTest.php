@@ -7,12 +7,14 @@ namespace App\Tests\Service\Market\Ticker;
 use App\Service\Market\Chart\ChartRange;
 use App\Service\Market\Ticker\ChartBufferWriter;
 use App\Service\Market\Ticker\TickCadence;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Pins the past-month change the ticker puts on the wire: read back in the buffer pipeline from each list's oldest
  * entry after this tick's push and trim, which is the entry PriceChangeFeed reads for the server-rendered figure.
  */
+#[Group('unit')]
 class ChartBufferWriterTest extends TestCase
 {
     private const TICKS_PER_YEAR = 3600;

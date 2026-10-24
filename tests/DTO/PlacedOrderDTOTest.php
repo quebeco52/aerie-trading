@@ -6,9 +6,11 @@ namespace App\Tests\DTO;
 
 use App\DTO\PlacedOrderDTO;
 use App\Entity\TradeOrder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /** The confirmation a player reads says what happened: a fill, or an order left on the book at its price. */
+#[Group('unit')]
 class PlacedOrderDTOTest extends TestCase
 {
     public function testAFillSaysWhatWasTraded(): void

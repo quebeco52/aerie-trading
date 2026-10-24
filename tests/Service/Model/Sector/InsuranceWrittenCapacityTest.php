@@ -13,12 +13,14 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The written share of Kenney capacity: a Winter (1994) / Gron (1994) supply curve in the full book's return over
  * the hurdle, reached through renewals (first-order partial adjustment over the policy term).
  */
+#[Group('unit')]
 final class InsuranceWrittenCapacityTest extends TestCase
 {
     private const DISPERSION = 0.06;

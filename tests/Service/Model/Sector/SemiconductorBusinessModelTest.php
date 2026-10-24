@@ -11,8 +11,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class SemiconductorBusinessModelTest extends TestCase
 {
     private SemiconductorBusinessModel $model;

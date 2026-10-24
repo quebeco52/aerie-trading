@@ -18,8 +18,10 @@ use App\Service\Model\ModelParameters;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class UtilityBusinessModelTest extends TestCase
 {
     public function testAStrongMerchantGenerationQuarterRaisesRevenue(): void

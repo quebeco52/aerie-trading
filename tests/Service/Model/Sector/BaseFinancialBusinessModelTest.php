@@ -6,8 +6,10 @@ namespace App\Tests\Service\Model\Sector;
 
 use App\Entity\Stock;
 use App\Service\Model\Sector\BaseFinancialBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class BaseFinancialBusinessModelTest extends TestCase
 {
     private BaseFinancialBusinessModel $model;

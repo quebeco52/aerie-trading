@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\Data\District;
 
 use App\Data\District\DistrictCalendar;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The District's calendar: Year 1 starts at simulation time 0, months are twelfths of a year, and a dateline's month
  * always sits in the quarter the quarter label names.
  */
+#[Group('unit')]
 class DistrictCalendarTest extends TestCase
 {
     public function testTheCalendarStartsInYearOne(): void

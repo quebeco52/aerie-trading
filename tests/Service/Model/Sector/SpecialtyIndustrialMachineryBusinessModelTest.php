@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Model\Sector\SpecialtyIndustrialMachineryBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
 {
     private SpecialtyIndustrialMachineryBusinessModel $model;

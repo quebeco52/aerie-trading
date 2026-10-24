@@ -7,8 +7,10 @@ namespace App\Tests\Data\Company;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\StockInfo;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class StockInfoTest extends TestCase
 {
     /** Marketing adjectives and stock AI constructions the house style bans from all company copy. */

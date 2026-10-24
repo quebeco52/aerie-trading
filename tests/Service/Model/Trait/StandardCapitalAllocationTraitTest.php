@@ -7,6 +7,7 @@ namespace App\Tests\Service\Model\Trait;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Tests\Support\Model\BareStandardModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -15,6 +16,7 @@ use PHPUnit\Framework\TestCase;
  * Nothing here is gated on a constant, which is precisely why it is easy to miss: these are the numbers
  * a sector model uses unless it writes its own, and no sector test addresses them directly.
  */
+#[Group('unit')]
 final class StandardCapitalAllocationTraitTest extends TestCase
 {
     private BareStandardModel $model;

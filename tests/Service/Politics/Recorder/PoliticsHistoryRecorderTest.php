@@ -81,7 +81,7 @@ class PoliticsHistoryRecorderTest extends TestCase
         // accumulated as the engine does, and at a rate putting a meeting exactly half a tick past a tick that tie can
         // fire twice.
         $ticksPerYear = 64;
-        $engine = new PoliticsEngine(MathUtility::ownStream(23), $this->inMemoryRedis());
+        $engine = new PoliticsEngine(MathUtility::ownStream(23), new InMemoryRedis());
         $recorder = $this->recorder();
         $meetings = [];
         $forecasts = [];
@@ -123,10 +123,5 @@ class PoliticsHistoryRecorderTest extends TestCase
         });
 
         return new PoliticsHistoryRecorder($entityManager);
-    }
-
-    private function inMemoryRedis(): \Redis
-    {
-        return new InMemoryRedis();
     }
 }

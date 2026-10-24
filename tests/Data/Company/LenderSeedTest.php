@@ -16,6 +16,7 @@ use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -25,6 +26,7 @@ use PHPUnit\Framework\TestCase;
  * agency lifts the rating its capital capped, and it earns past its return from then on. Every lender opens inside
  * them.
  */
+#[Group('unit')]
 class LenderSeedTest extends TestCase
 {
     private DebtEngine $debtEngine;

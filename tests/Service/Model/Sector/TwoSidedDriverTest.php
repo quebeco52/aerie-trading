@@ -10,6 +10,7 @@ use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -17,6 +18,7 @@ use PHPUnit\Framework\TestCase;
  * the firm when the driver runs one side of neutral it gives back when the driver runs the other. Read one-sided, a
  * driver that averages neutral still paid on average, revenue no one forecast.
  */
+#[Group('unit')]
 final class TwoSidedDriverTest extends TestCase
 {
     /**

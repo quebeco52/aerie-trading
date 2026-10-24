@@ -10,6 +10,7 @@ use App\Service\User\CashLedger;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * lookup and an UPDATE per contract, several hundred of each inside one twenty-millisecond tick, and the
  * ticker logged it as a hundred-millisecond spike every time a serial rolled.
  */
+#[Group('unit')]
 class OptionSettlementBatchTest extends TestCase
 {
     /** @var list<array{0: string, 1: array<int, mixed>}> */

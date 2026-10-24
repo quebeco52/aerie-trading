@@ -13,8 +13,10 @@ use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class DefenseContractorBusinessModelTest extends TestCase
 {
     private function createMacroState(

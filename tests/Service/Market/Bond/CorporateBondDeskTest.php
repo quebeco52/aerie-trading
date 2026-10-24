@@ -15,6 +15,7 @@ use App\Service\Market\Bond\CorporateBondDesk;
 use App\Service\Math\FinancialConstants;
 use App\Tests\Support\StockBuilder;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -25,6 +26,7 @@ use PHPUnit\Framework\TestCase;
  * sheet, every deal would lever the firm up for free and the leverage covenant, the Altman score and the
  * cost of capital would all be reading a number the market had invented.
  */
+#[Group('unit')]
 class CorporateBondDeskTest extends TestCase
 {
     /** @param bool $marketOpen What DebtEngine says when asked whether the primary market will lend to the issuer. */

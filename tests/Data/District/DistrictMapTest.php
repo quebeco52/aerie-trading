@@ -8,6 +8,7 @@ use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Data\District\DistrictMap;
 use App\Data\Macro\MacroFieldCatalog;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * companies actually hold frontage on any given request is a live ranking, not authored data —
  * see App\Service\District\DistrictWardComposerTest for that behaviour.
  */
+#[Group('unit')]
 class DistrictMapTest extends TestCase
 {
     /** @return list<string> distinct business models InitialMarket::STOCKS actually carries */

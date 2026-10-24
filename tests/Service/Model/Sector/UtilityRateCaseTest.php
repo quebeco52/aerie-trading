@@ -10,6 +10,7 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,6 +27,7 @@ use PHPUnit\Framework\TestCase;
  * inflates revenue with, so a multiplier carrying a cumulative level rather than the lag hands the utility
  * free margin on every order instead of squeezing it between them.
  */
+#[Group('unit')]
 final class UtilityRateCaseTest extends TestCase
 {
     private const PENDING_KEY = StreamContext::REGIME_STATE_PREFIX . UtilityBusinessModel::REGIME_RATE_CASE;

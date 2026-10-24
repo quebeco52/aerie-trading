@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Twig;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /** The economy page's topic pills count the charts they filter, so adding a chart means updating its pill. */
+#[Group('unit')]
 class EconomyFilterCountsTest extends TestCase
 {
     public function testEachPillCountsTheChartsInItsTopic(): void

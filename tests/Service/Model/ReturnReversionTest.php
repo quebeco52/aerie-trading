@@ -15,6 +15,7 @@ use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -22,6 +23,7 @@ use PHPUnit\Framework\TestCase;
  * StandardBaseModelTrait, since their revenue targets read it; lenders and funds, whose targets are struck on their
  * structural ROE, carry the return they are measured to earn.
  */
+#[Group('unit')]
 class ReturnReversionTest extends TestCase
 {
     private function lender(float $trailingRoe): Stock

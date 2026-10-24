@@ -14,10 +14,12 @@ use App\Twig\Extension\EventExtension;
 use App\Twig\Extension\SimDateExtension;
 use App\Twig\WebSocketTicketExtension;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\SecurityBundle\Security;
 
 #[AllowMockObjectsWithoutExpectations]
+#[Group('unit')]
 class TwigExtensionsTest extends TestCase
 {
     /** HS256 signing key; the JWT library refuses anything shorter than the hash it signs with. */

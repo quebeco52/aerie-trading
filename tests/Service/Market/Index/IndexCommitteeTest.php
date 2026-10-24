@@ -16,6 +16,7 @@ use App\Service\Math\MathUtility;
 use App\Tests\Support\InMemoryRedis;
 use App\Tests\Support\StockBuilder;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -25,6 +26,7 @@ use PHPUnit\Framework\TestCase;
  * arithmetic of its own composition, so changing who is counted must not move the level. Everything else
  * here — banding, float adjustment, dropping the dead — is about which changes are worth making at all.
  */
+#[Group('unit')]
 class IndexCommitteeTest extends TestCase
 {
     private InMemoryIndexMembershipStore $store;

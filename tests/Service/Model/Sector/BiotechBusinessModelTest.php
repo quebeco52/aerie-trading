@@ -11,8 +11,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BiotechBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class BiotechBusinessModelTest extends TestCase
 {
     private const EXPECTED_REVENUE = 100_000_000.0;

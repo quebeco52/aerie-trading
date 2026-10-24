@@ -11,6 +11,7 @@ use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use PHPUnit\Framework\TestCase;
  * measurably settled at, not the constant the default process is built on. The rates average below those constants,
  * so a term read against them booked a standing gain or loss in every quiet year.
  */
+#[Group('unit')]
 final class DefaultRateTrendTest extends TestCase
 {
     /**

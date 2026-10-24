@@ -15,6 +15,7 @@ use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * anchors disagree (a return target below what the deposit franchise already earns, or a book priced at the wrong
  * tenor), and its loans would be lent below cost.
  */
+#[Group('unit')]
 final class LenderOpeningFranchiseTest extends TestCase
 {
     public function testEverySeededLenderOpensWithANonNegativeLoanSpread(): void

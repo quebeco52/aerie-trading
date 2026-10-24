@@ -11,6 +11,7 @@ use App\Service\District\DistrictConduitResolver;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\BusinessModelRegistryInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,6 +27,7 @@ use PHPUnit\Framework\TestCase;
  * UBIQUITOUS_MACRO_FIELDS in the first place, so a field drifting from rare to near-universal
  * fails a test instead of silently rewiring every tenant to the same institution.
  */
+#[Group('unit')]
 class DistrictConduitTopologyTest extends TestCase
 {
     private DistrictConduitResolver $resolver;

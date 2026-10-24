@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\CustodyBankBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class CustodyBankBusinessModelTest extends TestCase
 {
     private CustodyBankBusinessModel $model;

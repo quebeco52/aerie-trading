@@ -16,6 +16,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * sides, expiries in order, the spot's own strike flagged — because that layout is the whole reason a chain
  * is readable, and because every one of those is a place a contract can silently go missing from the page.
  */
+#[Group('unit')]
 class OptionChainBuilderTest extends TestCase
 {
     private InMemoryDealerGammaStore $gammaStore;

@@ -16,6 +16,7 @@ use App\Service\Model\Sector\SecurityProtectionBusinessModel;
 use App\Service\Model\Sector\UtilityBusinessModel;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * before tax, as a share of revenue, which the market prices a change in public spending against
  * (App\Service\Market\Pricing\PolicyCapitalization::publicSpendingGap()).
  */
+#[Group('unit')]
 class PublicSpendingExposureTest extends TestCase
 {
     /**

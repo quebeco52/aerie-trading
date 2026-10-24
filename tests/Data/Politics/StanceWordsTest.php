@@ -11,9 +11,11 @@ use App\Service\Politics\Department\FinancialRegulator;
 use App\Service\Politics\Department\MonetaryAuthority;
 use App\Service\Politics\Department\SecuritiesCommission;
 use App\Service\Politics\Department\SovereignReserveFund;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /** The stance words: every stance a department can name has words in every form its pages print. */
+#[Group('unit')]
 final class StanceWordsTest extends TestCase
 {
     /**

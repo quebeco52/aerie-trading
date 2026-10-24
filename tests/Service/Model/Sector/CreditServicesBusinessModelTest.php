@@ -12,8 +12,10 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\CreditServicesBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class CreditServicesBusinessModelTest extends TestCase
 {
     private CreditServicesBusinessModel $model;

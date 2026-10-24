@@ -10,6 +10,7 @@ use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -17,6 +18,7 @@ use PHPUnit\Framework\TestCase;
  * cost is per unit, so it stays linear in the draw: a margin term that also lowered the cost ratio with the same draw
  * (scale, attach, learning-curve or cachet elasticities) counted the leverage twice and bent costs quadratic.
  */
+#[Group('unit')]
 final class DemandDrawLeavesCostRatioTest extends TestCase
 {
     /**

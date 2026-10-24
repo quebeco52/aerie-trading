@@ -13,6 +13,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * quarter's own draws (StandardOperatingPhysicsTrait::measureStreamMacroEffects). That is only a measurement if the
  * re-run reproduces the quarter exactly wherever the input does not reach, which is what these pin for every model.
  */
+#[Group('unit')]
 class StreamMacroAttributionTest extends TestCase
 {
     private const EXPECTED_REVENUE = 10_000_000_000.0;

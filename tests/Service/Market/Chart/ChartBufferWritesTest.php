@@ -6,6 +6,7 @@ namespace App\Tests\Service\Market\Chart;
 
 use App\Service\Market\Chart\ChartRange;
 use App\Service\Market\Ticker\TickCadence;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * mark and nothing between, and its list is kept at a month of marks rather than a month of ticks, so the
  * short ranges and the change figure still read a month back.
  */
+#[Group('unit')]
 final class ChartBufferWritesTest extends TestCase
 {
     private const TICKS_PER_YEAR = 3600;

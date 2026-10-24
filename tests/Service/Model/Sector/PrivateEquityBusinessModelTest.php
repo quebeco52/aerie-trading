@@ -13,8 +13,10 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class PrivateEquityBusinessModelTest extends TestCase
 {
     private const NEUTRAL_RATE = 0.035;

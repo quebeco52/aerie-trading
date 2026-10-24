@@ -7,8 +7,10 @@ namespace App\Tests\Service\Model;
 use App\Data\Company\Sectors;
 use App\Service\Model\BusinessModelRegistry;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class BusinessModelRegistryTest extends TestCase
 {
     /** The injected registry and the static lookup are one registry: same identifiers, same instances. */

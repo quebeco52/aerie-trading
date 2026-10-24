@@ -12,8 +12,10 @@ use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\PortTerminalBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class PortTerminalBusinessModelTest extends TestCase
 {
     private const EXPECTED_REVENUE = 100.0;

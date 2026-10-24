@@ -6,6 +6,7 @@ namespace App\Tests\Service\Market\Chart;
 
 use App\Service\Market\Chart\ChartRange;
 use App\Service\Market\Ticker\TickCadence;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * nine and a half times the span its button named. Lowering the bar rate would have mis-scaled the stock
  * charts the same way, over the rows already written at the old rate.
  */
+#[Group('unit')]
 final class ChartRangeTest extends TestCase
 {
     public function testEveryRangeButtonIsASpanOfYears(): void

@@ -9,8 +9,10 @@ use App\Data\Company\Sectors;
 use App\Data\Company\StockModelTuning;
 use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class StockModelTuningTest extends TestCase
 {
     public function testSilcTickerOverridesAreCorrectlyResolved(): void

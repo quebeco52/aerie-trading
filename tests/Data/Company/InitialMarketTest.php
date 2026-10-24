@@ -11,8 +11,10 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Market\Index\MarketIndex;
 use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class InitialMarketTest extends TestCase
 {
     public static function stockProvider(): array

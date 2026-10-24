@@ -13,8 +13,10 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\OilGasProducerBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class OilGasProducerBusinessModelTest extends TestCase
 {
     private OilGasProducerBusinessModel $model;

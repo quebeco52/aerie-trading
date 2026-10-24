@@ -7,8 +7,10 @@ namespace App\Tests\DTO;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
 use App\Service\Math\MacroConstants;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class MacroStateDTOTest extends TestCase
 {
     public function testAnEmptyPayloadOpensAtTheConstructorOpening(): void

@@ -19,8 +19,7 @@ use PHPUnit\Framework\TestCase;
 
 class OpinionPollsTest extends TestCase
 {
-    /** The first vote on the calendar. */
-    private const ELECTION_AT = Election::TERM_YEARS;
+    use OpinionPollsFixtures;
 
     /**
      * The normal votes take a neutral step, a share's variance times the years, and are put back on a whole; with no
@@ -67,24 +66,6 @@ class OpinionPollsTest extends TestCase
         $this->assertEqualsWithDelta(1.0, array_sum($back), 1e-12);
         $this->assertEqualsWithDelta(Election::NORMAL_VOTE_DRIFT_VARIANCE, Election::normalVoteDriftVariance(1e-6) / 1e-6, 1e-8, 'Over a moment the drift is the yearly variance\'s.');
         $this->assertLessThan(Election::NORMAL_VOTE_DRIFT_VARIANCE * 100.0, Election::normalVoteDriftVariance(100.0), 'Over a century the pull back holds it in.');
-    }
-
-    /** Through a term the normal votes walk with the polls' clock, and the vote is cast against the walked normals. */
-    public function testTheNormalVotesWalkThroughATerm(): void
-    {
-        mt_srand(9);
-        $engine = new Politics(MathUtility::ownStream(9), $this->inMemoryRedis());
-        $state = $this->termStart();
-        for ($tick = 1; $tick <= 4 * 48; ++$tick) {
-            $engine->advance($state, $this->economy($tick / 48.0), 1.0 / 48.0);
-        }
-        $this->assertEqualsWithDelta(1.0, array_sum($state->normalVoteShares), 1e-12);
-        $moved = 0.0;
-        foreach (Diet::PARTIES as $party) {
-            $moved += abs($state->normalVoteShares[$party] - Diet::SEED_VOTE_SHARES[$party]);
-        }
-        $this->assertGreaterThan(0.0, $moved, 'A term on, the normals have moved.');
-        $this->assertLessThan(0.15, $moved, 'But only as far as a term of the walk takes them.');
     }
 
     /**
@@ -278,30 +259,6 @@ class OpinionPollsTest extends TestCase
     }
 
     /**
-     * With nothing drawn, a term walked a month at a time votes as a term in one step: the cabinet pays the cost of
-     * ruling either way.
-     */
-    public function testAMonthlyTermVotesAsATermInOneStep(): void
-    {
-        $quiet = $this->quietMath();
-        $whole = $this->termStart();
-        (new Politics($quiet, $this->inMemoryRedis()))->advance($whole, $this->economy(self::ELECTION_AT), 0.01);
-
-        $monthly = $this->termStart();
-        $engine = new Politics($quiet, $this->inMemoryRedis());
-        for ($month = 1; $month <= 48; ++$month) {
-            $engine->advance($monthly, $this->economy($month / 12.0), 1.0 / 12.0);
-        }
-
-        $this->assertSame(self::ELECTION_AT, $monthly->lastElectionAt);
-        $this->assertSame([], $monthly->polls, 'The vote puts the term\'s polls away.');
-        $this->assertEqualsWithDelta(-Election::COST_OF_RULING, $whole->electionIncumbentSwing, 1e-9);
-        foreach (Diet::PARTIES as $party) {
-            $this->assertEqualsWithDelta($whole->dietVoteShares[$party], $monthly->dietVoteShares[$party], 2e-5, $party);
-        }
-    }
-
-    /**
      * In a coalition the growth vote goes to the party leading it: a year of growth above trend lifts the Vanguard's
      * support and leaves its partner's no higher.
      */
@@ -322,56 +279,6 @@ class OpinionPollsTest extends TestCase
         $this->assertSame(Diet::VANGUARD, \App\Service\Politics\Diet\PartyLeaders::primeMinisterParty($boom));
         $this->assertGreaterThan(OpinionPolls::support($trend)[Diet::VANGUARD], OpinionPolls::support($boom)[Diet::VANGUARD]);
         $this->assertLessThanOrEqual(OpinionPolls::support($trend)[Diet::EXCHANGE], OpinionPolls::support($boom)[Diet::EXCHANGE]);
-    }
-
-    /** A poll is published at each month's turn, none on the vote's tick, and every one samples support as it stood. */
-    public function testAPollIsPublishedEachMonthOfTheTerm(): void
-    {
-        mt_srand(5);
-        $engine = new Politics(MathUtility::ownStream(5), $this->inMemoryRedis());
-        $state = $this->termStart();
-        $ticksPerYear = 48;
-        $published = 0;
-        for ($tick = 1; $tick < 4 * $ticksPerYear; ++$tick) {
-            $engine->advance($state, $this->economy($tick / $ticksPerYear), 1.0 / $ticksPerYear);
-            if ($state->polls !== [] && end($state->polls)['t'] === $state->totalTime) {
-                ++$published;
-                $poll = end($state->polls)['shares'];
-                $support = OpinionPolls::support($state);
-                $this->assertEqualsWithDelta(1.0, array_sum($poll), 5e-4);
-                foreach (Diet::PARTIES as $party) {
-                    $this->assertLessThan(5.0 * sqrt(($support[$party] / OpinionPolls::EFFECTIVE_SAMPLE_SIZE) + (OpinionPolls::UNSETTLED_VARIANCE * $support[$party])), abs($poll[$party] - $support[$party]), $party);
-                }
-            }
-        }
-        $this->assertSame(47, $published);
-        $this->assertCount(47, $state->polls);
-    }
-
-    /**
-     * The polls are drawn off the politics stream: a game polled on another salt votes the same, on different polls.
-     */
-    public function testPublishingThePollsChangesNothingElse(): void
-    {
-        $results = [];
-        $polls = [];
-        foreach ([11, 12] as $salt) {
-            $engine = new Politics(MathUtility::ownStream(9), $this->inMemoryRedis());
-            $state = $this->termStart();
-            $state->authoritySalt = (float) $salt;
-            for ($month = 1; $month <= 48; ++$month) {
-                $engine->advance($state, $this->economy($month / 12.0), 1.0 / 12.0);
-                if ($month === 47) {
-                    $poll = end($state->polls);
-                    $this->assertNotFalse($poll, 'four years in, the polls have been published');
-                    $polls[] = $poll['shares'];
-                }
-            }
-            $results[] = $state->dietVoteShares;
-        }
-
-        $this->assertSame($results[0], $results[1]);
-        $this->assertNotSame($polls[0], $polls[1]);
     }
 
     /** A poll's errors sum to nothing and have the multinomial's variance, p(1 - p) / n, on each party. */
@@ -415,7 +322,7 @@ class OpinionPollsTest extends TestCase
     /** The polls and support survive the round trip through Redis. */
     public function testThePollsSurviveTheRoundTrip(): void
     {
-        $engine = new Politics(MathUtility::ownStream(2), $this->inMemoryRedis());
+        $engine = new Politics(MathUtility::ownStream(2), new InMemoryRedis());
         $state = $this->termStart();
         for ($month = 1; $month <= 6; ++$month) {
             $engine->advance($state, $this->economy($month / 12.0), 1.0 / 12.0);
@@ -424,52 +331,5 @@ class OpinionPollsTest extends TestCase
         $decoded = json_decode(json_encode($state->toArray(), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION), true, 512, JSON_THROW_ON_ERROR);
         $this->assertEquals($state, PoliticsState::fromArray($decoded));
         $this->assertCount(6, $state->polls);
-    }
-
-    /**
-     * The founding Diet a coalition of two governs, at the start of the first term, the term counted from Year 1 and
-     * the game's salt drawn.
-     */
-    private function termStart(): PoliticsState
-    {
-        $state = new PoliticsState();
-        $state->governingCoalition = Diet::membership([Diet::VANGUARD, Diet::EXCHANGE]);
-        $state->supportParties = [];
-        $state->cabinetFallsAt = 100.0;
-        $state->termStartedAt = 0.0;
-        $state->termStartDeflator = $this->economy(0.0)->consumerPriceLevel;
-        $state->campaignStartedAt = 0.0;
-        $state->campaignStartRealGdp = Election::realGdp($this->economy(0.0));
-        // The game's salt, which a fresh game draws on its first tick, after that tick's poll would have been
-        // published.
-        $state->authoritySalt = 7.0;
-
-        return $state;
-    }
-
-    /** The economy on trend: output growing at its trend and prices at the target. */
-    private function economy(float $totalTime): MacroStateDTO
-    {
-        return new MacroStateDTO(
-            totalTime: $totalTime,
-            potentialGdpIndex: exp((MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE + MacroConstants::TFP_DRIFT) * $totalTime),
-            consumerPriceLevel: exp(MacroConstants::TARGET_INFLATION * $totalTime),
-        );
-    }
-
-    /** Normals are zero; the other draws stay live. */
-    private function quietMath(): MathUtility
-    {
-        return new class extends MathUtility {
-            public function generateStandardNormal(): float
-            {
-                return 0.0;
-            }
-        };
-    }
-
-    private function inMemoryRedis(): \Redis
-    {
-        return new InMemoryRedis();
     }
 }

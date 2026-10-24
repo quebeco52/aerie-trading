@@ -9,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Tests\Support\Model\BareStandardModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use PHPUnit\Framework\TestCase;
  * confusing sector failures rather than one clear one, and any behaviour a sector overrides is covered
  * only where some other sector happens to leave the default in place.
  */
+#[Group('unit')]
 final class StandardTreasuryTraitTest extends TestCase
 {
     private BareStandardModel $model;

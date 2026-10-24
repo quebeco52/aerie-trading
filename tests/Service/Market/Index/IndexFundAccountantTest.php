@@ -10,6 +10,7 @@ use App\Service\Math\FinancialConstants;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  * shortchanges its holders by the whole dividend yield of the market every year.
  */
 #[AllowMockObjectsWithoutExpectations]
+#[Group('unit')]
 class IndexFundAccountantTest extends TestCase
 {
     private function fund(float $expenseRatio = 0.0050, float $price = 100.0): Etf

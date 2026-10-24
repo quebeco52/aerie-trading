@@ -9,6 +9,7 @@ use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\ChemicalBusinessModel;
 use App\Service\Model\Sector\RefiningBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * InputOutputExposures). These claims come straight from the tables, so a regeneration that breaks one has changed
  * the economics, not the formatting.
  */
+#[Group('unit')]
 final class InputOutputExposuresTest extends TestCase
 {
     private const COMMODITY_CHANNELS = ['energy', 'gas', 'electricity', 'metals', 'agri', 'freight'];

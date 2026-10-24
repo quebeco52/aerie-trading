@@ -16,6 +16,7 @@ use App\Service\Politics\Diet\ElectionForecast;
 use App\Service\Politics\Policy\Lever;
 use App\Service\Politics\PoliticsEngine as Politics;
 use App\Service\Politics\PoliticsState;
+use App\Tests\Support\InMemoryRedis;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -152,7 +153,7 @@ class PoliticsEngineRealismTest extends TestCase
         $math = new MathUtility();
         $economy = MacroEngine::headless($math);
         $state = new MacroState();
-        $engine = new Politics(MathUtility::ownStream(17), $this->inMemoryRedis());
+        $engine = new Politics(MathUtility::ownStream(17), new InMemoryRedis());
 
         $votes = 0;
         $falls = 0;

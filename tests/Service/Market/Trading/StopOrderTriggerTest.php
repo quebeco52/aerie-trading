@@ -6,6 +6,7 @@ namespace App\Tests\Service\Market\Trading;
 
 use App\Entity\TradeOrder;
 use App\Service\Market\Trading\TradeExecutionService;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -17,6 +18,7 @@ use ReflectionMethod;
  * take-profit, silently, on the one order type people place specifically to protect themselves — so the
  * direction is pinned here rather than trusted to the reading of a comparison operator.
  */
+#[Group('unit')]
 final class StopOrderTriggerTest extends TestCase
 {
     private ReflectionMethod $triggered;

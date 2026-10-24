@@ -17,6 +17,7 @@ use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\ScriptedDraws;
 use App\Tests\Support\StockBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
@@ -29,6 +30,7 @@ use PHPUnit\Framework\TestCase;
  * that to be a pure optimisation rather than a model change: the ceiling must dominate every hazard the
  * logic can assign, and the two-stage draw must reproduce each hazard exactly.
  */
+#[Group('unit')]
 class MergerAndAcquisitionGateTest extends TestCase
 {
     private ScriptedDraws $math;

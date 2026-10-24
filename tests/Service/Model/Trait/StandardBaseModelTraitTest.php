@@ -10,11 +10,13 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\Model\BareStandardModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The identity and factor-loading layer every sector model composes.
  */
+#[Group('unit')]
 final class StandardBaseModelTraitTest extends TestCase
 {
     private BareStandardModel $model;

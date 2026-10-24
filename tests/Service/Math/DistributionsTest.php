@@ -7,11 +7,13 @@ namespace App\Tests\Service\Math;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\Distributions;
 use App\Service\Math\MathUtility;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The formulas in App\Service\Math\Distributions.
  */
+#[Group('unit')]
 class DistributionsTest extends TestCase
 {
     private const EDGES = CreditFiscalSubsystem::NEW_PURCHASE_CLTV_EDGES;

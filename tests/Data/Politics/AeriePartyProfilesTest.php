@@ -6,8 +6,10 @@ namespace App\Tests\Data\Politics;
 
 use App\Data\Politics\AerieDiet;
 use App\Data\Politics\AeriePartyProfiles;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class AeriePartyProfilesTest extends TestCase
 {
     /** Every party in the Diet has a profile, and only they do. */

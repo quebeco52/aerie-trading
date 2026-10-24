@@ -6,12 +6,14 @@ namespace App\Tests\Service\Market\Ticker;
 
 use App\Service\Market\Ticker\BulkRowUpdate;
 use Doctrine\DBAL\Connection;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The bulk writer replaces one UPDATE per row with one per chunk. The shape of the statement is the whole
  * point, so it is asserted literally: a derived row set joined on the key, every value a placeholder.
  */
+#[Group('unit')]
 class BulkRowUpdateTest extends TestCase
 {
     public function testOneStatementJoinsTheRowsOnTheirKeyAndAssignsEveryColumn(): void

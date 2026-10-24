@@ -18,12 +18,14 @@ use App\Service\Market\Ticker\IndexFundPhase;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The fund phase's creation basket: money put into a fund lands on its constituents as orders in index weight,
  * and a fund struck at its net asset value sends nothing.
  */
+#[Group('unit')]
 final class IndexFundPhaseTest extends TestCase
 {
     private const TICKS_PER_YEAR = 14400;

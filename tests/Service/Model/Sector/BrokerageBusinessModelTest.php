@@ -18,8 +18,10 @@ use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BrokerageBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class BrokerageBusinessModelTest extends TestCase
 {
     private BrokerageBusinessModel $model;

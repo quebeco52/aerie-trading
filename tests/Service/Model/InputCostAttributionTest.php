@@ -11,6 +11,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AutoManufacturerBusinessModel;
 use App\Service\Model\StreamContext;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use PHPUnit\Framework\TestCase;
  * linear and shared, so each input's own lag state is an exact part of the basket's: the parts sum to the drag the
  * quarter booked, one moving input owns all of it, and state from before the split fades as "earlier".
  */
+#[Group('unit')]
 final class InputCostAttributionTest extends TestCase
 {
     /** Auto assembly buys metals, imported parts and labour (InputOutputExposures::AUTO_MANUFACTURER). */

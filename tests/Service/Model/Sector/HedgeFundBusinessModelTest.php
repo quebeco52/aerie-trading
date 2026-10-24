@@ -12,8 +12,10 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\HedgeFundBusinessModel;
 use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class HedgeFundBusinessModelTest extends TestCase
 {
     private HedgeFundBusinessModel $model;

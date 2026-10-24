@@ -11,6 +11,7 @@ use App\Service\Market\Option\OptionDeskService;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  *
  * Both of those are properties, not opinions, so they are asserted here.
  */
+#[Group('unit')]
 class OptionDeskCadenceTest extends TestCase
 {
     /** One step of the walked paths, in years: a tick at 14,400 a year. */

@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -24,6 +25,7 @@ use ReflectionMethod;
  * WACC-only reads. Generic trait code is not
  * model-specific coupling and is skipped.
  */
+#[Group('unit')]
 final class BusinessModelMacroFieldDeclarationTest extends TestCase
 {
     /** @var list<string> */

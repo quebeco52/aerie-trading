@@ -18,8 +18,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InvestmentBankBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class InvestmentBankBusinessModelTest extends TestCase
 {
     private InvestmentBankBusinessModel $model;

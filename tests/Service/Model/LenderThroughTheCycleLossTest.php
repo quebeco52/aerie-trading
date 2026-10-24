@@ -12,6 +12,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\StreamContext;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * Vasicek factor, the trend's factor sat below zero: a card book charged off 8% above it and a mortgage book below it,
  * quarter after quarter of an economy on trend.
  */
+#[Group('unit')]
 final class LenderThroughTheCycleLossTest extends TestCase
 {
     /** @return iterable<string, array{string}> */

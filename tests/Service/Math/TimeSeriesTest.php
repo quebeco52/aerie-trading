@@ -6,11 +6,13 @@ namespace App\Tests\Service\Math;
 
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The formulas in App\Service\Math\TimeSeries.
  */
+#[Group('unit')]
 class TimeSeriesTest extends TestCase
 {
     public function testCalculateMeanRevertingWeight(): void

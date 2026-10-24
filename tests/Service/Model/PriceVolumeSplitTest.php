@@ -13,6 +13,7 @@ use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * matching unit of variable cost, and a firm's real pricing must be visible to the engine as the gap
  * between its selling price and its input cost level.
  */
+#[Group('unit')]
 class PriceVolumeSplitTest extends TestCase
 {
     public function testTemplateMethodAppliesVariableCostToVolumeRevenueOnly(): void

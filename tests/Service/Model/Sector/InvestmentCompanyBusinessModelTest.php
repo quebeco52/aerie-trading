@@ -18,8 +18,10 @@ use App\Service\Model\Strategy\ValuationStrategyInterface;
 use App\Tests\Support\FloatBookCreditDrivers;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class InvestmentCompanyBusinessModelTest extends TestCase
 {
     /**

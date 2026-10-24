@@ -13,8 +13,10 @@ use App\Service\Math\StochasticProcesses;
 use App\Service\Model\Sector\CommunicationEquipmentBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class CommunicationEquipmentBusinessModelTest extends TestCase
 {
     private const EXPECTED_REVENUE = 100_000_000.0;

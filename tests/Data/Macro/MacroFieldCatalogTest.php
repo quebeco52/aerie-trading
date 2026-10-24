@@ -6,6 +6,7 @@ namespace App\Tests\Data\Macro;
 
 use App\Data\Macro\MacroFieldCatalog;
 use App\DTO\MacroStateDTO;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * things that must hold are that every catalogued field actually exists on MacroStateDTO, and
  * that a reading is only ever produced for a field the snapshot really carries.
  */
+#[Group('unit')]
 class MacroFieldCatalogTest extends TestCase
 {
     public function testEveryCataloguedFieldExistsOnTheMacroSnapshot(): void

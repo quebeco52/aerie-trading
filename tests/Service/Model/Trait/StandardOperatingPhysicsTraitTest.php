@@ -15,6 +15,7 @@ use App\Service\Model\ModelParameters;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Tests\Support\Model\BareStandardModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,6 +27,7 @@ use PHPUnit\Framework\TestCase;
  * {@see ConfiguredStandardModel} actually reaches the calculation — a gate that silently stopped being
  * read would otherwise look identical to one that works.
  */
+#[Group('unit')]
 final class StandardOperatingPhysicsTraitTest extends TestCase
 {
     private BareStandardModel $model;

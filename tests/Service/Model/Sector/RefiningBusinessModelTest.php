@@ -12,8 +12,10 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\RefiningBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class RefiningBusinessModelTest extends TestCase
 {
     /**

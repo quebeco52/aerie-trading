@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\AdvertisingAgencyBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class AdvertisingAgencyBusinessModelTest extends TestCase
 {
     private AdvertisingAgencyBusinessModel $model;

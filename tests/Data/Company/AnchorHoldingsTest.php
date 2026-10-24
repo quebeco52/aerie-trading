@@ -10,6 +10,7 @@ use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Data\Company\StrategicHoldings;
 use App\Service\Model\Sector\InvestmentCompanyBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  * Three have already happened: a retuned stake orphaned five float cuts, a declared sleeve claimed 60% of
  * book against stakes worth 51.5%, and a sphere carried a portfolio nobody had measured.
  */
+#[Group('unit')]
 class AnchorHoldingsTest extends TestCase
 {
     /**

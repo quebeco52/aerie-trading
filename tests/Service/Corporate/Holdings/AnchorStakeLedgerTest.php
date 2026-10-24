@@ -8,12 +8,14 @@ use App\Data\Company\AnchorHoldings;
 use App\Entity\Stock;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Tests\Support\StockBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The mark on a sphere's listed anchor stakes: when the companies it holds fall, its net asset value falls
  * with them — the one behaviour the class could not previously express.
  */
+#[Group('unit')]
 class AnchorStakeLedgerTest extends TestCase
 {
     private AnchorStakeLedger $ledger;

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Service\Math;
 
 use App\Service\Math\LinearAlgebra;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class LinearAlgebraTest extends TestCase
 {
     public function testSolvesASystemThatNeedsAPivotAndRefusesASingularOne(): void

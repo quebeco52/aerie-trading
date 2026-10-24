@@ -19,6 +19,7 @@ use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\BrokerageBusinessModel;
 use App\Tests\Support\OpeningCreditAtTrend;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -27,6 +28,7 @@ use PHPUnit\Framework\TestCase;
  * opening macro with credit at its trend, so the board starts level and a later move in its return is the funding
  * market's or the cycle's.
  */
+#[Group('unit')]
 class FeeEarnerSeedTest extends TestCase
 {
     /** How far from its structural return a fee earner may open (0.5pp of ROE): a fee manager's coupon gap is in it. */

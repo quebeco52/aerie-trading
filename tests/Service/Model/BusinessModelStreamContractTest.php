@@ -9,9 +9,11 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
+#[Group('unit')]
 class BusinessModelStreamContractTest extends TestCase
 {
     /** The draw streams every contract runs on; each is its own case, so a failure names its seed. */

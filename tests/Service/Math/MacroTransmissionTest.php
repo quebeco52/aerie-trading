@@ -6,11 +6,13 @@ namespace App\Tests\Service\Math;
 
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The formulas in App\Service\Math\MacroTransmission.
  */
+#[Group('unit')]
 class MacroTransmissionTest extends TestCase
 {
     /** Kingman (1961): the wait in a G/G/1 queue scales with rho / (1 - rho), convex as utilization nears capacity. */

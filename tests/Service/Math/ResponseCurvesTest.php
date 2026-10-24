@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Tests\Service\Math;
 
 use App\Service\Math\ResponseCurves;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The formulas in App\Service\Math\ResponseCurves.
  */
+#[Group('unit')]
 class ResponseCurvesTest extends TestCase
 {
     public function testNormalizeWeightsSimplex(): void

@@ -11,6 +11,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use PHPUnit\Framework\TestCase;
  * be unbounded, and the exchange rule that stops it — a listing standard, a shared expiry grid, and a round
  * strike ladder around the money — is also what makes the chain read like a real one.
  */
+#[Group('unit')]
 class OptionChainServiceTest extends TestCase
 {
     private function service(?EntityManagerInterface $em = null): OptionChainService

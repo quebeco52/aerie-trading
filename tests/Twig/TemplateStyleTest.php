@@ -8,12 +8,14 @@ use App\Data\District\DistrictMap;
 use App\Data\District\Institutions;
 use App\Data\Politics\AerieCouncil;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The house style in .agents/FRONTEND.md, enforced on the player pages (templates/, admin excluded) and the scripts
  * that paint them (assets/js, assets/controllers). Each test names the rule it guards; a failure lists file:line.
  */
+#[Group('unit')]
 final class TemplateStyleTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../..';

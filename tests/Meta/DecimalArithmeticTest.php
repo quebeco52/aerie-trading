@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Support;
+namespace App\Tests\Meta;
 
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use PHPUnit\Framework\TestCase;
  * These cases assert the semantics both implementations must satisfy, so they are meaningful whether the
  * extension is present or polyfilled.
  */
+#[Group('unit')]
 final class DecimalArithmeticTest extends TestCase
 {
     /** bcmath truncates toward zero; it never rounds. */

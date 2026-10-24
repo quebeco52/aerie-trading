@@ -28,6 +28,7 @@ use App\Tests\Support\StockBuilder;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -37,6 +38,7 @@ use PHPUnit\Framework\TestCase;
  * visible on the connection: a mark for each HELD contract, one bulk statement for the public's book, and
  * nothing at all through the unit of work. Those are the statements asserted here.
  */
+#[Group('unit')]
 class OptionDeskSweepTest extends TestCase
 {
     /** @var list<array{0: string, 1: array<int, mixed>}> */

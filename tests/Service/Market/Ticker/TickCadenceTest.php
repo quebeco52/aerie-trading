@@ -11,12 +11,14 @@ use App\Service\Market\Option\OptionDeskService;
 use App\Service\Market\Ticker\TickCadence;
 use App\Service\Market\Ticker\TickerRun;
 use App\Service\Math\FinancialConstants;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The working-set reload is counted in history bars, because a clear() that does not follow a flush loses
  * the tick's changes. These pin the cadence at the shipped tick rate and at the edges.
  */
+#[Group('unit')]
 class TickCadenceTest extends TestCase
 {
     public function testAtTheShippedRateTheWorkingSetReloadsAboutOnceATradingDay(): void

@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\WasteManagementBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class WasteManagementBusinessModelTest extends TestCase
 {
     private WasteManagementBusinessModel $model;

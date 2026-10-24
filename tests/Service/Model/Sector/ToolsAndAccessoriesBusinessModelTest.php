@@ -10,8 +10,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\ToolsAndAccessoriesBusinessModel;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class ToolsAndAccessoriesBusinessModelTest extends TestCase
 {
     private ToolsAndAccessoriesBusinessModel $model;

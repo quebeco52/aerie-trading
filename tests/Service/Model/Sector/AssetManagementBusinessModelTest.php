@@ -20,8 +20,10 @@ use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class AssetManagementBusinessModelTest extends TestCase
 {
     public function testGetTargetMetricsDoesNotDoubleLeverageOperatingYield(): void

@@ -11,6 +11,7 @@ use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\View\AnchorPortfolioBuilder;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use PHPUnit\Framework\TestCase;
  * traded, with no way to find out why.
  */
 #[AllowMockObjectsWithoutExpectations]
+#[Group('unit')]
 class AnchorPortfolioBuilderTest extends TestCase
 {
     /** @param list<Stock> $held */

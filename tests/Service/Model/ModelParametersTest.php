@@ -6,8 +6,10 @@ namespace App\Tests\Service\Model;
 
 use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class ModelParametersTest extends TestCase
 {
     public function testGetWithModelParamEnumAndStringKey(): void

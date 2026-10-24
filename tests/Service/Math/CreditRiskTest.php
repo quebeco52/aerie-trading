@@ -9,6 +9,7 @@ use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
 use App\Service\Math\MacroConstants;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * the bad year never comes — so the properties asserted are the ones that only show up in a bad year:
  * recovery falling exactly when defaults cluster, and a spread that is not zero on a safe name.
  */
+#[Group('unit')]
 class CreditRiskTest extends TestCase
 {
     // --- Recovery ---

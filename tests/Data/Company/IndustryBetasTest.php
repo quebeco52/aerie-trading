@@ -9,12 +9,14 @@ use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The industry betas a firm's beta is built on: Damodaran's January 2026 US table, the map from the board's
  * industries into it, and the band lore positions a firm in.
  */
+#[Group('unit')]
 final class IndustryBetasTest extends TestCase
 {
     /** Rounding of the published two-decimal betas, after unlevering and the cash correction. */

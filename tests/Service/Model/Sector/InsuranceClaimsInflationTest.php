@@ -12,6 +12,7 @@ use App\Service\Model\Sector\ReinsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,6 +20,7 @@ use PHPUnit\Framework\TestCase;
  * premiums are filed on past losses and catch up a year or so later, so an inflation surge lifts the loss ratio
  * and a return to target lets it fall back (US personal auto, 2022-24).
  */
+#[Group('unit')]
 final class InsuranceClaimsInflationTest extends TestCase
 {
     /** @return array<string, array{class-string<InsuranceBusinessModel>}> */

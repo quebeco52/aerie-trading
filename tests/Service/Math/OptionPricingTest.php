@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Math;
 
 use App\Service\Math\OptionPricing;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -13,6 +14,7 @@ use PHPUnit\Framework\TestCase;
  * analytic moments of an exponential for the jump shape, and a constant-volatility strip for the
  * model-free variance, which must come back at the volatility it was built from.
  */
+#[Group('unit')]
 class OptionPricingTest extends TestCase
 {
     // --- Black-Scholes-Merton Price ---

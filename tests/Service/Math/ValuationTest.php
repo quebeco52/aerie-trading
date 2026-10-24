@@ -7,11 +7,13 @@ namespace App\Tests\Service\Math;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The formulas in App\Service\Math\Valuation.
  */
+#[Group('unit')]
 class ValuationTest extends TestCase
 {
     public function testCalculateIntrinsicFairValuePEStandardValuation(): void

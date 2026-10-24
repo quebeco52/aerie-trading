@@ -7,6 +7,7 @@ namespace App\Tests\Data\Macro;
 use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -14,6 +15,7 @@ use PHPUnit\Framework\TestCase;
  * its field list appeared. Each test here fails on one specific way a newly added observable can go
  * missing without any other test noticing.
  */
+#[Group('unit')]
 class MacroFieldRegistryTest extends TestCase
 {
     /** Columns on macro_report that the macro vector does not own and must not try to fill. */

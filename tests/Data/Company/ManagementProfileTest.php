@@ -8,6 +8,7 @@ use App\Data\Company\ManagementProfile;
 use App\Data\Company\ManagementStyle;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -15,6 +16,7 @@ use PHPUnit\Framework\TestCase;
  * each kind of manager sits in policy space; the intensity carries the spread around them, so two firms
  * filed under the same label are not the same firm.
  */
+#[Group('unit')]
 final class ManagementProfileTest extends TestCase
 {
     /**

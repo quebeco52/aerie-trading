@@ -7,12 +7,14 @@ namespace App\Tests\Service\Market\Ticker;
 use App\Service\Market\Ticker\RestingOrderWatch;
 use App\Service\Market\Trading\LimitOrderDispatchGate;
 use App\Service\Notification\PriceAlertService;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Which instruments the tick asks the worker to look at: a quote through a resting order's bound, or one with no
  * cached book at all; never one sitting inside its bounds, and never twice while the worker has not answered.
  */
+#[Group('unit')]
 final class RestingOrderWatchTest extends TestCase
 {
     /**

@@ -8,8 +8,10 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Model\Sector\CustodyBankBusinessModel;
 use App\Service\Model\Sector\PrivateBankBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class PrivateBankBusinessModelTest extends TestCase
 {
     private PrivateBankBusinessModel $model;

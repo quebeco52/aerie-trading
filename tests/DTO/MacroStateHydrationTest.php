@@ -13,12 +13,14 @@ use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Covers the openings a snapshot computes rather than reads: the values a payload that predates a
  * field, or was written by an older engine, has to be given before the pricing surfaces see it.
  */
+#[Group('unit')]
 class MacroStateHydrationTest extends TestCase
 {
     public function testAbsentCurveIsRebuiltOffThePolicyRate(): void

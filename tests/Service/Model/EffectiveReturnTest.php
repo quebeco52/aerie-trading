@@ -7,6 +7,7 @@ namespace App\Tests\Service\Model;
 use App\Entity\Stock;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -14,6 +15,7 @@ use PHPUnit\Framework\TestCase;
  * engine writes "0" and a reloaded row reads "0.0000"; tested as strings, only the first fell back, so the same firm
  * was priced differently before and after a restart.
  */
+#[Group('unit')]
 final class EffectiveReturnTest extends TestCase
 {
     public function testAZeroCurrentReturnFallsBackToTheBaselineHoweverItWasStored(): void

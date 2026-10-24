@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\Data\Company\Sectors;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Validates that all sector business model strategies provide mathematically consistent
  * seasonality factors: exactly 4 quarterly factors summing to 4.0 within tolerance.
  */
+#[Group('unit')]
 class SectorSeasonalityInvariantTest extends TestCase
 {
     public function testAllBusinessModelStrategiesProvideValidSeasonalityFactors(): void

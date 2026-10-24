@@ -10,6 +10,7 @@ use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
 use App\Service\Model\BusinessModelInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,6 +19,7 @@ use PHPUnit\Framework\TestCase;
  * per stream must hand the same activity back through resolveSectorActivityShift(), or its cost base never
  * sees a recession and never restructures.
  */
+#[Group('unit')]
 class CostBaseSeesTheCycleTest extends TestCase
 {
     private const GAP = -0.03;

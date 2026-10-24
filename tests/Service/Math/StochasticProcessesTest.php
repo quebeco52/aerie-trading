@@ -8,11 +8,13 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The formulas in App\Service\Math\StochasticProcesses.
  */
+#[Group('unit')]
 class StochasticProcessesTest extends TestCase
 {
     public function testKouTruncatedSecondMomentMatchesTheUncappedMomentWhenTheCapIsFarOut(): void

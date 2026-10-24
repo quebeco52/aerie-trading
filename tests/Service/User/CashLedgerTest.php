@@ -6,6 +6,7 @@ namespace App\Tests\Service\User;
 
 use App\Entity\User;
 use App\Service\User\CashLedger;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * the equity desk, the option desk and option settlement each carried their own copy of these rules, which
  * agreed only until the first of them was corrected.
  */
+#[Group('unit')]
 class CashLedgerTest extends TestCase
 {
     private CashLedger $ledger;

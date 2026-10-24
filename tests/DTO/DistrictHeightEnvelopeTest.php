@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\DTO;
 
 use App\DTO\DistrictHeightEnvelope;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The one mapping every consumer of facade height shares: linear in log10 across the window,
  * clamped outside it, and never a window with no width to divide by.
  */
+#[Group('unit')]
 class DistrictHeightEnvelopeTest extends TestCase
 {
     public function testNormaliseIsLinearInLogAcrossTheWindow(): void

@@ -14,6 +14,7 @@ use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -24,6 +25,7 @@ use PHPUnit\Framework\TestCase;
  * sits in the queue decides how much, and that a firm failing in the middle of a credit cycle settles worse
  * than the same firm failing alone.
  */
+#[Group('unit')]
 class CorporateDefaultServiceTest extends TestCase
 {
     /** Recovery for a claim, as the service computes it. */

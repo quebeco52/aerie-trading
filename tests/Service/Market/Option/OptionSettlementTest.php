@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market\Option;
 use App\Entity\OptionContract;
 use App\Service\Market\Option\OptionSettlementEngine;
 use App\Service\Math\FinancialConstants;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -15,6 +16,7 @@ use PHPUnit\Framework\TestCase;
  * that a long and a short of the same contract are exact mirrors — if they ever are not, the clearing house
  * has created or destroyed stock.
  */
+#[Group('unit')]
 class OptionSettlementTest extends TestCase
 {
     private const MULTIPLIER = FinancialConstants::OPTION_CONTRACT_MULTIPLIER;

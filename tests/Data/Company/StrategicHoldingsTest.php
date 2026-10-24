@@ -7,8 +7,10 @@ namespace App\Tests\Data\Company;
 use App\Data\Company\AnchorHoldings;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\StrategicHoldings;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class StrategicHoldingsTest extends TestCase
 {
     public function testEveryStakeIsInACompanyOnTheBoard(): void

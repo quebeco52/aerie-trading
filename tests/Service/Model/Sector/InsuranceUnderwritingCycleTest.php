@@ -14,6 +14,7 @@ use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * for years after the capital has returned — the discipline lag the cycle is named for. Modelling it off
  * this quarter's surplus alone would give an instantaneous response and no cycle at all.
  */
+#[Group('unit')]
 final class InsuranceUnderwritingCycleTest extends TestCase
 {
     private const REGIME_KEY = StreamContext::REGIME_STATE_PREFIX . InsuranceBusinessModel::REGIME_HARD_MARKET;

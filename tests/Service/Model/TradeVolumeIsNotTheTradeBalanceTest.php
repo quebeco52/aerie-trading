@@ -17,6 +17,7 @@ use App\Service\Model\Sector\ShippingBusinessModel;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -24,6 +25,7 @@ use PHPUnit\Framework\TestCase;
  * move with gross trade, the domestic cycle for what comes in and the customers abroad for what goes out, so a
  * balance that moves on its own moves none of their revenue.
  */
+#[Group('unit')]
 final class TradeVolumeIsNotTheTradeBalanceTest extends TestCase
 {
     /** @return iterable<string, array{OperatingStrategyInterface}> */

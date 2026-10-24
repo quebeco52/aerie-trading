@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\DTO;
 
 use App\DTO\SectorPhysicsResult;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class SectorPhysicsResultTest extends TestCase
 {
     public function testSectorPhysicsResultProperties(): void

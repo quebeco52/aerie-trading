@@ -14,12 +14,14 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The one mapping from a listed firm to the inputs MarketEngine prices it on. The ticker and the company page both
  * price through it, so each input read here is read the same way everywhere a firm is valued.
  */
+#[Group('unit')]
 class MarketPricingContextTest extends TestCase
 {
     private function health(Stock $stock, MacroStateDTO $macroState): DebtHealthDTO

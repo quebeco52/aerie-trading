@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\SteelManufacturingBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class SteelManufacturingBusinessModelTest extends TestCase
 {
     private SteelManufacturingBusinessModel $model;

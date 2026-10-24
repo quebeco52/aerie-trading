@@ -15,6 +15,7 @@ use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -22,6 +23,7 @@ use PHPUnit\Framework\TestCase;
  * writing, fully backed by cash. Seeded off it, the float ran off or built for years after the opening, and its
  * investment income with it: SAFE opened 38% above its book's float.
  */
+#[Group('unit')]
 final class InsurerOpeningFloatTest extends TestCase
 {
     public function testEverySeededInsurerOpensAtItsSteadyFloat(): void

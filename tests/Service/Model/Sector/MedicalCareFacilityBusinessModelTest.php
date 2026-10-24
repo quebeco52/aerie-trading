@@ -10,8 +10,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\MedicalCareFacilityBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class MedicalCareFacilityBusinessModelTest extends TestCase
 {
     private MedicalCareFacilityBusinessModel $model;

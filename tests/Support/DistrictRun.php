@@ -28,7 +28,8 @@ final class DistrictRun
         $math = new MathUtility();
         $engine = MacroEngine::headless($math, withFund: true);
         $economy = new MacroState();
-        $diet = $withDiet ? new PoliticsEngine(MathUtility::ownStream($seed), self::inMemoryRedis()) : null;
+        // The bootstrap's Redis stand-in forgets everything; the Diet needs its state back each tick.
+        $diet = $withDiet ? new PoliticsEngine(MathUtility::ownStream($seed), new InMemoryRedis()) : null;
         $policy = $diet?->liveState()->policy();
 
         $dt = 1.0 / $ticksPerYear;
@@ -41,11 +42,5 @@ final class DistrictRun
                 yield $tick => $macro;
             }
         }
-    }
-
-    /** The bootstrap's Redis stand-in forgets everything; the Diet needs its state back each tick. */
-    private static function inMemoryRedis(): \Redis
-    {
-        return new InMemoryRedis();
     }
 }

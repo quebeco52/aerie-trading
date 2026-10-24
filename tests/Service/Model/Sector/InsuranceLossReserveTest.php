@@ -12,6 +12,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\ReinsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * treasury is debited when a claim is paid rather than when it is incurred. A float that grew with the economy
  * whatever the firm wrote let a firm writing a third of its capacity keep earning on the reserves of a full book.
  */
+#[Group('unit')]
 final class InsuranceLossReserveTest extends TestCase
 {
     private const ANNUAL_PREMIUM = 400_000_000_000.0;

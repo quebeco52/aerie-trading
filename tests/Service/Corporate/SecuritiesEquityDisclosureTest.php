@@ -8,6 +8,7 @@ use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Tests\Support\StockBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,6 +20,7 @@ use PHPUnit\Framework\TestCase;
  * intact capital ratio on a hollowed-out balance sheet, which is the state this whole mechanism exists to
  * make reachable.
  */
+#[Group('unit')]
 class SecuritiesEquityDisclosureTest extends TestCase
 {
     private const EQUITY = 100_000_000_000.0;

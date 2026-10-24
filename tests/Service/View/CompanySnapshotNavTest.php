@@ -16,6 +16,7 @@ use App\Service\Math\MathUtility;
 use App\Service\View\CompanySnapshotBuilder;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * reading a player needs to trade the class at all.
  */
 #[AllowMockObjectsWithoutExpectations]
+#[Group('unit')]
 class CompanySnapshotNavTest extends TestCase
 {
     /** @param list<Stock> $held */

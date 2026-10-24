@@ -7,6 +7,7 @@ namespace App\Tests\Data\Company;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\ManagementStyle;
 use App\Entity\Stock;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -14,6 +15,7 @@ use PHPUnit\Framework\TestCase;
  * dimension expressed as Jensen's (1986) agency cost: an empire builder is not investing harder, it is
  * applying a lower hurdle and funding projects a disciplined board would refuse.
  */
+#[Group('unit')]
 final class ManagementStyleTest extends TestCase
 {
     /** An unassigned firm behaves exactly as before: the default must be a no-op on every dial. */

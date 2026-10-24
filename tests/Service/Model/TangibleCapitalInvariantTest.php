@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * net assets), so the capital that sizes a financial's business is tangible and a write-off, which moves
  * book equity and goodwill together, moves none of it.
  */
+#[Group('unit')]
 class TangibleCapitalInvariantTest extends TestCase
 {
     public function testEveryCapitalMeasureDeductsGoodwill(): void

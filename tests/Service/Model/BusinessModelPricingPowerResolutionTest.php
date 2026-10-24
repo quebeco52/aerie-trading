@@ -12,6 +12,7 @@ use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Service\Model\Sector\TechBusinessModel;
 use App\Tests\Support\Model\HookConstant;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -26,6 +27,7 @@ use ReflectionMethod;
  * resolveModelParameters() with a hardcoded 0.5 instead silently discard the sector constant, which is how
  * Railroad (0.80) and FinancialData (0.85) spent a release priced as median firms.
  */
+#[Group('unit')]
 final class BusinessModelPricingPowerResolutionTest extends TestCase
 {
     /** A ticker carrying no StockModelTuning override, so resolution falls through to the sector constant. */

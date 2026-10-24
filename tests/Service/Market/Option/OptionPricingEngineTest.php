@@ -13,6 +13,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\OptionPricing;
 use App\Service\Math\StochasticProcesses;
 use App\Tests\Support\StockBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * quotes has to be the one the price process will actually realize, the smile has to carry the direction of
  * the underlying's own jump, and the two sides of the quote have to be a spread in volatility.
  */
+#[Group('unit')]
 class OptionPricingEngineTest extends TestCase
 {
     private OptionPricingEngine $engine;

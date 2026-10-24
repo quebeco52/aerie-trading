@@ -14,6 +14,7 @@ use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  * has to chase the price, a desk long gamma has to lean against it, and neither may demand more liquidity
  * in one tick than the name can supply.
  */
+#[Group('unit')]
 class DealerGammaEngineTest extends TestCase
 {
     /** One trading day, in years: the pass length the per-day cap is stated in. */

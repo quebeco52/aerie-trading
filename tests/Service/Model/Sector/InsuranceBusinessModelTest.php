@@ -14,8 +14,10 @@ use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class InsuranceBusinessModelTest extends TestCase
 {
     public function testCalculateMinOperatingCashAndTargetCash(): void

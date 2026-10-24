@@ -10,6 +10,7 @@ use App\Entity\StockHistory;
 use Doctrine\ORM\Mapping\Column;
 use Doctrine\ORM\Mapping\Index;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -22,6 +23,7 @@ use PHPUnit\Framework\TestCase;
  * one in every chart. An archive indexed by a clock the market does not keep cannot answer when something
  * happened, so ordering and retention read this column instead.
  */
+#[Group('unit')]
 class HistorySimTimeTest extends TestCase
 {
     /** @return array<string, array{0: class-string, 1: string}> */

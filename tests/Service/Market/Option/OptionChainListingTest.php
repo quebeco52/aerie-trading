@@ -13,6 +13,7 @@ use App\Tests\Support\StockBuilder;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\Column;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * contract — put the option sweep thirty milliseconds over a twenty-millisecond tick every simulated month.
  * What is pinned here is that the cost of a roll is a handful of statements rather than a few hundred.
  */
+#[Group('unit')]
 class OptionChainListingTest extends TestCase
 {
     /** @var list<array{0: string, 1: array<int, mixed>}> */

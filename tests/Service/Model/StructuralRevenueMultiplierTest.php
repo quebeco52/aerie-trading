@@ -13,12 +13,14 @@ use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\Earnings\OperatingCapacityEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\BiotechBusinessModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * A franchise level a model carries itself (an approved drug) is capacity: it reaches structural revenue, and with
  * it the cost base, rather than reading as utilization above one (overtime) or below it (idle plant).
  */
+#[Group('unit')]
 final class StructuralRevenueMultiplierTest extends TestCase
 {
     private const CAPITAL = 1_000_000_000.0;

@@ -10,8 +10,10 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\EducationBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class EducationBusinessModelTest extends TestCase
 {
     private EducationBusinessModel $model;

@@ -8,8 +8,10 @@ use App\Data\Company\Sectors;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class SectorsTest extends TestCase
 {
     public static function industryProvider(): array

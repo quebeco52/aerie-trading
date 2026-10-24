@@ -17,9 +17,11 @@ use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
+#[Group('unit')]
 class ReitBusinessModelTest extends TestCase
 {
     private function createMacroState(

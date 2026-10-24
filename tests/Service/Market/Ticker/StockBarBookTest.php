@@ -6,12 +6,14 @@ namespace App\Tests\Service\Market\Ticker;
 
 use App\Service\Market\Ticker\StockBarBook;
 use Doctrine\DBAL\Connection;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * A history row carries the bar its close belongs to: the extremes and volume of every tick inside it, then a
  * fresh bar opens.
  */
+#[Group('unit')]
 final class StockBarBookTest extends TestCase
 {
     /** @var list<array<int, mixed>> Parameters of each INSERT, one row per eight. */

@@ -11,8 +11,10 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\HealthInsurerBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class HealthInsurerBusinessModelTest extends TestCase
 {
     /** UnitedHealth's 2019 medical care ratio, above the floor's reported-ratio equivalent. */

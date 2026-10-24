@@ -8,6 +8,7 @@ use App\Entity\Stock;
 use App\Service\Market\Ticker\StockTickColumns;
 use App\Tests\Support\StockBuilder;
 use Doctrine\DBAL\Connection;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -15,6 +16,7 @@ use PHPUnit\Framework\TestCase;
  * writer. If it drifts from the mapping — a column added to one and not the other — the price simply stops
  * being persisted, silently. Both directions of that contract are pinned here.
  */
+#[Group('unit')]
 class StockTickColumnsTest extends TestCase
 {
     private function persisted(Stock $stock, int $id): Stock

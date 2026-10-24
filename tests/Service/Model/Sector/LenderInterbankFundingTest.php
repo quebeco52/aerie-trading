@@ -19,6 +19,7 @@ use App\Service\Model\Sector\PrivateBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
 use App\Tests\Support\OpeningCreditAtTrend;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -27,6 +28,7 @@ use PHPUnit\Framework\TestCase;
  * franchise is struck on the funding DebtEngine charges it through the cycle: the fixed notes at the coupon they carry,
  * the floating at the reference rate plus its own spread at the credit trend.
  */
+#[Group('unit')]
 final class LenderInterbankFundingTest extends TestCase
 {
     /** The live run's peak smoothed interbank spread. */

@@ -9,12 +9,14 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
 /**
  * Stress test matrix executing invariant checks across all registered business models.
  */
+#[Group('unit')]
 class BusinessModelContractMatrixTest extends TestCase
 {
     /** The draw streams every invariant runs on; each is its own case, so a failure names its seed. */

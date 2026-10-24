@@ -11,6 +11,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,6 +20,7 @@ use PHPUnit\Framework\TestCase;
  * gap the report then books: every model either projects exactly what its next quarter books, or, because it
  * books no input-cost drag at all, projects nothing.
  */
+#[Group('unit')]
 class InputCostProjectionTest extends TestCase
 {
     /** @return iterable<string, array{string, BusinessModelInterface}> */

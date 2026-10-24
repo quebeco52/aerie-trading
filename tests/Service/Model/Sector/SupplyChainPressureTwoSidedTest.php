@@ -10,6 +10,7 @@ use App\Service\Model\Sector;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -17,6 +18,7 @@ use PHPUnit\Framework\TestCase;
  * and spread are already in each firm's cost base. A term read only above normal charged that average a second time;
  * read both ways, a slack chain gives back what a tight one costs.
  */
+#[Group('unit')]
 final class SupplyChainPressureTwoSidedTest extends TestCase
 {
     /** @return iterable<string, array{class-string<OperatingStrategyInterface>}> */

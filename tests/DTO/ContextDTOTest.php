@@ -12,8 +12,10 @@ use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Model\BusinessModelInterface;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class ContextDTOTest extends TestCase
 {
     public function testMarketPricingContextInstantiation(): void

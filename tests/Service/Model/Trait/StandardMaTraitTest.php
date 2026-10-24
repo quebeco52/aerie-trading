@@ -6,11 +6,13 @@ namespace App\Tests\Service\Model\Trait;
 
 use App\Entity\Stock;
 use App\Tests\Support\Model\BareStandardModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The acquisition and divestiture arithmetic every non-financial sector inherits.
  */
+#[Group('unit')]
 final class StandardMaTraitTest extends TestCase
 {
     private BareStandardModel $model;

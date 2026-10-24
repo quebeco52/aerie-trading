@@ -29,9 +29,9 @@ class ForecastElectionHandlerTest extends TestCase
     public function testTheForecastSentBackIsTheOneTheTickWouldHaveMade(): void
     {
         $bus = new RecordingBus();
-        $redis = $this->inMemoryRedis();
+        $redis = new InMemoryRedis();
         $offTick = new PoliticsEngine(MathUtility::ownStream(3), $redis, null, $bus);
-        $onTick = new PoliticsEngine(MathUtility::ownStream(3), $this->inMemoryRedis());
+        $onTick = new PoliticsEngine(MathUtility::ownStream(3), new InMemoryRedis());
 
         [$day, $inline, $asked] = $this->toTheFirstPoll($onTick, $offTick, $bus);
         $this->assertSame($inline->totalTime, $inline->forecastAt, 'On the tick, the poll is forecast from at once.');
@@ -53,9 +53,9 @@ class ForecastElectionHandlerTest extends TestCase
     public function testAnUnansweredRequestIsWorkedOutOnTheTickOnceOverdue(): void
     {
         $bus = new RecordingBus();
-        $offTick = new PoliticsEngine(MathUtility::ownStream(3), $this->inMemoryRedis(), null, $bus);
+        $offTick = new PoliticsEngine(MathUtility::ownStream(3), new InMemoryRedis(), null, $bus);
 
-        [$day, , $asked] = $this->toTheFirstPoll(new PoliticsEngine(MathUtility::ownStream(3), $this->inMemoryRedis()), $offTick, $bus);
+        [$day, , $asked] = $this->toTheFirstPoll(new PoliticsEngine(MathUtility::ownStream(3), new InMemoryRedis()), $offTick, $bus);
         $requestedAt = $asked->forecastRequestedAt;
         do {
             $politics = $offTick->updatePolitics($this->economy($day++ * self::DAY), self::DAY, forecastOffTick: true);
@@ -104,10 +104,6 @@ class ForecastElectionHandlerTest extends TestCase
         );
     }
 
-    private function inMemoryRedis(): \Redis
-    {
-        return new InMemoryRedis();
-    }
 }
 
 /** Keeps what is dispatched to it instead of sending it, so the test plays the forecaster. */

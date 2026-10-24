@@ -11,8 +11,10 @@ use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use App\Tests\Support\DebtHealthBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class BusinessModelThresholdsAndPolymorphismTest extends TestCase
 {
     private Stock $corpStock;

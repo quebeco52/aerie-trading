@@ -18,6 +18,7 @@ use App\Service\Model\Sector\InvestmentBankBusinessModel;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,6 +27,7 @@ use PHPUnit\Framework\TestCase;
  * deepened the loss: STRK's target fell from a 19.8% return to the 7.7% floor as its trailing ROE ran to
  * -50%, and it failed at the zero lower bound with a 13% capital ratio a year earlier.
  */
+#[Group('unit')]
 final class LenderRevenueCapacityTest extends TestCase
 {
     /**

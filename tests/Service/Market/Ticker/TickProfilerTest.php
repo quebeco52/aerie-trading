@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Ticker;
 
 use App\Service\Market\Ticker\TickProfiler;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The lag warning names the costliest phases of the tick that overran, and the window report is a per-tick mean
  * over a full window, not a sample of whichever tick happened to close it.
  */
+#[Group('unit')]
 final class TickProfilerTest extends TestCase
 {
     public function testTheBreakdownNamesTheCostliestPhasesFirst(): void

@@ -11,8 +11,10 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\HomebuilderBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class HomebuilderBusinessModelTest extends TestCase
 {
     /** The variable cost ratio the fixtures run at: land 0.20 and construction 0.58 of the price at trend. */

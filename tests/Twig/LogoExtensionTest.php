@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Tests\Twig;
 
 use App\Twig\Extension\LogoExtension;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Asset\Packages;
 use Symfony\Component\Asset\PathPackage;
 use Symfony\Component\Asset\VersionStrategy\EmptyVersionStrategy;
 
+#[Group('unit')]
 class LogoExtensionTest extends TestCase
 {
     private string $publicDir;

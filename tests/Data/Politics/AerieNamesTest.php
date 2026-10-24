@@ -6,8 +6,10 @@ namespace App\Tests\Data\Politics;
 
 use App\Data\Politics\AerieNames;
 use App\Data\Politics\UsNameFrequencies as Tables;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class AerieNamesTest extends TestCase
 {
     /** Every table row carries a positive count and group shares that add to 100%, the Census suppressions filled. */

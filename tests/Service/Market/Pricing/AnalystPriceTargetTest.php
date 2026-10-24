@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market\Pricing;
 use App\Entity\Stock;
 use App\Service\Market\Pricing\StockTracker;
 use App\Tests\Support\StockBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -22,6 +23,7 @@ use ReflectionProperty;
  *
  * Brav & Lehavy (2003) is the reason it sits above fair value: targets are systematically optimistic.
  */
+#[Group('unit')]
 final class AnalystPriceTargetTest extends TestCase
 {
     private StockTracker $tracker;

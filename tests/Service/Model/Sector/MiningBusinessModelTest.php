@@ -11,8 +11,10 @@ use App\Service\Event\ShockEvent;
 use App\Service\Math\FirmEconomics;
 use App\Service\Model\Sector\MiningBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 final class MiningBusinessModelTest extends TestCase
 {
     private MiningBusinessModel $model;

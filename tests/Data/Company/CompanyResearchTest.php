@@ -12,12 +12,14 @@ use App\Data\Company\StockModelTuning;
 use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The long-form profiles are lore, and lore sets facts, never the model: a figure in the text must be the figure the
  * firm runs on, and a firm the text names must be on the board.
  */
+#[Group('unit')]
 class CompanyResearchTest extends TestCase
 {
     /** A beta quoted to one decimal is the seeded beta rounded: within half a unit of the last digit. */

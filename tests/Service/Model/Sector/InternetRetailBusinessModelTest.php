@@ -13,8 +13,10 @@ use App\Service\Model\Sector\InternetRetailBusinessModel;
 use App\Service\News\NarrativeEngine;
 use App\Tests\Support\MacroStateBuilder;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class InternetRetailBusinessModelTest extends TestCase
 {
     private InternetRetailBusinessModel $model;

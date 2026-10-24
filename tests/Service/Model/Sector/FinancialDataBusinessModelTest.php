@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\FinancialDataBusinessModel;
 use App\Tests\Support\ScriptedDraws;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class FinancialDataBusinessModelTest extends TestCase
 {
     public function testSubscriptionMonopolyIsUnderLeveraged(): void

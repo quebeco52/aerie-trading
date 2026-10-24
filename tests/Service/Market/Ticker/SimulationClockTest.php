@@ -9,6 +9,7 @@ use App\Service\Market\Option\OptionChainService;
 use App\Service\Market\Ticker\SimulationClockService;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,6 +20,7 @@ use PHPUnit\Framework\TestCase;
  * replayed weeks it had already lived. That surfaced as duplicate option symbols — the only thing keyed on
  * simulation time with a unique constraint to fail on — and everything else replayed in silence.
  */
+#[Group('unit')]
 class SimulationClockTest extends TestCase
 {
     private const TICKS_PER_YEAR = 14400;

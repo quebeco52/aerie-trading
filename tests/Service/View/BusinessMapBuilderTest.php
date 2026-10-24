@@ -13,12 +13,14 @@ use App\Service\Model\Sector\HealthInsurerBusinessModel;
 use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Service\Model\StreamContext;
 use App\Service\View\BusinessMapBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The "How the business works" map: demand lines are the report's own measured stream effects, cost lines the cost
  * side the quarter filed, and every line joins two cards in neighbouring columns or bows within one.
  */
+#[Group('unit')]
 final class BusinessMapBuilderTest extends TestCase
 {
     private BusinessMapBuilder $builder;

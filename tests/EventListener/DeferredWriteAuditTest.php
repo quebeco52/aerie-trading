@@ -13,6 +13,7 @@ use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\Event\PreFlushEventArgs;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\ORMSetup;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -24,6 +25,7 @@ use PHPUnit\Framework\TestCase;
  * whole question is what Doctrine itself does with an entity nobody persisted; the connection is never
  * opened, because the server version is configured and the metadata comes from the attribute driver.
  */
+#[Group('unit')]
 class DeferredWriteAuditTest extends TestCase
 {
     /** Classes the tests below mark explicit before registering anything, standing in for the mapping. */

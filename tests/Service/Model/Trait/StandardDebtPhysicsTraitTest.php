@@ -11,6 +11,7 @@ use App\Service\Model\AbstractBusinessModel;
 use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\Model\BareStandardModel;
 use App\Tests\Support\Model\ConfiguredStandardModel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,6 +20,7 @@ use PHPUnit\Framework\TestCase;
  * Several shipped models declare MIN_RECAP_ICR_FLOOR and UNDERLEVERAGED_DEBT_RATIO, so the FinancialConstants
  * fallbacks behind those `defined()` gates are the behaviour a newly written sector model gets.
  */
+#[Group('unit')]
 final class StandardDebtPhysicsTraitTest extends TestCase
 {
     private BareStandardModel $model;
