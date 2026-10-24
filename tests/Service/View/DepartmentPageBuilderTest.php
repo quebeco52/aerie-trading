@@ -49,6 +49,8 @@ final class DepartmentPageBuilderTest extends TestCase
         $this->assertSame('Rosalind Tate', $panel['head']['name']);
         $this->assertSame(51, $panel['head']['age']);
         $this->assertSame('short', $panel['head']['stance']);
+        $this->assertSame('Favours borrowing short', $panel['head']['stanceText'], 'The sentence the Exchequer\'s page opens with.');
+        $this->assertSame('favouring short borrowing', $panel['head']['stanceClause'], 'The clause after the name on the front page.');
         $this->assertEqualsWithDelta(4.3, $panel['movingTo'], 1e-12);
         $share = CreditFiscalSubsystem::billShare(4.7);
         $this->assertEqualsWithDelta($share, $panel['repricingShare'], 1e-12);
@@ -84,6 +86,8 @@ final class DepartmentPageBuilderTest extends TestCase
         $this->assertSame('Odile Farrant', $panel['head']['name']);
         $this->assertSame(55, $panel['head']['age']);
         $this->assertSame('strict', $panel['head']['stance']);
+        $this->assertSame('A strict enforcer against concentration', $panel['head']['stanceText']);
+        $this->assertSame('a strict enforcer', $panel['head']['stanceClause']);
         $this->assertFalse($panel['head']['opening']);
         $this->assertSame(MergerAndAcquisitionEngine::reviewScreens(FairTradingBoard::leniency(0.8)), $panel['screens']);
         $this->assertEqualsWithDelta(0.25, $panel['head']['passedOver'][0]['line'], 1e-12, 'The lightest candidate would draw the 2010 line.');
@@ -109,6 +113,8 @@ final class DepartmentPageBuilderTest extends TestCase
 
         $this->assertNotNull($panel);
         $this->assertSame('strict', $panel['head']['stance']);
+        $this->assertSame('A strict overseer of the markets', $panel['head']['stanceText']);
+        $this->assertSame('strict', $panel['head']['stanceClause']);
         $this->assertSame(0.5, $panel['inForce']['initial']);
         $this->assertSame(FinancialConstants::MAINTENANCE_MARGIN_SHORT, $panel['inForce']['short']);
         $this->assertNotNull($panel['coming']);

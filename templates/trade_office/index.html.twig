@@ -1,14 +1,11 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Trade & Migration Office - Aerie Exchange{% endblock %}
+{% block page_title %}Trade & Migration Office{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The District's Trade & Migration Office: the tariff on imports, the migration regime and the tax on homes bought from outside the District.">
-	<meta property="og:title" content="Trade & Migration Office | Aerie Exchange">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}The District's Trade & Migration Office: the tariff on imports, the migration regime and the tax on homes bought from outside the District.{% endblock %}
 
 {% macro law_line(law) %}
+	{% import 'partials/_ui.html.twig' as ui %}
 	<dl class="grid grid-cols-3 gap-x-6 gap-y-1 mt-4 text-xs">
 		<div>
 			<dt class="text-on-surface-variant">In force</dt>
@@ -16,11 +13,11 @@
 		</div>
 		<div>
 			<dt class="text-on-surface-variant">Next budget</dt>
-			<dd class="text-on-surface mt-0.5 font-mono tabular-nums">{{ law.next is null ? '–' : law.next|pct(2) }}</dd>
+			<dd class="text-on-surface mt-0.5 font-mono tabular-nums">{{ law.next is null ? ui.missing() : law.next|pct(2) }}</dd>
 		</div>
 		<div>
 			<dt class="text-on-surface-variant">After the vote</dt>
-			<dd class="text-on-surface mt-0.5 font-mono tabular-nums">{{ law.expected is null ? '–' : law.expected|pct(2) }}</dd>
+			<dd class="text-on-surface mt-0.5 font-mono tabular-nums">{{ law.expected is null ? ui.missing() : law.expected|pct(2) }}</dd>
 		</div>
 	</dl>
 {% endmacro %}
@@ -28,16 +25,14 @@
 {% block body %}
 <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
 
-	{% include 'government/_breadcrumb.html.twig' with {current: 'Trade & Migration Office'} %}
-	<header class="pb-5 border-b border-outline-variant/15">
-		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Trade &amp; Migration Office</h1>
-		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed max-w-3xl">
+	{% embed 'government/_header.html.twig' with {title: 'Trade & Migration Office'} %}
+		{% block lead %}
 			The office that collects the District's tariff, issues its work and residence permits and levies the tax on homes
 			bought from outside the District. It sets none of them: each is a law the Diet passes in its budget, and the office
 			carries out what the budget says.{% if office.expectedFrom %} Traders expect the laws the next government passes
 			to take effect from {{ office.expectedFrom }}.{% endif %}
-		</p>
-	</header>
+		{% endblock %}
+	{% endembed %}
 
 	{% set tariff = office.tariff %}
 	<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="tariff-heading">

@@ -1,13 +1,10 @@
 {% extends 'base.html.twig' %}
+{% import 'partials/_ui.html.twig' as ui %}
 
-{% block title %}Bonds | Aerie Exchange{% endblock %}
+{% block page_title %}Bonds{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The outstanding sovereign bond ladder: benchmark yields, coupons, duration and every issue currently trading on the Aerie Exchange.">
-	<meta property="og:title" content="Sovereign Bond Desk | Aerie Exchange">
-	<meta property="og:description" content="Live sovereign yield curve and the full outstanding bond ladder.">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}The outstanding sovereign bond ladder: benchmark yields, coupons, duration and every issue currently trading on the Aerie Exchange.{% endblock %}
+{% block og_description %}Live sovereign yield curve and the full outstanding bond ladder.{% endblock %}
 
 {% block body %}
 	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
@@ -25,10 +22,7 @@
 				{# Benchmark readout: the four points the macro engine publishes. #}
 				<dl class="grid grid-cols-4 gap-x-8 shrink-0">
 					{% for point in benchmarks %}
-						<div>
-							<dt class="text-xs text-on-surface-variant">{{ point.label }}</dt>
-							<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ point.yield|pct(2) }}</dd>
-						</div>
+						{{ ui.figure(point.label, point.yield|pct(2)) }}
 					{% endfor %}
 				</dl>
 			</div>
@@ -46,29 +40,16 @@
 				<div class="space-y-3">
 					<h2 class="text-sm font-semibold text-on-surface">Curve shape</h2>
 					<dl class="divide-y divide-outline-variant/15 text-sm">
+						{# An inverted curve is a caution, not a loss: amber, as the warning under it. #}
 						{% set slope2s10s = macro.yield10y - macro.yield2y %}
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-on-surface-variant">2s10s spread</dt>
-							<dd class="font-medium font-mono tabular-nums {{ slope2s10s|signed_class }}">
-								{{ slope2s10s|bps(0, true) }}
-							</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-on-surface-variant">Policy rate</dt>
-							<dd class="font-medium font-mono tabular-nums text-on-surface">{{ macro.policyRate|pct(2) }}</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-on-surface-variant">10Y term premium</dt>
-							<dd class="font-medium font-mono tabular-nums text-on-surface">{{ macro.termPremium10y|bps }}</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-on-surface-variant">Inflation</dt>
-							<dd class="font-medium font-mono tabular-nums text-on-surface">{{ macro.inflation|pct(2) }}</dd>
-						</div>
+						{{ ui.stat('2s10s spread', slope2s10s|bps(0, true), {tone: slope2s10s < 0 ? 'text-warning' : slope2s10s|signed_class}) }}
+						{{ ui.stat('Policy rate', macro.policyRate|pct(2)) }}
+						{{ ui.stat('10Y term premium', macro.termPremium10y|bps) }}
+						{{ ui.stat('Inflation', macro.inflation|pct(2)) }}
 					</dl>
 
 					{% if slope2s10s < 0 %}
-						<div class="rounded border border-tertiary/25 bg-tertiary/10 px-3 py-2 text-xs text-tertiary leading-relaxed">
+						<div class="rounded border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning leading-relaxed">
 							<span class="font-semibold">Inverted.</span>
 							The front end out-yields the long end, which historically leads a downturn rather than
 							following one.
@@ -85,60 +66,7 @@
 					<span class="text-xs text-on-surface-variant">{{ rows|length }} outstanding</span>
 				</div>
 
-				<div class="overflow-x-auto">
-					<table class="w-full text-left">
-						<thead class="table-head bg-surface-container-lowest/60">
-							<tr>
-								<th scope="col" class="px-5 py-2 font-semibold">Issue</th>
-								<th scope="col" class="px-4 py-2 font-semibold text-right">Coupon</th>
-								<th scope="col" class="px-4 py-2 font-semibold text-right">Maturity</th>
-								<th scope="col" class="px-4 py-2 font-semibold text-right">Price</th>
-								<th scope="col" class="px-4 py-2 font-semibold text-right">1M</th>
-								<th scope="col" class="px-4 py-2 font-semibold text-right">Yield</th>
-								<th scope="col" class="px-4 py-2 font-semibold text-right">Duration</th>
-								<th scope="col" class="px-5 py-2 font-semibold text-right">Held</th>
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
-							{% for row in rows %}
-								{% set bond = row.bond %}
-								<tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group">
-									<td class="px-5 py-3">
-										<div class="flex items-center gap-2">
-											<a href="{{ path('app_bond_view', { ticker: bond.ticker }) }}" class="font-semibold text-primary font-mono outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ bond.ticker }}</a>
-											{% if bond.isOnTheRun %}
-												<span class="badge badge-accent relative z-10" title="The newest issue at this tenor, and the one the benchmark yield is quoted from">On the run</span>
-											{% endif %}
-										</div>
-									</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ bond.couponRate|pct(3) }}</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Matures {{ bond.maturesAtTime|sim_date }}">
-										{{ row.yearsToMaturity|number_format(2) }}y
-									</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="clean-{{ bond.ticker }}" title="Clean price, per {{ bond.faceValue|number_format(0) }} of face">
-										{{ bond.cleanPrice|number_format(2) }}
-									</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change|signed_class }}">
-										{% if row.change is null %}
-											&mdash;
-										{% else %}
-											{{ row.change|pct(2, true) }}
-										{% endif %}
-									</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="ytm-{{ bond.ticker }}">{{ bond.yieldToMaturity|pct(2) }}</td>
-									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Modified duration: the percentage price move per 1% parallel yield shift">{{ bond.modifiedDuration|number_format(2) }}</td>
-									<td class="px-5 py-3 font-mono tabular-nums text-right">
-										{% if holdings[bond.ticker] is defined %}
-											<span class="font-medium text-on-surface">{{ holdings[bond.ticker]|number_format }}</span>
-										{% else %}
-											<span class="text-on-surface-faint">&mdash;</span>
-										{% endif %}
-									</td>
-								</tr>
-							{% endfor %}
-						</tbody>
-					</table>
-				</div>
+				{% include 'bond/_issue_table.html.twig' with {rows: rows, holdings: holdings} only %}
 			</div>
 		{% else %}
 			<div class="bg-surface-container-low rounded-lg p-10 border border-outline-variant/20 text-center">
@@ -165,7 +93,7 @@
 							<span class="font-normal text-on-surface-variant">{{ group.issuer.name }}</span>
 						</h3>
 						<div class="flex items-center gap-4 text-2xs">
-							<span class="px-1.5 py-0.5 rounded text-on-surface font-medium border border-outline-variant/25" title="Credit rating, from the issuer's distance to default and its balance sheet">{{ group.rating }}</span>
+							<span class="badge badge-neutral" title="Credit rating, from the issuer's distance to default and its balance sheet">{{ group.rating }}</span>
 							<span class="text-on-surface-variant">
 								Spread
 								<span class="ml-1 font-mono tabular-nums font-medium text-on-surface" title="What this company's credit costs over the sovereign curve">{{ group.spread|bps }}</span>
@@ -173,58 +101,7 @@
 						</div>
 					</div>
 
-					<div class="overflow-x-auto">
-						<table class="w-full text-left">
-							<thead class="table-head bg-surface-container-lowest/60">
-								<tr>
-									<th scope="col" class="px-5 py-2 font-semibold">Issue</th>
-									<th scope="col" class="px-4 py-2 font-semibold text-right">Coupon</th>
-									<th scope="col" class="px-4 py-2 font-semibold text-right">Maturity</th>
-									<th scope="col" class="px-4 py-2 font-semibold text-right">Price</th>
-									<th scope="col" class="px-4 py-2 font-semibold text-right">1M</th>
-									<th scope="col" class="px-4 py-2 font-semibold text-right">Yield</th>
-									<th scope="col" class="px-4 py-2 font-semibold text-right">Duration</th>
-									<th scope="col" class="px-5 py-2 font-semibold text-right">Held</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
-								{% for row in group.issues %}
-									{% set bond = row.bond %}
-									<tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group">
-										<td class="px-5 py-3">
-											<div class="flex items-center gap-2">
-												<a href="{{ path('app_bond_view', { ticker: bond.ticker }) }}" class="font-semibold text-primary font-mono outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ bond.ticker }}</a>
-												<span class="relative z-10 px-1.5 py-0.5 rounded text-on-surface-variant text-2xs font-medium border border-outline-variant/25" title="Where this claim sits when the issuer fails">Senior</span>
-											</div>
-										</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ bond.couponRate|pct(3) }}</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Matures {{ bond.maturesAtTime|sim_date }}">
-											{{ row.yearsToMaturity|number_format(2) }}y
-										</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="clean-{{ bond.ticker }}" title="Clean price, per {{ bond.faceValue|number_format(0) }} of face">
-											{{ bond.cleanPrice|number_format(2) }}
-										</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change|signed_class }}">
-											{% if row.change is null %}
-												&mdash;
-											{% else %}
-												{{ row.change|pct(2, true) }}
-											{% endif %}
-										</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="ytm-{{ bond.ticker }}">{{ bond.yieldToMaturity|pct(2) }}</td>
-										<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Modified duration: the percentage price move per 1% parallel yield shift">{{ bond.modifiedDuration|number_format(2) }}</td>
-										<td class="px-5 py-3 font-mono tabular-nums text-right">
-											{% if holdings[bond.ticker] is defined %}
-												<span class="font-medium text-on-surface">{{ holdings[bond.ticker]|number_format }}</span>
-											{% else %}
-												<span class="text-on-surface-faint">&mdash;</span>
-											{% endif %}
-										</td>
-									</tr>
-								{% endfor %}
-							</tbody>
-						</table>
-					</div>
+					{% include 'bond/_issue_table.html.twig' with {rows: group.issues, holdings: holdings} only %}
 				</div>
 			{% endfor %}
 		{% endif %}

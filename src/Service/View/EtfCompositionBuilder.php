@@ -212,6 +212,11 @@ class EtfCompositionBuilder
                 'sectorWeights' => $sectorWeights,
                 'divisor' => $this->etfTracker->currentDivisor($index->value),
                 'reconstitutionsPerYear' => FinancialConstants::INDEX_RECONSTITUTIONS_PER_YEAR,
+                // What the methodology quotes: the level a fresh market opens at, the band around a selective index's
+                // cut, and how often the fund passes its dividend income on.
+                'baseLevel' => FinancialConstants::INDEX_BASE_LEVEL,
+                'membershipBuffer' => IndexCommittee::INDEX_MEMBERSHIP_BUFFER,
+                'distributionsPerYear' => FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR,
                 'added' => $roster['added'] ?? [],
                 'deleted' => $roster['deleted'] ?? [],
                 'hasRoster' => $roster !== null,

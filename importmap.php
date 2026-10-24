@@ -48,6 +48,10 @@ return [
         'path' => './assets/js/pages/news.js',
         'entrypoint' => true,
     ],
+    'admin/macro' => [
+        'path' => './assets/admin/macro.js',
+        'entrypoint' => true,
+    ],
     '@hotwired/stimulus' => [
         'version' => '3.2.2',
     ],

@@ -1,16 +1,12 @@
 {% extends 'base.html.twig' %}
+{% import 'partials/_ui.html.twig' as ui %}
 
-{% set isMatured = bond.status != 'ACTIVE' %}
 {% set issuer = bond.issuer %}
 
-{% block title %}{{ bond.ticker }} Bond Price & Yield | {{ bond.name }} - Aerie Exchange{% endblock %}
+{% block page_title %}{{ bond.ticker }} bond price & yield | {{ bond.name }}{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="Live clean price, yield to maturity, duration and cash flow schedule for {{ bond.ticker }} ({{ bond.name }}).">
-	<meta property="og:title" content="{{ bond.ticker }} Bond Price & Yield | Aerie Exchange">
-	<meta property="og:description" content="{{ issuer ? issuer.name ~ ' corporate' : 'Sovereign' }} bond {{ bond.ticker }}, {{ bond.couponRate|pct(3) }} coupon, {{ yearsToMaturity|number_format(2) }} years to maturity.">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}Live clean price, yield to maturity, duration and cash flow schedule for {{ bond.ticker }} ({{ bond.name }}).{% endblock %}
+{% block og_description %}{{ issuer ? issuer.name ~ ' corporate' : 'Sovereign' }} bond {{ bond.ticker }}, {{ bond.couponRate|pct(3) }} coupon, {{ yearsToMaturity|number_format(2) }} years to maturity.{% endblock %}
 
 {% block body %}
 	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
@@ -29,10 +25,10 @@
 					<div class="flex flex-wrap items-center gap-2 md:gap-3 mt-1.5">
 						<span class="text-sm font-semibold text-on-surface font-mono">{{ bond.ticker }}</span>
 						{% if bond.isOnTheRun %}
-							<span class="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary border border-primary/25">On the run</span>
+							<span class="badge badge-accent">On the run</span>
 						{% endif %}
-						{% if isMatured %}
-							<span class="inline-flex items-center rounded bg-tertiary/10 px-1.5 py-0.5 text-xs font-medium text-tertiary border border-tertiary/25">Redeemed</span>
+						{% if retired %}
+							<span class="badge badge-{{ retired.tone }}">{{ retired.badge }}</span>
 						{% endif %}
 					</div>
 
@@ -55,11 +51,7 @@
 					</span>
 
 					<div class="flex items-center md:justify-end gap-2 mt-1.5">
-						{% if changePercent is not null %}
-							<span id="big-change" class="text-sm font-semibold font-mono tabular-nums {{ changePercent|signed_class }}">{{ changePercent|pct(2, true) }}</span>
-						{% else %}
-							<span id="big-change" class="text-sm font-semibold font-mono tabular-nums text-on-surface-faint">&mdash;</span>
-						{% endif %}
+						<span id="big-change" class="text-sm font-semibold font-mono tabular-nums {{ changePercent|signed_class }}">{{ changePercent|pct(2, true) }}</span>
 						<span class="text-xs text-on-surface-variant">past month, clean</span>
 					</div>
 
@@ -108,11 +100,11 @@
 				<div class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">
 					<div class="px-5 py-3 border-b border-outline-variant/15">
 						<h2 class="text-sm font-bold text-on-surface">Remaining cash flows</h2>
-						<p class="text-2xs text-on-surface-variant mt-0.5">Per bond of {{ bond.faceValue|number_format(0) }} face. Contractual, not forecast.</p>
+						<p class="text-2xs text-on-surface-variant mt-0.5">Per bond of {{ bond.faceValue|money(0) }} face. Contractual, not forecast.</p>
 					</div>
 
 					{% if cashFlows is empty %}
-						<div class="px-5 py-8 text-center text-sm text-on-surface-variant">This issue has redeemed. No cash flows remain.</div>
+						<div class="px-5 py-8 text-center text-sm text-on-surface-variant">No cash flows remain.</div>
 					{% else %}
 						<div class="overflow-x-auto max-h-96 overflow-y-auto">
 							<table class="w-full text-left">
@@ -134,7 +126,7 @@
 													<span class="text-on-surface-variant">Coupon</span>
 												{% endif %}
 											</td>
-											<td class="px-5 py-2.5 font-mono tabular-nums text-right font-bold text-on-surface">{{ flow.amount|number_format(2) }}</td>
+											<td class="px-5 py-2.5 font-mono tabular-nums text-right font-bold text-on-surface">{{ flow.amount|money(2) }}</td>
 										</tr>
 									{% endfor %}
 								</tbody>
@@ -154,8 +146,8 @@
 							<a href="{{ path('app_login') }}" class="text-primary font-semibold hover:underline underline-offset-4">Sign in</a>
 							to trade this issue.
 						</p>
-					{% elseif isMatured %}
-						<p class="text-xs text-on-surface-variant">This issue has redeemed at par and no longer trades.</p>
+					{% elseif retired %}
+						<p class="text-xs text-on-surface-variant">{{ retired.note }}</p>
 					{% else %}
 						{% if userQuantity > 0 or userCouponIncome > 0 %}
 							<div class="mb-4 p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 space-y-1.5">
@@ -166,7 +158,7 @@
 									</div>
 									<div class="flex justify-between items-center text-xs">
 										<span class="text-on-surface-variant">Market value</span>
-										<span class="font-mono tabular-nums font-medium text-on-surface" id="user-holding-value">${{ (bond.price * userQuantity)|number_format(2) }}</span>
+										<span class="font-mono tabular-nums font-medium text-on-surface" id="user-holding-value">{{ (bond.price * userQuantity)|money(2) }}</span>
 									</div>
 									{% if userAvgCost > 0 %}
 										<div class="flex justify-between items-center text-xs">
@@ -178,68 +170,25 @@
 								{% if userCouponIncome > 0 %}
 									<div class="flex justify-between items-center text-xs {{ userQuantity > 0 ? 'pt-1.5 border-t border-outline-variant/15' : '' }}">
 										<span class="text-on-surface-variant">Coupons received</span>
-										<span class="font-mono tabular-nums font-medium text-secondary">+{{ userCouponIncome|money(2) }}</span>
+										<span class="font-mono tabular-nums font-medium text-secondary">{{ userCouponIncome|money(2, true) }}</span>
 									</div>
 								{% endif %}
 							</div>
 						{% endif %}
 
-						<form action="/trade/execute" method="POST" class="space-y-3"
-									  data-controller="trade-form"
-									  data-trade-form-ticker-value="{{ bond.ticker }}"
-									  data-trade-form-price-value="{{ dealingPrice }}"
-									  data-action="submit->trade-form#onSubmit">
-							<input type="hidden" name="ticker" value="{{ bond.ticker }}">
-							<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
-
-							<div class="flex gap-2 bg-surface-container-lowest p-1 rounded border border-outline-variant/20">
-								<label class="flex-1 cursor-pointer">
-									<input type="radio" name="action" value="BUY" class="peer sr-only" checked>
-									<div class="py-1.5 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">Buy</div>
-								</label>
-								<label class="flex-1 cursor-pointer">
-									<input type="radio" name="action" value="SELL" class="peer sr-only">
-									<div class="py-1.5 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">Sell</div>
-								</label>
-							</div>
-
-							<div class="flex gap-2 bg-surface-container-lowest p-1 rounded border border-outline-variant/20">
-								<label class="flex-1 cursor-pointer">
-									<input type="radio" name="orderType" value="MARKET" class="peer sr-only" checked data-action="change->trade-form#onOrderTypeChange">
-									<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-surface-container-high peer-checked:text-primary transition-all">Market</div>
-								</label>
-								<label class="flex-1 cursor-pointer">
-									<input type="radio" name="orderType" value="LIMIT" class="peer sr-only" data-action="change->trade-form#onOrderTypeChange">
-									<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-surface-container-high peer-checked:text-primary transition-all">Limit</div>
-								</label>
-							</div>
-
-							<div id="limit-price-group" class="hidden space-y-1" data-trade-form-target="limitGroup">
-								<label for="limitPrice" class="text-sm font-semibold text-on-surface-variant">Limit price ($, dirty)</label>
-								<input type="number" step="0.01" min="0.01" id="limitPrice" name="limitPrice" placeholder="{{ dealingPrice|number_format(2, '.', '') }}" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none" data-trade-form-target="limitPrice" data-action="input->trade-form#render">
-							</div>
-
-							<div class="space-y-1">
-								<label for="quantity" class="text-sm font-semibold text-on-surface-variant">Quantity (bonds)</label>
-								<input type="number" id="quantity" name="quantity" min="1" max="1000000" value="1" required class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none" data-trade-form-target="quantity" data-action="input->trade-form#render">
-							</div>
-
-							<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 flex justify-between items-center text-xs">
-								<span class="text-on-surface-variant" data-trade-form-target="estimateLabel">Estimated cost</span>
-								<span class="font-bold text-on-surface font-mono tabular-nums text-sm" id="estimated-total" data-trade-form-target="estimate" aria-live="polite">{{ bond.price|money(2) }}</span>
-							</div>
-							<div class="flex justify-between items-center text-xs text-on-surface-variant px-3" data-trade-form-target="costsRow">
-								<span>Spread</span>
-								<span class="font-mono tabular-nums" data-trade-form-target="costs">&mdash;</span>
-							</div>
-
-							<p class="text-2xs text-on-surface-variant leading-relaxed">
-								Settled at the dirty price: the buyer reimburses the seller for the
-								{{ bond.accruedInterest|number_format(2) }} of coupon accrued since the last payment.
-							</p>
-
-							<button type="submit" data-trade-form-target="submit" class="w-full py-2 px-4 rounded bg-primary text-on-primary font-semibold text-sm hover:bg-primary-container transition-colors cursor-pointer">Place order</button>
-						</form>
+						{% embed 'partials/_trade_ticket.html.twig' with {ticker: bond.ticker, price: dealingPrice, estimate: bond.price, limitLabel: 'Limit price ($, dirty)', quantityLabel: 'Quantity (bonds)'} %}
+							{% block choices %}
+								{% import 'partials/_ui.html.twig' as ui %}
+								{{ ui.choices('action', [{value: 'BUY', label: 'Buy', tone: 'up', checked: true}, {value: 'SELL', label: 'Sell', tone: 'down'}], {label: 'Side'}) }}
+								{{ ui.choices('orderType', [{value: 'MARKET', label: 'Market', checked: true}, {value: 'LIMIT', label: 'Limit'}], {label: 'Order type', pad: 'py-1', action: 'change->trade-form#onOrderTypeChange'}) }}
+							{% endblock %}
+							{% block notes %}
+								<p class="text-2xs text-on-surface-variant leading-relaxed">
+									Settled at the dirty price: the buyer reimburses the seller for the
+									{{ bond.accruedInterest|money(2) }} of coupon accrued since the last payment.
+								</p>
+							{% endblock %}
+						{% endembed %}
 
 						{% if openOrders is not empty %}
 							<div class="mt-4 pt-4 border-t border-outline-variant/15 space-y-2">
@@ -247,13 +196,10 @@
 								{% for order in openOrders %}
 									<div class="flex items-center justify-between gap-2 text-xs">
 										<span class="font-mono tabular-nums text-on-surface">
-											<span class="{{ order.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }} font-bold">{{ order.action|lower|capitalize }}</span>
+											<span class="{{ ui.side(order.action) }} font-bold">{{ order.action|lower|capitalize }}</span>
 											{{ order.quantity|number_format }} @ {{ order.limitPrice|money(2) }}
 										</span>
-										<form action="{{ path('app_trade_cancel', { id: order.id }) }}" method="POST">
-											<input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
-											<button type="submit" class="cursor-pointer px-2.5 py-1 rounded border border-outline-variant/30 text-on-surface-variant hover:text-tertiary hover:border-tertiary/40 text-xs font-medium transition-colors">Cancel</button>
-										</form>
+										{{ ui.cancel_order(order) }}
 									</div>
 								{% endfor %}
 							</div>
@@ -264,39 +210,15 @@
 				<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/20">
 					<h2 class="text-sm font-semibold text-on-surface mb-3">Key statistics</h2>
 
-					<dl class="divide-y divide-outline-variant/15 text-xs">
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-sm font-semibold text-on-surface-variant">Yield to maturity</dt>
-							<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-ytm">{{ bond.yieldToMaturity|pct(2) }}</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-sm font-semibold text-on-surface-variant">Coupon</dt>
-							<dd class="font-medium text-on-surface font-mono tabular-nums">{{ bond.couponRate|pct(3) }}</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-sm font-semibold text-on-surface-variant">Annual income</dt>
-							<dd class="font-medium text-on-surface font-mono tabular-nums">{{ annualCouponIncome|money(2) }}</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-sm font-semibold text-on-surface-variant">Time to maturity</dt>
-							<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-ttm">{{ yearsToMaturity|number_format(2) }}y</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-sm font-semibold text-on-surface-variant">Modified duration</dt>
-							<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-duration">{{ bond.modifiedDuration|number_format(2) }}</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-sm font-semibold text-on-surface-variant">Convexity</dt>
-							<dd class="font-medium text-on-surface font-mono tabular-nums" id="stat-convexity">{{ bond.convexity|number_format(1) }}</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-sm font-semibold text-on-surface-variant">Face value</dt>
-							<dd class="font-medium text-on-surface font-mono tabular-nums">{{ bond.faceValue|money(0) }}</dd>
-						</div>
-						<div class="py-2 flex justify-between items-center">
-							<dt class="text-sm font-semibold text-on-surface-variant">Amount outstanding</dt>
-							<dd class="font-medium text-on-surface font-mono tabular-nums">{{ bond.outstandingFace|format_large('$') }}</dd>
-						</div>
+					<dl class="divide-y divide-outline-variant/15 text-sm">
+						{{ ui.stat('Yield to maturity', bond.yieldToMaturity|pct(2), {id: 'stat-ytm'}) }}
+						{{ ui.stat('Coupon', bond.couponRate|pct(3)) }}
+						{{ ui.stat('Annual income', annualCouponIncome|money(2)) }}
+						{{ ui.stat('Time to maturity', yearsToMaturity|number_format(2) ~ 'y', {id: 'stat-ttm'}) }}
+						{{ ui.stat('Modified duration', bond.modifiedDuration|number_format(2), {id: 'stat-duration'}) }}
+						{{ ui.stat('Convexity', bond.convexity|number_format(1), {id: 'stat-convexity'}) }}
+						{{ ui.stat('Face value', bond.faceValue|money(0)) }}
+						{{ ui.stat('Amount outstanding', bond.outstandingFace|format_large('$')) }}
 					</dl>
 				</div>
 
@@ -307,15 +229,9 @@
 						convexity: &minus;D&times;&Delta;y + &frac12;&times;C&times;&Delta;y&sup2;.
 					</p>
 
-					<dl class="divide-y divide-outline-variant/15 text-xs">
-						{% for dy in [-0.01, -0.005, 0.005, 0.01] %}
-							{% set move = (-bond.modifiedDuration * dy) + (0.5 * bond.convexity * dy * dy) %}
-							<div class="py-2 flex justify-between items-center">
-								<dt class="text-sm font-semibold text-on-surface-variant">{{ dy|bps(0, true) }}</dt>
-								<dd class="font-medium font-mono tabular-nums {{ move|signed_class }}">
-									{{ move|pct(2, true) }}
-								</dd>
-							</div>
+					<dl class="divide-y divide-outline-variant/15 text-sm">
+						{% for shock in rateShocks %}
+							{{ ui.stat(shock.shift|bps(0, true), shock.move|pct(2, true), {tone: shock.move|signed_class}) }}
 						{% endfor %}
 					</dl>
 				</div>
@@ -332,9 +248,9 @@
 	<script type="application/json" id="aerie-data">
 		{{ {
 			ticker: bond.ticker,
-			ticksPerYear: ticksPerYear|default(14400),
-			userQuantity: userQuantity|default(0),
-			faceValue: bond.faceValue|default(1000)
+			ticksPerYear: ticksPerYear,
+			userQuantity: userQuantity,
+			faceValue: bond.faceValue
 		}|json_encode|raw }}
 	</script>
 

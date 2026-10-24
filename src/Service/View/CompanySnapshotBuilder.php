@@ -26,6 +26,11 @@ use App\Service\Model\Sector\InsuranceBusinessModel;
  */
 class CompanySnapshotBuilder
 {
+    // --- Analyst Rating ---
+
+    /** The badge tone of the consensus rating: a call to outperform reads as a rise, to underperform as a fall. */
+    private const RATING_TONES = ['Outperform' => 'up', 'Underperform' => 'down', 'Neutral' => 'neutral'];
+
     public function __construct(
         private readonly MarketEngine $marketEngine,
         private readonly DebtEngine $debtEngine,
@@ -61,11 +66,23 @@ class CompanySnapshotBuilder
             'dividendYield' => (!$isBankrupt && $price > 0.0 && $lastDividend > 0.0)
                 ? ($lastDividend * FinancialConstants::QUARTERS_PER_YEAR) / $price
                 : 0.0,
+            'displayReturn' => self::displayReturn($stock, $isFinancial),
             'analystTargets' => $isBankrupt ? null : $this->analystTargets($stock, $macroState),
             'netAssetValue' => $isBankrupt ? null : $this->netAssetValue($stock, $macroState, $businessModel, $price),
             'capitalThresholds' => $this->capitalThresholds($businessModel),
             'capital' => $isBankrupt ? null : $this->capitalPosition($stock, $businessModel, $price),
         ];
+    }
+
+    /**
+     * The return the page quotes: ROE for a lender, ROIC otherwise. The baseline stands in until the first quarter has
+     * set the current one, which reads zero before then.
+     */
+    private static function displayReturn(Stock $stock, bool $isFinancial): float
+    {
+        $current = (float) ($isFinancial ? $stock->getCurrentRoe() : $stock->getCurrentRoic());
+
+        return $current !== 0.0 ? $current : (float) ($isFinancial ? $stock->getBaselineRoe() : $stock->getBaselineRoic());
     }
 
     /**
@@ -103,9 +120,9 @@ class CompanySnapshotBuilder
     }
 
     /**
-     * The lines the regulator acts on, in percent of tangible assets: above the warning line the firm is well
-     * capitalized, below the distress line it is distressed, and below the closure line FailureSweep
-     * liquidates it. Null for a firm its capital ratio does not govern.
+     * The lines the regulator acts on, as fractions of tangible assets: above the warning line the firm is well
+     * capitalised, below the distress line it is distressed, and below the closure line FailureSweep liquidates it.
+     * Null for a firm its capital ratio does not govern.
      *
      * @return array{warning: float, distress: float, bankrupt: float}|null
      */
@@ -116,10 +133,11 @@ class CompanySnapshotBuilder
             return null;
         }
 
+        // The models state the lines in percent.
         return [
-            'warning' => $strategy->getWarningEquityThreshold(),
-            'distress' => $strategy->getDistressEquityThreshold(),
-            'bankrupt' => $strategy->getBankruptEquityThreshold(),
+            'warning' => $strategy->getWarningEquityThreshold() / 100.0,
+            'distress' => $strategy->getDistressEquityThreshold() / 100.0,
+            'bankrupt' => $strategy->getBankruptEquityThreshold() / 100.0,
         ];
     }
 
@@ -195,6 +213,7 @@ class CompanySnapshotBuilder
         }
 
         $targets['rating'] = $stock->getAnalystRating();
+        $targets['tone'] = self::RATING_TONES[$targets['rating']] ?? 'neutral';
         $targets['upside'] = $price > 0.0 ? ($targets['consensus'] - $price) / $price : 0.0;
 
         return $targets;

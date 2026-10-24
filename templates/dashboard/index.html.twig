@@ -1,6 +1,7 @@
 {% extends 'base.html.twig' %}
+{% import 'partials/_ui.html.twig' as ui %}
 
-{% block title %}My Portfolio | Aerie Exchange{% endblock %}
+{% block page_title %}My portfolio{% endblock %}
 
 {% block body %}
     <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
@@ -25,22 +26,10 @@
             </div>
 
             <dl class="lg:col-span-5 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-3">
-                <div>
-                    <dt class="text-xs text-on-surface-variant">Cash</dt>
-                    <dd id="available-cash" class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ cashBalance|money(2) }}</dd>
-                </div>
-                <div>
-                    <dt class="text-xs text-on-surface-variant">Invested</dt>
-                    <dd id="total-invested" class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ totalInvested|money(2) }}</dd>
-                </div>
-                <div>
-                    <dt class="text-xs text-on-surface-variant">In open orders</dt>
-                    <dd class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ (escrowedCash + escrowedShareValue)|money(2) }}</dd>
-                </div>
-                <div>
-                    <dt class="text-xs text-on-surface-variant">Dividends</dt>
-                    <dd id="dividend-income" class="mt-0.5 text-sm font-semibold text-on-surface font-mono tabular-nums">{{ totalDividendIncome|money(2) }}</dd>
-                </div>
+                {{ ui.figure('Cash', cashBalance|money(2), {id: 'available-cash', size: 'text-sm'}) }}
+                {{ ui.figure('Invested', totalInvested|money(2), {id: 'total-invested', size: 'text-sm'}) }}
+                {{ ui.figure('In open orders', (escrowedCash + escrowedShareValue)|money(2), {size: 'text-sm'}) }}
+                {{ ui.figure('Dividends', totalDividendIncome|money(2), {id: 'dividend-income', size: 'text-sm'}) }}
             </dl>
         </header>
 
@@ -91,10 +80,7 @@
 
             <div class="w-full h-65 sm:h-80 relative rounded overflow-hidden">
                 <div id="portfolio-chart-spinner" class="hidden absolute inset-0 z-20 items-center justify-center bg-surface-container-low/80">
-                    <svg class="animate-spin h-7 w-7 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                    {% include 'partials/_spinner.html.twig' with { size: 'h-7 w-7' } only %}
                 </div>
                 <div id="portfolioChartContainer" class="w-full h-full"></div>
             </div>
@@ -102,26 +88,26 @@
 
         <div class="space-y-5" data-controller="tabs" data-tabs-default-tab-value="holdings">
             <div class="flex border-b border-outline-variant/20 overflow-x-auto gap-5 sm:gap-7 pb-px custom-scrollbar" role="tablist">
-                <button class="portfolio-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-primary border-primary cursor-pointer" data-tab="holdings" data-tabs-target="tab" data-action="click->tabs#select">
+                <button class="tab-btn" aria-selected="true" data-tab="holdings" data-tabs-target="tab" data-action="click->tabs#select">
                     Holdings
                     <span class="text-xs font-normal text-on-surface-variant tabular-nums">{{ holdings|length }}</span>
                 </button>
-                <button class="portfolio-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="orders" data-tabs-target="tab" data-action="click->tabs#select">
+                <button class="tab-btn" data-tab="orders" data-tabs-target="tab" data-action="click->tabs#select">
                     Orders
                     {% if openOrders|length > 0 %}
                         <span class="text-xs font-normal text-on-surface-variant tabular-nums">{{ openOrders|length }}</span>
                     {% endif %}
                 </button>
-                <button class="portfolio-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="watchlist" data-tabs-target="tab" data-action="click->tabs#select">
+                <button class="tab-btn" data-tab="watchlist" data-tabs-target="tab" data-action="click->tabs#select">
                     Watchlist
                     {% if watchlist|length > 0 %}
                         <span class="text-xs font-normal text-on-surface-variant tabular-nums">{{ watchlist|length }}</span>
                     {% endif %}
                 </button>
-                <button class="portfolio-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="analytics" data-tabs-target="tab" data-action="click->tabs#select">
+                <button class="tab-btn" data-tab="analytics" data-tabs-target="tab" data-action="click->tabs#select">
                     Allocation
                 </button>
-                <button class="portfolio-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="account" data-tabs-target="tab" data-action="click->tabs#select">
+                <button class="tab-btn" data-tab="account" data-tabs-target="tab" data-action="click->tabs#select">
                     Account
                 </button>
             </div>
@@ -165,7 +151,7 @@
                                 <tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group">
                                     <td class="px-5 py-3">
                                         <div class="flex items-center gap-3">
-                                            <img class="w-7 h-7 rounded shrink-0 border border-outline-variant/20 p-0.5 bg-surface-container-lowest" src="{{ asset('icons/' ~ (holding.underlying|default(holding.ticker)) ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ holding.ticker }} logo">
+                                            {% include 'partials/_logo.html.twig' with { ticker: holding.underlying|default(holding.ticker), class: 'w-7 h-7 p-0.5', alt: holding.ticker ~ ' logo' } only %}
                                             <div>
                                                 <div class="flex items-center gap-2">
                                                     {% if holding.type == 'BOND' %}
@@ -209,7 +195,7 @@
                                     <td class="px-5 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="value-{{ holding.ticker }}">{{ holding.marketValue|money(2) }}</td>
                                     <td class="px-5 py-3 font-mono tabular-nums text-right font-bold {{ holding.unrealizedPnL|signed_class }}" id="pnl-{{ holding.ticker }}">
                                         <div>{{ holding.unrealizedPnL|money(2, true) }}</div>
-                                        <div class="text-2xs font-normal opacity-80">({{ holding.unrealizedReturn|pct(2, true) }})</div>
+                                        <div class="text-2xs font-normal">({{ holding.unrealizedReturn|pct(2, true) }})</div>
                                         {% if holding.borrowAccrued|default(0) > 0 %}
                                             <div class="text-2xs font-normal text-tertiary mt-0.5" title="Borrow fees paid to keep this short open">
                                                 &minus;{{ holding.borrowAccrued|money(2) }} borrow
@@ -223,7 +209,8 @@
                                     </td>
                                     <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant text-xs">{{ holding.weight|pct(1) }}</td>
                                     <td class="px-5 py-3 text-right">
-                                        <a href="{{ holding.type == 'BOND' ? path('app_bond_view', { ticker: holding.ticker }) : '/stock/' ~ (holding.underlying|default(holding.ticker)) }}" class="relative z-10 inline-flex items-center px-2.5 py-1 rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high text-xs font-medium transition-colors">
+                                        {# A copy of the row's own link, kept out of the tab order. #}
+                                        <a href="{{ holding.type == 'BOND' ? path('app_bond_view', { ticker: holding.ticker }) : '/stock/' ~ (holding.underlying|default(holding.ticker)) }}" aria-hidden="true" tabindex="-1" class="relative z-10 inline-flex items-center px-2.5 py-1 rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high text-xs font-medium transition-colors">
                                             Trade
                                         </a>
                                     </td>
@@ -250,54 +237,7 @@
                     <span class="text-xs text-on-surface-variant">{{ openOrders|length }} open</span>
                 </div>
 
-                {% if openOrders|length > 0 %}
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse min-w-150">
-                            <thead>
-                                <tr class="table-head">
-                                    <th class="py-2.5">Order ID</th>
-                                    <th class="py-2.5">Type</th>
-                                    <th class="py-2.5">Action</th>
-                                    <th class="py-2.5">Asset</th>
-                                    <th class="py-2.5 text-right">Quantity</th>
-                                    <th class="py-2.5 text-right">Stop price</th>
-                                    <th class="py-2.5 text-right">Limit price</th>
-                                    <th class="py-2.5 text-right">Current price</th>
-                                    <th class="py-2.5 text-right">Cancel</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
-                                {% for order in openOrders %}
-                                    <tr class="hover:bg-surface-container-high/30 transition-colors">
-                                        <td class="py-2.5 text-xs font-mono text-on-surface-variant">#{{ order.id }}</td>
-                                        <td class="py-2.5 text-xs text-on-surface-variant">{{ order.orderType|replace({'_': ' '})|lower|capitalize }}</td>
-                                        <td class="py-2.5 font-bold {{ order.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ order.action|lower|capitalize }}</td>
-                                        <td class="py-2.5">
-                                            <a href="{{ order.assetType == 'BOND' ? path('app_bond_view', { ticker: order.ticker }) : '/stock/' ~ order.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ order.ticker }}</a>
-                                        </td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ order.quantity|number_format }}</td>
-                                        {# A stop wakes at its trigger; a stop-limit then fills no worse than its limit, a plain stop at market. #}
-                                        <td class="py-2.5 text-right font-mono tabular-nums {{ order.stopPrice is null ? 'text-on-surface-faint' : 'text-primary font-bold' }}">{{ order.stopPrice|money(2) }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums {{ order.limitPrice is null ? 'text-on-surface-faint' : 'text-primary font-bold' }}">{{ order.limitPrice|money(2) }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums {{ livePrices[order.ticker] is defined ? 'text-on-surface' : 'text-on-surface-faint' }}">{{ (livePrices[order.ticker] ?? null)|money(2) }}</td>
-                                        <td class="py-2.5 text-right">
-                                            <form action="{{ path('app_trade_cancel', {'id': order.id}) }}" method="POST" onsubmit="return confirm('Cancel this {{ order.orderType|replace({'_': ' '})|lower }} order?');">
-                                                <input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
-                                                <button type="submit" class="cursor-pointer px-2.5 py-1 rounded border border-outline-variant/30 text-on-surface-variant hover:text-tertiary hover:border-tertiary/40 text-xs font-medium transition-colors">
-                                                    Cancel
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="py-6 text-center text-on-surface-variant text-xs">
-                        No open orders.
-                    </div>
-                {% endif %}
+                {% include 'partials/_order_table.html.twig' with {orders: openOrders, livePrices: livePrices, showAsset: true, empty: 'No open orders.'} only %}
             </div>
 
             <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
@@ -314,62 +254,7 @@
                     {% endif %}
                 </div>
 
-                {% if tradeHistory|length > 0 %}
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse min-w-150">
-                            <thead>
-                                <tr class="table-head">
-                                    <th class="py-2.5">Execution date</th>
-                                    <th class="py-2.5">Type</th>
-                                    <th class="py-2.5">Action</th>
-                                    <th class="py-2.5">Asset</th>
-                                    <th class="py-2.5 text-right">Quantity</th>
-                                    <th class="py-2.5 text-right">Executed price</th>
-                                    <th class="py-2.5 text-right">Total amount</th>
-                                    <th class="py-2.5 text-right">Trading costs</th>
-                                    <th class="py-2.5 text-right">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
-                                {% for trade in tradeHistory %}
-                                    {% set tradeQuantity = trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity %}
-                                    {% set tradePrice = trade.executionPrice ?? trade.limitPrice %}
-                                    {# An option premium is quoted per share and a contract covers a hundred; its
-                                       chain lives on the underlying, the part of the symbol before the dash. #}
-                                    {% set isOption = trade.assetType == 'OPTION' %}
-                                    <tr>
-                                        <td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ (trade.filledAt ?? trade.createdAt)|date('Y-m-d H:i') }}</td>
-                                        <td class="py-2.5 text-xs text-on-surface-variant">
-                                            {{ trade.orderType|replace({'_': ' '})|lower|capitalize }}
-                                            {% if trade.origin == 'MARGIN_CALL' %}
-                                                <span class="badge badge-warn ml-1" title="Sold by your broker to meet a margin call">Margin call</span>
-                                            {% elseif trade.origin == 'BUY_IN' %}
-                                                <span class="badge badge-warn ml-1" title="Bought back because the lender recalled the stock">Buy-in</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="py-2.5 font-bold {{ trade.action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}">{{ trade.action|lower|capitalize }}</td>
-                                        <td class="py-2.5">
-                                            <a href="{{ trade.assetType == 'BOND' ? path('app_bond_view', { ticker: trade.ticker }) : '/stock/' ~ (isOption ? trade.ticker|split('-')|first : trade.ticker) }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ trade.ticker }}</a>
-                                        </td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ tradeQuantity|number_format }}{% if isOption %} <span class="font-sans text-2xs text-on-surface-variant">contracts</span>{% endif %}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ tradePrice|money(2) }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">
-                                            {{ (tradePrice is null ? null : tradePrice * tradeQuantity * (isOption ? optionMultiplier : 1))|money(2) }}
-                                        </td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums text-xs">{% include 'partials/_trade_costs.html.twig' with { trade: trade } only %}</td>
-                                        <td class="py-2.5 text-right">
-                                            <span class="text-xs {{ trade.status == 'FILLED' ? 'text-on-surface' : 'text-on-surface-variant' }}">{{ trade.status|lower|capitalize }}</span>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="py-6 text-center text-on-surface-variant text-xs">
-                        No trades yet.
-                    </div>
-                {% endif %}
+                {% include 'partials/_trade_table.html.twig' with {trades: tradeHistory, optionMultiplier: optionMultiplier, showAsset: true, empty: 'No trades yet.'} only %}
             </div>
 
             <div class="bg-surface-container-low border border-outline-variant/20 rounded-lg p-5">
@@ -386,10 +271,10 @@
                         <table class="w-full text-left border-collapse min-w-100">
                             <thead>
                                 <tr class="table-head">
-                                    <th class="py-2.5">Ex-Date</th>
+                                    <th class="py-2.5">Ex-date</th>
                                     <th class="py-2.5">Asset</th>
                                     <th class="py-2.5 text-right">Shares held</th>
-                                    <th class="py-2.5 text-right">Rate/Share</th>
+                                    <th class="py-2.5 text-right">Per share</th>
                                     <th class="py-2.5 text-right">Amount</th>
                                 </tr>
                             </thead>
@@ -473,16 +358,15 @@
                             </thead>
                             <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
                                 {% for item in watchlist %}
-                                    {% set itemAlerts = priceAlerts|filter(a => a.ticker == item.ticker) %}
                                     <tr>
                                         <td class="py-2.5">
                                             <a href="/stock/{{ item.ticker }}" class="font-mono font-bold text-on-surface hover:text-primary transition-colors">{{ item.ticker }}</a>
                                             <span class="block text-xs text-on-surface-variant truncate max-w-60">{{ item.name }}</span>
                                         </td>
                                         <td class="py-2.5 text-right font-mono tabular-nums text-on-surface tick-flash" data-watch-price="{{ item.ticker }}" data-last="{{ item.price }}">{{ item.price|money(2) }}</td>
-                                        <td class="py-2.5 text-right font-mono tabular-nums {{ item.change is null ? 'text-on-surface-faint' : item.change|signed_class }}">{{ item.change is null ? '—' : item.change|pct(2, true) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums {{ item.change|signed_class }}">{{ item.change|pct(2, true) }}</td>
                                         <td class="py-2.5 text-right text-xs text-on-surface-variant">
-                                            {% for alert in itemAlerts %}
+                                            {% for alert in alertsByTicker[item.ticker] ?? [] %}
                                                 <span class="block font-mono tabular-nums">{{ alert.direction == 'ABOVE' ? '≥' : '≤' }} {{ alert.targetPrice|money(2) }}</span>
                                             {% else %}
                                                 <a href="/stock/{{ item.ticker }}#price-alerts" class="hover:text-primary transition-colors">Set one</a>
@@ -541,7 +425,7 @@
                             </div>
                             <div class="py-2.5 flex justify-between">
                                 <dt class="text-on-surface-variant">Largest position</dt>
-                                <dd class="font-bold text-on-surface font-mono tabular-nums">{{ holdings|length > 0 ? holdings[0].weight|abs|pct(1) : '—' }}</dd>
+                                <dd class="font-bold text-on-surface font-mono tabular-nums">{{ largestWeight|pct(1) }}</dd>
                             </div>
                             <div class="py-2.5 flex justify-between">
                                 <dt class="text-on-surface-variant">Cash share</dt>
@@ -601,35 +485,20 @@
 
                 {% if app.user.marginEnabled %}
                     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                        <div>
-                            <dt class="text-xs text-on-surface-variant">Margin loan</dt>
-                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 {{ marginDebit > 0 ? 'text-tertiary' : 'text-on-surface' }}">{{ marginDebit|money(2) }}</dd>
-                            <dd class="text-2xs text-on-surface-variant mt-0.5">at <span class="font-mono tabular-nums">{{ marginRate|pct(2) }}</span> a year</dd>
-                        </div>
-                        <div>
-                            <dt class="text-xs text-on-surface-variant">Short exposure</dt>
-                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">{{ margin.shortMarketValue|money(2) }}</dd>
-                        </div>
+                        {% set loanRate %}at <span class="font-mono tabular-nums">{{ marginRate|pct(2) }}</span> a year{% endset %}
+                        {{ ui.figure('Margin loan', marginDebit|money(2), {tone: marginDebit > 0 ? 'text-warning' : 'text-on-surface', note: loanRate, noteSize: 'text-2xs', noteMono: false}) }}
+                        {{ ui.figure('Short exposure', margin.shortMarketValue|money(2)) }}
                         {% if margin.optionShortValue > 0 %}
-                            <div>
-                                <dt class="text-xs text-on-surface-variant">Written contracts</dt>
-                                <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface" title="What buying the written contracts back would cost at the current mark">{{ margin.optionShortValue|money(2) }}</dd>
-                            </div>
+                            {{ ui.figure('Written contracts', margin.optionShortValue|money(2), {attrs: {title: 'What buying the written contracts back would cost at the current mark'}}) }}
                         {% endif %}
-                        <div>
-                            <dt class="text-xs text-on-surface-variant">Account equity</dt>
-                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">{{ margin.equity|money(2) }}</dd>
-                        </div>
-                        <div>
-                            <dt class="text-xs text-on-surface-variant">Maintenance</dt>
-                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 {{ margin.isCalled ? 'text-tertiary' : 'text-on-surface' }}">{{ margin.maintenanceRequirement|money(2) }}</dd>
-                        </div>
+                        {{ ui.figure('Account equity', margin.equity|money(2)) }}
+                        {{ ui.figure('Maintenance', margin.maintenanceRequirement|money(2), {tone: margin.isCalled ? 'text-warning' : 'text-on-surface'}) }}
                     </dl>
 
                     {% if margin.isCalled %}
-                        <div class="rounded border border-tertiary/30 bg-tertiary/10 px-4 py-3">
-                            <p class="text-sm font-semibold text-tertiary">Margin call</p>
-                            <p class="text-xs text-tertiary mt-1 leading-relaxed">
+                        <div class="rounded border border-warning/30 bg-warning/10 px-4 py-3">
+                            <p class="text-sm font-semibold text-warning">Margin call</p>
+                            <p class="text-xs text-warning mt-1 leading-relaxed">
                                 Equity is {{ margin.callAmount|money(2) }} below the maintenance requirement.
                                 Positions will be sold at the market on the next sweep unless the account is
                                 brought back into compliance.
@@ -684,15 +553,10 @@
     {# Page data for assets/js/pages/dashboard.js. See the note in templates/stock/index.html.twig. #}
     <script type="application/json" id="portfolio-data">
         {{ {
-            holdings: holdings|reduce((carry, h) => carry|merge({ (h.ticker): {
-                quantity: h.quantity,
-                avgCost: h.avgCost,
-                price: h.price,
-                multiplier: h.type == 'OPTION' ? optionMultiplier : 1
-            } }), {}),
-            cash: cashBalance|default(0),
-            initialPortfolioValue: portfolioValue|default(0),
-            totalInvestedCost: totalInvestedCost|default(0)
+            holdings: holdingsFeed,
+            cash: cashBalance,
+            initialPortfolioValue: portfolioValue,
+            totalInvestedCost: totalInvestedCost
         }|json_encode|raw }}
     </script>
 

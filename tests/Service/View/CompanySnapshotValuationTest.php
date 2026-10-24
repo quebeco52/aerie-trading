@@ -71,5 +71,20 @@ class CompanySnapshotValuationTest extends TestCase
         foreach (['growth_analyst', 'income_analyst', 'value_analyst'] as $school) {
             $this->assertSame($market['analyst_targets'][$school], $snapshot['analystTargets'][$school], $school);
         }
+        $this->assertSame(
+            ['Outperform' => 'up', 'Underperform' => 'down', 'Neutral' => 'neutral'][$snapshot['analystTargets']['rating']],
+            $snapshot['analystTargets']['tone'],
+            'the rating badge reads as a rise, a fall or neither',
+        );
+    }
+
+    /** A lender is quoted on its return on equity, and the baseline stands in until the first quarter sets one. */
+    public function testALenderQuotesItsReturnOnEquity(): void
+    {
+        $this->assertEqualsWithDelta(0.12, $this->builder()->build($this->lender(), new MacroStateDTO())['displayReturn'], 1e-12);
+
+        $fresh = $this->lender();
+        $fresh->setCurrentRoe('0.00000000');
+        $this->assertEqualsWithDelta(0.13, $this->builder()->build($fresh, new MacroStateDTO())['displayReturn'], 1e-12);
     }
 }

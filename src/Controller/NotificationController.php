@@ -36,7 +36,6 @@ class NotificationController extends AbstractController
             'notifications' => $items,
             'page' => $page,
             'pages' => max(1, (int) ceil($total / self::PER_PAGE)),
-            'total' => $total,
         ]);
         $notifications->markAllRead($user);
 

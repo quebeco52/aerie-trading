@@ -88,6 +88,7 @@ final class PagesRenderTest extends KernelTestCase
                 'breadth' => ['advancing' => 31, 'declining' => 12, 'unchanged' => 2, 'topMover' => ['ticker' => 'HUMM', 'changePercent' => 0.1342]],
                 'macro' => $macro,
                 'top_stocks' => array_slice($stocks, 0, 6),
+                'cycleLabel' => 'Boom',
             ]],
             'home' => ['/', 'home/index.html.twig', [
                 'macro' => $macro,
@@ -96,8 +97,12 @@ final class PagesRenderTest extends KernelTestCase
                     ['ticker' => 'LBC', 'name' => 'Skein Total Market', 'label' => 'Whole board', 'isBenchmark' => false, 'price' => 188.02],
                 ],
                 'stocks' => $stocks,
+                'cycleLabel' => 'Boom',
+                'inflationTarget' => \App\Service\Math\MacroConstants::TARGET_INFLATION,
             ]],
-            'screener' => ['/screener', 'screener/index.html.twig', ['stocks' => $stocks]],
+            'screener' => ['/screener', 'screener/index.html.twig', [
+                'stocks' => array_map(static fn(array $s): array => $s + \App\Controller\ScreenerController::cautions($s['netDebtToEbitda'], $s['fcfConversion']), $stocks),
+            ]],
             'leaderboard' => ['/leaderboard', 'leaderboard/index.html.twig', [
                 'view' => 'season',
                 'views' => ['season' => 'This season', 'networth' => 'Net worth', 'past' => 'Past seasons'],
@@ -121,7 +126,7 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'regulator' => ['/regulator', 'regulator/index.html.twig', [
                 'regulator' => [
-                    'head' => ['name' => 'Leontine Ashby', 'age' => 54, 'sinceLabel' => 'Year 12 Q3', 'termEndsLabel' => 'Year 17 Q3', 'stance' => 'middle', 'requirement' => 0.1046, 'ltvCap' => 0.85, 'neutralBuffer' => 0.02,
+                    'head' => ['name' => 'Leontine Ashby', 'age' => 54, 'sinceLabel' => 'Year 12 Q3', 'termEndsLabel' => 'Year 17 Q3', 'stance' => 'middle', 'stanceText' => 'A moderate regulator', 'requirement' => 0.1046, 'ltvCap' => 0.85, 'neutralBuffer' => 0.02,
                         'passedOver' => [['name' => 'Osric Vane', 'age' => 49, 'requirement' => 0.08, 'ltvCap' => null], ['name' => 'Maren Holt', 'age' => 58, 'requirement' => 0.1255, 'ltvCap' => null]]],
                     'inForce' => 0.1012, 'buffer' => 0.005, 'phasing' => ['target' => 0.1046, 'completeLabel' => 'Year 13 Q3'],
                     'rules' => ['termYears' => 5.0, 'shortlist' => 3, 'lightest' => 0.08, 'strictest' => 0.13, 'phaseInMonths' => 12],
@@ -136,7 +141,7 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'exchequer' => ['/exchequer', 'exchequer/index.html.twig', [
                 'exchequer' => [
-                    'head' => ['name' => 'Rosalind Tate', 'age' => 51, 'sinceLabel' => 'Year 13 Q1', 'termEndsLabel' => 'Year 18 Q1', 'opening' => false, 'stance' => 'short', 'maturity' => 4.3,
+                    'head' => ['name' => 'Rosalind Tate', 'age' => 51, 'sinceLabel' => 'Year 13 Q1', 'termEndsLabel' => 'Year 18 Q1', 'opening' => false, 'stance' => 'short', 'stanceText' => 'Favours borrowing short', 'maturity' => 4.3,
                         'passedOver' => [['name' => 'Hal Brennan', 'age' => 47, 'maturity' => 5.7], ['name' => 'Ines Okafor', 'age' => 56, 'maturity' => 4.9]]],
                     'debt' => 0.912, 'netDebt' => 0.764, 'netLiabilities' => 0.342, 'remittanceToGdp' => 0.0034, 'authorityLossesToGdp' => 0.0, 'maturity' => 4.7, 'movingTo' => 4.3, 'repricingShare' => 0.295, 'rate' => 0.0341,
                     'interestToGdp' => 0.0311, 'tenYear' => 0.0438, 'maturityBp' => -6, 'riskSpreadBp' => 14, 'councilMaturity' => 4.6,
@@ -145,7 +150,7 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'fair_trading' => ['/fair-trading', 'fair_trading/index.html.twig', [
                 'board' => [
-                    'head' => ['name' => 'Odile Farrant', 'age' => 55, 'sinceLabel' => 'Year 6 Q1', 'termEndsLabel' => 'Year 11 Q1', 'opening' => false, 'stance' => 'strict',
+                    'head' => ['name' => 'Odile Farrant', 'age' => 55, 'sinceLabel' => 'Year 6 Q1', 'termEndsLabel' => 'Year 11 Q1', 'opening' => false, 'stance' => 'strict', 'stanceText' => 'A strict enforcer against concentration',
                         'passedOver' => [['name' => 'Hal Brennan', 'age' => 47, 'line' => 0.235], ['name' => 'Ines Okafor', 'age' => 56, 'line' => 0.205]]],
                     'screens' => ['delta' => 0.0115, 'concentrated' => 0.1905, 'shareCeiling' => 0.405],
                     'councilLine' => 0.2105,
@@ -155,7 +160,7 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'securities' => ['/securities', 'securities/index.html.twig', [
                 'commission' => [
-                    'head' => ['name' => 'Thea Lindqvist', 'age' => 54, 'sinceLabel' => 'Year 10 Q3', 'termEndsLabel' => 'Year 15 Q3', 'opening' => false, 'stance' => 'strict',
+                    'head' => ['name' => 'Thea Lindqvist', 'age' => 54, 'sinceLabel' => 'Year 10 Q3', 'termEndsLabel' => 'Year 15 Q3', 'opening' => false, 'stance' => 'strict', 'stanceText' => 'A strict overseer of the markets',
                         'passedOver' => [['name' => 'Arlo Mercer', 'age' => 49, 'margin' => 0.45], ['name' => 'Ines Okafor', 'age' => 56, 'margin' => 0.6]]],
                     'inForce' => ['initial' => 0.5, 'long' => 0.25, 'short' => 0.30, 'enforcement' => 1.0],
                     'coming' => ['fromLabel' => 'Year 10 Q4', 'initial' => 0.68, 'enforcement' => 0.7],
@@ -171,8 +176,9 @@ final class PagesRenderTest extends KernelTestCase
                     'expectedFrom' => 'Year 17 Q2',
                 ],
             ]],
+            'reserve' => ['/reserve', 'reserve/index.html.twig', $this->reservePage()],
             'notifications' => ['/notifications', 'notifications/index.html.twig', [
-                'page' => 1, 'pages' => 1, 'total' => 3,
+                'page' => 1, 'pages' => 1,
                 'notifications' => [
                     ['read' => false, 'tone' => 'badge-accent', 'label' => 'Order filled', 'ticker' => 'LAKE', 'dateline' => '3 Mar, Year 14', 'link' => '/stock/LAKE', 'title' => 'Bought 100 LAKE at $81.95', 'body' => 'Your limit order filled.'],
                     ['read' => false, 'tone' => 'badge-warn', 'label' => 'Margin call', 'ticker' => null, 'dateline' => '28 Feb, Year 14', 'link' => '/dashboard', 'title' => 'Margin call: your broker closed positions to meet the maintenance requirement', 'body' => 'Sold 120 GULL; bought back 2 GULL-C25 contracts.'],
@@ -181,7 +187,7 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'news' => ['/news', 'news/index.html.twig', self::newswire()],
             'login' => ['/login', 'security/login.html.twig', ['error' => null, 'last_username' => '']],
-            'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Expansion', 'macro' => ['inflation' => 0.0241, 'inflationEma' => 0.0238, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'balanceSheetIntensity' => 0.0], 'exposures' => [['key' => 'oil', 'title' => 'Oil and fuel', 'intro' => 'Producers sell crude at the world price; transport and heavy industry burn its products.', 'lists' => [['label' => 'Sell crude and liquids', 'unit' => 'of sales', 'format' => \App\Service\View\FigureFormat::Percent, 'decimals' => 0, 'detail_unit' => null, 'rows' => [['ticker' => 'SINK', 'name' => 'Sinkhole Petroleum', 'value' => 0.7, 'detail' => null], ['ticker' => 'DRLL', 'name' => 'Drillwell Energy', 'value' => 0.55, 'detail' => null]]], ['label' => 'Buy fuel', 'unit' => 'of costs', 'format' => \App\Service\View\FigureFormat::Percent, 'decimals' => 0, 'detail_unit' => null, 'rows' => [['ticker' => 'KEEL', 'name' => 'Keel Line Shipping', 'value' => 0.102, 'detail' => null], ['ticker' => 'RAIL', 'name' => 'Pamlico Rail', 'value' => 0.088, 'detail' => null], ['ticker' => 'HAUL', 'name' => 'Haulwright Logistics', 'value' => 0.069, 'detail' => null]]]]], ['key' => 'rates', 'title' => 'Interest rates', 'intro' => 'Floating-rate debt reprices with the policy rate.', 'lists' => [['label' => 'Most floating-rate debt', 'unit' => 'of market value', 'format' => \App\Service\View\FigureFormat::Percent, 'decimals' => 0, 'detail_unit' => 'of its debt floats', 'rows' => [['ticker' => 'GULL', 'name' => 'Gull Resorts', 'value' => 0.42, 'detail' => 0.6], ['ticker' => 'IBHI', 'name' => 'Ibis Heavy Industries', 'value' => 0.18, 'detail' => 0.35]]]]], ['key' => 'property', 'title' => 'Property prices', 'intro' => 'Landlords reset rents toward market as leases roll; lenders lose more on defaults when the collateral is worth less.', 'lists' => [['label' => 'Largest landlords', 'unit' => 'total assets', 'format' => \App\Service\View\FigureFormat::LargeMoney, 'decimals' => null, 'detail_unit' => null, 'rows' => [['ticker' => 'TOWR', 'name' => 'Tower Row Properties', 'value' => 18400000000, 'detail' => null]]], ['label' => 'Lenders with most property loans', 'unit' => 'of loans', 'format' => \App\Service\View\FigureFormat::Percent, 'decimals' => 0, 'detail_unit' => null, 'rows' => [['ticker' => 'PLVR', 'name' => 'Plover Bank', 'value' => 0.61, 'detail' => null], ['ticker' => 'LAKE', 'name' => 'Lakeside Bancorp', 'value' => 0.48, 'detail' => null]]]]], ['key' => 'cycle', 'title' => 'The business cycle', 'intro' => 'How far sales swing with the economy, where 1.0x is a typical company.', 'lists' => [['label' => 'Most cyclical sales', 'unit' => 'typical swing', 'format' => \App\Service\View\FigureFormat::Multiple, 'decimals' => 1, 'detail_unit' => null, 'rows' => [['ticker' => 'STRK', 'name' => 'Stark Motors', 'value' => 1.5, 'detail' => null], ['ticker' => 'GULL', 'name' => 'Gull Resorts', 'value' => 1.5, 'detail' => null]]]]]]]],
+            'economy' => ['/economy', 'economy/index.html.twig', ['economic_cycle' => 'Boom', 'chartConstants' => \App\Controller\EconomyController::chartConstants(), 'macro' => ['inflation' => 0.0241, 'inflationEma' => 0.0238, 'outputGap' => 0.0132, 'policyRate' => 0.0425, 'yield10y' => 0.0461, 'qeActive' => false, 'balanceSheetIntensity' => 0.0], 'exposures' => [['key' => 'oil', 'title' => 'Oil and fuel', 'intro' => 'Producers sell crude at the world price; transport and heavy industry burn its products.', 'lists' => [['label' => 'Sell crude and liquids', 'unit' => 'of sales', 'format' => \App\Service\View\FigureFormat::Percent, 'decimals' => 0, 'detail_unit' => null, 'rows' => [['ticker' => 'SINK', 'name' => 'Sinkhole Petroleum', 'value' => 0.7, 'detail' => null], ['ticker' => 'DRLL', 'name' => 'Drillwell Energy', 'value' => 0.55, 'detail' => null]]], ['label' => 'Buy fuel', 'unit' => 'of costs', 'format' => \App\Service\View\FigureFormat::Percent, 'decimals' => 0, 'detail_unit' => null, 'rows' => [['ticker' => 'KEEL', 'name' => 'Keel Line Shipping', 'value' => 0.102, 'detail' => null], ['ticker' => 'RAIL', 'name' => 'Pamlico Rail', 'value' => 0.088, 'detail' => null], ['ticker' => 'HAUL', 'name' => 'Haulwright Logistics', 'value' => 0.069, 'detail' => null]]]]], ['key' => 'rates', 'title' => 'Interest rates', 'intro' => 'Floating-rate debt reprices with the policy rate.', 'lists' => [['label' => 'Most floating-rate debt', 'unit' => 'of market value', 'format' => \App\Service\View\FigureFormat::Percent, 'decimals' => 0, 'detail_unit' => 'of its debt floats', 'rows' => [['ticker' => 'GULL', 'name' => 'Gull Resorts', 'value' => 0.42, 'detail' => 0.6], ['ticker' => 'IBHI', 'name' => 'Ibis Heavy Industries', 'value' => 0.18, 'detail' => 0.35]]]]], ['key' => 'property', 'title' => 'Property prices', 'intro' => 'Landlords reset rents toward market as leases roll; lenders lose more on defaults when the collateral is worth less.', 'lists' => [['label' => 'Largest landlords', 'unit' => 'total assets', 'format' => \App\Service\View\FigureFormat::LargeMoney, 'decimals' => null, 'detail_unit' => null, 'rows' => [['ticker' => 'TOWR', 'name' => 'Tower Row Properties', 'value' => 18400000000, 'detail' => null]]], ['label' => 'Lenders with most property loans', 'unit' => 'of loans', 'format' => \App\Service\View\FigureFormat::Percent, 'decimals' => 0, 'detail_unit' => null, 'rows' => [['ticker' => 'PLVR', 'name' => 'Plover Bank', 'value' => 0.61, 'detail' => null], ['ticker' => 'LAKE', 'name' => 'Lakeside Bancorp', 'value' => 0.48, 'detail' => null]]]]], ['key' => 'cycle', 'title' => 'The business cycle', 'intro' => 'How far sales swing with the economy, where 1.0x is a typical company.', 'lists' => [['label' => 'Most cyclical sales', 'unit' => 'typical swing', 'format' => \App\Service\View\FigureFormat::Multiple, 'decimals' => 1, 'detail_unit' => null, 'rows' => [['ticker' => 'STRK', 'name' => 'Stark Motors', 'value' => 1.5, 'detail' => null], ['ticker' => 'GULL', 'name' => 'Gull Resorts', 'value' => 1.5, 'detail' => null]]]]]]]],
             'stock' => ['/stock/LAKE', 'stock/index.html.twig', [
                 'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Commercial banking', 'price' => 84.21, 'isBankrupt' => false, 'bankrupt' => false, 'sharesOutstanding' => 2400000000, 'earningsPerShare' => 6.12, 'currentRoe' => 0.124, 'baselineRoe' => 0.12, 'currentRoic' => 0.09, 'baselineRoic' => 0.09, 'publicFloatPercentage' => 0.8, 'volatility' => 0.22, 'totalEquity' => 1.6e11, 'debtToEquity' => 1.4, 'creditRating' => 'A', 'creditSpread' => 0.011, 'dynamicCreditSpread' => 0.0134, 'systemicImportance' => 'Systemic'],
                 'isEtf' => false, 'isFinancial' => true, 'changePercent' => 0.0342, 'businessModel' => 'commercial_bank', 'generalInfo' => StockInfo::DESCRIPTIONS['LAKE'], 'hasProfile' => true,
@@ -190,8 +196,9 @@ final class PagesRenderTest extends KernelTestCase
                     (new StockEvent())->setEventType('CREDIT DOWNGRADE')->setDescription('Shrike Standard Ratings cut Lakebird Bank to A-.')->setChangePercent('-1.40')->setRecordedAt(new \DateTime('2026-09-12 12:00')),
                 ],
                 'userQuantity' => 0, 'userDividendIncome' => 0, 'marketCap' => 2.02e11, 'peRatio' => 13.76, 'dividendYield' => 0.031, 'strategicStake' => 0, 'macro' => ['sovereignFundOwnershipShare' => 0.23, 'stampDutyRate' => 0.001],
-                'analystTargets' => ['rating' => 'Outperform', 'upside' => 0.084, 'consensus' => 91.3, 'growth_analyst' => 95.1, 'value_analyst' => 88.2, 'income_analyst' => 90.4],
-                'openOrders' => [], 'tradeHistory' => [], 'optionsListed' => false, 'optionExpiries' => [], 'lifecycleStage' => \App\Data\Company\LifecycleStage::Mature, 'lifecycleStages' => \App\Data\Company\LifecycleStage::cases(), 'financialSummary' => [], 'peers' => [], 'industry' => null, 'management' => null, 'anchorPortfolio' => null, 'netAssetValue' => null, 'capital' => null, 'credit' => null, 'ticksPerYear' => 14400, 'halfSpread' => 0.0004, 'advShares' => 3400000, 'borrowFee' => 0.01, 'availableToBorrow' => 1000000, 'shortUtilization' => 0.2,
+                'analystTargets' => ['rating' => 'Outperform', 'tone' => 'up', 'upside' => 0.084, 'consensus' => 91.3, 'growth_analyst' => 95.1, 'value_analyst' => 88.2, 'income_analyst' => 90.4],
+                'isInsurer' => false, 'pieLabels' => [], 'pieData' => [], 'displayReturn' => 0.124, 'fundStake' => 0.184, 'industryCharts' => ['netInterestEngineChart', 'regulatoryRatiosChart'], 'industryDescription' => \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS['commercial_bank'],
+                'openOrders' => [['id' => 52, 'ticker' => 'LAKE', 'assetType' => 'STOCK', 'action' => 'SELL', 'orderType' => 'STOP', 'stop' => true, 'quantity' => 50, 'limitPrice' => null, 'stopPrice' => 79.5, 'createdAt' => new \DateTimeImmutable('2026-10-02 09:30')]], 'userTrades' => [['ticker' => 'LAKE', 'assetType' => 'STOCK', 'action' => 'BUY', 'orderType' => 'MARKET', 'origin' => null, 'quantity' => 100, 'filledQuantity' => 100, 'executionPrice' => 83.9, 'limitPrice' => null, 'status' => 'FILLED', 'spreadCost' => 3.4, 'impactCost' => 0.0, 'stampDuty' => 8.39, 'createdAt' => new \DateTimeImmutable('2026-09-20 10:00'), 'filledAt' => new \DateTimeImmutable('2026-09-20 10:00')]], 'tradeHistory' => [], 'optionsListed' => false, 'optionExpiries' => [], 'lifecycleStage' => \App\Data\Company\LifecycleStage::Mature, 'lifecycleStages' => \App\Data\Company\LifecycleStage::cases(), 'financialSummary' => [], 'peers' => [], 'industry' => null, 'management' => null, 'anchorPortfolio' => null, 'netAssetValue' => null, 'capital' => null, 'credit' => null, 'ticksPerYear' => 14400, 'halfSpread' => 0.0004, 'advShares' => 3400000, 'borrowFee' => 0.01, 'availableToBorrow' => 1000000, 'shortUtilization' => 0.2,
                 'borrowWarnings' => ['expensiveFee' => 0.05, 'scarceUtilization' => 0.90, 'recallUtilization' => 0.97],
                 'shortInterest' => ['shares' => 21600000, 'floatShare' => 0.01125, 'daysToCover' => 6.35],
                 'nextReport' => ['dateline' => '14 Feb, Year 15', 'quarter' => 'Year 14 Q4'],
@@ -225,7 +232,11 @@ final class PagesRenderTest extends KernelTestCase
                     ['ticker' => 'PEAC', 'name' => 'Peacock Heritage Group', 'type' => 'STOCK', 'sector' => 'Consumer Discretionary', 'quantity' => 300, 'avgCost' => 210.0, 'price' => 210.0, 'marketValue' => 63000.0, 'unrealizedPnL' => 0.0, 'unrealizedReturn' => 0.0, 'weight' => 0.051, 'dividendsReceived' => 0.0, 'isBankrupt' => false],
                 ],
                 'openOrders' => [['id' => 41, 'ticker' => 'LAKE', 'action' => 'BUY', 'orderType' => 'STOP_LIMIT', 'quantity' => 100, 'limitPrice' => 80.0, 'stopPrice' => 82.0, 'createdAt' => new \DateTimeImmutable('2026-10-01')]],
-                'tradeHistory' => [], 'dividendPayments' => [], 'allocation' => [
+                'tradeHistory' => [
+                    ['ticker' => 'LAKE', 'assetType' => 'STOCK', 'action' => 'BUY', 'orderType' => 'LIMIT', 'origin' => null, 'quantity' => 1200, 'filledQuantity' => 1200, 'executionPrice' => 70.1, 'limitPrice' => 70.5, 'status' => 'FILLED', 'spreadCost' => 33.6, 'impactCost' => 12.0, 'stampDuty' => 84.12, 'createdAt' => new \DateTimeImmutable('2026-08-03 10:00'), 'filledAt' => new \DateTimeImmutable('2026-08-03 10:05')],
+                    ['ticker' => 'LAKE-C-90-Y15Q2', 'assetType' => 'OPTION', 'action' => 'WRITE', 'orderType' => 'MARKET', 'origin' => null, 'quantity' => 2, 'filledQuantity' => 2, 'executionPrice' => 1.85, 'limitPrice' => null, 'status' => 'FILLED', 'spreadCost' => 4.0, 'impactCost' => null, 'stampDuty' => null, 'createdAt' => new \DateTimeImmutable('2026-08-10 11:00'), 'filledAt' => new \DateTimeImmutable('2026-08-10 11:00')],
+                    ['ticker' => 'PEAC', 'assetType' => 'STOCK', 'action' => 'SELL', 'orderType' => 'MARKET', 'origin' => 'MARGIN_CALL', 'quantity' => 40, 'filledQuantity' => 0, 'executionPrice' => null, 'limitPrice' => null, 'status' => 'CANCELLED', 'spreadCost' => null, 'impactCost' => null, 'stampDuty' => null, 'createdAt' => new \DateTimeImmutable('2026-09-01 12:00'), 'filledAt' => null],
+                ], 'dividendPayments' => [], 'allocation' => [
                     ['label' => 'Stocks', 'value' => 900000, 'share' => 0.729, 'colour' => 'bg-series-blue'],
                     ['label' => 'Index funds', 'value' => 134567, 'share' => 0.109, 'colour' => 'bg-series-orange'],
                     ['label' => 'Cash', 'value' => 200000, 'share' => 0.162, 'colour' => 'bg-on-surface-faint'],
@@ -247,20 +258,25 @@ final class PagesRenderTest extends KernelTestCase
                     'row' => ['rank' => 7, 'forfeited' => false, 'weeks' => 137, 'return' => 0.214, 'benchmarkReturn' => 0.171, 'excess' => 0.043, 'sharpe' => 0.81, 'beta' => 1.12, 'alpha' => 0.018, 'maxDrawdown' => 0.137],
                 ],
                 'watchlist' => [['ticker' => 'HUMM', 'name' => 'Hummock Foods', 'assetType' => 'STOCK', 'price' => 41.07, 'change' => -0.0121]],
-                'priceAlerts' => [['ticker' => 'HUMM', 'direction' => 'BELOW', 'targetPrice' => 38.0]],
+                'alertsByTicker' => ['HUMM' => [['ticker' => 'HUMM', 'direction' => 'BELOW', 'targetPrice' => 38.0]]],
                 'freshStartBlocker' => null, 'freshStartCapital' => 23456.0,
             ]],
         ];
+
+        // The dashboard's figures the builder derives from its rows.
+        $book = $pages['dashboard'][2]['holdings'];
+        $pages['dashboard'][2] += ['holdingsFeed' => \App\Service\View\DashboardPageBuilder::holdingsFeed($book), 'largestWeight' => \App\Service\View\DashboardPageBuilder::largestWeight($book)];
 
         // The company page for a telecom (seven summary tiles, its operating figures charted) and an insurer, from the
         // bank's stub.
         $pages['stock-telecom'] = ['/stock/WIRE', 'stock/index.html.twig', array_replace($pages['stock'][2], [
             'isFinancial' => false, 'businessModel' => 'telecom', 'shortUtilization' => 0.93, 'borrowFee' => 0.081,
+            'industryCharts' => ['kpiHistoryChart'], 'industryDescription' => \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS['telecom'], 'displayReturn' => 0.09,
             'creditHealth' => [
                 'inDefault' => false, 'quartersInDefault' => 0, 'cureDueNextReport' => false,
                 'revolverCommitment' => 500000000.0, 'revolverDrawn' => 100000000.0, 'revolverUtilization' => 0.2,
                 'netDebtToEbitda' => 1.8, 'covenantLimit' => 3.5, 'hasCovenantHeadroom' => true,
-                'interestCoverage' => 6.2, 'distanceToDefault' => 3.1, 'coverageState' => 'adequate',
+                'interestCoverage' => 6.2, 'distanceToDefault' => 3.1, 'investmentGradeDistance' => \App\Service\Market\Bond\CreditRatingAgency::THRESHOLD_BBB, 'coverageState' => 'adequate',
             ],
             'financialSummary' => [
                 ['label' => 'Operating margin', 'value' => 0.22, 'format' => \App\Service\View\FigureFormat::Percent], ['label' => 'ROIC − WACC', 'value' => 0.011, 'format' => \App\Service\View\FigureFormat::SignedPercent],
@@ -272,6 +288,7 @@ final class PagesRenderTest extends KernelTestCase
         ])];
         $pages['stock-insurer'] = ['/stock/GULL', 'stock/index.html.twig', array_replace($pages['stock'][2], [
             'isInsurer' => true, 'businessModel' => 'insurance',
+            'industryCharts' => ['kpiHistoryChart', 'regulatoryRatiosChart', 'insuranceDualEngineChart'], 'industryDescription' => \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS['insurance'],
             'financialSummary' => [['label' => 'Capital ratio', 'value' => 0.25, 'format' => \App\Service\View\FigureFormat::Percent], ['label' => 'ROE', 'value' => 0.09, 'format' => \App\Service\View\FigureFormat::Percent], ['label' => 'Combined ratio', 'value' => 0.94, 'format' => \App\Service\View\FigureFormat::Percent], ['label' => 'Loss ratio', 'value' => 0.63, 'format' => \App\Service\View\FigureFormat::Percent], ['label' => 'Expense ratio', 'value' => 0.31, 'format' => \App\Service\View\FigureFormat::Percent]],
             'kpiSeries' => ['loss_ratio' => ['label' => 'Loss ratio', 'format' => \App\Service\View\FigureFormat::Percent], 'expense_ratio' => ['label' => 'Expense ratio', 'format' => \App\Service\View\FigureFormat::Percent]],
         ])];
@@ -280,6 +297,7 @@ final class PagesRenderTest extends KernelTestCase
         $pages['stock-biotech'] = ['/stock/IBIS', 'stock/index.html.twig', array_replace($pages['stock'][2], [
             'asset' => array_replace($pages['stock'][2]['asset'], ['ticker' => 'IBIS', 'name' => 'Ibis Pharmaceuticals', 'sector' => 'Health Care', 'industry' => 'Drug Manufacturers - General']),
             'isFinancial' => false, 'businessModel' => 'biotech', 'generalInfo' => StockInfo::DESCRIPTIONS['IBIS'] ?? '',
+            'industryCharts' => ['reinvestmentIntensityChart'], 'industryDescription' => \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS['biotech'], 'displayReturn' => 0.09,
             'pipeline' => [
                 'lateStageAssets' => 3.4, 'readoutsPerYear' => 1.34, 'protectedShare' => 0.71, 'franchiseChange' => 0.083, 'rndReplacement' => 0.92, 'ramping' => 2,
                 'ladder' => \App\Service\View\BiotechPipelineBuilder::ladder([
@@ -298,7 +316,8 @@ final class PagesRenderTest extends KernelTestCase
             ['rank' => 3, 'ticker' => 'WIRE', 'name' => 'Wirefield Telecom', 'sector' => 'Communication Services', 'price' => 22.9, 'marketCap' => 7.4e10, 'floatCap' => 6.1e10, 'adjustedCap' => 6.1e10, 'volatility' => 0.18, 'weight' => 0.25, 'targetWeight' => null, 'changePercent' => null, 'isNew' => true],
         ];
         $pages['stock-etf'] = ['/stock/LBI', 'stock/index.html.twig', array_replace($pages['stock'][2], [
-            'isEtf' => true, 'isFinancial' => false, 'businessModel' => null,
+            'isEtf' => true, 'isFinancial' => false, 'businessModel' => 'none',
+            'industryCharts' => [], 'industryDescription' => 'The thirty largest companies on the board by free float.', 'displayReturn' => null, 'fundStake' => 0.0,
             'asset' => array_replace($pages['stock'][2]['asset'], ['ticker' => 'LBI', 'name' => 'Skein Lakebird 30 ETF', 'price' => 412.37]),
             'components' => $members, 'pieLabels' => array_column($members, 'ticker'), 'pieData' => array_column($members, 'adjustedCap'),
             'sharesMap' => ['LAKE' => 1.2e9, 'GULL' => 2.02e9, 'WIRE' => 2.66e9],
@@ -318,11 +337,27 @@ final class PagesRenderTest extends KernelTestCase
                 'expenseRatio' => 0.0005, 'navPremium' => 0.00042, 'arbitrageBand' => 0.0015, 'sharesOutstanding' => 4.2e7,
                 'distributionYield' => 0.0105, 'accruedIncome' => 0.85, 'feesPaidPerShare' => 1.94, 'tradingCostsPerShare' => 0.12,
                 'trackingDifference' => 0.0012,
+                'baseLevel' => \App\Service\Math\FinancialConstants::INDEX_BASE_LEVEL, 'membershipBuffer' => \App\Service\Market\Index\IndexCommittee::INDEX_MEMBERSHIP_BUFFER,
+                'distributionsPerYear' => \App\Service\Math\FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR,
             ],
         ])];
 
         // A listed fund manager quoted against its net assets: the NAV premium chart beside the multiples.
         $pages['stock-fund'] = ['/stock/SWAN', 'stock/index.html.twig', array_replace($pages['stock'][2], ['netAssetValue' => ['premium' => -0.042]])];
+
+        // A bank, quoted on tangible book and judged on its capital ratio (CompanySnapshotBuilder::capitalPosition).
+        $pages['stock-bank'] = ['/stock/LAKE', 'stock/index.html.twig', array_replace($pages['stock'][2], [
+            'isFinancial' => true, 'businessModel' => 'commercial_bank', 'displayReturn' => 0.124,
+            'industryCharts' => ['netInterestEngineChart', 'regulatoryRatiosChart'], 'industryDescription' => \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS['commercial_bank'],
+            'capital' => ['tangibleBookPerShare' => 52.4, 'priceToTangibleBook' => 1.61, 'returnOnTangibleEquity' => 0.141, 'goodwillShare' => 0.08, 'ratio' => 0.094, 'zone' => 'Safe', 'cet1' => 0.118],
+            'capitalThresholds' => ['warning' => 0.08, 'distress' => 0.05, 'bankrupt' => 0.03],
+        ])];
+
+        // A miner in default, seen signed in: the credit card under stress, the industry card with its merger review,
+        // management, peers, holdings, a listed bond, an option chain and the business map.
+        $pages['stock-industrial'] = ['/stock/FNCH', 'stock/index.html.twig', array_replace($pages['stock'][2], self::minerStock())];
+
+        $pages += self::bondPages();
 
         self::bootKernel();
         $container = static::getContainer();
@@ -335,7 +370,7 @@ final class PagesRenderTest extends KernelTestCase
             $request = Request::create($path);
             $request->setSession(new Session(new MockArraySessionStorage()));
             $stack->push($request);
-            $tokens->setToken($name === 'dashboard'
+            $tokens->setToken(in_array($name, ['dashboard', 'bond-held', 'bond-redeemed', 'stock-industrial'], true)
                 ? new UsernamePasswordToken((new User())->setEmail('kestrel@example.com')->setUsername('kestrel'), 'main', ['ROLE_USER'])
                 : null);
             $html = $twig->render($template, $data);
@@ -353,6 +388,166 @@ final class PagesRenderTest extends KernelTestCase
             $this->assertStringContainsString($stage->label(), $html);
         }
         $stack->pop();
+    }
+
+    /**
+     * The reserve page as SovereignReservePageBuilder hands it over: a stub state with the fund open, a head named and
+     * a programme running, over the first eight listings and the District's clearinghouse.
+     *
+     * @return array<string, mixed>
+     */
+    private function reservePage(): array
+    {
+        $rows = [...array_slice(InitialMarket::STOCKS, 0, 8), ...array_values(array_filter(InitialMarket::STOCKS, static fn(array $row): bool => $row['ticker'] === 'ACC'))];
+        $board = [];
+        foreach ($rows as $i => $row) {
+            $board[] = (new \App\Entity\Stock())->setTicker($row['ticker'])->setName($row['name'])->setSector($row['sector'])
+                ->setPrice((string) (20 + (7 * $i)))->setSharesOutstanding((80 + (35 * $i)) * 1_000_000)->setPublicFloatPercentage('0.8')->setLastDividend('0.4');
+        }
+        $stocks = $this->createStub(\App\Repository\StockRepository::class);
+        $stocks->method('findAll')->willReturn($board);
+        $macro = new \App\DTO\MacroStateDTO(
+            totalTime: 14.4,
+            nominalGdpIndex: 131.0,
+            lastSovereignRebalanceAt: 14.25,
+            sovereignFundTargetWeight: 0.0314,
+            sovereignFundPolicyEquityShare: 0.62,
+            sovereignFundDollarsPerGdp: 1.0e10,
+            sovereignFundAnnualDraw: 2.4e10,
+            sovereignFundRebalanceMonthsLeft: 2.0,
+            sovereignFundRebalanceShare: 0.0036,
+            sovereignFundToGdp: 1.52,
+            sovereignFundDomesticWeight: 0.0262,
+            sovereignFundEquityShare: 0.6,
+            sovereignFundOwnershipShare: 0.061,
+            sovereignFundDrawToGdp: 0.0184,
+            sovereignFundStampDutyYearToDate: 1.1e9,
+            sovereignFundStampDutyToGdp: 0.0016,
+            sovereignDebtToGdp: 0.84,
+            sovereignNetDebtToGdp: 0.31,
+            sovereignFundReturnIndex: 134.2,
+            sovereignFundExpectedRealReturn: 0.0318,
+            foreignBondYield: 0.0334,
+        );
+        $politics = new \App\DTO\PoliticsStateDTO(totalTime: 14.4, heads: [\App\Service\Politics\Department\Office::FundHead->value => [
+            'name' => 'Ines Varga', 'birth' => -41.0, 'termStart' => 12.0, 'stance' => \App\Service\Politics\Department\SovereignReserveFund::stance(0.62),
+        ] + \App\Service\Politics\Department\Office::VACANT]);
+
+        return (new \App\Service\View\SovereignReservePageBuilder($stocks, new \App\Service\Macro\Subsystem\SovereignFundSubsystem(new \App\Service\Math\MathUtility())))->build($macro, $politics);
+    }
+
+    /**
+     * The bond desk from entities built as the auction and the corporate desk build them: the ladder with an inverted
+     * curve, an issue signed out, a corporate issue held with a resting order, and a redeemed issue. The view
+     * variables mirror BondController; keep the two in step.
+     *
+     * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+     */
+    private static function bondPages(): array
+    {
+        $issuer = (new \App\Entity\Stock())->setTicker('LAKE')->setName('Lakebird Bank')->setCreditRating('A')->setDynamicCreditSpread('0.0134');
+        $bond = static fn(string $ticker, string $name, float $tenor, float $coupon, float $clean, float $ytm, float $duration, float $convexity): \App\Entity\Bond => (new \App\Entity\Bond())
+            ->setTicker($ticker)->setName($name)->setTenorYears((string) $tenor)->setCouponRate((string) $coupon)->setFaceValue('1000')
+            ->setIssuedAtTime(13.5 - $tenor / 2)->setMaturesAtTime(13.5 + $tenor / 2)->setLastCouponTime(13.25)
+            ->setCleanPrice((string) $clean)->setAccruedInterest('8.25')->setPrice((string) ($clean + 8.25))
+            ->setYieldToMaturity((string) $ytm)->setModifiedDuration((string) $duration)->setConvexity((string) $convexity)->setOutstandingFace('42000000000');
+        $sovereign2 = $bond('G02-007', '4.125% Sovereign 2Y due Y14.50', 2.0, 0.04125, 1001.2, 0.0402, 0.97, 1.4)->setIsOnTheRun(true);
+        $sovereign10 = $bond('G10-003', '3.750% Sovereign 10Y due Y18.50', 10.0, 0.0375, 1004.15, 0.0368, 4.62, 25.3)->setIsOnTheRun(true);
+        $older10 = $bond('G10-002', '3.250% Sovereign 10Y due Y16.00', 10.0, 0.0325, 981.4, 0.0371, 2.41, 6.9);
+        $corporate = $bond('LAKE-05Y02', 'LAKE 5.100% Senior Notes 5Y due Y16.00', 5.0, 0.051, 1012.9, 0.0478, 2.38, 6.8)
+            ->setIssuer($issuer)->setSeniority(\App\Entity\Bond::SENIORITY_SENIOR_UNSECURED)->setCreditSpread('0.0134')->setOutstandingFace('1500000000');
+        $redeemed = $bond('G02-004', '2.875% Sovereign 2Y due Y13.00', 2.0, 0.02875, 1000.0, 0.0, 0.0, 0.0)->setStatus(\App\Entity\Bond::STATUS_MATURED)->setAccruedInterest('0')->setPrice('1000');
+
+        $row = static fn(\App\Entity\Bond $b, ?float $change): array => ['bond' => $b, 'yearsToMaturity' => $b->yearsToMaturity(13.5), 'change' => $change];
+        $flows = [];
+        for ($k = 1; $k <= 10; $k++) {
+            $flows[] = ['yearsAway' => $k * 0.5 - 0.25, 'amount' => $k === 10 ? 1025.5 : 25.5, 'isRedemption' => $k === 10];
+        }
+        $view = static fn(\App\Entity\Bond $b, array $overrides = []): array => array_replace([
+            'bond' => $b, 'yearsToMaturity' => $b->yearsToMaturity(13.5), 'retired' => null, 'changePercent' => 0.0042,
+            'cashFlows' => $flows, 'annualCouponIncome' => (float) $b->getCouponRate() * 1000.0, 'userQuantity' => 0, 'userAvgCost' => 0.0,
+            'userCouponIncome' => 0.0, 'openOrders' => [], 'dealingPrice' => (float) $b->getPrice() + 0.6,
+            'rateShocks' => \App\Controller\BondController::rateShocks($b), 'ticksPerYear' => 14400,
+        ], $overrides);
+
+        return [
+            'bond-ladder' => ['/bonds', 'bond/ladder.html.twig', [
+                'rowsByTenor' => ['2' => [$row($sovereign2, 0.0011)], '10' => [$row($sovereign10, -0.0063), $row($older10, null)]],
+                'corporateByIssuer' => ['LAKE' => ['issuer' => $issuer, 'rating' => 'A', 'spread' => 0.0134, 'issues' => [$row($corporate, 0.0021)]]],
+                'holdings' => ['G10-003' => 40],
+                'curve' => [['tenor' => 0.25, 'yield' => 0.0431], ['tenor' => 2.0, 'yield' => 0.0402], ['tenor' => 10.0, 'yield' => 0.0368], ['tenor' => 30.0, 'yield' => 0.0381]],
+                'macro' => new \App\DTO\MacroStateDTO(policyRate: 0.0425, inflation: 0.0241, yield2y: 0.0402, yield10y: 0.0368, termPremium10y: 0.0061),
+                'benchmarks' => [
+                    ['label' => '2Y', 'tenor' => 2.0, 'yield' => 0.0402], ['label' => '5Y', 'tenor' => 5.0, 'yield' => 0.0379],
+                    ['label' => '10Y', 'tenor' => 10.0, 'yield' => 0.0368], ['label' => '30Y', 'tenor' => 30.0, 'yield' => 0.0381],
+                ],
+            ]],
+            'bond' => ['/bond/G10-003', 'bond/view.html.twig', $view($sovereign10)],
+            'bond-held' => ['/bond/LAKE-05Y02', 'bond/view.html.twig', $view($corporate, [
+                'changePercent' => -0.011, 'userQuantity' => 25, 'userAvgCost' => 998.1, 'userCouponIncome' => 112.5,
+                'openOrders' => [['id' => 77, 'ticker' => 'LAKE-05Y02', 'action' => 'SELL', 'orderType' => 'LIMIT', 'quantity' => 10, 'limitPrice' => 1025.0]],
+            ])],
+            'bond-redeemed' => ['/bond/G02-004', 'bond/view.html.twig', $view($redeemed, [
+                'retired' => \App\Controller\BondController::RETIRED[\App\Entity\Bond::STATUS_MATURED], 'changePercent' => null, 'cashFlows' => [],
+            ])],
+        ];
+    }
+
+    /**
+     * The keys a struggling miner's page carries on top of the bank's stub, as the stock page builders hand them over.
+     */
+    private static function minerStock(): array
+    {
+        $leg = static fn(string $ticker, float $mark, float $delta, float $theta, int $position, bool $itm): array => [
+            'ticker' => $ticker, 'mark' => $mark, 'impliedVolatility' => 0.41, 'delta' => $delta, 'gamma' => 0.03, 'theta' => $theta,
+            'dailyDecay' => abs($theta) / 365.0, 'openInterest' => 1200, 'position' => $position, 'inTheMoney' => $itm,
+        ];
+
+        return [
+            'asset' => ['ticker' => 'FNCH', 'name' => 'Goldfinch Mining', 'sector' => 'Materials', 'industry' => 'Gold', 'price' => 84.21, 'isBankrupt' => false, 'bankrupt' => false, 'sharesOutstanding' => 310000000, 'earningsPerShare' => -1.12, 'currentRoe' => 0.0, 'baselineRoe' => 0.0, 'currentRoic' => 0.0, 'baselineRoic' => 0.064, 'publicFloatPercentage' => 0.7, 'volatility' => 0.41, 'totalEquity' => 6.4e9, 'debtToEquity' => 2.6, 'creditRating' => 'B', 'creditSpread' => 0.052, 'dynamicCreditSpread' => 0.061, 'systemicImportance' => 'Base', 'beta' => 1.4, 'accrualsRatio' => 0.031],
+            'isFinancial' => false, 'businessModel' => 'mining', 'lifecycleStage' => \App\Data\Company\LifecycleStage::ShakeOut,
+            'industryCharts' => ['cyclicalDynamicsChart'], 'industryDescription' => \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS['mining'],
+            'marketCap' => 2.61e10, 'peRatio' => null, 'dividendYield' => 0.0, 'strategicStake' => 0.0, 'marketShare' => 0.31, 'displayReturn' => 0.064, 'fundStake' => 0.161,
+            'analystTargets' => ['rating' => 'Underperform', 'tone' => 'down', 'upside' => -0.12, 'consensus' => 74.1, 'growth_analyst' => 70.2, 'value_analyst' => 77.9, 'income_analyst' => 74.4],
+            'creditHealth' => [
+                'inDefault' => true, 'quartersInDefault' => 2, 'cureDueNextReport' => true,
+                'revolverCommitment' => 0.0, 'revolverDrawn' => 0.0, 'revolverUtilization' => null,
+                'netDebtToEbitda' => 5.6, 'covenantLimit' => 2.5, 'hasCovenantHeadroom' => false,
+                'interestCoverage' => -0.4, 'distanceToDefault' => 0.8, 'investmentGradeDistance' => \App\Service\Market\Bond\CreditRatingAgency::THRESHOLD_BBB, 'coverageState' => 'negative',
+            ],
+            'industry' => [
+                'tracked' => true, 'pricesCapacity' => true, 'addressableShare' => 0.31,
+                'saturation' => ['threshold' => 0.25, 'penalty' => 0.0021, 'severity' => 0.12, 'trueReturn' => 0.11, 'trailingReturn' => 0.094, 'marginalReturn' => 0.072, 'moatFactor' => 1.0],
+                'rosterShare' => 0.38, 'peerShares' => ['SINK' => 0.41, 'FNCH' => 0.38, 'DRLL' => 0.21], 'rosterSize' => 3,
+                'capacityRatio' => 1.08, 'installedCapacity' => 4.2e10, 'trendCapacity' => 3.9e10, 'balance' => 'overbuilt', 'balanceTone' => 'warn',
+                'priceMove' => 0.93 - 1.0, 'rivalShareDrain' => 0.0042, 'ownPriceVolumeShift' => -0.0011,
+                'mergerReview' => ['herfindahl' => 0.3266, 'highlyConcentrated' => true, 'acquirerShare' => 0.38, 'fringeShare' => 0.12, 'clearedShare' => 0.003, 'reviewBinds' => true, 'screens' => ['delta' => 0.02, 'concentrated' => 0.25, 'shareCeiling' => 0.35]],
+            ],
+            'management' => ['style' => 'empire_builder', 'label' => 'Empire Builder', 'mandate' => 'mandated to grow, and will fund projects a stricter board would refuse', 'conviction' => 'pronounced', 'tone' => 'warn', 'tenureYears' => 3.2],
+            'peers' => [
+                ['ticker' => 'SINK', 'name' => 'Sinkhole Gold', 'industry' => 'Gold', 'price' => 31.2, 'marketCap' => 9.4e9, 'peRatio' => 11.2, 'roic' => 0.081, 'totalEquity' => 4.1e9, 'isBankrupt' => false, 'sameIndustry' => true],
+                ['ticker' => 'DRLL', 'name' => 'Drillwell Copper', 'industry' => 'Copper', 'price' => 18.7, 'marketCap' => 5.2e9, 'peRatio' => null, 'roic' => -0.012, 'totalEquity' => 2.2e9, 'isBankrupt' => false, 'sameIndustry' => false],
+            ],
+            'anchorPortfolio' => ['totalValue' => 3.1e9, 'shareOfNav' => 0.42, 'holdings' => [
+                ['ticker' => 'KEEL', 'name' => 'Keel Line Shipping', 'industry' => 'Marine Shipping', 'ownership' => 0.34, 'tier' => 'Associate', 'price' => 22.4, 'changePercent' => 0.018, 'value' => 2.6e9, 'shareOfPortfolio' => 0.84, 'shareOfNav' => 0.35, 'isBankrupt' => false],
+                ['ticker' => 'KITE', 'name' => 'Kite Freight', 'industry' => 'Trucking', 'ownership' => 0.12, 'tier' => 'Minority', 'price' => 0.0, 'changePercent' => null, 'value' => 0.0, 'shareOfPortfolio' => 0.0, 'shareOfNav' => 0.0, 'isBankrupt' => true],
+            ]],
+            'corporateBonds' => [['ticker' => 'CB-FNCH-5Y', 'name' => 'Goldfinch 7.25% Year 19', 'couponRate' => 0.0725, 'cleanPrice' => 81.4, 'yieldToMaturity' => 0.124, 'modifiedDuration' => 3.6, 'maturesAtTime' => 18.2, 'yearsToMaturity' => 4.4]],
+            'optionsListed' => true, 'optionsReason' => null, 'optionDealerGammaPerPercent' => 125000.0, 'optionOpenInterest' => 4200, 'optionMultiplier' => 100,
+            'optionExpiries' => [['serial' => 1, 'expiresAtTime' => 14.25, 'daysToExpiry' => 41.0, 'atmVolatility' => 0.38, 'atmDistance' => 0.79, 'rows' => [
+                ['strike' => 80.0, 'isNearestStrike' => false, 'call' => $leg('FNCH-C80', 7.12, 0.71, -9.1, 2, true), 'put' => null],
+                ['strike' => 85.0, 'isNearestStrike' => true, 'call' => $leg('FNCH-C85', 4.05, 0.48, -11.4, 0, false), 'put' => $leg('FNCH-P85', 4.61, -0.52, -10.2, -1, true)],
+            ]]],
+            'businessMap' => [
+                'edges' => [['d:metals', 'rev:gold', -1, 0.004]],
+                'outside' => [['group' => 'Input markets'], ['id' => 'd:metals', 'label' => 'Precious metals', 'value' => -0.031, 'format' => \App\Service\View\FigureFormat::SignedPercent, 'unit' => null, 'note' => null, 'chips' => [['text' => 'on gold', 'figure' => -0.004, 'format' => \App\Service\View\FigureFormat::SignedPercent, 'tone' => 'down']], 'feeds' => ['Gold']]],
+                'inside' => [['id' => 'ops:gold', 'label' => 'Gold', 'value' => null, 'format' => null, 'unit' => null, 'note' => null, 'chips' => [['text' => 'Operational headwinds', 'figure' => null, 'format' => null, 'tone' => 'down']]]],
+                'produced' => [['id' => 'rev:gold', 'label' => 'Gold', 'value' => 2.1e9, 'format' => \App\Service\View\FigureFormat::LargeMoney, 'share' => 1.0, 'change' => -0.031, 'note' => null, 'chips' => [['text' => 'Soft market', 'figure' => null, 'format' => null, 'tone' => 'neutral']]]],
+                'handoff' => ['revenue' => 2.1e9, 'change' => -0.031],
+                'event' => ['text' => 'Strike at the coldwater pit', 'figure' => null, 'format' => null, 'tone' => 'warn'],
+            ],
+            'priceAlerts' => [],
+        ];
     }
 
     /** A newswire page from the presenter, so each card is the one the page renders live. */

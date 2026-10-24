@@ -1,6 +1,6 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Leaderboard | Aerie Exchange{% endblock %}
+{% block page_title %}Leaderboard{% endblock %}
 
 {% macro season_row(row, myId) %}
     {% set isMe = myId is not null and row.userId == myId %}
@@ -10,8 +10,8 @@
             {{ row.username }}
             {% if isMe %}<span class="ml-2 text-xs font-normal text-primary">You</span>{% endif %}
         </th>
-        <td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.return is null ? 'text-on-surface-faint' : row.return|signed_class }}">{{ row.return is null ? '—' : row.return|pct(2, true) }}</td>
-        <td class="px-4 py-3 font-mono tabular-nums text-right {{ row.excess is null ? 'text-on-surface-faint' : row.excess|signed_class }}">{{ row.excess is null ? '—' : row.excess|pct(2, true) }}</td>
+        <td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.return|signed_class }}">{{ row.return|pct(2, true) }}</td>
+        <td class="px-4 py-3 font-mono tabular-nums text-right {{ row.excess|signed_class }}">{{ row.excess|pct(2, true) }}</td>
         <td class="px-4 py-3 font-mono tabular-nums text-right {{ row.sharpe is null ? 'text-on-surface-faint' : 'text-on-surface-variant' }}">{{ row.sharpe is null ? '—' : row.sharpe|number_format(2) }}</td>
         <td class="px-4 py-3 font-mono tabular-nums text-right {{ row.beta is null ? 'text-on-surface-faint' : 'text-on-surface-variant' }}">{{ row.beta is null ? '—' : row.beta|number_format(2) }}</td>
         <td class="px-4 py-3 font-mono tabular-nums text-right {{ row.maxDrawdown > 0 ? 'text-tertiary' : 'text-on-surface-faint' }}">{{ row.maxDrawdown > 0 ? (-row.maxDrawdown)|pct(1, true) : '—' }}</td>
@@ -153,8 +153,8 @@
                             <tr>
                                 <td class="py-2 text-on-surface">Season {{ entry.season.number }}</td>
                                 <td class="py-2 text-right font-mono tabular-nums text-on-surface-variant">{{ entry.finalRank ?? (entry.forfeited ? 'Left' : 'Unranked') }}</td>
-                                <td class="py-2 text-right font-mono tabular-nums {{ entry.finalReturn is null ? 'text-on-surface-faint' : entry.finalReturn|signed_class }}">{{ entry.finalReturn is null ? '—' : entry.finalReturn|pct(2, true) }}</td>
-                                <td class="py-2 text-right font-mono tabular-nums {{ entry.finalBenchmarkReturn is null ? 'text-on-surface-faint' : entry.finalBenchmarkReturn|signed_class }}">{{ entry.finalBenchmarkReturn is null ? '—' : entry.finalBenchmarkReturn|pct(2, true) }}</td>
+                                <td class="py-2 text-right font-mono tabular-nums {{ entry.finalReturn|signed_class }}">{{ entry.finalReturn|pct(2, true) }}</td>
+                                <td class="py-2 text-right font-mono tabular-nums {{ entry.finalBenchmarkReturn|signed_class }}">{{ entry.finalBenchmarkReturn|pct(2, true) }}</td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -171,7 +171,7 @@
                         {% for place in podium.places %}
                             <li class="flex items-center justify-between gap-3">
                                 <span class="text-on-surface"><span class="font-mono text-on-surface-variant mr-2">{{ place.rank }}</span>{{ place.username }}</span>
-                                <span class="font-mono tabular-nums {{ place.return is null ? 'text-on-surface-faint' : place.return|signed_class }}">{{ place.return is null ? '—' : place.return|pct(1, true) }}</span>
+                                <span class="font-mono tabular-nums {{ place.return|signed_class }}">{{ place.return|pct(1, true) }}</span>
                             </li>
                         {% endfor %}
                     </ol>

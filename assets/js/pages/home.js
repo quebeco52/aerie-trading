@@ -1,4 +1,4 @@
-import { formatLarge, formatPercent, signedClass, SIGNED_CLASSES } from '../utils/formatters.js';
+import { formatCurrency, formatLarge, formatPercent, signedClass, SIGNED_CLASSES } from '../utils/formatters.js';
 import { readPageData } from '../utils/page-data.js';
 import { flashTick } from '../utils/tick-flash.js';
 import { setText } from '../utils/set-text.js';
@@ -37,23 +37,17 @@ function initHome() {
         const payload = event.detail;
         if (!payload) return;
 
-        // Update Macro UI
-        if (payload.macro) {
-            const macroCycleEl = document.getElementById('macro-cycle');
-            if (macroCycleEl) {
-                const cycleText = payload.macro.output_gap > 0.01 ? 'Boom' : (payload.macro.output_gap < -0.01 ? 'Bust' : 'Neutral');
-                if (macroCycleEl.textContent !== cycleText) {
-                    setText(macroCycleEl, cycleText);
-                    flashTick(macroCycleEl, 1);
-                }
-            }
+        // The cycle as the ticker names it (MacroStateDTO::economicCycleLabel()), the label the page rendered with.
+        const macroCycleEl = document.getElementById('macro-cycle');
+        if (macroCycleEl && payload.economic_cycle && setText(macroCycleEl, payload.economic_cycle)) {
+            flashTick(macroCycleEl, 1);
         }
 
         // The index tiles: every fund on the frame that has a tile is repainted, whatever it is called.
         if (Array.isArray(payload.stocks)) {
             payload.stocks.forEach(update => {
                 const tileEl = document.getElementById(`index-price-${update.ticker}`);
-                if (tileEl) setText(tileEl, '$' + parseFloat(update.price).toFixed(2));
+                if (tileEl) setText(tileEl, formatCurrency(update.price));
             });
         }
 
@@ -69,20 +63,20 @@ function initHome() {
                     if (stock.is_bankrupt) {
                         rowEl.setAttribute('data-bankrupt', 'true');
                         rowEl.setAttribute('data-mcap', '0');
-                        setText(priceEl, '$0.00');
+                        setText(priceEl, formatCurrency(0));
                         priceEl.classList.add('text-tertiary', 'line-through');
-                        setText(mcapEl, '$0.00');
+                        setText(mcapEl, formatCurrency(0));
                         if (chgEl) {
                             setText(chgEl, '\u2014');
                             chgEl.classList.remove(...SIGNED_CLASSES);
                             chgEl.classList.add(signedClass(null));
                         }
-                        rowEl.classList.add('opacity-50', 'bg-tertiary/10');
+                        rowEl.classList.add('bg-tertiary/10');
                         return;
                     }
 
                     const newPrice = parseFloat(stock.price);
-                    const priceMoved = setText(priceEl, '$' + newPrice.toFixed(2));
+                    const priceMoved = setText(priceEl, formatCurrency(newPrice));
 
                     const sharesCount = sharesByTicker[stock.ticker] || 0;
                     const newMcap = stock.market_cap !== undefined ? stock.market_cap : (newPrice * sharesCount);

@@ -1,16 +1,125 @@
 {# Shared page components: {% import 'partials/_ui.html.twig' as ui %}. The house rules are in .agents/FRONTEND.md. #}
 
-{# Hover/focus tooltip, positioned against its `group` parent. Pair it with a `.term` label. #}
-{% macro tooltip(text, position = 'left', width = 'w-48', vpos = 'top') %}
+{# Values that hold markup (a link, a second span) are passed captured, {% set v %}…{% endset %}, so they print
+   unescaped; a plain string or a filtered figure is passed as it is. #}
+
+{# Hover/focus tooltip, positioned against its `group` parent. Pair it with a `.term` label, or draw both with term;
+   id lets the trigger name it in aria-describedby. #}
+{% macro tooltip(text, position = 'left', width = 'w-48', vpos = 'top', id = null) %}
 	{% set arrowPosition = position == 'right' ? 'right-4' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4') %}
 	{% set alignClass = position == 'right' ? 'right-0' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0') %}
 	{% set verticalClass = vpos == 'bottom' ? 'top-full mt-2.5' : 'bottom-full mb-2.5' %}
 	{% set arrowVerticalClass = vpos == 'bottom' ? '-top-[5px] border-t border-l' : '-bottom-[5px] border-b border-r' %}
 
-	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} {{ verticalClass }} {{ width }} p-2.5 bg-surface-container-high text-on-surface text-2xs leading-relaxed rounded-lg opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-50 normal-case tracking-normal font-normal border border-outline-variant/40">
+	<span role="tooltip"{% if id %} id="{{ id }}"{% endif %} class="block pointer-events-none absolute {{ alignClass }} {{ verticalClass }} {{ width }} p-2.5 bg-surface-container-high text-on-surface text-2xs leading-relaxed rounded-lg opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-50 normal-case tracking-normal font-normal border border-outline-variant/40">
 		{{ text }}
 		<span class="block absolute {{ arrowVerticalClass }} {{ arrowPosition }} w-2.5 h-2.5 bg-surface-container-high border-outline-variant/40 transform rotate-45"></span>
 	</span>
+{% endmacro %}
+
+{# A label explained on hover and keyboard focus. opts: tag ('dt', or 'span' outside a dl), class (the wrapper's text
+   classes, default text-on-surface-variant), and position, width (default w-72) and vpos as for tooltip. #}
+{% macro term(label, tip, opts = {}) %}
+	{% import _self as ui %}
+	{% set id = ui_id('tip') %}
+	{% set tag = opts.tag ?? 'dt' %}
+	<{{ tag }} class="group relative cursor-help {{ opts.class ?? 'text-on-surface-variant' }}" tabindex="0" aria-describedby="{{ id }}">
+		<span class="term">{{ label }}</span>
+		{{ ui.tooltip(tip, opts.position ?? 'left', opts.width ?? 'w-72', opts.vpos ?? 'top', id) }}
+	</{{ tag }}>
+{% endmacro %}
+
+{# One row of a stats list (a `dl` with divide-y): label left, figure right in mono. opts: id and attrs (a hash of
+   further attributes) on the dd, tone (a text class in place of text-on-surface), sub (a small note after the
+   figure), labelClass (the plain label's classes), tip (the label becomes a term; position, width, vpos pass on). #}
+{% macro stat(label, value, opts = {}) %}
+	{% import _self as ui %}
+	<div class="py-2 flex justify-between items-center">
+		{% if opts.tip is defined %}
+			{{ ui.term(label, opts.tip, opts) }}
+		{% else %}
+			<dt class="{{ opts.labelClass ?? 'text-on-surface-variant' }}">{{ label }}</dt>
+		{% endif %}
+		<dd class="font-medium font-mono tabular-nums {{ opts.tone ?? 'text-on-surface' }}"{% if opts.id is defined %} id="{{ opts.id }}"{% endif %}{% for name, attr in opts.attrs ?? {} %} {{ name }}="{{ attr }}"{% endfor %}>
+			{{- value -}}
+			{%- if opts.sub is defined and opts.sub is not null %} <span class="text-on-surface-variant font-normal text-2xs">{{ opts.sub }}</span>{% endif -%}
+		</dd>
+	</div>
+{% endmacro %}
+
+{# A boxed figure in a grid of tiles: a small label, the value and an optional faint note under it. opts: tone (in
+   place of text-on-surface), mono (default true; false for a word such as a sector), id (on the value), tip (the
+   label becomes a term; position, width, vpos pass on). #}
+{% macro tile(label, value, note = null, opts = {}) %}
+	{% import _self as ui %}
+	<div class="p-3.5 rounded bg-surface-container-lowest/60 border border-outline-variant/15">
+		{% if opts.tip is defined %}
+			{{ ui.term(label, opts.tip, opts|merge({tag: 'span', class: 'text-xs text-on-surface-variant'})) }}
+		{% else %}
+			<span class="text-xs text-on-surface-variant">{{ label }}</span>
+		{% endif %}
+		<p class="text-base font-semibold {{ opts.tone ?? 'text-on-surface' }}{{ (opts.mono ?? true) ? ' font-mono tabular-nums' }} mt-1"{% if opts.id is defined %} id="{{ opts.id }}"{% endif %}>{{ value }}</p>
+		{% if note is not null %}
+			<p class="text-2xs text-on-surface-faint mt-1">{{ note }}</p>
+		{% endif %}
+	</div>
+{% endmacro %}
+
+{# A headline figure in a page header's dl: label, value and an optional note in a second dd. opts: id and attrs on
+   the value, tone (in place of text-on-surface), mono (default true), size (default text-lg), note, noteId (a note
+   a page script fills: its dd is drawn even when empty), noteSize (default text-3xs) and noteMono (default true; false
+   for a note in words), tip (the label becomes a term; position, width, vpos pass on), class and wrapId on the
+   wrapping div. #}
+{% macro figure(label, value, opts = {}) %}
+	{% import _self as ui %}
+	<div{% if opts.class is defined %} class="{{ opts.class }}"{% endif %}{% if opts.wrapId is defined %} id="{{ opts.wrapId }}"{% endif %}>
+		{% if opts.tip is defined %}
+			{{ ui.term(label, opts.tip, {class: 'text-xs text-on-surface-variant', position: opts.position ?? 'left', width: opts.width ?? 'w-72', vpos: opts.vpos ?? 'top'}) }}
+		{% else %}
+			<dt class="text-xs text-on-surface-variant">{{ label }}</dt>
+		{% endif %}
+		<dd class="mt-0.5 {{ opts.size ?? 'text-lg' }} font-semibold{{ (opts.mono ?? true) ? ' font-mono tabular-nums' }} {{ opts.tone ?? 'text-on-surface' }}"{% if opts.id is defined %} id="{{ opts.id }}"{% endif %}{% for name, attr in opts.attrs ?? {} %} {{ name }}="{{ attr }}"{% endfor %}>{{ value }}</dd>
+		{% if opts.note is defined or opts.noteId is defined %}
+			<dd class="mt-0.5 {{ opts.noteSize ?? 'text-3xs' }}{{ (opts.noteMono ?? true) ? ' font-mono tabular-nums' }} text-on-surface-variant"{% if opts.noteId is defined %} id="{{ opts.noteId }}"{% endif %}>{{ opts.note ?? '' }}</dd>
+		{% endif %}
+	</div>
+{% endmacro %}
+
+{# The faint dash a cell shows when it has no figure. #}
+{% macro missing() %}<span class="text-on-surface-faint">—</span>{% endmacro %}
+
+{# The text colour of an order's side: buying (a buy, or a cover of a short) in the rise colour, selling (a sale, a
+   short, an option written) in the fall colour. #}
+{% macro side(action) %}{{ action in ['BUY', 'COVER'] ? 'text-secondary' : 'text-tertiary' }}{% endmacro %}
+
+{# Radio buttons drawn as a segmented control. options: a list of {value, label, tone, checked}; tone 'up' (a buy)
+   or 'down' (a sale) fills the checked button in that colour, otherwise the neutral highlight. opts: label (the
+   group's aria-label), action (a data-action on every input), class (the row's layout, default 'flex gap-2'; a
+   'grid …' layout drops flex-1), pad (default py-1.5), attrs (a hash of further attributes on the row). #}
+{% macro choices(name, options, opts = {}) %}
+	{% set checkedTone = {
+		up: 'peer-checked:bg-secondary peer-checked:text-on-secondary',
+		down: 'peer-checked:bg-tertiary peer-checked:text-on-tertiary',
+		neutral: 'peer-checked:bg-surface-container-high peer-checked:text-primary',
+	} %}
+	{% set layout = opts.class ?? 'flex gap-2' %}
+	<div class="{{ layout }} bg-surface-container-lowest p-1 rounded border border-outline-variant/20" role="radiogroup"{% if opts.label is defined %} aria-label="{{ opts.label }}"{% endif %}{% for name, attr in opts.attrs ?? {} %} {{ name }}="{{ attr }}"{% endfor %}>
+		{% for option in options %}
+			<label class="{{ layout starts with 'grid' ? '' : 'flex-1 ' }}cursor-pointer">
+				<input type="radio" name="{{ name }}" value="{{ option.value }}" class="peer sr-only"{% if option.checked ?? false %} checked{% endif %}{% if opts.action is defined %} data-action="{{ opts.action }}"{% endif %}>
+				<div class="{{ opts.pad ?? 'py-1.5' }} text-center text-xs font-semibold rounded text-on-surface-variant {{ checkedTone[option.tone ?? 'neutral'] }} peer-focus-visible:ring-2 peer-focus-visible:ring-primary/60 transition-all">{{ option.label }}</div>
+			</label>
+		{% endfor %}
+	</div>
+{% endmacro %}
+
+{# The cancel button for a resting order: posts its token to the cancel route once the player confirms (Turbo's
+   data-turbo-confirm asks before the form is sent). #}
+{% macro cancel_order(order) %}
+	<form action="{{ path('app_trade_cancel', {id: order.id}) }}" method="POST" class="inline" data-turbo-confirm="Cancel the {{ order.orderType|replace({'_': ' '})|lower }} order to {{ order.action|lower }} {{ order.quantity|number_format }} {{ order.ticker }}?">
+		<input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
+		<button type="submit" class="cursor-pointer px-2.5 py-1 rounded border border-outline-variant/30 text-on-surface-variant hover:text-tertiary hover:border-tertiary/40 text-xs font-medium transition-colors">Cancel</button>
+	</form>
 {% endmacro %}
 
 {# A count of days with its noun, at least one: talks settled within a day took office on its first. #}

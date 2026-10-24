@@ -26,22 +26,25 @@
 			</thead>
 			<tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
 				{% for holding in anchorPortfolio.holdings %}
-					<tr class="{{ holding.isBankrupt ? 'opacity-50' : '' }}">
+					{# A delisted holding stays listed, in the faint text of a figure that no longer counts. #}
+					{% set ink = holding.isBankrupt ? 'text-on-surface-faint' : 'text-on-surface' %}
+					{% set inkVariant = holding.isBankrupt ? 'text-on-surface-faint' : 'text-on-surface-variant' %}
+					<tr>
 					<td class="py-2.5">
-						<a href="/stock/{{ holding.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ holding.ticker }}</a>
-						<span class="block text-2xs text-on-surface-variant">{{ holding.industry ?? holding.name }}</span>
+						<a href="/stock/{{ holding.ticker }}" class="font-bold {{ ink }} hover:text-primary transition-colors">{{ holding.ticker }}</a>
+						<span class="block text-2xs {{ inkVariant }}">{{ holding.industry ?? holding.name }}</span>
 					</td>
 					<td class="py-2.5 text-right">
-						<span class="font-mono tabular-nums text-on-surface">{{ holding.ownership|pct(0) }}</span>
-						<span class="block text-2xs text-on-surface-variant">{{ holding.tier }}</span>
+						<span class="font-mono tabular-nums {{ ink }}">{{ holding.ownership|pct(0) }}</span>
+						<span class="block text-2xs {{ inkVariant }}">{{ holding.tier }}</span>
 					</td>
-					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ holding.price|money(2) }}</td>
+					<td class="py-2.5 text-right font-mono tabular-nums {{ ink }}">{{ holding.price|money(2) }}</td>
 					<td class="py-2.5 text-right font-mono tabular-nums {{ holding.changePercent|signed_class }}">
-						{%- if holding.changePercent is null -%}&mdash;{%- else -%}{{ holding.changePercent|pct(2, true) }}{%- endif -%}
+						{{- holding.changePercent|pct(2, true) -}}
 					</td>
-					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ holding.value|format_large('$') }}</td>
-					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ holding.shareOfPortfolio|pct(1) }}</td>
-					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ holding.shareOfNav|pct(1) }}</td>
+					<td class="py-2.5 text-right font-mono tabular-nums {{ ink }}">{{ holding.value|format_large('$') }}</td>
+					<td class="py-2.5 text-right font-mono tabular-nums {{ inkVariant }}">{{ holding.shareOfPortfolio|pct(1) }}</td>
+					<td class="py-2.5 text-right font-mono tabular-nums {{ inkVariant }}">{{ holding.shareOfNav|pct(1) }}</td>
 					</tr>
 				{% endfor %}
 			</tbody>

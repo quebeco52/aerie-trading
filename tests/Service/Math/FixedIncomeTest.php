@@ -149,6 +149,32 @@ class FixedIncomeTest extends TestCase
     }
 
     /**
+     * The shift estimate is -D dy + 0.5 C dy^2: pinned on round figures, a rally gains more than a sell-off of the same
+     * size loses by exactly C dy^2, and on a thirty-year bond it tracks the exact repricing to the third-order term.
+     */
+    public function testPriceChangeForShiftIsTheSecondOrderExpansion(): void
+    {
+        $this->assertEqualsWithDelta(-0.0715, FixedIncome::priceChangeForShift(7.5, 70.0, 0.01), 1e-12);
+        $this->assertEqualsWithDelta(0.0785, FixedIncome::priceChangeForShift(7.5, 70.0, -0.01), 1e-12);
+        $this->assertEqualsWithDelta(-0.0375, FixedIncome::priceChangeForShift(7.5, 0.0, 0.005), 1e-12, 'With no convexity, duration alone.');
+        $this->assertEqualsWithDelta(70.0 * 0.0001, FixedIncome::priceChangeForShift(7.5, 70.0, -0.01) + FixedIncome::priceChangeForShift(7.5, 70.0, 0.01), 1e-12);
+        $this->assertSame(0.0, FixedIncome::priceChangeForShift(7.5, 70.0, 0.0));
+
+        $flows = [];
+        for ($k = 1; $k <= 60; $k++) {
+            $flows[] = ['time' => $k * 0.5, 'amount' => $k === 60 ? 1027.5 : 27.5];
+        }
+        $yield = 0.055;
+        $priceAt = static fn(float $y): float => FixedIncome::calculateBondPresentValue($flows, static fn(float $tau): float => $y);
+        $duration = FixedIncome::calculateModifiedDuration(FixedIncome::calculateMacaulayDuration($flows, $yield));
+        $convexity = FixedIncome::calculateConvexity($flows, $yield);
+        foreach ([-0.005, 0.0025, 0.005] as $shift) {
+            $exact = ($priceAt($yield + $shift) / $priceAt($yield)) - 1.0;
+            $this->assertEqualsWithDelta($exact, FixedIncome::priceChangeForShift($duration, $convexity, $shift), ($duration * abs($shift)) ** 3, "At a {$shift} shift.");
+        }
+    }
+
+    /**
      * An even ladder of zeros out to twice its duration has that duration, and its price change at any move is the
      * PV-weighted repricing of every rung; to second order that is -D dy + 0.5 (4D^2/3) dy^2.
      */

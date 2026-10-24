@@ -8,6 +8,7 @@ use App\Data\Macro\OutputGapChannels;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;
 use App\Service\Market\Ticker\HistoryPruner;
+use App\Service\Math\MacroConstants;
 use Doctrine\DBAL\Connection;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -25,6 +26,7 @@ class MacroController extends AbstractController
 
         return $this->render('admin/macroDashboard.html.twig', [
             'macro_state' => $macroState,
+            'targetInflation' => MacroConstants::TARGET_INFLATION,
         ]);
     }
 

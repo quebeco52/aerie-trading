@@ -1,13 +1,10 @@
 {% extends 'base.html.twig' %}
+{% import 'partials/_ui.html.twig' as ui %}
 
-{% block title %}The District Economy - Aerie Exchange{% endblock %}
+{% block page_title %}The District economy{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="Live macroeconomic conditions across the Aerie Autonomous District: monetary policy, the yield curve, inflation, growth, credit, labour and commodities, with twenty-five years of history.">
-	<meta property="og:title" content="The District Economy | Aerie Exchange">
-	<meta property="og:description" content="Monetary policy, yield curves, risk premia, labour and commodities — the economy every listed company is priced against.">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}Live macroeconomic conditions across the Aerie Autonomous District: monetary policy, the yield curve, inflation, growth, credit, labour and commodities, with twenty-five years of history.{% endblock %}
+{% block og_description %}Monetary policy, yield curves, risk premia, labour and commodities — the economy every listed company is priced against.{% endblock %}
 
 {# A chart card in the economy grid (partials/_chart_card.html.twig). #}
 {% macro chart(id, category, title, lede, source, options = {}) %}
@@ -19,50 +16,29 @@
 
 		<header class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 pb-6 border-b border-outline-variant/15">
 			<div class="min-w-0 max-w-2xl">
-				<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">The District Economy</h1>
+				<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">The District economy</h1>
 				<p class="text-sm text-on-surface-variant mt-2 leading-relaxed">
 					The conditions every listed company is priced against. The Monetary Authority sets the policy
 					rate by its published rule, the yield curve prices the path it expects, and growth, credit and
 					the labour market feed through to every earnings report on the exchange.
 				</p>
 				<p class="mt-3 text-sm">
-					<a href="/government" class="text-primary hover:underline underline-offset-2">The Government</a>
+					<a href="/government" class="text-primary hover:underline underline-offset-2">The government</a>
 					<span class="mx-2 text-on-surface-variant/40" aria-hidden="true">&middot;</span>
 					<a href="/reserve" class="text-primary hover:underline underline-offset-2">Sovereign Reserve Fund</a>
 				</p>
 			</div>
 
 			{# The readings the ticker publishes on every frame; economy/macro-vitals.js repaints them in place. Inflation is
-			   the quarter's annual rate, the same reading the charts below plot, not the instant's noisy one. #}
+			   the quarter's annual rate, the same reading the charts below plot, not the instant's noisy one. The output gap
+			   takes the cycle's colours: a bust below its band, a boom above it. #}
 			<dl class="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-4 shrink-0">
-				<div>
-					<dt class="text-xs text-on-surface-variant">Economic cycle</dt>
-					<dd class="mt-0.5 text-lg font-semibold text-on-surface" id="market-economic-cycle">{{ economic_cycle }}</dd>
-				</div>
-				<div>
-					<dt class="text-xs text-on-surface-variant">Inflation (CPI)</dt>
-					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-inflation">{{ macro.inflationEma|pct(2) }}</dd>
-				</div>
-				<div>
-					<dt class="text-xs text-on-surface-variant">Output gap</dt>
-					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums {{ macro.outputGap * 100 < -1.0 ? 'text-tertiary' : (macro.outputGap * 100 > 1.0 ? 'text-secondary' : 'text-on-surface') }}" id="macro-output-gap">{{ macro.outputGap|pct(2) }}</dd>
-				</div>
-				<div>
-					<dt class="text-xs text-on-surface-variant">Policy rate</dt>
-					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-policy-rate">{{ macro.policyRate|pct(2) }}</dd>
-				</div>
-				<div>
-					<dt class="text-xs text-on-surface-variant">10Y yield</dt>
-					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-yield">{{ macro.yield10y|pct(2) }}</dd>
-				</div>
-				<div class="{{ macro.qeActive ? '' : 'hidden' }}" id="qe-status-container">
-					<dt class="text-xs text-on-surface-variant">Asset purchases</dt>
-					<dd class="mt-0.5 text-lg font-semibold font-mono tabular-nums text-on-surface" id="macro-qe-status">
-						{%- if macro.qeActive -%}
-							&minus;{{ macro.balanceSheetIntensity|bps }}
-						{%- endif -%}
-					</dd>
-				</div>
+				{{ ui.figure('Economic cycle', economic_cycle, {id: 'market-economic-cycle', mono: false}) }}
+				{{ ui.figure('Inflation (CPI)', macro.inflationEma|pct(2), {id: 'macro-inflation'}) }}
+				{{ ui.figure('Output gap', macro.outputGap|pct(2), {id: 'macro-output-gap', tone: {Boom: 'text-secondary', Bust: 'text-tertiary'}[economic_cycle] ?? 'text-on-surface'}) }}
+				{{ ui.figure('Policy rate', macro.policyRate|pct(2), {id: 'macro-policy-rate'}) }}
+				{{ ui.figure('10Y yield', macro.yield10y|pct(2), {id: 'macro-yield'}) }}
+				{{ ui.figure('Asset purchases', macro.qeActive ? '−' ~ macro.balanceSheetIntensity|bps : '', {id: 'macro-qe-status', wrapId: 'qe-status-container', class: macro.qeActive ? '' : 'hidden'}) }}
 			</dl>
 		</header>
 
@@ -121,7 +97,7 @@
 
 						{{ _self.chart('macroMortgageChart', 'monetary', "Mortgage rates",
 							"The 30-year fixed mortgage rate and its spread over the policy rate",
-							source_line('credit-registry'), {canvas: {'data-mortgage-spread': constant('App\\Service\\Math\\MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD')}}) }}
+							source_line('credit-registry'), {canvas: {'data-mortgage-spread': chartConstants.mortgageSpread}}) }}
 
 						{% embed 'partials/_chart_card.html.twig' with {id: 'macroBalanceSheetChart', category: 'monetary', title: "Central bank balance sheet",
 							lede: "The Monetary Authority's bond holdings, as the basis points they hold the 10-year yield down, and each quarter's purchases (QE) or run-off (QT)",
@@ -154,7 +130,7 @@
 
 						{{ _self.chart('macroGapBreakdownChart', 'inflation', "What moved the output gap",
 							"Each quarter's change in the output gap, split by what drove it: rates, credit, the government and the Fund, wealth, supply, the mainland, and the economy's own pull back to trend",
-							source_line('statistical-office'), {wide: true, canvas: {'data-groups': constant('App\\Service\\View\\MacroHistoryPresenter::GAP_GROUP_LABELS')|json_encode}}) }}
+							source_line('statistical-office'), {wide: true, canvas: {'data-groups': chartConstants.gapGroups|json_encode}}) }}
 					</div>
 				</section>
 
@@ -163,7 +139,7 @@
 					<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 						{{ _self.chart('macroGdpGrowthChart', 'growth', "Growth and recession risk",
 							"Real and nominal GDP growth, potential growth and the productivity behind it, and the chance of a recession within a year",
-							source_line('statistical-office'), {wide: true, canvas: {'data-structural-labor-growth': constant('App\\Service\\Math\\MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE')}}) }}
+							source_line('statistical-office'), {wide: true, canvas: {'data-structural-labour-growth': chartConstants.structuralLabourGrowth}}) }}
 
 						{{ _self.chart('macroGdpChart', 'growth', "Output, quarter on quarter",
 							"Real output's change on the quarter before; two falling quarters in a row and the statistical office declares a recession, marked here until two quarters of growth end it",
@@ -215,7 +191,7 @@
 							source_line('monetary-authority', 'credit-registry')) }}
 
 						{{ _self.chart('macroBankingLiquidityChart', 'credit', "Deposits and money-market funds",
-							"Money-market funds' share of deposits and the interbank spread. Banks pass on " ~ constant('App\\Service\\Math\\MacroConstants::SYSTEM_DEPOSIT_BETA_BASE')|pct(0) ~ " of a rate change to depositors, so funds gain share as rates rise",
+							"Money-market funds' share of deposits and the interbank spread. Banks pass on " ~ chartConstants.depositBeta|pct(0) ~ " of a rate change to depositors, so funds gain share as rates rise",
 							source_line('financial-regulator', 'monetary-authority')) }}
 					</div>
 				</section>
@@ -233,7 +209,7 @@
 
 						{{ _self.chart('macroEnergySpreadsChart', 'assets', "Refining and power margins",
 							"What refiners earn turning crude into fuels ($/bbl), and generators turning gas into power ($/MWh)",
-							source_line('commodity-exchange'), {canvas: {'data-power-reference': constant('App\\Service\\Math\\MacroConstants::REFERENCE_POWER_PRICE'), 'data-gas-reference': constant('App\\Service\\Math\\MacroConstants::REFERENCE_GAS_PRICE'), 'data-spark-heat-rate': constant('App\\Service\\Macro\\Subsystem\\CommodityLogisticsSubsystem::SPARK_SPREAD_BENCHMARK_HEAT_RATE')}}) }}
+							source_line('commodity-exchange'), {canvas: {'data-power-reference': chartConstants.powerReference, 'data-gas-reference': chartConstants.gasReference, 'data-spark-heat-rate': chartConstants.sparkHeatRate}}) }}
 					</div>
 				</section>
 
@@ -257,8 +233,8 @@
 							source_line('exchequer')) }}
 
 						{{ _self.chart('macroPolicyUncertaintyChart', 'public', "Policy uncertainty",
-							"How unsettled the outlook for taxes, spending and rates is, against its long-run average of " ~ constant('App\\Service\\Math\\MacroConstants::EPU_BASELINE')|number_format(0) ~ ". It rises into an election and in a downturn, and holds back investment",
-							source_line('statistical-office'), {canvas: {'data-baseline': constant('App\\Service\\Math\\MacroConstants::EPU_BASELINE')}}) }}
+							"How unsettled the outlook for taxes, spending and rates is, against its long-run average of " ~ chartConstants.policyUncertaintyBaseline|number_format(0) ~ ". It rises into an election and in a downturn, and holds back investment",
+							source_line('statistical-office'), {canvas: {'data-baseline': chartConstants.policyUncertaintyBaseline}}) }}
 
 						{% embed 'partials/_chart_card.html.twig' with {id: 'macroSovereignFundChart', category: 'public', title: "Sovereign Reserve Fund",
 							lede: "District equity weight against the policy weight, and the fund's share of the listed float",
@@ -280,7 +256,7 @@
 		</section>
 
 		{# Each driver's most exposed listings, read from the per-firm figures their earnings and financing run on (EconomyExposureBuilder). #}
-		{% if exposures is defined and exposures is not empty %}
+		{% if exposures is not empty %}
 			<section class="space-y-5" aria-labelledby="exposure-heading">
 				<div>
 					<h2 id="exposure-heading" class="text-lg font-semibold text-on-surface">Who it moves</h2>

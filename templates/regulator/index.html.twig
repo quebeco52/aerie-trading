@@ -1,43 +1,33 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Financial Regulator - Aerie Exchange{% endblock %}
+{% block page_title %}Financial Regulator{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The District's Financial Regulator: the core capital its banks must hold, the most a home buyer may borrow against the property, and the banks it supervises.">
-	<meta property="og:title" content="Financial Regulator | Aerie Exchange">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}The District's Financial Regulator: the core capital its banks must hold, the most a home buyer may borrow against the property, and the banks it supervises.{% endblock %}
 
 {% block body %}
 <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
 
-	{% include 'government/_breadcrumb.html.twig' with {current: 'Financial Regulator'} %}
-	<header class="pb-5 border-b border-outline-variant/15">
-		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Financial Regulator</h1>
-		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed max-w-3xl">
+	{% embed 'government/_header.html.twig' with {title: 'Financial Regulator'} %}
+		{% block lead %}
 			The District's bank supervisor. It sets two rules: the core capital every deposit-taking bank must hold against
 			its loans, and the most a home buyer may borrow against the property they buy. Its head is named by the Aerie
 			Council for a single term and sets both.
-		</p>
-	</header>
+		{% endblock %}
+	{% endembed %}
 
 	{% if regulator %}
-		{% set head = regulator.head %}
-		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="head-heading">
-			<h2 id="head-heading" class="text-sm font-semibold text-on-surface">The head</h2>
-			<p class="text-sm font-semibold text-on-surface mt-2">{{ head.name }}</p>
-			<p class="text-xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
-			<p class="text-sm text-on-surface mt-2 max-w-3xl">
-				{{- {light: 'A light-touch regulator', middle: 'A moderate regulator', strict: 'A strict regulator'}[head.stance] }}, setting core capital at <span class="font-mono tabular-nums">{{ head.requirement|pct(1) }}</span>
-				{{- head.neutralBuffer is defined and head.neutralBuffer > 0 ? ', a countercyclical buffer of ' ~ head.neutralBuffer|pct(1) ~ ' even when credit is calm,' : '' }}
+		{% embed 'government/_head.html.twig' with {head: regulator.head} %}
+			{% block stance -%}
+				{{ head.stanceText }}, setting core capital at <span class="font-mono tabular-nums">{{ head.requirement|pct(1) }}</span>
+				{{- head.neutralBuffer > 0 ? ', a countercyclical buffer of ' ~ head.neutralBuffer|pct(1) ~ ' even when credit is calm,' : '' }}
 				and {{ head.ltvCap is null ? 'no limit on mortgage borrowing' : 'mortgages at ' ~ head.ltvCap|pct(0) ~ ' of a home\'s price' }}
-				{%- if head.passedOver is not empty %}, chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(<span class="font-mono tabular-nums">{{ candidate.requirement|pct(1) }}</span>{% if candidate.ltvCap is defined %}, {{ candidate.ltvCap is null ? 'no limit' : candidate.ltvCap|pct(0) ~ ' limit' }}{% endif %}, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
-			</p>
-			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">
+			{%- endblock %}
+			{% block candidate %}<span class="font-mono tabular-nums">{{ candidate.requirement|pct(1) }}</span>, {{ candidate.ltvCap is null ? 'no limit' : candidate.ltvCap|pct(0) ~ ' limit' }}, {% endblock %}
+			{% block rules %}
 				The Council names the head for a single {{ regulator.rules.termYears|number_format(0) }}-year term from a shortlist of {{ regulator.rules.shortlist }}, choosing the candidate nearest its own view of the banks.
 				A head's view of the banks sets all three rules together, and they change when the head does: the stricter the head, the more capital, the tighter the mortgage limit and the larger the buffer kept on in calm years, up to <span class="font-mono tabular-nums">{{ mortgage.strictestBuffer|pct(0) }}</span>, so there is capital to release when a crisis or a recession comes.
-			</p>
-		</section>
+			{% endblock %}
+		{% endembed %}
 
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="capital-heading">

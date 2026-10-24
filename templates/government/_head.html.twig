@@ -1,0 +1,19 @@
+{# A department head's card, embedded with `head` (name, age, sinceLabel, termEndsLabel, passedOver) and optionally
+   `title` (default "The head") and `id` (the heading's). Blocks: `stance` opens the sentence about them, `candidate`
+   puts a passed-over candidate's figures before their age, `rules` says how the Council names them, `more` follows. #}
+{% import 'government/_macros.html.twig' as gov %}
+{%- set heading_id = id ?? 'head-heading' -%}
+{%- set stance_html %}{% block stance %}{% endblock %}{% endset -%}
+<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="{{ heading_id }}">
+	<h2 id="{{ heading_id }}" class="text-sm font-semibold text-on-surface">{{ title ?? 'The head' }}</h2>
+	<p class="text-sm font-semibold text-on-surface mt-2">{{ head.name }}</p>
+	<p class="text-xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
+	{% if stance_html|trim is not empty or head.passedOver is not empty %}
+		<p class="text-sm text-on-surface mt-2 max-w-3xl">
+			{{- stance_html -}}
+			{%- if head.passedOver is not empty %}{{ stance_html|trim is empty ? 'Chosen over ' : ', chosen over ' }}{% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">({% block candidate %}{% endblock %}{{ candidate.age }})</span>{{ gov.joiner(loop) }}{% endfor %}{% endif %}.
+		</p>
+	{% endif %}
+	<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">{% block rules %}{% endblock %}</p>
+	{% block more %}{% endblock %}
+</section>

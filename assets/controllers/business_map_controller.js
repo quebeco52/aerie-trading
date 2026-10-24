@@ -5,7 +5,8 @@ import { THEME_COLORS, withAlpha } from '../js/utils/colors.js';
  * The "How the business works" modal: draws the lines between the cards BusinessMapBuilder lays out, and lights one
  * card's lines and neighbours on hover or focus. Each edge is [from, to, sign, weight]: sign colours it (helped,
  * hurt, or carrying revenue or cost), weight sizes it (an effect for a line out of the economy, a share within the
- * firm). Lines run between neighbouring columns; a line inside one column bows out to its right.
+ * firm). Lines run between neighbouring columns; a line inside one column bows out to its right. The controller sits
+ * over the whole stock page, so a button anywhere on it opens the map with `business-map#open`; `modal` is the overlay.
  */
 const SIGN_COLORS = { 1: THEME_COLORS.positive, '-1': THEME_COLORS.negative, 0: withAlpha(THEME_COLORS.textMuted, 0.45) };
 
@@ -19,15 +20,13 @@ function lineWidth(weight) {
 const SAME_COLUMN_BOW = 34;
 
 export default class extends Controller {
-    static targets = ['map', 'lines'];
+    static targets = ['modal', 'map', 'lines'];
     static values = { edges: Array };
 
     connect() {
-        this.openHandler = () => this.open();
         this.keydownHandler = (event) => {
-            if (event.key === 'Escape' && !this.element.classList.contains('hidden')) this.close();
+            if (event.key === 'Escape' && !this.modalTarget.classList.contains('hidden')) this.close();
         };
-        document.addEventListener('business-map:open', this.openHandler);
         document.addEventListener('keydown', this.keydownHandler);
 
         this.resizeObserver = new ResizeObserver(() => this.draw());
@@ -39,30 +38,23 @@ export default class extends Controller {
     }
 
     disconnect() {
-        document.removeEventListener('business-map:open', this.openHandler);
         document.removeEventListener('keydown', this.keydownHandler);
         this.resizeObserver?.disconnect();
     }
 
     open() {
-        this.element.classList.remove('hidden');
-        this.element.classList.add('flex');
+        this.modalTarget.classList.remove('hidden');
+        this.modalTarget.classList.add('flex');
         requestAnimationFrame(() => this.draw());
     }
 
     close() {
-        this.element.classList.add('hidden');
-        this.element.classList.remove('flex');
+        this.modalTarget.classList.add('hidden');
+        this.modalTarget.classList.remove('flex');
     }
 
     backdropClick(event) {
-        if (event.target === this.element) this.close();
-    }
-
-    /** Hands over to the earnings-flow chart, which picks up at the revenue this map ends on. */
-    handoff() {
-        this.close();
-        document.dispatchEvent(new CustomEvent('sankey:open'));
+        if (event.target === this.modalTarget) this.close();
     }
 
     draw() {

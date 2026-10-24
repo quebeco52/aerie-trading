@@ -14,6 +14,7 @@ use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Bond\BondPricingEngine;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FixedIncome;
 use App\Service\User\CostBasisCalculator;
 use App\Service\User\CouponIncomeCalculator;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -30,6 +31,18 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 class BondController extends AbstractController
 {
+    // --- Rate Sensitivity ---
+    /** The parallel yield shifts an issue's page prices from its duration and convexity: 50 and 100 bps each way. */
+    private const RATE_SHOCKS = [-0.01, -0.005, 0.005, 0.01];
+
+    // --- Retired Issues ---
+    /** What an issue's page says once it stops trading: its badge, the badge's tone and the ticket's line. */
+    public const RETIRED = [
+        Bond::STATUS_MATURED => ['badge' => 'Redeemed', 'tone' => 'neutral', 'note' => 'This issue has redeemed at par and no longer trades.'],
+        Bond::STATUS_CALLED => ['badge' => 'Called', 'tone' => 'neutral', 'note' => 'The issuer bought this issue back at the market price; it no longer trades.'],
+        Bond::STATUS_DEFAULTED => ['badge' => 'In default', 'tone' => 'down', 'note' => 'The issuer failed and the claim was settled at its recovery; it no longer trades.'],
+    ];
+
     /**
      * The outstanding ladder, grouped by original tenor, alongside the live curve.
      */
@@ -99,7 +112,6 @@ class BondController extends AbstractController
             'curve' => $this->sampleCurve($pricingEngine, $macro),
             'macro' => $macro,
             'benchmarks' => $this->benchmarkPoints($macro),
-            'simulationTime' => $macro->totalTime,
         ]);
     }
 
@@ -145,12 +157,13 @@ class BondController extends AbstractController
         }
 
         // Remaining flows are shown as dates and amounts rather than as a present value: the point of the
-        // schedule is that a bond's return is contractual, and a discounted total hides exactly that.
+        // schedule is that a bond's return is contractual, and a discounted total hides exactly that. A called or
+        // defaulted issue has none left, whatever its maturity date says.
+        $isActive = $bond->getStatus() === Bond::STATUS_ACTIVE;
         $cashFlows = [];
-        foreach ($pricingEngine->remainingCashFlows($bond, $currentTime) as $flow) {
+        foreach ($isActive ? $pricingEngine->remainingCashFlows($bond, $currentTime) : [] as $flow) {
             $cashFlows[] = [
                 'yearsAway' => $flow['time'],
-                'simulationTime' => $currentTime + $flow['time'],
                 'amount' => $flow['amount'],
                 'isRedemption' => $flow['amount'] > $bond->couponAmount(),
             ];
@@ -158,12 +171,9 @@ class BondController extends AbstractController
 
         return $this->render('bond/view.html.twig', [
             'bond' => $bond,
-            'macro' => $macro,
-            'simulationTime' => $currentTime,
             'yearsToMaturity' => $bond->yearsToMaturity($currentTime),
-            'changePercent' => $bond->getStatus() === Bond::STATUS_ACTIVE
-                ? $priceChangeFeed->changeForTicker($ticker, (float) $bond->getCleanPrice())
-                : null,
+            'retired' => self::RETIRED[$bond->getStatus()] ?? null,
+            'changePercent' => $isActive ? $priceChangeFeed->changeForTicker($ticker, (float) $bond->getCleanPrice()) : null,
             'cashFlows' => $cashFlows,
             'annualCouponIncome' => $bond->couponAmount() * FinancialConstants::BOND_COUPON_FREQUENCY,
             'userQuantity' => $userQuantity,
@@ -171,10 +181,28 @@ class BondController extends AbstractController
             'userCouponIncome' => $userCouponIncome,
             'openOrders' => $openOrders,
             // The ticket starts from the price the desk deals at, off the live curve; the mark above is the day's.
-            'dealingPrice' => $bond->getStatus() === Bond::STATUS_ACTIVE ? $pricingEngine->dealingPrice($bond, $macro) : (float) $bond->getPrice(),
-            'curve' => $this->sampleCurve($pricingEngine, $macro),
+            'dealingPrice' => $isActive ? $pricingEngine->dealingPrice($bond, $macro) : (float) $bond->getPrice(),
+            'rateShocks' => self::rateShocks($bond),
             'ticksPerYear' => $ticksPerYear,
         ]);
+    }
+
+    /**
+     * The issue's estimated price move at each of RATE_SHOCKS, from its own duration and convexity.
+     *
+     * @return list<array{shift: float, move: float}>
+     */
+    public static function rateShocks(Bond $bond): array
+    {
+        $rows = [];
+        foreach (self::RATE_SHOCKS as $shift) {
+            $rows[] = [
+                'shift' => $shift,
+                'move' => FixedIncome::priceChangeForShift((float) $bond->getModifiedDuration(), (float) $bond->getConvexity(), $shift),
+            ];
+        }
+
+        return $rows;
     }
 
     /**

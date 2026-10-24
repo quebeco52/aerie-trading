@@ -397,6 +397,16 @@ final class FixedIncome
     }
 
     /**
+     * Price change of one bond, as a fraction, when its yield shifts by dy: the second-order Taylor expansion of price
+     * in yield, -D dy + 0.5 C dy^2, from its modified duration D and convexity C. The convexity leg is why a fall in
+     * yields gains more than a rise of the same size loses.
+     */
+    public static function priceChangeForShift(float $modifiedDuration, float $convexity, float $shift): float
+    {
+        return (-$modifiedDuration * $shift) + (0.5 * $convexity * $shift * $shift);
+    }
+
+    /**
      * Price change of a book laddered evenly out to twice its duration when its yield moves by dy, as a fraction: equal
      * present values on maturities spread evenly over [0, 2D] each reprice by exp(-dy t), which averages to (1 -
      * exp(-2D dy)) / (2D dy) - 1 (continuously compounded). Exact for the ladder at any move; to second order it is -D

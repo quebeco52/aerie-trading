@@ -59,8 +59,12 @@ function formatMacroReading(reading) {
     return `${reading.label} ${value.toFixed(1)}`;
 }
 
+/**
+ * The earnings-flow modal. The controller sits over the whole stock page, so any button on it opens the modal with a
+ * `sankey#open` action; `modal` is the overlay it shows and hides.
+ */
 export default class extends Controller {
-    static targets = ['container'];
+    static targets = ['modal', 'container'];
     static values = {
         ticker: String,
         url: { type: String, default: '/api/earnings-flow' }
@@ -71,23 +75,17 @@ export default class extends Controller {
         this.resizeHandler = () => this.chart?.resize();
         window.addEventListener('resize', this.resizeHandler);
 
-        this.openHandler = () => this.open();
-        this.closeHandler = () => this.close();
         this.keydownHandler = (e) => {
-            if (e.key === 'Escape' && !this.element.classList.contains('hidden')) {
+            if (e.key === 'Escape' && !this.modalTarget.classList.contains('hidden')) {
                 this.close();
             }
         };
 
-        document.addEventListener('sankey:open', this.openHandler);
-        document.addEventListener('sankey:close', this.closeHandler);
         document.addEventListener('keydown', this.keydownHandler);
     }
 
     disconnect() {
         window.removeEventListener('resize', this.resizeHandler);
-        document.removeEventListener('sankey:open', this.openHandler);
-        document.removeEventListener('sankey:close', this.closeHandler);
         document.removeEventListener('keydown', this.keydownHandler);
         if (this.chart) {
             this.chart.dispose();
@@ -96,24 +94,24 @@ export default class extends Controller {
     }
 
     open() {
-        this.element.classList.remove('hidden');
-        this.element.classList.add('flex');
+        this.modalTarget.classList.remove('hidden');
+        this.modalTarget.classList.add('flex');
         this.loadChart();
     }
 
     close() {
-        this.element.classList.add('hidden');
-        this.element.classList.remove('flex');
+        this.modalTarget.classList.add('hidden');
+        this.modalTarget.classList.remove('flex');
     }
 
     backdropClick(event) {
-        if (event.target === this.element) {
+        if (event.target === this.modalTarget) {
             this.close();
         }
     }
 
     async loadChart() {
-        const container = this.hasContainerTarget ? this.containerTarget : this.element;
+        const container = this.hasContainerTarget ? this.containerTarget : this.modalTarget;
         if (!container) return;
 
         if (!this.chart) {

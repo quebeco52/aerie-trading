@@ -120,9 +120,25 @@ same before and after the feed repaints it.
 - `.badge` plus a tone: `badge-up`, `badge-down`, `badge-warn`, `badge-accent`, `badge-neutral`. Sentence case.
   A news card's tone is a `Tone` (App\Service\News): `EventPresenter` hands it out as `tone`, with its `badgeClass`
   and `iconClass`.
-- `.term` on a label that explains itself on hover, with `ui.tooltip(text)` beside it:
-  `{% import 'partials/_ui.html.twig' as ui %}`.
+- The shared pieces are macros in `partials/_ui.html.twig` (`{% import 'partials/_ui.html.twig' as ui %}`); each
+  one's comment there gives its options. A value that holds markup is captured with `{% set %}…{% endset %}` first.
+  - `ui.term(label, tip)`: a label that explains itself on hover and focus (`.term`, its tooltip, aria-describedby).
+  - `ui.stat(label, value)`: a row of a stats list. `ui.tile(label, value, note)`: a boxed figure.
+    `ui.figure(label, value)`: a page header's figure, its note in a second `<dd>`.
+  - `ui.choices(name, options)`: radio buttons as a segmented control. `ui.side(action)`: an order side's colour.
+    `ui.cancel_order(order)`: a resting order's cancel button, confirmed before it is sent.
+- A page header is `partials/_page_header.html.twig` (crumbs, lead, aside); a government page embeds
+  `government/_header.html.twig`. A page names itself in `{% block page_title %}` and describes itself in
+  `{% block description %}`; the base adds " | Aerie Exchange" and the shared head tags.
+- A department's head of office is `government/_head.html.twig`, a hub card on the government front page
+  `government/_hub_card.html.twig`; a stance's words come from `App\Data\Politics\StanceWords` through the builders.
+- Orders and fills are `partials/_order_table.html.twig` and `partials/_trade_table.html.twig`; the stock and bond
+  order ticket is `partials/_trade_ticket.html.twig`.
 - `.seg-btn` for range and filter buttons; state lives in `aria-pressed`.
+- `.tab-btn` for the buttons of a `tabs` strip; state lives in `aria-selected`, which the template sets on the
+  default tab.
+- A company logo is `partials/_logo.html.twig` (the generic mark when a company has none); a chart's loading
+  spinner is `partials/_spinner.html.twig`.
 - A chart is a `partials/_chart_card.html.twig`: each grid page wraps it in a `chart()` macro with its own defaults
   (economy page, `stock/_tab_financials`). Embed the partial for a card that needs a custom `hud`, `controls` above
   the canvas, `canvas_extra` inside it, or its own `footer`.

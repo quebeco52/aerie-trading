@@ -59,6 +59,7 @@ class CreditHealthBuilderTest extends TestCase
         $this->assertSame($health->ebitdaCovenantLimit, $credit['covenantLimit'], 'an industrial carries a cash-flow covenant');
         $this->assertSame($health->interestCoverage, $credit['interestCoverage']);
         $this->assertSame($this->debtEngine->resolveDistanceToDefault($firm, $this->macroState), $credit['distanceToDefault']);
+        $this->assertSame(\App\Service\Market\Bond\CreditRatingAgency::THRESHOLD_BBB, $credit['investmentGradeDistance'], 'the agency grades on the same line');
     }
 
     public function testAFirmWithNoCommittedLineShowsNoUtilization(): void

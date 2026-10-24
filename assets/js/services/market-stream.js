@@ -100,10 +100,18 @@ function dispatchFrame() {
     document.dispatchEvent(new CustomEvent('market:frame', { detail }));
 }
 
+/**
+ * The feed's ticket, from `<meta name="ws-ticket">` in base.html.twig. Read on each connect, since a Turbo visit
+ * replaces the tag with a fresh one.
+ */
+function wsTicket() {
+    return document.querySelector('meta[name="ws-ticket"]')?.content ?? '';
+}
+
 export function initMarketStream() {
     // ws_ticket() signs a ticket for guests too (uid "guest"), so an empty ticket means the
     // base layout did not run, not an anonymous visitor. The feed is a public broadcast.
-    if (!window.WS_TICKET || window.WS_TICKET === "") {
+    if (wsTicket() === '') {
         console.log("No WebSocket ticket on this page: live updates disabled.");
         return;
     }
@@ -118,7 +126,7 @@ export function initMarketStream() {
         
         const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
         const host = window.location.host;
-        globalMarketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
+        globalMarketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${wsTicket()}`);
 
         globalMarketSocket.onopen = function() {
             console.log("Connected to live market feed.");

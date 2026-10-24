@@ -2,11 +2,9 @@
 
 {# One District Almanac entry, its Markdown rendered by App\Service\Lore\Almanac. #}
 
-{% block title %}{{ entry.title }} | District Almanac{% endblock %}
+{% block page_title %}{{ entry.title }} | District Almanac{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="{{ entry.summary }}">
-{% endblock %}
+{% block description %}{{ entry.summary }}{% endblock %}
 
 {% block body %}
 <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full">

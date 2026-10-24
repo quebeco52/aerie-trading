@@ -326,6 +326,30 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame('blocked', $tax['status']);
     }
 
+    /**
+     * The front page's budget card counts the laws the next round changes and those held back, from the statuses the
+     * budget page shows; its Diet card names the largest party, the first in the Diet's order on a tie.
+     */
+    public function testTheFrontPageCountsTheLawsInPlayAndNamesTheLargestParty(): void
+    {
+        $politics = new PoliticsStateDTO(totalTime: 0.2, governingCoalition: Diet::membership([Diet::VANGUARD]), supportParties: Diet::membership([Diet::CIVIC]));
+        $page = $this->builder()->buildHub(new MacroStateDTO(totalTime: 0.2, sovereignDebtToGdp: 0.5), $politics);
+
+        $statuses = array_count_values(array_column($page['budget']['levers'], 'status'));
+        $this->assertSame(($statuses['pending'] ?? 0) + ($statuses['partial'] ?? 0), $page['budget']['changing']);
+        $this->assertSame(($statuses['fund'] ?? 0) + ($statuses['blocked'] ?? 0), $page['budget']['held']);
+        $this->assertGreaterThan(0, $page['budget']['held'], 'The supporter holds back the tax cut.');
+
+        $seats = array_column($page['parties'], 'seats', 'key');
+        $this->assertNotEmpty($seats, 'The front page lists the Diet\'s parties.');
+        $this->assertSame(max($seats), $page['largestParty']['seats']);
+
+        $tied = array_fill_keys(Diet::PARTIES, 30.0);
+        $tied[Diet::PARTIES[1]] = $tied[Diet::PARTIES[4]] = 60.0;
+        $largest = $this->builder()->buildHub(new MacroStateDTO(), new PoliticsStateDTO(dietSeats: $tied))['largestParty'];
+        $this->assertSame(Diet::PARTIES[1], $largest['key'], 'On a tie the first party in the Diet\'s order is named.');
+    }
+
     /** The home share's row says when the law asks for more of the board than the fund may own. */
     public function testTheHomeShareSaysWhenTheCeilingHoldsIt(): void
     {
@@ -574,12 +598,23 @@ class GovernmentPageBuilderTest extends TestCase
             $this->assertGreaterThanOrEqual((int) floor(\App\Service\Politics\Council\CouncilAppointments::APPOINTMENT_AGE_MIN), $seat['age']);
             $this->assertContains($seat['stance'], ['hawk', 'swing', 'dove']);
             $this->assertContains($seat['banks'], ['light', 'middle', 'strict']);
+            $this->assertSame(['hawk' => 'Hawk', 'swing' => 'Swing', 'dove' => 'Dove'][$seat['stance']], $seat['stanceLabel'], 'The roster prints the stance as a cell.');
+            $this->assertSame(['light' => 'Light-touch', 'middle' => 'Moderate', 'strict' => 'Strict'][$seat['banks']], $seat['banksLabel']);
+            $this->assertSame($seat['leaning'] === null ? null : 'leaning ' . ($seat['leaning'] === 'hawk' ? 'hawkish' : 'dovish'), $seat['leaningText']);
+        }
+        $governor = $authority['governor'];
+        $this->assertSame(['hawk' => 'A hawk', 'swing' => 'A swing vote', 'dove' => 'A dove'][$governor['stance']] . ($governor['leaningText'] === null ? '' : ' ' . $governor['leaningText']), $governor['stanceText']);
+        $this->assertSame(['hawk' => 'a hawk', 'swing' => 'a swing vote', 'dove' => 'a dove'][$governor['stance']], $page['authority']['governor']['stanceClause'], 'The front page names the governor\'s stance after their name.');
+        foreach ($authority['members'] as $member) {
+            $this->assertSame(['hawk' => 'Hawk', 'swing' => 'Swing', 'dove' => 'Dove'][$member['stance']], $member['stanceLabel']);
         }
 
         $regulator = $page['regulator'];
         $this->assertSame(\App\Data\Politics\AerieCouncil::OPENING_REGULATOR, $regulator['head']['name']);
         $this->assertSame('Before Year 1', $regulator['head']['sinceLabel']);
         $this->assertSame('light', $regulator['head']['stance']);
+        $this->assertSame('A light-touch regulator', $regulator['head']['stanceText']);
+        $this->assertSame('light-touch', $regulator['head']['stanceClause']);
         $this->assertSame([], $regulator['head']['passedOver']);
         $this->assertEqualsWithDelta(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT, $regulator['inForce'], 1e-12);
         $this->assertNull($regulator['phasing']);
@@ -591,6 +626,7 @@ class GovernmentPageBuilderTest extends TestCase
         $this->assertSame(\App\Data\Politics\AerieCouncil::OPENING_FUND_HEAD, $fundHead['name']);
         $this->assertTrue($fundHead['opening']);
         $this->assertSame('bold', $fundHead['stance'], 'The fund opens bolder than the median reserve fund.');
+        $this->assertSame('a bold investor', $fundHead['stanceClause']);
         $this->assertEqualsWithDelta(\App\Service\Politics\Department\SovereignReserveFund::equityShare(\App\Service\Politics\Council\CouncilAppointments::median($politics->councilFundStances)), $page['council']['lean']['reserves'], 1e-12);
         foreach ($council['roster'] as $seat) {
             $this->assertContains($seat['reserves'], ['cautious', 'balanced', 'bold']);

@@ -7,6 +7,7 @@ namespace App\Service\View;
 use App\Data\District\DistrictCalendar;
 use App\Data\District\Institutions;
 use App\Data\Politics\AerieCouncil;
+use App\Data\Politics\StanceWords;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
@@ -45,10 +46,13 @@ final class DepartmentPageBuilder
             return null;
         }
 
+        $stance = SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($head['stance']));
+
         return [
             'name' => $head['name'],
             'opening' => $head['termStart'] < 0.0,
-            'stance' => SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($head['stance'])),
+            'stance' => $stance,
+            'stanceClause' => StanceWords::for(StanceWords::RESERVES, StanceWords::CLAUSE, $stance),
             'inForce' => $macro->sovereignFundPolicyEquityShare > 0.0 ? $macro->sovereignFundPolicyEquityShare : null,
         ];
     }
@@ -117,6 +121,7 @@ final class DepartmentPageBuilder
                 'termEndsLabel' => DistrictCalendar::quarter(Office::ExchequerHead->termEnd($time)),
                 'opening' => $head['termStart'] < 0.0,
                 'stance' => Exchequer::stanceName($target),
+                ...self::stanceWords(StanceWords::DEBT, Exchequer::stanceName($target)),
                 'maturity' => $target,
                 'passedOver' => array_map(static fn(array $candidate): array => [
                     'name' => $candidate['name'],
@@ -175,6 +180,7 @@ final class DepartmentPageBuilder
                 'termEndsLabel' => DistrictCalendar::quarter(Office::FairTradingHead->termEnd($time)),
                 'opening' => $head['termStart'] < 0.0,
                 'stance' => FairTradingBoard::stanceName($head['stance']),
+                ...self::stanceWords(StanceWords::COMPETITION, FairTradingBoard::stanceName($head['stance'])),
                 'passedOver' => array_map(static fn(array $candidate): array => [
                     'name' => $candidate['name'],
                     'age' => (int) floor($head['termStart'] - $candidate['birth']),
@@ -219,6 +225,7 @@ final class DepartmentPageBuilder
                 'termEndsLabel' => DistrictCalendar::quarter(Office::SecuritiesHead->termEnd($time)),
                 'opening' => $opening,
                 'stance' => SecuritiesCommission::stanceName($stance),
+                ...self::stanceWords(StanceWords::MARKETS, SecuritiesCommission::stanceName($stance)),
                 'passedOver' => array_map(static fn(array $candidate): array => [
                     'name' => $candidate['name'],
                     'age' => (int) floor($head['termStart'] - $candidate['birth']),
@@ -300,6 +307,20 @@ final class DepartmentPageBuilder
         ];
     }
 
+    /**
+     * A head's stance in words: the sentence their department's page opens with, and the clause after their name on
+     * the government's front page.
+     *
+     * @return array{stanceText: string, stanceClause: string}
+     */
+    private static function stanceWords(string $question, string $stance): array
+    {
+        return [
+            'stanceText' => StanceWords::for($question, StanceWords::SENTENCE, $stance),
+            'stanceClause' => StanceWords::for($question, StanceWords::CLAUSE, $stance),
+        ];
+    }
+
     /** A department's mandate as the Council lists it. */
     private static function mandate(string $department): string
     {
@@ -354,6 +375,7 @@ final class DepartmentPageBuilder
                 'sinceLabel' => $head['termStart'] < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($head['termStart']),
                 'termEndsLabel' => DistrictCalendar::quarter(Office::Regulator->termEnd($time)),
                 'stance' => FinancialRegulator::stanceName($target),
+                ...self::stanceWords(StanceWords::BANKS, FinancialRegulator::stanceName($target)),
                 'requirement' => $target,
                 'passedOver' => array_map(static fn(array $candidate): array => [
                     'name' => $candidate['name'],

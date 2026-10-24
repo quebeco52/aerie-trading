@@ -1,12 +1,8 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Monetary Authority - Aerie Exchange{% endblock %}
+{% block page_title %}Monetary Authority{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The District's Monetary Authority: its governor and rate committee, the last decision on the policy rate, and every meeting since.">
-	<meta property="og:title" content="Monetary Authority | Aerie Exchange">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}The District's Monetary Authority: its governor and rate committee, the last decision on the policy rate, and every meeting since.{% endblock %}
 
 {% import 'partials/_ui.html.twig' as ui %}
 {% import 'government/_macros.html.twig' as gov %}
@@ -32,8 +28,8 @@
 							<p class="text-sm font-semibold text-on-surface mt-0.5">{{ governor.name }}</p>
 							<p class="text-2xs text-on-surface-variant mt-0.5">Age {{ governor.age }} · seated {{ governor.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ governor.termEndsLabel }}</span></p>
 							<p class="text-xs text-on-surface mt-1">
-								{{- {hawk: 'A hawk', swing: 'A swing vote', dove: 'A dove'}[governor.stance] -}}{{- governor.leaning ? (governor.leaning == 'hawk' ? ' leaning hawkish' : ' leaning dovish') : '' -}}
-								{%- if governor.passedOver is not empty %}, chosen over {% for candidate in governor.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">({{ {hawk: 'hawk', swing: 'swing vote', dove: 'dove'}[candidate.stance] }}, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
+								{{- governor.stanceText -}}
+								{%- if governor.passedOver is not empty %}, chosen over {% for candidate in governor.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">({{ candidate.stanceNoun }}, {{ candidate.age }})</span>{{ gov.joiner(loop) }}{% endfor %}{% endif %}.
 							</p>
 						</div>
 						<div>
@@ -87,7 +83,7 @@
 										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface-variant">{{ member.age }}</td>
 										<td class="py-1.5 pl-4 font-mono tabular-nums text-on-surface-variant whitespace-nowrap hidden md:table-cell">{{ member.sinceLabel }}</td>
 										<td class="py-1.5 pl-4 md:pl-0 font-mono tabular-nums text-on-surface-variant whitespace-nowrap">{{ member.termEndsLabel }}</td>
-										<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ gov.stance(member.stance, member.leaning) }}</td>
+										<td class="py-1.5 pl-4 text-on-surface whitespace-nowrap">{{ gov.stance(member.stanceLabel, member.leaningText) }}</td>
 										<td class="py-1.5 pl-4 text-2xs {{ member.vote is not null and member.vote != 0 ? 'text-on-surface font-semibold' : 'text-on-surface-variant' }}">
 											{{- member.vote is null ? '' : (member.vote > 0 ? 'For a higher rate' : (member.vote < 0 ? 'For a lower rate' : 'With the decision')) -}}
 										</td>

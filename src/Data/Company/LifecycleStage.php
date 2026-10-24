@@ -74,6 +74,21 @@ enum LifecycleStage: string
         };
     }
 
+    /**
+     * The stage's badge tone (`.badge badge-{tone}`): a launch is a plain marker, growth a rise, maturity neutral,
+     * shake-out a caution and decline a fall.
+     */
+    public function tone(): string
+    {
+        return match ($this) {
+            self::Introduction => 'accent',
+            self::Growth => 'up',
+            self::Mature => 'neutral',
+            self::ShakeOut => 'warn',
+            self::Decline => 'down',
+        };
+    }
+
     public function label(): string
     {
         return match ($this) {

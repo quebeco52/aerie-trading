@@ -82,6 +82,7 @@ class SovereignReservePageBuilderTest extends TestCase
         $this->assertSame([], $page['bands']);
         $this->assertSame([], $page['holdings']);
         $this->assertSame([], $page['strategic']);
+        $this->assertSame([], $page['rules'], 'The mandate is listed once the fund has bands to quote.');
         $this->assertSame(0.0, $page['summary']['value']);
         $this->assertNull($page['programme']['monthsSinceLast']);
     }
@@ -147,8 +148,26 @@ class SovereignReservePageBuilderTest extends TestCase
         $this->assertSame('Ines Varga', $page['head']['name']);
         $this->assertSame(55, $page['head']['age']);
         $this->assertSame('cautious', $page['head']['stance']);
+        $this->assertSame('a cautious investor', $page['head']['stanceText']);
         $this->assertFalse($page['head']['opening']);
         $this->assertNull($this->builder()->build($macro)['head'], 'Without the politics there is no head to name.');
+    }
+
+    /** The mandate lists every rule the fund runs on, with the figures in force and its own bands written in. */
+    public function testTheRulesWriteInTheFiguresInForce(): void
+    {
+        $macro = new MacroStateDTO(...array_merge(get_object_vars($this->incepted()), ['reserveDrawShare' => 0.5, 'stampDutyRate' => 0.001]));
+        $page = $this->builder()->build($macro);
+        $rules = array_column($page['rules'], 'text', 'name');
+
+        $this->assertSame(['Who sets the mix', 'Spending rule', 'Budget rule', 'Opening size', 'Reference portfolio', 'District equity band', 'Equity band', 'Rebalancing', 'Ownership ceiling', 'Corporate actions', 'Returns', 'Stamp duty', 'Strategic holding'], array_keys($rules));
+        $this->assertStringContainsString('that the Diet passes, 50% now.', $rules['Spending rule']);
+        $this->assertStringContainsString('over ' . number_format(SovereignFundSubsystem::POLICY_TRANSITION_MONTHS) . ' months.', $rules['Who sets the mix']);
+        $this->assertStringContainsString('pays 0.10% on each side', $rules['Stamp duty']);
+        $this->assertStringStartsWith('Checked at every month end.', $rules['Rebalancing']);
+        $district = $page['bands'][0];
+        $this->assertStringContainsString(sprintf('Policy weight %.2f%%, band ±%.2fpp', 100 * $district['policy'], 100 * $district['band']), $rules['District equity band']);
+        $this->assertStringContainsString(sprintf('%d%% of its central counterparty', round(100 * StrategicHoldings::CLEARINGHOUSE_STAKE)), $rules['Strategic holding']);
     }
 
     public function testBandsAreTheFundsOwn(): void

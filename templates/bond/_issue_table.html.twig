@@ -1,0 +1,55 @@
+{# One table of the bond ladder, sovereign or corporate. Pass rows (each {bond, yearsToMaturity, change}) and holdings
+   (bonds held by ticker). A sovereign issue is marked when it is on the run, a corporate one with where its claim
+   ranks. #}
+{% import 'partials/_ui.html.twig' as ui %}
+<div class="overflow-x-auto">
+	<table class="w-full text-left">
+		<thead class="table-head bg-surface-container-lowest/60">
+			<tr>
+				<th scope="col" class="px-5 py-2 font-semibold">Issue</th>
+				<th scope="col" class="px-4 py-2 font-semibold text-right">Coupon</th>
+				<th scope="col" class="px-4 py-2 font-semibold text-right">Maturity</th>
+				<th scope="col" class="px-4 py-2 font-semibold text-right">Price</th>
+				<th scope="col" class="px-4 py-2 font-semibold text-right">1M</th>
+				<th scope="col" class="px-4 py-2 font-semibold text-right">Yield</th>
+				<th scope="col" class="px-4 py-2 font-semibold text-right">Duration</th>
+				<th scope="col" class="px-5 py-2 font-semibold text-right">Held</th>
+			</tr>
+		</thead>
+		<tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
+			{% for row in rows %}
+				{% set bond = row.bond %}
+				<tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group">
+					<td class="px-5 py-3">
+						<div class="flex items-center gap-2">
+							<a href="{{ path('app_bond_view', { ticker: bond.ticker }) }}" class="font-semibold text-primary font-mono outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ bond.ticker }}</a>
+							{% if bond.isOnTheRun %}
+								<span class="badge badge-accent relative z-10" title="The newest issue at this tenor, and the one the benchmark yield is quoted from">On the run</span>
+							{% endif %}
+							{% if bond.seniority %}
+								<span class="badge badge-neutral relative z-10" title="Where this claim sits when the issuer fails">{{ bond.seniority|replace({'_': ' '})|lower|capitalize }}</span>
+							{% endif %}
+						</div>
+					</td>
+					<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ bond.couponRate|pct(3) }}</td>
+					<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Matures {{ bond.maturesAtTime|sim_date }}">
+						{{ row.yearsToMaturity|number_format(2) }}y
+					</td>
+					<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="clean-{{ bond.ticker }}" title="Clean price, per {{ bond.faceValue|money(0) }} of face">
+						{{ bond.cleanPrice|number_format(2) }}
+					</td>
+					<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change|signed_class }}">{{ row.change|pct(2, true) }}</td>
+					<td class="px-4 py-3 font-mono tabular-nums text-right font-medium text-on-surface" id="ytm-{{ bond.ticker }}">{{ bond.yieldToMaturity|pct(2) }}</td>
+					<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Modified duration: the percentage price move per 1% parallel yield shift">{{ bond.modifiedDuration|number_format(2) }}</td>
+					<td class="px-5 py-3 font-mono tabular-nums text-right">
+						{% if holdings[bond.ticker] is defined %}
+							<span class="font-medium text-on-surface">{{ holdings[bond.ticker]|number_format }}</span>
+						{% else %}
+							{{ ui.missing() }}
+						{% endif %}
+					</td>
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</div>

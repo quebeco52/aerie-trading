@@ -22,6 +22,9 @@ class UiExtension extends AbstractExtension
     /** Rendered in place of a figure that is missing or not finite; formatters.js NOT_AVAILABLE. */
     public const NOT_AVAILABLE = '—';
 
+    /** How many ids ui_id() has handed out on this page. */
+    private int $issuedIds = 0;
+
     public function getFilters(): array
     {
         return [
@@ -43,6 +46,7 @@ class UiExtension extends AbstractExtension
             // Not 'source': Twig's own source() inlines a template's text (the web profiler draws its icons with it),
             // and an extension function of the same name replaces it.
             new TwigFunction('source_line', [self::class, 'source']),
+            new TwigFunction('ui_id', $this->uniqueId(...)),
         ];
     }
 
@@ -166,6 +170,15 @@ class UiExtension extends AbstractExtension
         }, $publishers);
 
         return 'Source: ' . implode('; ', $names);
+    }
+
+    /**
+     * An element id no other ui_id() call on the page shares ("tip-3"), for an aria reference between two elements
+     * a macro draws, such as a term and its tooltip.
+     */
+    public function uniqueId(string $prefix): string
+    {
+        return $prefix . '-' . ++$this->issuedIds;
     }
 
     /** $value × $scale to $decimals places with its unit; the dash when missing, "+" on a rise when $signed. */

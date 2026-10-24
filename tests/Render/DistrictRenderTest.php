@@ -8,6 +8,7 @@ use App\Data\Company\InitialMarket;
 use App\Data\District\DistrictMap;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Entity\User;
 use App\Service\District\DistrictMapBuilder;
 use App\Service\District\DistrictStressEvaluator;
 use App\Service\District\DistrictWardComposer;
@@ -16,6 +17,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
+use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 
 /**
  * Renders Glasswater Row from the seed universe with stub prices, ratings and monthly changes, through the real
@@ -75,6 +77,7 @@ final class DistrictRenderTest extends KernelTestCase
         $canvas = $builder->resolveCanvas($frontage['slots'], $stocks, $envelope, $frontage['rowCount']);
         $plots = $builder->buildWard($frontage['slots'], $stocks, $envelope, $canvas, $changes);
         $viewboxWidth = $builder->resolveViewboxWidth($plots, $frontage['viewboxWidth']);
+        $institutions = $builder->buildInstitutions($plots, $viewboxWidth, $canvas);
         $macro = new MacroStateDTO();
         $stress = (new DistrictStressEvaluator())->evaluate($macro);
 
@@ -107,7 +110,8 @@ final class DistrictRenderTest extends KernelTestCase
             'sectorBracket' => ['ruleOffset' => DistrictMap::SECTOR_BRACKET_RULE_OFFSET, 'labelOffset' => DistrictMap::SECTOR_BRACKET_LABEL_OFFSET, 'labelSize' => DistrictMap::SECTOR_BRACKET_LABEL_SIZE],
             'plots' => $plots,
             'shares' => [],
-            'institutions' => $builder->buildInstitutions($plots, $viewboxWidth, $canvas),
+            'institutions' => $institutions,
+            ...$builder->sceneIndex($plots, $institutions),
             'institutionStress' => $stress,
             'macroSnapshot' => $macro->toArray(),
             'institutionBand' => [
@@ -147,5 +151,15 @@ final class DistrictRenderTest extends KernelTestCase
         $container->get('request_stack')->push($request);
 
         $this->assertFileExists(OfflinePage::write('district', $twig->render('district/index.html.twig', $data)));
+
+        // The street to a signed-in trader with margin: the quick-trade ticket, and pennants on a long and a short.
+        $tickers = array_map(static fn($plot) => $plot->ticker, $plots);
+        $container->get('security.token_storage')->setToken(new UsernamePasswordToken((new User())->setEmail('kestrel@example.com')->setUsername('kestrel'), 'main', ['ROLE_USER']));
+        $trader = array_replace($data, [
+            'userHoldings' => [$tickers[0] => ['quantity' => 120, 'isShort' => false, 'averageCost' => 41.5], $tickers[3] => ['quantity' => 40, 'isShort' => true, 'averageCost' => 18.2]],
+            'userCash' => 25000.0,
+            'marginEnabled' => true,
+        ]);
+        $this->assertFileExists(OfflinePage::write('district-trader', $twig->render('district/index.html.twig', $trader)));
     }
 }

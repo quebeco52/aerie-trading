@@ -48,7 +48,7 @@ final class AeriePartyProfiles
                 ['title' => 'A higher corporate tax', 'text' => 'Raise the rate on corporate profits to pay for them.'],
                 ['title' => 'Keep the dividend tax', 'text' => 'Hold the tax on the dividends shareholders are paid where the Charter set it, and spend what it raises on the District.'],
                 ['title' => 'A levy on the banks', 'text' => 'Charge the largest balance sheets for the public guarantee they enjoy.'],
-                ['title' => 'A duty on share trades', 'text' => 'Raise the stamp duty on share trading, paid into the Sovereign Reserve.'],
+                ['title' => 'A duty on share trades', 'text' => 'Raise the stamp duty on share trading, paid into the Sovereign Reserve Fund.'],
                 ['title' => 'A price on carbon', 'text' => 'A moderate carbon price on the District\'s power.'],
             ],
             'relations' => 'The Front leads the left bloc in almost every Diet and is the Vanguard\'s rival for the premiership; the two will not govern together. Its usual partners are Iron Harbor and the Tideline Accord, which share its suspicion of Glasswater Row if not its faith in the state. It counts on the Common Lot\'s votes from outside the cabinet, and offers it nothing more.',

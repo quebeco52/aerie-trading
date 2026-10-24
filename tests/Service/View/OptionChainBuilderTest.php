@@ -133,6 +133,7 @@ class OptionChainBuilderTest extends TestCase
         $this->assertNotNull($row['call']);
         $this->assertNotNull($row['put']);
         $this->assertEqualsWithDelta(100.0, $row['strike'], 1e-9);
+        $this->assertEqualsWithDelta(abs($row['call']['theta']) / 365.0, $row['call']['dailyDecay'], 1e-12, 'a year of decay over its days');
     }
 
     public function testAStrikeListedOnOneSideOnlyLeavesTheOtherSideEmpty(): void

@@ -47,6 +47,16 @@ final class LifecycleStageTest extends TestCase
         }
     }
 
+    /** Each stage badge takes a house tone, and only decline reads as a fall: a mixed pattern is a caution. */
+    public function testEachStageHasABadgeTone(): void
+    {
+        foreach (LifecycleStage::cases() as $stage) {
+            $this->assertContains($stage->tone(), ['up', 'down', 'warn', 'accent', 'neutral'], $stage->value);
+        }
+        $this->assertSame('warn', LifecycleStage::ShakeOut->tone());
+        $this->assertSame('down', LifecycleStage::Decline->tone());
+    }
+
     /**
      * The displayed sign pattern must round-trip through the classifier, so the UI can never
      * show a signature that the engine would file under a different stage.

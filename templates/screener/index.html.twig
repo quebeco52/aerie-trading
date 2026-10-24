@@ -1,6 +1,12 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Stock Screener | Aerie Exchange{% endblock %}
+{% block page_title %}Stock screener{% endblock %}
+
+{# A column heading the screener sorts by (screener_controller.js), on a click or on Enter. opts: align (a text
+   alignment class), pad (default px-4), title (a hover note). #}
+{% macro sortable(col, label, opts = {}) %}
+    <th scope="col" class="{{ opts.pad ?? 'px-4' }} py-3 {{ opts.align ?? '' }} cursor-pointer select-none hover:text-primary transition-colors" data-col="{{ col }}" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort keydown.enter->screener#sort"{% if opts.title is defined %} title="{{ opts.title }}"{% endif %}>{{ label }}</th>
+{% endmacro %}
 
 {% block body %}
 <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-5" data-controller="screener">
@@ -34,30 +40,30 @@
             <table class="w-full text-left border-collapse min-w-225" id="screener-table">
                 <thead>
                     <tr class="table-head bg-surface-container-highest/20">
-                        <th scope="col" class="px-5 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Ticker</th>
-                        <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="name" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Company</th>
-                        <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="sector" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Sector</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="price" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Price</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Market cap</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="pe" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">P/E</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="yield" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Annualized dividend yield">Div yield</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="eps" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">EPS</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">ROIC</th>
-                        <th scope="col" class="px-4 py-3 text-center cursor-pointer select-none hover:text-primary transition-colors" data-col="rating" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Credit rating from rating agency">Rating</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Equity</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">D/E</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="ndebt" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Net debt over annualized EBITDA">ND/EBITDA</th>
-                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="fcfconv" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Free cash flow over trailing net income">FCF conv.</th>
+                        {{ _self.sortable('ticker', 'Ticker', {pad: 'px-5'}) }}
+                        {{ _self.sortable('name', 'Company') }}
+                        {{ _self.sortable('sector', 'Sector') }}
+                        {{ _self.sortable('price', 'Price', {align: 'text-right'}) }}
+                        {{ _self.sortable('mcap', 'Market cap', {align: 'text-right'}) }}
+                        {{ _self.sortable('pe', 'P/E', {align: 'text-right'}) }}
+                        {{ _self.sortable('yield', 'Div yield', {align: 'text-right', title: 'Annualised dividend yield'}) }}
+                        {{ _self.sortable('eps', 'EPS', {align: 'text-right'}) }}
+                        {{ _self.sortable('roic', 'ROIC', {align: 'text-right'}) }}
+                        {{ _self.sortable('rating', 'Rating', {align: 'text-center', title: 'Credit rating from rating agency'}) }}
+                        {{ _self.sortable('equity', 'Equity', {align: 'text-right'}) }}
+                        {{ _self.sortable('de', 'D/E', {align: 'text-right'}) }}
+                        {{ _self.sortable('ndebt', 'ND/EBITDA', {align: 'text-right', title: 'Net debt over annualised EBITDA'}) }}
+                        {{ _self.sortable('fcfconv', 'FCF conv.', {align: 'text-right', title: 'Free cash flow over trailing net income'}) }}
                         <th class="px-5 py-3"><span class="sr-only">Open</span></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm" id="screener-tbody" data-screener-target="tbody">
                     {% for stock in stocks %}
-                        <tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group screener-row {{ stock.isBankrupt ? 'opacity-50 bg-tertiary/10' : '' }}" data-ticker="{{ stock.ticker }}" data-name="{{ stock.name|lower }}" data-sector="{{ stock.sector }}" data-screener-target="row">
+                        <tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group screener-row {{ stock.isBankrupt ? 'bg-tertiary/10' : '' }}" data-ticker="{{ stock.ticker }}" data-name="{{ stock.name|lower }}" data-sector="{{ stock.sector }}" data-screener-target="row">
                             <th scope="row" class="px-5 py-2.5 text-left font-normal" data-value="{{ stock.ticker }}">
                                 <div class="flex items-center gap-1.5">
                                     <a href="/stock/{{ stock.ticker }}" class="font-bold text-primary font-mono group-hover:underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ stock.ticker }}</a>
-                                    {% if stock.dividendAristocrat|default(false) %}
+                                    {% if stock.dividendAristocrat %}
                                         <span class="badge badge-up relative z-10" title="Dividend Aristocrat: 25+ consecutive years of dividend increases">Aristocrat</span>
                                     {% endif %}
                                     {% if stock.isBankrupt %}
@@ -69,13 +75,13 @@
                             <td class="px-4 py-2.5 text-on-surface-variant text-xs" data-value="{{ stock.sector }}">
                                 {{ stock.sector }}
                             </td>
-                            <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}</td>
-                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">{{ stock.isBankrupt ? '$0.00' : stock.marketCap|format_large('$') }}</td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">{{ (stock.isBankrupt ? 0 : stock.price)|money(2) }}</td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">{{ stock.isBankrupt ? 0|money(2) : stock.marketCap|format_large('$') }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : (stock.peRatio ?? 0) }}">
                                 {{ (stock.isBankrupt ? null : stock.peRatio)|multiple }}
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.dividendYield ?? 0 }}">
-                                {{ not stock.isBankrupt and stock.dividendYield > 0 ? stock.dividendYield|pct(2) : '—' }}
+                                {{ (not stock.isBankrupt and stock.dividendYield > 0 ? stock.dividendYield : null)|pct(2) }}
                             </td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.eps }}">{{ stock.eps|money(2) }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.currentRoic|signed_class }}" data-value="{{ stock.currentRoic }}">
@@ -88,10 +94,10 @@
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.debtToEquity ?? 0 }}">
                                 {{ stock.debtToEquity|multiple }}
                             </td>
-                            <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.netDebtToEbitda is not null and stock.netDebtToEbitda > 4 ? 'text-tertiary' : 'text-on-surface' }}" data-value="{{ stock.netDebtToEbitda ?? 0 }}">
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.leverageCaution ? 'text-warning' : 'text-on-surface' }}" data-value="{{ stock.netDebtToEbitda ?? 0 }}">
                                 {{ stock.netDebtToEbitda|multiple }}
                             </td>
-                            <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.fcfConversion is not null and stock.fcfConversion < 0.8 ? 'text-tertiary' : 'text-on-surface' }}" data-value="{{ stock.fcfConversion ?? 0 }}">
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.cashCaution ? 'text-warning' : 'text-on-surface' }}" data-value="{{ stock.fcfConversion ?? 0 }}">
                                 {{ stock.fcfConversion|pct(0) }}
                             </td>
                             <td class="px-5 py-2.5 text-right">

@@ -25,6 +25,7 @@ function getAerieContext() {
         businessModel: d.businessModel || 'none',
         isFinancial: !!d.isFinancial,
         isInsurer: !!d.isInsurer,
+        industryCharts: Array.isArray(d.industryCharts) ? d.industryCharts : [],
         sharesOutstanding: d.sharesOutstanding || 1,
         currentPrice: d.currentPrice || 0,
         userQuantity: d.userQuantity || 0,

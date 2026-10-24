@@ -1,13 +1,9 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}The Government - Aerie Exchange{% endblock %}
+{% block page_title %}The government{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The Aerie District's government at a glance: the cabinet, the next election, the budget, the Council and the departments it appoints.">
-	<meta property="og:title" content="The Government | Aerie Exchange">
-	<meta property="og:description" content="Eight parties, a 300-seat Diet elected every four years, and a thirteen-member Council that renews itself.">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}The Aerie District's government at a glance: the cabinet, the next election, the budget, the Council and the departments it appoints.{% endblock %}
+{% block og_description %}Eight parties, a 300-seat Diet elected every four years, and a thirteen-member Council that renews itself.{% endblock %}
 
 {% import 'partials/_ui.html.twig' as ui %}
 {% import 'government/_macros.html.twig' as gov %}
@@ -15,20 +11,17 @@
 {% block body %}
 	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" id="governmentPage">
 
-		<header class="pb-6 border-b border-outline-variant/15">
-			<div class="flex flex-col gap-6">
-				<div class="min-w-0 max-w-3xl">
-					<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight leading-tight">The Government</h1>
-					<p class="text-sm text-on-surface-variant mt-2 max-w-2xl">
-						The District is governed by two institutions that share no members and answer to no one but themselves.
-						The Diet is elected every {{ rules.termYears|number_format(0) }} years and passes the budget and the laws.
-						The Council is {{ rules.councilSeats }} leaders who choose their own successors and appoint the governor of the
-						Monetary Authority and the heads of the other departments.
-					</p>
-					<p class="mt-3 text-sm text-on-surface-variant">As of {{ simDate }}</p>
-				</div>
-
-				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-5">
+		{% embed 'partials/_page_header.html.twig' with {title: 'The government', aside_below: true} %}
+			{% block lead %}
+				The District is governed by two institutions that share no members and answer to no one but themselves.
+				The Diet is elected every {{ rules.termYears|number_format(0) }} years and passes the budget and the laws.
+				The Council is {{ rules.councilSeats }} leaders who choose their own successors and appoint the governor of the
+				Monetary Authority and the heads of the other departments.
+			{% endblock %}
+			{% block aside %}
+				{% import 'partials/_ui.html.twig' as ui %}
+				<p class="text-sm text-on-surface-variant">As of {{ simDate }}</p>
+				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-5 mt-3">
 					<div class="col-span-2">
 						<dt class="text-xs text-on-surface-variant">{{ government.caretaker ? 'Caretaker cabinet' : 'Cabinet' }}</dt>
 						<dd class="text-base font-semibold text-on-surface mt-1 flex flex-wrap gap-x-3 gap-y-1">
@@ -37,207 +30,182 @@
 							{% endfor %}
 						</dd>
 						{% if government.support is not empty %}
-							<p class="text-2xs text-on-surface-variant mt-1">Supported from outside by {% for member in government.support %}<span class="font-semibold text-on-surface">{{ member.name }}</span>{{ not loop.last ? ', ' : '' }}{% endfor %}</p>
+							<dd class="text-2xs text-on-surface-variant mt-1">Supported from outside by {% for member in government.support %}<span class="font-semibold text-on-surface">{{ member.name }}</span>{{ not loop.last ? ', ' : '' }}{% endfor %}</dd>
 						{% endif %}
 						{% if government.primeMinister %}
-							<p class="text-2xs text-on-surface-variant mt-1">{{ government.caretaker ? 'Caretaker prime minister' : 'Prime minister' }} <span class="font-semibold text-on-surface">{{ government.primeMinister.name }}</span>, {{ government.primeMinister.age }}, leader of {{ government.primeMinister.party }}</p>
+							<dd class="text-2xs text-on-surface-variant mt-1">{{ government.caretaker ? 'Caretaker prime minister' : 'Prime minister' }} <span class="font-semibold text-on-surface">{{ government.primeMinister.name }}</span>, {{ government.primeMinister.age }}, leader of {{ government.primeMinister.party }}</dd>
 						{% endif %}
-						<p class="text-2xs font-mono tabular-nums text-on-surface-variant mt-1">{{ government.caretaker ? 'Stays in office until the talks produce a government · formed ' : 'Formed ' }}{{ government.formed }}</p>
+						<dd class="text-2xs font-mono tabular-nums text-on-surface-variant mt-1">{{ government.caretaker ? 'Stays in office until the talks produce a government · formed ' : 'Formed ' }}{{ government.formed }}</dd>
 					</div>
-					<div>
-						<dt class="text-xs text-on-surface-variant">Cabinet seats</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ government.seats }} / {{ rules.seats }}</dd>
-						<p class="text-2xs font-mono tabular-nums text-on-surface-variant mt-0.5">
-							{%- if government.minority %}Minority · {{ government.supportedSeats }} with supporters{% else %}Majority {{ rules.majority }}{% endif -%}
-						</p>
-					</div>
-					<div>
-						<dt class="text-xs text-on-surface-variant">Next election</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ election.next }}</dd>
-						<p class="text-2xs font-mono tabular-nums text-on-surface-variant mt-0.5">
-							{{ election.campaign ? 'Campaign under way · ' : '' }}in {{ election.yearsLeft|number_format(1) }} {{ election.yearsLeft|number_format(1) == '1.0' ? 'year' : 'years' }}
-						</p>
-					</div>
-					<div class="col-span-2">
-						<dt class="text-xs text-on-surface-variant" title="An index of uncertainty about economic policy, 100 on average">Policy uncertainty</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5">{{ election.policyUncertainty|number_format(0) }}</dd>
-						<p class="text-2xs text-on-surface-variant mt-0.5">Rises into a vote and stays high through the talks, as firms put off investment until they know who governs</p>
-					</div>
-					<div class="col-span-2">
-						<dt class="text-xs text-on-surface-variant">Next Council term to end</dt>
-						<dd class="text-base font-semibold text-on-surface mt-0.5">Seat {{ council.nextVacancy.seat }} · {{ council.nextVacancy.termEndsLabel }}</dd>
-						<p class="text-2xs text-on-surface-variant mt-0.5">{{ council.nextVacancy.name }}'s term ends; the Council elects the successor</p>
-					</div>
+					{{ ui.figure('Cabinet seats', government.seats ~ ' / ' ~ rules.seats, {noteSize: 'text-2xs', note: government.minority ? 'Minority · ' ~ government.supportedSeats ~ ' with supporters' : 'Majority ' ~ rules.majority}) }}
+					{{ ui.figure('Next election', election.next, {noteSize: 'text-2xs', note: (election.campaign ? 'Campaign under way · ' : '') ~ 'in ' ~ election.yearsLeft|number_format(1) ~ ' ' ~ (election.yearsLeft|number_format(1) == '1.0' ? 'year' : 'years')}) }}
+					{{ ui.figure('Policy uncertainty', election.policyUncertainty|number_format(0), {class: 'col-span-2', tip: 'An index of uncertainty about economic policy, 100 on average', noteSize: 'text-2xs', noteMono: false, note: 'Rises into a vote and stays high through the talks, as firms put off investment until they know who governs'}) }}
+					{{ ui.figure('Next Council term to end', 'Seat ' ~ council.nextVacancy.seat ~ ' · ' ~ council.nextVacancy.termEndsLabel, {class: 'col-span-2', size: 'text-base', mono: false, noteSize: 'text-2xs', noteMono: false, note: council.nextVacancy.name ~ '\'s term ends; the Council elects the successor'}) }}
 				</dl>
-			</div>
-		</header>
-
+			{% endblock %}
+		{% endembed %}
 
 		{# One headline from each institution, with a link to its own page. #}
 		<section aria-labelledby="elected-heading">
 			<h2 id="elected-heading" class="text-sm font-semibold text-on-surface">The Diet and its budget</h2>
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-5 mt-3">
-				<section class="bg-surface-container-low rounded-lg p-5 border {{ talks and talks.underWay ? 'border-primary/40' : 'border-outline-variant/20' }} flex flex-col" aria-labelledby="hub-diet-heading">
-					<h3 id="hub-diet-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_government_diet') }}" class="hover:underline">The Diet</a></h3>
-					{{ gov.hemicycle(hemicycle, parties, government.supportedSeats, rules.majority, 'mt-3 max-h-40') }}
-					<p class="text-xs text-on-surface mt-3">
-						{% if talks and talks.underWay %}
-							<span class="font-semibold text-primary">{{ talks.afterFall ? 'The cabinet has fallen' : 'Coalition talks under way' }}</span>, day <span class="font-mono tabular-nums">{{ talks.day|number_format(0) }}</span>{% if talks.leading %}: {{ talks.leading.name }} is trying to form a government{% endif %}.
-						{% else %}
-							{% set largest = parties|sort((a, b) => b.seats <=> a.seats)|first %}
-							{{ largest.name }} is the largest party with <span class="font-mono tabular-nums">{{ largest.seats }}</span> seats; the cabinet {{ government.minority ? 'governs as a minority' : 'holds a majority' }}.
-						{% endif %}
-					</p>
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_government_diet') }}" class="text-primary hover:underline underline-offset-2">Seats, talks, where the parties stand and past elections</a></p>
-				</section>
-
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-election-heading">
-					<h3 id="hub-election-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_government_election') }}" class="hover:underline">The election</a></h3>
-					<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ election.next }}</p>
-					<p class="text-xs text-on-surface-variant">{{ election.campaign ? 'Campaign under way, ' : '' }}in {{ election.yearsLeft|number_format(1) }} {{ election.yearsLeft|number_format(1) == '1.0' ? 'year' : 'years' }}</p>
-					{% if polls %}
-						{% set front = polls.parties|first %}
+				{% embed 'government/_hub_card.html.twig' with {key: 'diet', title: 'The Diet', href: path('app_government_diet'), more: 'Seats, talks, where the parties stand and past elections', border: talks and talks.underWay ? 'border-primary/40' : 'border-outline-variant/20'} %}
+					{% block body %}
+						{% import 'government/_macros.html.twig' as gov %}
+						{{ gov.hemicycle(hemicycle, parties, government.supportedSeats, rules.majority, 'mt-3 max-h-40') }}
 						<p class="text-xs text-on-surface mt-3">
-							<span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ front.color }}" aria-hidden="true"></span>{{ front.name }} leads the polls at <span class="font-mono tabular-nums">{{ front.average|pct(1) }}</span>, against <span class="font-mono tabular-nums">{{ front.vote|pct(1) }}</span> at the last vote.
+							{% if talks and talks.underWay %}
+								<span class="font-semibold text-primary">{{ talks.afterFall ? 'The cabinet has fallen' : 'Coalition talks under way' }}</span>, day <span class="font-mono tabular-nums">{{ talks.day|number_format(0) }}</span>{% if talks.leading %}: {{ talks.leading.name }} is trying to form a government{% endif %}.
+							{% else %}
+								{{ largestParty.name }} is the largest party with <span class="font-mono tabular-nums">{{ largestParty.seats }}</span> seats; the cabinet {{ government.minority ? 'governs as a minority' : 'holds a majority' }}.
+							{% endif %}
 						</p>
-					{% endif %}
-					{% if market and market.leaders is not empty %}
-						{% set favourite = market.leaders|first %}
-						<p class="text-xs text-on-surface mt-1">
-							Traders give {{ favourite.name }} a <span class="font-mono tabular-nums">{{ favourite.chance|pct(0) }}</span> chance of leading {{ market.talks ? 'the government the talks produce' : 'the next government' }}.
-						</p>
-					{% endif %}
-					{% if not polls and not market %}
-						<p class="text-xs text-on-surface-variant mt-3">No poll has been taken since the last vote.</p>
-					{% endif %}
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_government_election') }}" class="text-primary hover:underline underline-offset-2">The polls and the market's odds</a></p>
-				</section>
+					{% endblock %}
+				{% endembed %}
 
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-budget-heading">
-					<h3 id="hub-budget-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_government_budget') }}" class="hover:underline">The budget</a></h3>
-					<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ budget.debt|pct(1) }}</p>
-					<p class="text-xs text-on-surface-variant">of GDP in debt; the cabinet steers to <span class="font-mono tabular-nums">{{ budget.debtTarget|pct(1) }}</span>, moving toward it by up to <span class="font-mono tabular-nums">{{ budget.debtPace|pct(2) }}</span> of GDP a year</p>
-					{% set changing = budget.levers|filter(lever => lever.status in ['pending', 'partial'])|length %}
-					{% set held = budget.levers|filter(lever => lever.status in ['fund', 'blocked'])|length %}
-					<p class="text-xs text-on-surface mt-3">
-						{% if government.caretaker %}
-							No budget passes until the talks produce a government.
-						{% else %}
-							Next round <span class="font-mono tabular-nums">{{ budget.nextRound }}</span>:
-							{{ changing == 0 ? 'no law changes' : (changing == 1 ? 'one law changes' : changing ~ ' laws change') }}{% if held > 0 %}, and {{ held == 1 ? 'one is' : held ~ ' are' }} held back{% endif %}.
+				{% embed 'government/_hub_card.html.twig' with {key: 'election', title: 'The election', href: path('app_government_election'), more: 'The polls and the market\'s odds'} %}
+					{% block body %}
+						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ election.next }}</p>
+						<p class="text-xs text-on-surface-variant">{{ election.campaign ? 'Campaign under way, ' : '' }}in {{ election.yearsLeft|number_format(1) }} {{ election.yearsLeft|number_format(1) == '1.0' ? 'year' : 'years' }}</p>
+						{% if polls %}
+							{% set front = polls.parties|first %}
+							<p class="text-xs text-on-surface mt-3">
+								<span class="inline-block w-2 h-2 rounded-full mr-1" style="background-color: {{ front.color }}" aria-hidden="true"></span>{{ front.name }} leads the polls at <span class="font-mono tabular-nums">{{ front.average|pct(1) }}</span>, against <span class="font-mono tabular-nums">{{ front.vote|pct(1) }}</span> at the last vote.
+							</p>
 						{% endif %}
-					</p>
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_government_budget') }}" class="text-primary hover:underline underline-offset-2">The laws, their history and the firms they reach</a></p>
-				</section>
+						{% if market and market.leaders is not empty %}
+							{% set favourite = market.leaders|first %}
+							<p class="text-xs text-on-surface mt-1">
+								Traders give {{ favourite.name }} a <span class="font-mono tabular-nums">{{ favourite.chance|pct(0) }}</span> chance of leading {{ market.talks ? 'the government the talks produce' : 'the next government' }}.
+							</p>
+						{% endif %}
+						{% if not polls and not market %}
+							<p class="text-xs text-on-surface-variant mt-3">No poll has been taken since the last vote.</p>
+						{% endif %}
+					{% endblock %}
+				{% endembed %}
+
+				{% embed 'government/_hub_card.html.twig' with {key: 'budget', title: 'The budget', href: path('app_government_budget'), more: 'The laws, their history and the firms they reach'} %}
+					{% block body %}
+						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ budget.debt|pct(1) }}</p>
+						<p class="text-xs text-on-surface-variant">of GDP in debt; the cabinet steers to <span class="font-mono tabular-nums">{{ budget.debtTarget|pct(1) }}</span>, moving toward it by up to <span class="font-mono tabular-nums">{{ budget.debtPace|pct(2) }}</span> of GDP a year</p>
+						<p class="text-xs text-on-surface mt-3">
+							{% if government.caretaker %}
+								No budget passes until the talks produce a government.
+							{% else %}
+								Next round <span class="font-mono tabular-nums">{{ budget.nextRound }}</span>:
+								{{ budget.changing == 0 ? 'no law changes' : (budget.changing == 1 ? 'one law changes' : budget.changing ~ ' laws change') }}{% if budget.held > 0 %}, and {{ budget.held == 1 ? 'one is' : budget.held ~ ' are' }} held back{% endif %}.
+							{% endif %}
+						</p>
+					{% endblock %}
+				{% endembed %}
 			</div>
 		</section>
 
 		<section aria-labelledby="appointed-heading">
 			<h2 id="appointed-heading" class="text-sm font-semibold text-on-surface">The Council and the departments it appoints</h2>
 			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-5 mt-3">
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-council-heading">
-					<h3 id="hub-council-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_council') }}" class="hover:underline">Aerie Council</a></h3>
-					{% if council.lean %}
-						<p class="mt-2 text-2xl font-semibold text-on-surface">{{ council.lean.median == 'hawk' ? 'Hawkish' : (council.lean.median == 'dove' ? 'Dovish' : 'Middle') }}</p>
-						<p class="text-xs text-on-surface-variant">
-							<span class="font-mono tabular-nums">{{ council.lean.hawk }}</span> {{ council.lean.hawk == 1 ? 'hawk' : 'hawks' }},
-							<span class="font-mono tabular-nums">{{ council.lean.swing }}</span> {{ council.lean.swing == 1 ? 'swing vote' : 'swing votes' }},
-							<span class="font-mono tabular-nums">{{ council.lean.dove }}</span> {{ council.lean.dove == 1 ? 'dove' : 'doves' }}
-						</p>
-					{% endif %}
-					{% if council.lean and council.lean.banks is not null %}
-						<p class="text-xs text-on-surface mt-3">
-							Its middle councillor would ask the banks for <span class="font-mono tabular-nums">{{ council.lean.banks|pct(1) }}</span> core capital{% if council.lean.reserves is not null %} and keep <span class="font-mono tabular-nums">{{ council.lean.reserves|pct(0) }}</span> of the reserves in shares{% endif %}.
-						</p>
-					{% endif %}
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_council') }}" class="text-primary hover:underline underline-offset-2">Councillors, departments and powers</a></p>
-				</section>
-
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-authority-heading">
-					<h3 id="hub-authority-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_authority') }}" class="hover:underline">Monetary Authority</a></h3>
-					{% if authority and authority.meeting %}
-						{% set meeting = authority.meeting %}
-						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ meeting.rate|pct(2) }}</p>
-						<p class="text-xs text-on-surface-variant">policy rate</p>
-						<p class="text-xs text-on-surface mt-3">
-							{%- set bp = meeting.moveBp -%}
-							{%- set points = bp|abs == 1 ? ' basis point' : ' basis points' -%}
-							{{ bp == 0 ? 'Held' : (bp > 0 ? 'Raised ' ~ bp ~ points : 'Cut ' ~ bp|abs ~ points) }} on <span class="font-mono tabular-nums">{{ meeting.date }}</span>, voting <span class="font-mono tabular-nums">{{ meeting.split }}</span>. Next meeting <span class="font-mono tabular-nums">{{ authority.nextMeeting }}</span>.
-						</p>
-					{% elseif authority %}
-						<p class="text-xs text-on-surface mt-2">The committee has not met yet. Its first meeting is <span class="font-mono tabular-nums">{{ authority.nextMeeting }}</span>.</p>
-					{% endif %}
-					{% if authority %}
-						<p class="text-xs text-on-surface-variant mt-1">Governor {{ authority.governor.name }}, {{ {hawk: 'a hawk', swing: 'a swing vote', dove: 'a dove'}[authority.governor.stance] }}</p>
-					{% endif %}
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_authority') }}" class="text-primary hover:underline underline-offset-2">The governor, the committee and every decision</a></p>
-				</section>
-
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-regulator-heading">
-					<h3 id="hub-regulator-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_regulator') }}" class="hover:underline">Financial Regulator</a></h3>
-					{% if regulator %}
-						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ regulator.inForce|pct(2) }}</p>
-						<p class="text-xs text-on-surface-variant">core capital, with a <span class="font-mono tabular-nums">{{ regulator.buffer|pct(2) }}</span> buffer on top</p>
-						<p class="text-xs text-on-surface mt-3">
-							{{ mortgageLtvCap is null ? 'No limit on mortgage borrowing.' : 'Mortgages capped at ' ~ mortgageLtvCap|pct(0) ~ ' of a home\'s price.' }}
-							{% if regulator.phasing %}Capital rising to <span class="font-mono tabular-nums">{{ regulator.phasing.target|pct(1) }}</span> by <span class="font-mono tabular-nums">{{ regulator.phasing.completeLabel }}</span>.{% endif %}
-						</p>
-						<p class="text-xs text-on-surface-variant mt-1">Head {{ regulator.head.name }}, {{ {light: 'light-touch', middle: 'moderate', strict: 'strict'}[regulator.head.stance] }}</p>
-					{% endif %}
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_regulator') }}" class="text-primary hover:underline underline-offset-2">Both rules and the banks it supervises</a></p>
-				</section>
-
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-fund-heading">
-					<h3 id="hub-fund-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_reserve') }}" class="hover:underline">Sovereign Reserve Fund</a></h3>
-					{% if fundHead %}
-						{% if fundHead.inForce is not null %}
-							<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ fundHead.inForce|pct(1) }}</p>
-							<p class="text-xs text-on-surface-variant">of the fund in equities</p>
+				{% embed 'government/_hub_card.html.twig' with {key: 'council', title: 'Aerie Council', href: path('app_council'), more: 'Councillors, departments and powers'} %}
+					{% block body %}
+						{% if council.lean %}
+							<p class="mt-2 text-2xl font-semibold text-on-surface">{{ council.lean.median == 'hawk' ? 'Hawkish' : (council.lean.median == 'dove' ? 'Dovish' : 'Middle') }}</p>
+							<p class="text-xs text-on-surface-variant">
+								<span class="font-mono tabular-nums">{{ council.lean.hawk }}</span> {{ council.lean.hawk == 1 ? 'hawk' : 'hawks' }},
+								<span class="font-mono tabular-nums">{{ council.lean.swing }}</span> {{ council.lean.swing == 1 ? 'swing vote' : 'swing votes' }},
+								<span class="font-mono tabular-nums">{{ council.lean.dove }}</span> {{ council.lean.dove == 1 ? 'dove' : 'doves' }}
+							</p>
 						{% endif %}
-						<p class="text-xs text-on-surface mt-3">Head {{ fundHead.name }}, {{ {cautious: 'a cautious investor', balanced: 'a balanced investor', bold: 'a bold investor'}[fundHead.stance] }}{{ fundHead.opening ? ', keeping the mix the fund opened with' : '' }}.</p>
-					{% endif %}
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_reserve') }}" class="text-primary hover:underline underline-offset-2">Holdings, weights and bands</a></p>
-				</section>
+						{% if council.lean and council.lean.banks is not null %}
+							<p class="text-xs text-on-surface mt-3">
+								Its middle councillor would ask the banks for <span class="font-mono tabular-nums">{{ council.lean.banks|pct(1) }}</span> core capital{% if council.lean.reserves is not null %} and keep <span class="font-mono tabular-nums">{{ council.lean.reserves|pct(0) }}</span> of the reserves in shares{% endif %}.
+							</p>
+						{% endif %}
+					{% endblock %}
+				{% endembed %}
 
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-exchequer-heading">
-					<h3 id="hub-exchequer-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_exchequer') }}" class="hover:underline">Exchequer</a></h3>
-					{% if exchequer %}
-						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ exchequer.maturity|number_format(1) }} years</p>
-						<p class="text-xs text-on-surface-variant">average maturity of the debt, <span class="font-mono tabular-nums">{{ exchequer.debt|pct(0) }}</span> of GDP</p>
-						<p class="text-xs text-on-surface mt-3">Head {{ exchequer.head.name }}, {{ {short: 'favouring short borrowing', balanced: 'taking a middle course', long: 'favouring long borrowing'}[exchequer.head.stance] }}{{ exchequer.head.opening ? ', keeping the debt as it stood at Year 1' : '' }}.</p>
-					{% endif %}
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_exchequer') }}" class="text-primary hover:underline underline-offset-2">The debt and what it costs</a></p>
-				</section>
+				{% embed 'government/_hub_card.html.twig' with {key: 'authority', title: 'Monetary Authority', href: path('app_authority'), more: 'The governor, the committee and every decision'} %}
+					{% block body %}
+						{% if authority and authority.meeting %}
+							{% set meeting = authority.meeting %}
+							<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ meeting.rate|pct(2) }}</p>
+							<p class="text-xs text-on-surface-variant">policy rate</p>
+							<p class="text-xs text-on-surface mt-3">
+								{%- set bp = meeting.moveBp -%}
+								{%- set points = bp|abs == 1 ? ' basis point' : ' basis points' -%}
+								{{ bp == 0 ? 'Held' : (bp > 0 ? 'Raised ' ~ bp ~ points : 'Cut ' ~ bp|abs ~ points) }} on <span class="font-mono tabular-nums">{{ meeting.date }}</span>, voting <span class="font-mono tabular-nums">{{ meeting.split }}</span>. Next meeting <span class="font-mono tabular-nums">{{ authority.nextMeeting }}</span>.
+							</p>
+						{% elseif authority %}
+							<p class="text-xs text-on-surface mt-2">The committee has not met yet. Its first meeting is <span class="font-mono tabular-nums">{{ authority.nextMeeting }}</span>.</p>
+						{% endif %}
+						{% if authority %}
+							<p class="text-xs text-on-surface-variant mt-1">Governor {{ authority.governor.name }}, {{ authority.governor.stanceClause }}</p>
+						{% endif %}
+					{% endblock %}
+				{% endembed %}
 
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-fair-trading-heading">
-					<h3 id="hub-fair-trading-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_fair_trading') }}" class="hover:underline">Fair Trading Board</a></h3>
-					{% if fairTrading %}
-						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ fairTrading.screens.concentrated|hhi }} HHI</p>
-						<p class="text-xs text-on-surface-variant">concentration line for mergers{% if fairTrading.screens.shareCeiling < 1 %}, merged firms capped at <span class="font-mono tabular-nums">{{ fairTrading.screens.shareCeiling|pct(0) }}</span> of a market{% endif %}</p>
-						<p class="text-xs text-on-surface mt-3">Head {{ fairTrading.head.name }}, {{ {light: 'who would let firms consolidate', balanced: 'taking a middle course', strict: 'a strict enforcer'}[fairTrading.head.stance] }}{{ fairTrading.head.opening ? ', keeping the guidelines of Year 1' : '' }}.</p>
-					{% endif %}
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_fair_trading') }}" class="text-primary hover:underline underline-offset-2">The guidelines a merger must clear</a></p>
-				</section>
+				{% embed 'government/_hub_card.html.twig' with {key: 'regulator', title: 'Financial Regulator', href: path('app_regulator'), more: 'Both rules and the banks it supervises'} %}
+					{% block body %}
+						{% if regulator %}
+							<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ regulator.inForce|pct(2) }}</p>
+							<p class="text-xs text-on-surface-variant">core capital, with a <span class="font-mono tabular-nums">{{ regulator.buffer|pct(2) }}</span> buffer on top</p>
+							<p class="text-xs text-on-surface mt-3">
+								{{ mortgageLtvCap is null ? 'No limit on mortgage borrowing.' : 'Mortgages capped at ' ~ mortgageLtvCap|pct(0) ~ ' of a home\'s price.' }}
+								{% if regulator.phasing %}Capital rising to <span class="font-mono tabular-nums">{{ regulator.phasing.target|pct(1) }}</span> by <span class="font-mono tabular-nums">{{ regulator.phasing.completeLabel }}</span>.{% endif %}
+							</p>
+							<p class="text-xs text-on-surface-variant mt-1">Head {{ regulator.head.name }}, {{ regulator.head.stanceClause }}</p>
+						{% endif %}
+					{% endblock %}
+				{% endembed %}
 
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-securities-heading">
-					<h3 id="hub-securities-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_securities') }}" class="hover:underline">Securities Commission</a></h3>
-					{% if securities %}
-						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ securities.inForce.initial|pct(0) }}</p>
-						<p class="text-xs text-on-surface-variant">initial margin to buy or short on credit</p>
-						<p class="text-xs text-on-surface mt-3">Head {{ securities.head.name }}{{ securities.head.opening ? ', keeping the rules of Year 1' : ', ' ~ {light: 'light-touch', balanced: 'taking a middle course', strict: 'strict'}[securities.head.stance] }}.</p>
-					{% endif %}
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_securities') }}" class="text-primary hover:underline underline-offset-2">Margin and disclosure rules</a></p>
-				</section>
+				{% embed 'government/_hub_card.html.twig' with {key: 'fund', title: 'Sovereign Reserve Fund', href: path('app_reserve'), more: 'Holdings, weights and bands'} %}
+					{% block body %}
+						{% if fundHead %}
+							{% if fundHead.inForce is not null %}
+								<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ fundHead.inForce|pct(1) }}</p>
+								<p class="text-xs text-on-surface-variant">of the fund in equities</p>
+							{% endif %}
+							<p class="text-xs text-on-surface mt-3">Head {{ fundHead.name }}, {{ fundHead.stanceClause }}{{ fundHead.opening ? ', keeping the mix the fund opened with' : '' }}.</p>
+						{% endif %}
+					{% endblock %}
+				{% endembed %}
 
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20 flex flex-col" aria-labelledby="hub-trade-heading">
-					<h3 id="hub-trade-heading" class="text-sm font-semibold text-on-surface"><a href="{{ path('app_trade_office') }}" class="hover:underline">Trade &amp; Migration Office</a></h3>
-					{% if tradeOffice is defined %}
+				{% embed 'government/_hub_card.html.twig' with {key: 'exchequer', title: 'Exchequer', href: path('app_exchequer'), more: 'The debt and what it costs'} %}
+					{% block body %}
+						{% if exchequer %}
+							<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ exchequer.maturity|number_format(1) }} years</p>
+							<p class="text-xs text-on-surface-variant">average maturity of the debt, <span class="font-mono tabular-nums">{{ exchequer.debt|pct(0) }}</span> of GDP</p>
+							<p class="text-xs text-on-surface mt-3">Head {{ exchequer.head.name }}, {{ exchequer.head.stanceClause }}{{ exchequer.head.opening ? ', keeping the debt as it stood at Year 1' : '' }}.</p>
+						{% endif %}
+					{% endblock %}
+				{% endembed %}
+
+				{% embed 'government/_hub_card.html.twig' with {key: 'fair-trading', title: 'Fair Trading Board', href: path('app_fair_trading'), more: 'The guidelines a merger must clear'} %}
+					{% block body %}
+						{% if fairTrading %}
+							<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ fairTrading.screens.concentrated|hhi }} HHI</p>
+							<p class="text-xs text-on-surface-variant">concentration line for mergers{% if fairTrading.screens.shareCeiling < 1 %}, merged firms capped at <span class="font-mono tabular-nums">{{ fairTrading.screens.shareCeiling|pct(0) }}</span> of a market{% endif %}</p>
+							<p class="text-xs text-on-surface mt-3">Head {{ fairTrading.head.name }}, {{ fairTrading.head.stanceClause }}{{ fairTrading.head.opening ? ', keeping the guidelines of Year 1' : '' }}.</p>
+						{% endif %}
+					{% endblock %}
+				{% endembed %}
+
+				{% embed 'government/_hub_card.html.twig' with {key: 'securities', title: 'Securities Commission', href: path('app_securities'), more: 'Margin and disclosure rules'} %}
+					{% block body %}
+						{% if securities %}
+							<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ securities.inForce.initial|pct(0) }}</p>
+							<p class="text-xs text-on-surface-variant">initial margin to buy or short on credit</p>
+							<p class="text-xs text-on-surface mt-3">Head {{ securities.head.name }}{{ securities.head.opening ? ', keeping the rules of Year 1' : ', ' ~ securities.head.stanceClause }}.</p>
+						{% endif %}
+					{% endblock %}
+				{% endembed %}
+
+				{% embed 'government/_hub_card.html.twig' with {key: 'trade', title: 'Trade & Migration Office', href: path('app_trade_office'), more: 'Tariffs, migration and foreign buyers'} %}
+					{% block body %}
 						<p class="mt-2 text-2xl font-semibold font-mono tabular-nums text-on-surface">{{ tradeOffice.tariff.inForce|pct(1) }}</p>
 						<p class="text-xs text-on-surface-variant">average tariff on imports</p>
 						<p class="text-xs text-on-surface mt-3">Labour force growing <span class="font-mono tabular-nums">{{ tradeOffice.migration.inForce|pct(2) }}</span> a year{{ tradeOffice.foreignBuyers.inForce > 0 ? ', with a tax of ' ~ tradeOffice.foreignBuyers.inForce|pct(0) ~ ' on homes bought from outside' : '' }}.</p>
-					{% endif %}
-					<p class="mt-auto pt-3 text-xs"><a href="{{ path('app_trade_office') }}" class="text-primary hover:underline underline-offset-2">Tariffs, migration and foreign buyers</a></p>
-				</section>
+					{% endblock %}
+				{% endembed %}
 			</div>
 		</section>
 
@@ -270,7 +238,7 @@
 					heading: 'The budget',
 					items: [
 						{name: 'Budget rounds', text: 'The Diet passes a budget every ' ~ rules.budgetRoundMonths|number_format(0) ~ ' months. A new government\'s first budget is the round after it takes office.'},
-						{name: 'What it decides', text: 'How much the District spends on public services, the corporate tax rate, the tax on dividends, the tariff on imports, the immigration regime, the tax on homes bought from outside the District, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve, the levy on banks\' balance sheets, how much of the reserves\' return the budget spends and how much of them is invested at home, the debt it aims for and how fast it gets there, whether the debt is brought down by raising taxes or by cutting spending, and how much of a rise in power and water bills the utility commission grants. How the debt is funded is the Exchequer\'s, and how strictly mergers are reviewed the Fair Trading Board\'s.'},
+						{name: 'What it decides', text: 'How much the District spends on public services, the corporate tax rate, the tax on dividends, the tariff on imports, the immigration regime, the tax on homes bought from outside the District, how much housing the planning system lets through, the carbon price on power, the rules on offshore drilling and mining, the stamp duty on share trades, which is paid into the Sovereign Reserve Fund, the levy on banks\' balance sheets, how much of the reserves\' return the budget spends and how much of them is invested at home, the debt it aims for and how fast it gets there, whether the debt is brought down by raising taxes or by cutting spending, and how much of a rise in power and water bills the utility commission grants. How the debt is funded is the Exchequer\'s, and how strictly mergers are reviewed the Fair Trading Board\'s.'},
 						{name: 'Supporters\' veto', text: 'A minority cabinet needs its supporters\' votes. They will not back a change that moves a policy further from their own, so they can stop a government but not steer it.'},
 						{name: 'The debt', text: 'Each party runs on a debt target, a share of GDP, and a pace, the most it would move the debt in a year toward it; a cabinet\'s plan averages its parties\', weighted by their seats. The budget plans the surplus that holds the debt steady and moves it toward the target, or the deficit that lets it rise toward a higher one. The bond market charges the District more to borrow as its debt rises.'}
 					]

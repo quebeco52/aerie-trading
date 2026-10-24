@@ -1,0 +1,7 @@
+{# One institution's card on the government's front page, embedded with `key` (the heading id's stem), `title`, `href`
+   and `more` (the link at the foot), and `border` for a card that stands out. Its headline goes in the `body` block. #}
+<section class="bg-surface-container-low rounded-lg p-5 border {{ border ?? 'border-outline-variant/20' }} flex flex-col" aria-labelledby="hub-{{ key }}-heading">
+	<h3 id="hub-{{ key }}-heading" class="text-sm font-semibold text-on-surface"><a href="{{ href }}" class="hover:underline">{{ title }}</a></h3>
+	{% block body %}{% endblock %}
+	<p class="mt-auto pt-3 text-xs"><a href="{{ href }}" class="text-primary hover:underline underline-offset-2">{{ more }}</a></p>
+</section>

@@ -28,6 +28,8 @@ final class OfflinePage
         if (!is_file(self::STYLESHEET)) {
             throw new \RuntimeException('Build the stylesheet first: php bin/console tailwind:build --env=test');
         }
+        // A page's own sheet (assets/styles/district.css) is inlined from its source, app.css from the built file.
+        $html = (string) preg_replace_callback('#<link rel="stylesheet" href="/assets/styles/((?!app-)[a-z0-9_]+)-[\w-]+\.css">#', static fn(array $m): string => '<style>' . file_get_contents(__DIR__ . "/../../assets/styles/{$m[1]}.css") . '</style>', $html);
         $html = (string) preg_replace('#<link rel="stylesheet" href="[^"]*app[^"]*\.css">#', '<style>' . file_get_contents(self::STYLESHEET) . '</style>', $html);
         $html = (string) preg_replace('#<script type="importmap".*?</script>|<script type="module".*?</script>|<link rel="modulepreload"[^>]*>#s', '', $html);
         $html = (string) preg_replace('#<link href="https://fonts[^>]*>|@import url\("https://fonts[^)]*\)[^;]*;#', '', $html);

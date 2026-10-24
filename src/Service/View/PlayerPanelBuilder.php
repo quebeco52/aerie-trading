@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\View;
 
 use App\Data\District\DistrictCalendar;
+use App\Entity\PriceAlert;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Repository\SeasonRepository;
@@ -41,11 +42,28 @@ final class PlayerPanelBuilder
         return [
             'season' => $season === null ? null : $this->seasonPanel($season, $table, $user, $simTime),
             'watchlist' => $this->watchlist($user),
-            'priceAlerts' => $this->alerts->waiting($user),
+            'alertsByTicker' => self::alertsByTicker($this->alerts->waiting($user)),
             'checklist' => $this->checklist($user, $hasTraded),
             'freshStartBlocker' => $this->freshStart->blocker($user),
             'freshStartCapital' => (float) $this->freshStart->startingCapital(),
         ];
+    }
+
+    /**
+     * The waiting alerts by instrument, each list in the order it came, for the watchlist row that shows them.
+     *
+     * @param list<PriceAlert> $alerts
+     *
+     * @return array<string, list<PriceAlert>>
+     */
+    public static function alertsByTicker(array $alerts): array
+    {
+        $byTicker = [];
+        foreach ($alerts as $alert) {
+            $byTicker[$alert->getTicker()][] = $alert;
+        }
+
+        return $byTicker;
     }
 
     /** Real seconds one simulated year takes at the configured pace. */

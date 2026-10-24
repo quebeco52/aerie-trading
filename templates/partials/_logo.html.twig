@@ -1,0 +1,3 @@
+{# A company's logo in its square frame, or the generic mark where it has none (logo_url). `ticker` picks the logo,
+   `class` adds the size and padding, `alt` is the text (empty, the default, where the name is printed beside it). #}
+<img class="{{ class|default('') }} rounded border border-outline-variant/20 bg-surface-container-lowest shrink-0" src="{{ logo_url(ticker) }}" alt="{{ alt|default('') }}">

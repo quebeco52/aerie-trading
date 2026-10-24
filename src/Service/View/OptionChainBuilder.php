@@ -196,6 +196,8 @@ class OptionChainBuilder
             'delta' => $quote->delta,
             'gamma' => $quote->gamma,
             'theta' => $quote->theta,
+            // Theta is per year; the mark's title quotes what a day of holding costs.
+            'dailyDecay' => abs($quote->theta) / FinancialConstants::DAYS_PER_YEAR,
             'openInterest' => $contract->customerOpenInterest(),
             'position' => $id !== null ? ($positions[$id] ?? 0) : 0,
             'inTheMoney' => $contract->isCall() ? $underlying > $strike : $underlying < $strike,

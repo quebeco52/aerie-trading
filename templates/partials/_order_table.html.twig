@@ -1,0 +1,53 @@
+{# A player's resting orders, each with its cancel button. Pass orders and empty (the line shown when there are
+   none); showAsset adds the asset column for a list across names, and livePrices (ticker → price) the current
+   price beside each order. #}
+{% import 'partials/_ui.html.twig' as ui %}
+{% set showAsset = showAsset ?? false %}
+{% set showLive = livePrices is defined %}
+{% if orders|length > 0 %}
+	<div class="overflow-x-auto">
+		<table class="w-full text-left border-collapse {{ showAsset ? 'min-w-175' : 'min-w-125' }}">
+			<thead>
+				<tr class="table-head">
+					<th class="py-2.5">Placed</th>
+					<th class="py-2.5">Type</th>
+					<th class="py-2.5">Action</th>
+					{% if showAsset %}<th class="py-2.5">Asset</th>{% endif %}
+					<th class="py-2.5 text-right">Quantity</th>
+					<th class="py-2.5 text-right">Stop price</th>
+					<th class="py-2.5 text-right">Limit price</th>
+					{% if showLive %}<th class="py-2.5 text-right">Current price</th>{% endif %}
+					<th class="py-2.5 text-right">Estimated total</th>
+					<th class="py-2.5 text-right">Cancel</th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
+				{% for order in orders %}
+					{# A stop wakes at its trigger; a stop-limit then fills no worse than its limit, a plain stop at
+					   market. Until it wakes, what it rests on is the trigger. #}
+					{% set restingPrice = order.orderType in ['STOP', 'STOP_LIMIT'] ? order.stopPrice : order.limitPrice %}
+					<tr class="hover:bg-surface-container-high/30 transition-colors">
+						<td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ order.createdAt|date('Y-m-d H:i') }}</td>
+						<td class="py-2.5 text-xs text-on-surface-variant">{{ order.orderType|replace({'_': ' '})|lower|capitalize }}</td>
+						<td class="py-2.5 font-bold {{ ui.side(order.action) }}">{{ order.action|lower|capitalize }}</td>
+						{% if showAsset %}
+							<td class="py-2.5">
+								<a href="{{ order.assetType == 'BOND' ? path('app_bond_view', {ticker: order.ticker}) : path('app_stock_view', {ticker: order.ticker}) }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ order.ticker }}</a>
+							</td>
+						{% endif %}
+						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ order.quantity|number_format }}</td>
+						<td class="py-2.5 text-right font-mono tabular-nums {{ order.stopPrice is null ? 'text-on-surface-faint' : 'font-bold text-on-surface' }}">{{ order.stopPrice|money(2) }}</td>
+						<td class="py-2.5 text-right font-mono tabular-nums {{ order.limitPrice is null ? 'text-on-surface-faint' : 'font-bold text-on-surface' }}">{{ order.limitPrice|money(2) }}</td>
+						{% if showLive %}
+							<td class="py-2.5 text-right font-mono tabular-nums {{ livePrices[order.ticker] is defined ? 'text-on-surface' : 'text-on-surface-faint' }}">{{ (livePrices[order.ticker] ?? null)|money(2) }}</td>
+						{% endif %}
+						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ (restingPrice is null ? null : restingPrice * order.quantity)|money(2) }}</td>
+						<td class="py-2.5 text-right">{{ ui.cancel_order(order) }}</td>
+					</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+{% else %}
+	<p class="py-6 text-center text-xs text-on-surface-variant">{{ empty }}</p>
+{% endif %}

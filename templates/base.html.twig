@@ -3,38 +3,33 @@
 	<head>
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>
-			{% block title %}Aerie Exchange
-			{% endblock %}
-		</title>
-
-
-		<script>
-			window.WS_TICKET = '{{ ws_ticket() }}';
+		{# `page_title` is the page's own name, which the tab and the link preview follow with " | Aerie Exchange". #}
+		{%- set head_name %}{% block page_title %}{% endblock %}{% endset %}
+		{%- set head_title %}{% if head_name|trim is not empty %}{{ head_name|trim }} | {% endif %}Aerie Exchange{% endset %}
+		{# `description` is plain text for the description and, unless `og_description` says otherwise, the preview. #}
+		{%- set head_description %}{% block description %}Aerie Exchange is the securities market of the Aerie Autonomous District: live prices, company filings, bonds and the economy they trade on.{% endblock %}{% endset %}
+		<title>{{ head_title }}</title>
+		<meta name="description" content="{{ head_description|trim }}">
+		{# Tags of the page's own; the ones after it are on every page. #}
+		{% block meta %}{% endblock %}
+		<meta property="og:title" content="{{ head_title }}">
+		<meta property="og:description" content="{% block og_description %}{{ head_description|trim }}{% endblock %}">
+		<meta property="og:type" content="website">
+		<meta name="twitter:card" content="summary_large_image">
+		<meta name="google-site-verification" content="zp-MWJxjqDD3nMcN7eRoM30TwI2oAY1I_IxP6EUYjSg"/>
+		{# Canonical URL to prevent duplicate content indexing #}
+		<link rel="canonical" href="{{ app.request.schemeAndHttpHost }}{{ app.request.pathInfo }}">
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "WebSite",
+				"name": "Aerie Exchange",
+				"url": "{{ app.request.getSchemeAndHttpHost() }}/",
+				"description": "The securities market of the Aerie Autonomous District."
+			}
 		</script>
-
-
-		{% block meta %}
-			<meta name="description" content="Aerie Exchange is the securities market of the Aerie Autonomous District: live prices, company filings, bonds and the economy they trade on.">
-			<meta property="og:title" content="Aerie Exchange">
-			<meta property="og:description" content="Live prices, company filings, bonds and the economy of the Aerie Autonomous District.">
-			<meta property="og:type" content="website">
-			<meta name="twitter:card" content="summary_large_image">
-			<meta name="google-site-verification" content="zp-MWJxjqDD3nMcN7eRoM30TwI2oAY1I_IxP6EUYjSg"/>
-
-			<script type="application/ld+json">
-				{
-								            "@context": "https://schema.org",
-								            "@type": "WebSite",
-								            "name": "Aerie Exchange",
-								            "url": "{{ app.request.getSchemeAndHttpHost() }}/",
-								            "description": "The securities market of the Aerie Autonomous District."
-								        }
-			</script>
-
-			{# Canonical URL to prevent duplicate content indexing #}
-			<link rel="canonical" href="{{ app.request.schemeAndHttpHost }}{{ app.request.pathInfo }}">
-		{% endblock %}
+		{# The live feed's ticket, read by assets/js/services/market-stream.js. #}
+		<meta name="ws-ticket" content="{{ ws_ticket() }}">
 
 		{% block favicon %}
 			<link rel="icon" href="{{ asset('favicon.svg') }}">

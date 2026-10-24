@@ -145,4 +145,30 @@ final class DashboardPageBuilderTest extends TestCase
         $this->assertSame(['SHT', 'LNG'], array_column($rows, 'ticker'));
         $this->assertEqualsWithDelta(-0.8333, $rows[0]['weight'], 0.0001);
     }
+
+    /** The largest position is the largest by size, a short included, and an empty book has none. */
+    public function testTheLargestPositionIsTheLargestBySize(): void
+    {
+        $rows = DashboardPageBuilder::weighted(DashboardPageBuilder::stockRows([
+            (new UserStock())->setStock(self::stock('LNG', 'Tech', '10.00'))->setQuantity(1000),
+            (new UserStock())->setStock(self::stock('SHT', 'Tech', '10.00'))->setQuantity(-3000),
+        ], [], []), 40000.0);
+
+        $this->assertSame(0.75, DashboardPageBuilder::largestWeight($rows), 'A $30,000 short is 75% of net worth, not -75%.');
+        $this->assertNull(DashboardPageBuilder::largestWeight([]), 'No holdings, no largest position.');
+    }
+
+    /** The page script's feed carries each position by ticker, an option counting its contract's shares. */
+    public function testTheFeedCarriesEachPositionAndItsMultiplier(): void
+    {
+        $contract = (new OptionContract())->setTicker('APX-C-60')->setStock(self::stock('APX', 'Tech', '50.00'))
+            ->setOptionType(OptionContract::TYPE_CALL)->setStrike('60.00')->setPrice('1.50');
+        $feed = DashboardPageBuilder::holdingsFeed([
+            ...DashboardPageBuilder::stockRows([(new UserStock())->setStock(self::stock('APX', 'Tech', '50.00'))->setQuantity(20)], ['APX' => 40.0], []),
+            ...DashboardPageBuilder::optionRows([(new UserOption())->setContract($contract)->setQuantity(-2)->setAveragePremium('2.50')]),
+        ]);
+
+        $this->assertSame(['quantity' => 20, 'avgCost' => 40.0, 'price' => 50.0, 'multiplier' => 1], $feed['APX']);
+        $this->assertSame(['quantity' => -2, 'avgCost' => 2.5, 'price' => 1.5, 'multiplier' => FinancialConstants::OPTION_CONTRACT_MULTIPLIER], $feed['APX-C-60']);
+    }
 }

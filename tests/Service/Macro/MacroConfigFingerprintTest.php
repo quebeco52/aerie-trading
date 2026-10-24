@@ -37,6 +37,7 @@ class MacroConfigFingerprintTest extends TestCase
     private const NOT_PARAMETERS = [
         \App\Data\Politics\AerieNames::class,
         \App\Data\Politics\AeriePartyProfiles::class,
+        \App\Data\Politics\StanceWords::class,
         \App\Data\Politics\UsNameFrequencies::class,
         MacroConfigFingerprint::class,
         \App\Service\Macro\MacroState::class,

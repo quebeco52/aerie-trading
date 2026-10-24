@@ -50,7 +50,10 @@ class CompanySnapshotCapitalTest extends TestCase
         $this->assertSame($closure['zone'], $capital['zone']);
     }
 
-    /** The regulator's lines come from the firm's own model, so the chart and the closure agree. */
+    /**
+     * The regulator's lines come from the firm's own model, so the chart and the closure agree; they arrive as
+     * fractions.
+     */
     public function testTheThresholdsAreTheModelsOwn(): void
     {
         $model = new CommercialBankBusinessModel();
@@ -58,7 +61,7 @@ class CompanySnapshotCapitalTest extends TestCase
         $thresholds = $this->builder()->build($this->bank(goodwill: 0.0), new MacroStateDTO())['capitalThresholds'];
 
         $this->assertSame(
-            ['warning' => $model->getWarningEquityThreshold(), 'distress' => $model->getDistressEquityThreshold(), 'bankrupt' => $model->getBankruptEquityThreshold()],
+            ['warning' => $model->getWarningEquityThreshold() / 100.0, 'distress' => $model->getDistressEquityThreshold() / 100.0, 'bankrupt' => $model->getBankruptEquityThreshold() / 100.0],
             $thresholds,
         );
     }

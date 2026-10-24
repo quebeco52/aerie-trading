@@ -40,6 +40,9 @@ class IndustryPositionBuilder
     /** Capacity over trend demand at or below which the industry reads as tight. */
     private const TIGHT_RATIO = 0.95;
 
+    /** The badge tone of each balance: both ends are a caution, read amber, since red is the colour of a fall. */
+    private const BALANCE_TONES = ['overbuilt' => 'warn', 'tight' => 'warn', 'balanced' => 'accent', 'unknown' => 'neutral'];
+
     // --- Trailing Return ---
 
     /** Filings the trailing return averages: a year of quarters. */
@@ -68,7 +71,8 @@ class IndustryPositionBuilder
      *         installedCapacity: float|null,
      *         trendCapacity: float|null,
      *         balance: string,
-     *         priceLevel: float|null,
+     *         balanceTone: string,
+     *         priceMove: float|null,
      *         rivalShareDrain: float|null,
      *         ownPriceVolumeShift: float|null,
      *         mergerReview: array{herfindahl: float, highlyConcentrated: bool, acquirerShare: float, fringeShare: float, clearedShare: float, reviewBinds: bool, screens: array{delta: float, concentrated: float, shareCeiling: float}}|null
@@ -97,10 +101,12 @@ class IndustryPositionBuilder
         $kpis = $this->reports->findLatestFor($stock)?->getReportedKpis() ?? [];
         $capacityRatio = $description['capacity_ratio'] ?? null;
 
+        // Largest seller first, as the share list is read.
         $peerShares = [];
         foreach ($description['peers'] ?? [] as $ticker => $peer) {
             $peerShares[$ticker] = $peer['revenue_share'];
         }
+        arsort($peerShares);
         $rosterSize = count($peerShares);
 
         // A lender's capital employed is funded by deposits and wholesale borrowing, so equity is the
@@ -123,6 +129,12 @@ class IndustryPositionBuilder
                 $filedReturns[] = (float) $filed;
             }
         }
+        $balance = match (true) {
+            $capacityRatio === null => 'unknown',
+            $capacityRatio >= self::OVERBUILT_RATIO => 'overbuilt',
+            $capacityRatio <= self::TIGHT_RATIO => 'tight',
+            default => 'balanced',
+        };
         $saturationPenalty = $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
 
         return [
@@ -142,19 +154,16 @@ class IndustryPositionBuilder
                 ],
                 // Only a share of something when there is someone else in the roster to share it with, selling
                 // the same thing: a listing label (conglomerates) groups firms that sell nothing the others buy.
-                'rosterShare' => $rosterSize > 1 && $substitutability > 0.0 ? $description['revenue_share'] : null,
+                'rosterShare' => $description !== null && $rosterSize > 1 && $substitutability > 0.0 ? $description['revenue_share'] : null,
                 'peerShares' => $peerShares,
                 'rosterSize' => $rosterSize,
                 'capacityRatio' => $capacityRatio,
                 'installedCapacity' => $description['installed_capacity'] ?? null,
                 'trendCapacity' => $description['trend_capacity'] ?? null,
-                'balance' => match (true) {
-                    $capacityRatio === null => 'unknown',
-                    $capacityRatio >= self::OVERBUILT_RATIO => 'overbuilt',
-                    $capacityRatio <= self::TIGHT_RATIO => 'tight',
-                    default => 'balanced',
-                },
-                'priceLevel' => isset($kpis['industry_price_level']) ? (float) $kpis['industry_price_level'] : null,
+                'balance' => $balance,
+                'balanceTone' => self::BALANCE_TONES[$balance],
+                // The realised price against a balanced industry's, as a move: 0.93 reads as 7% under.
+                'priceMove' => isset($kpis['industry_price_level']) ? (float) $kpis['industry_price_level'] - 1.0 : null,
                 'rivalShareDrain' => isset($kpis['rival_share_drain']) ? (float) $kpis['rival_share_drain'] : null,
                 'ownPriceVolumeShift' => isset($kpis['own_price_volume_shift']) ? (float) $kpis['own_price_volume_shift'] : null,
                 'mergerReview' => $stock->isBankrupt() ? null : $this->mergerReview($stock, $macroState, $strategy, $tick),

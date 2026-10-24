@@ -423,6 +423,35 @@ class DistrictMapBuilder
     }
 
     /**
+     * The lookups the scene draws from, built once here rather than inside the template's loops: each row's plots in
+     * frontage order, each institution by id for the conduits it feeds, and each sector's kerb-light gradient number
+     * (from 1 in palette order; 0 is the fallback colour's).
+     *
+     * @param  list<DistrictPlotDTO>        $plots
+     * @param  list<DistrictInstitutionDTO> $institutions
+     * @return array{plotsByRow: array<int, list<DistrictPlotDTO>>, institutionsById: array<string, DistrictInstitutionDTO>, kerbGlowIds: array<string, int>}
+     */
+    public function sceneIndex(array $plots, array $institutions): array
+    {
+        $plotsByRow = [];
+        foreach ($plots as $plot) {
+            $plotsByRow[$plot->row][] = $plot;
+        }
+
+        $institutionsById = [];
+        foreach ($institutions as $institution) {
+            $institutionsById[$institution->id] = $institution;
+        }
+
+        $kerbGlowIds = [];
+        foreach (array_keys(DistrictMap::SECTOR_PALETTE) as $index => $sector) {
+            $kerbGlowIds[$sector] = $index + 1;
+        }
+
+        return ['plotsByRow' => $plotsByRow, 'institutionsById' => $institutionsById, 'kerbGlowIds' => $kerbGlowIds];
+    }
+
+    /**
      * @param  list<DistrictPlotDTO> $plots
      * @return list<string> institution ids, in DistrictMap::INSTITUTIONS declaration order
      */

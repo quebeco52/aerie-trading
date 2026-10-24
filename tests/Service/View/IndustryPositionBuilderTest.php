@@ -87,9 +87,10 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertTrue($industry['pricesCapacity']);
         $this->assertEqualsWithDelta(1.25, $industry['capacityRatio'], 1e-9);
         $this->assertSame('overbuilt', $industry['balance']);
+        $this->assertSame('warn', $industry['balanceTone'], 'an overbuilt industry is a caution, not a fall');
         $this->assertSame(2, $industry['rosterSize']);
         $this->assertEqualsWithDelta(0.5, $industry['peerShares']['RVL'], 1e-9);
-        $this->assertEqualsWithDelta(0.93, $industry['priceLevel'], 1e-9);
+        $this->assertEqualsWithDelta(-0.07, $industry['priceMove'], 1e-9);
         $this->assertEqualsWithDelta(-0.012, $industry['rivalShareDrain'], 1e-9);
         $this->assertEqualsWithDelta(0.004, $industry['ownPriceVolumeShift'], 1e-9);
     }
@@ -107,7 +108,8 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertFalse($view['industry']['pricesCapacity']);
         $this->assertNull($view['industry']['capacityRatio']);
         $this->assertSame('unknown', $view['industry']['balance']);
-        $this->assertNull($view['industry']['priceLevel'], 'no report has been filed yet');
+        $this->assertSame(['BNQ', 'BNK'], array_keys($view['industry']['peerShares']), 'largest seller first');
+        $this->assertNull($view['industry']['priceMove'], 'no report has been filed yet');
     }
 
     /**

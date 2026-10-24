@@ -9,6 +9,7 @@ use App\Data\District\Institutions;
 use App\Data\Politics\AerieCouncil;
 use App\Data\Politics\AerieDiet;
 use App\Data\Politics\AeriePartyProfiles;
+use App\Data\Politics\StanceWords;
 use App\DTO\MacroStateDTO;
 use App\DTO\PoliticsStateDTO;
 use App\Entity\DietElection;
@@ -117,6 +118,7 @@ class GovernmentPageBuilder
         return array_replace($frame['page'], [
             'talks' => $this->talks($politics, $context['talking']),
             'parties' => $context['parties'],
+            'largestParty' => self::largestParty($context['parties']),
             'hemicycle' => DietChamberDrawing::hemicycle($context['seats'], $context['parties']),
             'budget' => $this->budget($macro, $politics, $context['coalition'], $context['support'], $context['talking']),
             'polls' => GovernmentCharts::polls($politics, $context['nextElection']),
@@ -210,15 +212,7 @@ class GovernmentPageBuilder
                 'termEndsLabel' => DistrictCalendar::quarter($seat['termEnds']),
             ] + (isset($politics->councilBirths[$seat['seat'] - 1], $politics->councilStances[$seat['seat'] - 1]) ? [
                 'age' => (int) floor($macro->totalTime - $politics->councilBirths[$seat['seat'] - 1]),
-                'stance' => MonetaryAuthority::typeName($politics->councilStances[$seat['seat'] - 1], $politics->councilSwingers[$seat['seat'] - 1] ?? 0.0),
-                'leaning' => self::leaning($politics->councilStances[$seat['seat'] - 1], $politics->councilSwingers[$seat['seat'] - 1] ?? 0.0),
-                'banks' => isset($politics->councilRegulationStances[$seat['seat'] - 1])
-                    ? FinancialRegulator::stanceName(FinancialRegulator::requirement($politics->councilRegulationStances[$seat['seat'] - 1]))
-                    : null,
-                'reserves' => isset($politics->councilFundStances[$seat['seat'] - 1])
-                    ? SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->councilFundStances[$seat['seat'] - 1]))
-                    : null,
-            ] : []), AerieCouncil::roster($macro->totalTime)),
+            ] + self::councillorStances($politics, $seat['seat'] - 1) : []), AerieCouncil::roster($macro->totalTime)),
             'board' => $politics->boardMembers === [] ? null : self::stanceCounts(
                 array_map(static fn(array $member): float => $member['stance'], $politics->boardMembers),
                 array_map(static fn(array $member): float => $member['swing'] ?? 0.0, $politics->boardMembers),
@@ -253,6 +247,37 @@ class GovernmentPageBuilder
         }
 
         return $heads;
+    }
+
+    /**
+     * A councillor's stances, by name and in the words the roster prints: on money, with a swing vote's lean; on the
+     * banks; and on the reserves, the last two null before they are drawn.
+     *
+     * @return array{stance: string, leaning: string|null, banks: string|null, reserves: string|null, stanceLabel: string, leaningText: string|null, banksLabel: string|null, reservesLabel: string|null}
+     */
+    private static function councillorStances(PoliticsStateDTO $politics, int $index): array
+    {
+        $stance = $politics->councilStances[$index];
+        $swing = $politics->councilSwingers[$index] ?? 0.0;
+        $type = MonetaryAuthority::typeName($stance, $swing);
+        $leaning = self::leaning($stance, $swing);
+        $banks = isset($politics->councilRegulationStances[$index])
+            ? FinancialRegulator::stanceName(FinancialRegulator::requirement($politics->councilRegulationStances[$index]))
+            : null;
+        $reserves = isset($politics->councilFundStances[$index])
+            ? SovereignReserveFund::stanceName(SovereignReserveFund::equityShare($politics->councilFundStances[$index]))
+            : null;
+
+        return [
+            'stance' => $type,
+            'leaning' => $leaning,
+            'banks' => $banks,
+            'reserves' => $reserves,
+            'stanceLabel' => StanceWords::for(StanceWords::MONEY, StanceWords::LABEL, $type),
+            'leaningText' => StanceWords::leaning($leaning),
+            'banksLabel' => $banks === null ? null : StanceWords::for(StanceWords::BANKS, StanceWords::LABEL, $banks),
+            'reservesLabel' => $reserves === null ? null : StanceWords::for(StanceWords::RESERVES, StanceWords::LABEL, $reserves),
+        ];
     }
 
     /**
@@ -355,6 +380,19 @@ class GovernmentPageBuilder
                 'nextElection' => $nextElection,
             ],
         ];
+    }
+
+    /**
+     * The party with the most seats, the first in the Diet's order on a tie.
+     *
+     * @param  non-empty-list<array<string, mixed>> $parties
+     * @return array<string, mixed>
+     */
+    private static function largestParty(array $parties): array
+    {
+        usort($parties, static fn(array $a, array $b): int => $b['seats'] <=> $a['seats']);
+
+        return $parties[0];
     }
 
     /**
@@ -834,8 +872,13 @@ class GovernmentPageBuilder
             ];
         }
 
+        $counting = static fn(array $statuses): int => count(array_filter($levers, static fn(array $lever): bool => in_array($lever['status'], $statuses, true)));
+
         return [
             'levers' => $levers,
+            // The laws the next budget changes, and those its supporters or the fund hold back.
+            'changing' => $counting(['pending', 'partial']),
+            'held' => $counting(['fund', 'blocked']),
             'debt' => $macro->sovereignDebtToGdp,
             'debtTarget' => $macro->debtTarget,
             'debtPace' => $macro->debtPace,
@@ -966,13 +1009,22 @@ class GovernmentPageBuilder
         $time = $politics->totalTime;
         $votes = $politics->lastMeetingVotes;
         $seated = static fn(float $since): string => $since < 0.0 ? 'Before Year 1' : DistrictCalendar::quarter($since);
-        $person = static fn(string $name, float $birth, float $stance, float $swing, ?float $vote): array => [
-            'name' => $name,
-            'age' => (int) floor($time - $birth),
-            'stance' => MonetaryAuthority::typeName($stance, $swing),
-            'leaning' => self::leaning($stance, $swing),
-            'vote' => $vote,
-        ];
+        $person = static function (string $name, float $birth, float $stance, float $swing, ?float $vote) use ($time): array {
+            $type = MonetaryAuthority::typeName($stance, $swing);
+            $leaning = self::leaning($stance, $swing);
+
+            return [
+                'name' => $name,
+                'age' => (int) floor($time - $birth),
+                'stance' => $type,
+                'leaning' => $leaning,
+                // A member's cell in the committee table, and a passed-over candidate's word in brackets.
+                'stanceLabel' => StanceWords::for(StanceWords::MONEY, StanceWords::LABEL, $type),
+                'leaningText' => StanceWords::leaning($leaning),
+                'stanceNoun' => StanceWords::for(StanceWords::MONEY, StanceWords::NOUN, $type),
+                'vote' => $vote,
+            ];
+        };
 
         $members = [];
         foreach ($politics->memberNames as $member => $name) {
@@ -983,11 +1035,16 @@ class GovernmentPageBuilder
             ];
         }
         $governor = $politics->head(Office::Governor);
+        $governorPerson = $person($governor['name'], $governor['birth'], $governor['stance'], max(0.0, $politics->governorSwinger), $votes[0] ?? null);
         $higher = count(array_filter($votes, static fn(float $vote): bool => $vote > 0.0));
         $lower = count(array_filter($votes, static fn(float $vote): bool => $vote < 0.0));
 
         return [
-            'governor' => $person($governor['name'], $governor['birth'], $governor['stance'], max(0.0, $politics->governorSwinger), $votes[0] ?? null) + [
+            'governor' => $governorPerson + [
+                // The sentence on the Authority's page, with a swing vote's lean, and the clause on the front page.
+                'stanceText' => StanceWords::for(StanceWords::MONEY, StanceWords::SENTENCE, $governorPerson['stance'])
+                    . ($governorPerson['leaningText'] === null ? '' : ' ' . $governorPerson['leaningText']),
+                'stanceClause' => StanceWords::for(StanceWords::MONEY, StanceWords::CLAUSE, $governorPerson['stance']),
                 'sinceLabel' => $seated($governor['termStart']),
                 'termEndsLabel' => DistrictCalendar::quarter(Office::Governor->termEnd($time)),
                 'passedOver' => array_map(static fn(array $candidate): array => $person($candidate['name'], $candidate['birth'], $candidate['stance'], $candidate['swing'] ?? 0.0, null), $governor['passedOver']),

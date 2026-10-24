@@ -1,6 +1,6 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Markets | Aerie Exchange{% endblock %}
+{% block page_title %}Markets{% endblock %}
 
 {% block body %}
 	<div class="max-w-400 mx-auto space-y-6 pt-8 px-4 sm:px-6 lg:px-8 pb-12">
@@ -11,12 +11,11 @@
 		</header>
 
 		{# Macroeconomic Indicators #}
-		{% if macro is defined %}
 		<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
 			{# Economic Cycle: links through to the economy page, where the full set of series lives. #}
 			<a href="/economy" class="block bg-surface-container-low rounded-lg p-4 border border-outline-variant/20 hover:border-primary/50 transition-colors group">
 				<p class="text-xs text-on-surface-variant mb-1">Economic cycle</p>
-				<p id="macro-cycle" class="text-2xl font-semibold text-on-surface tracking-tight">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</p>
+				<p id="macro-cycle" class="text-2xl font-semibold text-on-surface tracking-tight">{{ cycleLabel }}</p>
 				<p class="text-xs text-on-surface-variant mt-1">Output gap <span class="font-mono">{{ macro.output_gap|pct(2, true) }}</span> <span class="text-primary group-hover:underline underline-offset-2">&middot; Economy</span></p>
 			</a>
 
@@ -25,32 +24,31 @@
 				{# The quarter's annual rate, as on the economy page, not the instant's noisy reading. #}
 				<p class="text-xs text-on-surface-variant mb-1">Inflation (CPI)</p>
 				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ macro.inflation_ema|pct(2) }}</p>
-				<p class="text-xs text-on-surface-variant mt-1">Target <span class="font-mono">2.00%</span></p>
+				<p class="text-xs text-on-surface-variant mt-1">Target <span class="font-mono">{{ inflationTarget|pct(2) }}</span></p>
 			</div>
 
 			{# Policy Rate #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/20">
 				<p class="text-xs text-on-surface-variant mb-1">Policy rate</p>
-				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ (macro.policy_rate ?? null)|pct(2) }}</p>
+				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ macro.policy_rate|pct(2) }}</p>
 				<p class="text-xs text-on-surface-variant mt-1">Overnight target</p>
 			</div>
 
 			{# 10Y Yield #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/20">
 				<p class="text-xs text-on-surface-variant mb-1">10Y yield</p>
-				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ (macro.yield_10y ?? null)|pct(2) }}</p>
-				{% set spread = macro.yield_10y|default(0) - macro.policy_rate|default(0) %}
+				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ macro.yield_10y|pct(2) }}</p>
+				{% set spread = macro.yield_10y - macro.policy_rate %}
 				<p class="text-xs mt-1 {{ spread < 0 ? 'text-warning' : 'text-on-surface-variant' }}">
 					Curve <span class="font-mono">{{ spread|bps(0, true) }}</span>{{ spread < 0 ? ', inverted' : '' }}
 				</p>
 			</div>
 		</div>
-		{% endif %}
 
 		{# The published indices. Read against each other rather than one at a time: the headline against the
 		   whole board is breadth, the staples fund against the headline is rotation, and the low-volatility
 		   fund against the headline is how much of the move is being paid for in risk. #}
-		{% if indices|default([])|length > 0 %}
+		{% if indices is not empty %}
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				{% for tile in indices %}
 					<a href="/stock/{{ tile.ticker }}" class="block bg-surface-container-low rounded-lg p-5 md:p-6 border border-outline-variant/20 hover:border-primary/40 transition-colors group">
@@ -87,8 +85,8 @@
 						</tr>
 					</thead>
 					<tbody id="market-table-body" class="divide-y divide-outline-variant/10 text-sm relative">
-						{% for stock in stocks|default([]) %}
-							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.isBankrupt ? 0 : stock.marketCap }}" data-bankrupt="{{ stock.isBankrupt ? 'true' : 'false' }}" class="{{ stock.isBankrupt ? 'opacity-50 hover:opacity-80 bg-tertiary/10' : 'hover:bg-surface-container-high/30' }} transition-colors group focus-within:bg-surface-container-high/30 relative">
+						{% for stock in stocks %}
+							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.isBankrupt ? 0 : stock.marketCap }}" data-bankrupt="{{ stock.isBankrupt ? 'true' : 'false' }}" class="{{ stock.isBankrupt ? 'bg-tertiary/10' : 'hover:bg-surface-container-high/30' }} transition-colors group focus-within:bg-surface-container-high/30 relative">
 								<th scope="row" class="px-5 py-3 text-left font-normal">
 									<div class="flex flex-col">
 										<div class="flex items-center gap-2">
@@ -105,17 +103,14 @@
 									{{ stock.sector }}
 								</td>
 								<td id="price-{{ stock.ticker }}" class="px-4 py-3 text-right font-bold font-mono tabular-nums text-xs sm:text-sm {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} transition-colors duration-300">
-									${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}
+									{{ (stock.isBankrupt ? 0 : stock.price)|money(2) }}
 								</td>
-								<td id="chg-{{ stock.ticker }}" class="px-4 py-3 text-right font-semibold font-mono tabular-nums text-xs sm:text-sm transition-colors duration-300 {{ stock.isBankrupt ? 'text-on-surface-faint' : stock.changePercent|signed_class }}">
-									{%- if stock.isBankrupt or stock.changePercent is null -%}
-										&mdash;
-									{%- else -%}
-										{{ stock.changePercent|pct(2, true) }}
-									{%- endif -%}
+								{% set change = stock.isBankrupt ? null : stock.changePercent %}
+								<td id="chg-{{ stock.ticker }}" class="px-4 py-3 text-right font-semibold font-mono tabular-nums text-xs sm:text-sm transition-colors duration-300 {{ change|signed_class }}">
+									{{- change|pct(2, true) -}}
 								</td>
 								<td id="mcap-{{ stock.ticker }}" class="px-5 py-3 text-right font-medium font-mono tabular-nums text-xs sm:text-sm text-on-surface-variant transition-colors duration-300">
-									${{ stock.isBankrupt ? '0.00' : ((stock.marketCap / 1000000000)|number_format(2) ~ 'B') }}
+									{{ stock.isBankrupt ? 0|money(2) : stock.marketCap|format_large('$') }}
 								</td>
 							</tr>
 						{% endfor %}
@@ -133,7 +128,7 @@
 	{# Share counts, so live market caps can be recomputed as prices tick. #}
 	<script type="application/json" id="market-data">
 		{{ {
-			shares: stocks|default([])|reduce((carry, stock) => carry|merge({ (stock.ticker): stock.shares }), {})
+			shares: stocks|reduce((carry, stock) => carry|merge({ (stock.ticker): stock.shares }), {})
 		}|json_encode|raw }}
 	</script>
 

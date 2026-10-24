@@ -1,52 +1,38 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Securities Commission - Aerie Exchange{% endblock %}
+{% block page_title %}Securities Commission{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The District's Securities Commission: who heads it, the margin investors put up, and what listed companies must disclose.">
-	<meta property="og:title" content="Securities Commission | Aerie Exchange">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}The District's Securities Commission: who heads it, the margin investors put up, and what listed companies must disclose.{% endblock %}
 
 {% block body %}
 <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
 
-	{% include 'government/_breadcrumb.html.twig' with {current: 'Securities Commission'} %}
-	<header class="pb-5 border-b border-outline-variant/15">
-		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Securities Commission</h1>
-		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed max-w-3xl">
+	{% embed 'government/_header.html.twig' with {title: 'Securities Commission'} %}
+		{% block lead %}
 			Sets the rules of the Aerie Exchange. Its head is named by the Aerie Council for a single term and decides the
 			margin an investor must put up to buy or short on credit, and how hard the Commission pursues listed companies
 			that dress up their results.
-		</p>
-	</header>
+		{% endblock %}
+	{% endembed %}
 
 	{% if commission %}
-		{% set head = commission.head %}
 		{% set rules = commission.inForce %}
-		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="head-heading">
-			<h2 id="head-heading" class="text-sm font-semibold text-on-surface">The head</h2>
-			<p class="text-sm font-semibold text-on-surface mt-2">{{ head.name }}</p>
-			<p class="text-xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
-			<p class="text-sm text-on-surface mt-2 max-w-3xl">
-				{%- if head.opening -%}
-					Keeps the rules the Exchange had at Year 1
-				{%- else -%}
-					{{ {light: 'A light-touch overseer of the markets', balanced: 'Takes a middle course', strict: 'A strict overseer of the markets'}[head.stance] }}
-				{%- endif -%}
-				{%- if head.passedOver is not empty %}, chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(margin <span class="font-mono tabular-nums">{{ candidate.margin|pct(0) }}</span>, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
-			</p>
-			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">
+		{% embed 'government/_head.html.twig' with {head: commission.head} %}
+			{% block stance %}{{ head.opening ? 'Keeps the rules the Exchange had at Year 1' : head.stanceText }}{% endblock %}
+			{% block candidate %}margin <span class="font-mono tabular-nums">{{ candidate.margin|pct(0) }}</span>, {% endblock %}
+			{% block rules %}
 				The Council names the head for a single {{ commission.rules.termYears|number_format(0) }}-year term from a shortlist of {{ commission.rules.shortlist }}, choosing the candidate nearest its own view of the markets.
 				A new head's rules take effect {{ commission.rules.noticeMonths }} months after they are seated.
 				{% if commission.councilMargin is not null %}The Council's median member would set the initial margin at <span class="font-mono tabular-nums">{{ commission.councilMargin|pct(0) }}</span>.{% endif %}
-			</p>
-			{% if commission.coming %}
-				<p class="text-xs text-on-surface mt-3 max-w-3xl">
-					From <span class="font-mono tabular-nums">{{ commission.coming.fromLabel }}</span>: initial margin <span class="font-mono tabular-nums">{{ commission.coming.initial|pct(0) }}</span>, and companies left <span class="font-mono tabular-nums">{{ commission.coming.enforcement|pct(0) }}</span> of the room they had at Year 1 to steer their results.
-				</p>
-			{% endif %}
-		</section>
+			{% endblock %}
+			{% block more %}
+				{% if commission.coming %}
+					<p class="text-xs text-on-surface mt-3 max-w-3xl">
+						From <span class="font-mono tabular-nums">{{ commission.coming.fromLabel }}</span>: initial margin <span class="font-mono tabular-nums">{{ commission.coming.initial|pct(0) }}</span>, and companies left <span class="font-mono tabular-nums">{{ commission.coming.enforcement|pct(0) }}</span> of the room they had at Year 1 to steer their results.
+					</p>
+				{% endif %}
+			{% endblock %}
+		{% endembed %}
 
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="margin-heading">

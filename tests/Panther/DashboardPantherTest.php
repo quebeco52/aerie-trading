@@ -21,22 +21,22 @@ class DashboardPantherTest extends BasePantherTestCase
         $this->assertSelectorExists('#portfolioChartContainer');
 
         // Test Tab: Orders & Trades
-        $client->executeScript("document.querySelector('button.portfolio-tab-btn[data-tab=\"orders\"]').click()");
+        $client->executeScript("document.querySelector('button.tab-btn[data-tab=\"orders\"]').click()");
         $client->waitFor('#tab-content-orders:not(.hidden)', 2);
         $this->assertSelectorExists('#tab-content-orders');
 
         // Test Tab: Analytics & Risk
-        $client->executeScript("document.querySelector('button.portfolio-tab-btn[data-tab=\"analytics\"]').click()");
+        $client->executeScript("document.querySelector('button.tab-btn[data-tab=\"analytics\"]').click()");
         $client->waitFor('#tab-content-analytics:not(.hidden)', 2);
         $this->assertSelectorExists('#tab-content-analytics');
 
         // Test Tab: Account & Cash
-        $client->executeScript("document.querySelector('button.portfolio-tab-btn[data-tab=\"account\"]').click()");
+        $client->executeScript("document.querySelector('button.tab-btn[data-tab=\"account\"]').click()");
         $client->waitFor('#tab-content-account:not(.hidden)', 2);
         $this->assertSelectorExists('#tab-content-account');
 
         // Test Tab: Back to Holdings
-        $client->executeScript("document.querySelector('button.portfolio-tab-btn[data-tab=\"holdings\"]').click()");
+        $client->executeScript("document.querySelector('button.tab-btn[data-tab=\"holdings\"]').click()");
         $client->waitFor('#tab-content-holdings:not(.hidden)', 2);
         $this->assertSelectorExists('#tab-content-holdings');
     }

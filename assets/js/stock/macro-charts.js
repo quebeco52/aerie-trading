@@ -191,7 +191,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     let balanceSheetHoldingsData = [], balanceSheetChangeData = [];
     let tfpGrowthData = [];
     // MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE, published on the canvas so the page never keeps its own copy.
-    const structuralLaborGrowthPct = parseFloat(document.getElementById('macroGdpGrowthChart')?.dataset.structuralLaborGrowth ?? '0.005') * 100;
+    const structuralLaborGrowthPct = parseFloat(document.getElementById('macroGdpGrowthChart')?.dataset.structuralLabourGrowth ?? '0.005') * 100;
     // MacroConstants::RESIDENTIAL_MORTGAGE_SPREAD, published on the canvas for the same reason.
     const mortgageSpreadPct = parseFloat(document.getElementById('macroMortgageChart')?.dataset.mortgageSpread ?? 'NaN') * 100;
     let fciData = [], fciEmaData = [];

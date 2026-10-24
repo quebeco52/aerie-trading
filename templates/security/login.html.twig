@@ -1,6 +1,6 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Sign in | Aerie Exchange{% endblock %}
+{% block page_title %}Sign in{% endblock %}
 
 {% block body %}
 	<div class="flex grow flex-col justify-center px-4 sm:px-6 lg:px-8 py-12">
@@ -16,7 +16,7 @@
 					{# Show errors #}
 					{% if error %}
 						<div role="alert" class="flex items-start gap-2.5 rounded border border-tertiary/25 bg-tertiary/10 p-3 text-xs text-tertiary">
-							<span class="material-symbols-outlined text-base leading-none shrink-0">error</span>
+							<span class="material-symbols-outlined text-base leading-none shrink-0" aria-hidden="true">error</span>
 							<span class="font-semibold">{{ error.messageKey|trans(error.messageData, 'security') }}</span>
 						</div>
 					{% endif %}
@@ -24,7 +24,7 @@
 					{# If they are already logged in but somehow hit this page #}
 					{% if app.user %}
 						<div class="flex items-start gap-2.5 rounded border border-primary/25 bg-primary/10 p-3 text-xs text-primary">
-							<span class="material-symbols-outlined text-base leading-none shrink-0">info</span>
+							<span class="material-symbols-outlined text-base leading-none shrink-0" aria-hidden="true">info</span>
 							<span>
 								Signed in as <span class="font-mono font-semibold">{{ app.user.userIdentifier }}</span>.
 								<form method="post" action="{{ path('app_logout') }}" class="inline">

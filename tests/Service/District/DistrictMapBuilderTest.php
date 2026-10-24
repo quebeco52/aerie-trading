@@ -847,6 +847,32 @@ class DistrictMapBuilderTest extends TestCase
         $this->assertNotEmpty($institutions);
     }
 
+    /**
+     * The scene's lookups hold every plot once under its own row in frontage order, every institution under its id, and
+     * a distinct kerb-light gradient from 1 for each palette sector, 0 being the fallback's.
+     */
+    public function testTheSceneIndexGroupsPlotsByRowAndKeysInstitutionsAndSectors(): void
+    {
+        ['frontage' => $frontage, 'canvas' => $canvas, 'plots' => $plots] = $this->compose($this->fullStreet());
+        $institutions = $this->builder->buildInstitutions($plots, $this->builder->resolveViewboxWidth($plots, $frontage['viewboxWidth']), $canvas);
+
+        ['plotsByRow' => $byRow, 'institutionsById' => $byId, 'kerbGlowIds' => $glow] = $this->builder->sceneIndex($plots, $institutions);
+
+        $this->assertGreaterThan(1, count($byRow), 'The full street wraps onto more than one row.');
+        $this->assertSame($plots, array_merge(...array_values($byRow)));
+        foreach ($byRow as $row => $rowPlots) {
+            foreach ($rowPlots as $plot) {
+                $this->assertSame($row, $plot->row);
+            }
+        }
+        $this->assertSame(array_map(static fn($i) => $i->id, $institutions), array_keys($byId));
+        foreach ($byId as $id => $institution) {
+            $this->assertSame($id, $institution->id);
+        }
+        $this->assertSame(array_keys(DistrictMap::SECTOR_PALETTE), array_keys($glow));
+        $this->assertSame(range(1, count(DistrictMap::SECTOR_PALETTE)), array_values($glow));
+    }
+
     public function testInstitutionsDoNotOverlapAndStayInsideTheCanvas(): void
     {
         $stocks = [$this->makeStock('LAKE'), $this->makeStock('RIVR'), $this->makeStock('ACC')];

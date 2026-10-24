@@ -147,6 +147,7 @@ class DistrictController extends AbstractController
             'plots' => $plots,
             'shares' => $shares,
             'institutions' => $institutions,
+            ...$mapBuilder->sceneIndex($plots, $institutions),
             'institutionStress' => $institutionStress,
             // Only for rendering the readout config's `field` lookups server-side on first paint —
             // live ticks read the same fields straight off payload.macro instead of this snapshot.

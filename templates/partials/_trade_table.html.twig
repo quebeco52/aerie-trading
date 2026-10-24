@@ -1,0 +1,61 @@
+{# A player's settled orders, newest first: fills with what they cost, and cancellations. Pass trades, empty (the
+   line shown when there are none) and optionMultiplier (shares per option contract); showAsset adds the asset
+   column for a list across names. #}
+{% import 'partials/_ui.html.twig' as ui %}
+{% set showAsset = showAsset ?? false %}
+{% if trades|length > 0 %}
+	<div class="overflow-x-auto">
+		<table class="w-full text-left border-collapse {{ showAsset ? 'min-w-175' : 'min-w-125' }}">
+			<thead>
+				<tr class="table-head">
+					<th class="py-2.5">Executed</th>
+					<th class="py-2.5">Type</th>
+					<th class="py-2.5">Action</th>
+					{% if showAsset %}<th class="py-2.5">Asset</th>{% endif %}
+					<th class="py-2.5 text-right">Quantity</th>
+					<th class="py-2.5 text-right">Executed price</th>
+					<th class="py-2.5 text-right">Total</th>
+					<th class="py-2.5 text-right">Trading costs</th>
+					<th class="py-2.5 text-right">Status</th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
+				{% for trade in trades %}
+					{% set tradeQuantity = trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity %}
+					{% set tradePrice = trade.executionPrice ?? trade.limitPrice %}
+					{# An option premium is quoted per share and a contract covers optionMultiplier of them; its chain
+					   lives on the underlying, the part of the symbol before the dash. #}
+					{% set isOption = trade.assetType == 'OPTION' %}
+					<tr>
+						<td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ (trade.filledAt ?? trade.createdAt)|date('Y-m-d H:i') }}</td>
+						<td class="py-2.5 text-xs text-on-surface-variant">
+							{{ trade.orderType|replace({'_': ' '})|lower|capitalize }}
+							{% if trade.origin == 'MARGIN_CALL' %}
+								<span class="badge badge-warn ml-1" title="Sold by your broker to meet a margin call">Margin call</span>
+							{% elseif trade.origin == 'BUY_IN' %}
+								<span class="badge badge-warn ml-1" title="Bought back because the lender recalled the stock">Buy-in</span>
+							{% endif %}
+						</td>
+						<td class="py-2.5 font-bold {{ ui.side(trade.action) }}">{{ trade.action|lower|capitalize }}</td>
+						{% if showAsset %}
+							<td class="py-2.5">
+								<a href="{{ trade.assetType == 'BOND' ? path('app_bond_view', {ticker: trade.ticker}) : path('app_stock_view', {ticker: isOption ? trade.ticker|split('-')|first : trade.ticker}) }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ trade.ticker }}</a>
+							</td>
+						{% endif %}
+						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ tradeQuantity|number_format }}{% if isOption %} <span class="font-sans text-2xs text-on-surface-variant">contracts</span>{% endif %}</td>
+						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ tradePrice|money(2) }}</td>
+						<td class="py-2.5 text-right font-mono tabular-nums font-bold text-on-surface">
+							{{ (tradePrice is null ? null : tradePrice * tradeQuantity * (isOption ? optionMultiplier : 1))|money(2) }}
+						</td>
+						<td class="py-2.5 text-right font-mono tabular-nums text-xs">{% include 'partials/_trade_costs.html.twig' with {trade: trade} only %}</td>
+						<td class="py-2.5 text-right">
+							<span class="badge {{ trade.status == 'FILLED' ? 'badge-up' : 'badge-neutral' }}">{{ trade.status|replace({'_': ' '})|lower|capitalize }}</span>
+						</td>
+					</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+{% else %}
+	<p class="py-6 text-center text-xs text-on-surface-variant">{{ empty }}</p>
+{% endif %}

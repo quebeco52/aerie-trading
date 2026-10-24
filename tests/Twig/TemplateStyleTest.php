@@ -27,15 +27,6 @@ final class TemplateStyleTest extends TestCase
     /** The one script allowed to hold colour literals: it reads the theme tokens and hands them to the charts. */
     private const PALETTE_SCRIPT = 'assets/js/utils/colors.js';
 
-    // --- Ratchets: lower these as pages move onto the shared filters, never raise them ---
-    /**
-     * Percentages still formatted by hand, `(x * 100)|number_format(n)` outside a CSS length, where |pct does not fit
-     * yet.
-     */
-    private const HAND_PERCENT_CEILING = 2;
-    /** Dollar figures still formatted by hand, `${{ ... }}`, where |money does not fit yet. */
-    private const HAND_MONEY_CEILING = 7;
-
     /** Utilities whose suffix is not a colour, by prefix. */
     private const NON_COLOUR_SUFFIXES = [
         'text' => ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl', '9xl', '2xs', '3xs', '4xs', 'left', 'center', 'right', 'justify', 'start', 'end', 'wrap', 'nowrap', 'balance', 'pretty', 'clip', 'ellipsis'],
@@ -58,6 +49,19 @@ final class TemplateStyleTest extends TestCase
         'model and paper names' => '/\b(Merton|Taylor rule|Cournot|Heston|Black-Scholes|Brock-Hommes|Vasicek|Fernald|Leontief|Diebold|Nelson-Siegel|Schularick|Dornbusch|Zakraj\w+|et al\.?|GSCPI)\b/',
         'retired names' => '/\b(Rate Council|Lakebird Exchange|Exchange Floor)\b/',
     ];
+
+    /**
+     * US insolvency chapters and the US currency code: the District's courts reorganise or liquidate a firm, and its
+     * figures are District dollars. Kept apart from OUT_OF_WORLD, which the wire copy test also reads, because the
+     * wire's bankruptcy stories still name the chapters.
+     */
+    private const FOREIGN_TERMS = '/\b(?:Chapter (?:7|11)|USD)\b/';
+
+    /** US spellings of words the District spells the British way (-ise, colour, centre, labour, grey). */
+    private const US_SPELLING = '/\b(?:\w{3,}iz(?:e|es|ed|ing|ation|ations)|\w*color\w*|cent(?:er|ers|ered)|labors?|favor\w*|honor\w*|behavior\w*|neighbor\w*|catalog|defense|analyz\w+|gray)\b/i';
+
+    /** Words the US-spelling pattern catches that are spelt so in British English too. */
+    private const NOT_US_SPELLING = ['capsize', 'downsize', 'oversize', 'resize', 'resized'];
 
     /** Words that break the fiction on an in-world page; the frame pages may use them. */
     private const SIM_JARGON = '/\b(simulation|simulated|simulator|harness)\b/i';
@@ -222,17 +226,78 @@ final class TemplateStyleTest extends TestCase
         }
     }
 
-    public function testHandFormattedFiguresOnlyShrink(): void
+    /** Percentages and dollar figures go through |pct and |money, so each prints alike everywhere. */
+    public function testFiguresAreNeverFormattedByHand(): void
     {
-        $percent = $money = 0;
-        foreach ($this->templates() as $source) {
+        $hits = [];
+        foreach ($this->templates() as $path => $source) {
             // A bar's CSS width is a length, not a figure the reader sees.
-            $percent += preg_match_all('/\*\s*100\s*\)\|number_format/', (string) preg_replace('/style="[^"]*"/', '', $source));
-            $money += preg_match_all('/\$\{\{/', $source);
+            $figures = (string) preg_replace('/style="[^"\n]*"/', 'style=""', $source);
+            $hits = [...$hits, ...$this->grep($path, $figures, '/\*\s*100\s*\)\|number_format/'), ...$this->grep($path, $source, '/\$\{\{/')];
         }
 
-        $this->assertLessThanOrEqual(self::HAND_PERCENT_CEILING, $percent, 'New percentages use |pct(n); move old ones over and lower HAND_PERCENT_CEILING.');
-        $this->assertLessThanOrEqual(self::HAND_MONEY_CEILING, $money, 'New dollar figures use |money(n); move old ones over and lower HAND_MONEY_CEILING.');
+        $this->assertSame([], $hits, 'Print a percentage with |pct(n) and a dollar figure with |money(n).');
+    }
+
+    public function testPagesUseTheDistrictsOwnLegalAndMoneyTerms(): void
+    {
+        $hits = [];
+        foreach ($this->templates() as $path => $source) {
+            $hits = [...$hits, ...$this->grep($path, $this->stripTwigComments($source), self::FOREIGN_TERMS)];
+        }
+        foreach ($this->scripts() as $path => $source) {
+            $hits = [...$hits, ...$this->grep($path, $this->stripJsComments($source), self::FOREIGN_TERMS)];
+        }
+
+        $this->assertSame([], $hits, 'Say a court-supervised reorganisation or a liquidation, and District dollars.');
+    }
+
+    public function testCopyIsInBritishSpelling(): void
+    {
+        $hits = [];
+        foreach ($this->templates() as $path => $source) {
+            preg_match_all(self::US_SPELLING, $this->visibleCopy($source), $matches);
+            foreach ($matches[0] as $word) {
+                if (!in_array(strtolower($word), self::NOT_US_SPELLING, true)) {
+                    $hits[] = "$path $word";
+                }
+            }
+        }
+
+        $this->assertSame([], $hits, 'The District writes British English: -ise, colour, centre, labour, grey.');
+    }
+
+    /**
+     * A faded element drops under 4.5:1 as faded text does, so only decorations fade: an aria-hidden mark, an SVG
+     * shape, or a control that brightens on hover.
+     */
+    public function testOnlyDecorationsAreFaded(): void
+    {
+        $hits = [];
+        foreach ($this->templates() as $path => $source) {
+            foreach ($this->grep($path, $this->stripTwigComments($source), '/(?<![\w:\[-])opacity-(?!0\b|100\b)\d+\b/', withLine: true) as [$hit, $text]) {
+                if (preg_match('/aria-hidden="true"|<(?:circle|path|rect|line|polyline|polygon|ellipse|g)\b|hover:opacity-100/', $text) !== 1) {
+                    $hits[] = $hit;
+                }
+            }
+        }
+
+        $this->assertSame([], $hits, 'Give a third tone of text text-on-surface-faint; fade only aria-hidden marks, SVG shapes and hover controls.');
+    }
+
+    /** Red is a fall or a loss. A caution (a covenant breach, an inverted curve, a concentrated market) is amber. */
+    public function testCautionsAreAmberNotRed(): void
+    {
+        $hits = [];
+        foreach ($this->templates() as $path => $source) {
+            foreach ($this->grep($path, $this->stripTwigComments($source), '/\b(?:text|bg|border)-tertiary\b|\bbadge-down\b/', withLine: true) as [$hit, $text]) {
+                if (preg_match('/covenant|invert|concentrat|breach|margin loan|leverage/i', $text) === 1) {
+                    $hits[] = $hit;
+                }
+            }
+        }
+
+        $this->assertSame([], $hits, 'Draw a caution in text-warning or badge-warn.');
     }
 
     /**
@@ -358,6 +423,26 @@ final class TemplateStyleTest extends TestCase
         }
 
         return $found;
+    }
+
+    /**
+     * The words a reader sees: text between tags, the title, alt, aria-label and placeholder attributes, and prose
+     * strings inside Twig expressions. Class lists, scripts and styles are left out.
+     */
+    private function visibleCopy(string $source): string
+    {
+        $source = (string) preg_replace('#<script\b.*?</script>|<style\b.*?</style>#s', ' ', $this->stripTwigComments($source));
+        $source = (string) preg_replace_callback('/\{\{.*?\}\}|\{%.*?%\}/s', static function (array $m): string {
+            preg_match_all("/'((?:[^'\\\\]|\\\\.)*)'/", $m[0], $strings);
+            // Prose has two words or more and none that reads as a utility class (items-center, var(--x)).
+            $prose = array_filter($strings[1], static fn(string $s): bool => str_word_count($s) >= 2
+                && preg_match('/(?:^|\s)[a-z0-9:\[\]]+(?:-[a-z0-9\[\]=:\/.%]+)+(?=\s|$)|var\(/', $s) !== 1);
+
+            return ' ' . implode(' ', $prose) . ' ';
+        }, $source);
+        preg_match_all('/\b(?:title|alt|aria-label|placeholder)="([^"]*)"/', $source, $attributes);
+
+        return preg_replace('/<(?:[^>"\']|"[^"]*"|\'[^\']*\')*>/', ' ', $source) . ' ' . implode(' ', $attributes[1]);
     }
 
     /** @return list<string> every --color-* token the theme defines, plus CSS keywords */

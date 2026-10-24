@@ -18,6 +18,12 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 class ScreenerController extends AbstractController
 {
+    // --- Cautions ---
+    /** Net debt over EBITDA above which the leverage column is flagged (4x, where lenders' covenants start to bind). */
+    private const LEVERAGE_CAUTION = 4.0;
+    /** Free cash flow over net income below which the cash column is flagged (under 80% of profit arriving as cash). */
+    private const CASH_CONVERSION_CAUTION = 0.8;
+
     #[Route('/screener', name: 'app_screener', methods: ['GET'])]
     public function index(Request $request, EntityManagerInterface $entityManager, StockRepository $stockRepository): Response
     {
@@ -88,7 +94,7 @@ class ScreenerController extends AbstractController
                 'netDebtToEbitda' => $netDebtToEbitda,
                 'fcfConversion' => $fcfConversion,
                 'isBankrupt'   => $stock->isBankrupt(),
-            ];
+            ] + self::cautions($netDebtToEbitda, $fcfConversion);
         }
 
         // Sort by active vs bankrupt first, then by Market Cap descending
@@ -102,5 +108,19 @@ class ScreenerController extends AbstractController
         return $this->render('screener/index.html.twig', [
             'stocks' => $screenerData,
         ]);
+    }
+
+    /**
+     * The two figures a reader should look at twice: leverage into the zone where covenants bind, and profit running
+     * ahead of cash. A blank ratio (a bank's leverage, a loss-maker's conversion) flags nothing.
+     *
+     * @return array{leverageCaution: bool, cashCaution: bool}
+     */
+    public static function cautions(?float $netDebtToEbitda, ?float $fcfConversion): array
+    {
+        return [
+            'leverageCaution' => $netDebtToEbitda !== null && $netDebtToEbitda > self::LEVERAGE_CAUTION,
+            'cashCaution' => $fcfConversion !== null && $fcfConversion < self::CASH_CONVERSION_CAUTION,
+        ];
     }
 }

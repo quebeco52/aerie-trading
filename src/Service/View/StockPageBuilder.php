@@ -6,6 +6,7 @@ namespace App\Service\View;
 
 use App\Data\Company\CompanyResearch;
 use App\Data\Company\LifecycleStage;
+use App\Data\Company\Sectors;
 use App\Data\Company\StockInfo;
 use App\Data\Company\StrategicHoldings;
 use App\Data\District\DistrictCalendar;
@@ -33,6 +34,21 @@ class StockPageBuilder
 
     /** Filings and announcements listed on the page before the history is truncated. */
     private const EVENT_ROWS = 15;
+
+    // --- Industry Charts ---
+
+    /** The financials tab's industry charts drawn for a business model, by the chart's canvas id. */
+    private const MODEL_CHARTS = [
+        'netInterestEngineChart' => ['commercial_bank', 'credit_services', 'shadow_bank'],
+        'reitCoverageChart' => ['reit'],
+        'reinvestmentIntensityChart' => ['tech', 'semiconductor', 'biotech', 'defense_contractor'],
+        'cyclicalDynamicsChart' => ['mining', 'oil_gas_producer', 'refining', 'shipping'],
+    ];
+
+    // --- Management ---
+
+    /** The badge tone of how firmly a manager holds their style: a pronounced one is a caution, not a fall. */
+    private const CONVICTION_TONES = ['nominal' => 'neutral', 'characteristic' => 'accent', 'pronounced' => 'warn'];
 
     // --- Borrow Warnings ---
 
@@ -125,13 +141,22 @@ class StockPageBuilder
             }
         }
 
-        return $this->companySnapshot->build($stock, $macroState)
+        $snapshot = $this->companySnapshot->build($stock, $macroState);
+        $summary = $this->financialSummary->build($stock);
+
+        return $snapshot
             + $this->industryPosition->build($stock, $macroState)
             + $this->creditHealth->build($stock, $macroState)
-            + $this->financialSummary->build($stock)
+            + $summary
             + $this->biotechPipeline->build($stock)
             + ($this->businessMap?->build($stock) ?? ['businessMap' => null])
             + [
+                'industryCharts' => self::industryCharts($snapshot['businessModel'], $snapshot['isFinancial'], $snapshot['isInsurer'], $summary['kpiSeries'] !== []),
+                // What the industry label in the header means: the business model the company is run on.
+                'industryDescription' => Sectors::BUSINESS_MODEL_DESCRIPTIONS[$snapshot['businessModel']] ?? Sectors::BUSINESS_MODEL_DESCRIPTIONS['none'],
+                // The Sovereign Reserve Fund holds the same share of every float, so of this company's shares it holds
+                // that share of the float.
+                'fundStake' => $stock->isBankrupt() ? 0.0 : $macroState->sovereignFundOwnershipShare * (float) $stock->getPublicFloatPercentage(),
                 'peers' => $this->peerTable->build($stock),
                 // What a permanent-capital sphere actually owns; null for every firm that owns no stakes.
                 'anchorPortfolio' => $this->anchorPortfolio->build($stock),
@@ -157,6 +182,31 @@ class StockPageBuilder
                 'nextReport' => $stock->isBankrupt() ? null : $this->nextReport($stock, $macroState),
                 'management' => self::managementSummary($stock),
             ];
+    }
+
+    /**
+     * The canvas ids of the financials tab's industry charts this company gets, in one list for the template and the
+     * chart script: its reported operating figures, its business model's own chart, and the capital or underwriting
+     * chart a financial firm or an insurer is read on.
+     *
+     * @return list<string>
+     */
+    public static function industryCharts(string $businessModel, bool $isFinancial, bool $isInsurer, bool $reportsKpis): array
+    {
+        $charts = $reportsKpis ? ['kpiHistoryChart'] : [];
+        foreach (self::MODEL_CHARTS as $chart => $models) {
+            if (in_array($businessModel, $models, true)) {
+                $charts[] = $chart;
+            }
+        }
+        if ($isFinancial) {
+            $charts[] = 'regulatoryRatiosChart';
+        }
+        if ($isInsurer) {
+            $charts[] = 'insuranceDualEngineChart';
+        }
+
+        return $charts;
     }
 
     /**
@@ -231,6 +281,7 @@ class StockPageBuilder
             'label' => $profile->style->label(),
             'mandate' => $profile->style->mandate(),
             'conviction' => $profile->convictionLabel(),
+            'tone' => self::CONVICTION_TONES[$profile->convictionLabel()],
             'tenureYears' => $stock->getCeoTenureYears(),
         ];
     }
@@ -248,10 +299,18 @@ class StockPageBuilder
         // A fund is the vehicle for one published index; a ticker the enum does not know is the whole board.
         $index = MarketIndex::tryFrom((string) $fund->getTicker()) ?? MarketIndex::Composite;
 
-        return $this->etfComposition->build($index, $fund) + [
+        $composition = $this->etfComposition->build($index, $fund);
+
+        return $composition + [
             'isFinancial' => false,
             'isInsurer' => false,
             'businessModel' => 'none',
+            'industryCharts' => [],
+            // The header names the index the fund tracks, explained by its mandate.
+            'industryDescription' => $composition['indexFacts']['mandate'] ?? null,
+            'displayReturn' => null,
+            // The facts card quotes the Sovereign Reserve Fund's share of the float instead.
+            'fundStake' => 0.0,
             'marketCap' => 0.0,
             'peRatio' => null,
             'marketShare' => 0.0,

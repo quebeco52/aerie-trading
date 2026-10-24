@@ -1,84 +1,49 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Sovereign Reserve Fund - Aerie Exchange{% endblock %}
+{% block page_title %}Sovereign Reserve Fund{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The District's Sovereign Reserve Fund: its size, the draw it pays the budget, its weights against policy and band, and its stake in every listed company.">
-	<meta property="og:title" content="Sovereign Reserve Fund | Aerie Exchange">
-	<meta property="og:description" content="A rule-based sovereign fund: it pays part of the budget, holds a slice of every listed company, and trades only to put its weights back inside their bands.">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}The District's Sovereign Reserve Fund: its size, the draw it pays the budget, its weights against policy and band, and its stake in every listed company.{% endblock %}
+{% block og_description %}A rule-based sovereign fund: it pays part of the budget, holds a slice of every listed company, and trades only to put its weights back inside their bands.{% endblock %}
+
+{% import 'partials/_ui.html.twig' as ui %}
 
 {% block body %}
-	{% set programme_months = programme.monthsLeft|number_format(0) %}
 	{# The sleeves take the chart series colours in order, shared with assets/js/reserve/reserve-charts.js. #}
 	{% set sleeve_swatch = { 'district': 'bg-series-blue', 'foreign-equities': 'bg-series-orange', 'foreign-bonds': 'bg-series-aqua' } %}
 	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6" id="reservePage">
 
-		{% include 'government/_breadcrumb.html.twig' with {current: 'Sovereign Reserve Fund'} %}
-		<header class="flex flex-col gap-6 pb-6 border-b border-outline-variant/15">
-				<div class="min-w-0 max-w-2xl">
-					<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Sovereign Reserve Fund</h1>
-					<p class="text-sm text-on-surface-variant mt-2 leading-relaxed">
-						The District's sovereign fund. It pays part of the budget every year, holds the same share of every
-						listed company's float beside a foreign portfolio of equities and government bonds, and trades only
-						when a weight leaves its band. It runs on published rules, not on a view of the market.
-					</p>
-				</div>
-
+		{% embed 'government/_header.html.twig' with {title: 'Sovereign Reserve Fund', aside_below: true} %}
+			{% block lead %}
+				The District's sovereign fund. It pays part of the budget every year, holds the same share of every
+				listed company's float beside a foreign portfolio of equities and government bonds, and trades only
+				when a weight leaves its band. It runs on published rules, not on a view of the market.
+			{% endblock %}
+			{% block aside %}
+				{% import 'partials/_ui.html.twig' as ui %}
+				{% set programme_months = programme.monthsLeft|number_format(0) %}
+				{% set programme_detail -%}
+					{%- if programme.active -%}
+						{{ programme.share|pct(2) }} of float to go · {{ programme_months }} {{ programme_months == '1' ? 'month' : 'months' }} left
+					{%- elseif programme.monthsSinceLast is not null -%}
+						Last one {{ programme.monthsSinceLast|number_format(0) }} months ago
+					{%- else -%}
+						None since inception
+					{%- endif -%}
+				{%- endset %}
 				{# Repainted in place from the live frame by pages/reserve.js. #}
 				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-5">
-					<div>
-						<dt class="text-xs text-on-surface-variant">Fund value</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-value">{{ incepted ? summary.value|format_large('$') : '—' }}</dd>
-					</div>
-					<div>
-						<dt class="text-xs text-on-surface-variant">Size</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-to-gdp">{{ incepted ? summary.toGdp|pct(0) ~ ' of GDP' : '—' }}</dd>
-					</div>
+					{{ ui.figure('Fund value', incepted ? summary.value|format_large('$') : '—', {id: 'reserve-value'}) }}
+					{{ ui.figure('Size', incepted ? summary.toGdp|pct(0) ~ ' of GDP' : '—', {id: 'reserve-to-gdp'}) }}
 					{# Needs the recorded history a year back, so pages/reserve.js fills it once the history loads. #}
-					<div>
-						<dt class="text-xs text-on-surface-variant">Real return</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-year">—</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-return-year-detail">Last 12 months</p>
-					</div>
-					<div>
-						<dt class="text-xs text-on-surface-variant">Budget draw</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-draw">{{ incepted ? summary.drawToGdp|pct(2) ~ ' of GDP' : '—' }}</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-draw-value">{{ incepted ? summary.annualDraw|format_large('$') ~ ' this year' : '' }}</p>
-					</div>
-					<div>
-						<dt class="text-xs text-on-surface-variant">Stamp duty inflow</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-duty">{{ incepted and summary.stampDutyToGdp > 0 ? summary.stampDutyToGdp|pct(2) ~ ' of GDP' : '—' }}</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-duty-ytd">{{ incepted ? (summary.stampDutyToGdp > 0 ? 'Last year · ' : 'First year open · ') ~ summary.stampDutyYearToDate|format_large('$') ~ ' so far' : '' }}</p>
-					</div>
-					<div>
-						<dt class="text-xs text-on-surface-variant">Board ownership</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-ownership">{{ incepted ? summary.ownership|pct(2) ~ ' of float' : '—' }}</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Ceiling {{ mandate.ownershipCeiling|pct(0) }}</p>
-					</div>
-					<div>
-						<dt class="text-xs text-on-surface-variant" title="The District's debt less the government bonds the fund holds">Net public debt</dt>
-						<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-net-debt">{{ summary.netDebtToGdp|pct(0) }} of GDP</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-gross-debt">Gross {{ summary.grossDebtToGdp|pct(0) }} less the fund's bonds</p>
-					</div>
-					<div>
-						<dt class="text-xs text-on-surface-variant">Rebalancing</dt>
-						<dd class="text-lg font-semibold text-on-surface mt-0.5" id="reserve-programme">
-							{% if programme.active %}{{ programme.buying ? 'Buying' : 'Trimming' }}{% else %}None running{% endif %}
-						</dd>
-						<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-programme-detail">
-							{%- if programme.active -%}
-								{{ programme.share|pct(2) }} of float to go · {{ programme_months }} {{ programme_months == '1' ? 'month' : 'months' }} left
-							{%- elseif programme.monthsSinceLast is not null -%}
-								Last one {{ programme.monthsSinceLast|number_format(0) }} months ago
-							{%- else -%}
-								None since inception
-							{%- endif -%}
-						</p>
-					</div>
+					{{ ui.figure('Real return', '—', {id: 'reserve-return-year', note: 'Last 12 months', noteId: 'reserve-return-year-detail'}) }}
+					{{ ui.figure('Budget draw', incepted ? summary.drawToGdp|pct(2) ~ ' of GDP' : '—', {id: 'reserve-draw', note: incepted ? summary.annualDraw|format_large('$') ~ ' this year' : '', noteId: 'reserve-draw-value'}) }}
+					{{ ui.figure('Stamp duty inflow', incepted and summary.stampDutyToGdp > 0 ? summary.stampDutyToGdp|pct(2) ~ ' of GDP' : '—', {id: 'reserve-duty', note: incepted ? (summary.stampDutyToGdp > 0 ? 'Last year · ' : 'First year open · ') ~ summary.stampDutyYearToDate|format_large('$') ~ ' so far' : '', noteId: 'reserve-duty-ytd'}) }}
+					{{ ui.figure('Board ownership', incepted ? summary.ownership|pct(2) ~ ' of float' : '—', {id: 'reserve-ownership', note: 'Ceiling ' ~ mandate.ownershipCeiling|pct(0)}) }}
+					{{ ui.figure('Net public debt', summary.netDebtToGdp|pct(0) ~ ' of GDP', {id: 'reserve-net-debt', tip: 'The District\'s debt less the government bonds the fund holds', note: 'Gross ' ~ summary.grossDebtToGdp|pct(0) ~ ' less the fund\'s bonds', noteId: 'reserve-gross-debt'}) }}
+					{{ ui.figure('Rebalancing', programme.active ? (programme.buying ? 'Buying' : 'Trimming') : 'None running', {id: 'reserve-programme', mono: false, note: programme_detail, noteId: 'reserve-programme-detail'}) }}
 				</dl>
-		</header>
+			{% endblock %}
+		{% endembed %}
 
 		{% if not incepted %}
 			<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/20 flex items-start gap-3" role="status">
@@ -97,7 +62,7 @@
 				{% if head %}
 					<p class="text-xs text-on-surface mt-2">
 						Run by <span class="font-semibold">{{ head.name }}</span>, {{ head.age }},
-						{{ {cautious: 'a cautious investor', balanced: 'a balanced investor', bold: 'a bold investor'}[head.stance] }}, until <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span>.
+						{{ head.stanceText }}, until <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span>.
 						{{ head.opening ? 'Keeps the mix the fund opened with.' : 'Holds ' ~ head.equityShare|pct(0) ~ ' of the fund in equities.' }}
 					</p>
 				{% endif %}
@@ -139,8 +104,8 @@
 				</table>
 				<p class="text-3xs text-on-surface-variant mt-3">
 					<span class="inline-block w-px h-2.5 bg-on-surface align-middle mr-1" aria-hidden="true"></span>
-					Policy split. Foreign money is held {{ (mandate.foreignEquityShare * 100)|number_format(0) }}/{{ ((1 - mandate.foreignEquityShare) * 100)|number_format(0) }}
-					in equities and government bonds, marked in foreign currency and converted at today's exchange rate.
+					Policy split. Foreign money is held {{ mandate.foreignEquityShare|pct(0) }} in equities and
+					{{ (1 - mandate.foreignEquityShare)|pct(0) }} in government bonds, marked in foreign currency and converted at today's exchange rate.
 					The bonds are a {{ mandate.foreignBondDuration|number_format(1) }}-year index of foreign government paper,
 					yielding <span class="font-mono tabular-nums" id="reserve-bond-yield">{{ returns.bondYield|pct(2) }}</span>.
 				</p>
@@ -192,26 +157,10 @@
 
 			{# Filled by pages/reserve.js from the quarterly history and the live index. #}
 			<dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-5 mt-4" id="reserveReturns" data-index-base="{{ mandate.returnIndexBase }}">
-				<div>
-					<dt class="text-xs text-on-surface-variant">Real, 10 years</dt>
-					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-decade">—</dd>
-					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">A year</p>
-				</div>
-				<div>
-					<dt class="text-xs text-on-surface-variant">Real, all recorded</dt>
-					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-real">—</dd>
-					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5" id="reserve-return-span">A year</p>
-				</div>
-				<div>
-					<dt class="text-xs text-on-surface-variant">Nominal, all recorded</dt>
-					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-span-nominal">—</dd>
-					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">A year, in District dollars</p>
-				</div>
-				<div>
-					<dt class="text-xs text-on-surface-variant">Spending rule assumes</dt>
-					<dd class="text-lg font-semibold font-mono tabular-nums text-on-surface mt-0.5" id="reserve-return-assumed">{{ returns.assumedReal|pct(2) }}</dd>
-					<p class="text-3xs font-mono tabular-nums text-on-surface-variant mt-0.5">Real a year, compound; the draw is half of it</p>
-				</div>
+				{{ ui.figure('Real, 10 years', '—', {id: 'reserve-return-decade', note: 'A year'}) }}
+				{{ ui.figure('Real, all recorded', '—', {id: 'reserve-return-span-real', note: 'A year', noteId: 'reserve-return-span'}) }}
+				{{ ui.figure('Nominal, all recorded', '—', {id: 'reserve-return-span-nominal', note: 'A year, in District dollars'}) }}
+				{{ ui.figure('Spending rule assumes', returns.assumedReal|pct(2), {id: 'reserve-return-assumed', note: 'Real a year, compound; the draw is half of it'}) }}
 			</dl>
 
 			<div class="mt-5">
@@ -346,74 +295,6 @@
 			<h2 id="reserve-mandate-heading" class="text-base font-semibold text-on-surface">Mandate</h2>
 			<p class="text-sm text-on-surface-variant mt-0.5">Every rule the fund runs on.</p>
 
-			{# Where each rule is taken from (kept for the record, not printed):
-			   - Spending rule: Singapore Net Investment Returns framework (2008)
-			   - Budget rule: Singapore's Net Investment Returns Contribution is budget revenue; its budget surpluses accrue to its reserves
-			   - Opening size: GPIF: its assets against Japan's GDP (FY2024) and its share of the Japanese market (2016)
-			   - Reference portfolio: GIC Reference Portfolio (2013); duration of the Bloomberg Global Aggregate (2026)
-			   - District equity band: GPIF policy asset mix, 5th medium-term plan (FY2025)
-			   - Equity band: GPIF policy asset mix, 5th medium-term plan (FY2025)
-			   - Rebalancing: Norges Bank Investment Management rebalancing rule (2018)
-			   - Ownership ceiling: Government Pension Fund Global mandate (Norway)
-			   - Corporate actions: Index-holder practice
-			   - Returns: GIPS time-weighted return, as GPFG and GIC report
-			   - Stamp duty: District rate; Hong Kong charges 0.1% a side, the UK 0.5% on purchases
-			   - Strategic holding: Singapore: SEL Holdings holds about 23% of SGX; Norway: 67% of Equinor, dividends to the GPFG
-			#}
-			{% set rules = [
-				{
-					name: 'Who sets the mix',
-					text: 'The Council names the fund\'s head for a single term. The head sets how much of the fund is held in equities; the District\'s share of those equities stays as the fund opened, and the rest goes abroad. A new mix puts the foreign money on its new split at once and moves the board to its new weight over ' ~ mandate.transitionMonths|number_format(0) ~ ' months.'
-				},
-				{
-					name: 'Spending rule',
-					text: 'Each budget year the fund pays the budget the share of its expected long-term real return on its value that the Diet passes, ' ~ mandate.spendingShare|pct(0) ~ ' now. The Diet may spend up to ' ~ mandate.drawCeiling|pct(0) ~ ' on its own; the fund holds the second key on anything more, and consents only while the Statistical Office has a recession declared. The return is the compound one, the average less half the variance, so volatility is never spent.'
-				},
-				{
-					name: 'Budget rule',
-					text: 'The draw is budget revenue, counted like a tax when the Diet plans the year\'s balance against its debt target, so a fund that grows faster than the economy widens what the budget can spend. The fund\'s own market swings never reach the budget. The District keeps at least ' ~ mandate.debtFloor|pct(0) ~ ' of GDP in gross debt outstanding for its benchmark curve, and a surplus that would take debt below that buys bonds for the fund instead.'
-				},
-				{
-					name: 'Opening size',
-					text: 'Opened at ' ~ mandate.openingSize|pct(0) ~ ' of GDP, holding ' ~ mandate.openingOwnership|pct(1) ~ ' of the board\'s float.'
-				},
-				{
-					name: 'Reference portfolio',
-					text: 'Money off the board is held ' ~ mandate.foreignEquityShare|pct(0) ~ ' in global equities and ' ~ (1 - mandate.foreignEquityShare)|pct(0) ~ ' in foreign government bonds. The bonds are held at a constant duration of ' ~ mandate.foreignBondDuration|number_format(1) ~ ' years, so they earn their yield and roll-down and gain when foreign rates fall.'
-				},
-				{
-					name: 'District equity band',
-					text: 'The Diet sets how much of the fund\'s equities are held in the District: ' ~ mandate.homeShare|pct(0) ~ ' under the law in force. Policy weight ' ~ bands[0].policy|pct(2) ~ ', band ±' ~ bands[0].band|pp(2) ~ ', so it trips on a relative move of about ' ~ bands[0].breachingMove|pct(0) ~ '.'
-				},
-				{
-					name: 'Equity band',
-					text: 'Policy equity share ' ~ bands[1].policy|pct(2) ~ ', band ±' ~ bands[1].band|pp(2) ~ '. This is the band a global crash breaches.'
-				},
-				{
-					name: 'Rebalancing',
-					text: 'Checked ' ~ (mandate.checkMonths == 1 ? 'at every month end' : 'every ' ~ mandate.checkMonths|number_format(0) ~ ' months') ~ '. A breach puts the foreign sleeves back on policy at once and trades the board back to its policy weight evenly over ' ~ mandate.executionMonths|number_format(0) ~ ' months, sliced across companies by float.'
-				},
-				{
-					name: 'Ownership ceiling',
-					text: 'Never more than ' ~ mandate.ownershipCeiling|pct(0) ~ ' of the float. Holding the same share of every company, that keeps it under ' ~ mandate.ownershipCeiling|pct(0) ~ ' of any company\'s voting shares.'
-				},
-				{
-					name: 'Corporate actions',
-					text: 'Tenders its share into buybacks and takes up its share of new issues, so a company\'s own flow never changes the fund\'s ownership.'
-				},
-				{
-					name: 'Returns',
-					text: 'Reported as a time-weighted return, valued continuously, so money paid in and the budget\'s draw are not performance. The real return is after District inflation, and is set against the return the spending rule assumed.'
-				},
-				{
-					name: 'Stamp duty',
-					text: 'Every share trade pays ' ~ mandate.stampDutyRate|pct(2) ~ ' on each side, and the duty is paid into the fund rather than the budget. Index funds are exempt.'
-				},
-				{
-					name: 'Strategic holding',
-					text: 'The District holds ' ~ mandate.clearinghouseStake|pct(0) ~ ' of its central counterparty outside the fund. The stake is off the float and never traded. The District tenders into buybacks and takes up new issues pro rata, so the percentage holds. Its dividends and buyback proceeds are paid into the fund, and any subscription is paid out of it.'
-				}
-			] %}
 			<dl class="mt-4 divide-y divide-outline-variant/10">
 				{% for rule in rules %}
 					<div class="py-3 grid grid-cols-1 md:grid-cols-[12rem_1fr] gap-1 md:gap-4">

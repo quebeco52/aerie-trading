@@ -2,47 +2,25 @@
 
 {% import 'partials/_ui.html.twig' as ui %}
 
-{% block title %}
-	{{ asset.ticker }}
-	Stock Price & Analysis |
-	{{ asset.name }}
-	- Aerie Exchange
-{% endblock %}
+{% block page_title %}{{ asset.ticker }} stock price & analysis | {{ asset.name }}{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="View live stock prices, market cap, financial statements, and fundamental valuation metrics for {{ asset.name }} ({{ asset.ticker }}).">
-	<meta property="og:title" content="{{ asset.ticker }} Stock Price & Financials | Aerie Exchange">
-	<meta property="og:description" content="Live financial data and analytics for {{ asset.name }} ({{ isEtf ? indexFacts.label : asset.industry|default('General') }}).">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}View live stock prices, market cap, financial statements, and fundamental valuation metrics for {{ asset.name }} ({{ asset.ticker }}).{% endblock %}
+{% block og_description %}Live financial data and analytics for {{ asset.name }} ({{ isEtf ? indexFacts.label : asset.industry|default('General') }}).{% endblock %}
 
 {% block favicon %}
-	<link rel="icon" href="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" type="image/svg+xml">
+	<link rel="icon" href="{{ logo_url(asset.ticker) }}" type="image/svg+xml">
 {% endblock %}
 
 {% block body %}
-	{# Life-cycle stage tones: reused by the header badge and the Company card. #}
-	{% set stageTone = {
-		'introduction': 'bg-primary/10 text-primary border-primary/25',
-		'growth': 'bg-secondary/10 text-secondary border-secondary/25',
-		'mature': 'bg-surface-container-highest text-on-surface border-outline-variant/40',
-		'shake_out': 'bg-tertiary/10 text-tertiary border-tertiary/25',
-		'decline': 'bg-tertiary/20 text-tertiary border-tertiary/40',
-	} %}
-	{% set stageBar = {
-		'introduction': 'bg-primary',
-		'growth': 'bg-secondary',
-		'mature': 'bg-on-surface',
-		'shake_out': 'bg-tertiary/60',
-		'decline': 'bg-tertiary',
-	} %}
-
+	{# The earnings-flow and business-map modals' controllers sit over the whole page, so the buttons that open them are
+	   actions in their scope (assets/controllers/sankey_controller.js, business_map_controller.js). #}
+	<div data-controller="sankey{{ businessMap ? ' business-map' }}" data-sankey-ticker-value="{{ asset.ticker }}" data-sankey-url-value="/api/earnings-flow"{% if businessMap %} data-business-map-edges-value="{{ businessMap.edges|json_encode }}"{% endif %}>
 	<div
 		class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5">
 
 		<header class="flex flex-col md:flex-row md:justify-between md:items-end gap-6 pb-6 border-b border-outline-variant/15 relative z-20">
 			<div class="flex items-center gap-4 min-w-0">
-				<img class="w-12 h-12 sm:w-14 sm:h-14 rounded border border-outline-variant/20 bg-surface-container-lowest p-1.5 shrink-0 object-contain" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="">
+				{% include 'partials/_logo.html.twig' with { ticker: asset.ticker, class: 'w-12 h-12 sm:w-14 sm:h-14 p-1.5 object-contain' } only %}
 
 				<div class="min-w-0">
 					<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight wrap-break-word leading-tight">{{ asset.name }}</h1>
@@ -60,27 +38,23 @@
 							</form>
 						{% endif %}
 						<span class="text-on-surface-variant/40" aria-hidden="true">&middot;</span>
-						<span class="group relative cursor-help focus-visible:outline-none" tabindex="0">
-							<span class="term">{{ isEtf ? indexFacts.indexName : asset.industry|default('General') }}</span>
-							{% set bmMap = constant('App\\Data\\Company\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
-							{% set bmDesc = isEtf ? indexFacts.mandate : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
-							{{ ui.tooltip(bmDesc, 'left', 'w-72', 'bottom') }}
-						</span>
+						{{ ui.term(isEtf ? indexFacts.indexName : asset.industry|default('General'), industryDescription, {tag: 'span', class: '', vpos: 'bottom'}) }}
 
 						{% if lifecycleStage is not null and not asset.isBankrupt %}
-							<span class="group relative cursor-help inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium {{ stageTone[lifecycleStage.value] }} focus-visible:outline-none" tabindex="0" id="lifecycle-badge">
+							{% set stageTip = ui_id('tip') %}
+							<span class="group relative cursor-help badge badge-{{ lifecycleStage.tone }}" tabindex="0" id="lifecycle-badge" aria-describedby="{{ stageTip }}">
 								<span class="border-b border-dotted border-current/60">{{ lifecycleStage.label }}</span>
-								{{ ui.tooltip('Life-cycle stage, read from the signs of operating, investing and financing cash flow in the last quarterly report. ' ~ lifecycleStage.description ~ ' Pattern: ' ~ lifecycleStage.cashFlowSignature ~ '.', 'left', 'w-80', 'bottom') }}
+								{{ ui.tooltip('Life-cycle stage, read from the signs of operating, investing and financing cash flow in the last quarterly report. ' ~ lifecycleStage.description ~ ' Pattern: ' ~ lifecycleStage.cashFlowSignature ~ '.', 'left', 'w-80', 'bottom', stageTip) }}
 							</span>
 						{% endif %}
-						{% if corporateBonds|default([])|length > 0 %}
+						{% if corporateBonds|length > 0 %}
 							<a href="#corporate-debt-section" class="inline-flex items-center gap-1 rounded bg-surface-container-high px-1.5 py-0.5 text-xs font-mono text-on-surface-variant hover:text-primary border border-outline-variant/30 transition-colors" title="{{ corporateBonds|length }} corporate debt issues listed on the exchange">
 								<span class="material-symbols-outlined text-xs" aria-hidden="true">receipt_long</span>
 								<span>{{ corporateBonds|length }} {{ corporateBonds|length == 1 ? 'bond' : 'bonds' }}</span>
 							</a>
 						{% endif %}
 						{% if not isEtf and asset.isBankrupt %}
-							<span class="inline-flex items-center rounded bg-tertiary/10 px-1.5 py-0.5 text-xs font-medium text-tertiary border border-tertiary/25">Bankrupt, delisted</span>
+							<span class="badge badge-down">Bankrupt, delisted</span>
 						{% endif %}
 					</div>
 				</div>
@@ -88,17 +62,13 @@
 
 			<div class="md:text-right shrink-0">
 				<span class="block text-3xl sm:text-4xl font-semibold font-mono tabular-nums {{ not isEtf and asset.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} tracking-tight transition-colors duration-300" id="big-price">
-					${{ (not isEtf and asset.isBankrupt ? 0.00 : asset.price)|number_format(2) }}
+					{{ (not isEtf and asset.isBankrupt ? 0.0 : asset.price)|money(2) }}
 				</span>
 
 				{# Trailing month, per the price buffer: the schema carries no session open or
 				   previous close to compute a daily move from. Labelled accordingly. #}
 				<p class="mt-1 text-sm font-mono tabular-nums" id="big-change-row">
-					{% if changePercent is not null %}
-						<span id="big-change" class="font-semibold {{ changePercent|signed_class }}">{{ changePercent|pct(2, true) }}</span>
-					{% else %}
-						<span id="big-change" class="font-semibold text-on-surface-faint">&mdash;</span>
-					{% endif %}
+					<span id="big-change" class="font-semibold {{ changePercent|signed_class }}">{{ changePercent|pct(2, true) }}</span>
 					<span class="font-sans text-xs text-on-surface-variant">past month</span>
 				</p>
 			</div>
@@ -106,35 +76,35 @@
 
 		<div class="space-y-5" data-controller="tabs" data-tabs-default-tab-value="overview">
 			<div class="flex border-b border-outline-variant/20 overflow-x-auto gap-5 sm:gap-7 pb-px custom-scrollbar" role="tablist">
-				<button class="stock-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-primary border-primary cursor-pointer" data-tab="overview" data-tabs-target="tab" data-action="click->tabs#select">
+				<button class="tab-btn" aria-selected="true" data-tab="overview" data-tabs-target="tab" data-action="click->tabs#select">
 					Overview
 				</button>
 				{% if isEtf %}
-					<button class="stock-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="constituents" data-tabs-target="tab" data-action="click->tabs#select">
+					<button class="tab-btn" data-tab="constituents" data-tabs-target="tab" data-action="click->tabs#select">
 						Constituents
 						<span class="text-xs font-normal text-on-surface-variant tabular-nums">{{ indexFacts.memberCount }}</span>
 					</button>
 				{% else %}
 					{% if anchorPortfolio %}
-						<button class="stock-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="holdings" data-tabs-target="tab" data-action="click->tabs#select">
+						<button class="tab-btn" data-tab="holdings" data-tabs-target="tab" data-action="click->tabs#select">
 							Holdings
 							<span class="text-xs font-normal text-on-surface-variant tabular-nums">{{ anchorPortfolio.holdings|length }}</span>
 						</button>
 					{% endif %}
-					<button class="stock-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="financials" data-tabs-target="tab" data-action="click->tabs#select">
+					<button class="tab-btn" data-tab="financials" data-tabs-target="tab" data-action="click->tabs#select">
 						Financials
 					</button>
-					<button class="stock-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="sector" data-tabs-target="tab" data-action="click->tabs#select">
+					<button class="tab-btn" data-tab="sector" data-tabs-target="tab" data-action="click->tabs#select">
 						Company
 					</button>
-					<button class="stock-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="options" data-tabs-target="tab" data-action="click->tabs#select">
+					<button class="tab-btn" data-tab="options" data-tabs-target="tab" data-action="click->tabs#select">
 						Options
 						{% if optionsListed %}
 							<span class="text-xs font-normal text-on-surface-variant tabular-nums">{{ optionExpiries|length }}</span>
 						{% endif %}
 					</button>
 				{% endif %}
-				<button class="stock-tab-btn pb-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="orders" data-tabs-target="tab" data-action="click->tabs#select">
+				<button class="tab-btn" data-tab="orders" data-tabs-target="tab" data-action="click->tabs#select">
 					Your orders
 					{% if openOrders|length > 0 %}
 						<span class="text-xs font-normal text-on-surface-variant tabular-nums">{{ openOrders|length }}</span>
@@ -176,19 +146,19 @@
 
 	</div>
 
-	{% if businessMap|default(null) %}
+	{% if businessMap %}
 		{% include 'stock/_business_map.html.twig' with { map: businessMap, name: asset.name } only %}
 	{% endif %}
 
-	{# Earnings-flow modal (assets/controllers/sankey_controller.js). #}
-	<div id="sankey-modal" data-controller="sankey" data-sankey-ticker-value="{{ asset.ticker }}" data-sankey-url-value="/api/earnings-flow" data-action="click->sankey#backdropClick" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
+	{# Earnings-flow modal. #}
+	<div id="sankey-modal" data-sankey-target="modal" data-action="click->sankey#backdropClick" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 p-4">
 		<div class="bg-surface-container-low border border-outline-variant/20 rounded-lg w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl">
 			<div class="flex justify-between items-center p-6 border-b border-outline-variant/10">
 				<div>
 					<h2 class="text-lg font-semibold text-on-surface">{{ asset.ticker }} earnings flow</h2>
 					<p class="text-sm text-on-surface-variant mt-0.5">Revenue by segment, through operating costs, to net income and what it is spent on.</p>
 				</div>
-				<button type="button" data-action="click->sankey#close" onclick="document.dispatchEvent(new CustomEvent('sankey:close'))" class="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" aria-label="Close">
+				<button type="button" data-action="sankey#close" class="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" aria-label="Close">
 					<span class="material-symbols-outlined text-2xl" aria-hidden="true">close</span>
 				</button>
 			</div>
@@ -209,6 +179,7 @@
 			</ul>
 		</div>
 	</div>
+	</div>
 
 {% endblock %}
 
@@ -225,19 +196,20 @@
 		{{ {
 			ticker: asset.ticker,
 			isEtf: isEtf,
-			businessModel: businessModel|default('none'),
+			businessModel: businessModel,
 			isFinancial: isFinancial,
-			isInsurer: isInsurer|default(false),
+			isInsurer: isInsurer,
+			industryCharts: industryCharts,
 			sharesOutstanding: asset.sharesOutstanding|default(1),
 			currentPrice: asset.price|default(0),
-			userQuantity: userQuantity|default(0),
-			eps: not isEtf and asset.earningsPerShare is defined ? asset.earningsPerShare|default(0) : 0,
-			ticksPerYear: ticksPerYear|default(14400),
-			pieLabels: pieLabels is defined and pieLabels ? pieLabels : [],
-			pieData: pieData is defined and pieData ? pieData : [],
-			sharesMap: sharesMap is defined and sharesMap ? sharesMap : {},
-			capitalThresholds: capitalThresholds|default(null),
-			kpiSeries: kpiSeries|default([]) ?: {}
+			userQuantity: userQuantity,
+			eps: isEtf ? 0 : asset.earningsPerShare,
+			ticksPerYear: ticksPerYear,
+			pieLabels: pieLabels,
+			pieData: pieData,
+			sharesMap: sharesMap ?: {},
+			capitalThresholds: capitalThresholds,
+			kpiSeries: kpiSeries ?: {}
 		}|json_encode|raw }}
 	</script>
 

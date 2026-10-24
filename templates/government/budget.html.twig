@@ -1,12 +1,8 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}The budget - Aerie Exchange{% endblock %}
+{% block page_title %}The budget{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The Aerie District's budget: the laws the cabinet aims for and those in force, each law's history, and the listed firms each law reaches.">
-	<meta property="og:title" content="The budget | Aerie Exchange">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}The Aerie District's budget: the laws the cabinet aims for and those in force, each law's history, and the listed firms each law reaches.{% endblock %}
 
 {% import 'partials/_ui.html.twig' as ui %}
 {% import 'government/_macros.html.twig' as gov %}
@@ -170,9 +166,9 @@
 														<span class="text-on-surface-variant">{{ firm.name }}</span>
 													</th>
 													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.now|signed_class }}">{{ firm.now|format_large('$', true) }}</td>
-													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.nowShare is null ? 'text-on-surface-faint' : firm.nowShare|signed_class }}">{{ firm.nowShare is null ? '—' : firm.nowShare|pct(1, true) }}</td>
+													<td class="py-1.5 text-right font-mono tabular-nums {{ firm.nowShare|signed_class }}">{{ firm.nowShare|pct(1, true) }}</td>
 													{% if law.expectedMoves %}
-														<td class="py-1.5 text-right font-mono tabular-nums {{ firm.changeShare is null ? 'text-on-surface-faint' : firm.changeShare|signed_class }}">{{ firm.changeShare is null ? '—' : firm.changeShare|pct(1, true) }}</td>
+														<td class="py-1.5 text-right font-mono tabular-nums {{ firm.changeShare|signed_class }}">{{ firm.changeShare|pct(1, true) }}</td>
 													{% endif %}
 												</tr>
 											{% endfor %}

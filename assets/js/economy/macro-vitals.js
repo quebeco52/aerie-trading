@@ -5,9 +5,17 @@ import { formatBps, formatPercent } from '../utils/formatters.js';
  * reading the history charts plot, so the header and the charts below it never print two figures for one thing.
  */
 export function updateEconomyVitals(payload) {
-    if (payload.economic_cycle) {
+    const cycle = payload.economic_cycle;
+    if (cycle) {
         const el = document.getElementById('market-economic-cycle');
-        if (el) el.textContent = payload.economic_cycle;
+        if (el) el.textContent = cycle;
+        // The output gap takes the cycle's colours, so its band is the one MacroStateDTO::economicCycleLabel() draws.
+        const gapEl = document.getElementById('macro-output-gap');
+        if (gapEl) {
+            gapEl.classList.toggle('text-tertiary', cycle === 'Bust');
+            gapEl.classList.toggle('text-secondary', cycle === 'Boom');
+            gapEl.classList.toggle('text-on-surface', cycle !== 'Bust' && cycle !== 'Boom');
+        }
     }
 
     const macro = payload.macro;
@@ -27,12 +35,5 @@ export function updateEconomyVitals(payload) {
     if (qeStatusEl) qeStatusEl.textContent = qeOn ? `−${formatBps(macro.balance_sheet_intensity)}` : '';
     document.getElementById('qe-status-container')?.classList.toggle('hidden', !qeOn);
 
-    const gapEl = document.getElementById('macro-output-gap');
-    if (gapEl && Number.isFinite(macro.output_gap)) {
-        const gapVal = macro.output_gap * 100;
-        gapEl.textContent = formatPercent(macro.output_gap, 2);
-        gapEl.classList.toggle('text-tertiary', gapVal < -1.0);
-        gapEl.classList.toggle('text-secondary', gapVal > 1.0);
-        gapEl.classList.toggle('text-on-surface', gapVal >= -1.0 && gapVal <= 1.0);
-    }
+    setPercent('macro-output-gap', macro.output_gap);
 }

@@ -3,11 +3,9 @@
 {# The long-form company profile: App\Data\Company\CompanyResearch's article beside live facts from
    App\Service\View\CompanyProfilePageBuilder. Tickbird Research writes for terminal subscribers. #}
 
-{% block title %}{{ article.headline }} | {{ publisher }}{% endblock %}
+{% block page_title %}{{ article.headline }} | {{ publisher }}{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="{{ article.standfirst }}">
-{% endblock %}
+{% block description %}{{ article.standfirst }}{% endblock %}
 
 {% block body %}
 <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full">
@@ -49,11 +47,11 @@
 					</div>
 					<div class="flex justify-between gap-3">
 						<dt class="text-on-surface-variant">Change</dt>
-						<dd class="font-mono tabular-nums {{ changePercent is null ? 'text-on-surface-faint' : changePercent|signed_class }}">{{ changePercent is null ? '—' : changePercent|pct(2, true) }}</dd>
+						<dd class="font-mono tabular-nums {{ changePercent|signed_class }}">{{ changePercent|pct(2, true) }}</dd>
 					</div>
 					<div class="flex justify-between gap-3">
 						<dt class="text-on-surface-variant">Market value</dt>
-						<dd class="font-mono tabular-nums {{ marketCap is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ marketCap is null ? '—' : marketCap|format_large('$') }}</dd>
+						<dd class="font-mono tabular-nums {{ marketCap is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ marketCap|format_large('$') }}</dd>
 					</div>
 					<div class="flex justify-between gap-3">
 						<dt class="text-on-surface-variant">Sector</dt>

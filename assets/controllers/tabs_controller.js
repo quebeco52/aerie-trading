@@ -3,7 +3,7 @@ import { Controller } from '@hotwired/stimulus';
 /**
  * Tabbed panels. Roles, ids and `aria-controls` pairs are wired here rather than in markup —
  * a dozen of them maintained by hand across two templates drift. Roving tabindex, so the strip
- * is one tab stop with arrow keys moving inside it.
+ * is one tab stop with arrow keys moving inside it. The look follows aria-selected (`.tab-btn` in app.css).
  */
 export default class extends Controller {
     static targets = ['tab', 'panel'];
@@ -101,13 +101,6 @@ export default class extends Controller {
             const isActive = btn.dataset.tab === tabId;
             btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
             btn.setAttribute('tabindex', isActive ? '0' : '-1');
-            if (isActive) {
-                btn.classList.remove('text-on-surface-variant', 'border-transparent');
-                btn.classList.add('text-primary', 'border-primary');
-            } else {
-                btn.classList.remove('text-primary', 'border-primary');
-                btn.classList.add('text-on-surface-variant', 'border-transparent');
-            }
         });
 
         this.panelTargets.forEach(panel => {

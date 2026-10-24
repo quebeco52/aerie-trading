@@ -25,14 +25,15 @@
 		<div class="p-4 rounded-lg bg-surface-container-lowest border border-outline-variant/20 sm:col-span-2">
 			<div class="text-xs text-on-surface-variant mb-1">Dealer gamma</div>
 			<div class="flex items-baseline gap-2">
-				<span class="font-mono tabular-nums text-xl font-semibold {{ optionDealerGammaPerPercent > 0 ? 'text-tertiary' : (optionDealerGammaPerPercent < 0 ? 'text-secondary' : 'text-on-surface') }}">
+				{# Short gamma amplifies moves: a caution, amber, not the red of a fall. #}
+				<span class="font-mono tabular-nums text-xl font-semibold {{ optionDealerGammaPerPercent > 0 ? 'text-warning' : (optionDealerGammaPerPercent < 0 ? 'text-secondary' : 'text-on-surface') }}">
 					{{ optionDealerGammaPerPercent|format_large('', true) }}
 				</span>
 				<span class="text-2xs text-on-surface-variant">shares per 1% move</span>
 			</div>
 			<p class="text-3xs text-on-surface-faint mt-1 leading-relaxed">
 				{% if optionDealerGammaPerPercent > 0 %}
-					The desk is <span class="text-tertiary font-semibold">short gamma</span>: it has to buy as the price rises and sell as it falls, so its hedging amplifies whatever the tape is already doing.
+					The desk is <span class="text-warning font-semibold">short gamma</span>: it has to buy as the price rises and sell as it falls, so its hedging amplifies whatever the tape is already doing.
 				{% elseif optionDealerGammaPerPercent < 0 %}
 					The desk is <span class="text-secondary font-semibold">long gamma</span>: it sells strength and buys weakness, so its hedging leans against the move and damps it.
 				{% else %}
@@ -99,7 +100,7 @@
 													data-option-ticket-symbol-param="{{ row.call.ticker }}"
 													data-option-ticket-mark-param="{{ row.call.mark }}"
 													data-option-ticket-position-param="{{ row.call.position }}"
-													title="Decays ${{ (row.call.theta / 365)|abs|number_format(3) }} per day">{{ row.call.mark|money(2) }}</button>
+													title="Decays {{ row.call.dailyDecay|money(3) }} per day">{{ row.call.mark|money(2) }}</button>
 										{% else %}
 											{{ row.call.mark|money(2) }}
 										{% endif %}
@@ -123,7 +124,7 @@
 													data-option-ticket-symbol-param="{{ row.put.ticker }}"
 													data-option-ticket-mark-param="{{ row.put.mark }}"
 													data-option-ticket-position-param="{{ row.put.position }}"
-													title="Decays ${{ (row.put.theta / 365)|abs|number_format(3) }} per day">{{ row.put.mark|money(2) }}</button>
+													title="Decays {{ row.put.dailyDecay|money(3) }} per day">{{ row.put.mark|money(2) }}</button>
 										{% else %}
 											{{ row.put.mark|money(2) }}
 										{% endif %}

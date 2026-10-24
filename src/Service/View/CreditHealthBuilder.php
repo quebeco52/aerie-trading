@@ -8,6 +8,7 @@ use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\FinancialConstants;
 
 /**
@@ -27,7 +28,7 @@ class CreditHealthBuilder
     ) {}
 
     /**
-     * @return array{creditHealth: array{inDefault: bool, quartersInDefault: int, cureDueNextReport: bool, revolverCommitment: float, revolverDrawn: float, revolverUtilization: float|null, netDebtToEbitda: float, covenantLimit: float|null, hasCovenantHeadroom: bool, interestCoverage: float, distanceToDefault: float, coverageState: string}|null}
+     * @return array{creditHealth: array{inDefault: bool, quartersInDefault: int, cureDueNextReport: bool, revolverCommitment: float, revolverDrawn: float, revolverUtilization: float|null, netDebtToEbitda: float, covenantLimit: float|null, hasCovenantHeadroom: bool, interestCoverage: float, distanceToDefault: float, investmentGradeDistance: float, coverageState: string}|null}
      */
     public function build(Stock $stock, MacroStateDTO $macroState): array
     {
@@ -53,6 +54,8 @@ class CreditHealthBuilder
             'hasCovenantHeadroom' => $health->hasLeverageHeadroom,
             'interestCoverage' => $health->interestCoverage,
             'distanceToDefault' => $this->debtEngine->resolveDistanceToDefault($stock, $macroState),
+            // The distance the rating agency's investment grade starts at; below it the credit is speculative.
+            'investmentGradeDistance' => CreditRatingAgency::THRESHOLD_BBB,
             // DebtEngine's flags: operating income below zero, or below the sector's minimum coverage.
             'coverageState' => $health->isLiquidityCrisis ? 'negative' : ($health->isLiquidityWarning ? 'below minimum' : 'adequate'),
         ]];

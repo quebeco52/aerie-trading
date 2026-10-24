@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
+use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
 use App\Entity\Stock;
@@ -45,13 +46,13 @@ class StockPageBuilderTest extends TestCase
      */
     private const TEMPLATE_KEYS = [
         'advShares', 'analystTargets', 'anchorPortfolio', 'asset', 'availableToBorrow',
-        'borrowFee', 'borrowWarnings', 'businessMap', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'corporateBonds', 'creditHealth', 'dividendYield',
-        'events', 'financialSummary', 'generalInfo', 'halfSpread', 'hasProfile', 'indexFacts', 'industry', 'isEtf',
+        'borrowFee', 'borrowWarnings', 'businessMap', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'corporateBonds', 'creditHealth', 'displayReturn', 'dividendYield',
+        'events', 'financialSummary', 'fundStake', 'generalInfo', 'halfSpread', 'hasProfile', 'indexFacts', 'industry', 'industryCharts', 'industryDescription', 'isEtf',
         'isFinancial', 'isInsurer', 'kpiSeries', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
         'marketShare', 'netAssetValue', 'nextReport', 'openOrders', 'optionDealerGammaPerPercent',
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
         'peRatio', 'peers', 'pieData', 'pieLabels', 'pipeline', 'sharesMap', 'shortInterest', 'shortUtilization', 'strategicStake',
-        'ticksPerYear', 'userAvgCost', 'userDividendIncome', 'userQuantity', 'userTrades',
+        'ticksPerYear', 'userAvgCost', 'userBorrowAccrued', 'userDividendIncome', 'userQuantity', 'userRealised', 'userTrades',
         'userUnrealizedPnL', 'userUnrealizedReturn',
     ];
 
@@ -64,14 +65,16 @@ class StockPageBuilderTest extends TestCase
         'userUnrealizedPnL' => 0.0,
         'userUnrealizedReturn' => 0.0,
         'userDividendIncome' => 0.0,
+        'userBorrowAccrued' => 0.0,
+        'userRealised' => 0.0,
         'openOrders' => [],
         'userTrades' => [],
     ];
 
-    private function builder(?\App\Repository\BondRepository $bonds = null, ?\Redis $redis = null, float $totalTime = 0.0): StockPageBuilder
+    private function builder(?\App\Repository\BondRepository $bonds = null, ?\Redis $redis = null, float $totalTime = 0.0, float $fundShare = 0.0): StockPageBuilder
     {
         $macroStateProvider = $this->createMock(MacroStateProvider::class);
-        $macroStateProvider->method('liveState')->willReturn(new MacroStateDTO(totalTime: $totalTime));
+        $macroStateProvider->method('liveState')->willReturn(new MacroStateDTO(totalTime: $totalTime, sovereignFundOwnershipShare: $fundShare));
 
         $companySnapshot = $this->createMock(CompanySnapshotBuilder::class);
         $companySnapshot->method('build')->willReturn([
@@ -82,6 +85,7 @@ class StockPageBuilderTest extends TestCase
             'peRatio' => 12.5,
             'lifecycleStage' => null,
             'dividendYield' => 0.01,
+            'displayReturn' => 0.12,
             'analystTargets' => ['consensus' => 110.0],
             'netAssetValue' => null,
             'capitalThresholds' => null,
@@ -216,6 +220,7 @@ class StockPageBuilderTest extends TestCase
         $this->assertNotSame('', $management['label']);
         $this->assertNotSame('', $management['mandate']);
         $this->assertContains($management['conviction'], ['nominal', 'characteristic', 'pronounced']);
+        $this->assertSame(['nominal' => 'neutral', 'characteristic' => 'accent', 'pronounced' => 'warn'][$management['conviction']], $management['tone']);
         $this->assertGreaterThanOrEqual(0.0, $management['tenureYears']);
 
         $this->assertNull(
@@ -301,6 +306,42 @@ class StockPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(20_000.0 / 800_000.0, $payload['shortInterest']['floatShare'], 1e-12);
         $this->assertEqualsWithDelta(20_000.0 / $adv, $payload['shortInterest']['daysToCover'], 1e-9);
         $this->assertSame(\App\Service\Math\FinancialConstants::BUY_IN_UTILIZATION_THRESHOLD, $payload['borrowWarnings']['recallUtilization']);
+    }
+
+    /**
+     * The financials tab and its chart script read one list of industry charts: a business model's own chart, the
+     * capital chart of a financial firm, the underwriting chart of an insurer and the reported operating figures.
+     */
+    public function testIndustryChartsFollowTheBusinessModel(): void
+    {
+        $this->assertSame([], StockPageBuilder::industryCharts('standard_corporate', false, false, false));
+        $this->assertSame(['netInterestEngineChart', 'regulatoryRatiosChart'], StockPageBuilder::industryCharts('commercial_bank', true, false, false));
+        $this->assertSame(['kpiHistoryChart', 'regulatoryRatiosChart', 'insuranceDualEngineChart'], StockPageBuilder::industryCharts('insurance', true, true, true));
+        $this->assertSame(['cyclicalDynamicsChart'], StockPageBuilder::industryCharts('mining', false, false, false));
+        $this->assertSame([], $this->builder()->build($this->fund(), 'LBI', null)['industryCharts'], 'a fund files no reports');
+    }
+
+    /**
+     * The Sovereign Reserve Fund holds the same share of every float, so of a company's shares it holds that share of
+     * its float.
+     */
+    public function testTheFundStakeIsItsShareOfTheFloat(): void
+    {
+        $stock = $this->stock();
+        $stock->setPublicFloatPercentage('0.8000');
+
+        $this->assertEqualsWithDelta(0.20, $this->builder(null, null, 0.0, 0.25)->build($stock, 'LAKE', null)['fundStake'], 1e-12);
+
+        $stock->setIsBankrupt(true);
+        $this->assertSame(0.0, $this->builder(null, null, 0.0, 0.25)->build($stock, 'LAKE', null)['fundStake'], 'a delisted shell has no holders to quote');
+    }
+
+    /**
+     * The header explains the industry label by the business model; one the descriptions do not know reads as general.
+     */
+    public function testTheIndustryIsDescribedByItsBusinessModel(): void
+    {
+        $this->assertSame(Sectors::BUSINESS_MODEL_DESCRIPTIONS['none'], $this->builder()->build($this->stock(), 'LAKE', null)['industryDescription']);
     }
 
     /** The next results date comes off the reporting schedule; with no tick counter to read it is left off. */

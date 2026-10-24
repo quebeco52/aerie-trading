@@ -137,6 +137,15 @@ final class UiExtensionTest extends TestCase
         );
     }
 
+    /** A macro called twice on a page draws two tooltips, and each trigger must point at its own. */
+    public function testUiIdNeverRepeatsOnAPage(): void
+    {
+        $twig = new Environment(new ArrayLoader(['page' => "{{ ui_id('tip') }} {{ ui_id('tip') }} {{ ui_id('row') }}"]));
+        $twig->addExtension(new UiExtension());
+
+        $this->assertSame('tip-1 tip-2 row-3', $twig->render('page'));
+    }
+
     /**
      * Twig's own source(), which inlines a template's text as the web profiler does its icons, still works beside it.
      */

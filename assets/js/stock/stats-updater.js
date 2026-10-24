@@ -179,19 +179,10 @@ function updateAnalystTargets(stockUpdate, newPrice) {
                 ? 'Outperform'
                 : (compositeTarget < (newPrice * 0.95) ? 'Underperform' : 'Neutral'));
 
+        // The badge tones CompanySnapshotBuilder::RATING_TONES gives the same ratings.
         badgeEl.textContent = rating;
-        badgeEl.classList.remove(
-            'text-secondary', 'bg-secondary/10',
-            'text-tertiary', 'bg-tertiary/10',
-            'text-on-surface-variant', 'bg-on-surface-variant/10'
-        );
-        if (rating === 'Outperform') {
-            badgeEl.classList.add('text-secondary', 'bg-secondary/10');
-        } else if (rating === 'Underperform') {
-            badgeEl.classList.add('text-tertiary', 'bg-tertiary/10');
-        } else {
-            badgeEl.classList.add('text-on-surface-variant', 'bg-on-surface-variant/10');
-        }
+        badgeEl.classList.remove('badge-up', 'badge-down', 'badge-neutral');
+        badgeEl.classList.add(rating === 'Outperform' ? 'badge-up' : (rating === 'Underperform' ? 'badge-down' : 'badge-neutral'));
         badgeEl.classList.remove('hidden');
     }
 }

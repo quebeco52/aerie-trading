@@ -1,43 +1,33 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Exchequer - Aerie Exchange{% endblock %}
+{% block page_title %}Exchequer{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The District's Exchequer: the debt it manages, how long the District borrows for, and what the debt costs.">
-	<meta property="og:title" content="Exchequer | Aerie Exchange">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}The District's Exchequer: the debt it manages, how long the District borrows for, and what the debt costs.{% endblock %}
 
 {% block body %}
 <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
 
-	{% include 'government/_breadcrumb.html.twig' with {current: 'Exchequer'} %}
-	<header class="pb-5 border-b border-outline-variant/15">
-		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Exchequer</h1>
-		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed max-w-3xl">
+	{% embed 'government/_header.html.twig' with {title: 'Exchequer'} %}
+		{% block lead %}
 			The District's treasury. It carries out the budget the Diet passes and funds it, selling bills repaid within the
 			year and bonds that run for decades. Its head is named by the Aerie Council for a single term and decides how long
 			the District borrows for.
-		</p>
-	</header>
+		{% endblock %}
+	{% endembed %}
 
 	{% if exchequer %}
-		{% set head = exchequer.head %}
-		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="head-heading">
-			<h2 id="head-heading" class="text-sm font-semibold text-on-surface">The head</h2>
-			<p class="text-sm font-semibold text-on-surface mt-2">{{ head.name }}</p>
-			<p class="text-xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
-			<p class="text-sm text-on-surface mt-2 max-w-3xl">
-				{{- {short: 'Favours borrowing short', balanced: 'Takes a middle course', long: 'Favours locking in long-term rates'}[head.stance] }},
+		{% embed 'government/_head.html.twig' with {head: exchequer.head} %}
+			{% block stance -%}
+				{{ head.stanceText }},
 				{{ head.opening ? 'keeping the debt at the average maturity it had at Year 1' : 'steering the debt toward an average maturity of' }}
 				{%- if not head.opening %} <span class="font-mono tabular-nums">{{ head.maturity|number_format(1) }}</span> years{% endif %}
-				{%- if head.passedOver is not empty %}, chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">(<span class="font-mono tabular-nums">{{ candidate.maturity|number_format(1) }}</span> years, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
-			</p>
-			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">
+			{%- endblock %}
+			{% block candidate %}<span class="font-mono tabular-nums">{{ candidate.maturity|number_format(1) }}</span> years, {% endblock %}
+			{% block rules %}
 				The Council names the head for a single {{ exchequer.rules.termYears|number_format(0) }}-year term from a shortlist of {{ exchequer.rules.shortlist }}, choosing the candidate nearest its own view of the debt.
 				{% if exchequer.councilMaturity is not null %}The Council's median member would borrow at <span class="font-mono tabular-nums">{{ exchequer.councilMaturity|number_format(1) }}</span> years on average.{% endif %}
-			</p>
-		</section>
+			{% endblock %}
+		{% endembed %}
 
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="debt-heading">

@@ -1,0 +1,227 @@
+/* Glasswater Row: the street scene on templates/district/index.html.twig, linked from that page's stylesheets
+   block. Colours read the theme tokens in app.css; the literal hexes are the scene's own art. */
+
+/* Stroke widths throughout are sized for the street's rendered scale (~0.45px per user unit):
+   anything under ~2.5 units lands below one device pixel and stops reading as a line. */
+.plot { cursor: pointer; }
+/* A facade resize is an SVG geometry change, which a transition can only animate on the main
+   thread: layout, paint and layerize on every frame for as long as any of the 45 facades is
+   mid-glide. Resizes are therefore rationed to one pass every RESIZE_INTERVAL_MS and the glide
+   (--facade-glide, set from FACADE_GLIDE_MS in district_controller.js) is shorter than that
+   interval, so the street is still most of the time. Everything that rides a roofline moves
+   with it: the windows and the roof kit by one transform each, the conduits by their `d`. */
+.district-map { --facade-glide: 0ms; }
+.facade {
+	stroke-width: 2.5;
+	transition: y var(--facade-glide) ease-out, height var(--facade-glide) ease-out;
+}
+.plot-windows, .roof-kit { transition: transform var(--facade-glide) ease-out; }
+/* Dimming throughout is fill-opacity / stroke-opacity, never `opacity`: element opacity is a
+   compositing effect, so every one of the ~450 windows, ~130 conduits and 90 badges/flares
+   carrying it became its own paint chunk, and Chrome re-layerised all of them on every
+   repaint (Layerize was the single largest cost in the profile). Paint-level opacity is
+   part of the fill and costs nothing extra. Element opacity survives only on transient,
+   few-at-a-time states (sector filter dimming, the tooltip). */
+/* Lit share tracks return on capital against baseline — see DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE.
+   Dark windows stay faintly visible so the facade keeps its texture. */
+.window { fill-opacity: 0.08; shape-rendering: crispEdges; }
+.window[data-lit="true"] { fill-opacity: 0.5; }
+/* A few lit windows carry subtle ambient texture — see DistrictMap::WINDOW_TWINKLE_SHARE.
+   Styled statically with crisp edges to prevent continuous 60-144fps GPU/CPU rasterization. */
+.window[data-lit="true"][data-twinkle="true"] { fill-opacity: 0.72; }
+.roofline { fill: #4a4f58; }
+
+/* Condition is drawn in texture, not hue: hue already carries the sector, and a brown
+   distressed bank read as an energy house. A distressed house (CCC and below) is hatched in
+   amber over the sector's own colours; a failed house is greyed and its windows boarded. */
+.condition-hatch { display: none; pointer-events: none; fill: url(#hatch-distressed); }
+.plot[data-condition="distressed"] .condition-hatch { display: inline; }
+.plot[data-condition="distressed"] .facade { stroke: var(--color-warning) !important; }
+
+.plot[data-condition="ruin"] .facade { fill: #1c1d21 !important; stroke: #5a5f68 !important; stroke-dasharray: 10 7; }
+.plot[data-condition="ruin"] .window,
+.plot[data-condition="ruin"] .window[data-lit="true"] { fill: #6e6152 !important; fill-opacity: 0.55; }
+.plot[data-condition="ruin"] .roofline { fill: #3a3d44; }
+
+.plot:hover .facade { fill: #2c313a !important; transition: fill 150ms ease-out; }
+.plot:hover .window[data-lit="true"] { fill-opacity: 0.85; }
+.plot:hover .window:not([data-lit="true"]) { fill-opacity: 0.18; }
+.plot[data-selected="true"] .facade { stroke: var(--color-primary) !important; stroke-width: 5; }
+.plot[data-selected="true"] .window[data-lit="true"] { fill-opacity: 0.95; }
+
+/* Sector filter: a legend chip dims every tenant outside its sector, plates and brackets included. */
+.plot[data-dimmed="true"], .plot-label[data-dimmed="true"], .plot-rank[data-dimmed="true"],
+.plot-price[data-dimmed="true"], .plot-change[data-dimmed="true"], .sector-run[data-dimmed="true"] {
+	opacity: 0.18;
+	transition: opacity 200ms;
+}
+
+/* Sized against the narrowest plot (100 units): a 5-character ticker at 30 is 90 units, a
+   price at 22 is 92, a change at 22 is 79. Each fits alone on a centred line; no two fit
+   side by side, so they are never paired. */
+.plot-rank { fill: var(--color-on-surface-variant); font-size: 24px; letter-spacing: 0.5px; }
+/* Street rank is re-ranked from live caps; a plate that just moved shows its direction for a moment. */
+.plot-rank[data-rank-move="up"] { fill: var(--color-secondary); }
+.plot-rank[data-rank-move="down"] { fill: var(--color-tertiary); }
+.plot-label { fill: var(--color-on-surface); font-size: 30px; letter-spacing: 1px; transition: fill 200ms; }
+.plot-price { fill: var(--color-on-surface-variant); font-size: 22px; letter-spacing: 0.5px; }
+.plot-change { font-size: 22px; font-weight: bold; letter-spacing: 0.5px; }
+.plot-change[data-direction="up"] { fill: var(--color-secondary); }
+.plot-change[data-direction="down"] { fill: var(--color-tertiary); }
+.plot-change[data-direction="flat"] { fill: var(--color-on-surface-variant); }
+.plot-label[data-selected="true"], .plot-rank[data-selected="true"] { fill: var(--color-primary); }
+
+/* Sector brackets along the kerb — one rule per run of adjacent same-sector plots. */
+.sector-run .sector-rule { stroke-width: 3; stroke-opacity: 0.7; }
+.sector-run .sector-label { font-size: 20px; letter-spacing: 1.5px; fill-opacity: 0.75; }
+
+.gridline { stroke: #2c313a; stroke-width: 2; stroke-dasharray: 4 12; stroke-opacity: 0.55; }
+.gridline-label { fill: var(--color-on-surface-variant); font-size: 32px; letter-spacing: 0.5px; fill-opacity: 0.75; }
+
+/* Roof furniture: one pictogram per trade (DistrictMap::ROOF_FURNITURE_BY_INDUSTRY), in the
+   sector's window colour so it is legible at the street's scale; condition recolours it the
+   way it recolours the windows. */
+.roof-furniture { fill-opacity: 0.85; stroke-opacity: 0.85; }
+.plot[data-condition="ruin"] .roof-furniture { color: #5a5f68 !important; fill-opacity: 0.5; stroke-opacity: 0.5; }
+
+/* Titan marker: rendered with static illumination rather than continuous animation loop
+   to avoid continuous 60fps CPU SVG rasterization. */
+.plot .beacon { fill: #ffd9a0; fill-opacity: 0.9; }
+
+/* Kerb lights: a pool in the sector colour under each plate — see DistrictMap::KERB_LIGHT_DEPTH. */
+.kerb-light { pointer-events: none; }
+.kerb-light[data-dimmed="true"] { opacity: 0.18; transition: opacity 200ms; }
+
+/* --- Institutions --- */
+.institution { cursor: pointer; }
+.institution .pediment, .institution .body {
+	fill: #22262e;
+	stroke: #4b5059;
+	stroke-width: 2.5;
+	transition: fill 300ms, stroke 300ms;
+}
+.institution .column { stroke: #5a606a; stroke-width: 3; stroke-opacity: 0.5; }
+.institution-beacon { fill: var(--color-tertiary); fill-opacity: 0; transition: fill-opacity 300ms; }
+.institution-label {
+	fill: var(--color-on-surface-variant);
+	font-size: 30px;
+	letter-spacing: 1px;
+	fill-opacity: 0.7;
+	transition: fill-opacity 200ms, fill 200ms;
+}
+.institution-readout { font-size: 26px; }
+.readout-label { fill: var(--color-on-surface-variant); letter-spacing: 0.5px; }
+.readout-value { fill: var(--color-primary); font-weight: bold; }
+/* Recent readings under each value, drawn client-side from the ticks seen — see
+   DistrictMap::INSTITUTION_SPARKLINE_WIDTH. Empty until a second sample lands. */
+.readout-spark { fill: none; stroke: #5a606a; stroke-width: 2; stroke-linejoin: round; stroke-opacity: 0.8; }
+.readout-spark-base { stroke: #2c313a; stroke-width: 1.5; stroke-opacity: 0.6; }
+.institution[data-stressed="true"] .readout-spark { stroke: var(--color-tertiary); }
+
+.institution:hover .pediment, .institution:hover .body { fill: #2c313a; }
+.institution[data-selected="true"] .pediment, .institution[data-selected="true"] .body {
+	stroke: var(--color-primary);
+	stroke-width: 5;
+}
+.institution[data-selected="true"] .institution-label { fill-opacity: 1; fill: var(--color-primary); }
+
+.institution[data-stressed="true"] .pediment, .institution[data-stressed="true"] .body {
+	fill: #3a2a2e;
+	stroke: #a35c5c;
+}
+.institution[data-stressed="true"] .institution-beacon { fill-opacity: 1; }
+.institution[data-stressed="true"] .institution-label { fill-opacity: 1; fill: var(--color-tertiary); }
+.institution[data-stressed="true"] .readout-value { fill: var(--color-tertiary); }
+
+/* --- Conduits --- */
+/* Routed orthogonally along one lane per institution (see DistrictMap::CONDUIT_LANE_PITCH).
+   Barely there at rest — the lane structure shows, the wiring does not — and revealed by
+   hovering either end: an institution lights everything it feeds, a building everything it
+   draws. A stressed institution's lines stay lit on their own. The two institutions with no
+   stress rules are reachable through hover, which is why the resting state need not be. */
+.conduit {
+	fill: none;
+	stroke: #3c414b;
+	stroke-width: 3;
+	stroke-linejoin: round;
+	stroke-dasharray: 10 9;
+	stroke-opacity: 0.12;
+	transition: stroke-opacity 300ms, stroke 300ms, d var(--facade-glide) ease-out;
+}
+.conduit[data-hover="true"] {
+	stroke-opacity: 0.85;
+	stroke: #8fa5d6;
+}
+.conduit[data-stressed="true"] {
+	stroke-opacity: 0.85;
+	stroke: var(--color-tertiary);
+	stroke-width: 3.5;
+	stroke-dasharray: 6 6;
+}
+.conduit[data-highlighted="true"] {
+	stroke-opacity: 0.95;
+	stroke: var(--color-primary);
+	stroke-width: 4;
+}
+
+/* --- Event Flares & Badges --- */
+/* Hidden by visibility, not opacity 0 — see the note on fill-opacity above. */
+.event-flare { visibility: hidden; fill-opacity: 0; pointer-events: none; fill: var(--color-primary); }
+.event-flare[data-flash="true"] { visibility: visible; animation: flare-burst 900ms ease-out; }
+@keyframes flare-burst {
+	0%   { fill-opacity: 0.95; r: 6; }
+	55%  { fill-opacity: 0.45; r: 30; }
+	100% { fill-opacity: 0; r: 40; }
+}
+
+.event-badge { visibility: hidden; pointer-events: none; }
+.event-badge:not([data-count="0"]) { visibility: visible; }
+.event-badge circle { fill: var(--color-surface-container); stroke: #5a606a; stroke-width: 2.5; }
+.event-badge text { fill: var(--color-on-surface-variant); font-size: 26px; font-weight: bold; }
+.event-badge[data-flash="true"] circle { animation: badge-pop 500ms ease-out; }
+@keyframes badge-pop {
+	0%   { stroke: var(--color-tertiary); }
+	100% { stroke: #5a606a; }
+}
+
+/* Labels drawn inside the map. CSS beats an SVG presentation attribute, so this is the
+   single place the street's type is set — it tracks --font-mono in assets/styles/app.css. */
+.district-map text { font-family: var(--font-mono); }
+
+/* --- Hover tooltip --- */
+/* Drawn in SVG rather than as an HTML bubble: the map card clips on overflow, which would
+   cut an absolutely-positioned tooltip off at the card edge. */
+#plot-tooltip { pointer-events: none; opacity: 0; transition: opacity 140ms; }
+#plot-tooltip[data-visible="true"] { opacity: 1; }
+#plot-tooltip .tooltip-bg { fill: var(--color-surface-container-lowest); stroke: #5a606a; stroke-width: 2.5; rx: 10; }
+#plot-tooltip text { font-family: var(--font-mono); }
+#plot-tooltip .tt-ticker { fill: var(--color-primary); font-size: 34px; font-weight: bold; }
+#plot-tooltip .tt-rank { fill: var(--color-on-surface-variant); font-size: 26px; }
+#plot-tooltip .tt-name { fill: var(--color-on-surface); font-size: 26px; }
+#plot-tooltip .tt-meta { fill: var(--color-on-surface-variant); font-size: 24px; }
+#plot-tooltip .tt-value { fill: var(--color-on-surface); font-size: 28px; font-weight: bold; }
+#plot-tooltip .tt-change[data-direction="up"] { fill: var(--color-secondary); }
+#plot-tooltip .tt-change[data-direction="down"] { fill: var(--color-tertiary); }
+#plot-tooltip .tt-change[data-direction="flat"] { fill: var(--color-on-surface-variant); }
+
+/* Position pennant & owned building styling */
+.plot[data-owned="true"] .facade { stroke: var(--color-secondary) !important; stroke-width: 3.5; }
+.plot[data-owned="true"][data-position-short="true"] .facade { stroke: #ffd9a0 !important; }
+.plot[data-owned="true"] .plot-rank { fill: var(--color-secondary); font-weight: bold; }
+.plot-pennant { pointer-events: none; }
+
+/* Conduit mode display */
+.district-map[data-conduit-mode="muted"] .conduit { display: none !important; }
+.district-map[data-conduit-mode="stressed"] .conduit:not([data-stressed="true"]) { stroke-opacity: 0.02 !important; }
+.district-map[data-conduit-mode="focused"] .conduit:not([data-highlighted="true"]):not([data-hover="true"]) { stroke-opacity: 0.02 !important; }
+
+@media (prefers-reduced-motion: reduce) {
+	.district-map { --facade-glide: 0ms !important; }
+	.plot .beacon { animation: none; fill-opacity: 0.75; }
+	.window[data-lit="true"][data-twinkle="true"] { animation: none; }
+	.institution[data-stressed="true"] .institution-beacon { animation: none; fill-opacity: 1; }
+	.plot-windows, .institution .pediment, .institution .body, .conduit,
+	#plot-tooltip { transition: none; animation: none; }
+	.event-flare[data-flash="true"] { animation: none; fill-opacity: 0.6; }
+	.event-badge[data-flash="true"] circle { animation: none; }
+}

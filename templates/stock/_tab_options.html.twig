@@ -1,4 +1,5 @@
 {# The options tab of the stock page (stock/index.html.twig). #}
+{% import 'partials/_ui.html.twig' as ui %}
 
 <div id="stock-tab-content-options" class="stock-tab-panel hidden space-y-5" data-tabs-target="panel" data-tab-panel="options" data-controller="option-ticket">
 
@@ -25,25 +26,12 @@
 					<input type="hidden" name="orderType" value="MARKET">
 					<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
 
-					<div class="grid grid-cols-2 gap-2 bg-surface-container-lowest p-1 rounded border border-outline-variant/20"
-						 data-option-ticket-target="actionGroup">
-						<label class="cursor-pointer">
-							<input type="radio" name="action" value="BUY" class="peer sr-only">
-							<div class="py-1.5 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">Buy</div>
-						</label>
-						<label class="cursor-pointer">
-							<input type="radio" name="action" value="SELL" class="peer sr-only">
-							<div class="py-1.5 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">Sell</div>
-						</label>
-						<label class="cursor-pointer">
-							<input type="radio" name="action" value="WRITE" class="peer sr-only">
-							<div class="py-1.5 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">Write</div>
-						</label>
-						<label class="cursor-pointer">
-							<input type="radio" name="action" value="COVER" class="peer sr-only">
-							<div class="py-1.5 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">Cover</div>
-						</label>
-					</div>
+					{{ ui.choices('action', [
+						{value: 'BUY', label: 'Buy', tone: 'up'},
+						{value: 'SELL', label: 'Sell', tone: 'down'},
+						{value: 'WRITE', label: 'Write', tone: 'down'},
+						{value: 'COVER', label: 'Cover', tone: 'up'},
+					], {label: 'Side', class: 'grid grid-cols-2 gap-2', attrs: {'data-option-ticket-target': 'actionGroup'}}) }}
 
 					<p class="text-2xs text-on-surface-variant leading-relaxed" data-option-ticket-target="hint"></p>
 

@@ -44,10 +44,10 @@ class DashboardControllerTest extends WebTestCase
         $this->assertSelectorExists('#total-invested');
         $this->assertSelectorExists('#portfolioChartContainer');
         $this->assertSelectorExists('[data-controller="tabs"]');
-        $this->assertSelectorExists('.portfolio-tab-btn[data-tab="holdings"]');
-        $this->assertSelectorExists('.portfolio-tab-btn[data-tab="orders"]');
-        $this->assertSelectorExists('.portfolio-tab-btn[data-tab="analytics"]');
-        $this->assertSelectorExists('.portfolio-tab-btn[data-tab="account"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="holdings"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="orders"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="analytics"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="account"]');
     }
 
     public function testPortfolioHistoryReturnsJsonForAuthenticatedUser(): void

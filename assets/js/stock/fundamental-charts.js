@@ -73,17 +73,17 @@ function nullablePercent(value) {
     return Number.isFinite(parsed) ? parsed * 100 : null;
 }
 
-// The regulator's lines, drawn flat across the chart: the well-capitalized line, the distress line and the
-// closure line (App\Service\Model\Strategy\DebtStrategyInterface::get*EquityThreshold, in percent).
+// The regulator's lines, drawn flat across the chart's percent axis: the well-capitalised line, the distress line and
+// the closure line (CompanySnapshotBuilder::capitalThresholds, as fractions).
 function thresholdDatasets(labels, thresholds) {
     if (!thresholds) return [];
     return [
-        { key: 'warning', label: 'Well capitalized', color: withAlpha(THEME_COLORS.positive, 0.7) },
+        { key: 'warning', label: 'Well capitalised', color: withAlpha(THEME_COLORS.positive, 0.7) },
         { key: 'distress', label: 'Distress', color: withAlpha(THEME_COLORS.warning, 0.7) },
         { key: 'bankrupt', label: 'Closure', color: withAlpha(THEME_COLORS.negative, 0.85) },
     ].map(line => ({
-        label: `${line.label} (${Number(thresholds[line.key]).toFixed(1)}%)`,
-        data: labels.map(() => thresholds[line.key]),
+        label: `${line.label} (${formatPercent(thresholds[line.key], 1)})`,
+        data: labels.map(() => Number(thresholds[line.key]) * 100),
         borderColor: line.color,
         borderDash: [6, 4],
         borderWidth: 1,
@@ -100,6 +100,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         businessModel = 'none',
         isFinancial = false,
         isInsurer = false,
+        industryCharts = [],
         sharesOutstanding = 1000000000,
         currentPrice = 0,
         capitalThresholds = null,
@@ -487,15 +488,20 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     renderWhenVisible('earningsSurpriseChart', () => renderEarningsSurpriseChart(labels, earningsAgainstConsensus(rawReports, timeframe)));
     renderWhenVisible('cashFlowSummaryChart', () => renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData, operatingCashFlowData, investingCashFlowData, financingCashFlowData));
 
-    if (['commercial_bank', 'credit_services', 'shadow_bank'].includes(businessModel)) {
+    // The industry charts this company gets, listed once by StockPageBuilder::industryCharts.
+    if (industryCharts.includes('netInterestEngineChart')) {
         renderWhenVisible('netInterestEngineChart', () => renderNetInterestEngineChart(labels, interestIncomeData, interestExpenseData, netInterestSpreadData));
-    } else if (isInsurer) {
+    }
+    if (industryCharts.includes('insuranceDualEngineChart')) {
         renderWhenVisible('insuranceDualEngineChart', () => renderInsuranceDualEngineChart(labels, underwritingProfitData, interestIncomeData, displayMarginData));
-    } else if (businessModel === 'reit') {
+    }
+    if (industryCharts.includes('reitCoverageChart')) {
         renderWhenVisible('reitCoverageChart', () => renderReitCoverageChart(labels, reitPayoutRatioData, reitLtvData, reitSpreadData, capitalRatioData, capitalThresholds));
-    } else if (['tech', 'semiconductor', 'biotech', 'defense_contractor'].includes(businessModel)) {
+    }
+    if (industryCharts.includes('reinvestmentIntensityChart')) {
         renderWhenVisible('reinvestmentIntensityChart', () => renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operatingMarginData, roicData));
-    } else if (['mining', 'oil_gas_producer', 'refining', 'shipping'].includes(businessModel)) {
+    }
+    if (industryCharts.includes('cyclicalDynamicsChart')) {
         renderWhenVisible('cyclicalDynamicsChart', () => renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData));
     }
 
@@ -541,7 +547,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         underwritingProfitData, displayMarginData,
         reitPayoutRatioData, reitLtvData,
         capexRevenueRatioData, roicData,
-        treasuryData, businessModel, isFinancial, isInsurer
+        treasuryData, industryCharts, isFinancial, isInsurer
     });
 }
 
@@ -598,7 +604,7 @@ function updateFinancialHud(m) {
     const lastConv = last(m.fcfConversionData);
     setHud('hud-cashFlowSummaryChart', `FCF ${formatLarge(lastFcf, '$')} · FCF/NI ${lastConv.toFixed(0)}%`);
 
-    if (['commercial_bank', 'credit_services', 'shadow_bank'].includes(m.businessModel)) {
+    if (m.industryCharts.includes('netInterestEngineChart')) {
         const lastNii = last(m.interestIncomeData) - last(m.interestExpenseData);
         const lastNim = last(m.netInterestSpreadData);
         setHud('hud-netInterestEngineChart', `NII ${formatLarge(lastNii, '$')} · NIM ${lastNim.toFixed(2)}%`);
@@ -618,17 +624,17 @@ function updateFinancialHud(m) {
         const lastComb = last(m.displayMarginData);
         setHud('hud-insuranceDualEngineChart', `Underwriting ${formatLarge(lastUw, '$')} · Float ${formatLarge(lastFloat, '$')} · Combined ratio ${lastComb.toFixed(1)}%`);
     }
-    if (m.businessModel === 'reit') {
+    if (m.industryCharts.includes('reitCoverageChart')) {
         const lastCov = last(m.reitPayoutRatioData);
         const lastLtv = last(m.reitLtvData);
         setHud('hud-reitCoverageChart', `AFFO cover ${lastCov.toFixed(0)}% · LTV ${lastLtv.toFixed(1)}%`);
     }
-    if (['tech', 'semiconductor', 'biotech', 'defense_contractor'].includes(m.businessModel)) {
+    if (m.industryCharts.includes('reinvestmentIntensityChart')) {
         const lastCapEx = last(m.capexRevenueRatioData);
         const lastRoic = last(m.roicData);
         setHud('hud-reinvestmentIntensityChart', `Capex/revenue ${lastCapEx.toFixed(1)}% · ROIC ${lastRoic.toFixed(1)}%`);
     }
-    if (['mining', 'oil_gas_producer', 'refining', 'shipping'].includes(m.businessModel)) {
+    if (m.industryCharts.includes('cyclicalDynamicsChart')) {
         const lastMargin = last(m.operatingMarginData);
         const lastCash = last(m.treasuryData);
         setHud('hud-cyclicalDynamicsChart', `Margin ${lastMargin.toFixed(1)}% · Cash ${formatLarge(lastCash, '$')}`);
@@ -2176,7 +2182,7 @@ function renderFinancialStatements(latest) {
         { label: 'Total liabilities', value: num('total_liabilities'), total: true },
         { label: 'Shareholders equity', value: num('equity'), total: true },
         // ASC 320: the unrealized mark on the securities book, carried in other comprehensive income.
-        ...(present('unrealized_securities_mark') ? [{ label: 'of which: unrealized securities mark (AOCI)', value: num('unrealized_securities_mark'), signed: true, indent: true }] : []),
+        ...(present('unrealized_securities_mark') ? [{ label: 'of which: unrealised securities mark (AOCI)', value: num('unrealized_securities_mark'), signed: true, indent: true }] : []),
         { label: 'Tangible equity', value: num('equity') - num('goodwill'), indent: true },
     ]);
     else if (hasAssetSide) renderStatementRows('balance-sheet-rows', [

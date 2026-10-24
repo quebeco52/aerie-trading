@@ -1,235 +1,10 @@
 {% extends 'base.html.twig' %}
+{% import 'partials/_ui.html.twig' as ui %}
 
-{% block title %}{{ wardName }} | Aerie District{% endblock %}
+{% block page_title %}{{ wardName }}{% endblock %}
 
 {% block stylesheets %}
-<style>
-	/* Stroke widths throughout are sized for the street's rendered scale (~0.45px per user unit):
-	   anything under ~2.5 units lands below one device pixel and stops reading as a line. */
-	.plot { cursor: pointer; }
-	/* A facade resize is an SVG geometry change, which a transition can only animate on the main
-	   thread: layout, paint and layerize on every frame for as long as any of the 45 facades is
-	   mid-glide. Resizes are therefore rationed to one pass every RESIZE_INTERVAL_MS and the glide
-	   (--facade-glide, set from FACADE_GLIDE_MS in district_controller.js) is shorter than that
-	   interval, so the street is still most of the time. Everything that rides a roofline moves
-	   with it: the windows and the roof kit by one transform each, the conduits by their `d`. */
-	.district-map { --facade-glide: 0ms; }
-	.facade {
-		stroke-width: 2.5;
-		transition: y var(--facade-glide) ease-out, height var(--facade-glide) ease-out;
-	}
-	.plot-windows, .roof-kit { transition: transform var(--facade-glide) ease-out; }
-	/* Dimming throughout is fill-opacity / stroke-opacity, never `opacity`: element opacity is a
-	   compositing effect, so every one of the ~450 windows, ~130 conduits and 90 badges/flares
-	   carrying it became its own paint chunk, and Chrome re-layerised all of them on every
-	   repaint (Layerize was the single largest cost in the profile). Paint-level opacity is
-	   part of the fill and costs nothing extra. Element opacity survives only on transient,
-	   few-at-a-time states (sector filter dimming, the tooltip). */
-	/* Lit share tracks return on capital against baseline — see DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE.
-	   Dark windows stay faintly visible so the facade keeps its texture. */
-	.window { fill-opacity: 0.08; shape-rendering: crispEdges; }
-	.window[data-lit="true"] { fill-opacity: 0.5; }
-	/* A few lit windows carry subtle ambient texture — see DistrictMap::WINDOW_TWINKLE_SHARE.
-	   Styled statically with crisp edges to prevent continuous 60-144fps GPU/CPU rasterization. */
-	.window[data-lit="true"][data-twinkle="true"] { fill-opacity: 0.72; }
-	.roofline { fill: #4a4f58; }
-
-	/* Condition is drawn in texture, not hue: hue already carries the sector, and a brown
-	   distressed bank read as an energy house. A distressed house (CCC and below) is hatched in
-	   amber over the sector's own colours; a failed house is greyed and its windows boarded. */
-	.condition-hatch { display: none; pointer-events: none; fill: url(#hatch-distressed); }
-	.plot[data-condition="distressed"] .condition-hatch { display: inline; }
-	.plot[data-condition="distressed"] .facade { stroke: var(--color-warning) !important; }
-
-	.plot[data-condition="ruin"] .facade { fill: #1c1d21 !important; stroke: #5a5f68 !important; stroke-dasharray: 10 7; }
-	.plot[data-condition="ruin"] .window,
-	.plot[data-condition="ruin"] .window[data-lit="true"] { fill: #6e6152 !important; fill-opacity: 0.55; }
-	.plot[data-condition="ruin"] .roofline { fill: #3a3d44; }
-
-	.plot:hover .facade { fill: #2c313a !important; transition: fill 150ms ease-out; }
-	.plot:hover .window[data-lit="true"] { fill-opacity: 0.85; }
-	.plot:hover .window:not([data-lit="true"]) { fill-opacity: 0.18; }
-	.plot[data-selected="true"] .facade { stroke: var(--color-primary) !important; stroke-width: 5; }
-	.plot[data-selected="true"] .window[data-lit="true"] { fill-opacity: 0.95; }
-
-	/* Sector filter: a legend chip dims every tenant outside its sector, plates and brackets included. */
-	.plot[data-dimmed="true"], .plot-label[data-dimmed="true"], .plot-rank[data-dimmed="true"],
-	.plot-price[data-dimmed="true"], .plot-change[data-dimmed="true"], .sector-run[data-dimmed="true"] {
-		opacity: 0.18;
-		transition: opacity 200ms;
-	}
-
-	/* Sized against the narrowest plot (100 units): a 5-character ticker at 30 is 90 units, a
-	   price at 22 is 92, a change at 22 is 79. Each fits alone on a centred line; no two fit
-	   side by side, so they are never paired. */
-	.plot-rank { fill: var(--color-on-surface-variant); font-size: 24px; letter-spacing: 0.5px; }
-	/* Street rank is re-ranked from live caps; a plate that just moved shows its direction for a moment. */
-	.plot-rank[data-rank-move="up"] { fill: var(--color-secondary); }
-	.plot-rank[data-rank-move="down"] { fill: var(--color-tertiary); }
-	.plot-label { fill: var(--color-on-surface); font-size: 30px; letter-spacing: 1px; transition: fill 200ms; }
-	.plot-price { fill: var(--color-on-surface-variant); font-size: 22px; letter-spacing: 0.5px; }
-	.plot-change { font-size: 22px; font-weight: bold; letter-spacing: 0.5px; }
-	.plot-change[data-direction="up"] { fill: var(--color-secondary); }
-	.plot-change[data-direction="down"] { fill: var(--color-tertiary); }
-	.plot-change[data-direction="flat"] { fill: var(--color-on-surface-variant); }
-	.plot-label[data-selected="true"], .plot-rank[data-selected="true"] { fill: var(--color-primary); }
-
-	/* Sector brackets along the kerb — one rule per run of adjacent same-sector plots. */
-	.sector-run .sector-rule { stroke-width: 3; stroke-opacity: 0.7; }
-	.sector-run .sector-label { font-size: 20px; letter-spacing: 1.5px; fill-opacity: 0.75; }
-
-	.gridline { stroke: #2c313a; stroke-width: 2; stroke-dasharray: 4 12; stroke-opacity: 0.55; }
-	.gridline-label { fill: var(--color-on-surface-variant); font-size: 32px; letter-spacing: 0.5px; fill-opacity: 0.75; }
-
-	/* Roof furniture: one pictogram per trade (DistrictMap::ROOF_FURNITURE_BY_INDUSTRY), in the
-	   sector's window colour so it is legible at the street's scale; condition recolours it the
-	   way it recolours the windows. */
-	.roof-furniture { fill-opacity: 0.85; stroke-opacity: 0.85; }
-	.plot[data-condition="ruin"] .roof-furniture { color: #5a5f68 !important; fill-opacity: 0.5; stroke-opacity: 0.5; }
-
-	/* Titan marker: rendered with static illumination rather than continuous animation loop
-	   to avoid continuous 60fps CPU SVG rasterization. */
-	.plot .beacon { fill: #ffd9a0; fill-opacity: 0.9; }
-
-	/* Kerb lights: a pool in the sector colour under each plate — see DistrictMap::KERB_LIGHT_DEPTH. */
-	.kerb-light { pointer-events: none; }
-	.kerb-light[data-dimmed="true"] { opacity: 0.18; transition: opacity 200ms; }
-
-
-	/* --- Institutions --- */
-	.institution { cursor: pointer; }
-	.institution .pediment, .institution .body {
-		fill: #22262e;
-		stroke: #4b5059;
-		stroke-width: 2.5;
-		transition: fill 300ms, stroke 300ms;
-	}
-	.institution .column { stroke: #5a606a; stroke-width: 3; stroke-opacity: 0.5; }
-	.institution-beacon { fill: var(--color-tertiary); fill-opacity: 0; transition: fill-opacity 300ms; }
-	.institution-label {
-		fill: var(--color-on-surface-variant);
-		font-size: 30px;
-		letter-spacing: 1px;
-		fill-opacity: 0.7;
-		transition: fill-opacity 200ms, fill 200ms;
-	}
-	.institution-readout { font-size: 26px; }
-	.readout-label { fill: var(--color-on-surface-variant); letter-spacing: 0.5px; }
-	.readout-value { fill: var(--color-primary); font-weight: bold; }
-	/* Recent readings under each value, drawn client-side from the ticks seen — see
-	   DistrictMap::INSTITUTION_SPARKLINE_WIDTH. Empty until a second sample lands. */
-	.readout-spark { fill: none; stroke: #5a606a; stroke-width: 2; stroke-linejoin: round; stroke-opacity: 0.8; }
-	.readout-spark-base { stroke: #2c313a; stroke-width: 1.5; stroke-opacity: 0.6; }
-	.institution[data-stressed="true"] .readout-spark { stroke: var(--color-tertiary); }
-
-	.institution:hover .pediment, .institution:hover .body { fill: #2c313a; }
-	.institution[data-selected="true"] .pediment, .institution[data-selected="true"] .body {
-		stroke: var(--color-primary);
-		stroke-width: 5;
-	}
-	.institution[data-selected="true"] .institution-label { fill-opacity: 1; fill: var(--color-primary); }
-
-	.institution[data-stressed="true"] .pediment, .institution[data-stressed="true"] .body {
-		fill: #3a2a2e;
-		stroke: #a35c5c;
-	}
-	.institution[data-stressed="true"] .institution-beacon { fill-opacity: 1; }
-	.institution[data-stressed="true"] .institution-label { fill-opacity: 1; fill: var(--color-tertiary); }
-	.institution[data-stressed="true"] .readout-value { fill: var(--color-tertiary); }
-
-	/* --- Conduits --- */
-	/* Routed orthogonally along one lane per institution (see DistrictMap::CONDUIT_LANE_PITCH).
-	   Barely there at rest — the lane structure shows, the wiring does not — and revealed by
-	   hovering either end: an institution lights everything it feeds, a building everything it
-	   draws. A stressed institution's lines stay lit on their own. The two institutions with no
-	   stress rules are reachable through hover, which is why the resting state need not be. */
-	.conduit {
-		fill: none;
-		stroke: #3c414b;
-		stroke-width: 3;
-		stroke-linejoin: round;
-		stroke-dasharray: 10 9;
-		stroke-opacity: 0.12;
-		transition: stroke-opacity 300ms, stroke 300ms, d var(--facade-glide) ease-out;
-	}
-	.conduit[data-hover="true"] {
-		stroke-opacity: 0.85;
-		stroke: #8fa5d6;
-	}
-	.conduit[data-stressed="true"] {
-		stroke-opacity: 0.85;
-		stroke: var(--color-tertiary);
-		stroke-width: 3.5;
-		stroke-dasharray: 6 6;
-	}
-	.conduit[data-highlighted="true"] {
-		stroke-opacity: 0.95;
-		stroke: var(--color-primary);
-		stroke-width: 4;
-	}
-
-	/* --- Event Flares & Badges --- */
-	/* Hidden by visibility, not opacity 0 — see the note on fill-opacity above. */
-	.event-flare { visibility: hidden; fill-opacity: 0; pointer-events: none; fill: var(--color-primary); }
-	.event-flare[data-flash="true"] { visibility: visible; animation: flare-burst 900ms ease-out; }
-	@keyframes flare-burst {
-		0%   { fill-opacity: 0.95; r: 6; }
-		55%  { fill-opacity: 0.45; r: 30; }
-		100% { fill-opacity: 0; r: 40; }
-	}
-
-	.event-badge { visibility: hidden; pointer-events: none; }
-	.event-badge:not([data-count="0"]) { visibility: visible; }
-	.event-badge circle { fill: var(--color-surface-container); stroke: #5a606a; stroke-width: 2.5; }
-	.event-badge text { fill: var(--color-on-surface-variant); font-size: 26px; font-weight: bold; }
-	.event-badge[data-flash="true"] circle { animation: badge-pop 500ms ease-out; }
-	@keyframes badge-pop {
-		0%   { stroke: var(--color-tertiary); }
-		100% { stroke: #5a606a; }
-	}
-
-	/* Labels drawn inside the map. CSS beats an SVG presentation attribute, so this is the
-	   single place the street's type is set — it tracks --font-mono in assets/styles/app.css. */
-	.district-map text { font-family: var(--font-mono); }
-
-	/* --- Hover tooltip --- */
-	/* Drawn in SVG rather than as an HTML bubble: the map card clips on overflow, which would
-	   cut an absolutely-positioned tooltip off at the card edge. */
-	#plot-tooltip { pointer-events: none; opacity: 0; transition: opacity 140ms; }
-	#plot-tooltip[data-visible="true"] { opacity: 1; }
-	#plot-tooltip .tooltip-bg { fill: var(--color-surface-container-lowest); stroke: #5a606a; stroke-width: 2.5; rx: 10; }
-	#plot-tooltip text { font-family: var(--font-mono); }
-	#plot-tooltip .tt-ticker { fill: var(--color-primary); font-size: 34px; font-weight: bold; }
-	#plot-tooltip .tt-rank { fill: var(--color-on-surface-variant); font-size: 26px; }
-	#plot-tooltip .tt-name { fill: var(--color-on-surface); font-size: 26px; }
-	#plot-tooltip .tt-meta { fill: var(--color-on-surface-variant); font-size: 24px; }
-	#plot-tooltip .tt-value { fill: var(--color-on-surface); font-size: 28px; font-weight: bold; }
-	#plot-tooltip .tt-change[data-direction="up"] { fill: var(--color-secondary); }
-	#plot-tooltip .tt-change[data-direction="down"] { fill: var(--color-tertiary); }
-	#plot-tooltip .tt-change[data-direction="flat"] { fill: var(--color-on-surface-variant); }
-
-	/* Position pennant & owned building styling */
-	.plot[data-owned="true"] .facade { stroke: var(--color-secondary) !important; stroke-width: 3.5; }
-	.plot[data-owned="true"][data-position-short="true"] .facade { stroke: #ffd9a0 !important; }
-	.plot[data-owned="true"] .plot-rank { fill: var(--color-secondary); font-weight: bold; }
-	.plot-pennant { pointer-events: none; }
-
-	/* Conduit mode display */
-	.district-map[data-conduit-mode="muted"] .conduit { display: none !important; }
-	.district-map[data-conduit-mode="stressed"] .conduit:not([data-stressed="true"]) { stroke-opacity: 0.02 !important; }
-	.district-map[data-conduit-mode="focused"] .conduit:not([data-highlighted="true"]):not([data-hover="true"]) { stroke-opacity: 0.02 !important; }
-
-	@media (prefers-reduced-motion: reduce) {
-		.district-map { --facade-glide: 0ms !important; }
-		.plot .beacon { animation: none; fill-opacity: 0.75; }
-		.window[data-lit="true"][data-twinkle="true"] { animation: none; }
-		.institution[data-stressed="true"] .institution-beacon { animation: none; fill-opacity: 1; }
-		.plot-windows, .institution .pediment, .institution .body, .conduit,
-		#plot-tooltip { transition: none; animation: none; }
-		.event-flare[data-flash="true"] { animation: none; fill-opacity: 0.6; }
-		.event-badge[data-flash="true"] circle { animation: none; }
-	}
-</style>
+	<link rel="stylesheet" href="{{ asset('styles/district.css') }}">
 {% endblock %}
 
 {% block body %}
@@ -277,41 +52,19 @@
 
 		{# Street summary — every figure read off plots already built, no extra query #}
 		<dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-8 gap-y-4 mt-5">
-			<div class="flex flex-col">
-				<span class="text-xs text-on-surface-variant">Street cap</span>
-				<span class="text-sm font-semibold text-on-surface font-mono tabular-nums mt-0.5">{{ summary.totalMarketCap|format_large('$') }}</span>
-			</div>
-			<div class="flex flex-col">
-				<span class="text-xs text-on-surface-variant">Past month</span>
-				{# Recomputed from the kerb figures as frames land — see renderSummaryChange(). #}
-				{% set streetChangeClass = summary.changePercent|signed_class %}
-				<span class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ streetChangeClass }}"
-					data-district-target="summaryChange" data-signed="{{ streetChangeClass }}">
-					{{- summary.changePercent is null ? '—' : summary.changePercent|pct(2, true) -}}
-				</span>
-			</div>
-			<div class="flex flex-col">
-				<span class="text-xs text-on-surface-variant">Biggest mover</span>
-				{% set moverClass = (summary.biggestMover.changePercent ?? null)|signed_class %}
-				<span class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ moverClass }}"
-					data-district-target="summaryMover" data-signed="{{ moverClass }}">
-					{{- summary.biggestMover ? summary.biggestMover.ticker ~ ' ' ~ summary.biggestMover.changePercent|pct(1, true) : '—' -}}
-				</span>
-			</div>
-			<div class="flex flex-col">
-				<span class="text-xs text-on-surface-variant">Institutions</span>
-				<span class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ summary.stressedInstitutions > 0 ? 'text-warning' : 'text-on-surface' }}"
-					data-district-target="summaryStress">
-					{{ summary.stressedInstitutions }}/{{ summary.totalInstitutions }} stressed
-				</span>
-			</div>
+			{{ ui.figure('Street cap', summary.totalMarketCap|format_large('$'), {size: 'text-sm'}) }}
+			{# Recomputed from the kerb figures as frames land — see renderSummaryChange(). #}
+			{% set streetChangeClass = summary.changePercent|signed_class %}
+			{{ ui.figure('Past month', summary.changePercent|pct(2, true), {size: 'text-sm', tone: streetChangeClass, attrs: {'data-district-target': 'summaryChange', 'data-signed': streetChangeClass}}) }}
+			{% set moverClass = (summary.biggestMover.changePercent ?? null)|signed_class %}
+			{{ ui.figure('Biggest mover', summary.biggestMover ? summary.biggestMover.ticker ~ ' ' ~ summary.biggestMover.changePercent|pct(1, true) : '—', {size: 'text-sm', tone: moverClass, attrs: {'data-district-target': 'summaryMover', 'data-signed': moverClass}}) }}
+			{{ ui.figure('Institutions', summary.stressedInstitutions ~ '/' ~ summary.totalInstitutions ~ ' stressed', {size: 'text-sm', tone: summary.stressedInstitutions > 0 ? 'text-warning' : 'text-on-surface', attrs: {'data-district-target': 'summaryStress'}}) }}
 			{# The roster is frozen between reconstitutions (DistrictRoster); this counts down to the
 			   next one in simulated days, kept live from the tick count on the feed. #}
-			<div class="flex flex-col"
-				title="The street is re-ranked once a quarter. Until then a bankrupt tenant keeps its plot and a rising company waits below the cut.">
-				<span class="text-xs text-on-surface-variant">Reconstitution</span>
-				<span class="text-sm font-semibold text-on-surface font-mono tabular-nums mt-0.5"
-					data-district-target="summaryReconstitution">in {{ reconstitution.simDaysUntilNext|round(0, 'ceil') }}d</span>
+			<div title="The street is re-ranked once a quarter. Until then a bankrupt tenant keeps its plot and a rising company waits below the cut.">
+				<dt class="text-xs text-on-surface-variant">Reconstitution</dt>
+				<dd class="mt-0.5 text-sm font-semibold font-mono tabular-nums text-on-surface"
+					data-district-target="summaryReconstitution">in {{ reconstitution.simDaysUntilNext|round(0, 'ceil') }}d</dd>
 			</div>
 		</dl>
 
@@ -320,13 +73,13 @@
 		<div class="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-4 border-t border-outline-variant/15">
 			{% for sector, colours in sectorPalette %}
 				<button type="button"
-					class="cursor-pointer flex items-center gap-1.5 text-xs text-on-surface-variant rounded px-1 -mx-1 hover:text-on-surface data-[active=true]:text-on-surface data-[active=true]:bg-surface-container-high data-[muted=true]:opacity-40"
+					class="group cursor-pointer flex items-center gap-1.5 text-xs text-on-surface-variant rounded px-1 -mx-1 hover:text-on-surface data-[active=true]:text-on-surface data-[active=true]:bg-surface-container-high data-[muted=true]:text-on-surface-faint"
 					data-district-target="sectorChip"
 					data-sector="{{ sector }}"
 					data-action="click->district#toggleSector"
 					aria-pressed="false"
 					title="Show only {{ sector }}">
-					<span class="w-2.5 h-2.5 rounded-full" style="background:{{ colours.window }}"></span>{{ sector }}
+					<span class="w-2.5 h-2.5 rounded-full group-data-[muted=true]:opacity-40" style="background:{{ colours.window }}" aria-hidden="true"></span>{{ sector }}
 				</button>
 			{% endfor %}
 		</div>
@@ -367,17 +120,17 @@
 								data-active="false"
 								title="Hide conduits">Off</button>
 						</div>
-						<button type="button" data-action="click->district#zoomOut" title="Zoom out"
+						<button type="button" data-action="click->district#zoomOut" title="Zoom out" aria-label="Zoom out"
 							class="cursor-pointer w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
-							<span class="material-symbols-outlined text-base">zoom_out</span>
+							<span class="material-symbols-outlined text-base" aria-hidden="true">zoom_out</span>
 						</button>
-						<button type="button" data-action="click->district#fitToWidth" title="Fit whole street"
+						<button type="button" data-action="click->district#fitToWidth" title="Fit whole street" aria-label="Fit whole street"
 							class="cursor-pointer w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
-							<span class="material-symbols-outlined text-base">fit_screen</span>
+							<span class="material-symbols-outlined text-base" aria-hidden="true">fit_screen</span>
 						</button>
-						<button type="button" data-action="click->district#zoomIn" title="Zoom in"
+						<button type="button" data-action="click->district#zoomIn" title="Zoom in" aria-label="Zoom in"
 							class="cursor-pointer w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
-							<span class="material-symbols-outlined text-base">zoom_in</span>
+							<span class="material-symbols-outlined text-base" aria-hidden="true">zoom_in</span>
 						</button>
 					</div>
 				</div>
@@ -388,7 +141,7 @@
 					data-district-target="svg"
 					data-action="click->district#deselect keydown.esc->district#deselect"
 					class="district-map block min-w-250 w-full h-auto"
-					role="img"
+					role="group"
 					aria-label="Illustrated street elevation of {{ wardName }}">
 
 					<defs>
@@ -413,10 +166,8 @@
 						{% endfor %}
 
 						{# One kerb-light gradient per sector colour, plus the fallback. #}
-						{% set kerbGlowIds = {} %}
 						{% for sector, colours in sectorPalette %}
-							{% set kerbGlowIds = kerbGlowIds|merge({(sector): loop.index}) %}
-							<radialGradient id="kerb-glow-{{ loop.index }}">
+							<radialGradient id="kerb-glow-{{ kerbGlowIds[sector] }}">
 								<stop offset="0%" stop-color="{{ colours.window }}" stop-opacity="{{ kerbLight.opacity }}"/>
 								<stop offset="100%" stop-color="{{ colours.window }}" stop-opacity="0"/>
 							</radialGradient>
@@ -685,10 +436,6 @@
 					   skyline, so a lower-row drop passes through the gaps of the rows above and behind their
 					   kerb, which is the one depth cue the elevation allows itself. #}
 					<g id="conduits">
-						{% set institutionsById = {} %}
-						{% for institution in institutions %}
-							{% set institutionsById = institutionsById|merge({(institution.id): institution}) %}
-						{% endfor %}
 						{% for plot in plots %}
 							{% for institutionId in plot.conduits %}
 								{% set institution = institutionsById[institutionId] %}
@@ -710,7 +457,7 @@
 					<g id="skyline">
 						{% for rowIndex, rowGroundLine in rowGroundLines %}
 							<g id="skyline-row-{{ rowIndex }}">
-								{% for plot in plots|filter(p => p.row == rowIndex) %}
+								{% for plot in plotsByRow[rowIndex] ?? [] %}
 									{% set palette = sectorPalette[plot.sector] ?? sectorPaletteFallback %}
 									{% set cols = plot.windowColumns %}
 									{% set isOwned = userHoldings[plot.ticker] is defined %}
@@ -825,7 +572,7 @@
 											   (DistrictEventFeed marks them `recent`), not the whole backfill —
 											   the client re-counts as the frames move the simulation on, so the
 											   badge ages out. #}
-											{% set recentCount = events[plot.ticker]|default([])|filter(e => e.recent)|length %}
+											{% set recentCount = (events[plot.ticker] ?? [])|filter(e => e.recent)|length %}
 											<g class="event-badge" data-district-target="badge" data-badge-for="{{ plot.ticker }}"
 												data-count="{{ recentCount }}">
 												<circle cx="{{ plot.x + plot.width - 6 }}" cy="{{ plot.y - 18 }}" r="15"/>
@@ -872,7 +619,7 @@
 						{% for rowIndex, rowGroundLine in rowGroundLines %}
 							{# One clip per row, not per pool: every clip reference is a separate paint effect. #}
 							<g clip-path="url(#kerb-band-{{ rowIndex }})">
-								{% for plot in plots|filter(p => p.row == rowIndex) %}
+								{% for plot in plotsByRow[rowIndex] ?? [] %}
 									<ellipse class="kerb-light" data-district-target="kerbLight" data-light-for="{{ plot.ticker }}"
 										cx="{{ plot.x + plot.width / 2 }}" cy="{{ plot.groundLine }}"
 										rx="{{ plot.width / 2 + 10 }}" ry="{{ kerbLight.depth }}"
@@ -901,7 +648,7 @@
 								x="{{ centre }}" y="{{ plot.groundLine + 88 }}"
 								text-anchor="middle"
 								data-direction="{{ plot.changePercent is null ? 'flat' : (plot.changePercent > 0 ? 'up' : (plot.changePercent < 0 ? 'down' : 'flat')) }}"
-								>{% if plot.changePercent is null %}&mdash;{% else %}{{ plot.changePercent|pct(1, true) }}{% endif %}</text>
+								>{{ plot.changePercent|pct(1, true) }}</text>
 						{% endfor %}
 					</g>
 
@@ -1017,7 +764,7 @@
 
 					<p class="text-4xs text-on-surface-faint mt-2.5 leading-relaxed"
 						data-district-target="detailRevenueFootnote" hidden>
-						Unaudited. Figures in USD as reported for the period shown. Growth quoted against the
+						Unaudited. Figures in District dollars as reported for the period shown. Growth quoted against the
 						prior quarter and the year-ago quarter; &ldquo;n/m&rdquo; where no comparison period is on
 						file. Contribution is the segment&rsquo;s share of the firm&rsquo;s sequential growth.
 					</p>
@@ -1047,38 +794,11 @@
 							<input type="hidden" name="ticker" data-district-target="quickTradeTickerInput" value="">
 							<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
 
-							<div class="flex gap-1.5 bg-surface-container-lowest p-1 rounded border border-outline-variant/20">
-								<label class="flex-1 cursor-pointer">
-									<input type="radio" name="action" value="BUY" class="peer sr-only" checked
-										data-action="change->district#onTradeActionChange">
-									<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">
-										Buy
-									</div>
-								</label>
-								<label class="flex-1 cursor-pointer">
-									<input type="radio" name="action" value="SELL" class="peer sr-only"
-										data-action="change->district#onTradeActionChange">
-									<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">
-										Sell
-									</div>
-								</label>
-								{% if marginEnabled %}
-									<label class="flex-1 cursor-pointer">
-										<input type="radio" name="action" value="SHORT" class="peer sr-only"
-											data-action="change->district#onTradeActionChange">
-										<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">
-											Short
-										</div>
-									</label>
-									<label class="flex-1 cursor-pointer">
-										<input type="radio" name="action" value="COVER" class="peer sr-only"
-											data-action="change->district#onTradeActionChange">
-										<div class="py-1 text-center text-xs font-semibold rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">
-											Cover
-										</div>
-									</label>
-								{% endif %}
-							</div>
+							{% set sides = [{value: 'BUY', label: 'Buy', tone: 'up', checked: true}, {value: 'SELL', label: 'Sell', tone: 'down'}] %}
+							{% if marginEnabled %}
+								{% set sides = sides|merge([{value: 'SHORT', label: 'Short', tone: 'down'}, {value: 'COVER', label: 'Cover', tone: 'up'}]) %}
+							{% endif %}
+							{{ ui.choices('action', sides, {label: 'Side', class: 'flex gap-1.5', pad: 'py-1', action: 'change->district#onTradeActionChange'}) }}
 
 							<div class="space-y-1">
 								<div class="flex items-center justify-between text-3xs text-on-surface-faint font-mono">
@@ -1119,7 +839,7 @@
 
 				<a href="#" data-district-target="detailLink"
 					class="inline-flex items-center gap-1.5 text-sm text-primary hover:underline underline-offset-2">
-					<span class="material-symbols-outlined text-sm">open_in_new</span>
+					<span class="material-symbols-outlined text-sm" aria-hidden="true">open_in_new</span>
 					Full company page
 				</a>
 			</div>

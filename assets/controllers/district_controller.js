@@ -238,7 +238,7 @@ export default class extends Controller {
     /**
      * How often facade heights are re-evaluated, and how long a resize glides. A skyline is a
      * slow variable — market cap at the flush cadence is noise — and a glide is a main-thread
-     * SVG geometry animation (see the .facade rule in the template), so the glide is kept well
+     * SVG geometry animation (see the .facade rule in assets/styles/district.css), so the glide is kept well
      * short of the interval: the street then moves for under a third of the time, smoothly,
      * instead of snapping every flush. Caps arriving between passes are kept in capByTicker.
      */

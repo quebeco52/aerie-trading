@@ -1,13 +1,9 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}{{ party.name }} - Aerie Exchange{% endblock %}
+{% block page_title %}{{ party.name }}{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="{{ party.name }}: {{ party.motto }}">
-	<meta property="og:title" content="{{ party.name }} | Aerie Exchange">
-	<meta property="og:description" content="{{ party.motto }}">
-	<meta property="og:type" content="website">
-{% endblock %}
+{% block description %}{{ party.name }}: {{ party.motto }}{% endblock %}
+{% block og_description %}{{ party.motto }}{% endblock %}
 
 {% block body %}
 {% import 'government/_macros.html.twig' as gov %}

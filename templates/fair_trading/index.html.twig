@@ -1,58 +1,45 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Fair Trading Board - Aerie Exchange{% endblock %}
+{% block page_title %}Fair Trading Board{% endblock %}
 
-{% block meta %}
-	<meta name="description" content="The District's Fair Trading Board: who heads it and the screens a merger must clear.">
-	<meta property="og:title" content="Fair Trading Board | Aerie Exchange">
-	<meta property="og:type" content="website">
-{% endblock %}
-
-{% macro hhi(value) %}<span class="font-mono tabular-nums">{{ value|hhi }}</span>{% endmacro %}
+{% block description %}The District's Fair Trading Board: who heads it and the screens a merger must clear.{% endblock %}
 
 {% block body %}
-{% import _self as fmt %}
 <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 w-full space-y-6">
 
-	{% include 'government/_breadcrumb.html.twig' with {current: 'Fair Trading Board'} %}
-	<header class="pb-5 border-b border-outline-variant/15">
-		<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight">Fair Trading Board</h1>
-		<p class="mt-2 text-sm text-on-surface-variant leading-relaxed max-w-3xl">
+	{% embed 'government/_header.html.twig' with {title: 'Fair Trading Board'} %}
+		{% block lead %}
 			Reviews the mergers of the District's firms. Its head is named by the Aerie Council for a single term and sets
 			the guidelines a deal must clear: how concentrated a market may become, and how much of it one firm may hold.
-		</p>
-	</header>
+		{% endblock %}
+	{% endembed %}
 
 	{% if board %}
-		{% set head = board.head %}
 		{% set screens = board.screens %}
-		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="head-heading">
-			<h2 id="head-heading" class="text-sm font-semibold text-on-surface">The head</h2>
-			<p class="text-sm font-semibold text-on-surface mt-2">{{ head.name }}</p>
-			<p class="text-xs text-on-surface-variant mt-0.5">Age {{ head.age }} · seated {{ head.sinceLabel }} · term ends <span class="font-mono tabular-nums">{{ head.termEndsLabel }}</span></p>
-			<p class="text-sm text-on-surface mt-2 max-w-3xl">
-				{{- {light: 'Would let firms consolidate', balanced: 'Takes a middle course', strict: 'A strict enforcer against concentration'}[head.stance] }},
+		{% embed 'government/_head.html.twig' with {head: board.head} %}
+			{% block stance -%}
+				{{ head.stanceText }},
 				{{ head.opening ? 'keeping the guidelines the District had at Year 1' : 'drawing the concentration line at' }}
-				{%- if not head.opening %} {{ fmt.hhi(screens.concentrated) }} on the HHI{% endif %}
-				{%- if head.passedOver is not empty %}, chosen over {% for candidate in head.passedOver %}{{ candidate.name }} <span class="text-on-surface-variant">({{ fmt.hhi(candidate.line) }}, {{ candidate.age }})</span>{{ loop.last ? '' : (loop.revindex == 2 ? ' and ' : ', ') }}{% endfor %}{% endif %}.
-			</p>
-			<p class="text-xs text-on-surface-variant mt-2 max-w-3xl">
+				{%- if not head.opening %} <span class="font-mono tabular-nums">{{ screens.concentrated|hhi }}</span> on the HHI{% endif %}
+			{%- endblock %}
+			{% block candidate %}<span class="font-mono tabular-nums">{{ candidate.line|hhi }}</span>, {% endblock %}
+			{% block rules %}
 				The Council names the head for a single {{ board.rules.termYears|number_format(0) }}-year term from a shortlist of {{ board.rules.shortlist }}, choosing the candidate nearest its own view of competition.
-				{% if board.councilLine is not null %}The Council's median member would draw the line at {{ fmt.hhi(board.councilLine) }}.{% endif %}
-			</p>
-		</section>
+				{% if board.councilLine is not null %}The Council's median member would draw the line at <span class="font-mono tabular-nums">{{ board.councilLine|hhi }}</span>.{% endif %}
+			{% endblock %}
+		{% endembed %}
 
 		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" aria-labelledby="screens-heading">
 			<h2 id="screens-heading" class="text-sm font-semibold text-on-surface">The guidelines in force</h2>
 			<dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4 mt-3">
 				<div>
 					<dt class="text-xs text-on-surface-variant">Concentration line</dt>
-					<dd class="mt-1 text-2xl font-semibold text-on-surface">{{ fmt.hhi(screens.concentrated) }}</dd>
+					<dd class="mt-1 text-2xl font-semibold text-on-surface"><span class="font-mono tabular-nums">{{ screens.concentrated|hhi }}</span></dd>
 					<dd class="text-xs text-on-surface-variant">HHI, the sum of the squared market shares</dd>
 				</div>
 				<div>
 					<dt class="text-xs text-on-surface-variant">Safe harbour</dt>
-					<dd class="mt-1 text-2xl font-semibold text-on-surface">{{ fmt.hhi(screens.delta) }}</dd>
+					<dd class="mt-1 text-2xl font-semibold text-on-surface"><span class="font-mono tabular-nums">{{ screens.delta|hhi }}</span></dd>
 					<dd class="text-xs text-on-surface-variant">HHI points a deal may add whatever the market</dd>
 				</div>
 				<div>
@@ -66,8 +53,8 @@
 				An acquirer buys only as much of its market as clears, so the guidelines decide how large a deal can be, and a deal too small to be worth doing once trimmed is dropped.
 			</p>
 			<p class="text-xs text-on-surface-variant mt-3 leading-relaxed max-w-3xl">
-				A head may set the guidelines anywhere from the lightest on record, a line at {{ fmt.hhi(board.rules.lightest.concentrated) }} with a safe harbour of {{ fmt.hhi(board.rules.lightest.delta) }} and no cap on share,
-				to the strictest, a line at {{ fmt.hhi(board.rules.strictest.concentrated) }}, a safe harbour of {{ fmt.hhi(board.rules.strictest.delta) }} and a cap of <span class="font-mono tabular-nums">{{ board.rules.strictest.shareCeiling|pct(0) }}</span>.
+				A head may set the guidelines anywhere from the lightest on record, a line at <span class="font-mono tabular-nums">{{ board.rules.lightest.concentrated|hhi }}</span> with a safe harbour of <span class="font-mono tabular-nums">{{ board.rules.lightest.delta|hhi }}</span> and no cap on share,
+				to the strictest, a line at <span class="font-mono tabular-nums">{{ board.rules.strictest.concentrated|hhi }}</span>, a safe harbour of <span class="font-mono tabular-nums">{{ board.rules.strictest.delta|hhi }}</span> and a cap of <span class="font-mono tabular-nums">{{ board.rules.strictest.shareCeiling|pct(0) }}</span>.
 				Each listed company's page shows where its own market stands against them.
 			</p>
 		</section>

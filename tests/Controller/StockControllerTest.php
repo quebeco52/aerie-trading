@@ -41,10 +41,10 @@ class StockControllerTest extends WebTestCase
         $this->assertSelectorExists('#mainChartContainer');
         $this->assertSelectorExists('[data-controller="tabs"]');
         $this->assertSelectorExists('[data-controller="navbar-search"]');
-        $this->assertSelectorExists('.stock-tab-btn[data-tab="overview"]');
-        $this->assertSelectorExists('.stock-tab-btn[data-tab="financials"]');
-        $this->assertSelectorExists('.stock-tab-btn[data-tab="sector"]');
-        $this->assertSelectorExists('.stock-tab-btn[data-tab="orders"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="overview"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="financials"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="sector"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="orders"]');
         $this->assertSelectorExists('#target-consensus');
         $this->assertSelectorExists('#target-growth');
         $this->assertSelectorExists('#target-value');
@@ -67,9 +67,9 @@ class StockControllerTest extends WebTestCase
         $this->assertSelectorExists('h1');
         $this->assertSelectorTextContains('h1', 'Skein Lakebird 30 ETF');
         $this->assertSelectorExists('#etfPieChart');
-        $this->assertSelectorExists('.stock-tab-btn[data-tab="constituents"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="constituents"]');
         $this->assertSelectorExists('#stock-tab-content-constituents table');
-        $this->assertSelectorNotExists('.stock-tab-btn[data-tab="macro"]');
+        $this->assertSelectorNotExists('.tab-btn[data-tab="macro"]');
     }
 
     public function testTheCompositeIndexHasItsOwnPage(): void
@@ -79,7 +79,7 @@ class StockControllerTest extends WebTestCase
 
         $this->assertResponseIsSuccessful();
         $this->assertSelectorTextContains('h1', 'Skein Total Market ETF');
-        $this->assertSelectorExists('.stock-tab-btn[data-tab="constituents"]');
+        $this->assertSelectorExists('.tab-btn[data-tab="constituents"]');
     }
 
     public function testStockViewThrows404ForNonexistentTicker(): void

@@ -1,0 +1,13 @@
+{# Page header: `crumbs`, then `title`, a one-line `lead` and an `aside` beside them (below with `aside_below`). #}
+{%- set crumbs_html %}{% block crumbs %}{% endblock %}{% endset -%}
+{%- set lead_html %}{% block lead %}{% endblock %}{% endset -%}
+{%- set aside_html %}{% block aside %}{% endblock %}{% endset -%}
+{%- set has_aside = aside_html|trim is not empty -%}
+{{ crumbs_html }}
+<header class="pb-5 border-b border-outline-variant/15{{ has_aside ? ' flex flex-col gap-6' ~ (aside_below|default(false) ? '' : ' lg:flex-row lg:items-end lg:justify-between') }}">
+	{% if has_aside %}<div class="min-w-0">{% endif %}
+	<h1 class="text-2xl md:text-3xl font-semibold text-on-surface tracking-tight leading-tight">{{ title }}</h1>
+	{% if lead_html|trim is not empty %}<p class="text-sm text-on-surface-variant mt-2 max-w-3xl leading-relaxed">{{ lead_html }}</p>{% endif %}
+	{% if has_aside %}</div>
+	<div class="shrink-0">{{ aside_html }}</div>{% endif %}
+</header>

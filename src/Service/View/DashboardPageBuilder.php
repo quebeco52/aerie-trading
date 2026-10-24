@@ -95,6 +95,8 @@ final class DashboardPageBuilder
         return [
             'user' => $user,
             'holdings' => $holdings,
+            'holdingsFeed' => self::holdingsFeed($holdings),
+            'largestWeight' => self::largestWeight($holdings),
             'portfolioValue' => $portfolioValue,
             'totalInvested' => $netWorth['stock_value'] + $netWorth['etf_value'] + $netWorth['bond_value'] + $netWorth['option_value'],
             'totalInvestedCost' => $marked['cost'],
@@ -372,6 +374,42 @@ final class DashboardPageBuilder
         usort($holdings, static fn(array $a, array $b): int => abs($b['marketValue']) <=> abs($a['marketValue']));
 
         return $holdings;
+    }
+
+    /**
+     * The largest position's share of net worth, a short sized by what it owes. An empty book has no largest
+     * position, so null rather than a false 0%.
+     *
+     * @param list<array<string, mixed>> $holdings Rows from weighted().
+     */
+    public static function largestWeight(array $holdings): ?float
+    {
+        $weights = array_map(static fn(array $row): float => abs((float) $row['weight']), $holdings);
+
+        return $weights === [] ? null : max($weights);
+    }
+
+    /**
+     * What the page script re-marks each position from as prices tick, by ticker: the quantity, the average cost, the
+     * last price and the shares one unit stands for (a contract's multiplier for an option, else one).
+     *
+     * @param list<array<string, mixed>> $holdings
+     *
+     * @return array<string, array{quantity: int, avgCost: float, price: float, multiplier: int}>
+     */
+    public static function holdingsFeed(array $holdings): array
+    {
+        $feed = [];
+        foreach ($holdings as $row) {
+            $feed[(string) $row['ticker']] = [
+                'quantity' => (int) $row['quantity'],
+                'avgCost' => (float) $row['avgCost'],
+                'price' => (float) $row['price'],
+                'multiplier' => $row['type'] === 'OPTION' ? FinancialConstants::OPTION_CONTRACT_MULTIPLIER : 1,
+            ];
+        }
+
+        return $feed;
     }
 
     /**

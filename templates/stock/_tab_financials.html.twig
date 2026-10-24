@@ -6,22 +6,16 @@
 {% endmacro %}
 
 <div id="stock-tab-content-financials" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="financials">
-{# Whether any of the business-model charts in the Industry section below applies to this company. #}
-{% set has_industry_charts = isFinancial|default(false) or isInsurer|default(false) or kpiSeries|default([])|length > 0 or businessModel|default('none') in [
-	'commercial_bank', 'credit_services', 'shadow_bank', 'reit',
-	'tech', 'semiconductor', 'biotech', 'defense_contractor',
-	'mining', 'oil_gas_producer', 'refining', 'shipping'
-] %}
 <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
 	<div>
 		<h2 class="text-lg font-semibold text-on-surface">Financial statements</h2>
 		<p class="text-sm text-on-surface-variant mt-0.5">Reported results, balance sheet, cash flow and valuation.</p>
 	</div>
 	<div class="flex items-center gap-3">
-		{% if businessMap|default(null) %}
-			<button type="button" onclick="document.dispatchEvent(new CustomEvent('business-map:open'))" class="px-3 py-1.5 text-xs font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">How the business works</button>
+		{% if businessMap %}
+			<button type="button" data-action="business-map#open" class="px-3 py-1.5 text-xs font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">How the business works</button>
 		{% endif %}
-		<button type="button" onclick="document.dispatchEvent(new CustomEvent('sankey:open'))" class="px-3 py-1.5 text-xs font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">Earnings flow</button>
+		<button type="button" data-action="sankey#open" class="px-3 py-1.5 text-xs font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-high transition-colors cursor-pointer">Earnings flow</button>
 		<div class="inline-flex gap-0.5 rounded-md border border-outline-variant/25 bg-surface-container-lowest p-0.5" role="group" aria-label="Reporting period">
 			<button type="button" data-financial-timeframe="12Q" id="btn-global-12Q" class="seg-btn" aria-pressed="false">Quarterly</button>
 			<button type="button" data-financial-timeframe="12Y" id="btn-global-12Y" class="seg-btn" aria-pressed="true">Annual</button>
@@ -30,7 +24,7 @@
 </div>
 
 {# Summary strip: the numbers an analyst reads first off the last report (FinancialSummaryBuilder). #}
-{% if financialSummary|default([])|length > 0 %}
+{% if financialSummary|length > 0 %}
 	<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3" id="financial-summary">
 		{% for tile in financialSummary %}
 			<div class="p-4 rounded-lg bg-surface-container-low border border-outline-variant/20">
@@ -47,7 +41,7 @@
 		<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="income">Income and cash flow</button>
 		<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="balance">Balance sheet</button>
 		<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="valuation">Valuation and returns</button>
-		{% if has_industry_charts %}
+		{% if industryCharts is not empty %}
 			<button type="button" class="financial-cat-btn seg-btn" aria-pressed="false" data-category="sector">Industry</button>
 		{% endif %}
 	</div>
@@ -172,13 +166,14 @@
 		</div>
 	</section>
 
-	{# Charts shown only for the matching sector or business model. #}
-	{% if has_industry_charts %}
+	{# Charts shown only for the matching sector or business model: StockPageBuilder::industryCharts lists them for this
+	   template and the chart script alike. #}
+	{% if industryCharts is not empty %}
 		<section class="space-y-4" data-chart-section aria-labelledby="financial-section-sector">
 			<h3 id="financial-section-sector" class="text-base font-semibold text-on-surface">Industry</h3>
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 				{# The operating figures the company reports each quarter (FinancialSummaryBuilder::KPI_LABELS), one at a time. #}
-				{% if kpiSeries|default([])|length > 0 %}
+				{% if 'kpiHistoryChart' in industryCharts %}
 					{% embed 'partials/_chart_card.html.twig' with {id: 'kpiHistoryChart', category: 'sector', title: "Operating figures",
 						lede: "What the company reports on its business each quarter, as filed", kpiSeries: kpiSeries,
 						family: 'financial', hud: 'latest', wide: true, wideAt: 'md'} only %}
@@ -193,37 +188,37 @@
 				{% endif %}
 
 				{# Banking / Credit Services: Net Interest Margin #}
-				{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
+				{% if 'netInterestEngineChart' in industryCharts %}
 					{{ _self.chart('netInterestEngineChart', 'sector', "Net interest margin",
 						"Interest income against interest expense, and the margin between them") }}
 				{% endif %}
 
 				{# Financials: Regulatory Capital Ratios #}
-				{% if isFinancial|default(false) %}
+				{% if 'regulatoryRatiosChart' in industryCharts %}
 					{{ _self.chart('regulatoryRatiosChart', 'sector', "Regulatory capital",
 						"Tangible equity over tangible assets, against the lines the regulator acts on") }}
 				{% endif %}
 
 				{# Insurance: Dual Engine Underwriting vs Float #}
-				{% if isInsurer|default(false) %}
+				{% if 'insuranceDualEngineChart' in industryCharts %}
 					{{ _self.chart('insuranceDualEngineChart', 'sector', "Underwriting and investment income",
 						"The combined ratio, and the yield earned on policyholder float") }}
 				{% endif %}
 
 				{# REITs: AFFO Coverage & LTV #}
-				{% if businessModel|default('none') == 'reit' %}
+				{% if 'reitCoverageChart' in industryCharts %}
 					{{ _self.chart('reitCoverageChart', 'sector', "REIT coverage and leverage",
 						"Dividend cover from AFFO, loan-to-value, and the cap rate's spread over funding") }}
 				{% endif %}
 
 				{# Tech / Semi / Biotech / Defense: R&D & Reinvestment Intensity #}
-				{% if businessModel|default('none') in ['tech', 'semiconductor', 'biotech', 'defense_contractor'] %}
+				{% if 'reinvestmentIntensityChart' in industryCharts %}
 					{{ _self.chart('reinvestmentIntensityChart', 'sector', "Reinvestment",
 						"Capital spending as a share of revenue, against operating margin and ROIC") }}
 				{% endif %}
 
 				{# Commodities / Shipping: Cyclical Dynamics & Deleveraging #}
-				{% if businessModel|default('none') in ['mining', 'oil_gas_producer', 'refining', 'shipping'] %}
+				{% if 'cyclicalDynamicsChart' in industryCharts %}
 					{{ _self.chart('cyclicalDynamicsChart', 'sector', "Cyclical margins and liquidity",
 						"Operating margin swings against debt service and cash reserves") }}
 				{% endif %}

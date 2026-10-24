@@ -156,6 +156,16 @@ class EtfCompositionBuilderTest extends TestCase
         $this->assertNull($composition['indexFacts']['largest']);
     }
 
+    /** The methodology quotes the committee's own figures, so the page cannot drift from the rules it describes. */
+    public function testTheMethodologyQuotesTheCommitteesOwnFigures(): void
+    {
+        $facts = $this->builder([$this->listing('LIVE', 80.0, 1_000.0)])->build(MarketIndex::Composite)['indexFacts'];
+
+        $this->assertSame(FinancialConstants::INDEX_BASE_LEVEL, $facts['baseLevel']);
+        $this->assertSame(IndexCommittee::INDEX_MEMBERSHIP_BUFFER, $facts['membershipBuffer']);
+        $this->assertSame(FinancialConstants::FUND_DISTRIBUTIONS_PER_YEAR, $facts['distributionsPerYear']);
+    }
+
     public function testWeightsAreStruckOnTheFloatNotTheWholeCompany(): void
     {
         // What a passive fund can hold is the part of the company that trades. Two firms of identical

@@ -10,6 +10,7 @@ use App\Repository\StockRepository;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Index\MarketIndex;
+use App\Service\Math\MacroConstants;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -36,8 +37,6 @@ class HomeController extends AbstractController
     #[Route('/', name: 'app_home')]
     public function index(StockRepository $stockRepository, EtfRepository $etfs, MacroStateProvider $macroStateProvider, PriceChangeFeed $priceChangeFeed): Response
     {
-        $etf = $etfs->findOneByTicker(MarketIndex::benchmark()->value);
-        $indices = $this->indexTiles($etfs);
         $stocks = $stockRepository->findAll();
         $macroState = $macroStateProvider->liveState();
 
@@ -52,18 +51,20 @@ class HomeController extends AbstractController
         // If the user is not logged in, render a dedicated landing page
         if (!$this->getUser()) {
             return $this->render('home/landing.html.twig', [
-                'etf'        => $etf,
+                'etf'        => $etfs->findOneByTicker(MarketIndex::benchmark()->value),
                 'top_stocks' => array_slice($marketData, 0, 6), // Show a preview of the top 6 stocks
                 'breadth'    => $this->buildBreadth($marketData),
                 'macro'      => $macroState->toArray(),
+                'cycleLabel' => $macroState->economicCycleLabel(),
             ]);
         }
 
         return $this->render('home/index.html.twig', [
-            'etf'     => $etf,
-            'indices' => $indices,
+            'indices' => $this->indexTiles($etfs),
             'stocks'  => $marketData,
             'macro'   => $macroState->toArray(),
+            'cycleLabel' => $macroState->economicCycleLabel(),
+            'inflationTarget' => MacroConstants::TARGET_INFLATION,
         ]);
     }
 
