@@ -79,6 +79,7 @@ class StockPageBuilder
         private readonly ?BondRepository $bonds = null,
         private readonly ?\Redis $redis = null,
         private readonly ?BusinessMapBuilder $businessMap = null,
+        private readonly ?SegmentNoteBuilder $segmentNote = null,
     ) {}
 
     /**
@@ -150,6 +151,7 @@ class StockPageBuilder
             + $summary
             + $this->biotechPipeline->build($stock)
             + ($this->businessMap?->build($stock) ?? ['businessMap' => null])
+            + ($this->segmentNote?->build($stock) ?? ['segments' => null])
             + [
                 'industryCharts' => self::industryCharts($snapshot['businessModel'], $snapshot['isFinancial'], $snapshot['isInsurer'], $summary['kpiSeries'] !== []),
                 // What the industry label in the header means: the business model the company is run on.
@@ -342,6 +344,7 @@ class StockPageBuilder
             'nextReport' => null,
             'kpiSeries' => [],
             'businessMap' => null,
+            'segments' => null,
             'pipeline' => null,
             'management' => null,
             // The fund carries no class of its own: contracts are written on companies here, not on the

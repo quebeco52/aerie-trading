@@ -524,6 +524,11 @@ final class PagesRenderTest extends KernelTestCase
                 'outlook' => ['level' => 0.912, 'doubt' => 0.088, 'revision' => -0.061],
                 'mergerReview' => ['herfindahl' => 0.3266, 'highlyConcentrated' => true, 'acquirerShare' => 0.38, 'fringeShare' => 0.12, 'clearedShare' => 0.003, 'reviewBinds' => true, 'screens' => ['delta' => 0.02, 'concentrated' => 0.25, 'shareCeiling' => 0.35]],
             ],
+            'segments' => [
+                ['label' => 'Gold and copper mining', 'industry' => 'Gold', 'revenue' => 5.8e9, 'share' => 0.86],
+                ['label' => 'Ore terminals', 'industry' => 'Marine Ports & Services', 'revenue' => 9.4e8, 'share' => 0.14],
+                ['label' => 'Royalty streams', 'industry' => 'Investment Companies', 'revenue' => null, 'share' => null],
+            ],
             'management' => ['style' => 'empire_builder', 'label' => 'Empire Builder', 'mandate' => 'mandated to grow, and will fund projects a stricter board would refuse', 'conviction' => 'pronounced', 'tone' => 'warn', 'tenureYears' => 3.2],
             'peers' => [
                 ['ticker' => 'SINK', 'name' => 'Sinkhole Gold', 'industry' => 'Gold', 'price' => 31.2, 'marketCap' => 9.4e9, 'peRatio' => 11.2, 'roic' => 0.081, 'totalEquity' => 4.1e9, 'isBankrupt' => false, 'sameIndustry' => true],
