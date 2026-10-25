@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Pricing;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateActionEngine;
 use App\Service\Corporate\CorporateMetrics;
@@ -11,6 +12,8 @@ use App\Service\Corporate\Deal\AcquisitionEngine;
 use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Industry\IndustryOutlook;
+use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\StockTracker;
 use App\Service\Math\MathUtility;
@@ -214,5 +217,57 @@ class StockTrackerTest extends TestCase
 
         $this->assertSame(0, $strikes);
         $this->assertEqualsWithDelta(100.0, $update['perceived_fair_value'], 1e-9);
+    }
+
+    // --- Industry Outlook Stories ---
+
+    /**
+     * A quarter's turn that moves an industry's outlook far puts a story on every listed company in it, with no price
+     * move; an industry whose outlook barely moved gets none.
+     */
+    public function testAFarRevisionPutsAStoryOnEveryCompanyInTheIndustry(): void
+    {
+        // The public is unsure and the truth has run far above its belief, so the quarter's data revise it a long way
+        // up; the grocers' settled outlook, on its truth, barely moves. The chip makers are too small a share of
+        // spending to move the grocers'.
+        $store = new InMemoryIndustryShareStore();
+        $store->writeOutlooks(['salt' => 3, 'quarter' => 0, 'industries' => [
+            'Semiconductors' => ['x' => 1.0, 'm' => -0.5, 'v' => 1.0, 'f' => 0.0, 'w' => 1e-6, 'prior_belief' => 0.0, 'revised_tick' => -1],
+            'Grocery Stores' => ['x' => 0.0, 'm' => 0.0, 'v' => 0.0, 'f' => 0.0, 'w' => 1.0, 'prior_belief' => 0.0, 'revised_tick' => -1],
+        ]]);
+        $tracker = self::stockTracker(
+            $this->marketEngineMock,
+            $this->earningsEngineMock,
+            $this->corporateActionEngineMock,
+            $this->debtEngineMock,
+            new \App\Service\Market\Pricing\LiquidityEngine(new MathUtility()),
+            publisher: $this->marketEventMock,
+            metrics: $this->corporateMetricsMock,
+            industryOutlook: new IndustryOutlook($store, new CorporateMetrics()),
+        );
+        $this->marketEngineMock->method('calculateNextPrice')->willReturn([
+            'price' => 100.0, 'shock' => null, 'next_volatility' => 0.20, 'analyst_targets' => [], 'perceived_fair_value' => 100.0,
+        ]);
+        $this->earningsEngineMock->method('calculate')->willReturn(null);
+        $this->corporateActionEngineMock->method('processSplits')->willReturn(['price' => 100.0, 'shares' => 1000, 'event' => null]);
+        $published = [];
+        $this->marketEventMock->method('publish')->willReturnCallback(function (...$args) use (&$published): array {
+            $published[] = $args;
+
+            return ['type' => $args[1], 'ticker' => $args[0]->getTicker(), 'description' => $args[2], 'change_percent' => $args[3]];
+        });
+        $stocks = [];
+        foreach (['CHP' => 'Semiconductors', 'CHQ' => 'Semiconductors', 'GRC' => 'Grocery Stores'] as $ticker => $industry) {
+            $stocks[] = $this->createDummyStock()->setTicker($ticker)->setIndustry($industry);
+        }
+
+        $tracker->updateStocks($stocks, 1.0 / 252.0, false, new MacroStateDTO(), 63, 252);
+
+        $stories = array_values(array_filter($published, static fn(array $args): bool => $args[1] === 'OUTLOOK'));
+        $this->assertSame(['CHP', 'CHQ'], array_map(static fn(array $args): string => $args[0]->getTicker(), $stories));
+        $this->assertMatchesRegularExpression('/^Industry data lift the demand outlook for Semiconductors [\d,]+\.\d% to \d+\.\d\d\.$/', $stories[0][2]);
+        $this->assertNull($stories[0][3], 'a story, not a price move');
+        $this->assertGreaterThan(StockTracker::OUTLOOK_STORY_REVISION, $stories[0][4]['revision']);
+        $this->assertSame('Semiconductors', $stories[0][4]['industry']);
     }
 }

@@ -28,7 +28,8 @@ use App\Service\Model\BusinessModelInterface;
  * only means something when there are modelled rivals, and is shown only then. The ledger also supplies
  * the roster's installed plant against its trend plant and the industry balance those imply (the rest of
  * the industry is a fringe supplying at trend); the last quarterly report supplies what that did to the price.
- * The page never strikes the balance itself: the ledger is written by the ticker and only read here.
+ * The page never strikes the balance itself: the ledger is written by the ticker and only read here. The industry's
+ * outlook is the public's reading of where its long-run demand is heading, never the truth behind it.
  */
 class IndustryPositionBuilder
 {
@@ -75,6 +76,8 @@ class IndustryPositionBuilder
      *         priceMove: float|null,
      *         rivalShareDrain: float|null,
      *         ownPriceVolumeShift: float|null,
+     *         idlePlant: float|null,
+     *         outlook: array{level: float, doubt: float, revision: float|null}|null,
      *         mergerReview: array{herfindahl: float, highlyConcentrated: bool, acquirerShare: float, fringeShare: float, clearedShare: float, reviewBinds: bool, screens: array{delta: float, concentrated: float, shareCeiling: float}}|null
      *     }
      * }
@@ -166,6 +169,10 @@ class IndustryPositionBuilder
                 'priceMove' => isset($kpis['industry_price_level']) ? (float) $kpis['industry_price_level'] - 1.0 : null,
                 'rivalShareDrain' => isset($kpis['rival_share_drain']) ? (float) $kpis['rival_share_drain'] : null,
                 'ownPriceVolumeShift' => isset($kpis['own_price_volume_shift']) ? (float) $kpis['own_price_volume_shift'] : null,
+                // The share of the company's plant a glut past the deepest price cut left standing, last report.
+                'idlePlant' => isset($kpis['idle_plant_share']) ? (float) $kpis['idle_plant_share'] : null,
+                // What the public expects of the industry's long-run demand; shared by every company in it.
+                'outlook' => $this->ledger->describeOutlook((string) $stock->getIndustry()),
                 'mergerReview' => $stock->isBankrupt() ? null : $this->mergerReview($stock, $macroState, $strategy, $tick),
             ],
         ];

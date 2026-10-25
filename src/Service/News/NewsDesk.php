@@ -11,10 +11,11 @@ use App\Service\Math\FinancialConstants;
  * Files each story under a newswire section and decides which stories are headlines.
  *
  * A district story, a failure and a rating move across investment grade are headlines by kind. A deal is a headline
- * when it is significant to the company, and a price shock beyond a 10% move. An earnings or analyst story is a
- * headline when its move is significant against the stock's own volatility: the standardised abnormal return of an
- * event study (Brown & Warner 1985; MacKinlay 1997), over a one-day window. The page load, the live wire and the
- * headline strip all ask this class, so a story never reads as a headline in one place and not another.
+ * when it is significant to the company, a price shock beyond a 10% move, and an industry outlook revised 7.5%. An
+ * earnings or analyst story is a headline when its move is significant against the stock's own volatility: the
+ * standardised abnormal return of an event study (Brown & Warner 1985; MacKinlay 1997), over a one-day window. The page
+ * load, the live wire and the headline strip all ask this class, so a story never reads as a headline in one place and
+ * not another.
  */
 final class NewsDesk
 {
@@ -52,6 +53,12 @@ final class NewsDesk
      * 1-02(w)).
      */
     private const HEADLINE_DEAL_SHARE = 0.10;
+
+    /**
+     * An industry outlook revision is a headline at 7.5% either way: a frontier industry's in about one quarter in ten,
+     * a settled one's almost never; about four a year across the board.
+     */
+    public const HEADLINE_OUTLOOK_REVISION = 0.075;
 
     /** The section a story is filed under on its own; "all" and "companies" also take it. */
     public static function sectionOf(string $scope, NewsCard $card): string
@@ -94,6 +101,7 @@ final class NewsDesk
             HeadlineTest::DealSize => $dealShareOfValue !== null && $dealShareOfValue >= self::HEADLINE_DEAL_SHARE,
             HeadlineTest::GradeCrossing => self::crossesInvestmentGrade($card->facts),
             HeadlineTest::ShockMove => $move !== null && abs($move) > self::HEADLINE_SHOCK_MOVE,
+            HeadlineTest::RevisionSize => abs((float) ($card->facts['revision'] ?? 0.0)) >= self::HEADLINE_OUTLOOK_REVISION,
             HeadlineTest::AbnormalReturn => $move !== null && $annualVolatility !== null
                 && self::abnormalReturnZ($move, $annualVolatility) >= self::HEADLINE_ABNORMAL_RETURN_Z,
             HeadlineTest::Never => false,

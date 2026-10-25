@@ -15,6 +15,8 @@ enum HeadlineTest
     case GradeCrossing;
     /** A headline when the price shock is beyond the circuit-breaker size. */
     case ShockMove;
+    /** A headline when an industry's outlook is revised far. */
+    case RevisionSize;
     /** A headline when the move is significant against the stock's own volatility. */
     case AbnormalReturn;
     /** Routine: never a headline. */

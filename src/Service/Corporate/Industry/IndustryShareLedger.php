@@ -312,6 +312,27 @@ class IndustryShareLedger
     }
 
     /**
+     * An industry's outlook as the public reads it, for display: the demand level it expects against the expected path
+     * (1 at the open), its doubt about that as a log standard deviation, and the last quarter's revision as a fraction
+     * (null before the first). Null for an industry with no outlook. The true level is never shown.
+     *
+     * @return array{level: float, doubt: float, revision: float|null}|null
+     */
+    public function describeOutlook(string $industry): ?array
+    {
+        $record = $this->store->readOutlook($industry);
+        if ($record === null) {
+            return null;
+        }
+
+        return [
+            'level' => exp(IndustryOutlook::belief($record)),
+            'doubt' => sqrt(max(0.0, $record['v'])),
+            'revision' => $record['revised_tick'] < 0 ? null : IndustryOutlook::revision($record),
+        ];
+    }
+
+    /**
      * Trend nominal GDP the demand anchor rides on: potential output times the price level, with no output
      * gap. The cycle already reaches a firm's volume through the demand shift and would be counted twice here.
      */

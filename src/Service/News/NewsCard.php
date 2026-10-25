@@ -27,6 +27,7 @@ enum NewsCard: string
     case Index = 'index';
     case Distribution = 'income';
     case Succession = 'governance';
+    case Outlook = 'outlook';
     case Economy = 'economy';
     case Government = 'government';
     case General = 'general';
@@ -55,6 +56,7 @@ enum NewsCard: string
         'INDEX' => self::Index,
         'DIVIDEND' => self::Distribution,
         'MANAGEMENT CHANGE' => self::Succession,
+        'OUTLOOK' => self::Outlook,
         'ECONOMY' => self::Economy,
         'GOVERNMENT' => self::Government,
     ];
@@ -107,6 +109,7 @@ enum NewsCard: string
             self::Deal => HeadlineTest::DealSize,
             self::Rating => HeadlineTest::GradeCrossing,
             self::Shock => HeadlineTest::ShockMove,
+            self::Outlook => HeadlineTest::RevisionSize,
             self::Earnings, self::Analyst => HeadlineTest::AbnormalReturn,
             self::Split, self::Street, self::Index, self::Distribution, self::Succession, self::General => HeadlineTest::Never,
         };

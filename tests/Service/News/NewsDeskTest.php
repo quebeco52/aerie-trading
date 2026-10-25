@@ -56,6 +56,17 @@ class NewsDeskTest extends TestCase
         $this->assertFalse(NewsDesk::isHeadline($this->card('SHOCK', null), 0.15));
     }
 
+    /** An industry outlook revised 7.5% or more either way is a headline; a smaller revision is only a story. */
+    public function testAnOutlookRevisionIsAHeadlineFromSevenAndAHalfPercent(): void
+    {
+        $outlook = static fn(float $revision): EventCard => (new EventPresenter())->present(new PresentableEvent(type: 'OUTLOOK', description: 'x', facts: ['revision' => $revision]));
+
+        $this->assertTrue(NewsDesk::isHeadline($outlook(NewsDesk::HEADLINE_OUTLOOK_REVISION), self::VOLATILITY));
+        $this->assertTrue(NewsDesk::isHeadline($outlook(-0.09), null), 'A cut is as much news as a raise.');
+        $this->assertFalse(NewsDesk::isHeadline($outlook(0.074), self::VOLATILITY));
+        $this->assertSame('companies', NewsDesk::sectionOf(NewsDesk::SCOPE_COMPANY, NewsCard::Outlook));
+    }
+
     /** @return iterable<string, array{string}> */
     public static function headlinesByKind(): iterable
     {
@@ -124,7 +135,7 @@ class NewsDeskTest extends TestCase
         $cards = NewsDesk::headlineCards();
 
         foreach (NewsCard::cases() as $card) {
-            $story = (new EventPresenter())->present(new PresentableEvent(type: NewsCard::typesOf([$card])[0] ?? 'SOMETHING NEW', description: 'x', facts: ['from' => 'BBB', 'to' => 'BB'], changePercent: 50.0));
+            $story = (new EventPresenter())->present(new PresentableEvent(type: NewsCard::typesOf([$card])[0] ?? 'SOMETHING NEW', description: 'x', facts: ['from' => 'BBB', 'to' => 'BB', 'revision' => 0.5], changePercent: 50.0));
             $this->assertSame(in_array($card, $cards, true), NewsDesk::isHeadline($story, 0.01, 1.0), $card->name);
         }
     }

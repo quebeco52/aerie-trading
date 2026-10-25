@@ -54,8 +54,11 @@ final class IndustryOutlook
      * Steps every industry to the quarter this tick falls in, opening the outlooks on the first call.
      *
      * @param iterable<Stock> $stocks The board, for the industries it holds and their opening sizes.
+     * @return array<string, array{level: float, revision: float}> Each industry the quarter's turn revised: the level
+     *                                                              the public now expects and how far it moved, as a
+     *                                                              fraction. Empty on any other tick.
      */
-    public function advance(iterable $stocks, MacroStateDTO $macroState, int $tick, int $ticksPerYear): void
+    public function advance(iterable $stocks, MacroStateDTO $macroState, int $tick, int $ticksPerYear): array
     {
         $quarter = intdiv($tick, max(1, intdiv($ticksPerYear, (int) FinancialConstants::QUARTERS_PER_YEAR)));
         $state = $this->store->readOutlooks();
@@ -63,16 +66,25 @@ final class IndustryOutlook
         if ($state === null || $state['quarter'] < 0) {
             $this->store->writeOutlooks(['salt' => $state['salt'] ?? random_int(1, PHP_INT_MAX >> 1), 'quarter' => $quarter, 'industries' => $this->open($stocks, $macroState)]);
 
-            return;
+            return [];
         }
         if ($quarter <= $state['quarter']) {
-            return;
+            return [];
         }
 
         for ($next = $state['quarter'] + 1; $next <= $quarter; ++$next) {
             $state = self::step($state, $next, $macroState, $tick);
         }
         $this->store->writeOutlooks($state);
+
+        $revisions = [];
+        foreach ($state['industries'] as $industry => $record) {
+            if ($record['revised_tick'] === $tick) {
+                $revisions[$industry] = ['level' => exp(self::belief($record)), 'revision' => self::revision($record)];
+            }
+        }
+
+        return $revisions;
     }
 
     /**
@@ -169,6 +181,17 @@ final class IndustryOutlook
     public static function belief(array $record): float
     {
         return $record['m'] + ($record['v'] / 2.0);
+    }
+
+    /**
+     * How far the public's expected level moved at the last quarter's turn, as a fraction: e^{belief - prior} - 1. Zero
+     * before the first revision.
+     *
+     * @param OutlookRecord $record
+     */
+    public static function revision(array $record): float
+    {
+        return $record['revised_tick'] < 0 ? 0.0 : exp(self::belief($record) - $record['prior_belief']) - 1.0;
     }
 
     /** Share of a reading's surprise the settled belief takes in each quarter, from its learning half-life in years. */

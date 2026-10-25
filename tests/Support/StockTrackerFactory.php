@@ -10,6 +10,7 @@ use App\Service\Corporate\Deal\AcquisitionEngine;
 use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\ManagementSuccessionEngine;
 use App\Service\Market\Agent\AgentFlowEngine;
 use App\Service\Market\Agent\AgentPopulation;
@@ -43,6 +44,7 @@ trait StockTrackerFactory
         ?OrderFlowStoreInterface $orderFlow = null,
         ?AgentStateStoreInterface $agentStates = null,
         array $agentStrategies = [],
+        ?IndustryOutlook $industryOutlook = null,
     ): StockTracker {
         if ($acquisitions === null) {
             $acquisitions = self::createStub(AcquisitionEngine::class);
@@ -72,6 +74,7 @@ trait StockTrackerFactory
             ),
             // Scripted draws: checkProbability() is false, so no succession fires in a test about something else.
             new ManagementSuccessionEngine(self::createStub(MarketEventPublisher::class), new ScriptedDraws()),
+            industryOutlook: $industryOutlook,
         );
     }
 }

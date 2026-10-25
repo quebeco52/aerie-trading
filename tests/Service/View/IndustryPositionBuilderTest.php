@@ -93,6 +93,28 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.004, $industry['ownPriceVolumeShift'], 1e-9);
     }
 
+    /**
+     * The card shows the outlook the public holds, never the truth behind it, and the plant the last report left idle;
+     * an industry with no outlook shows none.
+     */
+    public function testTheCardShowsThePublicsOutlookAndTheIdlePlant(): void
+    {
+        $firm = $this->stock('STL', 'Steel', 2_000.0);
+        $this->store->writeOutlooks(['salt' => 1, 'quarter' => 4, 'industries' => ['Steel' => ['x' => 0.4, 'm' => 0.08, 'v' => 0.0036, 'f' => 0.0, 'w' => 1.0, 'prior_belief' => 0.02, 'revised_tick' => 252]]]);
+
+        $industry = $this->builder(['idle_plant_share' => 0.12])->build($firm, new MacroStateDTO())['industry'];
+
+        $this->assertNotNull($industry['outlook']);
+        $this->assertEqualsWithDelta(exp(0.0818), $industry['outlook']['level'], 1e-12, 'the belief, not the true level');
+        $this->assertEqualsWithDelta(0.06, $industry['outlook']['doubt'], 1e-12);
+        $this->assertEqualsWithDelta(exp(0.0818 - 0.02) - 1.0, $industry['outlook']['revision'], 1e-12);
+        $this->assertEqualsWithDelta(0.12, $industry['idlePlant'], 1e-12);
+
+        $bank = $this->builder(null)->build($this->stock('BNK', 'Banks - Regional', 500.0), new MacroStateDTO())['industry'];
+        $this->assertNull($bank['outlook']);
+        $this->assertNull($bank['idlePlant']);
+    }
+
     public function testALenderIsNotPricedOnCapacityButStillHasAShareOfItsIndustry(): void
     {
         $bank = $this->stock('BNK', 'Banks - Regional', 500.0);

@@ -80,6 +80,13 @@ class StockTracker
      */
     public const ANALYST_TARGET_REVISION_THRESHOLD = 0.10;
 
+    // --- Industry Outlook Stories ---
+    /**
+     * How far an industry's outlook has to move at a quarter's turn before every listed company in it carries the
+     * story (5%): a frontier industry's about one quarter in four, a settled one's almost never.
+     */
+    public const OUTLOOK_STORY_REVISION = 0.05;
+
     /** Market vol of the last tick priced, at which every stored variance was built; null before the first. */
     private ?float $priorMarketVol = null;
 
@@ -165,7 +172,7 @@ class StockTracker
         // The stamp duty the Diet has in force thins every name's turnover, and so its depth, this tick.
         $this->liquidityEngine->setStampDutyRate($macroDTO->stampDutyRate);
         // Every industry's outlook moves at the quarter's turn, before any report this tick reads it.
-        $this->industryOutlook?->advance($stocks, $macroDTO, $tickCount, $ticksPerYear);
+        $revisions = $this->industryOutlook?->advance($stocks, $macroDTO, $tickCount, $ticksPerYear) ?? [];
 
         $board = new BoardTick(
             $macroDTO,
@@ -180,6 +187,8 @@ class StockTracker
             // Passive ownership weights: assets tracking each index proportional to constituent weight.
             $this->indexCommittee?->passiveOwnership() ?? [],
         );
+
+        $this->reportOutlookRevisions($stocks, $revisions, $board);
 
         // The agent books are loaded once for the whole tick and written back once at the end, for the
         // same reason the order flow is drained once: a round trip per name is the cost that scales.
@@ -222,6 +231,38 @@ class StockTracker
             'events' => $board->events,
             'market_vol' => $marketVol,
         ];
+    }
+
+    /**
+     * A story on every listed company in an industry whose outlook the quarter's turn moved far. It carries no shock:
+     * the revision reaches the price through the market the company is valued on.
+     *
+     * @param Stock[]                                             $stocks
+     * @param array<string, array{level: float, revision: float}> $revisions
+     */
+    private function reportOutlookRevisions(array $stocks, array $revisions, BoardTick $board): void
+    {
+        foreach ($stocks as $stock) {
+            $industry = (string) $stock->getIndustry();
+            $outlook = $revisions[$industry] ?? null;
+            if ($outlook === null || $stock->isBankrupt() || abs($outlook['revision']) < self::OUTLOOK_STORY_REVISION) {
+                continue;
+            }
+
+            $board->events[] = $this->eventService->publish(
+                $stock,
+                'OUTLOOK',
+                sprintf(
+                    'Industry data %s the demand outlook for %s %s%% to %s.',
+                    $outlook['revision'] < 0.0 ? 'cut' : 'lift',
+                    $industry,
+                    number_format(100.0 * abs($outlook['revision']), 1),
+                    number_format($outlook['level'], 2),
+                ),
+                null,
+                ['industry' => $industry, 'revision' => $outlook['revision'], 'level' => $outlook['level']],
+            );
+        }
     }
 
     /**

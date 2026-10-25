@@ -102,11 +102,22 @@
 			{{ ui.tile('Moat', sat.moatFactor|multiple, asset.systemicImportance ~ ' · offsets the drag from size') }}
 		</div>
 
+		{# The industry's outlook: what the public expects of its long-run demand, never the truth behind it. #}
+		{% set outlook = industry.outlook %}
+		{% if outlook %}
+			<div class="grid grid-cols-2 gap-3 text-xs mb-3" id="industry-outlook">
+				{% set outlookNote %}expected long-run demand, 1.00 when trading opened · give or take {{ outlook.doubt|pct(0) }}{% endset %}
+				{{ ui.tile('Demand outlook', outlook.level|figure('index', 2), outlookNote, {tone: (outlook.level - 1)|signed_class, tip: 'What industry data lead the market to expect of demand for the whole industry in the long run, against what it expected when trading opened. Companies build plant for this demand, so a revision changes what they plan to build. The range is how unsure the estimate still is.'}) }}
+				{{ ui.tile('Last revision', outlook.revision|pct(1, true), 'at the quarter\'s turn, from industry data', {tone: outlook.revision|signed_class}) }}
+			</div>
+		{% endif %}
+
 		{% if not industry.pricesCapacity %}
 			<p class="text-xs text-on-surface-variant leading-relaxed">Not priced on capacity: {{ isFinancial ? 'a lender sells a yield on its book, not a unit of output, so there is no plant to overbuild.' : 'this industry\'s output is not substitutable enough for rivals\' plant to move its price.' }}</p>
 		{% else %}
-			<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-				{{ ui.tile('Capacity against demand', industry.capacityRatio|pct(1), industry.installedCapacity is not null ? industry.installedCapacity|format_large('$') ~ ' plant · ' ~ industry.trendCapacity|format_large('$') ~ ' at trend' : 'anchored at first report', {tone: industry.balance in ['overbuilt', 'tight'] ? 'text-warning' : 'text-on-surface'}) }}
+			<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
+				{{ ui.tile('Capacity against demand', industry.capacityRatio|pct(1), industry.installedCapacity is not null ? industry.installedCapacity|format_large('$') ~ ' plant · ' ~ industry.trendCapacity|format_large('$') ~ ' for expected demand' : 'anchored at first report', {tone: industry.balance in ['overbuilt', 'tight'] ? 'text-warning' : 'text-on-surface'}) }}
+				{{ ui.tile('Idle plant', industry.idlePlant|pct(1), 'of its plant switched off, last report', {tone: industry.idlePlant is null ? 'text-on-surface-faint' : (industry.idlePlant > 0.0005 ? 'text-warning' : 'text-on-surface'), tip: 'Plant switched off because, at the industry\'s price, its output would not cover the cost of running it. It goes back to work as demand catches up.'}) }}
 				{# A move under five basis points reads as none. #}
 				{% for move in [
 					{label: 'Realised price', value: industry.priceMove, note: 'against a balanced industry, last report'},
@@ -135,7 +146,7 @@
 		{% elseif industry.rosterSize > 1 %}
 			<p class="mt-4 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant leading-relaxed">Its listed peers sell into different markets, so no share among them is shown.</p>
 		{% elseif industry.tracked %}
-			<p class="mt-4 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant leading-relaxed">The only listed company in its industry, so no peer share is shown. The capacity figures above take the unlisted rest of the industry as supplying at trend.</p>
+			<p class="mt-4 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant leading-relaxed">The only listed company in its industry, so no peer share is shown. The capacity figures above take the unlisted rest of the industry as building toward the same outlook.</p>
 		{% endif %}
 
 		{# Merger review: the same ledger reading the M&A engine sizes this firm's deals on. #}

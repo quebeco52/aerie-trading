@@ -6,6 +6,7 @@ namespace App\Tests\Service\Corporate\Industry;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
@@ -133,6 +134,31 @@ class IndustryOutlookTest extends TestCase
     {
         $this->assertSame(self::stepQuarters(self::state(3), 12), self::stepQuarters(self::state(3), 12));
         $this->assertNotSame(self::stepQuarters(self::state(3), 12)['industries']['Volatile']['x'], self::stepQuarters(self::state(4), 12)['industries']['Volatile']['x']);
+    }
+
+    /**
+     * The quarter's turn reports every industry it revised, with the level the public now expects and how far that
+     * moved; a tick inside the quarter reports nothing, and an outlook never yet revised has moved by nothing.
+     */
+    public function testTheQuartersTurnReportsEachRevision(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $outlook = new IndustryOutlook($store, new CorporateMetrics());
+        $variance = IndustryOutlook::steadyVariance(0.06, 1.0);
+        $opening = ['x' => 0.0, 'm' => -$variance / 2.0, 'v' => $variance, 'f' => 0.0, 'w' => 1.0, 'prior_belief' => 0.0, 'revised_tick' => -1];
+        $store->writeOutlooks(['salt' => 9, 'quarter' => 0, 'industries' => ['Steel' => $opening]]);
+        $this->assertSame(0.0, IndustryOutlook::revision($opening));
+
+        $this->assertSame([], $outlook->advance([], new MacroStateDTO(), 62, 252), 'still inside the first quarter');
+        $revisions = $outlook->advance([], new MacroStateDTO(), 63, 252);
+
+        $record = $store->readOutlook('Steel');
+        $this->assertNotNull($record);
+        $this->assertSame(['Steel'], array_keys($revisions));
+        $this->assertEqualsWithDelta(exp(IndustryOutlook::belief($record)), $revisions['Steel']['level'], 1e-12);
+        $this->assertEqualsWithDelta(($revisions['Steel']['level'] / exp($record['prior_belief'])) - 1.0, $revisions['Steel']['revision'], 1e-12);
+        $this->assertNotEqualsWithDelta(0.0, $revisions['Steel']['revision'], 1e-9);
+        $this->assertSame([], $outlook->advance([], new MacroStateDTO(), 64, 252));
     }
 
     /**

@@ -80,6 +80,17 @@ class NewsCardTest extends TestCase
         $this->assertSame('GUIDANCE CUT', $presenter->present(new PresentableEvent(type: 'GUIDANCE', description: 'Guidance cut: management expects to miss consensus by roughly 8%.'))->badge);
     }
 
+    public function testAnOutlookRevisionReadsInItsDirection(): void
+    {
+        $presenter = new EventPresenter();
+
+        $cut = $presenter->present(new PresentableEvent(type: 'OUTLOOK', description: 'Industry data cut the demand outlook for Steel 6.0% to 0.94.', facts: ['revision' => -0.06]));
+        $this->assertSame('OUTLOOK CUT', $cut->badge);
+        $this->assertSame('down', $cut->tone->value);
+        $this->assertSame('Industry data cut the demand outlook for Steel 6.0% to 0.94.', $cut->headline);
+        $this->assertSame('OUTLOOK RAISED', $presenter->present(new PresentableEvent(type: 'OUTLOOK', description: 'x', facts: ['revision' => 0.06]))->badge);
+    }
+
     /**
      * Every literal type passed to MarketEventPublisher::publish in src, the literal deal types the acquisition
      * engine configures, the two the debt engine picks between at run time, and the two district desks.

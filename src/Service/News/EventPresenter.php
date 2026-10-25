@@ -115,6 +115,10 @@ class EventPresenter
             NewsCard::Succession => ($facts['forced'] ?? false)
                 ? self::story('BOARD REMOVAL', Tone::Warn, 'gavel', $description ?: 'The board removed the chief executive.')
                 : self::story('MANAGEMENT CHANGE', Tone::Neutral, 'badge', $description ?: 'The company named new management.'),
+            // Not a price event: a revised outlook reaches the price through what the company is worth.
+            NewsCard::Outlook => (float) ($facts['revision'] ?? 0.0) < 0.0
+                ? self::story('OUTLOOK CUT', Tone::Down, 'insights', $description ?: 'Industry demand outlook cut.')
+                : self::story('OUTLOOK RAISED', Tone::Up, 'insights', $description ?: 'Industry demand outlook raised.'),
             NewsCard::Economy, NewsCard::Government => self::districtStory($card, $type, $event->topic, $description),
             NewsCard::General => self::story($type, Tone::Neutral, 'campaign', $description ?: 'Corporate news announcement.'),
         };
