@@ -391,4 +391,44 @@ final class TimeSeries
 
         return max($effectiveMinFloor, min($effectiveMaxCeiling, $raw));
     }
+
+    /**
+     * One step of a local-level filter (Muth 1960; Kalman 1960): a level that walks at random, read through noise. The
+     * belief's variance grows by the walk's over the step, then the reading is weighed against it by their precisions.
+     * A walk with no variance and a belief already certain stay put.
+     *
+     * @return array{float, float} The updated mean and variance.
+     */
+    public static function localLevelStep(float $mean, float $variance, float $reading, float $stepVariance, float $readingVariance): array
+    {
+        $prior = max(0.0, $variance) + max(0.0, $stepVariance);
+        if ($prior <= 0.0) {
+            return [$mean, 0.0];
+        }
+        $gain = $prior / ($prior + max(0.0, $readingVariance));
+
+        return [$mean + ($gain * ($reading - $mean)), (1.0 - $gain) * $prior];
+    }
+
+    /**
+     * The reading noise that settles a local-level filter at a given gain: in steady state the prior variance is q/K,
+     * and K = (q/K) / (q/K + R) gives R = q (1 - K) / K^2.
+     *
+     * @param float $stepVariance The walk's variance over one step (q).
+     * @param float $steadyGain   The share of a reading's surprise the settled belief takes in (K, 0 to 1).
+     */
+    public static function localLevelReadingVariance(float $stepVariance, float $steadyGain): float
+    {
+        $gain = max(1e-9, min(1.0, $steadyGain));
+
+        return max(0.0, $stepVariance) * (1.0 - $gain) / ($gain * $gain);
+    }
+
+    /** The settled belief's variance after a reading at that gain: (1 - K) q / K. */
+    public static function localLevelSteadyVariance(float $stepVariance, float $steadyGain): float
+    {
+        $gain = max(1e-9, min(1.0, $steadyGain));
+
+        return (1.0 - $gain) * max(0.0, $stepVariance) / $gain;
+    }
 }

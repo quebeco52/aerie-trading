@@ -19,9 +19,12 @@ def pct(xs, p):
     return xs[min(len(xs) - 1, int(math.ceil(p * len(xs))) - 1)]
 
 
+TAG = os.environ.get('TAG', '')
+
+
 def run(arm, s):
-    r = json.loads(open(f'{H}/runs/{arm}-{s}.jsonl').readline())
-    k = json.load(open(f'{H}/runs/{arm}-{s}.idle.json'))
+    r = json.loads(open(f'{H}/runs/{arm}-{s}{TAG}.jsonl').readline())
+    k = json.load(open(f'{H}/runs/{arm}-{s}{TAG}.idle.json'))
     kpi = {(row[1], row[0]): row for row in k['rows']}
     out, firm = {}, {}
     win = []
@@ -56,7 +59,11 @@ def run(arm, s):
     out['pl p99 (y10-20)'] = pct(pls, 0.99)
     out['pl max (y10-20)'] = max(pls)
     out['share pl > 1.05 (y10-20)'] = sum(1 for p in pls if p > 1.05) / len(pls)
-    out['pl min (all)'] = min(x['pl'] for x in nf if x['pl'] is not None)
+    allpl = [x['pl'] for x in nf if x['pl'] is not None]
+    out['pl min (all)'] = min(allpl)
+    out['pl p1 (all)'] = pct(allpl, 0.01)
+    out['pl p99 (all)'] = pct(allpl, 0.99)
+    out['pl max (all)'] = max(allpl)
     out['idle>0 firm-quarters'] = sum(1 for x in nf if x['idle'] > 1e-12)
     out['capex/revenue (y10-20)'] = sum(x['capex'] for x in win) / sum(x['rev'] for x in win)
     out['median net debt/EBITDA y20'] = st.median(nds)
@@ -67,6 +74,14 @@ def run(arm, s):
     out['median op margin'] = st.median(x['om'] for x in allq)
     out['defaults+deaths'] = len(r['defaults']) + len(r['dead'])
     out['share B or worse'] = sum(1 for x in allq if x['rating'] in BAD) / len(allq)
+    rv = []
+    for f in r['final'].values():
+        px = [x['price'] for x in f['q'] if x['price'] > 0]
+        lr = [math.log(b / a) for a, b in zip(px, px[1:])]
+        if len(lr) > 8 and not f['dead']:
+            rv.append(st.stdev(lr) * 2.0)
+    out['median realised vol (quarterly, ann.)'] = st.median(rv)
+    out['median current vol y20'] = st.median(f['vol'] for f in r['final'].values() if not f['dead'])
     out['SKYL real rev multiple y20'] = firm['SKYL']['real20'] if 'SKYL' in firm else float('nan')
     ev = [f'{tk} default {n}q' for tk, n in r['defaults'].items()] if isinstance(r['defaults'], dict) else [str(e) for e in r['defaults']]
     ev += [f"{e['t']} reorg y{e['year']}" for e in r['reorgs']] + [f'dead {json.dumps(e)}' for e in r['dead']]

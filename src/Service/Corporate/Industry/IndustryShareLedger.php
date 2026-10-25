@@ -154,7 +154,7 @@ class IndustryShareLedger
      * share; zero for a firm the ledger has not seen them from yet.
      *
      * @param array<string, mixed>|null $record
-     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, addressable_share: float}
+     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float}
      */
     private static function carriedFields(?array $record): array
     {
@@ -162,6 +162,7 @@ class IndustryShareLedger
             'anchor_capacity_share' => (float) ($record['anchor_capacity_share'] ?? 0.0),
             'anchor_demand_share'   => (float) ($record['anchor_demand_share'] ?? 0.0),
             'anchor_time'           => (float) ($record['anchor_time'] ?? 0.0),
+            'anchor_outlook'        => (float) ($record['anchor_outlook'] ?? 0.0),
             'addressable_share'     => (float) ($record['addressable_share'] ?? 0.0),
         ];
     }
@@ -203,19 +204,69 @@ class IndustryShareLedger
         int $tick,
         int $ticksPerYear,
     ): float {
+        $balance = $this->recordAndBalance($stock, $annualCapacity, $addressableShare, $trendNominalGdp, $totalTime, $secularExcessGrowth, $tick, $ticksPerYear);
+
+        return $balance === null ? 1.0 : $this->boundedCapacityRatio($balance['supply_over_demand']);
+    }
+
+    /**
+     * The industry's supply against its true demand at the trend price, split into the listed roster's plant and the
+     * unlisted fringe's, after recording this firm as resolveIndustryCapacityRatio() does. A roster that leaves the
+     * industry shorter than the price responds to is floored there. Null for a firm the ledger cannot price.
+     *
+     * @return array{roster: float, fringe: float}|null
+     */
+    public function resolveIndustrySupply(
+        Stock $stock,
+        float $annualCapacity,
+        float $addressableShare,
+        float $trendNominalGdp,
+        float $totalTime,
+        float $secularExcessGrowth,
+        int $tick,
+        int $ticksPerYear,
+    ): ?array {
+        $balance = $this->recordAndBalance($stock, $annualCapacity, $addressableShare, $trendNominalGdp, $totalTime, $secularExcessGrowth, $tick, $ticksPerYear);
+        if ($balance === null) {
+            return null;
+        }
+
+        return [
+            'roster' => max($balance['roster_supply'], self::MIN_INDUSTRY_CAPACITY_RATIO - $balance['fringe_supply']),
+            'fringe' => $balance['fringe_supply'],
+        ];
+    }
+
+    /**
+     * Records this firm's capacity, striking its anchor if it has none, and strikes the industry balance with it in.
+     *
+     * @return array{supply_over_demand: float, roster_supply: float, fringe_supply: float, installed_capacity: float, trend_capacity: float, roster_trend_share: float}|null
+     */
+    private function recordAndBalance(
+        Stock $stock,
+        float $annualCapacity,
+        float $addressableShare,
+        float $trendNominalGdp,
+        float $totalTime,
+        float $secularExcessGrowth,
+        int $tick,
+        int $ticksPerYear,
+    ): ?array {
         $industry = $stock->getIndustry();
         $ticker = $stock->getTicker();
         if ($industry === null || $industry === '' || $ticker === ''
             || $annualCapacity <= 0.0 || $addressableShare <= 0.0 || $trendNominalGdp <= 0.0) {
-            return 1.0;
+            return null;
         }
 
         $records = $this->store->readIndustry($industry);
         $own = $records[$ticker] ?? null;
         $hasAnchor = $own !== null && (float) ($own['anchor_capacity_share'] ?? 0.0) > 0.0;
+        $outlook = $this->outlook($industry);
 
         // The anchor is struck once, the first time the ledger prices the firm: its plant then is trend
-        // plant, and its plant over its share is the market it sells into. Entry is neutral by construction.
+        // plant, and its plant over its share is the market it sells into as the public then saw it. Entry is
+        // neutral by construction.
         $record = [
             'revenue'               => (float) ($own['revenue'] ?? max(1.0, (float) $stock->getTotalRevenue())),
             'gain'                  => (float) ($own['gain'] ?? 0.0),
@@ -223,6 +274,7 @@ class IndustryShareLedger
             'anchor_capacity_share' => $hasAnchor ? (float) $own['anchor_capacity_share'] : $annualCapacity / $trendNominalGdp,
             'anchor_demand_share'   => $hasAnchor ? (float) $own['anchor_demand_share'] : $annualCapacity / (min(1.0, $addressableShare) * $trendNominalGdp),
             'anchor_time'           => $hasAnchor ? (float) $own['anchor_time'] : $totalTime,
+            'anchor_outlook'        => $hasAnchor ? (float) ($own['anchor_outlook'] ?? 0.0) : $outlook['belief'],
             'addressable_share'     => min(1.0, $addressableShare),
             'tick'                  => $tick,
             'consumed_tick'         => (int) ($own['consumed_tick'] ?? $tick),
@@ -230,9 +282,7 @@ class IndustryShareLedger
         $this->store->writeRecord($industry, $ticker, $record);
         $records[$ticker] = $record;
 
-        $balance = $this->capacityBalance($records, $ticker, $trendNominalGdp, $totalTime, $secularExcessGrowth, $tick, $ticksPerYear);
-
-        return $this->boundedCapacityRatio($balance['supply_over_demand']);
+        return $this->capacityBalance($records, $ticker, $trendNominalGdp, $totalTime, $secularExcessGrowth, $tick, $ticksPerYear, $outlook);
     }
 
     /**
@@ -250,7 +300,7 @@ class IndustryShareLedger
             return null;
         }
 
-        $growth = self::trendNominalGdp($macroState) * exp(TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->outlook((string) $stock->getIndustry())['belief']);
 
         return log($anchorShare * $growth / $capacity);
     }
@@ -327,7 +377,7 @@ class IndustryShareLedger
         $capacityRatio = null;
         $rosterTrendShare = null;
         if ($trend !== null && $own !== null && (float) ($own['anchor_capacity_share'] ?? 0.0) > 0.0) {
-            $balance = $this->capacityBalance($records, $ticker, $trend['trend_nominal_gdp'], $trend['total_time'], $trend['secular_excess_growth'], $tick, $ticksPerYear);
+            $balance = $this->capacityBalance($records, $ticker, $trend['trend_nominal_gdp'], $trend['total_time'], $trend['secular_excess_growth'], $tick, $ticksPerYear, $this->outlook($industry));
             $installedCapacity = $balance['installed_capacity'];
             $trendCapacity = $balance['trend_capacity'];
             $capacityRatio = $this->boundedCapacityRatio($balance['supply_over_demand']);
@@ -346,10 +396,15 @@ class IndustryShareLedger
 
     /**
      * The sum in the class comment over every anchored firm on the roster (this firm always, a peer while
-     * its record is under a year old): industry supply over demand, and the modelled plant behind it.
+     * its record is under a year old): industry supply over demand as the public sees it, and the modelled plant
+     * behind it. Trend plant and market grow by trendFactor(), so a revision of the outlook moves both and leaves the
+     * believed balance where it was. Against the TRUE demand the roster supplies its plant over each firm's market at
+     * the true level, and the fringe the plant it has built toward the belief; at an outlook of zero the two sum to the
+     * believed balance.
      *
-     * @param array<string, array{revenue: float, gain: float, capacity: float, anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, addressable_share: float, tick: int, consumed_tick: int}> $records
-     * @return array{supply_over_demand: float, installed_capacity: float, trend_capacity: float, roster_trend_share: float}
+     * @param array<string, ShareRecord> $records
+     * @param array{truth: float, belief: float, fringe: float} $outlook
+     * @return array{supply_over_demand: float, roster_supply: float, fringe_supply: float, installed_capacity: float, trend_capacity: float, roster_trend_share: float}
      */
     private function capacityBalance(
         array $records,
@@ -359,11 +414,14 @@ class IndustryShareLedger
         float $secularExcessGrowth,
         int $tick,
         int $ticksPerYear,
+        array $outlook,
     ): array {
         $excess = 0.0;
         $installed = 0.0;
         $trendCapacity = 0.0;
         $rosterTrendShare = 0.0;
+        $rosterSupply = 0.0;
+        $surprise = exp($outlook['truth'] - $outlook['belief']);
 
         foreach ($records as $peerTicker => $record) {
             if ((float) ($record['anchor_capacity_share'] ?? 0.0) <= 0.0) {
@@ -373,7 +431,7 @@ class IndustryShareLedger
                 continue;
             }
 
-            $growth = $trendNominalGdp * exp(TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $record['anchor_time'], $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+            $growth = self::trendFactor($record, $trendNominalGdp, $secularExcessGrowth, $totalTime, $outlook['belief']);
             $trendPlant = (float) $record['anchor_capacity_share'] * $growth;
             $trendDemand = (float) $record['anchor_demand_share'] * $growth;
             $capacity = max(0.0, (float) $record['capacity']);
@@ -381,16 +439,49 @@ class IndustryShareLedger
             $installed += $capacity;
             $trendCapacity += $trendPlant;
             $excess += ($capacity - $trendPlant) / max(1.0, $trendDemand);
+            $rosterSupply += $capacity / max(1.0, $trendDemand * $surprise);
             // Trend plant over trend demand is the anchor share itself: the growth factor cancels.
             $rosterTrendShare += $trendDemand > 0.0 ? $trendPlant / $trendDemand : 0.0;
         }
 
         return [
             'supply_over_demand' => 1.0 + $excess,
+            'roster_supply' => $rosterSupply,
+            'fringe_supply' => (1.0 - min(1.0, $rosterTrendShare)) * exp($outlook['fringe'] - $outlook['truth']),
             'installed_capacity' => $installed,
             'trend_capacity' => $trendCapacity,
             'roster_trend_share' => min(1.0, $rosterTrendShare),
         ];
+    }
+
+    /**
+     * What a firm's anchor plant and market have grown into by now as the public sees them: trend nominal GDP times the
+     * industry's expected path since the anchor (TimeSeries::fadedExcessIntegral()) and the public's revision of the
+     * industry's outlook since then. Every conversion between plant and anchor units goes through here.
+     *
+     * @param ShareRecord $record
+     */
+    private static function trendFactor(array $record, float $trendNominalGdp, float $secularExcessGrowth, float $totalTime, float $belief): float
+    {
+        return $trendNominalGdp * exp(
+            TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $record['anchor_time'], $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)
+            + $belief - (float) ($record['anchor_outlook'] ?? 0.0),
+        );
+    }
+
+    /**
+     * The industry's outlook in log (IndustryOutlook): the true level, the level the public expects, and the fringe's
+     * plant. All zero for an industry the outlook does not track.
+     *
+     * @return array{truth: float, belief: float, fringe: float}
+     */
+    private function outlook(string $industry): array
+    {
+        $record = $this->store->readOutlook($industry);
+
+        return $record === null
+            ? ['truth' => 0.0, 'belief' => 0.0, 'fringe' => 0.0]
+            : ['truth' => $record['x'], 'belief' => IndustryOutlook::belief($record), 'fringe' => $record['f']];
     }
 
     /**
@@ -433,7 +524,7 @@ class IndustryShareLedger
             return $this->describeRevenueMarket($stock, $own, $tick, $ticksPerYear);
         }
 
-        $growth = self::trendNominalGdp($macroState) * exp(TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->outlook((string) $stock->getIndustry())['belief']);
         $shares = $this->rosterTrendShares((string) $stock->getIndustry(), $stock->getTicker(), $tick, $ticksPerYear);
 
         return [
@@ -592,6 +683,7 @@ class IndustryShareLedger
             'anchor_capacity_share' => (float) ($own['anchor_capacity_share'] ?? 0.0),
             'anchor_demand_share'   => (float) ($own['anchor_demand_share'] ?? 0.0),
             'anchor_time'           => (float) ($own['anchor_time'] ?? 0.0),
+            'anchor_outlook'        => (float) ($own['anchor_outlook'] ?? 0.0),
             'addressable_share'     => (float) ($own['addressable_share'] ?? 0.0),
             'tick'                  => (int) $own['tick'],
             'consumed_tick'         => (int) $own['consumed_tick'],
@@ -648,7 +740,7 @@ class IndustryShareLedger
             return;
         }
 
-        $growth = $trendNominalGdp * exp(TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $own['anchor_time'], $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+        $growth = self::trendFactor($own, $trendNominalGdp, $secularExcessGrowth, $macroState->totalTime, $this->outlook((string) $stock->getIndustry())['belief']);
         $own['anchor_capacity_share'] = max(0.0, (float) $own['anchor_capacity_share'] + ($capacityDelta / $growth));
         $own['capacity'] = max(0.0, (float) $own['capacity'] + $capacityDelta);
 

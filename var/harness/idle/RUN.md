@@ -14,6 +14,14 @@ board, and where does it bind?
   - `base`: `BASE=<tree>` required: `git archive <commit>` + `vendor` symlink, kept OUTSIDE the repo (scratchpad) so
     git and PHPStan do not see it; delete it and `var/harness/cache-<basename>` afterwards.
   - `ovr`: working tree with src copies under `ovr/` in front (bootstrap `OVR`); `ovr/` currently deleted.
+  - `off`, `on` (industry outlook, section e): `off` = working tree as committed; `on` = working tree + `ovr_on/`
+    (IndustryOutlooks DEFAULT_DRIFT_VOL 0.08) with `OUTLOOK_SALT=1` (onStart pre-writes salt 1000+SEED). Every arm
+    logs the outlook state per quarter to `runs/<arm>-<seed><TAG>.outlook.json` when the store has readOutlooks.
+    Paths for this run: `TAG=-oc` (recorded on the 2a working tree), logs in `logs-oc/`.
+
+      TAG=-oc LOGS=var/harness/idle/logs-oc BASE=<tree> bin/harness-batch var/harness/idle/run.sh 1-4 base off on
+      TAG=-oc python3 var/harness/idle/analyse_shortage.py 1,2,3,4 off on; python3 var/harness/idle/analyse_outlook.py 1,2,3,4 on -oc
+
   - `probe`: working tree + `ovr_probe/` (CapitalBudgetEngine copy that logs the growth-capex gate for
     `PROBE_TICKER`, default FALC, into IDLE_OUT `probe`). STALE since section d: re-copy it from src before use.
     `analyse_probe.py <seed> <ticker> <y0> <y1>` prints per-year gate and funding and checks probe OUT == fix OUT.

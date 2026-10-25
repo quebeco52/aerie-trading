@@ -131,6 +131,10 @@ class StockTracker
          * with nothing to say so. Holds only a per-tick price map, so a harness builds one free.
          */
         private \App\Service\Corporate\Holdings\AnchorStakeLedger $anchorStakes = new \App\Service\Corporate\Holdings\AnchorStakeLedger(),
+        /**
+         * Industry outlooks, stepped before any report reads them; null (unit tests) leaves every outlook unchanged.
+         */
+        private ?\App\Service\Corporate\Industry\IndustryOutlook $industryOutlook = null,
     ) {}
 
     /**
@@ -160,6 +164,8 @@ class StockTracker
         );
         // The stamp duty the Diet has in force thins every name's turnover, and so its depth, this tick.
         $this->liquidityEngine->setStampDutyRate($macroDTO->stampDutyRate);
+        // Every industry's outlook moves at the quarter's turn, before any report this tick reads it.
+        $this->industryOutlook?->advance($stocks, $macroDTO, $tickCount, $ticksPerYear);
 
         $board = new BoardTick(
             $macroDTO,

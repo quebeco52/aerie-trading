@@ -89,3 +89,30 @@ empire_builder) and CASC s6 events are gone.
 Year 20 ND/EBITDA base/fix/fix2 and price level base/fix2: LOON 2.08/2.95/2.96, 1.111/1.006; SKUA 1.93/2.56/2.66,
 1.111/1.007; FALC 2.23/2.20/2.11, 1.010/1.009; SGRB 1.23/1.40/1.36, 1.015/0.998; PHIL 1.36/1.46/1.47, 1.022/0.998;
 CASC 2.12/2.39/2.02, 1.005/1.005.
+
+## 2026-10-25 (e) industry outlook 2a (working tree vs 77b848e4)
+
+Macro paths re-recorded on the 2a working tree (`TAG=-oc`), 4 seeds x 20y, TPY 360. Arms base (77b848e4 tree in
+scratchpad, deleted), off (working tree), on (`ovr_on/`, drift vol 0.08, half-life 2y, salt 1000+seed). Tables
+`outlook_off.out`, `outlook_on.out`, `outlook_state.out`.
+
+1) OFF vs base: float drift only (all 4 seeds diverge from t 0.14-0.33 at the 16th digit of expected revenue).
+Moments inside noise: defaults+deaths 0.50 -> 0.25 (t -1.0), B-or-worse +0.08pp (t 1.5), cap -0.63tn (0.63) t -1.0,
+op margin +0.01pp (t 0.1), price level p99 y10-20 -0.002 (t -1.8); capex/rev +0.08pp (0.02) t 3.6, about 1% of the
+level, the one column past 2.
+
+2) ON vs OFF:
+- exp(x) at y20: cross-industry sd 0.33-0.42 (random walk reference 0.08 x sqrt 20 = 0.36), min 0.36-0.50, max
+  1.83-2.53. No mean reversion, so dispersion keeps growing as sqrt(t).
+- Belief error |b - x|: mean 0.10 (all quarters and y20), max at y20 0.23-0.33. CROP s2 believed 1.35-1.38 while the
+  truth was 0.89-0.99 (y4-6).
+- Zero-sum: max |sum w e^x / sum w - 1| = 8.9e-16.
+- Price level min 0.972 -> 0.850, p1 0.988 -> 0.895, p99 1.026 -> 1.143, max 1.038 -> 1.247; share > 1.05 in
+  y10-20 0 -> 15.5%; idle firm-quarters 14.5 -> 66 per seed.
+- defaults+deaths 0.25 -> 1.75 per seed (+1.5 (0.5) t 3.0); B-or-worse 0.92% -> 1.49% (t 3.1); cap -1.20tn (0.83)
+  t -1.4; op margin +0.61pp (0.28) t 2.1; realised vol (quarterly, annualised) 0.349 -> 0.348 (t -0.2); median
+  current vol t -1.0; median ND/EBITDA -0.13 (t -3.3).
+- Events (on): s1 WEAV failed y12.1 (Internet Retail, true demand 0.53-0.64 by y8-12, belief above it); s2 CROP failed
+  y9.8 (Farm Products, truth 0.75-0.81 at y8-10); s4 TERN failed y12.4 after reorg y4.7 (Airlines, truth 0.62-0.65 in
+  y6-10); s4 PELI reorg y14.1 (Healthcare Plans, truth 0.70). None of the three failing firms ever idled plant
+  (prices 0.86-0.93): they lost volume against a fixed cost base. No explosions.

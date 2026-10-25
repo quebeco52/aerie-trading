@@ -196,50 +196,50 @@ class FirmEconomicsTest extends TestCase
         $cournot = FirmEconomics::calculateCournotPriceLevel(1.2, 1.25);
 
         // No fringe elasticity, or no fringe at all, is the plain Cournot level.
-        $this->assertEqualsWithDelta($cournot, FirmEconomics::calculateFringeAdjustedPriceLevel(1.2, 0.4, 1.25, 0.0), 1e-12);
-        $this->assertEqualsWithDelta($cournot, FirmEconomics::calculateFringeAdjustedPriceLevel(1.2, 1.0, 1.25, 1.0), 1e-12);
+        $this->assertEqualsWithDelta($cournot, FirmEconomics::calculateFringeAdjustedPriceLevel(0.6, 0.6, 1.25, 0.0), 1e-12);
+        $this->assertEqualsWithDelta($cournot, FirmEconomics::calculateFringeAdjustedPriceLevel(1.2, 0.0, 1.25, 1.0), 1e-12);
         // A balanced industry clears at one whatever the fringe does.
-        $this->assertEqualsWithDelta(1.0, FirmEconomics::calculateFringeAdjustedPriceLevel(1.0, 0.4, 1.25, 1.0), 1e-9);
+        $this->assertEqualsWithDelta(1.0, FirmEconomics::calculateFringeAdjustedPriceLevel(0.4, 0.6, 1.25, 1.0), 1e-9);
 
         // With a responsive fringe the overbuild is partly absorbed by fringe exit: the price sits between
         // the Cournot level and one, and the solution satisfies the market-clearing identity exactly.
-        $adjusted = FirmEconomics::calculateFringeAdjustedPriceLevel(1.2, 0.4, 1.25, 1.0);
+        $adjusted = FirmEconomics::calculateFringeAdjustedPriceLevel(0.6, 0.6, 1.25, 1.0);
         $this->assertGreaterThan($cournot, $adjusted);
         $this->assertLessThan(1.0, $adjusted);
-        $this->assertEqualsWithDelta(0.4 + 0.2 + 0.6 * $adjusted, $adjusted ** -1.25, 1e-9, 'roster + excess + fringe supply = demand');
+        $this->assertEqualsWithDelta(0.6 + 0.6 * $adjusted, $adjusted ** -1.25, 1e-9, 'roster + fringe supply = demand');
 
         // A more elastic fringe absorbs more; a larger fringe absorbs more.
-        $this->assertGreaterThan($adjusted, FirmEconomics::calculateFringeAdjustedPriceLevel(1.2, 0.4, 1.25, 2.0));
-        $this->assertGreaterThan($adjusted, FirmEconomics::calculateFringeAdjustedPriceLevel(1.2, 0.2, 1.25, 1.0));
+        $this->assertGreaterThan($adjusted, FirmEconomics::calculateFringeAdjustedPriceLevel(0.6, 0.6, 1.25, 2.0));
+        $this->assertGreaterThan($adjusted, FirmEconomics::calculateFringeAdjustedPriceLevel(0.4, 0.8, 1.25, 1.0));
         // A hole (capacity short of trend) is likewise partly refilled: dearer than one, cheaper than Cournot.
-        $short = FirmEconomics::calculateFringeAdjustedPriceLevel(0.8, 0.4, 1.25, 1.0);
+        $short = FirmEconomics::calculateFringeAdjustedPriceLevel(0.2, 0.6, 1.25, 1.0);
         $this->assertGreaterThan(1.0, $short);
         $this->assertLessThan(FirmEconomics::calculateCournotPriceLevel(0.8, 1.25), $short);
-        $this->assertSame(1.0, FirmEconomics::calculateFringeAdjustedPriceLevel(0.0, 0.4, 1.25, 1.0));
+        $this->assertSame(1.0, FirmEconomics::calculateFringeAdjustedPriceLevel(-0.6, 0.6, 1.25, 1.0));
     }
 
     public function testIndustryClearingHoldsTheFloorAndIdlesThePlantBuyersDoNotTake(): void
     {
         // Above the floor it is the fringe-adjusted level with every plant running.
-        $unfloored = FirmEconomics::calculateFringeAdjustedPriceLevel(1.6, 0.4, 1.25, 1.0);
-        $this->assertSame(['price' => $unfloored, 'load' => 1.0], FirmEconomics::calculateIndustryClearing(1.6, 0.4, 1.25, 1.0, $unfloored - 0.01));
+        $unfloored = FirmEconomics::calculateFringeAdjustedPriceLevel(1.0, 0.6, 1.25, 1.0);
+        $this->assertSame(['price' => $unfloored, 'load' => 1.0], FirmEconomics::calculateIndustryClearing(1.0, 0.6, 1.25, 1.0, $unfloored - 0.01));
 
         // Below it the price holds and the roster sells what buyers take after the fringe: demand = roster sales +
         // fringe.
         $floor = $unfloored + 0.05;
-        $cleared = FirmEconomics::calculateIndustryClearing(1.6, 0.4, 1.25, 1.0, $floor);
+        $cleared = FirmEconomics::calculateIndustryClearing(1.0, 0.6, 1.25, 1.0, $floor);
         $this->assertSame($floor, $cleared['price']);
         $this->assertLessThan(1.0, $cleared['load']);
-        $this->assertEqualsWithDelta($floor ** -1.25, (1.6 - 0.6) * $cleared['load'] + 0.6 * $floor, 1e-12, 'buyers take what is sold');
+        $this->assertEqualsWithDelta($floor ** -1.25, 1.0 * $cleared['load'] + 0.6 * $floor, 1e-12, 'buyers take what is sold');
 
         // Continuous through the floor, and a deeper glut idles more of the plant.
-        $this->assertEqualsWithDelta(1.0, FirmEconomics::calculateIndustryClearing(1.6, 0.4, 1.25, 1.0, $unfloored + 1e-9)['load'], 1e-6);
-        $this->assertLessThan($cleared['load'], FirmEconomics::calculateIndustryClearing(2.4, 0.4, 1.25, 1.0, $floor)['load']);
+        $this->assertEqualsWithDelta(1.0, FirmEconomics::calculateIndustryClearing(1.0, 0.6, 1.25, 1.0, $unfloored + 1e-9)['load'], 1e-6);
+        $this->assertLessThan($cleared['load'], FirmEconomics::calculateIndustryClearing(1.8, 0.6, 1.25, 1.0, $floor)['load']);
 
         // A fringe fixed at trend still answers for its share; a roster with no plant left has nothing to idle.
-        $fixedFringe = FirmEconomics::calculateIndustryClearing(1.6, 0.4, 1.25, 0.0, 0.9);
+        $fixedFringe = FirmEconomics::calculateIndustryClearing(1.0, 0.6, 1.25, 0.0, 0.9);
         $this->assertEqualsWithDelta(0.9 ** -1.25, 1.0 * $fixedFringe['load'] + 0.6, 1e-12);
-        $this->assertSame(1.0, FirmEconomics::calculateIndustryClearing(0.5, 0.4, 1.25, 1.0, 2.0)['load']);
+        $this->assertSame(1.0, FirmEconomics::calculateIndustryClearing(-0.1, 0.6, 1.25, 1.0, 2.0)['load']);
     }
 
     public function testFringeAdjustedElasticityAddsTheFringesSupplyResponseOnItsShare(): void

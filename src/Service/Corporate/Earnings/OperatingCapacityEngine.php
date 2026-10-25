@@ -401,8 +401,9 @@ final class OperatingCapacityEngine
         }
 
         // The roster is not the industry: the firm's build weighs on the industry price by its share of the
-        // market it sells into, the same share the saturation penalty is struck on.
-        $capacityRatio = $this->industryShareLedger->resolveIndustryCapacityRatio(
+        // market it sells into, the same share the saturation penalty is struck on. Supply is struck against the
+        // industry's true demand, which the plan only knows through the public outlook.
+        $supply = $this->industryShareLedger->resolveIndustrySupply(
             $ctx->stock,
             $ctx->structuralRevenue * EarningsEngine::TTM_QUARTERS,
             $ctx->addressableShare,
@@ -412,11 +413,17 @@ final class OperatingCapacityEngine
             $ctx->tickCount,
             $ctx->ticksPerYear,
         );
-        $rosterShare = $this->industryShareLedger->resolveRosterTrendShare($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear);
+        if ($supply === null) {
+            return [1.0, 1.0];
+        }
 
         $marginalRevenue = FirmEconomics::calculateCournotMarginalRevenueFactor(
             $ctx->addressableShare,
-            FirmEconomics::fringeAdjustedDemandElasticity(FinancialConstants::COURNOT_DEMAND_ELASTICITY, self::FRINGE_SUPPLY_ELASTICITY, $rosterShare),
+            FirmEconomics::fringeAdjustedDemandElasticity(
+                FinancialConstants::COURNOT_DEMAND_ELASTICITY,
+                self::FRINGE_SUPPLY_ELASTICITY,
+                1.0 - ($supply['fringe'] / max(1e-9, $supply['roster'] + $supply['fringe'])),
+            ),
             $substitutability,
         );
         $withholdingPrice = $marginalRevenue > 0.0 ? min(1.0, $avoidableCostRatio / $marginalRevenue) : 1.0;
@@ -424,8 +431,8 @@ final class OperatingCapacityEngine
         // The roster is priced as dominant firms against a competitive fringe that answers the price: an
         // overbuild is partly absorbed by fringe exit, a hole left by a failed firm partly refilled.
         $clearing = FirmEconomics::calculateIndustryClearing(
-            $capacityRatio,
-            $rosterShare,
+            $supply['roster'],
+            $supply['fringe'],
             FinancialConstants::COURNOT_DEMAND_ELASTICITY,
             self::FRINGE_SUPPLY_ELASTICITY,
             max(1.0 - FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, $withholdingPrice),

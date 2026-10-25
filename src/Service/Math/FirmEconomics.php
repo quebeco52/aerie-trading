@@ -136,31 +136,29 @@ final class FirmEconomics
 
     /**
      * The price level an industry clears at once the competitive fringe has answered it (Forchheimer dominant
-     * firm with a price-taking fringe). The modelled roster holds its plant fixed at rosterShare + excess of
-     * trend demand; the fringe supplies (1 - rosterShare) * P^eta; demand is P^(-e). The clearing price solves
-     *   rosterShare + excess + (1 - rosterShare) * P^eta = P^(-e),
-     * which is the plain Cournot level when eta = 0 or the roster is the whole market. Overbuilding is then
-     * partly absorbed by fringe exit rather than carried forever as a price cut.
+     * firm with a price-taking fringe). The modelled roster holds its plant fixed at rosterSupply of trend demand; the
+     * fringe supplies fringeSupply * P^eta from the plant it has; demand is P^(-e). The clearing price solves
+     *   rosterSupply + fringeSupply * P^eta = P^(-e),
+     * which is the plain Cournot level when eta = 0 or there is no fringe. Overbuilding is then partly absorbed by
+     * fringe exit rather than carried forever as a price cut.
      *
-     * @param float $capacityRatio     Installed supply over trend demand at the trend price, already bounded.
-     * @param float $rosterShare       The modelled roster's trend share of the market it sells into (0..1).
-     * @param float $elasticity        Industry price elasticity of demand (must be positive).
-     * @param float $fringeElasticity  Long-run supply elasticity of the fringe (0 = fixed at trend).
+     * @param float $rosterSupply     The roster's installed plant over trend demand at the trend price.
+     * @param float $fringeSupply     The fringe's plant over trend demand at the trend price (its share at balance).
+     * @param float $elasticity       Industry price elasticity of demand (must be positive).
+     * @param float $fringeElasticity Long-run supply elasticity of the fringe (0 = fixed at its plant).
      */
-    public static function calculateFringeAdjustedPriceLevel(float $capacityRatio, float $rosterShare, float $elasticity, float $fringeElasticity): float
+    public static function calculateFringeAdjustedPriceLevel(float $rosterSupply, float $fringeSupply, float $elasticity, float $fringeElasticity): float
     {
-        if ($capacityRatio <= 0.0 || $elasticity <= 0.0) {
+        $fringeSupply = max(0.0, $fringeSupply);
+        if ($rosterSupply + $fringeSupply <= 0.0 || $elasticity <= 0.0) {
             return 1.0;
         }
-        $rosterShare = max(0.0, min(1.0, $rosterShare));
-        $fringeShare = 1.0 - $rosterShare;
-        if ($fringeElasticity <= 0.0 || $fringeShare <= 0.0) {
-            return self::calculateCournotPriceLevel($capacityRatio, $elasticity);
+        if ($fringeElasticity <= 0.0 || $fringeSupply <= 0.0) {
+            return self::calculateCournotPriceLevel($rosterSupply + $fringeSupply, $elasticity);
         }
 
-        // f(P) = roster + excess + fringe * P^eta - P^(-e) rises monotonically in P; bracket and bisect.
-        $rosterSupply = $capacityRatio - $fringeShare;
-        $f = fn(float $p): float => $rosterSupply + $fringeShare * ($p ** $fringeElasticity) - ($p ** (-$elasticity));
+        // f(P) = roster + fringe * P^eta - P^(-e) rises monotonically in P; bracket and bisect.
+        $f = fn(float $p): float => $rosterSupply + $fringeSupply * ($p ** $fringeElasticity) - ($p ** (-$elasticity));
         $low = 0.05;
         $high = 20.0;
         if ($f($low) >= 0.0) {
@@ -184,26 +182,24 @@ final class FirmEconomics
     /**
      * Where an industry clears when its roster sells no lower than a floor price: the fringe-adjusted level while that
      * stays at or above the floor; below it the price holds at the floor, buyers take Pf^(-e), the fringe supplies
-     * (1 - rosterShare) * Pf^eta, and the roster sells the rest with its other plant idle. Load is the share of the
-     * roster's plant that sells, one until the floor binds and continuous through it.
+     * fringeSupply * Pf^eta, and the roster sells the rest with its other plant idle. Load is the share of the roster's
+     * plant that sells, one until the floor binds and continuous through it.
      *
-     * @param float $capacityRatio Installed supply over trend demand at the trend price.
-     * @param float $priceFloor    Lowest industry price the roster sells at; below it, it withholds output instead.
+     * @param float $rosterSupply The roster's installed plant over trend demand at the trend price.
+     * @param float $fringeSupply The fringe's plant over trend demand at the trend price.
+     * @param float $priceFloor   Lowest industry price the roster sells at; below it, it withholds output instead.
      * @return array{price: float, load: float}
      */
-    public static function calculateIndustryClearing(float $capacityRatio, float $rosterShare, float $elasticity, float $fringeElasticity, float $priceFloor): array
+    public static function calculateIndustryClearing(float $rosterSupply, float $fringeSupply, float $elasticity, float $fringeElasticity, float $priceFloor): array
     {
-        $price = self::calculateFringeAdjustedPriceLevel($capacityRatio, $rosterShare, $elasticity, $fringeElasticity);
-        $fringeShare = 1.0 - max(0.0, min(1.0, $rosterShare));
-        $rosterPlant = $capacityRatio - $fringeShare;
-        if ($price >= $priceFloor || $elasticity <= 0.0 || $rosterPlant <= 0.0) {
+        $price = self::calculateFringeAdjustedPriceLevel($rosterSupply, $fringeSupply, $elasticity, $fringeElasticity);
+        if ($price >= $priceFloor || $elasticity <= 0.0 || $rosterSupply <= 0.0) {
             return ['price' => $price, 'load' => 1.0];
         }
 
-        $fringeSupply = $fringeShare * ($priceFloor ** max(0.0, $fringeElasticity));
-        $rosterSales = ($priceFloor ** (-$elasticity)) - $fringeSupply;
+        $rosterSales = ($priceFloor ** (-$elasticity)) - (max(0.0, $fringeSupply) * ($priceFloor ** max(0.0, $fringeElasticity)));
 
-        return ['price' => $priceFloor, 'load' => max(0.0, min(1.0, $rosterSales / $rosterPlant))];
+        return ['price' => $priceFloor, 'load' => max(0.0, min(1.0, $rosterSales / $rosterSupply))];
     }
 
     /**

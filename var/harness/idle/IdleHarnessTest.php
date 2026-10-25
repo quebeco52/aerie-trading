@@ -18,8 +18,40 @@ final class IdleHarnessTest extends BoardRun
     /** @var array<string, float> */
     private array $openingRevenue = [];
 
+    /** @var list<array{float, int, array<string, mixed>}> Outlook state per quarter (OUTLOOK_OUT). */
+    private array $outlookRows = [];
+    private int $outlookQuarter = -2;
+
+    private function outlookStore(): ?object
+    {
+        $id = 'App\\Service\\Corporate\\Industry\\IndustryShareStoreInterface';
+        $store = static::getContainer()->has($id) ? static::getContainer()->get($id) : null;
+
+        return $store !== null && method_exists($store, 'readOutlooks') ? $store : null;
+    }
+
+    /** OUTLOOK_SALT=1 pre-writes the outlook salt 1000 + SEED so the outlook draws repeat across runs. */
+    protected function afterStocks(array $result): void
+    {
+        if (!getenv('OUTLOOK_OUT') || ($store = $this->outlookStore()) === null) {
+            return;
+        }
+        $state = $store->readOutlooks();
+        if ($state !== null && $state['quarter'] !== $this->outlookQuarter) {
+            $this->outlookQuarter = $state['quarter'];
+            $rows = [];
+            foreach ($state['industries'] as $industry => $r) {
+                $rows[$industry] = [$r['x'], $r['m'], $r['v'], $r['f'], $r['w']];
+            }
+            $this->outlookRows[] = [round($this->currentTime, 3), $state['quarter'], $rows];
+        }
+    }
+
     protected function onStart(): void
     {
+        if (getenv('OUTLOOK_SALT') && ($store = $this->outlookStore()) !== null) {
+            $store->writeOutlooks(['salt' => 1000 + $this->seed, 'quarter' => -1, 'industries' => []]);
+        }
         foreach ($this->stocks as $ticker => $stock) {
             $this->openingRevenue[$ticker] = (float) $stock->getTotalRevenue();
         }
@@ -43,6 +75,9 @@ final class IdleHarnessTest extends BoardRun
 
     protected function onEnd(): void
     {
+        if (getenv('OUTLOOK_OUT')) {
+            file_put_contents((string) getenv('OUTLOOK_OUT'), json_encode(['quarters' => $this->outlookRows]));
+        }
         $out = getenv('IDLE_OUT');
         if ($out) {
             file_put_contents($out, json_encode(['rows' => $this->idleRows, 'opening' => $this->openingRevenue, 'probe' => $GLOBALS['IDLE_PROBE'] ?? []]));
