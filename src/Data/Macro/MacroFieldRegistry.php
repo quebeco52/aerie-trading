@@ -196,6 +196,7 @@ final class MacroFieldRegistry
         'outputGapLag12m' => 'outputGapEma',
         'outputGapLag15m' => 'outputGapEma',
         'outputGapLag18m' => 'outputGapEma',
+        'monetaryStanceTrend' => 'monetaryStanceTransmitted',
     ];
 
     /**

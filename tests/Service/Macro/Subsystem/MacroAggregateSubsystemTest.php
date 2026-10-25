@@ -20,6 +20,7 @@ use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
@@ -903,7 +904,8 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * A rise in short-horizon expectations lowers the real policy leg and lifts demand; the fixed-rate leg is unmoved.
+     * A rise in short-horizon expectations lowers the real policy leg and lifts demand, as easing does; the fixed-rate
+     * leg is unmoved.
      */
     public function testHigherExpectedInflationLowersTheRealPolicyLegOnly(): void
     {
@@ -915,9 +917,10 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $gapUnanchored = $this->subsystem->calculateOutputGap($unanchored, 0.035, MacroConstants::BASE_NATURAL_RATE, 0.03, 0.25, 1.0);
 
-        // One percentage point of expected inflation on a 0.50 policy leg is 50bps of real easing, through the drag
-        // coefficient over a quarter, of which a one-quarter step has passed w^2 through the two Pascal stages.
-        $expectedLift = OutputGap::DOMESTIC_GAP_WEIGHT * DomesticDemand::KALDOR_MONETARY_DRAG * DomesticDemand::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        // One percentage point of expected inflation on the policy leg is real easing below the stance borrowers are
+        // used to, through the drag at the easing share over a quarter, of which a one-quarter step has passed w^2
+        // through the two Pascal stages.
+        $expectedLift = OutputGap::DOMESTIC_GAP_WEIGHT * FinancialConstants::RATE_EASING_SLOPE_SHARE * DomesticDemand::KALDOR_MONETARY_DRAG * DomesticDemand::BORROWING_POLICY_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapUnanchored - $gapAnchored, 1e-9);
     }
 
@@ -939,22 +942,25 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
-     * The District borrows at floating rates, so easing does not push on a string (Tenreyro & Thwaites 2016): an equal
-     * real-rate move either side of neutral lifts demand as much as it cuts it.
+     * Easing pushes on a string (Tenreyro & Thwaites 2016): from neutral on both legs, the stance borrowers are used to
+     * here, an equal real-rate move lifts demand by the easing share of what it cuts.
      */
-    public function testAnEqualEasingLiftsDemandAsMuchAsTighteningCutsIt(): void
+    public function testAnEqualEasingLiftsDemandByTheEasingShareOfWhatTighteningCuts(): void
     {
         $neutral = $this->neutralBorrowingState();
         $tight = $this->neutralBorrowingState();
         $easy = $this->neutralBorrowingState();
+        // The five-year at its neutral, term premium included, so the fixed-rate leg adds no stance of its own.
+        $neutral5y = $neutral->policyRate + (MacroConstants::NS_BASE_TERM_PREMIUM * FixedIncome::calculateTermPremiumDurationScale(5.0, MacroConstants::TERM_PREMIUM_DURATION_HORIZON_YEARS));
 
-        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
-        $gapTight = $this->subsystem->calculateOutputGap($tight, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION - 0.01, 0.25, 1.0);
-        $gapEasy = $this->subsystem->calculateOutputGap($easy, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION + 0.01, 0.25, 1.0);
+        $gapNeutral = $this->subsystem->calculateOutputGap($neutral, $neutral5y, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
+        $gapTight = $this->subsystem->calculateOutputGap($tight, $neutral5y, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION - 0.01, 0.25, 1.0);
+        $gapEasy = $this->subsystem->calculateOutputGap($easy, $neutral5y, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION + 0.01, 0.25, 1.0);
+        $this->assertEqualsWithDelta(0.0, $neutral->monetaryStanceStage1, 1e-15, 'Both legs sit at neutral.');
 
         $this->assertLessThan($gapNeutral, $gapTight);
         $this->assertGreaterThan($gapNeutral, $gapEasy);
-        $this->assertEqualsWithDelta($gapNeutral - $gapTight, $gapEasy - $gapNeutral, 1e-12);
+        $this->assertEqualsWithDelta(FinancialConstants::RATE_EASING_SLOPE_SHARE * ($gapNeutral - $gapTight), $gapEasy - $gapNeutral, 1e-12);
     }
 
     /**
@@ -1029,7 +1035,8 @@ class MacroAggregateSubsystemTest extends TestCase
 
     /**
      * The fixed-rate leg is the real five-year: the breakeven deflates it, so a higher breakeven at the same nominal
-     * yield is easier money.
+     * yield is easier money, lifting demand at the easing share from a stance already easier than borrowers are used
+     * to.
      */
     public function testAHigherBreakevenAtTheSameNominalFiveYearIsEasierMoney(): void
     {
@@ -1040,7 +1047,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $gapAnchored = $this->subsystem->calculateOutputGap($anchored, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
         $gapRepriced = $this->subsystem->calculateOutputGap($repriced, 0.035, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, 0.25, 1.0);
 
-        $expectedLift = OutputGap::DOMESTIC_GAP_WEIGHT * DomesticDemand::KALDOR_MONETARY_DRAG * DomesticDemand::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
+        $this->assertLessThan(0.0, $anchored->monetaryStanceStage1, 'The anchored stance already sits on the easy side.');
+        $expectedLift = OutputGap::DOMESTIC_GAP_WEIGHT * FinancialConstants::RATE_EASING_SLOPE_SHARE * DomesticDemand::KALDOR_MONETARY_DRAG * DomesticDemand::BORROWING_YIELD5Y_WEIGHT * 0.01 * $this->pascalPassThrough(0.25) * 0.25;
         $this->assertEqualsWithDelta($expectedLift, $gapRepriced - $gapAnchored, 1e-9);
     }
 

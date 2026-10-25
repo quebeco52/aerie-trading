@@ -56,6 +56,12 @@ final class MovingAverages
     /** Horizon (years) of the excess bond premium's trend the demand drag reads: a decade, past a credit cycle. */
     public const CREDIT_PREMIUM_TREND_YEARS = 10.0;
     /**
+     * Horizon (years) of the real-rate stance borrowers are used to, which the monetary drag tells tightening from
+     * easing against: a decade, past a rate cycle, so a cycle reads as moves and a stance held that long is in loan
+     * sizes.
+     */
+    public const MONETARY_STANCE_TREND_YEARS = 10.0;
+    /**
      * Horizon (years) of the energy and freight trends the supply drags read: a decade, past the few-year swings that
      * are shocks.
      */
@@ -161,6 +167,7 @@ final class MovingAverages
         $state->freightRateIndexEma += $emaWeight * ($state->freightRateIndex - $state->freightRateIndexEma);
         $state->freightRateIndexDecadeTrend += $supplyCostTrendWeight * ($state->freightRateIndexEma - $state->freightRateIndexDecadeTrend);
         $state->excessBondPremiumTrend = TimeSeries::calculateDistributedLag($state->excessBondPremiumTrend, $state->excessBondPremium, $dt, self::CREDIT_PREMIUM_TREND_YEARS);
+        $state->monetaryStanceTrend = TimeSeries::calculateDistributedLag($state->monetaryStanceTrend, $state->monetaryStanceTransmitted, $dt, self::MONETARY_STANCE_TREND_YEARS);
         $state->interbankLiquiditySpreadEma += $emaWeight * ($state->interbankLiquiditySpread - $state->interbankLiquiditySpreadEma);
         $spreadTrendWeight = TimeSeries::smoothingWeight($dt, self::SPREAD_TREND_YEARS);
         $state->interbankLiquiditySpreadTrend += $spreadTrendWeight * ($state->interbankLiquiditySpreadEma - $state->interbankLiquiditySpreadTrend);

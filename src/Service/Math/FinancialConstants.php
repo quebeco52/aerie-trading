@@ -178,8 +178,10 @@ class FinancialConstants
 
     // --- Monetary Stance Transmission ---
     /**
-     * Share of the tightening slope an easy real-rate stance gives back to rate-sensitive orders: policy pushes on a
-     * string below neutral (Tenreyro & Thwaites 2016).
+     * Share of the tightening slope easing gives back to rate-sensitive orders and to the demand the collateral channel
+     * moves: policy pushes on a string. Half, inside the range estimates span: near nothing in US data (Angrist, Jorda
+     * & Kuersteiner 2018; Barnichon & Matthes 2018), somewhat under tightening (Tenreyro & Thwaites 2016), the same
+     * sign in the euro area.
      */
     public const RATE_EASING_SLOPE_SHARE = 0.50;
 

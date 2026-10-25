@@ -320,6 +320,7 @@ class MacroState
     // Monetary transmission: the real-rate stance through two Pascal stages (Solow 1960) on its way to demand.
     public float $monetaryStanceStage1;
     public float $monetaryStanceTransmitted;
+    public float $monetaryStanceTrend;
 
     public float $supercoreInflation;
     public float $supercoreInflationEma;

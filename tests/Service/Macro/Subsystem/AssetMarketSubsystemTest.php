@@ -920,7 +920,7 @@ class AssetMarketSubsystemTest extends TestCase
         $restOfWorld = 1.0 - AssetMarketSubsystem::DOMESTIC_DEMAND_WEIGHT - AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT;
         $expectedGlobal = (AssetMarketSubsystem::DOMESTIC_DEMAND_WEIGHT * $state->outputGap) + (AssetMarketSubsystem::MAINLAND_DEMAND_WEIGHT * $state->foreignOutputGap) + ($restOfWorld * $state->worldActivityGap);
         $this->assertEqualsWithDelta($expectedGlobal, $state->globalDemandGap, 1e-9, 'World demand weighs the three economies at their GDP shares.');
-        $this->assertEqualsWithDelta(0.63, $restOfWorld, 0.01, 'Most of the world is neither the District nor the mainland.');
+        $this->assertEqualsWithDelta(0.685, $restOfWorld, 0.01, 'Most of the world is neither the District nor the mainland.');
     }
 
     /**

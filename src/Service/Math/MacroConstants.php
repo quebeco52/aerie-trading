@@ -180,8 +180,11 @@ final class MacroConstants
     public const MAINLAND_NEUTRAL_RATE = self::BASE_NATURAL_RATE + self::TARGET_INFLATION;
 
     // --- The District in Dollars (World Bank NY.GDP.MKTP.CD, 2023) ---
-    /** District GDP at the opening: the world's third economy, between China's $18.3T and Germany's $4.6T. */
-    public const DISTRICT_GDP_USD = 12.0e12;
+    /**
+     * District GDP at the opening: the world's third economy, between China's $18.3T and Germany's $4.6T. Its listed
+     * giants earn much of their revenue on the mainland and abroad, so the board is worth several times it.
+     */
+    public const DISTRICT_GDP_USD = 6.0e12;
     /** Equity volatility above which flight-to-safety flows begin, for both the FX bid and the term premium. */
     public const FLIGHT_TO_SAFETY_VOL_THRESHOLD = 0.25;
 

@@ -7,6 +7,7 @@ namespace App\Service\Macro\Subsystem\Aggregate;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\ResponseCurves;
@@ -49,10 +50,10 @@ final class DomesticDemand
     public const EQUITY_WEALTH_MPC = 0.032;
     /**
      * Share of the board District households own themselves, directly and through funds (the holdings the MPC is
-     * measured on): a financial centre whose listed giants earn abroad, the UK's 20.4% (ONS, Ownership of UK quoted
-     * shares 2020: individuals 12.0%, unit trusts 7.4%, investment trusts 1.0%; the rest of the world holds 56.3%).
+     * measured on), 10.2%: giants that earn abroad are owned abroad. Half the UK's 20.4% (ONS, Ownership of UK quoted
+     * shares 2020); Dutch investors of every kind hold about 10% of Amsterdam-listed shares (CBS, end-2024).
      */
-    public const DISTRICT_HOUSEHOLD_EQUITY_SHARE = 0.204;
+    public const DISTRICT_HOUSEHOLD_EQUITY_SHARE = 0.102;
     /**
      * Demand drift per unit of equity wealth above the level households are used to: the MPC on the part of the board
      * households own, which is sized against District GDP already, so domestic demand's share is undone. Foreign
@@ -78,10 +79,11 @@ final class DomesticDemand
      */
     public const KALDOR_CAPACITY = 600.0;
     /**
-     * Demand per unit of the transmitted real-rate stance, either side of neutral: tightening binds the collateral
-     * firms and homebuyers borrow against (Guerrieri & Iacoviello 2017), beside the wealth, trade and debt-service
-     * routes the engine carries separately. The District borrows at floating rates, so a cut reaches borrowers as
-     * fully as a hike; where fixed-rate debt locks borrowers in, easing pushes on a string (Tenreyro & Thwaites 2016).
+     * Demand per unit of the transmitted real-rate stance at and above the stance borrowers are used to: tightening
+     * binds the collateral firms and homebuyers borrow against (Guerrieri & Iacoviello 2017), beside the wealth, trade
+     * and debt-service routes the engine carries separately. Easing below it lifts demand at
+     * FinancialConstants::RATE_EASING_SLOPE_SHARE of this (monetaryDrag()); the District's floating rates pass a cut
+     * into household cash flow in full, through the debt-service channel.
      */
     public const KALDOR_MONETARY_DRAG = 1.2505;
 
@@ -212,7 +214,9 @@ final class DomesticDemand
         // Rudebusch & Svensson 1999 lag the real rate a year): investment is planned, ordered and built.
         $state->monetaryStanceStage1 = TimeSeries::calculateDistributedLag($state->monetaryStanceStage1, $realRate - $neutralRealRate, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
         $state->monetaryStanceTransmitted = TimeSeries::calculateDistributedLag($state->monetaryStanceTransmitted, $state->monetaryStanceStage1, $dt, self::MONETARY_TRANSMISSION_LAG_YEARS);
-        $monetaryDrag = self::KALDOR_MONETARY_DRAG * $state->monetaryStanceTransmitted;
+        // Easing pushes on a string (Tenreyro & Thwaites 2016; Angrist, Jorda & Kuersteiner 2018), told against the
+        // stance borrowers are used to.
+        $monetaryDrag = self::monetaryDrag($state->monetaryStanceTransmitted, $state->monetaryStanceTrend);
 
         // Gilchrist & Zakrajsek (2012): the excess bond premium is the price of credit supply, and spending pays it on
         // its adverse side only (Barnichon, Matthes & Ziegenbein 2022: easy credit does not lift output). Read against
@@ -311,6 +315,21 @@ final class DomesticDemand
         // Kaldor (1940) capital stock accumulation and physical depreciation dynamics.
         $state->capitalStockOverhang += (($state->outputGap * self::CAPITAL_ACCUMULATION_RATE) - (self::CAPITAL_DECAY_RATE * $state->capitalStockOverhang)) * $dt;
         $state->capitalStockOverhang = max(self::CAPITAL_OVERHANG_MIN, min(self::CAPITAL_OVERHANG_MAX, $state->capitalStockOverhang));
+    }
+
+    /**
+     * The real-rate stance's drag on demand, a year: the stance borrowers are used to at the full slope, a move tighter
+     * than it at the full slope too, as it binds the collateral and income limits loans were sized to, and a move
+     * easier than it at the easing share, as it relaxes limits most borrowers are not pressing against. Continuous
+     * where the two meet, and a stance held for a decade becomes the one borrowers are used to.
+     *
+     * @param float $stance      Transmitted real-rate stance over neutral.
+     * @param float $usualStance Its decade trend (MovingAverages::MONETARY_STANCE_TREND_YEARS).
+     */
+    public static function monetaryDrag(float $stance, float $usualStance): float
+    {
+        return (self::KALDOR_MONETARY_DRAG * $usualStance)
+            + ResponseCurves::calculateAsymmetricResponse($stance - $usualStance, self::KALDOR_MONETARY_DRAG, FinancialConstants::RATE_EASING_SLOPE_SHARE * self::KALDOR_MONETARY_DRAG);
     }
 
     /** A supply cost's relative distance from its own trend; none before the trend has opened. */

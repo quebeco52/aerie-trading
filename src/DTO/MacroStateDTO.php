@@ -331,6 +331,11 @@ readonly class MacroStateDTO
         public float $coreGoodsImportInflation = 0.0,
         public float $monetaryStanceStage1 = 0.0,
         public float $monetaryStanceTransmitted = 0.0,
+        /**
+         * The stance borrowers are used to, a decade's average of the transmitted stance: a move tighter than it binds
+         * at the full slope, an easier one at the easing share (DomesticDemand::monetaryDrag()).
+         */
+        public float $monetaryStanceTrend = 0.0,
         public float $financialConditionsIndex = 0.0,
         public float $financialConditionsIndexEma = 0.0,
         public bool $qeActive = false,

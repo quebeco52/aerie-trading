@@ -45,7 +45,7 @@ final class OpenEconomy
      * (full-market opening).
      */
     public const DISTRICT_DEFENSE_EXPORTS_USD = 170.0e9;
-    /** Arms exports over GDP, part of the exports above (1.4%). */
+    /** Arms exports over GDP, part of the exports above (2.8%). */
     public const DISTRICT_DEFENSE_EXPORT_SHARE = self::DISTRICT_DEFENSE_EXPORTS_USD / MacroConstants::DISTRICT_GDP_USD;
     /**
      * Mean lag (years) from an allied arms order to its delivery as exports: the makers' cost-plus backlog burns 15% a

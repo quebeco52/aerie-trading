@@ -79,8 +79,11 @@ class SovereignFundSubsystem
     public const EXCHANGE_RATE_VOLATILITY = 2.0 * MacroConstants::EXCHANGE_RATE_QUARTERLY_VOLATILITY;
 
     // --- Deviation Limits (GPIF policy asset mix, 5th medium-term period, FY2025) ---
-    /** Share of the board's float the fund holds at inception (GPIF owned 5.8% of the Japanese market in 2016). */
-    public const DOMESTIC_OWNERSHIP_OPENING = 0.058;
+    /**
+     * Share of the board's float the fund holds at inception, 2.9%: half GPIF's 5.8% of the Japanese market in 2016, as
+     * the board's giants are owned abroad.
+     */
+    public const DOMESTIC_OWNERSHIP_OPENING = 0.029;
     /** GPIF's policy weight for domestic equities. */
     public const GPIF_DOMESTIC_EQUITY_TARGET = 0.25;
     /**
@@ -143,8 +146,8 @@ class SovereignFundSubsystem
      */
     public const BOARD_OPENING_CAP_USD = 22.0e12;
     /**
-     * Listed-company capitalisation over GDP at inception: the board over District GDP, 1.83, a financial centre's
-     * (World Bank CM.MKT.LCAP.GD.ZS 2015-22: Singapore 1.2-2.3, US 1.4-2.1, Switzerland 2.0-2.8).
+     * Listed-company capitalisation over GDP at inception: the board over District GDP, 3.67, a financial centre whose
+     * listed giants earn abroad (World Bank CM.MKT.LCAP.GD.ZS 2020: Switzerland 2.66, Hong Kong 17.7).
      */
     public const MARKET_CAP_TO_GDP = self::BOARD_OPENING_CAP_USD / MacroConstants::DISTRICT_GDP_USD;
 

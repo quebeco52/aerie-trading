@@ -71,6 +71,7 @@ class MacroFieldRegistryTest extends TestCase
         'energyPriceIndexDecadeTrend' => 'Decade-long average of energy_price_index, which is recorded.',
         'freightRateIndexDecadeTrend' => 'Decade-long average of freight_rate_index, which is recorded.',
         'excessBondPremiumTrend' => 'Decade-long average of excess_bond_premium, which is recorded.',
+        'monetaryStanceTrend' => 'Decade-long average of monetary_stance_transmitted, which is recorded.',
         'crisisScarPending' => 'Scar a crisis has booked that potential_gdp_index, which is recorded, has yet to take.',
         'corporateDefaultRateTrend' => 'Decade-long average of corporate_default_rate, which is recorded.',
         'retailDefaultRateTrend' => 'Decade-long average of retail_default_rate, which is recorded.',

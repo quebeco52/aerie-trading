@@ -12,6 +12,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -539,11 +540,11 @@ class FinancialInvariantTest extends TestCase
     }
 
     /**
-     * Easing still lifts demand in a slump with blown-out spreads, and the District borrows at floating rates, so it
-     * does not push on a string (Tenreyro & Thwaites 2016): a 300bp cut lifts the gap as much as a 300bp hike from the
-     * same state cuts it.
+     * Easing still lifts demand in a slump with blown-out spreads, but pushes on a string (Tenreyro & Thwaites 2016): a
+     * 300bp cut that ends below the stance borrowers are used to lifts the gap by less than a 300bp hike from the same
+     * state cuts it, and by more than the easing share of it, since part of the cut only undoes tightness.
      */
-    public function testMonetaryEasingLiftsARecessionAsMuchAsTighteningRestrains(): void
+    public function testMonetaryEasingLiftsARecessionByLessThanTighteningRestrains(): void
     {
         // The disaster gate, the only randomness left, stays shut: a jump in one leg would swamp the difference.
         $deterministicMath = new ScriptedDraws();
@@ -568,7 +569,8 @@ class FinancialInvariantTest extends TestCase
         $tighter = $gapAt(0.075, 0.065);
 
         $this->assertGreaterThan($tight, $eased, 'Rate cuts during a downturn must still lift the output gap despite credit spreads.');
-        $this->assertEqualsWithDelta($tight - $tighter, $eased - $tight, 1e-12, 'A 300bp cut lifts demand as much as a 300bp hike cuts it.');
+        $this->assertLessThan($tight - $tighter, $eased - $tight, 'A 300bp cut lifts demand by less than a 300bp hike cuts it.');
+        $this->assertGreaterThan(FinancialConstants::RATE_EASING_SLOPE_SHARE * ($tight - $tighter), $eased - $tight, 'The part of the cut that only undoes tightness lifts at the full slope.');
     }
 
     public function testFinancialConditionsIndexEmpiricalBalanceAcrossRegimes(): void
