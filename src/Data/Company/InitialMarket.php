@@ -999,6 +999,37 @@ class InitialMarket
             'retained_earnings' => 30_000_000_000.00,
         ],
         [
+            'ticker' => 'TERN',
+            'name' => 'Tern Airways',
+            'sector' => 'Industrials',
+            'industry' => 'Airlines',
+            'systemic_importance' => 'none',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.35,
+            'beta_tilt' => 0.15, // business travel and full planes turn with the cycle
+            'jump_intensity' => 0.80,
+            'jump_vol' => 0.12,
+            'baseline_roic' => 0.09,
+            'capex_ratio' => 0.55,
+            'target_payout_ratio' => 0.20,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            // aircraft ownership, maintenance bases and salaried staff; fuel, crews and fees follow the flying
+            'fixed_cost_ratio' => 0.30,
+            // network carriers earn 8-10% before interest in a good year
+            'operating_margin' => 0.09,
+            'public_float' => 0.95,
+            'sam_ratio' => 0.18,
+            'floating_debt_ratio' => 0.30,
+            'historical_fixed_rate' => 0.050,
+            'credit_spread' => 0.0200,
+            'depreciation_rate' => 0.05,
+            'corporate_treasury' => 10_800_000_000.00,
+            'total_equity'      => 43_200_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt'    => 34_200_000_000.00,
+            'retained_earnings' => 18_000_000_000.00,
+        ],
+        [
             'ticker' => 'SGRB',
             // Asset-light packaging lines convert operating profit straight into distributable cash
             'management_style' => 'steward',

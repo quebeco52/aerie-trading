@@ -226,6 +226,15 @@ final class StochasticProcesses
     }
 
     /**
+     * The scale on the periods without a loss so that a loss of share $loss, struck with probability $probability a
+     * period, leaves the mean where it was: 1 / (1 - p x loss). The one-period Bernoulli form of the jump compensator.
+     */
+    public static function bernoulliLossCompensator(float $probability, float $loss): float
+    {
+        return 1.0 / (1.0 - ($probability * $loss));
+    }
+
+    /**
      * Expected size of one calculateSVJJJumps() variance jump: mean muV on a down jump and
      * VARIANCE_JUMP_UPSIDE_MEAN_SHARE x muV on an up jump, each an exponential capped at
      * MAX_VARIANCE_JUMP_MEAN_MULTIPLE of its mean, so E[min(X, K m)] = m (1 - e^-K). Intensity times this,

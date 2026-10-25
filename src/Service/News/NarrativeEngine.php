@@ -665,6 +665,11 @@ class NarrativeEngine
                 "A renewed multi-year licence agreement released back royalties accrued during the dispute.",
                 "Resolution of the licensing litigation restored royalty flows and recovered accumulated arrears.",
             ]),
+            ShockEvent::FLIGHT_CREW_STRIKE => $this->getRandomPhrase([
+                "A pilots' strike grounded part of the fleet, cancelling flights and refunding tickets already sold.",
+                "Cabin crew walked out over pay, forcing the airline to cancel a share of its schedule for two weeks.",
+                "Flight cancellations during a crew strike cut passenger and cargo revenue before a new contract was agreed.",
+            ]),
             ShockEvent::CARRIAGE_BLACKOUT => $this->getRandomPhrase([
                 "A carriage fee dispute took the network's channels off a major distributor's system for part of the quarter.",
                 "Viewers on a large cable and broadband system lost the channels while the carriage contract was renegotiated.",

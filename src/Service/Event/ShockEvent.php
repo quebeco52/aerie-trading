@@ -194,6 +194,8 @@ class ShockEvent
      * new deal was signed.
      */
     public const CARRIAGE_BLACKOUT = 'carriage_blackout';
+    /** Pilots or cabin crew walked out; the airline cancelled part of its schedule until the strike was settled. */
+    public const FLIGHT_CREW_STRIKE = 'flight_crew_strike';
 
     public const SECURITY_BREACH = 'security_breach';
     public const GEOPOLITICAL_CONFLICT = 'geopolitical_conflict';

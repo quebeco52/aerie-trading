@@ -260,6 +260,12 @@ enum ModelParam: string
     case RiskRestructuringWeight = 'risk_restructuring_weight';
     case AuditTaxWeight = 'audit_tax_weight';
 
+    // --- Airlines ---
+    case LeisurePassengerWeight = 'leisure_passenger_weight';
+    case BusinessPassengerWeight = 'business_passenger_weight';
+    case AirCargoWeight = 'air_cargo_weight';
+    case LoyaltyMilesWeight = 'loyalty_miles_weight';
+
     // --- Broadcasting ---
     case CarriageFeesWeight = 'carriage_fees_weight';
     case AirtimeAdvertisingWeight = 'airtime_advertising_weight';

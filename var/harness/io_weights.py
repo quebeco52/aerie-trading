@@ -150,6 +150,7 @@ def variable_cost_ratio(j):
 # One group per listed firm industry, equal weight per firm; a group's codes share its weight equally.
 MAP = {
     'ADVERTISING_AGENCY': [['541800']],                                                    # LYRE
+    'AIRLINE': [['481000']],                                                               # TERN
     'APPAREL_MANUFACTURING': [['315000']],                                                 # SHER
     'AUTO_MANUFACTURER': [['336111', '336112']] * 2,                                       # FALC, EIDR
     'BIOTECH': [['325412', '325414']],                                                     # IBIS
@@ -276,7 +277,7 @@ json.dump({'eps_power': EPS_POWER, 'eps_gas': EPS_GAS, 'results': results}, open
 
 # --- PHP data class ---
 LABELS = {
-    'ADVERTISING_AGENCY': 'Advertising agencies', 'APPAREL_MANUFACTURING': 'Apparel manufacturing (SHER)',
+    'ADVERTISING_AGENCY': 'Advertising agencies', 'AIRLINE': 'Air transportation (TERN)', 'APPAREL_MANUFACTURING': 'Apparel manufacturing (SHER)',
     'AUTO_MANUFACTURER': 'Automobile and light truck assembly', 'BIOTECH': 'Pharmaceutical and biological products',
     'BROADCASTING': 'Radio and television broadcasting, cable and other subscription programming (BELL)',
     'CHEMICAL': 'Petrochemicals, organics, resins, fertilizer and agricultural chemicals (hydrocarbon feedstock priced in the model)',

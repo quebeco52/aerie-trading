@@ -14,6 +14,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\StochasticProcesses;
 use App\Service\Model\ModelParam;
 use App\Service\Politics\Diet\Election;
 
@@ -204,7 +205,7 @@ class BroadcastingBusinessModel extends StandardCorporateBusinessModel
         // --- Blackout: a failed renewal darkens one distributor for part of the quarter ---
         // The expected loss is in the plan, so the quarters without one carry what the dark ones give up.
         $blackoutLoss = self::BLACKOUT_DISTRIBUTOR_SHARE * self::BLACKOUT_QUARTER_SHARE;
-        $blackoutCompensation = 1.0 / (1.0 - (Distributions::standardNormalCdf(self::BLACKOUT_Z_SCORE) * $blackoutLoss));
+        $blackoutCompensation = StochasticProcesses::bernoulliLossCompensator(Distributions::standardNormalCdf(self::BLACKOUT_Z_SCORE), $blackoutLoss);
         $isBlackout = $disputeZ < self::BLACKOUT_Z_SCORE;
         $reach = $blackoutCompensation * ($isBlackout ? 1.0 - $blackoutLoss : 1.0);
 

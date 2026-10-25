@@ -52,7 +52,7 @@ final class InputOutputExposuresTest extends TestCase
         // Refining keeps its opex basket: crude and refinery fuel gas share one BEA row, and its basket sits on the
         // non-feedstock cost base the table does not isolate.
         $this->assertSame(['RefiningBusinessModel'], $handSet);
-        $this->assertCount(40, self::measuredModelProvider());
+        $this->assertCount(41, self::measuredModelProvider());
         $this->assertArrayHasKey('gas', RefiningBusinessModel::INPUT_COST_EXPOSURES);
     }
 

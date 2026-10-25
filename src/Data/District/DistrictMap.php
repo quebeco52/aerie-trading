@@ -83,7 +83,7 @@ class DistrictMap
             'conglomerate', 'merchant_house',
             'steel_manufacturing', 'specialty_industrial_machinery', 'chemical',
             'construction', 'defense_contractor', 'security_protection', 'waste_management',
-            'railroad', 'shipping', 'port_terminal', 'logistics', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
+            'railroad', 'shipping', 'port_terminal', 'logistics', 'airline', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
             'consulting',
         ],
         'Consumer Trades' => [
@@ -332,7 +332,7 @@ class DistrictMap
         'mining' => 'ingot', 'oil_gas_producer' => 'derrick', 'refining' => 'flare_stack', 'chemical' => 'flask',
         // Movers and builders.
         'construction' => 'crane', 'shipping' => 'anchor', 'port_terminal' => 'crane', 'logistics' => 'truck',
-        'railroad' => 'train', 'waste_management' => 'bin',
+        'railroad' => 'train', 'airline' => 'plane', 'waste_management' => 'bin',
         // Guardians and the professions.
         'defense_contractor' => 'shield', 'security_protection' => 'lock',
         'law_firm' => 'scales', 'education' => 'cap', 'advertising_agency' => 'megaphone',
@@ -359,7 +359,7 @@ class DistrictMap
     /** Every symbol the template must define; every furniture value must be one of these. */
     public const ROOF_FURNITURE_SYMBOLS = [
         'coin', 'umbrella', 'chart', 'derrick', 'flare_stack', 'ingot', 'factory', 'flask', 'bolt', 'drop',
-        'crane', 'anchor', 'truck', 'train', 'bin', 'shield', 'lock', 'cart', 'bottle', 'fork', 'shirt',
+        'crane', 'anchor', 'truck', 'train', 'plane', 'bin', 'shield', 'lock', 'cart', 'bottle', 'fork', 'shirt',
         'car', 'bag', 'gem', 'dice', 'megaphone', 'cap', 'scales', 'chip', 'cloud', 'signal', 'cross',
         'pill', 'house', 'blocks',
     ];

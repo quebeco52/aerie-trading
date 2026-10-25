@@ -41,6 +41,8 @@ class FinancialSummaryBuilder
         'net_adds' => ['Net adds', FigureFormat::SignedIndex],
         'arpu_index' => ['ARPU index', FigureFormat::Index],
         'audience_index' => ['Audience index', FigureFormat::Index],
+        'seat_capacity_index' => ['Seat capacity index', FigureFormat::Index],
+        'load_factor' => ['Load factor', FigureFormat::Percent],
         'carriage_fee_index' => ['Carriage fee index', FigureFormat::Index],
         'upfront_price_index' => ['Upfront price index', FigureFormat::Index],
         'walt_years' => ['WALT', FigureFormat::Years],

@@ -49,6 +49,8 @@ final class InputOutputExposures
     // --- Model Exposures (share of the variable cost base per input channel) ---
     /** Advertising agencies: BEA 541800. */
     public const ADVERTISING_AGENCY = ['imports' => 0.042, 'labor' => 0.532];
+    /** Air transportation (TERN): BEA 481000. */
+    public const AIRLINE = ['energy' => 0.143, 'imports' => 0.117, 'labor' => 0.347];
     /** Apparel manufacturing (SHER): BEA 315000. */
     public const APPAREL_MANUFACTURING = ['imports' => 0.085, 'labor' => 0.633];
     /** Automobile and light truck assembly: BEA 336111, 336112. */

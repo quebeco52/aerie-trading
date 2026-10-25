@@ -15,6 +15,7 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\FailureSweep;
 use App\Service\Market\Trading\TradeExecutionService;
+use App\Service\Model\Sector\AirlineBusinessModel;
 use App\Service\News\MarketEventPublisher;
 use App\Service\User\Portfolio;
 use App\Tests\Support\StockTrackerFactory;
@@ -374,9 +375,9 @@ class BankruptcyTest extends TestCase
         $operator->sweep([$stock], new MacroStateDTO(yield5yEma: 0.04, highYieldCreditSpreadEma: 0.01));
 
         // Exit notes at the 4% five-year plus a 1% high-yield spread. Exit debt is the tightest of: coverage 50M / (5%
-        // x (2.0 + 1.5)) = 285.7M, the airline 3.5x covenant 3.5 x 80M + 20M = 300M, and the 320M the assets are worth.
-        // The other 1.71B became the equity.
-        $exitDebt = 50_000_000.0 / (0.05 * 3.5);
+        // x (2.5 + 1.5)) = 250M at the airline's own interest-cover floor, the airline 3.5x covenant 3.5 x 80M + 20M =
+        // 300M, and the 320M the assets are worth. The other 1.75B became the equity.
+        $exitDebt = 50_000_000.0 / (0.05 * (AirlineBusinessModel::MIN_ICR + 1.5));
         $this->assertFalse($stock->isBankrupt());
         $this->assertEqualsWithDelta($exitDebt, (float) $stock->getWholesaleDebt(), 1.0);
         $this->assertEqualsWithDelta(-500_000_000.0 + (2_000_000_000.0 - $exitDebt), (float) $stock->getTotalEquity(), 1.0);
@@ -416,8 +417,8 @@ class BankruptcyTest extends TestCase
         $operator = new FailureSweep($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock);
         $operator->sweep([$held, $holder], new MacroStateDTO(yield5yEma: 0.04, highYieldCreditSpreadEma: 0.01));
 
-        // The plan reinstates 285.7M of the 320M the assets are worth; the creditors own the remaining 34.3M.
-        $reorganizedEquity = 320_000_000.0 - (50_000_000.0 / (0.05 * 3.5));
+        // The plan reinstates 250M of the 320M the assets are worth; the creditors own the remaining 70M.
+        $reorganizedEquity = 320_000_000.0 - (50_000_000.0 / (0.05 * (AirlineBusinessModel::MIN_ICR + 1.5)));
         $paid = \App\Data\Company\AnchorHoldings::forHolder('BRKW')['ALBT'] * $reorganizedEquity;
         $this->assertEqualsWithDelta(10_000_000_000.0 - $paid, (float) $holder->getCorporateTreasury(), 1.0);
         $this->assertEqualsWithDelta(1_000_000_000.0 + $paid, (float) $holder->getListedStakesCarrying(), 1.0, 'the new shares are carried at what they cost; the cancelled ones are written off at the next mark');
