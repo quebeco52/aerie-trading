@@ -29,7 +29,8 @@ use App\Service\Math\Valuation;
  * rescaled so the industries' opening shares of spending, at their new levels, still sum to one.
  *
  * Stepped once per quarter for every industry, before any report reads it. Draws are hashed from the run's salt, so
- * they take nothing from any random stream. Financial industries sell no output from plant and are not tracked.
+ * they take nothing from any random stream. An industry with no uncertainty is not tracked, financial ones included,
+ * so spending moves only among the industries that drift.
  *
  * @phpstan-import-type OutlookState from IndustryShareStoreInterface
  * @phpstan-import-type OutlookRecord from IndustryShareStoreInterface
@@ -49,10 +50,10 @@ final class IndustryOutlook
     public function advance(iterable $stocks, MacroStateDTO $macroState, int $tick, int $ticksPerYear): void
     {
         $quarter = intdiv($tick, max(1, intdiv($ticksPerYear, (int) FinancialConstants::QUARTERS_PER_YEAR)));
-        $state = $this->store->readOutlooks() ?? ['salt' => random_int(1, PHP_INT_MAX >> 1), 'quarter' => $quarter, 'industries' => []];
-        if ($state['industries'] === []) {
-            $state = ['salt' => $state['salt'], 'quarter' => $quarter, 'industries' => $this->open($stocks, $macroState)];
-            $this->store->writeOutlooks($state);
+        $state = $this->store->readOutlooks();
+        // Opened once: on the first call, or where a harness has written only the salt to draw from.
+        if ($state === null || $state['quarter'] < 0) {
+            $this->store->writeOutlooks(['salt' => $state['salt'] ?? random_int(1, PHP_INT_MAX >> 1), 'quarter' => $quarter, 'industries' => $this->open($stocks, $macroState)]);
 
             return;
         }
@@ -79,7 +80,7 @@ final class IndustryOutlook
         foreach ($stocks as $stock) {
             $industry = (string) $stock->getIndustry();
             $strategy = Sectors::strategyFor($industry);
-            if ($industry === '' || $stock->isBankrupt() || $strategy->isFinancial()) {
+            if ($industry === '' || $stock->isBankrupt() || $strategy->isFinancial() || IndustryOutlooks::driftVol($industry) <= 0.0) {
                 continue;
             }
             $capital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());

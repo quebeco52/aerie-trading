@@ -7,8 +7,8 @@ require_once __DIR__ . '/../lib/BoardRun.php';
 use App\Entity\CorporateReport;
 
 /**
- * Plain whole-board run plus a read-only log of the idle-capacity KPIs per firm-quarter.
- * IDLE_OUT=<json>: {"rows": [[t, ticker, industry, idle_plant_share|null, industry_price_level|null, cpi], ...],
+ * Plain whole-board run plus a read-only log of the idle-capacity KPIs per firm-quarter. IDLE_OUT=<json>: {"rows": [[t,
+ * ticker, industry, idle_plant_share|null, industry_price_level|null, cpi, log(need/plant)|null], ...],
  *   "opening": {ticker: opening annual revenue}}.
  */
 final class IdleHarnessTest extends BoardRun
@@ -68,9 +68,25 @@ final class IdleHarnessTest extends BoardRun
             isset($kpis['idle_plant_share']) ? (float) $kpis['idle_plant_share'] : null,
             isset($kpis['industry_price_level']) ? (float) $kpis['industry_price_level'] : null,
             $this->currentMacro?->consumerPriceLevel ?? 1.0,
+            $this->trendCapacityGap($stock),
         ];
 
         return $row;
+    }
+
+    /** log(need / plant) as the ledger's accelerator reads it (read-only); null where unavailable. */
+    private function trendCapacityGap(\App\Entity\Stock $stock): ?float
+    {
+        $ledgerId = 'App\\Service\\Corporate\\Industry\\IndustryShareLedger';
+        if ($this->currentMacro === null || !method_exists($ledgerId, 'secularExcessGrowth') || !static::getContainer()->has($ledgerId)) {
+            return null;
+        }
+        $strategy = \App\Data\Company\Sectors::strategyFor((string) $stock->getIndustry());
+        if ($strategy->isFinancial()) {
+            return null;
+        }
+
+        return static::getContainer()->get($ledgerId)->resolveTrendCapacityGap($stock, $this->currentMacro, $ledgerId::secularExcessGrowth($strategy, $stock));
     }
 
     protected function onEnd(): void

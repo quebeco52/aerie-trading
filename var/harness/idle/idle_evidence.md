@@ -116,3 +116,53 @@ level, the one column past 2.
   y9.8 (Farm Products, truth 0.75-0.81 at y8-10); s4 TERN failed y12.4 after reorg y4.7 (Airlines, truth 0.62-0.65 in
   y6-10); s4 PELI reorg y14.1 (Healthcare Plans, truth 0.70). None of the three failing firms ever idled plant
   (prices 0.86-0.93): they lost volume against a fixed cost base. No explosions.
+
+## 2026-10-25 (f) plant follows a falling outlook (working tree vs 112fff29)
+
+Arms on the 2a macro paths (`TAG=-oc`), 4 seeds x 20y, TPY 360: off2 / on2 (working tree, outlook off / on), onbase
+(112fff29 tree + ovr_on + salt; its OUT equals the earlier `on` on all 4 seeds, so the new need/plant probe is
+read-only). Tables `outlook_f.out`, `outlook_f_events.out`, `outlook_decline.out`.
+
+- off2 vs off: bit-identical OUT moments on all 4 seeds (every delta exactly 0).
+- on2 vs onbase (n 4): defaults+deaths 1.75 -> 4.0 per seed (+2.25 (1.03) t 2.2); B-or-worse 1.49% -> 1.65% (t 0.8);
+  cap -3.03tn (0.24) t -12.6; median op margin 23.1% -> 20.4% (t -10.0); capex/rev +0.16pp (t 1.4); price level min
+  0.850 -> 0.840, p1 0.895 -> 0.883 (t -3.9), p99 1.143 -> 1.082 (t -10.1), max 1.247 -> 1.161; idle firm-quarters
+  66 -> 113 per seed (t 3.0); realised vol t -0.4.
+- on2 vs off2: defaults+deaths +3.75 (0.85) t 4.4; B-or-worse +0.73pp t 7.0; cap -4.2tn t -4.1; margin -2.1pp t -22.6.
+- Events on2 (16 vs onbase 7): TERN s1 reorg y2.4 (true 1.01), CROP s1 reorg y7.6 (0.71), PELI s2 failed y4.6 (true
+  0.94, belief 1.30), CROP s2 failed y6.3 (true 0.91, belief 1.34), SPRW s2 failed y12.6 (0.82), SPRW s3 failed y5.1
+  (0.83), TERN s3 failed y8.4 (true 0.93, belief 1.20), TERN s4 default y7.4 (0.58), PELI s4 reorg y10.3 / failed y14.3
+  (0.75 / 0.62), SPRW s4 reorg y15.6 (0.95). Most fail with belief above truth, i.e. after building on optimism.
+- Declining industries (truth < 0.7): plant/need after the crossing 1.14-1.16 -> 1.04-1.07 (the rule works there);
+  margin unchanged (0.18-0.20 both).
+- Margin y10-20 by truth at y20: > 1.3: 27.0% -> 21.8%; 0.7-1.3: 22.5% -> 19.6%; < 0.7: 20.4% -> 20.3%. Idle
+  quarters 187 -> 259 in the middle group. The loss is overbuild where the belief rose.
+- Reading: the revision term (revision / 0.25 for one quarter) builds the full belief revision at once, on a belief
+  that carries reading noise, while a downward revision only stops replacing wear. Upward noise builds plant,
+  downward noise unwinds it slowly: a ratchet. The trend gap already reads the belief (resolveTrendCapacityGap uses
+  outlook belief), so the revision adds an immediate full step on top of the 6.2%/yr correction.
+
+## 2026-10-25 (g) calibrated outlook table (ovr_cal) vs off, working tree = 112fff29
+
+8 seeds x 20y, TPY 360, paths `-oc` (seeds 5-8 recorded on the working tree). Table `outlook_cal.out`.
+
+| quantity | off | cal | cal-off (se) t |
+|---|---|---|---|
+| defaults+failures / seed | 0.125 | 0.50 | +0.375 (0.375) 1.0 |
+| B or worse | 0.96% | 1.22% | +0.26pp (0.18) 1.5 |
+| board cap y20 $tn | 48.87 | 48.78 | -0.08 (0.68) -0.1 |
+| median op margin | 22.47% | 22.72% | +0.26pp (0.14) 1.8 |
+| capex/rev y10-20 | 8.53% | 8.35% | -0.18pp (0.05) -3.8 |
+| price level min / p1 | 0.976 / 0.989 | 0.873 / 0.912 | -0.103 (0.004) / -0.077 (0.005) |
+| price level p99 / max | 1.026 / 1.041 | 1.096 / 1.150 | +0.070 (0.006) / +0.109 (0.007) |
+| idle firm-quarters / seed | 16.0 | 21.8 | +5.8 (3.3) 1.7 |
+| glut share of industry-quarters | 0.27% | 0.36% | +0.09pp (0.05) 1.7 |
+| realised vol | 0.349 | 0.351 | +0.002 (0.004) 0.6 |
+
+Reference: `on` (0.08 everywhere, half-life 2y) had 1.75 events/seed on seeds 1-4; cal has 1.0 on the same seeds.
+By category (pooled 8 seeds): median / max |b-x| and SD exp(x) y20 (random-walk ref): staple 0.013 / 0.070, 0.118
+(0.112); steady 0.020 / 0.120, 0.183 (0.179); shifting 0.047 / 0.296, 0.288 (0.268); volatile 0.057 / 0.353, 0.373
+(0.402); off 0 / 0, 0.040 (rescaling moves the untracked industries too).
+Events: off s4 TERN default y5.1 (true 1.00). cal s3 FALC (Auto, volatile) default y7.9, reorg y9.2 (true 0.69-0.71,
+belief 0.69-0.75); cal s3 SINK (Oil & Gas E&P, outlook off) failed y12.9 (true 1.03, so not outlook-driven); cal s4
+TERN (Airlines, steady) reorg y6.4 (true 0.81-0.84; off had TERN default in the same seed).

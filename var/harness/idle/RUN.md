@@ -22,6 +22,11 @@ board, and where does it bind?
       TAG=-oc LOGS=var/harness/idle/logs-oc BASE=<tree> bin/harness-batch var/harness/idle/run.sh 1-4 base off on
       TAG=-oc python3 var/harness/idle/analyse_shortage.py 1,2,3,4 off on; python3 var/harness/idle/analyse_outlook.py 1,2,3,4 on -oc
 
+  - `off2`, `on2` (section f): working tree, outlook off / on (ovr_on + salt). `onbase` = `BASE` tree + ovr_on + salt,
+    the outlook-on arm for a committed tree. The probe logs log(need/plant) per report (idle.json column 7) via the
+    ledger's resolveTrendCapacityGap; `analyse_decline.py 1,2,3,4 onbase on2 -oc` uses it.
+  - `cal` (section g): working tree + `ovr_cal/` (calibrated per-industry outlook table) + salt. Paths `-oc` cover
+    seeds 1-8. `analyse_cal.py 1-8-list cal off -oc`: belief error and exp(x) SD by drift category, glut share, events.
   - `probe`: working tree + `ovr_probe/` (CapitalBudgetEngine copy that logs the growth-capex gate for
     `PROBE_TICKER`, default FALC, into IDLE_OUT `probe`). STALE since section d: re-copy it from src before use.
     `analyse_probe.py <seed> <ticker> <y0> <y1>` prints per-year gate and funding and checks probe OUT == fix OUT.
