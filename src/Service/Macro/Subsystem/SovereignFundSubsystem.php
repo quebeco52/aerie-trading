@@ -139,11 +139,11 @@ class SovereignFundSubsystem
 
     // --- Currency Bridge (World Bank) ---
     /**
-     * The seeded board's value at the opening: its first-quarter mean on the full market, $20.3T.
+     * The seeded board's value at the opening: its first-quarter mean on the full market, $22.0T.
      */
-    public const BOARD_OPENING_CAP_USD = 20.3e12;
+    public const BOARD_OPENING_CAP_USD = 22.0e12;
     /**
-     * Listed-company capitalisation over GDP at inception: the board over District GDP, 1.69, a financial centre's
+     * Listed-company capitalisation over GDP at inception: the board over District GDP, 1.83, a financial centre's
      * (World Bank CM.MKT.LCAP.GD.ZS 2015-22: Singapore 1.2-2.3, US 1.4-2.1, Switzerland 2.0-2.8).
      */
     public const MARKET_CAP_TO_GDP = self::BOARD_OPENING_CAP_USD / MacroConstants::DISTRICT_GDP_USD;
