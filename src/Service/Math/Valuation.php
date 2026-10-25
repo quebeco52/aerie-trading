@@ -176,16 +176,36 @@ final class Valuation
         float $beta,
         float $inflation,
         float $discountRate,
+        float $catchUpGrowth = 0.0,
     ): float {
         // The secular excess over trend keeps fading (SECULAR_EXCESS_HALF_LIFE_YEARS), so it is priced at its
-        // perpetual equivalent rather than as permanent or as nothing.
+        // perpetual equivalent rather than as permanent or as nothing. The catch-up to the market the firm is expected
+        // to reach is already a perpetual equivalent (capacityCatchUpGrowth()).
         $realGrowth = TimeSeries::persistentEquivalentGrowth($secularGrowth, MacroConstants::TREND_REAL_GROWTH, $discountRate - $inflation)
-            + ($outputGap * self::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
+            + ($outputGap * self::CYCLICAL_GROWTH_PASS_THROUGH * $beta)
+            + $catchUpGrowth;
 
         // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
         // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). The
         // firms' own earnings pass inflation through in full, so no haircut on it is priced either.
         return max(0.0, $realGrowth + $inflation);
+    }
+
+    /**
+     * The perpetual-growth equivalent of closing a gap between the plant a firm runs and the plant its expected market
+     * calls for: a log gap G closed at speed k is an excess kG fading at k, worth G k / (s + k) of base value at the
+     * real spread s (persistentEquivalentGrowth()). A firm short of its market closes the gap by building, at the
+     * accelerator's speed; one with plant to spare closes it only as demand grows into the plant, at trend growth.
+     *
+     * @param float $gap              Log of the plant the expected market calls for over the plant in use.
+     * @param float $buildSpeed       Share of a positive gap closed a year (the flexible accelerator's).
+     * @param float $realDiscountRate The real rate the cash flows are discounted at.
+     */
+    public static function capacityCatchUpGrowth(float $gap, float $buildSpeed, float $realDiscountRate): float
+    {
+        $speed = $gap >= 0.0 ? $buildSpeed : MacroConstants::TREND_REAL_GROWTH;
+
+        return TimeSeries::persistentEquivalentGrowth($speed * $gap, 0.0, $realDiscountRate - MacroConstants::TREND_REAL_GROWTH, $speed);
     }
 
     /**

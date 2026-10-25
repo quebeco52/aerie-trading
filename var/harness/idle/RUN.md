@@ -27,6 +27,10 @@ board, and where does it bind?
     ledger's resolveTrendCapacityGap; `analyse_decline.py 1,2,3,4 onbase on2 -oc` uses it.
   - `cal` (section g): working tree + `ovr_cal/` (calibrated per-industry outlook table) + salt. Paths `-oc` cover
     seeds 1-8. `analyse_cal.py 1-8-list cal off -oc`: belief error and exp(x) SD by drift category, glut share, events.
+  - `val`, `head` (section h): working tree / `BASE` tree, outlook as committed in src, salt 1000+SEED, `FVX=1`
+    (fair value and cost of equity in the quarter rows; read-only, checked with `valnofvx`). The probe also logs
+    realised vol accumulators (idle.json `rv`: sum sq tick log returns, n, configured vol) and per report the filed
+    `carry:capacity_gap`, its catch-up growth and x_fv (columns 8-10). `analyse_val.py 1,...,8 head val -oc`.
   - `probe`: working tree + `ovr_probe/` (CapitalBudgetEngine copy that logs the growth-capex gate for
     `PROBE_TICKER`, default FALC, into IDLE_OUT `probe`). STALE since section d: re-copy it from src before use.
     `analyse_probe.py <seed> <ticker> <y0> <y1>` prints per-year gate and funding and checks probe OUT == fix OUT.

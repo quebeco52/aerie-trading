@@ -6,6 +6,7 @@ namespace App\Service\Market\Pricing;
 
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
+use App\Service\Corporate\Earnings\CapitalBudgetEngine;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
 
@@ -78,6 +79,7 @@ final class FairValue
             $ctx->policyBasesPerShare,
             $ctx->longRunReturn,
             $ctx->excessCashPerShare,
+            $ctx->capacityGap,
         );
     }
 
@@ -115,6 +117,7 @@ final class FairValue
      * @param float|null $longRunReturn  The firm's measured long-run return; the trailing return's gap to it is valued
      *                                   as it fades.
      * @param float $excessCashPerShare  Cash beyond what the business needs to run, valued at face beside it.
+     * @param float $capacityGap         Log of the plant the expected market calls for over the plant in use.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
      */
     private static function evaluateFundamentalState(
@@ -144,6 +147,7 @@ final class FairValue
         array $policyBasesPerShare,
         ?float $longRunReturn,
         float $excessCashPerShare,
+        float $capacityGap = 0.0,
     ): array {
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
@@ -210,7 +214,8 @@ final class FairValue
             $tangibleBookValuePerShare,
             $dividendPerShare,
             $targetPayoutRatio,
-            $dividendAdjustmentSpeed
+            $dividendAdjustmentSpeed,
+            $capacityGap
         ): array {
             // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
             // The growth transmission and the Sloan accruals discount live in Valuation because the corporate
@@ -224,6 +229,7 @@ final class FairValue
                     $beta,
                     $macro->tipsBreakeven,
                     $hurdleRate,
+                    Valuation::capacityCatchUpGrowth($capacityGap, CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED, $hurdleRate - $macro->tipsBreakeven),
                 ),
                 $equityReturn,
                 $targetPayoutRatio,

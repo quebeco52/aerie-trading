@@ -419,4 +419,23 @@ class ValuationTest extends TestCase
         $this->assertLessThan(1.0, Valuation::dividendTaxPayoutScale(0.396));
         $this->assertGreaterThan(1.0, Valuation::dividendTaxPayoutScale(0.0));
     }
+
+    /**
+     * A log gap G closed at speed k is worth G k / (s + k) of base value, so its perpetual equivalent is G k s / (s +
+     * k): a firm short of its market builds at the accelerator's speed, one with plant to spare waits for trend growth.
+     */
+    public function testCapacityCatchUpIsTheGapsPerpetualEquivalent(): void
+    {
+        $spread = 0.06 - MacroConstants::TREND_REAL_GROWTH;
+
+        $this->assertSame(0.0, Valuation::capacityCatchUpGrowth(0.0, 0.062, 0.06));
+        $this->assertEqualsWithDelta(0.1 * 0.062 * $spread / ($spread + 0.062), Valuation::capacityCatchUpGrowth(0.1, 0.062, 0.06), 1e-12);
+        $trend = MacroConstants::TREND_REAL_GROWTH;
+        $this->assertEqualsWithDelta(-0.1 * $trend * $spread / ($spread + $trend), Valuation::capacityCatchUpGrowth(-0.1, 0.062, 0.06), 1e-12);
+        $this->assertGreaterThan(
+            Valuation::calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.02, 0.08),
+            Valuation::calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.02, 0.08, Valuation::capacityCatchUpGrowth(0.1, 0.062, 0.06)),
+            'a firm behind its market is expected to grow faster',
+        );
+    }
 }

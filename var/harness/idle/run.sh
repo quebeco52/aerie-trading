@@ -22,10 +22,13 @@ case "$1" in
   on2)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OVR=$H/ovr_on OUTLOOK_SALT=1 ;;  # section f, outlook on
   onbase) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<tree>}; export OVR=$H/ovr_on OUTLOOK_SALT=1 ;;  # BASE tree, outlook on
   cal)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OVR=$H/ovr_cal OUTLOOK_SALT=1 ;;  # calibrated per-industry outlooks (section g)
+  val)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 ;;  # section h: working tree, outlook as committed
+  valnofvx) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 ;;  # FVX read-only check
+  head) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<tree>}; export OUTLOOK_SALT=1 FVX=1 ;;  # section h: committed tree
   ovr)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OVR=$H/ovr ;;  # working tree + ovr/ src overrides
   plain) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV="" ;;  # probe-free check: same as idle without the KPI log
   base) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<git archive tree with a vendor symlink>} ;;
-  *) echo "usage: run.sh rec|idle|fix|fix2|off|on|off2|on2|onbase|cal|base|plain|ovr|probe <seed>" >&2; exit 2 ;;
+  *) echo "usage: run.sh rec|idle|fix|fix2|off|on|off2|on2|onbase|cal|val|valnofvx|head|base|plain|ovr|probe <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env "$MAC" BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" OUT="$H/runs/$1-$2$TAG.jsonl" \
   IDLE_OUT="$H/runs/$1-$2$TAG.idle.json" OUTLOOK_OUT="$H/runs/$1-$2$TAG.outlook.json" \

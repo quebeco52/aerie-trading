@@ -188,10 +188,12 @@ final class TimeSeries
      * half-life: the H-model of Fuller & Hsia (1984) with an exponential fade. A dividend growing at g_L plus an excess
      * e decaying at lambda is worth D/(r-g_L) x (1 + e/(r-g_L+lambda)) to first order, so the perpetual equivalent
      * keeps (r-g_L)/(r-g_L+lambda) of the excess. Rates are real: the real discount rate against real trend growth.
+     *
+     * @param float|null $fadeSpeed The excess's fade a year, lambda; the secular half-life's when null.
      */
-    public static function persistentEquivalentGrowth(float $growth, float $longRunGrowth, float $realDiscountRate): float
+    public static function persistentEquivalentGrowth(float $growth, float $longRunGrowth, float $realDiscountRate, ?float $fadeSpeed = null): float
     {
-        $fade = M_LN2 / FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS;
+        $fade = $fadeSpeed ?? (M_LN2 / FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
         $spread = max(FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, $realDiscountRate - $longRunGrowth);
 
         return $longRunGrowth + (($growth - $longRunGrowth) * $spread / ($spread + $fade));

@@ -6,6 +6,7 @@ namespace App\DTO;
 
 use App\Data\Company\Sectors;
 use App\Entity\Stock;
+use App\Service\Corporate\Earnings\CapitalBudgetEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 
 /**
@@ -97,6 +98,8 @@ class MarketPricingContext
          * cash is its business.
          */
         public float $excessCashPerShare = 0.0,
+        /** Log of the plant the firm's expected market calls for over the plant it runs, as last filed. */
+        public float $capacityGap = 0.0,
     ) {}
 
     /**
@@ -178,6 +181,7 @@ class MarketPricingContext
             costOfDebt: $health->rawMetrics->currentMarketRate,
             longRunReturn: $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null,
             excessCashPerShare: $excessCash / $shares,
+            capacityGap: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0),
             policyBasesPerShare: array_filter([
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,

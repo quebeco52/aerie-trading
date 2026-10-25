@@ -166,3 +166,27 @@ By category (pooled 8 seeds): median / max |b-x| and SD exp(x) y20 (random-walk 
 Events: off s4 TERN default y5.1 (true 1.00). cal s3 FALC (Auto, volatile) default y7.9, reorg y9.2 (true 0.69-0.71,
 belief 0.69-0.75); cal s3 SINK (Oil & Gas E&P, outlook off) failed y12.9 (true 1.03, so not outlook-driven); cal s4
 TERN (Airlines, steady) reorg y6.4 (true 0.81-0.84; off had TERN default in the same seed).
+
+## 2026-10-25 (h) catch-up in fair value (working tree vs ac4a7a68, outlook on as committed)
+
+Arms `val` (working tree) and `head` (ac4a7a68 tree, deleted after), salt 1000+SEED, FVX=1 (read-only: val vs
+valnofvx seed 1 identical without x_ columns). 8 seeds x 20y, TPY 360, paths `-oc`. Table `val_catchup.out`.
+Realised vol from every tick's log return, annualised, live names with a year of ticks.
+
+| quantity | head | val | val-head (se) t |
+|---|---|---|---|
+| median realised vol | 0.359 | 0.359 | +0.000 (0.001) 0.1 |
+| p90 realised vol | 0.502 | 0.492 | -0.010 (0.004) -2.4 |
+| share realised > 1.1 x configured | 76.4% | 75.5% | -0.9pp (1.1) -0.8 |
+| board cap y20 $tn | 48.67 | 49.07 | +0.40 (0.73) 0.5 |
+| median P/E y10-20 | 16.35 | 16.29 | -0.07 (0.08) -0.8 |
+| defaults+failures / seed | 0.375 | 0.375 | 0.000 (0.42) 0.0 |
+| B or worse | 0.99% | 1.11% | +0.11pp (0.15) 0.8 |
+
+- Catch-up growth y10-20 (24,611 firm-quarters): mean +0.0009, cross-sectional sd 0.0034 (per seed 0.0027-0.0041),
+  p1 -0.0060, p99 +0.0125.
+- Volatile industries: corr(quarterly FV log change, belief revision) +0.056 in val vs +0.033 in head (8,216
+  firm-quarters; per seed val +0.001..+0.113); slope 0.22 vs 0.13; sd FV change 0.169 vs 0.177, sd revision 0.044.
+- Events: head s3 FALC reorg y8.4, TERN reorg y9.4; s4 TERN reorg y6.2. val s1 WEAV failed; s8 FALC reorg y14.2.
+- Pre-existing, both arms: median configured vol 0.21, median realised/configured 1.56 (quarterly-price measure in
+  section e gave the same 0.35), so the vol budget is already exceeded at HEAD; the catch-up term does not add to it.

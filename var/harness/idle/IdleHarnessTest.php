@@ -8,7 +8,7 @@ use App\Entity\CorporateReport;
 
 /**
  * Plain whole-board run plus a read-only log of the idle-capacity KPIs per firm-quarter. IDLE_OUT=<json>: {"rows": [[t,
- * ticker, industry, idle_plant_share|null, industry_price_level|null, cpi, log(need/plant)|null], ...],
+ * ticker, industry, idle_plant_share|null, industry_price_level|null, cpi, log(need/plant)|null, filed capacity gap|null, catch-up growth|null, x_fv|null], ...],
  *   "opening": {ticker: opening annual revenue}}.
  */
 final class IdleHarnessTest extends BoardRun
@@ -30,9 +30,24 @@ final class IdleHarnessTest extends BoardRun
         return $store !== null && method_exists($store, 'readOutlooks') ? $store : null;
     }
 
+    /** @var array<string, array{float, int, float, float}> ticker => [sum of squared tick log returns, n, configured vol, last price] */
+    private array $realisedVol = [];
+
     /** OUTLOOK_SALT=1 pre-writes the outlook salt 1000 + SEED so the outlook draws repeat across runs. */
     protected function afterStocks(array $result): void
     {
+        foreach ($this->stocks as $ticker => $stock) {
+            $price = (float) $stock->getPrice();
+            if (!isset($this->realisedVol[$ticker]) || $price <= 0.0 || $stock->isBankrupt()) {
+                continue;
+            }
+            $last = $this->realisedVol[$ticker][3];
+            if ($last > 0.0) {
+                $this->realisedVol[$ticker][0] += log($price / $last) ** 2;
+                ++$this->realisedVol[$ticker][1];
+            }
+            $this->realisedVol[$ticker][3] = $price;
+        }
         if (!getenv('OUTLOOK_OUT') || ($store = $this->outlookStore()) === null) {
             return;
         }
@@ -54,6 +69,7 @@ final class IdleHarnessTest extends BoardRun
         }
         foreach ($this->stocks as $ticker => $stock) {
             $this->openingRevenue[$ticker] = (float) $stock->getTotalRevenue();
+            $this->realisedVol[$ticker] = [0.0, 0, (float) $stock->getVolatility(), 0.0];
         }
     }
 
@@ -69,6 +85,10 @@ final class IdleHarnessTest extends BoardRun
             isset($kpis['industry_price_level']) ? (float) $kpis['industry_price_level'] : null,
             $this->currentMacro?->consumerPriceLevel ?? 1.0,
             $this->trendCapacityGap($stock),
+            $gap = (($stock->getEarningsMomentumZ() ?? [])['carry:capacity_gap'] ?? null),
+            ($gap !== null && isset($row['x_coe']) && $this->currentMacro !== null && method_exists('App\\Service\\Math\\Valuation', 'capacityCatchUpGrowth'))
+                ? \App\Service\Math\Valuation::capacityCatchUpGrowth((float) $gap, 0.062, $row['x_coe'] - $this->currentMacro->tipsBreakeven) : null,
+            $row['x_fv'] ?? null,
         ];
 
         return $row;
@@ -96,7 +116,7 @@ final class IdleHarnessTest extends BoardRun
         }
         $out = getenv('IDLE_OUT');
         if ($out) {
-            file_put_contents($out, json_encode(['rows' => $this->idleRows, 'opening' => $this->openingRevenue, 'probe' => $GLOBALS['IDLE_PROBE'] ?? []]));
+            file_put_contents($out, json_encode(['rows' => $this->idleRows, 'opening' => $this->openingRevenue, 'probe' => $GLOBALS['IDLE_PROBE'] ?? [], 'rv' => $this->realisedVol, 'tpy' => $this->tpy]));
         }
     }
 }

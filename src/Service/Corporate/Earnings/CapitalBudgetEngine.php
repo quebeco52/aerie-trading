@@ -24,6 +24,11 @@ final class CapitalBudgetEngine
      * Van Reenen 2007, UK company panel, error-correction term).
      */
     public const CAPITAL_ERROR_CORRECTION_SPEED = 0.062;
+    /**
+     * Carried stream-state key: log of the plant the firm's expected market calls for over the plant it runs, filed at
+     * each report for the market's valuation of the catch-up (Valuation::capacityCatchUpGrowth()).
+     */
+    public const STATE_CAPACITY_GAP = EarningsEngine::CARRIED_STATE_PREFIX . 'capacity_gap';
     /** Least the capex cycle scales every capex line to: half of plan in the deepest trough. */
     public const MIN_CAPEX_CYCLE_MODIFIER = 0.50;
     /** Most the capex cycle scales every capex line to: one and a half times plan at the peak. */
@@ -262,6 +267,8 @@ final class CapitalBudgetEngine
             IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock),
         ) ?? 0.0;
         $plantGrowth = Valuation::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, self::CAPITAL_ERROR_CORRECTION_SPEED);
+        // Plant idled in a glut comes back as demand does, so the gap the market prices is against the plant in use.
+        $stock->setEarningsMomentumZ([self::STATE_CAPACITY_GAP => $capitalGap - log(max(OperatingCapacityEngine::MIN_CAPACITY_UTILIZATION, $ctx->plantLoad))] + ($stock->getEarningsMomentumZ() ?? []));
 
         $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
         $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
