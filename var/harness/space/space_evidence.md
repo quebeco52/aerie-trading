@@ -272,3 +272,63 @@ real/designed y20 fix - live: +0.224 (0.081) t 2.8 n 8
 ```
 
 Growth now lands on the design: real/designed 1.08, 0.93, 0.98, 1.05 at y5/10/15/20 (y20 seeds 0.84-1.28); paired vs `live` at y20 +0.22 (se 0.08, t 2.8, n 8; seeds do not pair tightly over 20y). Plant growth tracks designed nominal growth in every snapshot (10.6 vs 13.0 at y5, 17.6 vs 16.3 at y10); the 16.5% cap no longer binds; hurdle gap -2 to -3pp; saturation 0. Failures 1.75/run (1-3), 9 of 14 in years 0-7; grounded-quarter margin -61% to +3% (seed means). First dividend year 12.0-13.0 in every seed; paid payout 0.10 at y15 (0.07-0.14) and 0.38 at y20 (0.24-0.54). Loss quarters 3.3 (0-6), negative-EPS years 0.6; worst rating CCC in 4 seeds (all in failure quarters early), BB in 4; no distress or default. Cap 20B -> 67B (y10) -> 216B (y20), 10.9x; P/E 15.6 at y20; vol 48%, beta 1.41, maxDD -76%, beat 78%.
+
+## 2026-10-25 (c): arm `learn` (hidden broadband market size, Kalman belief on log M)
+
+Run: `rm -rf var/harness/cache/test; bin/harness-batch var/harness/space/run.sh 1-8 learn && python3 var/harness/space/analyse.py learn && python3 var/harness/space/learn.py learn && python3 var/harness/space/payout.py learn fix` (tables `learn_8seed_20y.out`, `learn_seeds.out`, `payout_learn.out`, `learn_overbuild.out`). The harness now also keeps the `state:broadband_market_*` keys. Probe `open_learn.out`: cap 20.0B unchanged. Seeds 1-8 do not pair with `fix` (the listing draw shifts the stream).
+
+```
+seed   M/2  estimate at y4 y6 y8 y10 y14 y20         sd10  sd20 real/des  cap x worst loss q bb share max
+   1  0.55  1.00 0.95 0.83 0.71 0.60 0.58   0.253 0.104     1.06    6.7     B      2         0.52
+   2  0.97  1.00 0.99 0.97 0.88 0.91 1.06   0.253 0.104     1.03   20.4    BB      0         0.63
+   3  0.65  1.00 0.98 0.88 0.86 0.72 0.75   0.253 0.104     1.06   15.5    BB      0         0.53
+   4  2.10  1.00 1.07 1.22 1.60 2.01 2.01   0.253 0.104     1.63   36.3    BB      1         0.88
+   5  1.23  1.00 1.00 0.99 0.97 1.15 1.16   0.253 0.104     1.09   33.9   CCC      3         0.80
+   6  2.08  1.00 1.10 1.40 1.71 2.03 2.22   0.253 0.104     1.60   20.9    BB      2         0.89
+   7  1.49  1.00 1.04 1.18 1.37 1.65 1.60   0.253 0.104     2.02   31.4     B      0         0.86
+   8  0.91  1.00 1.02 1.05 1.02 1.05 0.97   0.253 0.104     1.08   12.9    BB      0         0.60
+
+Spearman(true M, real/designed y20) +0.76; Spearman(true M, cap x y20) +0.88; n 8
+real/designed y20 mean 1.32 range 1.03-2.02; cap x y20 mean 22.3 range 6.7-36.3
+revisions: n 632, sd of quarterly d log estimate 0.010, max +0.040, min -0.026
+  quarter excess return: corr +0.03, slope +0.70
+  report day..+5d excess return: corr +0.07, slope +0.71
+  launch revenue qoq log change: corr +0.00, slope +0.14; in the 5%% largest upward revisions mean +0.006 vs all +0.018
+seed 1 paid payout y13 0.06 y15 0.18 y20 0.46
+seed 2 paid payout y13 0.00 y15 0.13 y20 0.43
+seed 3 paid payout y13 0.00 y15 0.08 y20 0.47
+seed 4 paid payout y13 0.00 y15 0.00 y20 0.19
+seed 5 paid payout y13 0.00 y15 0.04 y20 0.38
+seed 6 paid payout y13 0.00 y15 0.05 y20 0.48
+seed 7 paid payout y13 0.00 y15 0.06 y20 0.23
+seed 8 paid payout y13 0.00 y15 0.15 y20 0.44
+```
+
+The y20 outcome ranks with true M (Spearman 0.76 revenue, 0.88 cap, n 8). Spread widens: real/designed 1.03-2.02 (fix 0.84-1.28), cap 6.7-36.3x (fix 4.1-21.5x); the sample of M/2 averages 1.25. Asymmetric: the small-market seeds (M/2 0.55, 0.65) still land at 1.06 because the plant pool moves into launch (seed 1 y20 launch 37.0B vs 31.2B in fix seed 1, broadband 43.5 vs 62.8); large markets reach 1.6-2.0. Belief sd 0.25 at y10 and 0.10 at y20 in every seed (deterministic Kalman variance); estimates reach true M by y14 when M is large, seed 1 at 0.58 vs 0.55 by y20. Revisions are small (quarterly d log estimate sd 0.010, max +0.040): the price slope is +0.7 per unit (about the value share of broadband) but corr 0.03-0.07 over 632 quarters, so not distinguishable from zero. Launch revenue does not dip on upward revisions (slope +0.14). Big-market seeds run margins of 29-34% at y10 while plant catches up, no overbuild (IC/revenue 0.5-0.8; seed 4 margin 8% in year 20 alone). No distress or default; worst CCC (seed 5, three failures), B in seeds 1 and 7; loss quarters 1.0; first dividend 11.25-16; paid payout y20 0.19-0.48 (large-market seeds lowest). P/E 21.6 -> 31.5 (y2) -> 16.0 -> 12.3 (y10) -> 18.2 -> 32.6 (y20, 9-88).
+
+## 2026-10-25 (d): arm `idle` (idle plant beyond 1.1 x the believed market need), paired with `learn`
+
+Run: `rm -rf var/harness/cache/test; bin/harness-batch var/harness/space/run.sh 1-8 idle && python3 var/harness/space/analyse.py idle && python3 var/harness/space/idle.py idle learn` (tables `idle_8seed_20y.out`, `idle_vs_learn.out`, `idle_paths.out` = max idle share / estimate / grounded by year for seeds 2, 8, 7, 3). No new draws, but 20-year paths still diverge once idle changes a quarter.
+
+```
+seed  M/2   idle mean/max/years first-t max-t | real/des learn->idle | cap x | worst | loss q | distress | payout y20 | launch y20 $B | om10/om20 | roic10/roic20 | capex/ocf idle vs busy
+   1  0.55   0.001/0.041/0.50 17.86 19.86 | 1.06->1.01 | 6.7->7.4 | B->B | 2->2 | 0->0 | 0.46->0.47 | 37.0->37.6 | 18/21->18/20 | 20/21->20/21 | 0.30 vs 0.58
+   2  0.97   0.023/0.172/8.25 1.86 17.11 | 1.03->0.87 | 20.4->10.3 | BB->B | 0->1 | 0->0 | 0.43->0.57 | 27.8->25.8 | 14/22->16/12 | 15/22->17/16 | 0.55 vs 0.65
+   3  0.65   0.008/0.089/4.00 4.86 9.86 | 1.06->1.04 | 15.5->3.9 | BB->BB | 0->1 | 0->0 | 0.47->0.31 | 39.4->33.4 | 20/18->19/24 | 22/20->19/24 | 0.56 vs 0.48
+   4  2.10   0.002/0.051/1.50 16.86 19.86 | 1.63->2.20 | 36.3->19.6 | BB->BB | 1->1 | 0->0 | 0.19->0.23 | 36.8->37.2 | 34/8->34/25 | 38/10->38/22 | 0.35 vs 0.46
+   5  1.23   0.001/0.028/0.75 0.36 4.36 | 1.09->1.28 | 33.9->17.1 | CCC->BB | 3->0 | 0->0 | 0.38->0.41 | 29.6->31.7 | 21/18->25/21 | 22/17->26/22 | 0.51 vs 0.46
+   6  2.08   0.000/0.000/0.00 None 0.11 | 1.60->1.60 | 20.9->20.9 | BB->BB | 2->2 | 0->0 | 0.48->0.48 | 32.0->32.0 | 29/20->29/20 | 33/21->33/21 | - vs 0.42
+   7  1.49   0.023/0.173/6.00 4.86 18.61 | 2.02->1.86 | 31.4->24.2 | B->BB | 0->0 | 0->0 | 0.23->0.17 | 41.5->43.4 | 27/25->15/21 | 26/22->16/19 | 0.45 vs 0.54
+   8  0.91   0.020/0.128/8.50 0.86 14.86 | 1.08->1.06 | 12.9->8.9 | BB->BB | 0->0 | 0->0 | 0.44->0.27 | 30.2->31.7 | 17/16->20/21 | 18/18->20/19 | 0.52 vs 0.60
+all         idle-learn: real/designed y20 +0.045 (0.084) t 0.5 n 8; log cap x -0.488 (0.167) t -2.9 n 8
+small M<1   idle-learn: real/designed y20 -0.061 (0.034) t -1.8 n 4; log cap x -0.586 (0.314) t -1.9 n 4
+large M>=1  idle-learn: real/designed y20 +0.151 (0.156) t 1.0 n 4; log cap x -0.390 (0.160) t -2.4 n 4
+Spearman(M, real/des y20) +0.83; Spearman(M, cap x) +0.88
+
+seed 2 y1 0.00/1.00/0 y2 0.00/1.00/0 y3 0.00/1.00/0 y4 0.00/1.00/0 y5 0.10/1.00/0 y6 0.12/0.99/0 y7 0.04/0.97/0 y8 0.00/0.91/0 y9 0.01/0.84/0 y10 0.09/0.84/0 y11 0.10/0.87/0 y12 0.07/0.89/0 y13 0.10/0.91/0 y14 0.05/0.91/0 y15 0.07/0.88/0 y16 0.07/0.87/0 y17 0.08/0.86/0 y18 0.17/0.84/0 y19 0.08/0.85/0 y20 0.04/0.84/0
+seed 8 y1 0.01/1.00/0 y2 0.08/1.00/0 y3 0.01/1.00/0 y4 0.04/1.00/0 y5 0.00/1.00/0 y6 0.07/1.02/0 y7 0.09/1.06/0 y8 0.00/1.09/0 y9 0.04/1.09/0 y10 0.02/1.06/0 y11 0.07/1.00/0 y12 0.05/1.00/0 y13 0.11/0.98/0 y14 0.07/1.00/0 y15 0.13/0.99/0 y16 0.00/0.98/0 y17 0.01/0.95/0 y18 0.07/0.91/0 y19 0.04/0.90/0 y20 0.11/0.90/0
+seed 7 y1 0.00/1.00/0 y2 0.00/1.00/0 y3 0.00/1.00/0 y4 0.00/1.00/0 y5 0.02/1.01/0 y6 0.00/1.04/0 y7 0.00/1.11/0 y8 0.06/1.21/0 y9 0.00/1.26/0 y10 0.01/1.22/0 y11 0.00/1.25/0 y12 0.00/1.31/0 y13 0.00/1.35/0 y14 0.00/1.36/0 y15 0.10/1.34/0 y16 0.08/1.34/0 y17 0.10/1.39/0 y18 0.16/1.41/0 y19 0.17/1.43/0 y20 0.15/1.45/0
+seed 3 y1 0.00/1.00/0 y2 0.00/1.00/0 y3 0.00/1.00/0 y4 0.00/1.00/0 y5 0.00/1.00/0 y6 0.00/0.99/0 y7 0.00/0.96/0 y8 0.00/0.91/0 y9 0.08/0.86/0 y10 0.09/0.82/0 y11 0.01/0.79/0 y12 0.08/0.71/0 y13 0.00/0.64/0 y14 0.03/0.62/0 y15 0.08/0.63/0 y16 0.08/0.65/0 y17 0.00/0.66/0 y18 0.00/0.66/0 y19 0.00/0.67/0 y20 0.00/0.68/0
+```
+
+Idle does not track the market. It binds most in the M ~ 1 seeds (2: 8.25 years, max 17%, from t 1.9; 8: 8.5 years, max 13%, from t 0.9) and in large-market seed 7 (years 15-20, 10-17% while the estimate rises 1.34 -> 1.45), and hardly in the small-market seeds (1: 0.5 years, max 4%; 3: 4 years, max 9%). It flickers quarter to quarter (seed 2: 0.10, 0.12, 0.04, 0.00, 0.01 ...), so the plan (expectedRevenue) swings past the need by >10% on its own cycle and drift: the anchor is struck from one quarter's expectedRevenue and compared each quarter with a raw expectedRevenue that carries the cycle and pricing beyond trend nominal GDP. Launch revenue in the small-market seeds is unchanged (seed 1 37.0 -> 37.6B), so the absorption it was meant to stop remains. Paired: real/designed y20 +0.045 (0.084) all, -0.061 (0.034) small, +0.151 (0.156) large; log cap multiple -0.49 (0.17, t -2.9), small -0.59 (0.31), large -0.39 (0.16). Spearman with M 0.83 / 0.88. No distress or default; capex/OCF lower in idle quarters in 5 of 7 seeds (0.30-0.56 vs 0.46-0.65).

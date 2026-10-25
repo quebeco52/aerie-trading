@@ -90,7 +90,8 @@ class SpaceSystemsBusinessModelTest extends TestCase
     {
         $years = 12.0;
         $levels = self::levels($years);
-        $result = $this->runQuarter([Space::STATE_YEARS_LISTED => $years, Space::STATE_LAUNCH_EXPERIENCE => Space::INITIAL_LAUNCH_EXPERIENCE_YEARS]);
+        // The true market as estimated, so the line bills its planned share.
+        $result = $this->runQuarter([Space::STATE_YEARS_LISTED => $years, Space::STATE_LAUNCH_EXPERIENCE => Space::INITIAL_LAUNCH_EXPERIENCE_YEARS, Space::STATE_MARKET_SIZE => Space::BROADBAND_MATURE_SIZE]);
 
         $this->assertEqualsWithDelta(self::EXPECTED_REVENUE * $levels['broadband'] / array_sum($levels), $result->streamRevenue['satellite_broadband'], 1.0);
         $this->assertGreaterThan($result->streamRevenue['launch_services'], $result->streamRevenue['satellite_broadband']);
@@ -125,6 +126,80 @@ class SpaceSystemsBusinessModelTest extends TestCase
         $signUps = $ahead->streamRevenue['satellite_broadband'] / $onCurve->streamRevenue['satellite_broadband'];
         $odds = static fn(float $share): float => $share / (1.0 - $share);
         $this->assertEqualsWithDelta($signUps * $odds($expected), $odds($ahead->kpis['broadband_penetration']), 1e-9);
+    }
+
+    public function testTheTrueMarketIsDrawnAtTheListingAroundTheEstimate(): void
+    {
+        $result = $this->model->computeActualFinancials(
+            self::stock(),
+            self::EXPECTED_REVENUE,
+            self::VARIABLE_COST_RATIO,
+            10_000_000.0,
+            0.0,
+            new MacroStateDTO(),
+            new ScriptedDraws(generatePersistentZ: fn(float $prev): float => 0.0, generateStandardNormal: 1.0),
+        );
+        $sigma = Space::MARKET_SIZE_UNCERTAINTY;
+
+        // The estimate is the prior's mean, and a one-sigma draw lands above it by exp(sigma - sigma^2 / 2).
+        $this->assertEqualsWithDelta(Space::BROADBAND_MATURE_SIZE, Space::believedMarketSize([]), 1e-12);
+        $this->assertEqualsWithDelta(Space::BROADBAND_MATURE_SIZE * exp($sigma - ($sigma * $sigma / 2.0)), $result->streamZ[Space::STATE_MARKET_SIZE], 1e-9);
+        // Before the service opens nothing is learned, and the estimate stays where it was.
+        $this->assertEqualsWithDelta(1.0, $result->kpis['broadband_market_estimate'], 1e-12);
+    }
+
+    public function testSubscribersSignUpToTheTrueMarketAndRevealIt(): void
+    {
+        $years = 8.0;
+        $trueMarket = 3.0;
+        $momentum = [Space::STATE_YEARS_LISTED => $years, Space::STATE_LAUNCH_EXPERIENCE => Space::INITIAL_LAUNCH_EXPERIENCE_YEARS];
+        $levels = self::levels($years);
+        $onEstimate = $this->runQuarter([...$momentum, Space::STATE_MARKET_SIZE => Space::BROADBAND_MATURE_SIZE]);
+        $bigger = $this->runQuarter([...$momentum, Space::STATE_MARKET_SIZE => $trueMarket]);
+
+        // The plan splits on the estimate; the subscribers come from the market there is.
+        $this->assertEqualsWithDelta(self::EXPECTED_REVENUE * $levels['broadband'] / array_sum($levels), $onEstimate->streamRevenue['satellite_broadband'], 1.0);
+        $this->assertEqualsWithDelta($trueMarket / Space::BROADBAND_MATURE_SIZE, $bigger->streamRevenue['satellite_broadband'] / $onEstimate->streamRevenue['satellite_broadband'], 1e-9);
+        $this->assertEqualsWithDelta($onEstimate->streamRevenue['launch_services'], $bigger->streamRevenue['launch_services'], 1.0);
+
+        // Once the estimate has caught up, the plan gives the internet the larger share the market as believed calls
+        // for.
+        $variance = 0.01;
+        $believed = $this->runQuarter([...$momentum, Space::STATE_MARKET_SIZE => $trueMarket, Space::STATE_MARKET_LOG_MEAN => log($trueMarket) - ($variance / 2.0), Space::STATE_MARKET_LOG_VARIANCE => $variance]);
+        $believedLevels = [...$levels, 'broadband' => $levels['broadband'] * $trueMarket / Space::BROADBAND_MATURE_SIZE];
+        $this->assertEqualsWithDelta(self::EXPECTED_REVENUE * $believedLevels['broadband'] / array_sum($believedLevels), $believed->streamRevenue['satellite_broadband'], 1.0);
+
+        // The sign-ups revise the estimate toward the market they came from, and the plan's growth with it.
+        $this->assertGreaterThan(1.0, $bigger->kpis['broadband_market_estimate']);
+        $this->assertLessThan($trueMarket / Space::BROADBAND_MATURE_SIZE, $bigger->kpis['broadband_market_estimate']);
+        $this->assertGreaterThan(
+            $this->model->getFadedSecularGrowthRate(self::stock($onEstimate->streamZ), 0.0),
+            $this->model->getFadedSecularGrowthRate(self::stock($bigger->streamZ), 0.0),
+        );
+    }
+
+    public function testTheEstimateLearnsTheMarketAsTakeUpGrows(): void
+    {
+        $priorVariance = Space::MARKET_SIZE_UNCERTAINTY ** 2;
+        $mean = log(Space::BROADBAND_MATURE_SIZE) - ($priorVariance / 2.0);
+        $variance = $priorVariance;
+
+        // No take-up, no reading.
+        $this->assertSame([$mean, $variance], Space::updateMarketBelief($mean, $variance, log(3.0), 0.0));
+
+        // One reading: precisions add and the mean moves by the reading's share of them.
+        $precision = 0.5 / (Space::SIGN_UP_SIGNAL_NOISE ** 2);
+        [$oneMean, $oneVariance] = Space::updateMarketBelief($mean, $variance, log(3.0), 0.5);
+        $this->assertEqualsWithDelta(1.0 / ((1.0 / $variance) + $precision), $oneVariance, 1e-12);
+        $this->assertEqualsWithDelta($mean + ($precision * $oneVariance * (log(3.0) - $mean)), $oneMean, 1e-12);
+
+        // Ten years of readings at high take-up close on the market they read; the prior keeps a few per cent of the
+        // weight.
+        for ($quarter = 0; $quarter < 40; $quarter++) {
+            [$mean, $variance] = Space::updateMarketBelief($mean, $variance, log(3.0), 0.9);
+        }
+        $this->assertEqualsWithDelta(3.0, Space::believedMarketSize([Space::STATE_MARKET_LOG_MEAN => $mean, Space::STATE_MARKET_LOG_VARIANCE => $variance]), 0.10);
+        $this->assertLessThan(0.15, sqrt($variance));
     }
 
     public function testTakeUpStaysAShareOfTheMarketWhateverTheRevenueDoes(): void

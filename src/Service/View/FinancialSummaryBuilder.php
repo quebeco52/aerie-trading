@@ -28,6 +28,7 @@ class FinancialSummaryBuilder
     private const KPI_LABELS = [
         'book_to_bill' => ['Book-to-bill', FigureFormat::Multiple],
         'broadband_penetration' => ['Satellite internet take-up', FigureFormat::Percent],
+        'broadband_market_estimate' => ['Internet market estimate', FigureFormat::Index],
         'launch_cost_index' => ['Launch cost index', FigureFormat::Index],
         'backlog_quarters' => ['Backlog', FigureFormat::Quarters],
         'contract_book_to_bill' => ['Charter book-to-bill', FigureFormat::Multiple],

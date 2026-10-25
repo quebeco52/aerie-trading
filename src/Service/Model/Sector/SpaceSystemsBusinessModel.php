@@ -28,10 +28,11 @@ use App\Service\Model\StreamContext;
  * - Government Missions: cargo, crew and defence payloads for the mainland's and allied agencies, awarded into a
  *   backlog that follows their budgets.
  * - Satellite Internet: a constellation opens a few years after the listing, and subscribers sign up along a Bass
- *   diffusion curve until it is the larger business. Each extra subscriber costs little to serve.
+ *   diffusion curve. How large the market is nobody knows at the listing: the sign-ups reveal it, and the firm and the
+ *   market revise their estimate as they arrive. Each extra subscriber costs little to serve.
  * - Growth: the firm's expected growth is the growth of the three lines along their expected paths, so its plant, its
- *   capital budget and the market's multiple all read the same S-curve; sign-ups ahead of or behind it are the
- *   surprise.
+ *   capital budget and the market's multiple all read the same S-curve, drawn to the market as believed; sign-ups
+ *   ahead of or behind it, and the revisions they bring, are the surprise.
  * - Launch Failures: a rocket lost grounds the fleet while the cause is found; the manifest waits and flies off when
  *   the fleet returns.
  */
@@ -118,10 +119,21 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
     /** Bass coefficient of imitation (0.38 a year), from the same meta-analysis. */
     public const BROADBAND_IMITATION = 0.38;
     /**
-     * Satellite internet revenue at saturation against the firm's revenue at the listing, in real terms (2x): it ends
-     * the larger business, a little over half of revenue twenty years on.
+     * Satellite internet revenue at saturation against the firm's revenue at the listing, in real terms, as estimated
+     * at the listing (2x): on that estimate it ends the larger business, a little over half of revenue twenty years on.
      */
     public const BROADBAND_MATURE_SIZE = 2.0;
+    /**
+     * Log standard deviation of the eventual internet market at the listing (0.4): nobody knows how many will sign up,
+     * so nine runs in ten land between about half and 1.8 times the estimate.
+     */
+    public const MARKET_SIZE_UNCERTAINTY = 0.40;
+    /**
+     * Log noise of a quarter's sign-ups as a reading of the eventual market once all of it has signed up (0.65); at
+     * lower take-up the reading is noisier by one over the root of take-up, since early adopters say little about the
+     * mass market.
+     */
+    public const SIGN_UP_SIGNAL_NOISE = 0.65;
     /** Variable cost of a subscriber per dollar against the firm's average (0.75x): the satellites are already up. */
     public const BROADBAND_COST_MULTIPLE = 0.75;
 
@@ -175,6 +187,12 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
     public const STATE_YEARS_LISTED = 'state:years_listed';
     /** Launches flown since the listing, in years of the listing's launch rate. */
     public const STATE_LAUNCH_EXPERIENCE = 'state:launch_experience';
+    /** The eventual internet market, drawn at the listing and never reported: what the sign-ups reveal. */
+    public const STATE_MARKET_SIZE = 'state:broadband_market_size';
+    /** Mean of the log of the internet market as the firm and the market believe it. */
+    public const STATE_MARKET_LOG_MEAN = 'state:broadband_market_log_mean';
+    /** Variance of that belief. */
+    public const STATE_MARKET_LOG_VARIANCE = 'state:broadband_market_log_variance';
 
     /**
      * The secular rate the addressable market and the industry ledger read: they take it as the excess at the open and
@@ -276,6 +294,7 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
         // The plan splits across the lines as their expected levels stand.
         $levels = $this->resolveLineLevels($stock, $years);
         $total = array_sum($levels);
+
         $plan = $total > 0.0 ? $expectedRevenue / $total : 0.0;
 
         $launchZ = $streams->generateZ('launch_services', 0.30);
@@ -307,9 +326,26 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
             + (MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * OpenEconomy::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma)));
         $government = $streams->recognizeBacklog('government_missions', $plan * $levels['government_missions'], $awards, self::GOVERNMENT_BURN_RATE);
 
-        // --- Satellite internet: subscribers on the expected curve, ahead of it or behind ---
+        // --- Satellite internet: subscribers sign up to the true market, which the plan only estimates, ahead of the
+        // expected curve or behind it ---
+        $market = self::believedMarketSize($momentum);
+        $trueMarket = $streams->getPersistedState(self::STATE_MARKET_SIZE, 0.0);
+        if ($trueMarket <= 0.0) {
+            // Drawn once, at the listing: a mean-one lognormal on the estimate, the belief's own prior.
+            $trueMarket = $market * exp((self::MARKET_SIZE_UNCERTAINTY * $mathUtility->generateStandardNormal()) - ((self::MARKET_SIZE_UNCERTAINTY ** 2) / 2.0));
+        }
+        $streams->registerState(self::STATE_MARKET_SIZE, $trueMarket);
         $signUps = max(0.0, 1.0 + ($broadbandZ * $baselineVol * self::BROADBAND_VARIANCE_SCALAR));
-        $broadband = $plan * $levels['satellite_broadband'] * $signUps;
+        $broadband = $plan * $levels['satellite_broadband'] * ($trueMarket / $market) * $signUps;
+
+        // The quarter's sign-ups are a reading of the true market, weighed by how much of it has signed up.
+        $takeUp = ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION);
+        [$beliefMean, $beliefVariance] = self::marketBelief($momentum);
+        if ($signUps > 0.0) {
+            [$beliefMean, $beliefVariance] = self::updateMarketBelief($beliefMean, $beliefVariance, log($trueMarket * $signUps), $takeUp);
+        }
+        $streams->registerState(self::STATE_MARKET_LOG_MEAN, $beliefMean);
+        $streams->registerState(self::STATE_MARKET_LOG_VARIANCE, $beliefVariance);
 
         $streamRevenues = [
             'launch_services'     => $launch['revenue'],
@@ -336,7 +372,8 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             kpis: [
-                'broadband_penetration' => self::reportedTakeUp(ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION), $signUps),
+                'broadband_penetration'     => self::reportedTakeUp($takeUp, $signUps),
+                'broadband_market_estimate' => exp($beliefMean + ($beliefVariance / 2.0)) / self::BROADBAND_MATURE_SIZE,
                 'launch_cost_index'     => self::learnedLaunchCost($experience),
             ],
         );
@@ -364,6 +401,52 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
+     * The internet market as believed: the mean of the lognormal belief, so the estimate is unbiased at every step and
+     * the true market averages it.
+     *
+     * @param array<string, float> $momentum The stream state map persisted last quarter.
+     */
+    public static function believedMarketSize(array $momentum): float
+    {
+        [$mean, $variance] = self::marketBelief($momentum);
+
+        return exp($mean + ($variance / 2.0));
+    }
+
+    /**
+     * One quarter's learning about the market (Kalman 1960, on its log): the sign-ups read as the eventual market with
+     * noise SIGN_UP_SIGNAL_NOISE over the root of take-up, weighed against the belief by their precisions.
+     *
+     * @return array{float, float} The updated log mean and variance.
+     */
+    public static function updateMarketBelief(float $mean, float $variance, float $reading, float $takeUp): array
+    {
+        if ($takeUp <= 0.0 || $variance <= 0.0) {
+            return [$mean, $variance];
+        }
+        $readingPrecision = $takeUp / (self::SIGN_UP_SIGNAL_NOISE ** 2);
+        $posteriorVariance = 1.0 / ((1.0 / $variance) + $readingPrecision);
+
+        return [$posteriorVariance * (($mean / $variance) + ($reading * $readingPrecision)), $posteriorVariance];
+    }
+
+    /**
+     * The belief's log mean and variance, the prior at the listing: centred so its mean is BROADBAND_MATURE_SIZE.
+     *
+     * @param array<string, float> $momentum
+     * @return array{float, float}
+     */
+    private static function marketBelief(array $momentum): array
+    {
+        $priorVariance = self::MARKET_SIZE_UNCERTAINTY ** 2;
+
+        return [
+            (float) ($momentum[self::STATE_MARKET_LOG_MEAN] ?? (log(self::BROADBAND_MATURE_SIZE) - ($priorVariance / 2.0))),
+            (float) ($momentum[self::STATE_MARKET_LOG_VARIANCE] ?? $priorVariance),
+        ];
+    }
+
+    /**
      * A launch's cost against the listing's after the launches flown, on the learning curve to its floor:
      * (experience / initial)^log2(learning rate).
      */
@@ -382,7 +465,7 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * Each line's expected real level against the firm's revenue at the listing, before trend growth: launches on the
-     * fading excess of their market, missions at trend, subscribers on the Bass curve.
+     * fading excess of their market, missions at trend, subscribers on the Bass curve to the market as believed.
      *
      * @return array{launch_services: float, government_missions: float, satellite_broadband: float}
      */
@@ -393,7 +476,7 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
         return [
             'launch_services'     => $weights['launch_services'] * exp(TimeSeries::fadedExcessIntegral(self::LAUNCH_EXCESS_GROWTH, 0.0, $years, self::LAUNCH_EXCESS_HALF_LIFE_YEARS)),
             'government_missions' => $weights['government_missions'],
-            'satellite_broadband' => self::BROADBAND_MATURE_SIZE * ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION),
+            'satellite_broadband' => self::believedMarketSize($stock->getEarningsMomentumZ() ?? []) * ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION),
         ];
     }
 
@@ -406,7 +489,7 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
             return 0.0;
         }
         $launchGrowth = $levels['launch_services'] * self::LAUNCH_EXCESS_GROWTH * (0.5 ** ($years / self::LAUNCH_EXCESS_HALF_LIFE_YEARS));
-        $signUps = self::BROADBAND_MATURE_SIZE * ResponseCurves::bassAdoptionRate($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION);
+        $signUps = self::believedMarketSize($stock->getEarningsMomentumZ() ?? []) * ResponseCurves::bassAdoptionRate($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION);
 
         return ($launchGrowth + $signUps) / $total;
     }

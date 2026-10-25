@@ -98,7 +98,7 @@ final class SpaceHarnessTest extends BoardRun
                 'deal' => $m?->dealActivityDeviation() ?? 0.0, 'dflt' => $m?->corporateDefaultDeviation() ?? 0.0,
                 'epu' => $m?->policyUncertaintyIndexEma ?? 100.0, 'tt' => $m?->totalTime ?? 0.0,
                 'sent' => $m?->sentimentResidual() ?? 0.0, 'ecp' => $m?->energyCostPushLag ?? 0.0, 'agri' => $m?->agriculturalCommodityIndexEma ?? 100.0, 'ddg' => $m?->domesticDemandGapEma ?? 0.0,
-                'regime' => array_filter($s->getEarningsMomentumZ() ?? [], static fn($k): bool => str_starts_with((string) $k, 'state:regime:'), ARRAY_FILTER_USE_KEY),
+                'regime' => array_filter($s->getEarningsMomentumZ() ?? [], static fn($k): bool => str_starts_with((string) $k, 'state:regime:') || str_starts_with((string) $k, 'state:broadband_market'), ARRAY_FILTER_USE_KEY),
                 'cap' => (float) $s->getPrice() * (float) $s->getSharesOutstanding(), 'cpi' => $m?->consumerPriceLevel ?? 1.0,
                 'diag' => $t === 'SKYL' && $m !== null ? $this->growthDiag($s, $m, $report) : null,
                 'ceps' => $report->getConsensusEps() !== null ? (float) $report->getConsensusEps() : null,
