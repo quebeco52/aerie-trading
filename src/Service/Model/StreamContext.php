@@ -207,15 +207,17 @@ class StreamContext
      * @param float  $expectedStreamRevenue Steady-state quarterly revenue of the stream (expected revenue x weight).
      * @param float  $orderMultiplier       This quarter's order intake relative to steady state (1.0 = flat).
      * @param float  $burnRate              Fraction of available work executed per quarter (0.05 .. 1.0).
+     * @param float  $cancelledShare        Share of the opening backlog cancelled this quarter before work resumes.
      * @return array{revenue: float, orders: float, backlog: float, backlog_quarters: float, book_to_bill: float}
      */
-    public function recognizeBacklog(string $key, float $expectedStreamRevenue, float $orderMultiplier, float $burnRate): array
+    public function recognizeBacklog(string $key, float $expectedStreamRevenue, float $orderMultiplier, float $burnRate, float $cancelledShare = 0.0): array
     {
         $burn = max(0.05, min(1.0, $burnRate));
         $steadyStateQuarters = (1.0 - $burn) / $burn;
         $base = max(1.0, $expectedStreamRevenue);
 
-        $openingQuarters = max(0.0, $this->getPersistedState(self::BACKLOG_STATE_PREFIX . $key, $steadyStateQuarters));
+        $openingQuarters = max(0.0, $this->getPersistedState(self::BACKLOG_STATE_PREFIX . $key, $steadyStateQuarters))
+            * (1.0 - max(0.0, min(1.0, $cancelledShare)));
         $orders = $base * max(0.0, $orderMultiplier);
         $available = ($openingQuarters * $base) + $orders;
         $revenue = $burn * $available;

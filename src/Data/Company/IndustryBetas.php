@@ -216,6 +216,7 @@ final class IndustryBetas
         'Merchant Houses' => 'Diversified',
         'Metal Fabrication' => 'Steel',
         'Mortgage Finance' => 'Financial Svcs. (Non-bank & Insurance)',
+        'Nuclear Power Equipment' => 'Machinery',
         'Oil & Gas E&P' => 'Oil/Gas (Production and Exploration)',
         'Oil & Gas Equipment & Services' => 'Oilfield Svcs/Equip.',
         'Oil & Gas Integrated' => 'Oil/Gas (Integrated)',

@@ -270,6 +270,11 @@ enum ModelParam: string
     case GroceriesWeight = 'groceries_weight';
     case FuelForecourtsWeight = 'fuel_forecourts_weight';
 
+    // --- Nuclear Reactor Vendors ---
+    case ReactorFuelWeight = 'reactor_fuel_weight';
+    case PlantServicesWeight = 'plant_services_weight';
+    case NewBuildWeight = 'new_build_weight';
+
     // --- Broadcasting ---
     case CarriageFeesWeight = 'carriage_fees_weight';
     case AirtimeAdvertisingWeight = 'airtime_advertising_weight';

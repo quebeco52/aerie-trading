@@ -92,7 +92,7 @@ class DistrictMap
         ],
         // The extraction and generation end. Named for extraction rather than energy because the block holds the
         // mines as well as the wells.
-        'Extraction & Power' => ['oil_gas_producer', 'refining', 'mining', 'utility', 'independent_power'],
+        'Extraction & Power' => ['oil_gas_producer', 'refining', 'mining', 'utility', 'independent_power', 'nuclear_vendor'],
         'Technology & Telecoms' => ['tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom', 'broadcasting'],
         'Property & Health' => ['reit', 'homebuilder', 'medical_care_facility', 'health_insurer', 'biotech'],
     ];
@@ -345,6 +345,8 @@ class DistrictMap
         // Power, silicon and signal.
         'utility' => 'bolt', 'independent_power' => 'bolt', 'tech' => 'cloud', 'computer_hardware' => 'chip',
         'semiconductor' => 'chip', 'communication_equipment' => 'signal', 'telecom' => 'signal',
+        // A reactor vendor is known by the cooling towers of the plants it builds.
+        'nuclear_vendor' => 'cooling_tower',
         // A broadcaster is known by its transmitter mast.
         'broadcasting' => 'signal',
         // Care, cures, property and the conglomerates. A merchant house takes the anchor rather than the
@@ -361,7 +363,7 @@ class DistrictMap
         'coin', 'umbrella', 'chart', 'derrick', 'flare_stack', 'ingot', 'factory', 'flask', 'bolt', 'drop',
         'crane', 'anchor', 'truck', 'train', 'plane', 'bin', 'shield', 'lock', 'cart', 'bottle', 'fork', 'shirt',
         'car', 'bag', 'gem', 'dice', 'megaphone', 'cap', 'scales', 'chip', 'cloud', 'signal', 'cross',
-        'pill', 'house', 'blocks',
+        'pill', 'house', 'blocks', 'cooling_tower',
     ];
     /** Symbol for a tenant neither map dressed — defensive only, the tests forbid the case for listed companies. */
     public const ROOF_FURNITURE_DEFAULT = 'blocks';

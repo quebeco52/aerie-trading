@@ -35,6 +35,7 @@ class Sectors
         'homebuilder'     => 'Homebuilders buy land, build houses on it and sell them at the going price. Closings follow the housing starts the market supports, a season or two behind the order. Land is carried at what it cost years earlier, so a rise in house prices lands on margin at once and a fall the same way, and a deep enough fall forces the land bank to be written down.',
         'reit'            => 'Real Estate Investment Trusts hold physical property. Evaluated on Funds From Operations (FFO). Pays 0% corporate tax but must issue heavy debt to expand due to high dividend payouts. Features CPI rent escalators (inflation hedge) and tenant vacancy risks.',
         'utility'         => 'Regulated monopolies and essential infrastructure (Power, Water, Telecom, Waste Management) with heavily regulated Return on Invested Capital (ROIC). They grow absolute earnings by deploying massive CapEx. Revenues are hyper-stable, but rate hikes lag behind inflation, causing temporary margin compression during inflationary spikes.',
+        'nuclear_vendor'    => 'Reactor vendors design and build nuclear plants and then fuel and service them for the sixty years they run. Every reactor of their design reloads with their fuel every year or two and is overhauled in spring and autumn outages, so most of the revenue follows the fleet, not the economy. New plants are ordered one at a time and built over about five years, more often when energy is dear, when carbon is priced and when long-term finance is cheap. Plants are built at a fixed price, so one that runs over budget loses money until it is delivered, and a serious accident anywhere freezes new orders for years.',
         'independent_power' => 'Independent generators own power stations and sell what they produce into the wholesale market at the going price, most of it sold forward a year ahead. Plants that burn gas earn the gap between the power price and their fuel and carbon bill; hydro and other plants with no fuel keep the whole price, so they earn most when gas is dear. Capacity payments for keeping plant available steady the top line, and a large unit out of service loses the output it would have sold.',
         'mining'          => 'Metals miners selling every tonne into a global market at the going price. Revenue is payable metal times the benchmark, sold unhedged; haulage, milling and power are paid per tonne, so a metals rally lands on margin in full and a slump leaves the whole cost base standing. Output does not follow the domestic cycle, and grades decline unless reinvestment keeps the mine modern.',
         'oil_gas_producer' => 'Upstream oil and gas producers selling every barrel into a global market at the going price. Revenue is volume times the realized crude and gas price, cushioned by a rolling year of forward swaps; lifting costs are paid per barrel, so a price move lands on margin in full. Output does not follow the domestic cycle, and fields deplete unless reinvestment replaces them.',
@@ -229,6 +230,8 @@ class Sectors
         'Metal Fabrication' => ['pe' => 13.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'heavy_manufacturing'],
         // Shadow banks / Fannie Mae. Bank Rule.
         'Mortgage Finance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'],
+        // Long contracts for fuel and service carry the debt through an empty order book.
+        'Nuclear Power Equipment' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'nuclear_vendor'],
         // Exploration. Wells deplete incredibly fast. Book D/E of US E&P (Damodaran, Jan 2026: 33.2% book debt/capital,
         // 142 firms).
         'Oil & Gas E&P' => ['pe' => 11.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.5, 'equity_limit' => 0.50, 'business_model' => 'oil_gas_producer'],
@@ -353,6 +356,7 @@ class Sectors
         'private_bank'                   => Sector\PrivateBankBusinessModel::class,
         'utility'                        => Sector\UtilityBusinessModel::class,
         'independent_power'              => Sector\IndependentPowerBusinessModel::class,
+        'nuclear_vendor'                 => Sector\NuclearVendorBusinessModel::class,
         'mining'                         => Sector\MiningBusinessModel::class,
         'oil_gas_producer'               => Sector\OilGasProducerBusinessModel::class,
         'refining'                       => Sector\RefiningBusinessModel::class,

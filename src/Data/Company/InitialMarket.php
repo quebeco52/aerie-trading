@@ -2869,6 +2869,38 @@ class InitialMarket
             'retained_earnings' => 9_000_000_000.00,
         ],
         [
+            'ticker' => 'FIRE',
+            // Fuel and service contracts run for decades and need little new capital, so the cash goes to shareholders
+            'management_style' => 'steward',
+            'name' => 'Firecrest Atomic',
+            'sector' => 'Industrials',
+            'industry' => 'Nuclear Power Equipment',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.20,
+            'beta_tilt' => -0.25, // orders follow world energy prices and long rates, the fleet runs whatever the cycle
+            'jump_intensity' => 0.50,
+            'jump_vol' => 0.10,
+            'baseline_roic' => 0.14,
+            'capex_ratio' => 0.30,
+            'target_payout_ratio' => 0.45,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            // engineering staff, licensing and the fuel plants; crews and materials follow the plants being built
+            'fixed_cost_ratio' => 0.50,
+            'operating_margin' => 0.13,
+            'public_float' => 0.95,
+            'sam_ratio' => 0.111,
+            'floating_debt_ratio' => 0.20,
+            'historical_fixed_rate' => 0.045,
+            'credit_spread' => 0.0080,
+            'depreciation_rate' => 0.05,
+            'corporate_treasury' => 3_700_000_000.00,
+            'total_equity'      => 22_200_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt'    => 11_100_000_000.00,
+            'retained_earnings' => 8_880_000_000.00,
+        ],
+        [
             'ticker' => 'KTWK',
             // A concession holder: builds quays the trade has asked for, pays out the rest
             'management_style' => 'steward',

@@ -122,6 +122,10 @@ final class InputOutputExposures
      * Copper, gold, coal and potash mining (CNDR; own-commodity trade excluded): BEA 212100, 212230, 2122A0, 2123A0.
      */
     public const MINING = ['energy' => 0.056, 'metals' => 0.027, 'imports' => 0.078, 'labor' => 0.254];
+    /**
+     * Nuclear fuel, reactor and power boiler manufacturing and engineering services (FIRE): BEA 325180, 332410, 541300.
+     */
+    public const NUCLEAR_VENDOR = ['energy' => 0.026, 'metals' => 0.115, 'imports' => 0.076, 'labor' => 0.368];
     /** Oil and gas extraction (own-commodity trade excluded): BEA 211000. */
     public const OIL_GAS_PRODUCER = ['energy' => 0.029, 'metals' => 0.038, 'imports' => 0.068, 'labor' => 0.24];
     /** Support activities for transportation, port and harbour operations among them (KTWK): BEA 48A000. */

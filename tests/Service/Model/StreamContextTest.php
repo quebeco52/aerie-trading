@@ -315,6 +315,17 @@ class StreamContextTest extends TestCase
         $this->assertArrayHasKey(StreamContext::BACKLOG_STATE_PREFIX . 'oem', $context->getStreamZ());
     }
 
+    /** Cancelled work leaves the opening book before the quarter's work is done; this quarter's orders stand. */
+    public function testACancellationCutsTheOpeningBookBeforeTheQuartersWork(): void
+    {
+        $context = new StreamContext([StreamContext::BACKLOG_STATE_PREFIX . 'oem' => 3.0], new MathUtility());
+        $book = $context->recognizeBacklog('oem', 1000.0, 1.0, 0.25, 0.20);
+
+        // (3.0 x 0.8 + 1.0) quarters available, a quarter of it built.
+        $this->assertEqualsWithDelta(850.0, $book['revenue'], 1e-9);
+        $this->assertEqualsWithDelta(2.55, $book['backlog_quarters'], 1e-9);
+    }
+
     /**
      * A slow-burning book is deep by nature: a contractor booking a tenth of its work a quarter keeps its nine quarters
      * and the orders on top of them, where a fixed eight-quarter ceiling deleted booked work every quarter.

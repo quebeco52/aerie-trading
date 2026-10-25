@@ -670,6 +670,16 @@ class NarrativeEngine
                 "Supermarkets matched a competitor's price cuts on staples, trimming margins while suppliers were paid in full.",
                 "A grocery price war broke out as chains cut prices on the weekly basket to hold their shoppers.",
             ]),
+            ShockEvent::REACTOR_ACCIDENT => $this->getRandomPhrase([
+                "A serious accident at a reactor abroad led governments to freeze new plants while their fleets were reviewed.",
+                "Regulators ordered safety reviews of operating reactors after an accident overseas, idling units and halting tenders.",
+                "Utilities shelved plans for new reactors after a serious accident at a plant abroad, while regulators drew up retrofits.",
+            ]),
+            ShockEvent::REACTOR_PLANT_OVERRUN => $this->getRandomPhrase([
+                "A reactor under construction on a fixed-price contract ran over budget, and the vendor will bear the cost until it is delivered.",
+                "Delays and rework at a reactor build pushed costs past the contract price, leaving the vendor to absorb the overrun.",
+                "Welding defects and late components put a fixed-price reactor project over budget, with losses expected until handover.",
+            ]),
             ShockEvent::FLIGHT_CREW_STRIKE => $this->getRandomPhrase([
                 "A pilots' strike grounded part of the fleet, cancelling flights and refunding tickets already sold.",
                 "Cabin crew walked out over pay, forcing the airline to cancel a share of its schedule for two weeks.",

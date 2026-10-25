@@ -32,6 +32,7 @@ class CostBaseSeesTheCycleTest extends TestCase
         'consulting',
         'defense_contractor',
         'homebuilder',
+        'nuclear_vendor',
         'specialty_industrial_machinery',
     ];
 
