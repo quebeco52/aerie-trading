@@ -44,6 +44,11 @@ final readonly class VarianceBudget
      * component of single-stock return variance is a minority of the total (Huang & Tauchen 2005).
      */
     private const MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE = 0.25;
+    /**
+     * Floor on the share of a name's long-run idiosyncratic variance left to its diffusion once its own jumps, order
+     * flow and announcements are paid for (20%): a name keeps some day-to-day news between its scheduled ones.
+     */
+    private const MIN_DIFFUSION_VARIANCE_SHARE = 0.20;
 
     // --- Common Idiosyncratic Volatility (Herskovic, Kelly, Lustig & Van Nieuwerburgh 2016) ---
     /**
@@ -198,12 +203,10 @@ final readonly class VarianceBudget
         );
 
         // Announcement variance budget: a report or a warning is a scheduled jump (Dubinsky, Johannes, Kaeck &
-        // Seeger 2019), so the diffusion gives back what the name's own announcements measurably supplied,
-        // within the same minority bound as its unscheduled jumps.
-        $announcementVariance = min(
-            max(0.0, $ctx->announcementVariance),
-            $longTermIdiosyncraticVar * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE,
-        );
+        // Seeger 2019), so the diffusion gives back what the name's own announcements measurably supplied. In full:
+        // unlike the unscheduled jump, an announcement is not scaled to fit a budget, so any part left unpaid would
+        // move the price on top of the configured variance.
+        $announcementVariance = max(0.0, $ctx->announcementVariance);
 
         // What the idiosyncratic diffusion is left with once the name's own other sources of variance have been paid
         // for, which is the only bucket that can flex: the market's diffusion and its jump reach the name through beta
@@ -212,7 +215,11 @@ final readonly class VarianceBudget
         // process still settles on it: see varianceJumpLoad().
         // The name's own sources besides its diffusion, deducted here, stripped from the state and added back to the
         // reported total below: one sum, so the three can never list different sources.
-        $ownSourceVariance = $idiosyncraticJumpVariance + $impactVariance + $announcementVariance;
+        // Bounded so the diffusion keeps its floor share; past it the announcements outrun the configured volatility.
+        $ownSourceVariance = min(
+            $idiosyncraticJumpVariance + $impactVariance + $announcementVariance,
+            $longTermIdiosyncraticVar * (1.0 - self::MIN_DIFFUSION_VARIANCE_SHARE),
+        );
         $adjustedTheta = max(
             0.0001,
             (($longTermIdiosyncraticVar * $commonIdiosyncraticScale) - $ownSourceVariance)

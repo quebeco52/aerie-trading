@@ -72,7 +72,7 @@ final class StockVarianceStateTest extends TestCase
      * A name's announcements are scheduled jumps, so the diffusion gives back the variance they measurably supplied,
      * and the reported total adds it back: the name's volatility is what it realizes, whatever its announcement record.
      * It used to settle below its target by exactly the announcement variance, so spreads, impact and option vol read a
-     * name quieter than its tape. An outsized record is held to a quarter of the idiosyncratic budget on both sides.
+     * name quieter than its tape. An outsized record leaves the diffusion its floor share, on both sides.
      */
     public function testTheDiffusionGivesBackTheMeasuredAnnouncementVariance(): void
     {
@@ -84,6 +84,20 @@ final class StockVarianceStateTest extends TestCase
                 "Announcement variance {$announcementVariance}.",
             );
         }
+    }
+
+    /**
+     * Announcements move the price however large they are, so a record past a quarter of the idiosyncratic budget is
+     * paid for in full, not just its first quarter: the overflow used to move the price on top of the configured
+     * variance. Past the diffusion's floor share the bound holds.
+     */
+    public function testAnAnnouncementRecordIsPaidForInFull(): void
+    {
+        $budget = VarianceBudget::longTermIdiosyncraticVariance(self::LONG_TERM_VOLATILITY, self::BETA);
+        $step = fn(float $announcementVariance): VarianceBudget => VarianceBudget::forStep($this->context(self::LONG_TERM_VOLATILITY, self::CALM_MARKET_VOL, self::CALM_MARKET_VOL, 0.0, 1.0e-6, self::DAILY, $announcementVariance));
+
+        self::assertEqualsWithDelta(0.5 * $budget, $step(0.5 * $budget)->ownSourceVariance, 1e-12, 'half the budget, paid in full');
+        self::assertEqualsWithDelta(0.8 * $budget, $step(2.0 * $budget)->ownSourceVariance, 1e-12, 'held where the diffusion keeps its fifth');
     }
 
     /**
@@ -138,9 +152,9 @@ final class StockVarianceStateTest extends TestCase
             $state = $engine->calculateNextPrice($context)['next_volatility'];
         }
 
-        // The diffusion settles on its target, three quarters of the budget once the capped announcement record is paid
-        // for, and the reported total adds that quarter back. A residual clamped to the floor would print 1.25 budgets.
-        self::assertEqualsWithDelta($loading + (0.75 * $residualBudget) + (0.25 * $residualBudget), $state * $state, 1.0e-5);
+        // The diffusion settles on its target, the floor share of the budget once the outsized announcement record is
+        // paid for, and the reported total adds the rest back. A residual clamped to the floor would print more.
+        self::assertEqualsWithDelta($loading + (0.2 * $residualBudget) + (0.8 * $residualBudget), $state * $state, 1.0e-5);
     }
 
     /**

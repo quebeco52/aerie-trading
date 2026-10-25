@@ -36,6 +36,9 @@ final class IdleHarnessTest extends BoardRun
     /** @var array<string, array{list<array{float, array<string, mixed>}>, float, float, float, float}> KPI_TICKERS: ticker => [kpi rows, opening cap, opening eps, running peak, max drawdown] */
     private array $kpiLog = [];
 
+    /** @var array<string, float> Each name's share count at the last tick, to tell a split from a price move. */
+    private array $lastShares = [];
+
     /** OUTLOOK_SALT=1 pre-writes the outlook salt 1000 + SEED so the outlook draws repeat across runs. */
     protected function afterStocks(array $result): void
     {
@@ -44,14 +47,20 @@ final class IdleHarnessTest extends BoardRun
             if (!isset($this->realisedVol[$ticker]) || $price <= 0.0 || $stock->isBankrupt()) {
                 continue;
             }
-            $last = $this->realisedVol[$ticker][3];
+            // A split multiplies the share count by a whole number (or divides it): restate the last price and the
+            // running peak, so a 4-for-1 does not read as a 75% fall.
+            $shares = (float) $stock->getSharesOutstanding();
+            $ratio = ($this->lastShares[$ticker] ?? 0.0) > 0.0 ? $shares / $this->lastShares[$ticker] : 1.0;
+            $this->lastShares[$ticker] = $shares;
+            $split = ($ratio >= 1.5 && abs($ratio - round($ratio)) < 1e-6) || ($ratio > 0.0 && $ratio <= 0.67 && abs((1.0 / $ratio) - round(1.0 / $ratio)) < 1e-6) ? $ratio : 1.0;
+            $last = $this->realisedVol[$ticker][3] / $split;
             if ($last > 0.0) {
                 $this->realisedVol[$ticker][0] += log($price / $last) ** 2;
                 ++$this->realisedVol[$ticker][1];
             }
             $this->realisedVol[$ticker][3] = $price;
             if (isset($this->kpiLog[$ticker])) {
-                $this->kpiLog[$ticker][3] = max($this->kpiLog[$ticker][3], $price);
+                $this->kpiLog[$ticker][3] = max($this->kpiLog[$ticker][3] / $split, $price);
                 $this->kpiLog[$ticker][4] = max($this->kpiLog[$ticker][4], 1.0 - ($price / $this->kpiLog[$ticker][3]));
             }
         }
