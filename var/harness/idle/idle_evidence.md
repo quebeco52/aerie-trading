@@ -314,3 +314,31 @@ either arm, else year 10. Tables `cmp_summary.out`, `cmp_detail.out`, `cmp_h3h4.
 - FALC (seeds 1, 3, gate-only events): seed 1 identical policy (no buybacks, same gate), both shut out; HEAD raised
   equity four times (2.9-9.0bn) and survived, gate raised once and failed: the rescue's draw and going-concern test.
   Seed 3: gate bought back 63bn vs 33bn (recap trigger 9 vs 7 quarters), ND/EBITDA 15.7 vs 6.5 at the event.
+
+## 2026-10-25 (n) airline FARE_LOAD_ELASTICITY 1.5 -> 1.0 (working tree vs HEAD 314ed19a)
+
+Arms `headn` (314ed19a tree, deleted after; OUT == gate on seeds 1-3) and `fare` (working tree), salt, FVX,
+KPI log for TERN. 16 seeds unclear (events -0.25 t -1.0, CCC quarters +1.5 t 1.3), so 32 seeds x 20y, TPY 360
+(seeds 17-32 recorded on the working tree). Tables `fare.out` (n 16), `fare_n32.out`.
+
+| quantity (n 32) | HEAD | fare | fare-HEAD (se) t |
+|---|---|---|---|
+| TERN events / seed | 0.50 | 0.50 | 0.00 (0.20) 0.0 |
+| TERN CCC-or-worse quarters | 3.44 | 3.72 | +0.28 (0.70) 0.4 |
+| board defaults+deaths | 1.06 | 0.91 | -0.16 (0.17) -0.9 |
+| board B-or-worse | 1.03% | 1.10% | +0.07pp (0.07) 1.0 |
+| TERN mean ttm EBITDA margin | 13.64% | 14.10% | +0.46pp (0.46) 1.0 |
+| TERN mean op margin | 8.91% | 9.43% | +0.51pp (0.47) 1.1 |
+| TERN opening cap / P/E | 50.8bn / 10.95 | same | 0 |
+| TERN median P/E y3-20 | 10.01 | 9.52 | -0.49 (0.51) -1.0 |
+| TERN mean load factor | 0.839 | 0.840 | +0.0007 (0.0005) 1.4 |
+| TERN realised vol | 0.508 | 0.536 | +0.028 (0.019) 1.5 |
+| TERN max drawdown | 0.892 | 0.900 | +0.008 (0.012) 0.7 |
+| board cap y20 $tn | 50.78 | 50.34 | -0.44 (0.35) -1.3 |
+| board median vol | 0.361 | 0.361 | +0.000 (0.001) 0.5 |
+
+TERN event seeds: HEAD 1, 4, 10, 13, 16, 23, 26, 31, 32; fare 1, 4, 11, 21, 24, 28, 29, 31.
+EBITDA-margin drawdowns (> 5 pts below prior 8q peak), trough median / p10 (n), HEAD -> fare:
+no oil spike, gap >= -2%: 0.096 / 0.051 (63) -> 0.095 / 0.037 (72); no oil spike, gap < -2%: 0.057 / -0.005 (40)
+-> 0.085 / 0.018 (41); oil spike (crude +30% over 8q), gap >= -2%: 0.087 / -0.027 (18) -> 0.097 / 0.037 (24); oil
+spike, gap < -2%: 0.082 / 0.020 (8) -> 0.042 / 0.037 (6).

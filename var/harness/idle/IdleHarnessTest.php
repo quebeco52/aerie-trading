@@ -33,6 +33,9 @@ final class IdleHarnessTest extends BoardRun
     /** @var array<string, array{float, int, float, float}> ticker => [sum of squared tick log returns, n, configured vol, last price] */
     private array $realisedVol = [];
 
+    /** @var array<string, array{list<array{float, array<string, mixed>}>, float, float, float, float}> KPI_TICKERS: ticker => [kpi rows, opening cap, opening eps, running peak, max drawdown] */
+    private array $kpiLog = [];
+
     /** OUTLOOK_SALT=1 pre-writes the outlook salt 1000 + SEED so the outlook draws repeat across runs. */
     protected function afterStocks(array $result): void
     {
@@ -47,6 +50,10 @@ final class IdleHarnessTest extends BoardRun
                 ++$this->realisedVol[$ticker][1];
             }
             $this->realisedVol[$ticker][3] = $price;
+            if (isset($this->kpiLog[$ticker])) {
+                $this->kpiLog[$ticker][3] = max($this->kpiLog[$ticker][3], $price);
+                $this->kpiLog[$ticker][4] = max($this->kpiLog[$ticker][4], 1.0 - ($price / $this->kpiLog[$ticker][3]));
+            }
         }
         if (!getenv('OUTLOOK_OUT') || ($store = $this->outlookStore()) === null) {
             return;
@@ -70,6 +77,9 @@ final class IdleHarnessTest extends BoardRun
         foreach ($this->stocks as $ticker => $stock) {
             $this->openingRevenue[$ticker] = (float) $stock->getTotalRevenue();
             $this->realisedVol[$ticker] = [0.0, 0, (float) $stock->getVolatility(), 0.0];
+            if (in_array($ticker, explode(',', (string) getenv('KPI_TICKERS')), true)) {
+                $this->kpiLog[$ticker] = [[], (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(), (float) $stock->getEarningsPerShare(), 0.0, 0.0];
+            }
         }
     }
 
@@ -77,6 +87,9 @@ final class IdleHarnessTest extends BoardRun
     {
         $kpis = $report->getReportedKpis() ?? [];
         $stock = $report->getStock();
+        if (isset($this->kpiLog[$stock->getTicker()])) {
+            $this->kpiLog[$stock->getTicker()][0][] = [round($this->currentTime, 3), $kpis];
+        }
         $this->idleRows[] = [
             round($this->currentTime, 3),
             $stock->getTicker(),
@@ -156,7 +169,7 @@ final class IdleHarnessTest extends BoardRun
         }
         $out = getenv('IDLE_OUT');
         if ($out) {
-            file_put_contents($out, json_encode(['rows' => $this->idleRows, 'opening' => $this->openingRevenue, 'probe' => $GLOBALS['IDLE_PROBE'] ?? [], 'rv' => $this->realisedVol, 'tpy' => $this->tpy]));
+            file_put_contents($out, json_encode(['rows' => $this->idleRows, 'opening' => $this->openingRevenue, 'probe' => $GLOBALS['IDLE_PROBE'] ?? [], 'rv' => $this->realisedVol, 'tpy' => $this->tpy, 'kpi' => $this->kpiLog]));
         }
     }
 }

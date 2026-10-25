@@ -16,3 +16,7 @@ firm CANV.
   (it edits fixed line numbers of TERN's block: check them after InitialMarket changes); run `open_probe.sh <variant> 1`.
 - After adding a model class in `src/`, delete `var/harness/cache/test` (the container is compiled once).
 - Evidence: `airline_evidence.md`.
+- Cycle probe (no board, ~1 s): `bin/php-slot php var/harness/airline/cycle_probe.php [normal|severe|stag|oil|all|noise]`
+  drives AirlineBusinessModel through a stylised boom and downturn on a fixed plan (engine cost steps replayed) and
+  prints EBITDA with its decomposition (seats flown, load, fare, other lines, seat cost, cyclical ratio, fuel, overtime,
+  fixed); `noise` gives the quarterly and trailing EBITDA margin spread at a calm macro with the draws on.

@@ -55,6 +55,9 @@ board, and where does it bind?
     two ovr dirs hold each tree's own CapitalBudgetEngine and CapitalAllocationEngine with identical gate and buyback
     logs for TRACE_TICKERS (TERN,FALC). OUT identity with val/head5 and gate checked (`cmp_identity.out`).
     `analyse_cmp.py` -> `cmp_summary.out` and quarterly `cmp_detail.out`.
+  - `headn` / `fare` (section n): HEAD 314ed19a tree (`BASE`) / working tree, salt, FVX, `KPI_TICKERS=TERN` (idle.json
+    `kpi`: per-report KPIs, opening cap and EPS, tick-level max drawdown). Paths `-oc` now cover seeds 1-32.
+    `analyse_fare.py <seeds> headn fare`.
   - `probe`: working tree + `ovr_probe/` (CapitalBudgetEngine copy that logs the growth-capex gate for
     `PROBE_TICKER`, default FALC, into IDLE_OUT `probe`). STALE since section d: re-copy it from src before use.
     `analyse_probe.py <seed> <ticker> <y0> <y1>` prints per-year gate and funding and checks probe OUT == fix OUT.

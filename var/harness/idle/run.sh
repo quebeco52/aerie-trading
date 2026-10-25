@@ -36,10 +36,12 @@ case "$1" in
   trace) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 OVR=$H/ovr_trace TRACE_TICKER=${TRACE_TICKER:-TERN} ;;  # section l buyback trace
   cmphead) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<HEAD tree>}; export OUTLOOK_SALT=1 FVX=1 OVR=$H/ovr_cmp_head TRACE_TICKERS=TERN,FALC ;;  # section m
   cmpgate) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 OVR=$H/ovr_cmp_gate TRACE_TICKERS=TERN,FALC ;;  # section m
+  headn) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<HEAD tree>}; export OUTLOOK_SALT=1 FVX=1 KPI_TICKERS=TERN ;;  # section n: HEAD 314ed19a
+  fare) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 KPI_TICKERS=TERN ;;  # section n: airline fare elasticity 1.0
   ovr)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OVR=$H/ovr ;;  # working tree + ovr/ src overrides
   plain) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV="" ;;  # probe-free check: same as idle without the KPI log
   base) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<git archive tree with a vendor symlink>} ;;
-  *) echo "usage: run.sh rec|idle|fix|fix2|off|on|off2|on2|onbase|cal|val|valnofvx|head|head5|pre|gapp|fund|prior|priorplain|gate|gateplain|trace|cmphead|cmpgate|base|plain|ovr|probe <seed>" >&2; exit 2 ;;
+  *) echo "usage: run.sh rec|idle|fix|fix2|off|on|off2|on2|onbase|cal|val|valnofvx|head|head5|pre|gapp|fund|prior|priorplain|gate|gateplain|trace|cmphead|cmpgate|headn|fare|base|plain|ovr|probe <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env "$MAC" BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" OUT="$H/runs/$1-$2$TAG.jsonl" \
   IDLE_OUT="$H/runs/$1-$2$TAG.idle.json" OUTLOOK_OUT="$H/runs/$1-$2$TAG.outlook.json" \

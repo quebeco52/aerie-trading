@@ -115,9 +115,10 @@ class AirlineBusinessModel extends StandardCorporateBusinessModel
     /** Highest load factor a schedule can carry (92%): past it, demand is turned away. */
     public const MAXIMUM_LOAD_FACTOR = 0.92;
     /**
-     * Fares per unit of passenger demand over seats (1.5): revenue management prices the last seats on a full plane.
+     * Fares per unit of passenger demand over seats (1.0): with the load moving one for one, a seat's revenue moves
+     * twice the gap, the most carriers lose per seat of excess capacity.
      */
-    public const FARE_LOAD_ELASTICITY = 1.50;
+    public const FARE_LOAD_ELASTICITY = 1.00;
     /** Years for the schedule to close a gap to passenger demand (0.5): timetables and crews are planned months out. */
     public const SCHEDULE_LAG_YEARS = 0.50;
 

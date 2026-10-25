@@ -33,6 +33,14 @@ class AirlineBusinessModelTest extends TestCase
     /** A schedule set at plan the quarter before. */
     private const PLANNED_SCHEDULE = [AirlineBusinessModel::STATE_SCHEDULED_SEATS => 1.0];
 
+    // --- Revenue per Seat in a Downturn ---
+    /** A schedule still set for the boom: seats 6% over plan. */
+    private const BOOM_SCHEDULE = [AirlineBusinessModel::STATE_SCHEDULED_SEATS => 1.06];
+    /** Least revenue a seat loses per unit of passengers short of seats: carriers hold loads and cut yields. */
+    private const MIN_SEAT_REVENUE_ELASTICITY = 1.5;
+    /** Most revenue a seat loses per unit of passengers short of seats, across carriers' downturns. */
+    private const MAX_SEAT_REVENUE_ELASTICITY = 2.0;
+
     private static function macro(float $domesticGap = 0.0, float $outputGap = 0.0): MacroStateDTO
     {
         return new MacroStateDTO(outputGapEma: $outputGap, domesticDemandGapEma: $domesticGap);
@@ -108,6 +116,23 @@ class AirlineBusinessModelTest extends TestCase
 
         // The flights still fly, so the cost of flying them is the plan's.
         $this->assertEqualsWithDelta($calm->actualVariableCosts, $slump->actualVariableCosts, 1.0);
+    }
+
+    public function testASeatScheduledForTheBoomLosesAtMostTwiceThePassengerShortfall(): void
+    {
+        $calm = $this->runQuarter(self::macro(), self::PLANNED_SCHEDULE);
+        $turn = $this->runQuarter(self::macro(), self::BOOM_SCHEDULE);
+
+        // Demand is back at plan while the seats are still the boom's: the planes empty and the fares fall on them.
+        $passengers = static fn(ActualFinancialsDTO $r): float => $r->streamRevenue['leisure_passengers'] + $r->streamRevenue['business_passengers'];
+        $revenuePerSeat = ($passengers($turn) / $turn->kpis['seat_capacity_index']) / ($passengers($calm) / $calm->kpis['seat_capacity_index']);
+        $shortfall = 1.0 - (1.0 / self::BOOM_SCHEDULE[AirlineBusinessModel::STATE_SCHEDULED_SEATS]);
+        $elasticity = (1.0 - $revenuePerSeat) / $shortfall;
+
+        $this->assertGreaterThanOrEqual(self::MIN_SEAT_REVENUE_ELASTICITY, $elasticity);
+        $this->assertLessThanOrEqual(self::MAX_SEAT_REVENUE_ELASTICITY, $elasticity);
+        // The seats still fly, so the cost of flying them is the boom schedule's.
+        $this->assertEqualsWithDelta(self::flownCosts($turn->kpis['seat_capacity_index']), $turn->actualVariableCosts, 1.0);
     }
 
     public function testTheScheduleChasesTheTrafficWithAHalfYearLag(): void
