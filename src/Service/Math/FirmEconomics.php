@@ -182,6 +182,41 @@ final class FirmEconomics
     }
 
     /**
+     * Where an industry clears when its roster sells no lower than a floor price: the fringe-adjusted level while that
+     * stays at or above the floor; below it the price holds at the floor, buyers take Pf^(-e), the fringe supplies
+     * (1 - rosterShare) * Pf^eta, and the roster sells the rest with its other plant idle. Load is the share of the
+     * roster's plant that sells, one until the floor binds and continuous through it.
+     *
+     * @param float $capacityRatio Installed supply over trend demand at the trend price.
+     * @param float $priceFloor    Lowest industry price the roster sells at; below it, it withholds output instead.
+     * @return array{price: float, load: float}
+     */
+    public static function calculateIndustryClearing(float $capacityRatio, float $rosterShare, float $elasticity, float $fringeElasticity, float $priceFloor): array
+    {
+        $price = self::calculateFringeAdjustedPriceLevel($capacityRatio, $rosterShare, $elasticity, $fringeElasticity);
+        $fringeShare = 1.0 - max(0.0, min(1.0, $rosterShare));
+        $rosterPlant = $capacityRatio - $fringeShare;
+        if ($price >= $priceFloor || $elasticity <= 0.0 || $rosterPlant <= 0.0) {
+            return ['price' => $price, 'load' => 1.0];
+        }
+
+        $fringeSupply = $fringeShare * ($priceFloor ** max(0.0, $fringeElasticity));
+        $rosterSales = ($priceFloor ** (-$elasticity)) - $fringeSupply;
+
+        return ['price' => $priceFloor, 'load' => max(0.0, min(1.0, $rosterSales / $rosterPlant))];
+    }
+
+    /**
+     * The elasticity of the demand a roster firm's output meets once the competitive fringe answers the price: buyers'
+     * own e plus the fringe's supply response eta times its share of the market, since a price cut also pushes fringe
+     * output out (from D(P) = Q + F(P)). A half-market fringe at unit elasticity lifts 1.25 to 1.75.
+     */
+    public static function fringeAdjustedDemandElasticity(float $elasticity, float $fringeElasticity, float $rosterShare): float
+    {
+        return $elasticity + (max(0.0, $fringeElasticity) * (1.0 - max(0.0, min(1.0, $rosterShare))));
+    }
+
+    /**
      * Marginal revenue over price for a quantity-setting firm that internalises its own price effect: the
      * Cournot Lerner condition MR/P = 1 - s/e, with s the firm's share of the market it sells into and e the
      * industry price elasticity of demand, scaled by how substitutable its output is (a firm whose output

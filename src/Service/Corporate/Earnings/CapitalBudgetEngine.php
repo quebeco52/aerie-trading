@@ -60,9 +60,10 @@ final class CapitalBudgetEngine
 
             // Operational CapEx:
             // 1. Maintenance CapEx: replaces depreciating physical capital in ongoing operations, at the capital-goods
-            //    replacement cost of the plant worn out, scaled with the capex cycle.
+            //    replacement cost of the plant worn out, scaled with the capex cycle. Plant idled in an industry glut is
+            //    left to wear out (Abel & Eberly 1994).
             $ctx->replacementCostRatio = $this->plant->resolveReplacementCostRatio($ctx);
-            $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier;
+            $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier * self::plantInUse($ctx);
             if ($ctx->strategy->isFinancial()) {
                 // A balance-sheet business keeps no plant ledger: what it spends to stand still (branches,
                 // systems) is expensed as it is spent, so the cash out is the depreciation charge and nothing
@@ -142,8 +143,9 @@ final class CapitalBudgetEngine
         $ctx->operatingCapex = $fcfData['capex'];
 
         // Replacement CapEx is the bar the firm has to clear to stand still, so the reinvestment ratio is
-        // measured against the depreciation charge restated at today's prices, not the historical-cost charge.
-        $replacementDepreciation = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio;
+        // measured against the depreciation charge restated at today's prices, not the historical-cost charge, on the
+        // plant in use.
+        $replacementDepreciation = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * self::plantInUse($ctx);
         $reinvestmentRatio = $replacementDepreciation > 0 ? ($fcfData['capex'] / $replacementDepreciation) : 1.0;
         $ctx->strategy->recordReinvestmentRatio($stock, $reinvestmentRatio, $ctx->dt);
 
@@ -254,6 +256,16 @@ final class CapitalBudgetEngine
         $revaluationAlreadyBooked = max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation);
         $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
 
-        return max(0.0, $plantBase * $plantGrowth * $ctx->dt * $cycleCapExModifier - $revaluationAlreadyBooked);
+        // Plant idled in an industry glut meets new demand first: growth is planned on the plant in use.
+        return max(0.0, ($plantBase * $plantGrowth * $ctx->dt * $cycleCapExModifier * $ctx->plantLoad) - ($plantBase * (1.0 - $ctx->plantLoad)) - $revaluationAlreadyBooked);
+    }
+
+    /**
+     * Share of the plant whose wear the firm replaces: the plant in use, or all of it for a plant charged by units of
+     * production, whose depreciation already follows the output it runs.
+     */
+    private static function plantInUse(EarningsSimulationContext $ctx): float
+    {
+        return $ctx->strategy->depreciatesByUnitsOfProduction() ? 1.0 : $ctx->plantLoad;
     }
 }

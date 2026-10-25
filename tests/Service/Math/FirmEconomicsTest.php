@@ -218,6 +218,38 @@ class FirmEconomicsTest extends TestCase
         $this->assertSame(1.0, FirmEconomics::calculateFringeAdjustedPriceLevel(0.0, 0.4, 1.25, 1.0));
     }
 
+    public function testIndustryClearingHoldsTheFloorAndIdlesThePlantBuyersDoNotTake(): void
+    {
+        // Above the floor it is the fringe-adjusted level with every plant running.
+        $unfloored = FirmEconomics::calculateFringeAdjustedPriceLevel(1.6, 0.4, 1.25, 1.0);
+        $this->assertSame(['price' => $unfloored, 'load' => 1.0], FirmEconomics::calculateIndustryClearing(1.6, 0.4, 1.25, 1.0, $unfloored - 0.01));
+
+        // Below it the price holds and the roster sells what buyers take after the fringe: demand = roster sales +
+        // fringe.
+        $floor = $unfloored + 0.05;
+        $cleared = FirmEconomics::calculateIndustryClearing(1.6, 0.4, 1.25, 1.0, $floor);
+        $this->assertSame($floor, $cleared['price']);
+        $this->assertLessThan(1.0, $cleared['load']);
+        $this->assertEqualsWithDelta($floor ** -1.25, (1.6 - 0.6) * $cleared['load'] + 0.6 * $floor, 1e-12, 'buyers take what is sold');
+
+        // Continuous through the floor, and a deeper glut idles more of the plant.
+        $this->assertEqualsWithDelta(1.0, FirmEconomics::calculateIndustryClearing(1.6, 0.4, 1.25, 1.0, $unfloored + 1e-9)['load'], 1e-6);
+        $this->assertLessThan($cleared['load'], FirmEconomics::calculateIndustryClearing(2.4, 0.4, 1.25, 1.0, $floor)['load']);
+
+        // A fringe fixed at trend still answers for its share; a roster with no plant left has nothing to idle.
+        $fixedFringe = FirmEconomics::calculateIndustryClearing(1.6, 0.4, 1.25, 0.0, 0.9);
+        $this->assertEqualsWithDelta(0.9 ** -1.25, 1.0 * $fixedFringe['load'] + 0.6, 1e-12);
+        $this->assertSame(1.0, FirmEconomics::calculateIndustryClearing(0.5, 0.4, 1.25, 1.0, 2.0)['load']);
+    }
+
+    public function testFringeAdjustedElasticityAddsTheFringesSupplyResponseOnItsShare(): void
+    {
+        $this->assertEqualsWithDelta(1.75, FirmEconomics::fringeAdjustedDemandElasticity(1.25, 1.0, 0.5), 1e-12);
+        // No fringe, or one that does not answer the price, leaves buyers' elasticity alone.
+        $this->assertSame(1.25, FirmEconomics::fringeAdjustedDemandElasticity(1.25, 1.0, 1.0));
+        $this->assertSame(1.25, FirmEconomics::fringeAdjustedDemandElasticity(1.25, 0.0, 0.3));
+    }
+
     public function testCournotMarginalRevenueFactorIsTheLernerConditionScaledBySubstitutability(): void
     {
         // MR/P = 1 - s/e for a firm selling its whole output into one price.

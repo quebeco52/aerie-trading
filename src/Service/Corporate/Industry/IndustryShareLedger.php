@@ -50,11 +50,6 @@ class IndustryShareLedger
 
     // --- Industry Capacity & Cournot Pricing ---
     /**
-     * Widest capacity-to-demand ratio the industry price responds to; past it the excess is idle plant, not a deeper
-     * price cut.
-     */
-    public const MAX_INDUSTRY_CAPACITY_RATIO = 2.0;
-    /**
      * Tightest capacity-to-demand ratio the industry price responds to; past it demand is rationed rather than bid ever
      * higher.
      */
@@ -172,9 +167,9 @@ class IndustryShareLedger
     }
 
     /**
-     * Installed capacity against trend demand across the industry, bounded to the range the price responds
-     * to. Records this firm's capacity first, so its own plant is always in the sum, and strikes its anchor
-     * if it has none.
+     * Installed capacity against trend demand across the industry, floored where a shortage stops bidding the price
+     * up. Records this firm's capacity first, so its own plant is always in the sum, and strikes its anchor if it has
+     * none.
      *
      * Dominant firms with a competitive fringe (Forchheimer; Landes & Posner 1981). The modelled roster is
      * not the whole industry — a firm's addressable share says how much of it is — and the unmodelled rest
@@ -506,9 +501,13 @@ class IndustryShareLedger
         return $shares;
     }
 
+    /**
+     * No ceiling: an overbuild past the deepest price cut clears as idle plant
+     * (FirmEconomics::calculateIndustryClearing).
+     */
     private function boundedCapacityRatio(float $supplyOverDemand): float
     {
-        return max(self::MIN_INDUSTRY_CAPACITY_RATIO, min(self::MAX_INDUSTRY_CAPACITY_RATIO, $supplyOverDemand));
+        return max(self::MIN_INDUSTRY_CAPACITY_RATIO, $supplyOverDemand);
     }
 
     /**

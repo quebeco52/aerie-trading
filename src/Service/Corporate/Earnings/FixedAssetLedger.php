@@ -66,8 +66,8 @@ final class FixedAssetLedger
         $ctx->quarterlyDepreciation = $ctx->structuralDepreciation;
         $ctx->expectedDepreciation = $ctx->structuralDepreciation;
         if ($ctx->strategy->depreciatesByUnitsOfProduction()) {
-            $ctx->quarterlyDepreciation *= $ctx->capacityUtilization * $ctx->sectorActivityFactor;
-            $ctx->expectedDepreciation *= $ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor;
+            $ctx->quarterlyDepreciation *= $ctx->capacityUtilization * $ctx->sectorActivityFactor * $ctx->plantLoad;
+            $ctx->expectedDepreciation *= $ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor * $ctx->plantLoad;
         }
     }
 

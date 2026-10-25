@@ -569,7 +569,7 @@ class EarningsEngine
                 - ($ctx->strategy->getPriceElasticityOfDemand() * ($pricingPowerMultiplier - $inputCostMultiplier));
 
             [, $expectedRevenue] = $this->operations->capacityRevenueAt($ctx, $pricingPowerMultiplier, $this->operations->capacityUtilizationAt($ctx, $macroDemandShift));
-            $counterfactuals[$field] = [$state, $expectedRevenue * $ctx->industryPriceLevel];
+            $counterfactuals[$field] = [$state, $expectedRevenue * $ctx->industryPriceLevel * $ctx->plantLoad];
         }
 
         $ctx->streamMacroEffects = $ctx->strategy->measureStreamMacroEffects(
@@ -745,6 +745,7 @@ class EarningsEngine
         $ctx->kpis['rival_share_drain'] = $ctx->rivalShareDrain;
         $ctx->kpis['own_price_volume_shift'] = $ctx->ownPriceVolumeShift;
         $ctx->kpis['industry_price_level'] = $ctx->industryPriceLevel;
+        $ctx->kpis['idle_plant_share'] = 1.0 - $ctx->plantLoad;
         $ctx->kpis['price_revenue'] = $actuals->priceRevenue;
         $this->recordCostKpis($ctx, $streamState);
         $ctx->creditLossProvision = $actuals->creditLossProvision;
@@ -804,11 +805,11 @@ class EarningsEngine
         $annualSaarRevenue = TimeSeries::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
         $stock->setTotalRevenue((string) $annualSaarRevenue);
 
-        // Leases follow the capacity the firm runs, not the quarter's demand: struck on structural revenue, signed as
-        // the plant grows and run off only as they expire.
+        // Leases follow the capacity the firm runs, not the quarter's demand: struck on structural revenue less plant
+        // idled in a glut, signed as the plant grows and run off only as they expire.
         $stock->setLeaseLiability(CorporateMetrics::rollLeaseLiability(
             $stock->getLeaseLiability(),
-            $ctx->structuralRevenue * self::TTM_QUARTERS,
+            $ctx->structuralRevenue * $ctx->plantLoad * self::TTM_QUARTERS,
             $ctx->strategy->getLeaseIntensity($stock),
             $ctx->dt,
         ));

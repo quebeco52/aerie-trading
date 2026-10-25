@@ -113,6 +113,55 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * A rival build too large for any price cut to sell clears as idle plant. The price holds at the deepest cut, the
+     * firm runs only the share of its plant buyers take, its utilisation as the inventory readers see it is untouched
+     * (idle plant makes no goods), it replaces wear only on the plant in use and builds nothing new. Compared on one
+     * seed against a control where the rival stood still.
+     */
+    public function testAGlutPastTheDeepestPriceCutIdlesPlantAndStopsGrowthSpend(): void
+    {
+        $report = function (float $rivalCapacityMultiple): EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($dispatcher, $ledger);
+            mt_srand(7); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+
+            $firm = $this->buildMatureIndustrial('HOLD');
+            $rival = $this->buildMatureIndustrial('BULD');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+            $ticksPerYear = 252;
+
+            $engine->calculate($firm, $macro, EarningsEngine::resolveReportingTick('HOLD', $ticksPerYear), $ticksPerYear);
+            $rivalCapacity = (float) $firm->getTotalRevenue();
+            $ledger->resolveIndustryCapacityRatio($rival, $rivalCapacity, 0.5, 1.0, 0.0, 0.0, 1, $ticksPerYear);
+            $ledger->resolveIndustryCapacityRatio($rival, $rivalCapacity * $rivalCapacityMultiple, 0.5, 1.0, 0.0, 0.0, 2, $ticksPerYear);
+
+            $engine->calculate($firm, $macro, 63 + EarningsEngine::resolveReportingTick('HOLD', $ticksPerYear), $ticksPerYear);
+            $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+
+            return $captured;
+        };
+
+        $control = $report(1.0);
+        $glut = $report(6.0);
+        $substitutability = $glut->strategy->getIndustrySubstitutability();
+
+        $this->assertSame(1.0, $control->plantLoad);
+        $this->assertLessThan(1.0, $glut->plantLoad, 'buyers take less than the industry built');
+        $this->assertEqualsWithDelta(1.0 - $glut->plantLoad, $glut->kpis['idle_plant_share'], 1e-12);
+        $this->assertGreaterThanOrEqual(1.0 - ($substitutability * FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE) - 1e-12, $glut->industryPriceLevel, 'the price holds at the deepest cut');
+        $this->assertSame($control->capacityUtilization, $glut->capacityUtilization, 'idle plant is not unsold stock');
+        $this->assertEqualsWithDelta($control->maintenanceCapex * $glut->plantLoad, $glut->maintenanceCapex, 1e-6 * $control->maintenanceCapex, 'wear replaced on the plant in use');
+        $this->assertSame(0.0, $glut->expansionBudget, 'idle plant meets new demand first');
+        $this->assertEqualsWithDelta($glut->maintenanceCapex + $glut->scheduledCapex, $glut->operatingCapex, 1e-6, 'no growth spend');
+    }
+
+    /**
      * Growth plant follows demand, not the reinvestment rate or how small the firm looks next to its market:
      * a price-taker at half a percent of a $10T market and a firm spanning forty percent of a $125B one, both
      * set to reinvest far past trend, grow their plant alike. Before the flexible accelerator the price-taker

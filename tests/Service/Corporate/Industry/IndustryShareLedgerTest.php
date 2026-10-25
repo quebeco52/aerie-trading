@@ -377,7 +377,7 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertEqualsWithDelta(0.55, $market['fringe_share'], 1e-12);
     }
 
-    public function testTheCapacityRatioIsBoundedToTheRangeThePriceRespondsTo(): void
+    public function testTheCapacityRatioIsFlooredInAShortageButCarriesAGlutInFull(): void
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
         $firm = $this->stock('BIG', 1_000.0);
@@ -385,7 +385,8 @@ class IndustryShareLedgerTest extends TestCase
         // A firm that IS its whole market: the closed-loop case, so its build is the industry's.
         $ledger->resolveIndustryCapacityRatio($firm, 1_000.0, 1.0, 1.0, 0.0, 0.0, 10, 252);
 
-        $this->assertSame(IndustryShareLedger::MAX_INDUSTRY_CAPACITY_RATIO, $ledger->resolveIndustryCapacityRatio($firm, 10_000.0, 1.0, 1.0, 0.0, 0.0, 73, 252));
+        // The clearing turns a glut past the deepest price cut into idle plant, so it needs the whole of it.
+        $this->assertEqualsWithDelta(10.0, $ledger->resolveIndustryCapacityRatio($firm, 10_000.0, 1.0, 1.0, 0.0, 0.0, 73, 252), 1e-9);
         $this->assertSame(IndustryShareLedger::MIN_INDUSTRY_CAPACITY_RATIO, $ledger->resolveIndustryCapacityRatio($firm, 10.0, 1.0, 1.0, 0.0, 0.0, 136, 252));
     }
 

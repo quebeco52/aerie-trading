@@ -195,6 +195,12 @@ class EarningsSimulationContext
      * trend demand.
      */
     public float $industryPriceLevel = 1.0;
+    /**
+     * Share of the plant that runs once the industry has cleared: below one when a glut has driven the price to the
+     * lowest the roster sells at and buyers take less than it has built. Idle plant makes no goods, so the inventory
+     * readers leave it out.
+     */
+    public float $plantLoad = 1.0;
     /** The quarter's idiosyncratic demand shock to utilisation. */
     public float $idiosyncraticDemandShock = 0.0;
     /** The quarter's fundamental jump in utilisation. */

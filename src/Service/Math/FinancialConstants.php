@@ -196,8 +196,8 @@ class FinancialConstants
      */
     public const COURNOT_DEMAND_ELASTICITY = 1.25;
     /**
-     * Largest fraction by which the industry capacity balance may move a single firm's realized price level, either
-     * way.
+     * Largest fraction by which the industry capacity balance may move a price level, either way (30%). It is also the
+     * deepest cut an overbuilt industry takes: past it the roster idles plant rather than cut further.
      */
     public const MAX_INDUSTRY_PRICE_RESPONSE = 0.30;
 

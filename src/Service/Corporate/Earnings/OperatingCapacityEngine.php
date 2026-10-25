@@ -216,14 +216,7 @@ final class OperatingCapacityEngine
         // marks, trade terms and units-of-production depreciation. Read before the physics rolls the book on.
         $ctx->sectorActivityFactor = max(0.0, 1.0 + $strategy->resolveSectorActivityShift($stock, $ctx->macroState));
 
-        // Industry capacity balance: total industry capacity relative to trend demand scales realized price level.
-        $industryPriceLevel = $this->resolveIndustryPriceLevel($ctx);
-        $ctx->industryPriceLevel = $industryPriceLevel;
         $balancedStructuralRevenue = $ctx->structuralRevenue;
-        $ctx->structuralRevenue *= $industryPriceLevel;
-        $ctx->expectedRevenue *= $industryPriceLevel;
-        $ctx->expectedRevenueBeforeShocks *= $industryPriceLevel;
-
         $fixedCostRatio = (float) $stock->getFixedCostRatio();
         // The cost base inflates with INPUT prices (expected inflation), not with the firm's own selling
         // price: a price setter's excess pass-through reaches its margin, a price taker's shortfall squeezes
@@ -250,13 +243,25 @@ final class OperatingCapacityEngine
         // resourced for until it restructures, which is why the structural figure is what gets scaled.
         // Rules that cost the firm productivity raise it per unit of capacity as they raise its unit costs.
         $structuralFixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor * $strategy->getFixedCostFactor($macroState);
+        $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);
+
+        // Industry capacity balance: the industry's plant against trend demand sets the price this firm realizes and,
+        // in a glut deep enough to reach the lowest price it sells at, how much of its plant runs. Idling a unit saves
+        // its variable cost and, once the committed base is restructured, the part of it above the floor.
+        [$ctx->industryPriceLevel, $ctx->plantLoad] = $this->resolveIndustryBalance(
+            $ctx,
+            ($structuralVariableCosts + ((1.0 - FinancialConstants::MIN_COMMITTED_COST_SCALE) * $structuralFixedCosts)) / $balancedStructuralRevenue,
+        );
+        $ctx->structuralRevenue *= $ctx->industryPriceLevel;
+        $ctx->expectedRevenue *= $ctx->industryPriceLevel * $ctx->plantLoad;
+        $ctx->expectedRevenueBeforeShocks *= $ctx->industryPriceLevel * $ctx->plantLoad;
+
         // A firm staffs, rents and stocks up for its peak and lets the extra go after it: the seasonal share of the
         // base follows the season, the rest (rent, depreciation, head office) carries evenly through the year.
         $seasonalShare = $strategy->getSeasonalFixedCostShare();
         $ctx->seasonalFixedCostFactor = 1.0 - $seasonalShare + ($seasonalShare * $ctx->seasonalFactor);
         $ctx->fixedCosts = $structuralFixedCosts * $this->resolveCommittedCostScale($ctx) * $ctx->seasonalFixedCostFactor;
 
-        $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
     }
 
@@ -353,9 +358,9 @@ final class OperatingCapacityEngine
             $prior = 1.0;
         }
 
-        // The activity the base has to carry, with the seasonal swing the firm staffs through taken out, and
-        // the volume a model moves inside its own sector physics put back in.
-        $utilization = ($ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor)) * $ctx->sectorActivityFactor;
+        // The activity the base has to carry, with the seasonal swing the firm staffs through taken out, the volume a
+        // model moves inside its own sector physics put back in, and plant idled in an industry glut left out.
+        $utilization = ($ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor)) * $ctx->sectorActivityFactor * $ctx->plantLoad;
         $activityGap = log(
             max(self::MIN_CAPACITY_UTILIZATION, $utilization) / max(self::MIN_CAPACITY_UTILIZATION, $prior),
         );
@@ -377,15 +382,22 @@ final class OperatingCapacityEngine
     }
 
     /**
-     * The price level this firm realizes given how much plant its industry has installed against trend
-     * demand: one for a balanced industry, below it for an overbuilt one. Financials sell a yield, not a
-     * unit, and are left at one; so is any firm whose model declares its output non-substitutable.
+     * The price level this firm realizes and the share of its plant that runs, given how much plant its industry has
+     * installed against trend demand. The industry price falls along the fringe-adjusted curve until it reaches the
+     * lowest price the firm sells into the shared market at: its avoidable cost over its marginal revenue, where
+     * another unit no longer pays for what idling it saves, and never below the deepest cut the balance makes. Past it
+     * the price holds and the plant buyers do not take stands idle (capacity-constrained Cournot, Kreps & Scheinkman
+     * 1983). Price and load reach the firm by how substitutable its output is; the rest sells in its own niche. One and
+     * one for a balanced industry, a financial, or output declared non-substitutable.
+     *
+     * @param float $avoidableCostRatio Cost idling a unit of plant saves, over its revenue at the balanced price.
+     * @return array{0: float, 1: float} Price level, plant load.
      */
-    private function resolveIndustryPriceLevel(EarningsSimulationContext $ctx): float
+    private function resolveIndustryBalance(EarningsSimulationContext $ctx, float $avoidableCostRatio): array
     {
         $substitutability = $ctx->strategy->getIndustrySubstitutability();
         if ($this->industryShareLedger === null || $ctx->strategy->isFinancial() || $substitutability <= 0.0) {
-            return 1.0;
+            return [1.0, 1.0];
         }
 
         // The roster is not the industry: the firm's build weighs on the industry price by its share of the
@@ -400,18 +412,30 @@ final class OperatingCapacityEngine
             $ctx->tickCount,
             $ctx->ticksPerYear,
         );
+        $rosterShare = $this->industryShareLedger->resolveRosterTrendShare($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear);
+
+        $marginalRevenue = FirmEconomics::calculateCournotMarginalRevenueFactor(
+            $ctx->addressableShare,
+            FirmEconomics::fringeAdjustedDemandElasticity(FinancialConstants::COURNOT_DEMAND_ELASTICITY, self::FRINGE_SUPPLY_ELASTICITY, $rosterShare),
+            $substitutability,
+        );
+        $withholdingPrice = $marginalRevenue > 0.0 ? min(1.0, $avoidableCostRatio / $marginalRevenue) : 1.0;
 
         // The roster is priced as dominant firms against a competitive fringe that answers the price: an
         // overbuild is partly absorbed by fringe exit, a hole left by a failed firm partly refilled.
-        $industryPrice = FirmEconomics::calculateFringeAdjustedPriceLevel(
+        $clearing = FirmEconomics::calculateIndustryClearing(
             $capacityRatio,
-            $this->industryShareLedger->resolveRosterTrendShare($ctx->stock, $ctx->tickCount, $ctx->ticksPerYear),
+            $rosterShare,
             FinancialConstants::COURNOT_DEMAND_ELASTICITY,
             self::FRINGE_SUPPLY_ELASTICITY,
+            max(1.0 - FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, $withholdingPrice),
         );
-        $firmResponse = $substitutability * ($industryPrice - 1.0);
+        $firmResponse = $substitutability * ($clearing['price'] - 1.0);
 
-        return 1.0 + max(-FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, min(FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, $firmResponse));
+        return [
+            1.0 + max(-FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, min(FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE, $firmResponse)),
+            1.0 - ($substitutability * (1.0 - $clearing['load'])),
+        ];
     }
 
     /**
@@ -473,13 +497,13 @@ final class OperatingCapacityEngine
         // What the ratio was expected to run at: the same step without its draw, at the output the quarter was
         // expected to sell.
         $ctx->publicVariableMargin = min(0.99, max(0.01, StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, 0.0)
-            + self::overtimePremium($ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor, $ctx->seasonalFactor)));
+            + self::overtimePremium($ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor * $ctx->plantLoad, $ctx->seasonalFactor)));
 
         $stock->setStructuralVariableMargin($realizedVariableMargin);
 
         // Variable cost is per unit: cost stickiness (Anderson, Banker & Janakiraman 2003) lives in the committed
         // base alone (resolveCommittedCostScale), so a fall in volume is not charged as sticky twice.
-        $ctx->realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin + self::overtimePremium($ctx->capacityUtilization * $ctx->sectorActivityFactor, $ctx->seasonalFactor)));
+        $ctx->realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin + self::overtimePremium($ctx->capacityUtilization * $ctx->sectorActivityFactor * $ctx->plantLoad, $ctx->seasonalFactor)));
     }
 
     /**
