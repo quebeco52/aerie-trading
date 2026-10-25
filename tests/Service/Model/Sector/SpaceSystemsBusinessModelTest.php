@@ -99,6 +99,44 @@ class SpaceSystemsBusinessModelTest extends TestCase
         $this->assertLessThan(self::EXPECTED_REVENUE * self::VARIABLE_COST_RATIO, $result->actualVariableCosts);
     }
 
+    public function testTakeUpReportsTheSignUpsAheadOfTheCurveOrBehindIt(): void
+    {
+        $years = 8.0;
+        $expected = ResponseCurves::bassAdoption($years - Space::BROADBAND_SERVICE_START_YEARS, Space::BROADBAND_INNOVATION, Space::BROADBAND_IMITATION);
+        $momentum = [Space::STATE_YEARS_LISTED => $years, Space::STATE_LAUNCH_EXPERIENCE => Space::INITIAL_LAUNCH_EXPERIENCE_YEARS];
+        $quarter = fn(float $broadbandZ): ActualFinancialsDTO => $this->model->computeActualFinancials(
+            self::stock($momentum),
+            self::EXPECTED_REVENUE,
+            self::VARIABLE_COST_RATIO,
+            10_000_000.0,
+            0.45,
+            new MacroStateDTO(),
+            // Launch, government, then satellite internet draw their persistent Z in that order.
+            new ScriptedDraws(generatePersistentZ: [0.0, 0.0, $broadbandZ]),
+        );
+        $onCurve = $quarter(0.0);
+        $ahead = $quarter(1.5);
+        $behind = $quarter(-1.5);
+
+        $this->assertEqualsWithDelta($expected, $onCurve->kpis['broadband_penetration'], 1e-12);
+        $this->assertGreaterThan($expected, $ahead->kpis['broadband_penetration']);
+        $this->assertLessThan($expected, $behind->kpis['broadband_penetration']);
+        // The take-up moves with the revenue: sign-ups ahead by a share s lift the odds of having signed up by s.
+        $signUps = $ahead->streamRevenue['satellite_broadband'] / $onCurve->streamRevenue['satellite_broadband'];
+        $odds = static fn(float $share): float => $share / (1.0 - $share);
+        $this->assertEqualsWithDelta($signUps * $odds($expected), $odds($ahead->kpis['broadband_penetration']), 1e-9);
+    }
+
+    public function testTakeUpStaysAShareOfTheMarketWhateverTheRevenueDoes(): void
+    {
+        // Early, take-up is the curve scaled by the sign-ups; near saturation it closes on the whole market.
+        $this->assertEqualsWithDelta(0.02 * 1.3, Space::reportedTakeUp(0.02, 1.3), 0.001);
+        $this->assertLessThan(1.0, Space::reportedTakeUp(0.98, 1.5));
+        $this->assertGreaterThan(0.98, Space::reportedTakeUp(0.98, 1.5));
+        $this->assertSame(0.0, Space::reportedTakeUp(0.0, 1.5));
+        $this->assertEqualsWithDelta(0.40, Space::reportedTakeUp(0.40, 1.0), 1e-12);
+    }
+
     public function testThePlantAndTheMarketReadTheCurvesGrowthAndTheLedgerItsLevel(): void
     {
         foreach ([0.0, 3.0, 8.0, 12.0, 18.0] as $years) {

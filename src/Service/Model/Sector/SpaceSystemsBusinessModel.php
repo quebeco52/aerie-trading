@@ -308,7 +308,8 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
         $government = $streams->recognizeBacklog('government_missions', $plan * $levels['government_missions'], $awards, self::GOVERNMENT_BURN_RATE);
 
         // --- Satellite internet: subscribers on the expected curve, ahead of it or behind ---
-        $broadband = $plan * $levels['satellite_broadband'] * max(0.0, 1.0 + ($broadbandZ * $baselineVol * self::BROADBAND_VARIANCE_SCALAR));
+        $signUps = max(0.0, 1.0 + ($broadbandZ * $baselineVol * self::BROADBAND_VARIANCE_SCALAR));
+        $broadband = $plan * $levels['satellite_broadband'] * $signUps;
 
         $streamRevenues = [
             'launch_services'     => $launch['revenue'],
@@ -335,10 +336,31 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             kpis: [
-                'broadband_penetration' => ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION),
+                'broadband_penetration' => self::reportedTakeUp(ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION), $signUps),
                 'launch_cost_index'     => self::learnedLaunchCost($experience),
             ],
         );
+    }
+
+    /**
+     * Take-up as the firm reports it: the expected curve with sign-ups running ahead of it or behind, applied to the
+     * odds of having signed up so it stays a share of the market. Early the surprise is how many have signed up; near
+     * saturation it is what they pay, so take-up closes on the whole market whatever the revenue does.
+     *
+     * @param float $expected Share of the market the expected curve has signed up.
+     * @param float $signUps  Satellite internet revenue against the expected curve's (1.0 = on the curve).
+     */
+    public static function reportedTakeUp(float $expected, float $signUps): float
+    {
+        if ($expected <= 0.0 || $signUps <= 0.0) {
+            return 0.0;
+        }
+        if ($expected >= 1.0) {
+            return 1.0;
+        }
+        $odds = $signUps * $expected / (1.0 - $expected);
+
+        return $odds / (1.0 + $odds);
     }
 
     /**
