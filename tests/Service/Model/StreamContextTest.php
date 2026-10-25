@@ -326,6 +326,16 @@ class StreamContextTest extends TestCase
         $this->assertEqualsWithDelta(2.55, $book['backlog_quarters'], 1e-9);
     }
 
+    /** Deferred work is not billed this quarter and stays in the book; the book is seeded at its normal depth. */
+    public function testDeferredWorkStaysInTheBook(): void
+    {
+        $book = (new StreamContext([], new MathUtility()))->recognizeBacklog('oem', 1000.0, 1.0, 0.25, deferredShare: 0.80);
+
+        // (3.0 + 1.0) quarters available, a quarter of it due and a fifth of that done.
+        $this->assertEqualsWithDelta(200.0, $book['revenue'], 1e-9);
+        $this->assertEqualsWithDelta(3.8, $book['backlog_quarters'], 1e-9);
+    }
+
     /**
      * A slow-burning book is deep by nature: a contractor booking a tenth of its work a quarter keeps its nine quarters
      * and the orders on top of them, where a fixed eight-quarter ceiling deleted booked work every quarter.

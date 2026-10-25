@@ -253,6 +253,7 @@ final class IndustryBetas
         'Software - Application' => 'Software (System & Application)',
         'Software - Infrastructure' => 'Software (System & Application)',
         'Solar' => 'Green & Renewable Energy',
+        'Space Systems' => 'Aerospace/Defense',
         'Specialty Business Services' => 'Business & Consumer Services',
         'Specialty Chemicals' => 'Chemical (Specialty)',
         'Specialty Industrial Machinery' => 'Machinery',

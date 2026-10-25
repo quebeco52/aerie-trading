@@ -144,6 +144,8 @@ final class InputOutputExposures
     public const SEMICONDUCTOR = ['metals' => 0.039, 'imports' => 0.083, 'labor' => 0.631];
     /** Water transportation (own-commodity trade excluded): BEA 483000. */
     public const SHIPPING = ['energy' => 0.102, 'metals' => 0.02, 'imports' => 0.073, 'labor' => 0.148];
+    /** Space vehicles, their propulsion and satellite telecommunications (SKYL): BEA 336414, 33641A, 517A00. */
+    public const SPACE_SYSTEMS = ['imports' => 0.082, 'labor' => 0.348];
     /** Industrial, general purpose, packaging and fluid power machinery: BEA 33329A, 333993, 33399A, 33399B. */
     public const SPECIALTY_INDUSTRIAL_MACHINERY = ['metals' => 0.125, 'imports' => 0.167, 'labor' => 0.287];
     /**

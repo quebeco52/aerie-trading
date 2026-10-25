@@ -47,6 +47,7 @@ class Sectors
         'private_bank'    => 'Private banks manage the money of wealthy families, most of them abroad, keep their cash and lend against their portfolios. Most revenue is fees charged on the value of the assets they manage, so it rises and falls with the markets clients invest in, and falls when a strong currency shrinks what foreign clients\' assets are worth at home. About half the balance sheet is loans secured on client portfolios.',
         'custody_bank'    => 'Custody banks hold and service other institutions\' securities and keep their cash. Most revenue is fees charged on the value of the assets in custody, so it rises and falls with the markets. The balance sheet is the clients\' cash, invested mostly in securities with little lending, and that cash is quick to demand a higher rate when rates rise.',
         'medical_care_facility' => 'Hospital networks and healthcare systems operating a tri-stream engine: inelastic inpatient care, high-margin elective outpatient surgeries, and algorithmic insurance billing arbitrage. Immune to recessions, but exposed to clinical wage inflation during high inflation regimes.',
+        'space_systems' => 'Space companies build and fly their own rockets and run satellite networks. Satellites are booked onto the launch manifest about a year ahead, and reusable rockets made reaching orbit cheap enough that launch demand outgrows the economy for years; every launch flown makes the next cheaper, and competition passes part of the saving on. Government agencies buy cargo, crew and defence missions out of their budgets. A satellite internet service opens a few years in and signs up subscribers slowly at first, then fast, until it is the larger business. A failed launch grounds the fleet while the cause is found, and the manifest waits for it.',
         'defense_contractor' => 'Operates on sovereign government "Cost-Plus" procurement contracts (Aerospace & Defense). Highly immune to recessions with guaranteed margin cost escalators.',
         'security_protection' => 'Private military contractors and executive protection. Tri-stream revenue engine: sovereign cost-plus contracts, sticky corporate campus retainers, and counter-cyclical expeditionary black-ops that thrive on market panic (high VIX) and credit distress. Carries asymmetric tail risk from publicized tactical breaches.',
         'clearing_house'  => 'Acts as the ultimate guarantor of all market trades. Holds massive "Initial Margin" deposits from member firms, earning interest on the float. Revenue scales off transaction volume, thriving during market panics (high VIX). Carries extreme apocalyptic tail risk if member defaults exceed the margin pool. Evaluated on ROE.',
@@ -302,6 +303,8 @@ class Sectors
         'Software - Infrastructure' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'tech'],
         // Capital intensive manufacturing
         'Solar' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'heavy_manufacturing'],
+        // Rockets and a satellite network: growth paid for with plant, debt held low while it is built.
+        'Space Systems' => ['pe' => 28.00, 'depreciation' => 0.07, 'ebitda_limit' => 2.5, 'equity_limit' => 0.75, 'business_model' => 'space_systems'],
         'Specialty Business Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Specialty Chemicals' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'chemical'],
         'Specialty Industrial Machinery' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'specialty_industrial_machinery'],
@@ -366,6 +369,7 @@ class Sectors
         'tech'                           => Sector\TechBusinessModel::class,
         'consumer_staples'               => Sector\ConsumerStaplesBusinessModel::class,
         'defense_contractor'             => Sector\DefenseContractorBusinessModel::class,
+        'space_systems'                  => Sector\SpaceSystemsBusinessModel::class,
         'security_protection'            => Sector\SecurityProtectionBusinessModel::class,
         'biotech'                        => Sector\BiotechBusinessModel::class,
         'luxury'                         => Sector\LuxuryBusinessModel::class,

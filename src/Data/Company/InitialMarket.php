@@ -602,6 +602,38 @@ class InitialMarket
             'retained_earnings' => 9_000_000_000.00,
         ],
         [
+            'ticker' => 'SKYL',
+            // Every dollar goes into rockets and satellites while the market grows; a dividend waits for it to mature
+            'management_style' => 'operator',
+            'name' => 'Skylark Orbital',
+            'sector' => 'Industrials',
+            'industry' => 'Space Systems',
+            'systemic_importance' => 'none',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.45,
+            'beta_tilt' => 0.25, // a growth stock: its value is mostly years away, so it moves with risk appetite
+            'jump_intensity' => 1.00,
+            'jump_vol' => 0.15,
+            'baseline_roic' => 0.12,
+            'capex_ratio' => 1.40, // reinvests more than it earns while the market grows, borrowing the rest
+            'target_payout_ratio' => 0.00,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            // engineering, the factory and the launch pads; propellant, recovery and ground crews follow the launches
+            'fixed_cost_ratio' => 0.45,
+            'operating_margin' => 0.10,
+            'public_float' => 0.95,
+            'sam_ratio' => 0.026,
+            'floating_debt_ratio' => 0.30,
+            'historical_fixed_rate' => 0.055,
+            'credit_spread' => 0.0250,
+            'depreciation_rate' => 0.07,
+            'corporate_treasury' => 3_250_000_000.00,
+            'total_equity'      => 9_100_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt'    => 1_950_000_000.00,
+            'retained_earnings' => 650_000_000.00,
+        ],
+        [
             'ticker' => 'LOON',
             'name' => 'Loon Call Telecom',
             'sector' => 'Communication Services',

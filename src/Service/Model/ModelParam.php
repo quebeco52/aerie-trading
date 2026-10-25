@@ -275,6 +275,10 @@ enum ModelParam: string
     case PlantServicesWeight = 'plant_services_weight';
     case NewBuildWeight = 'new_build_weight';
 
+    // --- Space Systems ---
+    case LaunchServicesWeight = 'launch_services_weight';
+    case GovernmentMissionsWeight = 'government_missions_weight';
+
     // --- Broadcasting ---
     case CarriageFeesWeight = 'carriage_fees_weight';
     case AirtimeAdvertisingWeight = 'airtime_advertising_weight';

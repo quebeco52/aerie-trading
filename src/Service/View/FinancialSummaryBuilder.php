@@ -27,6 +27,8 @@ class FinancialSummaryBuilder
     /** Operating KPIs the business models report, as label and figure format; anything else is not shown. */
     private const KPI_LABELS = [
         'book_to_bill' => ['Book-to-bill', FigureFormat::Multiple],
+        'broadband_penetration' => ['Satellite internet take-up', FigureFormat::Percent],
+        'launch_cost_index' => ['Launch cost index', FigureFormat::Index],
         'backlog_quarters' => ['Backlog', FigureFormat::Quarters],
         'contract_book_to_bill' => ['Charter book-to-bill', FigureFormat::Multiple],
         'contract_backlog_quarters' => ['Charter backlog', FigureFormat::Quarters],

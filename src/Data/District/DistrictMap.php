@@ -82,7 +82,7 @@ class DistrictMap
         'Industry & Materials' => [
             'conglomerate', 'merchant_house',
             'steel_manufacturing', 'specialty_industrial_machinery', 'chemical',
-            'construction', 'defense_contractor', 'security_protection', 'waste_management',
+            'construction', 'defense_contractor', 'space_systems', 'security_protection', 'waste_management',
             'railroad', 'shipping', 'port_terminal', 'logistics', 'airline', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
             'consulting',
         ],
@@ -335,6 +335,8 @@ class DistrictMap
         'railroad' => 'train', 'airline' => 'plane', 'waste_management' => 'bin',
         // Guardians and the professions.
         'defense_contractor' => 'shield', 'security_protection' => 'lock',
+        // A space company is known by its rockets.
+        'space_systems' => 'rocket',
         'law_firm' => 'scales', 'education' => 'cap', 'advertising_agency' => 'megaphone',
         // A consultancy is known by its slide decks: the bar chart the market-data houses carry too.
         'consulting' => 'chart',
@@ -363,7 +365,7 @@ class DistrictMap
         'coin', 'umbrella', 'chart', 'derrick', 'flare_stack', 'ingot', 'factory', 'flask', 'bolt', 'drop',
         'crane', 'anchor', 'truck', 'train', 'plane', 'bin', 'shield', 'lock', 'cart', 'bottle', 'fork', 'shirt',
         'car', 'bag', 'gem', 'dice', 'megaphone', 'cap', 'scales', 'chip', 'cloud', 'signal', 'cross',
-        'pill', 'house', 'blocks', 'cooling_tower',
+        'pill', 'house', 'blocks', 'cooling_tower', 'rocket',
     ];
     /** Symbol for a tenant neither map dressed — defensive only, the tests forbid the case for listed companies. */
     public const ROOF_FURNITURE_DEFAULT = 'blocks';

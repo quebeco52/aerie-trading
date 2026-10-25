@@ -214,6 +214,7 @@ class StockModelTuningTest extends TestCase
             'consulting' => [ModelParam::StrategyAdvisoryWeight, ModelParam::TechnologyProgrammeWeight, ModelParam::RiskRestructuringWeight, ModelParam::AuditTaxWeight],
             'grocery' => [ModelParam::GroceriesWeight, ModelParam::FuelForecourtsWeight],
             'nuclear_vendor' => [ModelParam::ReactorFuelWeight, ModelParam::PlantServicesWeight, ModelParam::NewBuildWeight],
+            'space_systems' => [ModelParam::LaunchServicesWeight, ModelParam::GovernmentMissionsWeight],
             'airline' => [ModelParam::LeisurePassengerWeight, ModelParam::BusinessPassengerWeight, ModelParam::AirCargoWeight, ModelParam::LoyaltyMilesWeight],
             'broadcasting' => [ModelParam::CarriageFeesWeight, ModelParam::AirtimeAdvertisingWeight, ModelParam::PoliticalAdvertisingWeight],
             'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight, ModelParam::CaptiveFinanceWeight],

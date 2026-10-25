@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Service\Math;
 
 /**
- * Shapes that map a driver to a response: the logistic on the unit interval, the kinked asymmetric response, simplex
- * weight normalisation and the convex penalty. Pure functions of their arguments.
+ * Shapes that map a driver to a response: the logistic on the unit interval, the Bass adoption curve, the kinked
+ * asymmetric response, simplex weight normalisation and the convex penalty. Pure functions of their arguments.
  */
 final class ResponseCurves
 {
@@ -24,6 +24,46 @@ final class ResponseCurves
     public static function logisticUnitInterval(float $x, float $midpoint, float $steepness): float
     {
         return 1.0 / (1.0 + exp(-$steepness * ($x - $midpoint)));
+    }
+
+    /**
+     * Share of its eventual market a new product has won $years after launch under the Bass (1969) diffusion model:
+     * each year a share $innovation of those yet to adopt does so on its own, and a share $imitation times the share
+     * already won follows them. An S-curve, slow while few have adopted, fastest at ln(q / p) / (p + q) years, then
+     * saturating. Zero before launch.
+     *
+     * @param float $years      Years since launch.
+     * @param float $innovation Coefficient of innovation p, per year.
+     * @param float $imitation  Coefficient of imitation q, per year.
+     */
+    public static function bassAdoption(float $years, float $innovation, float $imitation): float
+    {
+        if ($years <= 0.0 || $innovation <= 0.0) {
+            return 0.0;
+        }
+        $decay = exp(-($innovation + $imitation) * $years);
+
+        return (1.0 - $decay) / (1.0 + (($imitation / $innovation) * $decay));
+    }
+
+    /**
+     * Adoption per year under the Bass (1969) model, the slope of bassAdoption(): p at launch, peaking where imitation
+     * takes over, zero before launch.
+     *
+     * @param float $years      Years since launch.
+     * @param float $innovation Coefficient of innovation p, per year.
+     * @param float $imitation  Coefficient of imitation q, per year.
+     */
+    public static function bassAdoptionRate(float $years, float $innovation, float $imitation): float
+    {
+        if ($years < 0.0 || $innovation <= 0.0) {
+            return 0.0;
+        }
+        $total = $innovation + $imitation;
+        $decay = exp(-$total * $years);
+        $spread = 1.0 + (($imitation / $innovation) * $decay);
+
+        return ($total * $total / $innovation) * $decay / ($spread * $spread);
     }
 
     /**

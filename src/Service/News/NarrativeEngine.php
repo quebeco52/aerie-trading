@@ -670,6 +670,11 @@ class NarrativeEngine
                 "Supermarkets matched a competitor's price cuts on staples, trimming margins while suppliers were paid in full.",
                 "A grocery price war broke out as chains cut prices on the weekly basket to hold their shoppers.",
             ]),
+            ShockEvent::LAUNCH_FAILURE => $this->getRandomPhrase([
+                "A rocket was lost shortly after lift-off, grounding the fleet while engineers traced the cause.",
+                "A launch failure destroyed a customer satellite; flights were suspended pending the investigation.",
+                "An upper-stage failure ended a mission and grounded the launch fleet until the fault is fixed.",
+            ]),
             ShockEvent::REACTOR_ACCIDENT => $this->getRandomPhrase([
                 "A serious accident at a reactor abroad led governments to freeze new plants while their fleets were reviewed.",
                 "Regulators ordered safety reviews of operating reactors after an accident overseas, idling units and halting tenders.",

@@ -208,9 +208,11 @@ class StreamContext
      * @param float  $orderMultiplier       This quarter's order intake relative to steady state (1.0 = flat).
      * @param float  $burnRate              Fraction of available work executed per quarter (0.05 .. 1.0).
      * @param float  $cancelledShare        Share of the opening backlog cancelled this quarter before work resumes.
+     * @param float  $deferredShare         Share of this quarter's work held back to later quarters (a grounded fleet,
+     *                                      a stoppage); it stays in the backlog.
      * @return array{revenue: float, orders: float, backlog: float, backlog_quarters: float, book_to_bill: float}
      */
-    public function recognizeBacklog(string $key, float $expectedStreamRevenue, float $orderMultiplier, float $burnRate, float $cancelledShare = 0.0): array
+    public function recognizeBacklog(string $key, float $expectedStreamRevenue, float $orderMultiplier, float $burnRate, float $cancelledShare = 0.0, float $deferredShare = 0.0): array
     {
         $burn = max(0.05, min(1.0, $burnRate));
         $steadyStateQuarters = (1.0 - $burn) / $burn;
@@ -220,7 +222,7 @@ class StreamContext
             * (1.0 - max(0.0, min(1.0, $cancelledShare)));
         $orders = $base * max(0.0, $orderMultiplier);
         $available = ($openingQuarters * $base) + $orders;
-        $revenue = $burn * $available;
+        $revenue = $burn * $available * (1.0 - max(0.0, min(1.0, $deferredShare)));
         $closingBacklog = max(0.0, $available - $revenue);
         $closingQuarters = min(self::MAX_BACKLOG_STEADY_STATE_MULTIPLE * $steadyStateQuarters, $closingBacklog / $base);
 

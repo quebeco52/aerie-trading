@@ -207,6 +207,8 @@ class ShockEvent
      * A fixed-price reactor under construction ran over budget; the vendor bears the cost until the plant is delivered.
      */
     public const REACTOR_PLANT_OVERRUN = 'reactor_plant_overrun';
+    /** A rocket was lost on launch; the fleet was grounded until the cause was found and the manifest waited. */
+    public const LAUNCH_FAILURE = 'launch_failure';
 
     public const SECURITY_BREACH = 'security_breach';
     public const GEOPOLITICAL_CONFLICT = 'geopolitical_conflict';
