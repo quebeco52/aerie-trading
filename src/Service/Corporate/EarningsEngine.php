@@ -746,6 +746,7 @@ class EarningsEngine
         $ctx->kpis['own_price_volume_shift'] = $ctx->ownPriceVolumeShift;
         $ctx->kpis['industry_price_level'] = $ctx->industryPriceLevel;
         $ctx->kpis['idle_plant_share'] = 1.0 - $ctx->plantLoad;
+        $ctx->kpis['industry_outlook'] = $ctx->industryOutlook;
         $ctx->kpis['price_revenue'] = $actuals->priceRevenue;
         $this->recordCostKpis($ctx, $streamState);
         $ctx->creditLossProvision = $actuals->creditLossProvision;

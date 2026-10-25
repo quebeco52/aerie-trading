@@ -201,6 +201,8 @@ class EarningsSimulationContext
      * readers leave it out.
      */
     public float $plantLoad = 1.0;
+    /** The level the public expects the firm's industry demand to reach against its expected path (1 = the opening). */
+    public float $industryOutlook = 1.0;
     /** The quarter's idiosyncratic demand shock to utilisation. */
     public float $idiosyncraticDemandShock = 0.0;
     /** The quarter's fundamental jump in utilisation. */

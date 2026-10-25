@@ -21,6 +21,7 @@ use App\Service\Corporate\Earnings\InvestmentMarkLedger;
 use App\Service\Corporate\Earnings\OperatingCapacityEngine;
 use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Event\EarningsReportedEvent;
@@ -283,6 +284,33 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.08 + (0.80 * 1.0 * 0.10), CapitalBudgetEngine::returnOnNewPlant($ctx), 1e-12, 'a year of turnover at a 10% premium');
         $ctx->industryPriceLevel = 0.95;
         $this->assertEqualsWithDelta(0.08 - (0.80 * 1.0 * 0.05), CapitalBudgetEngine::returnOnNewPlant($ctx), 1e-12);
+    }
+
+    /**
+     * The report files the industry outlook the public holds, and the market the firm sizes itself against grows with
+     * it: a firm whose industry is expected 10% above its path reads a market 10% larger.
+     */
+    public function testTheReportFilesTheIndustryOutlookAndTheMarketGrowsWithIt(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $store = new InMemoryIndustryShareStore();
+        $engine = $this->buildEngine($dispatcher, new IndustryShareLedger($store));
+        mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+        $stock = $this->buildMatureIndustrial('FILE');
+        $store->writeOutlooks(['salt' => 1, 'quarter' => 0, 'industries' => [(string) $stock->getIndustry() => [
+            'x' => 0.1, 'm' => 0.1, 'v' => 0.0, 'f' => 0.0, 'w' => 1.0, 'prior_belief' => 0.0, 'revised_tick' => -1,
+        ]]]);
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045), EarningsEngine::resolveReportingTick('FILE', 252), 252);
+
+        $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+        $this->assertEqualsWithDelta(exp(0.1), $captured->kpis['industry_outlook'], 1e-12);
+        $this->assertEqualsWithDelta(0.1, ($stock->getEarningsMomentumZ() ?? [])[IndustryOutlook::STATE_BELIEF], 1e-12, 'carried to the next report');
+        $this->assertEqualsWithDelta(exp(0.1), CorporateMetrics::secularMarketGrowth($stock, 0.0), 1e-12);
     }
 
     /**

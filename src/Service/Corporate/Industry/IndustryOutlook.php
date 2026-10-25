@@ -10,6 +10,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
@@ -37,6 +38,13 @@ use App\Service\Math\Valuation;
  */
 final class IndustryOutlook
 {
+    // --- Filed Outlook ---
+    /**
+     * Carried stream-state key: the level the public expected the firm's industry demand to reach at its last report,
+     * in log against the expected path (0 for an untracked industry), which its market size reads.
+     */
+    public const STATE_BELIEF = EarningsEngine::CARRIED_STATE_PREFIX . 'industry_outlook';
+
     public function __construct(
         private readonly IndustryShareStoreInterface $store,
         private readonly CorporateMetrics $corporateMetrics,

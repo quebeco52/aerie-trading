@@ -305,6 +305,12 @@ class IndustryShareLedger
         return log($anchorShare * $growth / $capacity);
     }
 
+    /** The level the public expects the firm's industry demand to reach, in log against its path: 0 if untracked. */
+    public function resolveOutlookBelief(Stock $stock): float
+    {
+        return $this->outlook((string) $stock->getIndustry())['belief'];
+    }
+
     /**
      * Trend nominal GDP the demand anchor rides on: potential output times the price level, with no output
      * gap. The cycle already reaches a firm's volume through the demand shift and would be counted twice here.

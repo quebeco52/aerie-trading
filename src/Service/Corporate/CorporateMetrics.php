@@ -77,13 +77,14 @@ class CorporateMetrics
 
     /**
      * How far the firm's sector has grown past (or fallen behind) the economy since the open: exp of its faded secular
-     * excess.
+     * excess, times the industry outlook the firm last filed (IndustryOutlook), as the ledger's trend market grows.
      */
     public static function secularMarketGrowth(Stock $stock, float $totalTime): float
     {
         $excess = IndustryShareLedger::secularExcessGrowth(\App\Data\Company\Sectors::strategyFor($stock->getIndustry()), $stock);
+        $outlook = (float) (($stock->getEarningsMomentumZ() ?? [])[Industry\IndustryOutlook::STATE_BELIEF] ?? 0.0);
 
-        return exp(TimeSeries::fadedExcessIntegral($excess, 0.0, $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
+        return exp(TimeSeries::fadedExcessIntegral($excess, 0.0, $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS) + $outlook);
     }
 
     public function calculateOperatingBase(float $revenue, float $equity, float $floor = 10000000.0): float

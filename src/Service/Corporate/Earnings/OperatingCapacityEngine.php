@@ -7,6 +7,7 @@ namespace App\Service\Corporate\Earnings;
 use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -134,6 +135,13 @@ final class OperatingCapacityEngine
         $pricingPowerMultiplier = $macroPhysics['pricing_power_multiplier'];
         // Input cost level; models that carry inflation inside their own physics leave it at the price level.
         $inputCostMultiplier = (float) ($macroPhysics['input_cost_multiplier'] ?? $pricingPowerMultiplier);
+
+        // The industry outlook as the public reads it this quarter, filed with the report: the market the firm sizes
+        // itself against below grows with it.
+        if ($this->industryShareLedger !== null) {
+            $ctx->industryOutlook = exp($this->industryShareLedger->resolveOutlookBelief($stock));
+            $stock->setEarningsMomentumZ([IndustryOutlook::STATE_BELIEF => log($ctx->industryOutlook)] + ($stock->getEarningsMomentumZ() ?? []));
+        }
 
         // The firm's reach into the market it sells into, on the base the saturation physics uses. The
         // industry ledger weighs both what this firm builds and what it takes from rivals by it.
