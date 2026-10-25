@@ -95,6 +95,11 @@ final class InputOutputExposures
     /** Securities intermediation and exchanges, data processing: BEA 518200, 523A00. */
     public const FINANCIAL_DATA = ['imports' => 0.141, 'labor' => 0.443];
     /**
+     * Food and beverage stores (SPRW): the cost of running the stores, resold food and fuel priced in the model: BEA
+     * 445000.
+     */
+    public const GROCERY = ['imports' => 0.039, 'labor' => 0.525];
+    /**
      * HVAC equipment, farm and construction machinery, motors and switchgear (NUTH, WREN, BUZT, CHUF, BOBY): BEA
      * 333111, 333120, 333415, 335312, 335313.
      */

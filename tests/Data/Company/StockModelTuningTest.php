@@ -212,6 +212,7 @@ class StockModelTuningTest extends TestCase
             'conglomerate' => [ModelParam::IndustrialConglomerateWeight, ModelParam::DefensiveStaplesWeight, ModelParam::ContrarianFloatWeight],
             'law_firm' => [ModelParam::CorporateRetainerWeight, ModelParam::LitigationContingencyWeight, ModelParam::RestructuringAdvisoryWeight],
             'consulting' => [ModelParam::StrategyAdvisoryWeight, ModelParam::TechnologyProgrammeWeight, ModelParam::RiskRestructuringWeight, ModelParam::AuditTaxWeight],
+            'grocery' => [ModelParam::GroceriesWeight, ModelParam::FuelForecourtsWeight],
             'airline' => [ModelParam::LeisurePassengerWeight, ModelParam::BusinessPassengerWeight, ModelParam::AirCargoWeight, ModelParam::LoyaltyMilesWeight],
             'broadcasting' => [ModelParam::CarriageFeesWeight, ModelParam::AirtimeAdvertisingWeight, ModelParam::PoliticalAdvertisingWeight],
             'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight, ModelParam::CaptiveFinanceWeight],

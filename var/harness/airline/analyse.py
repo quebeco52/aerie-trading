@@ -4,7 +4,7 @@ import glob, json, math, statistics as st, sys
 from pathlib import Path
 
 arm = sys.argv[1] if len(sys.argv) > 1 else 'live'
-runs = sorted(glob.glob(str(Path(__file__).parent / 'runs' / f'{arm}-s*.json')), key=lambda p: int(p.split('-s')[-1][:-5]))
+runs = sorted(glob.glob(str(Path(__file__).parent / 'runs' / f'{arm}-s[0-9]*.json')), key=lambda p: int(p.split('-s')[-1][:-5]))
 D = [json.load(open(p)) for p in runs]
 FIRMS = ['TERN', 'CANV']
 ORDER = [a + b for a in ('AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC', 'CC', 'C') for b in ('+', '', '-')] + ['D']

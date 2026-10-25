@@ -196,6 +196,8 @@ class ShockEvent
     public const CARRIAGE_BLACKOUT = 'carriage_blackout';
     /** Pilots or cabin crew walked out; the airline cancelled part of its schedule until the strike was settled. */
     public const FLIGHT_CREW_STRIKE = 'flight_crew_strike';
+    /** A rival grocer began a discount drive; shelf prices were cut across the market until it ran its course. */
+    public const GROCERY_PRICE_WAR = 'grocery_price_war';
 
     public const SECURITY_BREACH = 'security_breach';
     public const GEOPOLITICAL_CONFLICT = 'geopolitical_conflict';

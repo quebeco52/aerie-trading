@@ -202,6 +202,8 @@ class StockInfo
         'BELL' => "Bellbird Media is the District's largest broadcaster. It owns the Bellbird News channel, the Bellbird network of entertainment and live sport, and the local stations that carry them.\n\nAbout half of its revenue is carriage fees: distributors pay for every subscriber who can watch its channels, under contracts of about three years that come up for renewal a few at a time. The fees barely move with the economy, but a renewal that fails takes the channels off that distributor until a deal is signed. The other half is advertising. Airtime is fixed, so when advertisers spend more the price of a minute rises, and most of the season is sold a year ahead at the upfront in the second quarter. Before each Diet vote the parties buy airtime too.\n\nNews viewing rises when politics and the economy turn uncertain, which steadies the channel in a downturn. Sports rights, newsrooms and stations cost the same whatever the airtime sells for, so profit swings more than revenue.",
 
         'TERN' => "Tern Airways is the District's flag carrier. It flies passengers from its hub at the District's airport to the mainland and abroad, carries cargo in the holds of its passenger aircraft and sells miles to the District's card issuers.\n\nAbout three-quarters of its revenue is fares. Leisure travellers follow household spending, and visitors from the mainland follow their own economy; business travellers, a third of the total, follow company profits and the dealmaking on Glasswater Row. The timetable is set about two quarters ahead, so when demand turns the planes fill or empty and fares move first, and the schedule catches up later.\n\nA flight costs about the same full or empty, so small changes in how full the planes are move profit a long way. Jet fuel is the largest cost after crews; it reaches the books a quarter after the oil market, and fares recover part of it over the year. Passengers pay before they fly, which funds the airline's working capital.",
+
+        'SPRW' => "Sparrow Markets is the District's largest supermarket chain. It sells food, drink and household goods in stores across the District, and fuel at forecourts beside its largest stores.\n\nGroceries are about nine-tenths of sales. The chain buys from farmers, food makers and wholesalers and sells on a percentage markup, so when food prices rise its sales and gross profit rise with them. What squeezes it is the cost of running the stores, above all wages. When households cut back they eat out less and cook more, so its baskets grow a little in a downturn. The forecourts sell fuel at a pump price that follows oil, on a margin per litre that barely moves, so fuel swings sales far more than profit.\n\nMargins are thin, around 3.5% before interest. Every few years a rival starts a price war, and shelf prices are cut for a couple of years while the suppliers are paid the same.",
     ];
 
     public const QUOTES = [
@@ -299,6 +301,7 @@ class StockInfo
         'AVCT' => "We sign the numbers everyone else trades on.",
         'BELL' => "Everyone watches the news. We make sure it is ours they watch.",
         'TERN' => "Every empty seat flies anyway.",
+        'SPRW' => "Everyone eats. Most of them, twice a week, with us.",
     ];
 
     /**

@@ -235,6 +235,11 @@ interface OperatingStrategyInterface
     /** The quarter's capex over replacement depreciation, for a model whose spend buys more than plant capacity. */
     public function recordReinvestmentRatio(Stock $stock, float $reinvestmentRatio, float $dt): void;
     public function getMarginReversionSpeed(): float;
+    /**
+     * Share of the variable cost base the firm's own efficiency moves: the variable cost ratio's random step is scaled
+     * by it, so goods bought at market prices and passed on carry none of it.
+     */
+    public function getVariableCostNoiseShare(): float;
     public function getReversionSpeed(): float;
     public function getMoatSpread(): float;
     public function getPhysicalCapital(Stock $stock): float;

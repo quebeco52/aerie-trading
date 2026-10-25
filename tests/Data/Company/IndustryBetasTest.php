@@ -92,7 +92,7 @@ final class IndustryBetasTest extends TestCase
         $residual = sqrt(($median ** 2) - (($usAverageBeta * $market) ** 2));
         $standardError = $residual / ($market * sqrt(60.0));
 
-        $this->assertEqualsWithDelta(0.22, $median, 1e-12, 'The band is derived at a 0.22 median volatility.');
+        $this->assertEqualsWithDelta(0.21, $median, 1e-12, 'The band is derived at a 0.21 median volatility.');
         $this->assertEqualsWithDelta(1.96 * $standardError, IndustryBetas::LORE_BAND, 0.005);
     }
 

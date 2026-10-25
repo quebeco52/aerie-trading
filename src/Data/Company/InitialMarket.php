@@ -1979,6 +1979,37 @@ class InitialMarket
             'retained_earnings' => 7_500_000_000.00,
         ],
         [
+            'ticker' => 'SPRW',
+            'name' => 'Sparrow Markets',
+            'sector' => 'Consumer Staples',
+            'industry' => 'Grocery Stores',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.18,
+            'beta_tilt' => -0.25, // food is bought whatever the economy does
+            'jump_intensity' => 0.40,
+            'jump_vol' => 0.06,
+            'baseline_roic' => 0.12,
+            'capex_ratio' => 0.35,
+            'target_payout_ratio' => 0.40,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            // store rents, depots and head office; suppliers, fuel and store payroll follow the baskets sold
+            'fixed_cost_ratio' => 0.10,
+            // supermarket chains earn 3-4% before interest (Kroger, Tesco, Ahold Delhaize)
+            'operating_margin' => 0.035,
+            'public_float' => 0.90,
+            'sam_ratio' => 0.12,
+            'floating_debt_ratio' => 0.25,
+            'historical_fixed_rate' => 0.045,
+            'credit_spread' => 0.0110,
+            'depreciation_rate' => 0.06,
+            'corporate_treasury' => 5_500_000_000.00,
+            'total_equity'      => 27_600_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt'    => 20_200_000_000.00,
+            'retained_earnings' => 13_800_000_000.00,
+        ],
+        [
             'ticker' => 'KITE',
             // Statutory trust distribution on a sub-2% vacancy portfolio leaves little to retain
             'management_style' => 'steward',

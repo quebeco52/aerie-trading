@@ -67,6 +67,7 @@ class Sectors
         'resorts_casinos' => 'Integrated resorts and casinos. Dual-stream engine: high-margin gaming (subject to volatile "Whale Luck") and sticky non-gaming conventions. Highly elastic to consumer sentiment, suffering promotional margin drag during downturns.',
         'law_firm'        => 'Asset-light, human-capital intensive corporate legal advisory and litigation practice. Dual-stream revenue engine blends defensive, high-margin corporate retainers and advisory fees with highly volatile, lumpy contingency payouts from blockbuster litigation settlements. Features minimal CapEx requirements, rapid free cash flow conversion, and strong macro cycle resilience.',
         'consulting'      => 'Consultancies sell their staff\'s time under signed engagements, and each line of work books into its own backlog that bills as the work is done. Strategy advice is weeks of work bought from discretionary budgets and is the first thing clients cut; technology programmes and managed services run for years against IT budgets set a year ahead; risk, regulatory and restructuring mandates arrive with credit stress and corporate failures. The firm staffs to the work in hand, so when bookings fall the bench fills before headcount comes down, and margins move ahead of revenue.',
+        'grocery'         => 'Supermarket chains buy food at wholesale and sell it on a percentage markup, so dearer food lifts sales and gross profit together, and what squeezes them is the cost of running the stores. Households that cut back eat out less and cook more, so baskets grow a little in a downturn. Forecourts at the large stores sell fuel at a pump price that follows oil on a margin per litre that barely moves, so fuel swings sales far more than profit. Now and then a rival starts a price war, and shelf prices are cut for a couple of years while suppliers are paid the same.',
         'airline'         => 'Scheduled airlines fly a timetable set two quarters ahead, so when demand turns the planes fill or empty and fares move before the seats can. A flight costs about the same full or empty, so a full plane goes almost straight to profit and an empty one straight to loss. Jet fuel is the largest bill after crews; it reaches costs a quarter after the oil market and fares win part of it back over the year. Leisure travel follows household spending, business travel the economy and deal flow, belly cargo world trade. Tickets are paid for before anyone flies, so passengers fund the working capital.',
         'broadcasting'    => 'Television networks, news and sports channels and the stations that carry them. About half the revenue is carriage fees distributors pay per subscriber under contracts of a few years, renewed a slice at a time, so it barely moves with the economy; a renewal that fails takes the channels dark on that distributor. The other half is advertising: the minutes are fixed, so advertisers\' budgets set their price, most of the season sold a year ahead at the upfront. News viewing rises when politics and the economy turn uncertain, and campaigns buy airtime before every Diet vote. Sports rights and newsrooms cost the same whatever the airtime sells for, so profit swings with ad prices.',
         'advertising_agency' => 'Asset light, human-capital intensive. Revenue driven by steady long-term corporate retainers and counter-cyclical crisis management mandates.',
@@ -164,7 +165,7 @@ class Sectors
         // 56 firms).
         'Gold' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.5, 'equity_limit' => 0.18, 'business_model' => 'mining'],
         // Very safe debt profile
-        'Grocery Stores' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'],
+        'Grocery Stores' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'grocery'],
         // Quantitative alpha, leveraged directional trading
         'Hedge Fund' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 3.0, 'business_model' => 'hedge_fund'],
         // Managed care
@@ -379,6 +380,7 @@ class Sectors
         'restaurant'                     => Sector\RestaurantBusinessModel::class,
         'law_firm'                       => Sector\LawFirmBusinessModel::class,
         'consulting'                     => Sector\ConsultingBusinessModel::class,
+        'grocery'                        => Sector\GroceryBusinessModel::class,
         'airline'                        => Sector\AirlineBusinessModel::class,
         'broadcasting'                   => Sector\BroadcastingBusinessModel::class,
         'advertising_agency'             => Sector\AdvertisingAgencyBusinessModel::class,

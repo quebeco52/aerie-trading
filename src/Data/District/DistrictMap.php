@@ -87,7 +87,7 @@ class DistrictMap
             'consulting',
         ],
         'Consumer Trades' => [
-            'consumer_staples', 'restaurant', 'apparel_manufacturing', 'auto_manufacturer',
+            'consumer_staples', 'grocery', 'restaurant', 'apparel_manufacturing', 'auto_manufacturer',
             'internet_retail', 'resorts_casinos', 'luxury', 'advertising_agency', 'education',
         ],
         // The extraction and generation end. Named for extraction rather than energy because the block holds the
@@ -339,7 +339,7 @@ class DistrictMap
         // A consultancy is known by its slide decks: the bar chart the market-data houses carry too.
         'consulting' => 'chart',
         // Consumer houses.
-        'consumer_staples' => 'cart', 'restaurant' => 'fork', 'apparel_manufacturing' => 'shirt',
+        'consumer_staples' => 'cart', 'grocery' => 'cart', 'restaurant' => 'fork', 'apparel_manufacturing' => 'shirt',
         'auto_manufacturer' => 'car', 'internet_retail' => 'bag', 'resorts_casinos' => 'dice',
         'luxury' => 'gem',
         // Power, silicon and signal.

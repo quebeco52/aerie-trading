@@ -266,6 +266,10 @@ enum ModelParam: string
     case AirCargoWeight = 'air_cargo_weight';
     case LoyaltyMilesWeight = 'loyalty_miles_weight';
 
+    // --- Grocery ---
+    case GroceriesWeight = 'groceries_weight';
+    case FuelForecourtsWeight = 'fuel_forecourts_weight';
+
     // --- Broadcasting ---
     case CarriageFeesWeight = 'carriage_fees_weight';
     case AirtimeAdvertisingWeight = 'airtime_advertising_weight';

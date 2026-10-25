@@ -459,7 +459,7 @@ final class OperatingCapacityEngine
         $dynamicVariableTheta = min(0.99, max(0.01, $ctx->baselineVariableMargin - $cyclicalMarginShift));
 
         $z2 = $this->mathUtility->generateStandardNormal();
-        $marginVol = $ctx->baselineVol * self::MARGIN_VOLATILITY_COEFFICIENT;
+        $marginVol = $ctx->baselineVol * self::MARGIN_VOLATILITY_COEFFICIENT * $strategy->getVariableCostNoiseShare();
 
         if ($stock->getStructuralVariableMargin() !== null) {
             $currentVariableMargin = max(0.01, min(0.99, (float) $stock->getStructuralVariableMargin()));

@@ -15,6 +15,7 @@ use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\GroceryBusinessModel;
 use App\Tests\Support\CorporateEngineFactory;
 use App\Tests\Support\ScriptedDraws;
 use App\Tests\Support\StockBuilder;
@@ -362,6 +363,34 @@ final class OperatingCostFlexTest extends TestCase
         };
 
         $this->assertEqualsWithDelta($realizedRatio(20_000_000_000.0), $realizedRatio(24_000_000_000.0), 1e-12, 'a fall in planned activity is not a rise in unit cost');
+    }
+
+    /**
+     * The variable cost ratio's random step is the firm's own efficiency, so it reaches only the costs the firm
+     * controls: a grocer's suppliers and fuel are bought at market prices and passed on, and its step is its store
+     * share of a manufacturer's.
+     */
+    public function testTheCostRatiosRandomStepReachesOnlyTheCostsTheFirmControls(): void
+    {
+        $step = function (string $model, float $draw): float {
+            $ctx = new EarningsSimulationContext(
+                $this->buildMatureIndustrial('FLEX'),
+                new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04),
+                Sectors::getBusinessModelStrategy($model),
+                $model,
+            );
+            $ctx->baselineVariableMargin = 0.60;
+            $ctx->baselineVol = 0.15;
+            $this->buildOperations(new ScriptedDraws(generateStandardNormal: $draw))->processVariableMargins($ctx);
+
+            return $ctx->realizedVariableMargin;
+        };
+
+        $manufacturer = $step(self::AUTO_MANUFACTURER, 1.0) - $step(self::AUTO_MANUFACTURER, 0.0);
+        $grocer = $step('grocery', 1.0) - $step('grocery', 0.0);
+
+        $this->assertGreaterThan(0.0, $manufacturer);
+        $this->assertEqualsWithDelta(GroceryBusinessModel::VARIABLE_COST_NOISE_SHARE, $grocer / $manufacturer, 1e-9);
     }
 
     /**

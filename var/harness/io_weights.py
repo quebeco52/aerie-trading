@@ -164,6 +164,7 @@ MAP = {
     'CONSUMER_STAPLES': [['312200'], ['311300', '311410', '311230'], ['112300', '1111B0'], ['325620', '325610'], ['312130', '312140']],  # PHIL, SGRB, CROP, LARK, PINT
     'DEFENSE_CONTRACTOR': [['336411', '336412', '336413', '336414', '334511']] * 2,       # GRIP, PTAR
     'EDUCATION': [['611A00', '611B00']],                                                   # STAR
+    'GROCERY': [['445000']],                                                               # SPRW (store operations; merchandise priced in the model)
     'HOMEBUILDER': [['233411', '233412', '2334A0']],                                       # BOWR (homes built for sale)
     'FINANCIAL_DATA': [['523A00', '518200']] * 2,                                          # SHRK, TICK
     'HEAVY_MANUFACTURING': [['333415']] * 2 + [['333111', '333120']] * 2 + [['335312', '335313']],  # NUTH, WREN; BUZT, CHUF; BOBY
@@ -288,6 +289,7 @@ LABELS = {
     'CONSUMER_STAPLES': 'Tobacco, packaged foods, poultry and grain, personal and household products, wine and spirits (PHIL, SGRB, CROP, LARK, PINT)',
     'DEFENSE_CONTRACTOR': 'Aircraft, engines, parts, missiles and navigation instruments', 'EDUCATION': 'Colleges and other educational services',
     'FINANCIAL_DATA': 'Securities intermediation and exchanges, data processing',
+    'GROCERY': 'Food and beverage stores (SPRW): the cost of running the stores, resold food and fuel priced in the model',
     'HEAVY_MANUFACTURING': 'HVAC equipment, farm and construction machinery, motors and switchgear (NUTH, WREN, BUZT, CHUF, BOBY)',
     'HOMEBUILDER': 'Single-family, multifamily and other residential structures (BOWR)',
     'INTERNET_RETAIL': 'Nonstore retailers', 'LAW_FIRM': 'Legal services (CLAW)',

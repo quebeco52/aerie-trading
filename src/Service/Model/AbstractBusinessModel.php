@@ -148,6 +148,11 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     public const MOAT_SPREAD = 0.000;
     /** Speed of the variable margin's reversion to its structural level (4.0 a year). */
     public const MARGIN_REVERSION_SPEED = 4.0;
+    /**
+     * Share of the variable cost base the firm's own efficiency moves (1.0): a reseller whose costs are mostly goods
+     * bought at market prices and passed on controls only the rest.
+     */
+    public const VARIABLE_COST_NOISE_SHARE = 1.0;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (1.5). */

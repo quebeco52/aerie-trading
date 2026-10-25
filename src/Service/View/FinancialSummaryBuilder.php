@@ -42,6 +42,8 @@ class FinancialSummaryBuilder
         'arpu_index' => ['ARPU index', FigureFormat::Index],
         'audience_index' => ['Audience index', FigureFormat::Index],
         'seat_capacity_index' => ['Seat capacity index', FigureFormat::Index],
+        'basket_volume_index' => ['Basket volume index', FigureFormat::Index],
+        'shelf_price_index' => ['Shelf price index', FigureFormat::Index],
         'load_factor' => ['Load factor', FigureFormat::Percent],
         'carriage_fee_index' => ['Carriage fee index', FigureFormat::Index],
         'upfront_price_index' => ['Upfront price index', FigureFormat::Index],

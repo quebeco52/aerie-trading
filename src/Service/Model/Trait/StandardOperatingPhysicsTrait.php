@@ -793,6 +793,11 @@ trait StandardOperatingPhysicsTrait
         return static::MARGIN_REVERSION_SPEED;
     }
 
+    public function getVariableCostNoiseShare(): float
+    {
+        return static::VARIABLE_COST_NOISE_SHARE;
+    }
+
     public function clampMargin(float $rawMargin, float $minMargin = 0.01, float $maxMargin = 1.50): float
     {
         return min($maxMargin, max($minMargin, $rawMargin));
