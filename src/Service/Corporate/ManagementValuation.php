@@ -8,6 +8,7 @@ use App\Data\Company\Sectors;
 use App\DTO\DebtHealthDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Earnings\CapitalBudgetEngine;
 use App\Service\Math\Valuation;
 use App\Service\Model\BusinessModelInterface;
 
@@ -33,6 +34,12 @@ final class ManagementValuation
             Sectors::baselineIndustryPe($stock->getIndustry()),
             (float) ($stock->getAccrualsRatio() ?? 0.0),
             $stock->getPolicyPayoutRatio(),
+            // The catch-up to its expected market, read off the gap its last report filed, as the market reads it.
+            Valuation::capacityCatchUpGrowth(
+                (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0),
+                CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED,
+                $equityRates['costOfEquity'] - $macroState->tipsBreakeven,
+            ),
         );
     }
 

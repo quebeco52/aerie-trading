@@ -8,7 +8,7 @@ use App\Entity\CorporateReport;
 
 /**
  * Plain whole-board run plus a read-only log of the idle-capacity KPIs per firm-quarter. IDLE_OUT=<json>: {"rows": [[t,
- * ticker, industry, idle_plant_share|null, industry_price_level|null, cpi, log(need/plant)|null, filed capacity gap|null, catch-up growth|null, x_fv|null], ...],
+ * ticker, industry, idle_plant_share|null, industry_price_level|null, cpi, log(need/plant)|null, filed capacity gap|null, catch-up growth|null, x_fv|null, filed log belief|null], ...],
  *   "opening": {ticker: opening annual revenue}}.
  */
 final class IdleHarnessTest extends BoardRun
@@ -89,9 +89,49 @@ final class IdleHarnessTest extends BoardRun
             ($gap !== null && isset($row['x_coe']) && $this->currentMacro !== null && method_exists('App\\Service\\Math\\Valuation', 'capacityCatchUpGrowth'))
                 ? \App\Service\Math\Valuation::capacityCatchUpGrowth((float) $gap, 0.062, $row['x_coe'] - $this->currentMacro->tipsBreakeven) : null,
             $row['x_fv'] ?? null,
+            (($stock->getEarningsMomentumZ() ?? [])['carry:industry_outlook'] ?? null),
+            ...$this->gapProbe($stock),
         ];
 
         return $row;
+    }
+
+    /**
+     * GAPPROBE=1: perceived fair value with the filed capacity gap set to 0 and to gap + 0.1 (restored after), so the
+     * fair value's own elasticity to the gap is measured. Columns 11-12; empty otherwise.
+     *
+     * @return list<?float>
+     */
+    private function gapProbe(\App\Entity\Stock $stock): array
+    {
+        $z = $stock->getEarningsMomentumZ() ?? [];
+        if (!getenv('GAPPROBE') || !isset($z['carry:capacity_gap']) || $this->debtEngine === null || $this->currentMacro === null || $this->tracker === null) {
+            return [];
+        }
+        $out = [];
+        foreach ([0.0, (float) $z['carry:capacity_gap'] + 0.1] as $gap) {
+            $stock->setEarningsMomentumZ(['carry:capacity_gap' => $gap] + $z);
+            $h = $this->debtEngine->analyzeTrailingDebtHealth($stock, $this->currentMacro);
+            $ledger = (new ReflectionProperty(\App\Service\Market\Pricing\StockTracker::class, 'anchorStakes'))->getValue($this->tracker);
+            $ctx = \App\DTO\MarketPricingContext::forStock($stock, $this->currentMacro, $h, $ledger);
+            $out[] = (float) \App\Service\Market\Pricing\FairValue::fundamentalStateFor($ctx)['perceived_fair_value'];
+        }
+        $stock->setEarningsMomentumZ($z);
+        // PGR: every perpetualGrowthRate call while striking fair value at the filed gap (ovr_pgr logs them);
+        // columns 13-14 = the call with the largest input, its input and its struck output.
+        if (getenv('PGR')) {
+            $GLOBALS['PGR_LOG'] = [];
+            $h = $this->debtEngine->analyzeTrailingDebtHealth($stock, $this->currentMacro);
+            $ledger = (new ReflectionProperty(\App\Service\Market\Pricing\StockTracker::class, 'anchorStakes'))->getValue($this->tracker);
+            \App\Service\Market\Pricing\FairValue::fundamentalStateFor(\App\DTO\MarketPricingContext::forStock($stock, $this->currentMacro, $h, $ledger));
+            $calls = $GLOBALS['PGR_LOG'];
+            unset($GLOBALS['PGR_LOG']);
+            usort($calls, static fn(array $a, array $b): int => $b[0] <=> $a[0]);
+            $out[] = $calls[0][0] ?? null;
+            $out[] = $calls[0][1] ?? null;
+        }
+
+        return $out;
     }
 
     /** log(need / plant) as the ledger's accelerator reads it (read-only); null where unavailable. */

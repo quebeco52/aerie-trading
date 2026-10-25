@@ -432,10 +432,41 @@ class ValuationTest extends TestCase
         $this->assertEqualsWithDelta(0.1 * 0.062 * $spread / ($spread + 0.062), Valuation::capacityCatchUpGrowth(0.1, 0.062, 0.06), 1e-12);
         $trend = MacroConstants::TREND_REAL_GROWTH;
         $this->assertEqualsWithDelta(-0.1 * $trend * $spread / ($spread + $trend), Valuation::capacityCatchUpGrowth(-0.1, 0.062, 0.06), 1e-12);
-        $this->assertGreaterThan(
-            Valuation::calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.02, 0.08),
-            Valuation::calculateExpectedNominalGrowth(0.02, 0.0, 1.0, 0.02, 0.08, Valuation::capacityCatchUpGrowth(0.1, 0.062, 0.06)),
-            'a firm behind its market is expected to grow faster',
-        );
+    }
+
+    /**
+     * The catch-up is priced outside the payout cap: plant is built from operating cash before anything is paid out,
+     * so a firm whose payout leaves its outlook unfunded still grows by what closing its gap adds. Management prices it
+     * as the market does.
+     */
+    public function testTheCatchUpIsFundedBeforeThePayoutCap(): void
+    {
+        $catchUp = Valuation::capacityCatchUpGrowth(0.1, 0.062, 0.06);
+        $capped = Valuation::calculateFundableGrowth(0.045, 0.15, 0.90, 0.02);
+
+        $this->assertEqualsWithDelta(0.02 + (0.15 * 0.10), $capped, 1e-12, 'the outlook is capped at what retention funds');
+        $this->assertEqualsWithDelta($capped + $catchUp, Valuation::calculateFundableGrowth(0.045, 0.15, 0.90, 0.02, $catchUp), 1e-12);
+        $this->assertSame(0.0, Valuation::calculateFundableGrowth(0.0, 0.15, 1.0, 0.0, -0.01), 'growth is never negative');
+
+        $growth = Valuation::calculateFundableGrowth(Valuation::calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.09), 0.18, 0.95, 0.025, $catchUp);
+        $market = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04, Valuation::sectorPriorYieldShift(0.09, 1.2, 0.025, $catchUp));
+        $this->assertSame($market, Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.95, $catchUp));
+        $this->assertGreaterThan(Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.95), $market, 'a firm behind its market is worth more');
+    }
+
+    /**
+     * The sector prior is struck at the firm's catch-up as at its hurdle, so the blend does not dilute it: a firm whose
+     * own multiple can take no more growth (pinned at the perpetual ceiling) still prices the market it is expected to
+     * reach, by the prior's weight.
+     */
+    public function testTheSectorPriorCarriesTheFirmsCatchUp(): void
+    {
+        $catchUp = 0.003;
+        $this->assertEqualsWithDelta(Valuation::sectorHurdleShift(0.09, 1.2, 0.025) - $catchUp, Valuation::sectorPriorYieldShift(0.09, 1.2, 0.025, $catchUp), 1e-15);
+
+        $pinned = static fn(float $shift): float => Valuation::calculateIntrinsicFairValuePE(0.09, 0.18, 0.12, 22.0, $shift);
+        $without = $pinned(Valuation::sectorPriorYieldShift(0.09, 1.2, 0.025));
+        $this->assertSame($without, Valuation::calculateIntrinsicFairValuePE(0.09, 0.18, 0.12 + $catchUp, 22.0, Valuation::sectorPriorYieldShift(0.09, 1.2, 0.025)), 'the firm leg is pinned');
+        $this->assertGreaterThan($without, $pinned(Valuation::sectorPriorYieldShift(0.09, 1.2, 0.025, $catchUp)));
     }
 }

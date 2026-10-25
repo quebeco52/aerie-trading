@@ -104,17 +104,18 @@ final class Valuation
      * weight x multiple = spread x payout / (spread^2 + tau^2), which tends to zero as the spread does, so a
      * firm whose cost of equity approaches its growth rate lands on its sector multiple instead of infinity.
      *
-     * The sector's multiple is quoted at the founding discount rate, so before it serves as the prior it is re-struck
-     * at today's: its earnings yield moves with the firm's real hurdle (sectorHurdleShift()). A fixed prior would
-     * dilute every firm's response to rates by its weight on it, most for the long-duration firms.
+     * The sector's multiple is quoted at the founding discount rate and at no firm's catch-up, so before it serves as
+     * the prior it is re-struck at today's: its earnings yield moves with the firm's real hurdle and against the
+     * firm's catch-up growth (sectorPriorYieldShift()). A fixed prior would dilute every firm's response to rates, and
+     * to the market it is expected to reach, by its weight on it.
      *
      * @param float      $costOfEquity   The required rate of return for equity investors (Hurdle Rate).
      * @param float      $roic           The Return on Invested Capital.
      * @param float      $growthRate     The expected perpetual growth rate.
      * @param float|null $sectorMultiple The sector's baseline trading multiple used as the cross-sectional
      *                                   prior. Null skips shrinkage and returns the raw Gordon multiple.
-     * @param float      $sectorHurdleShift How far the firm's real hurdle has moved from the one the sector multiple
-     *                                      was quoted at.
+     * @param float      $priorYieldShift How far the prior's earnings yield moves before the blend
+     *                                    (sectorPriorYieldShift()).
      * @return float The intrinsic fair value P/E multiple.
      */
     public static function calculateIntrinsicFairValuePE(
@@ -122,7 +123,7 @@ final class Valuation
         float $roic,
         float $growthRate = self::DEFAULT_PERPETUAL_GROWTH_RATE,
         ?float $sectorMultiple = null,
-        float $sectorHurdleShift = 0.0,
+        float $priorYieldShift = 0.0,
     ): float {
         // 1. Enforce absolute structural floor on Cost of Equity to prevent divergence under extreme distress
         $effectiveCostOfEquity = max(self::MIN_COST_OF_EQUITY, $costOfEquity);
@@ -146,7 +147,7 @@ final class Valuation
         // Firm precision goes as spread^2 (delta method on a 1/spread ratio); the prior's is the fixed
         // tau^2. A well-conditioned firm keeps its own multiple; an ill-conditioned one inherits its sector's.
         if ($sectorMultiple !== null && $sectorMultiple > 0.0) {
-            $sectorMultiple = 1.0 / max(1.0 / self::MAX_INTRINSIC_PE, (1.0 / $sectorMultiple) + $sectorHurdleShift);
+            $sectorMultiple = 1.0 / max(1.0 / self::MAX_INTRINSIC_PE, (1.0 / $sectorMultiple) + $priorYieldShift);
             $tau = self::INTRINSIC_PE_SHRINKAGE_SPREAD;
             $firmPrecision = $spread * $spread;
             $priorPrecision = $tau * $tau;
@@ -176,14 +177,11 @@ final class Valuation
         float $beta,
         float $inflation,
         float $discountRate,
-        float $catchUpGrowth = 0.0,
     ): float {
         // The secular excess over trend keeps fading (SECULAR_EXCESS_HALF_LIFE_YEARS), so it is priced at its
-        // perpetual equivalent rather than as permanent or as nothing. The catch-up to the market the firm is expected
-        // to reach is already a perpetual equivalent (capacityCatchUpGrowth()).
+        // perpetual equivalent rather than as permanent or as nothing.
         $realGrowth = TimeSeries::persistentEquivalentGrowth($secularGrowth, MacroConstants::TREND_REAL_GROWTH, $discountRate - $inflation)
-            + ($outputGap * self::CYCLICAL_GROWTH_PASS_THROUGH * $beta)
-            + $catchUpGrowth;
+            + ($outputGap * self::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
 
         // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
         // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). The
@@ -214,12 +212,16 @@ final class Valuation
      * payout policy retains. Reinvestment funds REAL growth (Damodaran: reinvestment rate = real g / real ROC);
      * the plant already in place sells at the going price level, so a firm that pays out everything still grows
      * with inflation.
+     *
+     * The catch-up to the firm's expected market (capacityCatchUpGrowth()) is added outside the cap: plant is built
+     * from operating cash before anything is paid out (CapitalBudgetEngine), and the multiple charges its reinvestment
+     * through the payout it leaves (calculateIntrinsicFairValuePE()).
      */
-    public static function calculateFundableGrowth(float $expectedGrowth, float $returnOnCapital, float $payoutRatio, float $inflation): float
+    public static function calculateFundableGrowth(float $expectedGrowth, float $returnOnCapital, float $payoutRatio, float $inflation, float $catchUpGrowth = 0.0): float
     {
         $retention = 1.0 - max(0.0, min(1.0, $payoutRatio));
 
-        return min($expectedGrowth, max(0.0, $inflation) + max(0.0, $returnOnCapital * $retention));
+        return max(0.0, min($expectedGrowth, max(0.0, $inflation) + max(0.0, $returnOnCapital * $retention)) + $catchUpGrowth);
     }
 
     /**
@@ -265,9 +267,9 @@ final class Valuation
         float $expectedGrowth,
         ?float $sectorMultiple,
         float $accrualsRatio,
-        float $sectorHurdleShift = 0.0,
+        float $priorYieldShift = 0.0,
     ): float {
-        $fairValuePE = self::calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $sectorMultiple, $sectorHurdleShift);
+        $fairValuePE = self::calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth, $sectorMultiple, $priorYieldShift);
         $accrualsPenalty = max(0.0, $accrualsRatio * self::ACCRUALS_ANOMALY_PE_PENALTY_SCALE);
 
         return max(self::MIN_INTRINSIC_PE, $fairValuePE - $accrualsPenalty);
@@ -461,15 +463,27 @@ final class Valuation
         ?float $sectorMultiple,
         float $accrualsRatio,
         float $payoutRatio,
+        float $catchUpGrowth = 0.0,
     ): float {
         $expectedGrowth = Valuation::calculateFundableGrowth(
             Valuation::calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $hurdleRate),
             $trueReturn,
             $payoutRatio,
             $inflation,
+            $catchUpGrowth,
         );
 
-        return Valuation::calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio, self::sectorHurdleShift($hurdleRate, $beta, $inflation));
+        return Valuation::calculateQualityAdjustedFairValuePE($hurdleRate, $trueReturn, $expectedGrowth, $sectorMultiple, $accrualsRatio, self::sectorPriorYieldShift($hurdleRate, $beta, $inflation, $catchUpGrowth));
+    }
+
+    /**
+     * How far the sector prior's earnings yield moves before it is blended with the firm's own multiple: up with the
+     * firm's real hurdle (sectorHurdleShift()) and down by its catch-up growth, one for one as in the Gordon spread, so
+     * a firm on the prior still prices the market it is expected to reach.
+     */
+    public static function sectorPriorYieldShift(float $hurdleRate, float $beta, float $expectedInflation, float $catchUpGrowth = 0.0): float
+    {
+        return self::sectorHurdleShift($hurdleRate, $beta, $expectedInflation) - $catchUpGrowth;
     }
 
     /**

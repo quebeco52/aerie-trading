@@ -222,18 +222,13 @@ final class FairValue
             // engines strike the same multiple when management decides on a buyback, an offering or a deal.
             // Perpetual growth carries the inflation the hurdle does: the ten-year breakeven inside the CAPM's 10Y,
             // not this quarter's print, so an oil spike does not read as faster growth forever.
+            $catchUpGrowth = Valuation::capacityCatchUpGrowth($capacityGap, CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED, $hurdleRate - $macro->tipsBreakeven);
             $expectedGrowth = Valuation::calculateFundableGrowth(
-                Valuation::calculateExpectedNominalGrowth(
-                    $secularGrowth,
-                    $outputGap,
-                    $beta,
-                    $macro->tipsBreakeven,
-                    $hurdleRate,
-                    Valuation::capacityCatchUpGrowth($capacityGap, CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED, $hurdleRate - $macro->tipsBreakeven),
-                ),
+                Valuation::calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $macro->tipsBreakeven, $hurdleRate),
                 $equityReturn,
                 $targetPayoutRatio,
                 $macro->tipsBreakeven,
+                $catchUpGrowth,
             );
 
             $fairValuePE = Valuation::calculateQualityAdjustedFairValuePE(
@@ -242,7 +237,7 @@ final class FairValue
                 $expectedGrowth,
                 $baselineIndustryPE,
                 $accrualsRatio,
-                Valuation::sectorHurdleShift($hurdleRate, $beta, $macro->tipsBreakeven),
+                Valuation::sectorPriorYieldShift($hurdleRate, $beta, $macro->tipsBreakeven, $catchUpGrowth),
             );
 
             // The structural run-rate is the normalized EPS: the trailing print already reaches it once, through the

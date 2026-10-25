@@ -241,7 +241,8 @@ class EarningsEngineTest extends TestCase
     /**
      * Plant is judged at the firm's true cost of capital whoever runs it. New plant here earns 10% against a cost of
      * capital of about 11%: an empire builder's own hurdle (three quarters of it) would take the project, but the plant
-     * goes unbuilt though demand calls for it.
+     * goes unbuilt though demand calls for it. Once the industry's outlook rises 5%, the firm is short of the plant its
+     * market calls for, but it files no shortfall for the market to price a catch-up on, since it will not build it.
      */
     public function testAnEmpireBuilderBuildsNoPlantBelowTheTrueCostOfCapital(): void
     {
@@ -250,12 +251,17 @@ class EarningsEngineTest extends TestCase
         $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
             $captured = $event->getContext();
         });
-        $engine = $this->buildEngine($dispatcher, new IndustryShareLedger(new InMemoryIndustryShareStore()));
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $engine = $this->buildEngine($dispatcher, $ledger);
         mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
         $stock = $this->buildMatureIndustrial('EMPR');
         $stock->setManagementStyle(ManagementStyle::EmpireBuilder);
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.095, yield5yEma: 0.10, inflationEma: 0.02);
 
-        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.095, yield5yEma: 0.10, inflationEma: 0.02), EarningsEngine::resolveReportingTick('EMPR', 252), 252);
+        $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('EMPR', 252), 252);
+        $store->writeOutlooks(['salt' => 1, 'quarter' => 1, 'industries' => ['Auto Manufacturers' => ['x' => 0.05, 'm' => 0.05, 'v' => 0.0, 'f' => 0.0, 'w' => 1.0, 'prior_belief' => 0.0, 'revised_tick' => 63]]]);
+        $engine->calculate($stock, $macro, 63 + EarningsEngine::resolveReportingTick('EMPR', 252), 252);
 
         $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
         $returnOnNewPlant = CapitalBudgetEngine::returnOnNewPlant($captured);
@@ -263,6 +269,10 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan($stock->getManagementProfile()->appliedHurdle($captured->health->wacc), $returnOnNewPlant, '...and above the empire builder\'s own hurdle');
         $this->assertEqualsWithDelta($captured->maintenanceCapex + $captured->scheduledCapex, $captured->operatingCapex, 1e-6, 'none is built');
         $this->assertGreaterThan(0.0, $captured->expansionBudget, 'though demand calls for it');
+        $shortfall = $ledger->resolveTrendCapacityGap($stock, $macro, IndustryShareLedger::secularExcessGrowth($captured->strategy, $stock));
+        $this->assertNotNull($shortfall);
+        $this->assertGreaterThan(0.03, $shortfall, 'the firm is short of the plant its market calls for');
+        $this->assertSame(0.0, ($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? null, 'and files no shortfall it will not build');
     }
 
     /**

@@ -26,7 +26,8 @@ final class CapitalBudgetEngine
     public const CAPITAL_ERROR_CORRECTION_SPEED = 0.062;
     /**
      * Carried stream-state key: log of the plant the firm's expected market calls for over the plant it runs, filed at
-     * each report for the market's valuation of the catch-up (Valuation::capacityCatchUpGrowth()).
+     * each report for the market's valuation of the catch-up (Valuation::capacityCatchUpGrowth()). A shortfall files
+     * as none while new plant would not earn its cost, since the firm will not build it.
      */
     public const STATE_CAPACITY_GAP = EarningsEngine::CARRIED_STATE_PREFIX . 'capacity_gap';
     /** Least the capex cycle scales every capex line to: half of plan in the deepest trough. */
@@ -193,6 +194,12 @@ final class CapitalBudgetEngine
         }
 
         if (self::returnOnNewPlant($ctx) < $manager->growthHurdle($hurdleRate, false)) {
+            // New plant would not earn its cost, so none is built: a shortfall is not closed by building, and the
+            // market prices no catch-up for it, only the plant to spare that demand grows into.
+            $state = $stock->getEarningsMomentumZ() ?? [];
+            $state[self::STATE_CAPACITY_GAP] = min(0.0, (float) ($state[self::STATE_CAPACITY_GAP] ?? 0.0));
+            $stock->setEarningsMomentumZ($state);
+
             return 0.0;
         }
 

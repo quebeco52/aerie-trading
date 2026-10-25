@@ -31,6 +31,30 @@ board, and where does it bind?
     (fair value and cost of equity in the quarter rows; read-only, checked with `valnofvx`). The probe also logs
     realised vol accumulators (idle.json `rv`: sum sq tick log returns, n, configured vol) and per report the filed
     `carry:capacity_gap`, its catch-up growth and x_fv (columns 8-10). `analyse_val.py 1,...,8 head val -oc`.
+  - Section i (HEAD cbe58c09): `head5` = HEAD, salt, FVX (equal to `val` dynamics; val seeds 1-8 stand in for it,
+    head5 for 9-16 and the 40y runs); `pre` = `BASE` git archive of 3c79f9c4^, FVX; `gapp` = HEAD + `GAPPROBE=1`
+    (fair value recomputed at gap 0 and gap+0.1, columns 11-12, restored after; read-only checked).
+
+      TAG=-oc LOGS=var/harness/idle/logs-oc BASE=<pre tree> bin/harness-batch var/harness/idle/run.sh 1-16 pre
+      TAG=-y40 YEARS=40 LOGS=var/harness/idle/logs-y40 bin/harness-batch var/harness/idle/run.sh 1-4 head5
+      SEEDS=1,...,16 python3 var/harness/idle/analyse_phase5.py > var/harness/idle/phase5_n16.out
+      python3 var/harness/idle/analyse_gap.py 1,2,3,4 -oc
+
+  - `fund` (section j): working tree, salt, FVX, GAPPROBE (catch-up after the payout cap). HEAD arm = val/head5.
+    `python3 var/harness/idle/analyse_fund.py 1,...,16 val fund` (revision slopes, gap elasticity, board, buybacks,
+    share issuance from "Issued new shares" events, M&A count).
+  - `prior` (section k): working tree + `ovr_pgr/` (src Valuation.php copy that logs perpetualGrowthRate calls;
+    re-copy from src before reuse) + GAPPROBE + `PGR=1` (columns 13-14: largest perpetualGrowthRate input and its
+    struck output at the filed gap). `priorplain` = the same without probes (read-only check).
+    `analyse_fund.py 1,...,16 val prior`, `analyse_clamp.py 1,...,16 prior`.
+  - `gate` (section l): working tree + `ovr_gate/` (CapitalBudgetEngine copy logging raw/filed gap, gate, budget,
+    funds for PROBE_TICKERS) + GAPPROBE; `gateplain` read-only check; `analyse_gate.py`. `trace` = working tree +
+    `ovr_trace/` (CapitalAllocationEngine copy logging the buyback triggers for TRACE_TICKER, default TERN, incl. the
+    management multiple with the gap zeroed); both ovr copies are stale once src changes - re-copy before reuse.
+  - `cmphead` / `cmpgate` (section m): HEAD tree (`BASE`) + `ovr_cmp_head/`, working tree + `ovr_cmp_gate/`; the
+    two ovr dirs hold each tree's own CapitalBudgetEngine and CapitalAllocationEngine with identical gate and buyback
+    logs for TRACE_TICKERS (TERN,FALC). OUT identity with val/head5 and gate checked (`cmp_identity.out`).
+    `analyse_cmp.py` -> `cmp_summary.out` and quarterly `cmp_detail.out`.
   - `probe`: working tree + `ovr_probe/` (CapitalBudgetEngine copy that logs the growth-capex gate for
     `PROBE_TICKER`, default FALC, into IDLE_OUT `probe`). STALE since section d: re-copy it from src before use.
     `analyse_probe.py <seed> <ticker> <y0> <y1>` prints per-year gate and funding and checks probe OUT == fix OUT.

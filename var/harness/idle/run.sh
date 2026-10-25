@@ -25,10 +25,21 @@ case "$1" in
   val)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 ;;  # section h: working tree, outlook as committed
   valnofvx) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 ;;  # FVX read-only check
   head) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<tree>}; export OUTLOOK_SALT=1 FVX=1 ;;  # section h: committed tree
+  head5) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 ;;  # section i: HEAD cbe58c09 (= val dynamics)
+  pre)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<tree>}; export OUTLOOK_SALT=1 FVX=1 ;;  # section i: pre-rework tree
+  gapp) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 GAPPROBE=1 ;;  # HEAD + fair value at gap 0 / gap+0.1
+  fund) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 GAPPROBE=1 ;;  # section j: catch-up after the payout cap
+  prior) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 GAPPROBE=1 PGR=1 OVR=$H/ovr_pgr ;;  # section k (ovr_pgr = src Valuation + call log)
+  priorplain) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 ;;  # section k read-only check
+  gate) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 GAPPROBE=1 OVR=$H/ovr_gate PROBE_TICKERS=TERN,FALC,SKYL,EIDR ;;  # section l
+  gateplain) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 ;;  # section l read-only check
+  trace) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 OVR=$H/ovr_trace TRACE_TICKER=${TRACE_TICKER:-TERN} ;;  # section l buyback trace
+  cmphead) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<HEAD tree>}; export OUTLOOK_SALT=1 FVX=1 OVR=$H/ovr_cmp_head TRACE_TICKERS=TERN,FALC ;;  # section m
+  cmpgate) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OUTLOOK_SALT=1 FVX=1 OVR=$H/ovr_cmp_gate TRACE_TICKERS=TERN,FALC ;;  # section m
   ovr)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OVR=$H/ovr ;;  # working tree + ovr/ src overrides
   plain) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV="" ;;  # probe-free check: same as idle without the KPI log
   base) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<git archive tree with a vendor symlink>} ;;
-  *) echo "usage: run.sh rec|idle|fix|fix2|off|on|off2|on2|onbase|cal|val|valnofvx|head|base|plain|ovr|probe <seed>" >&2; exit 2 ;;
+  *) echo "usage: run.sh rec|idle|fix|fix2|off|on|off2|on2|onbase|cal|val|valnofvx|head|head5|pre|gapp|fund|prior|priorplain|gate|gateplain|trace|cmphead|cmpgate|base|plain|ovr|probe <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env "$MAC" BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" OUT="$H/runs/$1-$2$TAG.jsonl" \
   IDLE_OUT="$H/runs/$1-$2$TAG.idle.json" OUTLOOK_OUT="$H/runs/$1-$2$TAG.outlook.json" \
