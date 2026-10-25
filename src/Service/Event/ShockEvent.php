@@ -189,6 +189,11 @@ class ShockEvent
     public const SEP_ROYALTY_DISPUTE = 'sep_royalty_dispute';
     /** A royalty dispute settled; most of the withheld arrears arrived as a catch-up payment. */
     public const SEP_ROYALTY_SETTLEMENT = 'sep_royalty_settlement';
+    /**
+     * A distributor's carriage contract lapsed in a fee dispute; the network's channels went dark on its system until a
+     * new deal was signed.
+     */
+    public const CARRIAGE_BLACKOUT = 'carriage_blackout';
 
     public const SECURITY_BREACH = 'security_breach';
     public const GEOPOLITICAL_CONFLICT = 'geopolitical_conflict';

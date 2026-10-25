@@ -665,6 +665,11 @@ class NarrativeEngine
                 "A renewed multi-year licence agreement released back royalties accrued during the dispute.",
                 "Resolution of the licensing litigation restored royalty flows and recovered accumulated arrears.",
             ]),
+            ShockEvent::CARRIAGE_BLACKOUT => $this->getRandomPhrase([
+                "A carriage fee dispute took the network's channels off a major distributor's system for part of the quarter.",
+                "Viewers on a large cable and broadband system lost the channels while the carriage contract was renegotiated.",
+                "Carriage fees and advertising audience fell during a blackout on a leading distributor before a new deal was signed.",
+            ]),
             ShockEvent::MANDATORY_HEALTHCARE_EXPANSION => $this->getRandomPhrase([
                 "Mandatory healthcare coverage expansions and higher patient admissions boosted operating volumes.",
                 "Expanded statutory health insurance coverage drove higher patient utilisation across medical centres.",

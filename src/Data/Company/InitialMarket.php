@@ -1209,6 +1209,38 @@ class InitialMarket
             'retained_earnings' => 5_000_000_000.00,
         ],
         [
+            'ticker' => 'BELL',
+            'name' => 'Bellbird Media',
+            'sector' => 'Communication Services',
+            'industry' => 'Broadcasting',
+            'systemic_importance' => 'base',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.24,
+            'beta_tilt' => 0.10, // the airtime half sells at the going ad rate
+            'jump_intensity' => 0.60,
+            'jump_vol' => 0.09,
+            'baseline_roic' => 0.14,
+            'capex_ratio' => 0.15,
+            'target_payout_ratio' => 0.35,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            // sports rights, newsrooms and the stations are paid for whatever the airtime sells for
+            'fixed_cost_ratio' => 0.55,
+            // news-led networks earn about 20% before interest (Fox, fiscal 2024-25)
+            'operating_margin' => 0.20,
+            // the founding family's trust holds the voting shares
+            'public_float' => 0.60,
+            'sam_ratio' => 0.20,
+            'floating_debt_ratio' => 0.15,
+            'historical_fixed_rate' => 0.045,
+            'credit_spread' => 0.0110,
+            'depreciation_rate' => 0.08,
+            'corporate_treasury' => 6_200_000_000.00,
+            'total_equity'      => 57_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt'    => 19_500_000_000.00,
+            'retained_earnings' => 28_000_000_000.00,
+        ],
+        [
             'ticker' => 'STAR',
             'name' => 'Starling Academic Systems',
             'sector' => 'Consumer Discretionary',

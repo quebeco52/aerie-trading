@@ -78,6 +78,8 @@ final class Election
     public const FALL_TALK_DAYS_PER_TERM = 19.5;
     /** Long-run mean nearness to the vote: the final-year ramp's half year a term, plus the talks held at the peak. */
     public const MEAN_ELECTION_PROXIMITY = (0.5 + ((CoalitionFormation::FORMATION_MEAN_DAYS + self::FALL_TALK_DAYS_PER_TERM) / FinancialConstants::DAYS_PER_YEAR)) / self::TERM_YEARS;
+    /** Long-run mean nearness to the vote over the campaign alone: the final-year ramp's half year a term. */
+    public const MEAN_CAMPAIGN_PROXIMITY = 0.5 / self::TERM_YEARS;
 
     // --- Party Positions ---
     /**
@@ -178,10 +180,18 @@ final class Election
      */
     public static function pulse(float $totalTime, float $lastElectionAt, float $coalitionTakesOfficeAt): float
     {
-        $yearsToElection = self::TERM_YEARS - fmod($totalTime, self::TERM_YEARS);
-        $proximity = ($lastElectionAt === $totalTime || $coalitionTakesOfficeAt > $totalTime) ? 1.0 : max(0.0, 1.0 - $yearsToElection);
+        $proximity = ($lastElectionAt === $totalTime || $coalitionTakesOfficeAt > $totalTime) ? 1.0 : self::campaignProximity($totalTime);
 
         return $proximity - self::MEAN_ELECTION_PROXIMITY;
+    }
+
+    /**
+     * Nearness to the next scheduled vote, rising from 0 a year out to 1 on the day: the campaign the parties fight
+     * and pay for. The talks after a vote or a fall are not part of it.
+     */
+    public static function campaignProximity(float $totalTime): float
+    {
+        return max(0.0, 1.0 - (self::TERM_YEARS - fmod($totalTime, self::TERM_YEARS)));
     }
 
     /**

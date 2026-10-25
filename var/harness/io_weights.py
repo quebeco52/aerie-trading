@@ -153,6 +153,7 @@ MAP = {
     'APPAREL_MANUFACTURING': [['315000']],                                                 # SHER
     'AUTO_MANUFACTURER': [['336111', '336112']] * 2,                                       # FALC, EIDR
     'BIOTECH': [['325412', '325414']],                                                     # IBIS
+    'BROADCASTING': [['515100', '515200']],                                                # BELL (stations and networks)
     'CHEMICAL': [['325110', '325190', '325211', '325310', '325320', '3259A0']],            # FULM (petrochemicals, specialty, agrochemicals)
     'COMMUNICATION_EQUIPMENT': [['334210', '334220']],                                     # ERNE
     'COMPUTER_HARDWARE': [['334111', '334112', '334118']],                                 # PENG
@@ -277,6 +278,7 @@ json.dump({'eps_power': EPS_POWER, 'eps_gas': EPS_GAS, 'results': results}, open
 LABELS = {
     'ADVERTISING_AGENCY': 'Advertising agencies', 'APPAREL_MANUFACTURING': 'Apparel manufacturing (SHER)',
     'AUTO_MANUFACTURER': 'Automobile and light truck assembly', 'BIOTECH': 'Pharmaceutical and biological products',
+    'BROADCASTING': 'Radio and television broadcasting, cable and other subscription programming (BELL)',
     'CHEMICAL': 'Petrochemicals, organics, resins, fertilizer and agricultural chemicals (hydrocarbon feedstock priced in the model)',
     'COMMUNICATION_EQUIPMENT': 'Telephone, broadcast and wireless equipment', 'COMPUTER_HARDWARE': 'Computers, storage and peripherals (PENG)',
     'CONGLOMERATE': 'A diversified industrial blend: machinery, motors, aerospace parts, chemical products',

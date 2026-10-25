@@ -51,6 +51,25 @@ final class MacroTransmission
      * single-digit percents per sd (Bonaime, Gulen & Ion 2018).
      */
     public const DEAL_ACTIVITY_EPU_BETA = 0.10;
+
+    // --- Advertising Budgets ---
+    /** Advertising spend per unit of output gap at cyclicality 1, both ways: a -3% gap cuts budgets 4.5%. */
+    public const AD_SPEND_GAP_ELASTICITY = 1.5;
+    /**
+     * Advertising spend per unit of the confidence residual over the cycle at cyclicality 1, both ways (Lemmon &
+     * Portniaguina 2006).
+     */
+    public const AD_SPEND_MOOD_ELASTICITY = 0.50;
+
+    /**
+     * Clients' advertising budgets over their steady level: the output gap plus the confidence residual over it, both
+     * scaled by the reader's cyclicality. An agency earns a take on these budgets; a broadcaster sells them airtime.
+     */
+    public static function advertisingSpendShift(float $outputGap, float $sentimentResidual, float $cyclicality): float
+    {
+        return ($outputGap * self::AD_SPEND_GAP_ELASTICITY * $cyclicality) + ($sentimentResidual * self::AD_SPEND_MOOD_ELASTICITY * $cyclicality);
+    }
+
     /**
      * A sector's demand drift relative to the economy: the annual log change in its share of nominal GDP between
      * two benchmark years. Added to trend real growth it is the sector's secular real growth, and shares that sum

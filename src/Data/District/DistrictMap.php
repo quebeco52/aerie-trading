@@ -93,7 +93,7 @@ class DistrictMap
         // The extraction and generation end. Named for extraction rather than energy because the block holds the
         // mines as well as the wells.
         'Extraction & Power' => ['oil_gas_producer', 'refining', 'mining', 'utility', 'independent_power'],
-        'Technology & Telecoms' => ['tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom'],
+        'Technology & Telecoms' => ['tech', 'computer_hardware', 'semiconductor', 'communication_equipment', 'telecom', 'broadcasting'],
         'Property & Health' => ['reit', 'homebuilder', 'medical_care_facility', 'health_insurer', 'biotech'],
     ];
 
@@ -345,6 +345,8 @@ class DistrictMap
         // Power, silicon and signal.
         'utility' => 'bolt', 'independent_power' => 'bolt', 'tech' => 'cloud', 'computer_hardware' => 'chip',
         'semiconductor' => 'chip', 'communication_equipment' => 'signal', 'telecom' => 'signal',
+        // A broadcaster is known by its transmitter mast.
+        'broadcasting' => 'signal',
         // Care, cures, property and the conglomerates. A merchant house takes the anchor rather than the
         // blocks: it is known by the wharves it owns, not by the businesses it has bolted together.
         'medical_care_facility' => 'cross', 'biotech' => 'pill', 'reit' => 'house', 'homebuilder' => 'house',

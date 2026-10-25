@@ -176,15 +176,10 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
             + ($params[ModelParam::MartechConsultingWeight] * $adSpendShift * self::MARTECH_AD_SPEND_SHARE)) / $totalWeight;
     }
 
-    /**
-     * Client ad budgets: the output gap at 1.5x the firm's cyclicality plus the confidence residual over it
-     * (Lemmon & Portniaguina 2006) at half that.
-     */
+    /** Client ad budgets on the output gap and the confidence residual, at the firm's cyclicality. */
     private function resolveAdSpendShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $beta = $this->getOperatingCyclicality($stock);
-
-        return ($macroState->outputGapEma * 1.5 * $beta) + ($macroState->sentimentResidual() * 0.50 * $beta);
+        return MacroTransmission::advertisingSpendShift($macroState->outputGapEma, $macroState->sentimentResidual(), $this->getOperatingCyclicality($stock));
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult

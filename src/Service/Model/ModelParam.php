@@ -260,6 +260,13 @@ enum ModelParam: string
     case RiskRestructuringWeight = 'risk_restructuring_weight';
     case AuditTaxWeight = 'audit_tax_weight';
 
+    // --- Broadcasting ---
+    case CarriageFeesWeight = 'carriage_fees_weight';
+    case AirtimeAdvertisingWeight = 'airtime_advertising_weight';
+    case PoliticalAdvertisingWeight = 'political_advertising_weight';
+    /** Share of the airtime a network sells in its news programming, where viewing follows the news. */
+    case NewsAirtimeShare = 'news_airtime_share';
+
     // --- Utilities & Waste Management ---
     case RegulatedBaseWeight = 'regulated_base_weight';
     case UnregulatedMerchantWeight = 'unregulated_merchant_weight';

@@ -198,6 +198,8 @@ class StockInfo
         'TSTN' => "Turnstone Advisory is the firm District companies call when something has gone wrong. It runs restructurings for companies that cannot pay their debts, works with banks on what the Financial Regulator demands of them after a crisis, and investigates fraud and accounting failures for boards, lenders and the courts.\n\nIts work arrives with credit stress. When credit spreads widen and companies start to fail, its order book fills, and it stays busy for a year or more afterwards while workouts and remediation programmes run their course. In calm years it lives on smaller advisory and technology work, and its partners take a large share of the profit as pay.\n\nThe share price tends to lag the market in a long boom and to hold up, or rise, in a credit crunch. Orders lead revenue by a few quarters, so a widening of credit spreads shows in its order book well before it shows in earnings.",
 
         'AVCT' => "Avocet & Curlew is the largest accounting firm in the Aerie Autonomous District. It audits most companies listed on the Aerie Exchange and prepares their tax returns, and sells consulting, deal and risk advice to the companies whose accounts it does not sign.\n\nThe Securities Commission requires every listed company to have its accounts audited each year, so the audit and tax practice, about two-fifths of revenue, is signed a year at a time and barely moves with the economy. Clients change auditor rarely, and only at a tender. Independence rules bar the firm from advising its own audit clients, so the rest of it works for the others and behaves like a consultancy: its strategy and technology work falls in a downturn, and its risk and restructuring practice fills when credit cracks.\n\nThe largest risk is an audit that misses a fraud. The fines, the lawsuits and the clients that leave afterwards cost far more than the fee ever earned, which is why the firm keeps more cash than its business needs.",
+
+        'BELL' => "Bellbird Media is the District's largest broadcaster. It owns the Bellbird News channel, the Bellbird network of entertainment and live sport, and the local stations that carry them.\n\nAbout half of its revenue is carriage fees: distributors pay for every subscriber who can watch its channels, under contracts of about three years that come up for renewal a few at a time. The fees barely move with the economy, but a renewal that fails takes the channels off that distributor until a deal is signed. The other half is advertising. Airtime is fixed, so when advertisers spend more the price of a minute rises, and most of the season is sold a year ahead at the upfront in the second quarter. Before each Diet vote the parties buy airtime too.\n\nNews viewing rises when politics and the economy turn uncertain, which steadies the channel in a downturn. Sports rights, newsrooms and stations cost the same whatever the airtime sells for, so profit swings more than revenue.",
     ];
 
     public const QUOTES = [
@@ -293,6 +295,7 @@ class StockInfo
         'GDWT' => "Change is the only constant, and we bill it by the day.",
         'TSTN' => "Every boom leaves a bill. We are paid to read it.",
         'AVCT' => "We sign the numbers everyone else trades on.",
+        'BELL' => "Everyone watches the news. We make sure it is ours they watch.",
     ];
 
     /**

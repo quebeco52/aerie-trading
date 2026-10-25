@@ -67,6 +67,7 @@ class Sectors
         'resorts_casinos' => 'Integrated resorts and casinos. Dual-stream engine: high-margin gaming (subject to volatile "Whale Luck") and sticky non-gaming conventions. Highly elastic to consumer sentiment, suffering promotional margin drag during downturns.',
         'law_firm'        => 'Asset-light, human-capital intensive corporate legal advisory and litigation practice. Dual-stream revenue engine blends defensive, high-margin corporate retainers and advisory fees with highly volatile, lumpy contingency payouts from blockbuster litigation settlements. Features minimal CapEx requirements, rapid free cash flow conversion, and strong macro cycle resilience.',
         'consulting'      => 'Consultancies sell their staff\'s time under signed engagements, and each line of work books into its own backlog that bills as the work is done. Strategy advice is weeks of work bought from discretionary budgets and is the first thing clients cut; technology programmes and managed services run for years against IT budgets set a year ahead; risk, regulatory and restructuring mandates arrive with credit stress and corporate failures. The firm staffs to the work in hand, so when bookings fall the bench fills before headcount comes down, and margins move ahead of revenue.',
+        'broadcasting'    => 'Television networks, news and sports channels and the stations that carry them. About half the revenue is carriage fees distributors pay per subscriber under contracts of a few years, renewed a slice at a time, so it barely moves with the economy; a renewal that fails takes the channels dark on that distributor. The other half is advertising: the minutes are fixed, so advertisers\' budgets set their price, most of the season sold a year ahead at the upfront. News viewing rises when politics and the economy turn uncertain, and campaigns buy airtime before every Diet vote. Sports rights and newsrooms cost the same whatever the airtime sells for, so profit swings with ad prices.',
         'advertising_agency' => 'Asset light, human-capital intensive. Revenue driven by steady long-term corporate retainers and counter-cyclical crisis management mandates.',
         'education'       => 'Revenue is a mix of highly sticky, guaranteed corporate/government subsidies and highly cyclical talent placement fees.',
         'conglomerate'    => 'A mix of diverse, unrelated business lines (industrial manufacturing, consumer products, financial investments) providing incredibly low baseline variance.',
@@ -108,6 +109,8 @@ class Sectors
         'Beverages - Wineries & Distilleries' => ['pe' => 20.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'],
         // R&D driven
         'Biotechnology' => ['pe' => 15.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'biotech'],
+        // Networks and stations: carriage contracts and owned licences carry an investment-grade load of debt
+        'Broadcasting' => ['pe' => 15.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'broadcasting'],
         // Prime brokers, market makers, prop shops
         'Brokerages' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'brokerage'],
         'Building Materials' => ['pe' => 15.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'heavy_manufacturing'],
@@ -375,6 +378,7 @@ class Sectors
         'restaurant'                     => Sector\RestaurantBusinessModel::class,
         'law_firm'                       => Sector\LawFirmBusinessModel::class,
         'consulting'                     => Sector\ConsultingBusinessModel::class,
+        'broadcasting'                   => Sector\BroadcastingBusinessModel::class,
         'advertising_agency'             => Sector\AdvertisingAgencyBusinessModel::class,
         'education'                      => Sector\EducationBusinessModel::class,
         'conglomerate'                   => Sector\ConglomerateBusinessModel::class,

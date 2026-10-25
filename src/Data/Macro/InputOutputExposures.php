@@ -55,6 +55,8 @@ final class InputOutputExposures
     public const AUTO_MANUFACTURER = ['metals' => 0.119, 'imports' => 0.264, 'labor' => 0.136];
     /** Pharmaceutical and biological products: BEA 325412, 325414. */
     public const BIOTECH = ['imports' => 0.375, 'labor' => 0.279];
+    /** Radio and television broadcasting, cable and other subscription programming (BELL): BEA 515100, 515200. */
+    public const BROADCASTING = ['imports' => 0.063, 'labor' => 0.225];
     /**
      * Petrochemicals, organics, resins, fertilizer and agricultural chemicals (hydrocarbon feedstock priced in the
      * model): BEA 325110, 325190, 325211, 325310, 325320, 3259A0.

@@ -68,6 +68,7 @@ final class MacroFieldCatalog
         'bank_capital_requirement' => ['label' => 'Bank capital requirement', 'unit' => self::UNIT_PERCENT],
         'market_volatility_ema' => ['label' => 'Implied volatility', 'unit' => self::UNIT_PERCENT],
         'consumer_sentiment_index_ema' => ['label' => 'Consumer sentiment', 'unit' => self::UNIT_INDEX],
+        'policy_uncertainty_index_ema' => ['label' => 'Policy uncertainty', 'unit' => self::UNIT_INDEX],
         'government_spending_index_ema' => ['label' => 'Government spending', 'unit' => self::UNIT_INDEX],
         'allied_defense_spending_index_ema' => ['label' => 'Allied defence spending', 'unit' => self::UNIT_INDEX],
         'reimbursement_rate_growth' => ['label' => 'Reimbursement update', 'unit' => self::UNIT_PERCENT],

@@ -38,6 +38,7 @@ class CostBaseSeesTheCycleTest extends TestCase
     /** Models whose volume does not read the domestic cycle, and why. */
     private const ACYCLICAL = [
         'biotech'            => 'prescription volume follows patents and approvals, not the gap',
+        'broadcasting'       => 'the minutes aired are fixed; the cycle moves the price of a minute, not the minutes',
         'mining'             => 'sells every tonne into a global pool at the going price',
         'oil_gas_producer'   => 'sells every barrel into a global pool at the going price',
     ];

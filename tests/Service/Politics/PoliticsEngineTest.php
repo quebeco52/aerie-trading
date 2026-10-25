@@ -541,6 +541,19 @@ class PoliticsEngineTest extends TestCase
     }
 
     /**
+     * The campaign the parties pay for is the final-year ramp alone: none in the talks after the vote, and read at
+     * quarter midpoints it averages its stated mean over the term.
+     */
+    public function testTheCampaignIsTheRampWithoutTheTalks(): void
+    {
+        $this->assertSame(0.0, Election::campaignProximity(4.1), 'The talks after the vote are no campaign.');
+        $this->assertEqualsWithDelta(0.95, Election::campaignProximity(3.95), 1e-9);
+
+        $quarters = array_map(static fn(int $quarter): float => Election::campaignProximity(($quarter + 0.5) / 4.0), range(0, 15));
+        $this->assertEqualsWithDelta(Election::MEAN_CAMPAIGN_PROXIMITY, array_sum($quarters) / count($quarters), 1e-12);
+    }
+
+    /**
      * The vote settles nothing until a government takes office: the pulse holds at its peak on the day of the vote and
      * through the talks after it, and falls back once the cabinet is seated.
      */

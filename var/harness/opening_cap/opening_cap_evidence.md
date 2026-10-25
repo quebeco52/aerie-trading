@@ -125,3 +125,28 @@ n_stocks 91 -> 92, n=16 per arm
 ```
 
 Tick-1 gain +0.218T (0.040) = AVCT 122.6B + GDWT's +92.7B. HEAD alone already opens at 21.57T and averages 22.17T over Q1, so most of the gap to the 20.3e12 constant came from commits after 10-16. Q1 mean: working tree 22.03T (0.19); HEAD Q1 mean + paired tick-1 gain 22.38T. Recommend 22.0e12 (a 22.2e12 midpoint is inside the noise).
+
+## 2026-10-25 (b): BELL (Bellbird Media, Broadcasting) added (working tree) vs HEAD 3bf3f53b
+
+Arm `bell_1025b` (93 firms): working tree. Arm `head1025b` (92 firms): `git archive HEAD` at `base/head3bf3f53b` with a
+vendor symlink. Seeds 1-16, TPY 360, one quarter, paired by seed. `cache/` deleted first (new model class).
+`bin/harness-batch var/harness/opening_cap/run.sh 1-16 bell_1025b && BASE=<abs>/var/harness/opening_cap/base/head3bf3f53b
+bin/harness-batch var/harness/opening_cap/run.sh 1-16 head1025b && python3 -I var/harness/opening_cap/analyse_1025b.py`
+(about 10 s per arm). Table `opening_cap_1025b.out`:
+
+```
+quantity                        head1025b       bell_1025b   paired diff (se)
+board tick 1, $T           21.786 (0.029)   22.058 (0.029)    +0.272 (0.045)
+board Q1 mean, $T          22.174 (0.197)   21.884 (0.183)    -0.290 (0.179)
+board Q1 end, $T           22.481 (0.349)   21.768 (0.221)    -0.713 (0.323)
+BELL $B: seed - -> 285.7 (0.0); tick1 - -> 285.3 (0.9); q1_end - -> 269.1 (6.5)
+LYRE $B: seed 78.6 -> 78.6 (0.0); tick1 78.6 -> 78.5 (0.2); q1_end 81.2 -> 78.9 (1.8)
+n_stocks 92 -> 93, n=16 per arm
+```
+
+HEAD tick 1 (21.786T) equals 10-25's working-tree arm `r4_1025` exactly, so the base is the board measured then. Tick-1
+gain +0.272T = BELL's 285B less ~13B elsewhere. The Q1 mean and end fall, but the arms diverge within the quarter (the new
+firm shifts the shared draw stream): per-seed Q1-mean differences run -1.5T to +0.8T, so pairing buys little after tick 1
+and -0.29T (t -1.6) is noise. BELL opens at 286B against the ~195B it was sized for (+46%); see `media/media_evidence.md`.
+Estimators of the Q1 mean: working tree direct 21.88T (0.18); HEAD Q1 mean + paired tick-1 gain 22.45T (0.20).
+Recommend keeping 22.0e12: inside the noise of both, and if BELL is re-sized to ~195B the tick-1 gain falls to ~0.18T.
