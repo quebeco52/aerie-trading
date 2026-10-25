@@ -87,7 +87,7 @@ final readonly class ManagementProfile
         return $this->scale($this->style->reinvestmentBias());
     }
 
-    /** Multiplier on the hurdle rate management actually applies to growth projects. */
+    /** Multiplier on the hurdle rate management applies where its appetite sizes the growth (growthHurdle()). */
     public function hurdleBias(): float
     {
         return $this->scale($this->style->hurdleBias());
@@ -121,6 +121,15 @@ final readonly class ManagementProfile
     public function appliedHurdle(float $trueHurdleRate): float
     {
         return $trueHurdleRate * $this->hurdleBias();
+    }
+
+    /**
+     * The hurdle growth spending must clear. Plant is sized by demand and has to earn the firm's true cost of capital
+     * whoever runs it; a lender's book is sized by management's appetite, so its own hurdle applies there.
+     */
+    public function growthHurdle(float $trueHurdleRate, bool $isLender): float
+    {
+        return $isLender ? $this->appliedHurdle($trueHurdleRate) : $trueHurdleRate;
     }
 
     /**

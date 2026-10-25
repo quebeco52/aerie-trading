@@ -294,11 +294,10 @@ class TreasuryEngine
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
 
         $trueReturn = $ctx->strategy->getTrueReturn($stock);
-        // The hurdle a capital-deployment gate tests against is the one MANAGEMENT applies, not the firm's
-        // true cost of capital — the same hurdle the earnings engine's growth-capex gate uses. Borrowing to
-        // build is the same decision as building from cash, so one manager brings one hurdle to both.
+        // The hurdle the earnings engine's growth-capex gate uses: plant must earn the true cost of capital, a lender's
+        // book management's own hurdle. Borrowing to build is the same decision as building from cash.
         $manager = $stock->getManagementProfile();
-        $hurdleRate = $manager->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
+        $hurdleRate = $manager->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), $ctx->strategy->isFinancial());
 
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
@@ -413,10 +412,10 @@ class TreasuryEngine
         $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
         $trueReturn = $ctx->strategy->getTrueReturn($stock);
-        // Management's own hurdle again, the same one the debt-funded gate above and the earnings engine's
-        // growth-capex gate apply.
+        // The growth hurdle again, the same one the debt-funded gate above and the earnings engine's growth-capex gate
+        // apply.
         $manager = $stock->getManagementProfile();
-        $hurdleRate = $manager->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
+        $hurdleRate = $manager->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), $ctx->strategy->isFinancial());
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
         $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $evaluationCapital, $ctx->macroState);

@@ -7,6 +7,7 @@ namespace App\Service\Corporate\Earnings;
 use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\Valuation;
 
@@ -153,49 +154,58 @@ final class CapitalBudgetEngine
     }
 
     /**
-     * Growth CapEx follows the fundamental reinvestment identity (Damodaran): the capital budget is planned on
-     * normalized earnings power (structural ROIC x invested capital), not on the current quarter's reported
-     * profit. A loss-making growth firm therefore keeps investing from its cash pile while a boom quarter does
-     * not trigger a one-off splurge. The stock's capexRatio is its reinvestment rate (g = reinvestment x ROIC).
-     *
-     * Three real-world gates apply:
-     *  1. NPV rule: no growth investment while the structural return fails the model's hurdle rate.
-     *  2. Demand: no more plant than the flexible accelerator allows (resolveExpansionBudget()).
-     *  3. Funding constraint: spend is bounded by the internal funds the quarter's other plant spend leaves.
+     * Growth CapEx builds the plant demand calls for (resolveExpansionBudget(), the flexible accelerator): the firm
+     * keeps its share of a growing market and closes part of any gap between the plant that share implies and the
+     * plant it runs, so a firm that has fallen behind a market short of plant catches up and one ahead of it waits.
+     * Two gates apply:
+     *  1. NPV rule: no growth investment while new plant would earn less than the firm's true cost of capital at the
+     *     price the industry pays today (returnOnNewPlant()), whoever runs it.
+     *  2. Funding constraint: spend is bounded by the internal funds the quarter's other plant spend leaves.
      * What the accelerator still allows after this spend is left on the context for the treasury.
+     *
+     * A lender has no plant to plan: its loan book grows by the reinvestment identity (Damodaran), its capexRatio of
+     * normalized earnings power (structural ROIC x invested capital), so a boom quarter does not trigger a splurge.
      */
     private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $fundingCapacity): float
     {
         $stock = $ctx->stock;
         $manager = $stock->getManagementProfile();
-        $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $manager->reinvestmentBias();
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
-
-        // Jensen (1986): the agency cost of free cash flow is not spending more, it is accepting projects
-        // that do not clear the cost of capital. The style bends the hurdle management applies, so an
-        // empire builder keeps growing through returns a disciplined board would refuse to fund — and the
-        // ROIC reversion downstream then prices exactly that value destruction.
-        $appliedHurdle = $manager->appliedHurdle($hurdleRate);
 
         $expansionBudget = $this->resolveExpansionBudget($ctx, $cycleCapExModifier, $maintenanceCapEx);
         $ctx->expansionBudget = $expansionBudget;
 
-        if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $appliedHurdle) {
+        if ($expansionBudget === null) {
+            // Jensen (1986): the agency cost of free cash flow is accepting projects that do not clear the cost of
+            // capital. A loan book is sized by management's appetite, so the style bends the hurdle it applies and an
+            // empire builder keeps lending through returns a disciplined board would refuse.
+            $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $manager->reinvestmentBias();
+            if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $manager->growthHurdle($hurdleRate, true)) {
+                return 0.0;
+            }
+
+            return min($ctx->baselineRoic * abs($ctx->investedCapital) / 4.0 * $reinvestmentRate * $cycleCapExModifier, $fundingCapacity);
+        }
+
+        if (self::returnOnNewPlant($ctx) < $manager->growthHurdle($hurdleRate, false)) {
             return 0.0;
         }
 
-        $structuralQuarterlyNopat = $ctx->baselineRoic * abs($ctx->investedCapital) / 4.0;
-        $plannedGrowthCapEx = $structuralQuarterlyNopat * $reinvestmentRate * $cycleCapExModifier;
-        if ($expansionBudget !== null) {
-            $plannedGrowthCapEx = min($plannedGrowthCapEx, $expansionBudget);
-        }
-
-        $growthCapEx = min($plannedGrowthCapEx, $fundingCapacity);
-        if ($expansionBudget !== null) {
-            $ctx->expansionBudget = max(0.0, $expansionBudget - $growthCapEx);
-        }
+        $growthCapEx = min($expansionBudget, $fundingCapacity);
+        $ctx->expansionBudget = max(0.0, $expansionBudget - $growthCapEx);
 
         return $growthCapEx;
+    }
+
+    /**
+     * What new plant earns at the price its industry pays today: the firm's return plus the after-tax margin that price
+     * adds over the balanced one on each dollar of capital it turns over (a shortage's premium; a glut's cut takes it
+     * off). Plant that keeps the firm's share of a growing market does not move that price.
+     */
+    public static function returnOnNewPlant(EarningsSimulationContext $ctx): float
+    {
+        return $ctx->baselineRoic
+            + ((1.0 - $ctx->corporateTaxRate) * $ctx->assetTurnover * EarningsEngine::TTM_QUARTERS * ($ctx->industryPriceLevel - 1.0));
     }
 
     /**

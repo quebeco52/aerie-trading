@@ -16,3 +16,76 @@ replay of a working-tree macro recording, 4 seeds x 20 years, TPY 360. Probe rea
 
 The committed tree uses the `ovr` order (growth capex reduces exactly to HEAD's at L=1). `basetree-cf0e6108/` was
 deleted after the run; `git archive cf0e6108` rebuilds it (RUN.md).
+
+## 2026-10-25 (b) shortage capex fix (working tree vs 3c79f9c4)
+
+Question: does planning growth capex on the accelerator budget, gated on returnOnNewPlant, close persistent industry
+shortages without harming the board? Arms `base` (git archive 3c79f9c4) and `fix` (working tree), the macro paths of
+(a) replayed, 4 seeds x 20 years, TPY 360. `analyse_shortage.py`, table in `shortage_capex.out`.
+
+Noise reference: float-only divergence (section a, idle vs base) already moved single-firm year-20 revenue by up to
++-0.25..0.35 log and p99 price level by +0.025, so per-firm movers below ~0.3 are not attributable.
+
+- Shortage closed: price level p95 1.029 -> 1.018 (t -6.7), max 1.116 -> 1.034 (t -3.0), share > 1.05 1.5% -> 0%.
+  Year 20: LOON 1.108 -> 0.997, SKUA 1.107 -> 0.998, PHIL 1.022 -> 0.999, SGRB 1.015 -> 0.999, WEAV 1.026 -> 1.014;
+  GULL and HUMM unchanged inside noise; SILC 1.004 -> 1.012 (t 3.2, small).
+- Overbuild: min level 0.985 -> 0.970 (LOON, 0.949 at t 16.9 in seed 2). Idle firm-quarters 1.5 -> 15.5 per seed, all
+  SPRW (max 0.034).
+- Spending: capex/rev 8.32% -> 8.57% (t 2.2); median ND/EBITDA y20 1.17 -> 1.18 (t 0.4); payout unchanged.
+  Leverage rises where capex rose: LOON 2.24 -> 2.98 (rising through y10-20: 2.75, 2.81, 2.98), SKUA 2.19 -> 2.58,
+  SGRB 0.96 -> 1.41.
+- Outcomes: cap +1.39tn (1.35) t 1.0; median op margin -0.36pp (0.14) t -2.6; B-or-worse -0.08pp (0.23).
+  One new default+reorganisation: FALC (Auto Manufacturers, price level ~1.00) seed 3, 7 quarters in default, reorg
+  y8.92. Its capex was 6.3% of revenue vs 4.2% at y5, net debt 102 -> 123bn vs 86-98bn in base, then a weak year.
+- SKYL real revenue multiple y20 5.18 -> 6.23 (0.51) t 2.0.
+- Revenue movers (log fix/base): SHRK +0.54, OWLS +0.39, HARR +0.39, TSTN +0.36, ERNE +0.32; CORV -0.62, SKUA -0.34,
+  PTRL -0.25.
+
+## 2026-10-25 (c) shortage capex fix: n=16, FALC gate probe, 40-year leverage
+
+Same arms (base = 3c79f9c4 tree in scratchpad, deleted after; fix = working tree), seeds 5-16 recorded on the working
+tree, TPY 360. Tables: `shortage_capex_n16.out`, `falc_probe.out`, `leverage_y40.out`.
+
+A) n=16, fix - base: p99 price level 1.087 -> 1.028 (t -6.5); share > 1.05 1.95% -> 0.01% (t -7.6); capex/rev
+8.26% -> 8.62% (t 6.0); median ND/EBITDA y20 1.23 -> 1.28 (+0.058 (0.024) t 2.4); p90 5.58 -> 5.58 (t 0.0); payout
+0.859 -> 0.846 (t -3.7); cap +1.76tn (0.55) t 3.2; median op margin -0.45pp (0.04) t -10.7; B-or-worse +0.02pp (0.09)
+t 0.2; defaults+deaths per seed 0.06 -> 0.44 (+0.375 (0.272) t 1.4).
+Events: base s12 TERN reorg y6.4. fix s3 FALC reorg y8.9; s6 CASC 6q default; s10 TERN and ALBT failed (both arms hit
+that downturn, base ALBT ND/EBITDA 109 and TERN CCC, survived); s11 SKUA reorg y12.3 after overshooting the balance
+(price 0.977-0.99, capex/rev 0.45 in y7, ND/EBITDA 3.0 -> 5.2; base SKUA A-rated at 0.8-1.2).
+Also 40y seed 2 fix: TERN reorg y8.7.
+
+B) FALC s3 fix (probe OUT == fix OUT): applied hurdle 0.064-0.082 sits 0.025-0.03 BELOW WACC (0.089-0.114, hurdle
+bias). Gate passed every quarter y2-y8, margin +0.057 (y2) falling to +0.008 (y8); return on new plant was below WACC
+in y4, y7, y8, y9. Growth capex = the full accelerator budget throughout (internal funds 15-65bn never bound): 5.1-7.6
+bn/yr against maintenance 13-18bn. Payouts 21-23bn/yr in y5-y6 (72-81% of NI) while net debt rose 93 -> 118bn.
+
+C) 40y, seeds 1-2: fix LOON ND/EBITDA y20-40 2.78 -> 1.64 (s1), 2.73 -> 2.70 (s2), base 1.85 -> 1.12 and 1.66 ->
+1.46. The fix price level drifts back above balance: LOON 1.000 (y20) -> 1.031 (s1) / 1.048 (s2) at y40 (base 1.24-1.30).
+Board median ND/EBITDA same in both arms (1.0-1.4).
+
+## 2026-10-25 (d) fix2: growth gates for non-lenders on WACC (ManagementProfile::growthHurdle)
+
+`fix2` = working tree, seeds 1-16, 20y, TPY 360, same macro paths; `base` reused from (c) (3c79f9c4, same harness,
+probe change read-only). Tables `shortage_capex_fix2_n16.out` and `shortage_capex_fix_n16_named.out` (old fix).
+
+| quantity | base | fix | fix2 | fix2-base (se) t |
+|---|---|---|---|---|
+| defaults+failures / seed | 0.06 | 0.44 | 0.125 | +0.063 (0.143) 0.4 |
+| B or worse | 0.84% | 0.86% | 0.86% | +0.01pp (0.06) 0.2 |
+| median ND/EBITDA y20 | 1.23 | 1.28 | 1.28 | +0.054 (0.016) 3.4 |
+| p90 ND/EBITDA y20 | 5.58 | 5.58 | 5.50 | -0.081 (0.088) -0.9 |
+| board cap y20 $tn | 52.19 | 53.96 | 54.29 | +2.10 (0.54) 3.9 |
+| median op margin | 22.84% | 22.38% | 22.38% | -0.46pp (0.06) -8.3 |
+| capex/rev y10-20 | 8.26% | 8.62% | 8.53% | +0.27pp (0.05) 5.4 |
+| p99 price level y10-20 | 1.087 | 1.028 | 1.029 | -0.058 (0.009) -6.7 |
+| share > 1.05 y10-20 | 1.95% | 0.01% | 0.03% | -1.92pp (0.26) -7.5 |
+| min price level | 0.983 | 0.977 | 0.978 | -0.005 (0.002) -2.2 |
+| idle firm-quarters / seed | 3.0 | 15.9 | 14.6 | +11.6 (1.7) 6.9 |
+
+Events: base s12 TERN reorg y6.4 (operator). fix2 s10 TERN reorg y4.4 and ALBT reorg y8.7 (both operator; the
+downturn seed where base nearly lost both and old fix lost both). The old fix's FALC s3, SKUA s11 (both
+empire_builder) and CASC s6 events are gone.
+Year 20 ND/EBITDA base/fix/fix2 and price level base/fix2: LOON 2.08/2.95/2.96, 1.111/1.006; SKUA 1.93/2.56/2.66,
+1.111/1.007; FALC 2.23/2.20/2.11, 1.010/1.009; SGRB 1.23/1.40/1.36, 1.015/0.998; PHIL 1.36/1.46/1.47, 1.022/0.998;
+CASC 2.12/2.39/2.02, 1.005/1.005.

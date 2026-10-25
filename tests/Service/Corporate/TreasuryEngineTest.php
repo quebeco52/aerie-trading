@@ -1569,15 +1569,12 @@ class TreasuryEngineTest extends TestCase
     }
 
     /**
-     * The applied hurdle has to reach the CASH-funded deployment gate, not only the earnings engine's.
-     *
-     * Jensen's (1986) agency cost is a manager funding projects a disciplined board would refuse, and it is
-     * one manager with one hurdle: reading the raw cost of capital here left an empire builder disciplined
-     * about debt-funded plant and reckless about cash-funded plant, which is an accident of funding source
-     * rather than a persistent style. The marginal return below sits between the two hurdles, so the
-     * neutral firm refuses the project and the empire builder takes it — from the same balance sheet.
+     * Plant is sized by demand and has to earn the firm's true cost of capital whoever runs it, from cash as from debt.
+     * The marginal return below sits between the empire builder's own hurdle and the true cost of capital, so both a
+     * neutral firm and an empire builder refuse it: the style shows in what management borrows, holds and pays out,
+     * not in plant that does not pay.
      */
-    public function testOrganicCapexGateAppliesTheHurdleManagementHoldsNotTheRawCostOfCapital(): void
+    public function testCashFundedPlantClearsTheTrueCostOfCapitalWhoeverRunsTheFirm(): void
     {
         $deploy = function (?ManagementStyle $style): CapitalAllocationContext {
             $stock = new Stock();
@@ -1607,7 +1604,7 @@ class TreasuryEngineTest extends TestCase
             return $ctx;
         };
 
-        // 0.50 x 0.75 = 0.375, which the 40% marginal return clears. That gap is the agency cost.
+        // 0.50 x 0.75 = 0.375, which the 40% marginal return would clear on the empire builder's own hurdle.
         $this->assertLessThan(
             0.40,
             ManagementStyle::EmpireBuilder->appliedHurdle(0.50),
@@ -1618,7 +1615,7 @@ class TreasuryEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $neutral->organicCapex, 1e-9, 'A disciplined firm does not buy a 40% return with 50% money.');
 
         $empireBuilder = $deploy(ManagementStyle::EmpireBuilder);
-        $this->assertGreaterThan(0.0, $empireBuilder->organicCapex, 'The empire builder funds it, and the value destruction is the point.');
+        $this->assertEqualsWithDelta(0.0, $empireBuilder->organicCapex, 1e-9, 'Nor does an empire builder, for plant.');
     }
 
     /**

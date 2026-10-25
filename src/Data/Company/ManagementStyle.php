@@ -81,8 +81,9 @@ enum ManagementStyle: string
     }
 
     /**
-     * Multiplier on the hurdle rate management actually applies to growth projects. Below one is the
-     * agency cost itself: capital deployed into returns that do not clear the true cost of capital.
+     * Multiplier on the hurdle rate management applies where its own appetite sizes the growth: a lender's book, an
+     * insurer's written share. Below one is the agency cost itself: capital deployed into returns that do not clear the
+     * true cost of capital. Plant is sized by demand and judged at the true cost (ManagementProfile::growthHurdle()).
      */
     public function hurdleBias(): float
     {
@@ -170,8 +171,8 @@ enum ManagementStyle: string
     }
 
     /**
-     * The hurdle management actually applies to a capital-deployment decision, given the firm's true cost
-     * of capital. Every such gate must resolve it through here so that one manager holds one hurdle.
+     * The hurdle management actually applies to a capital-deployment decision its appetite sizes, given the firm's
+     * true cost of capital. Every such gate resolves it through here so that one manager holds one hurdle.
      */
     public function appliedHurdle(float $trueHurdleRate): float
     {

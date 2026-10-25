@@ -8,16 +8,20 @@ set -eu
 H=$(cd "$(dirname "$0")" && pwd)
 PROJ=$(cd "$H/../../.." && pwd)
 mkdir -p "$H/runs" "$H/macro"
-PATH_GZ=$H/macro/path-$2.gz
+TAG=${TAG:-}  # e.g. TAG=-y40: separate macro path and outputs for a different horizon
+PATH_GZ=$H/macro/path-$2$TAG.gz
 case "$1" in
   rec)  MAC="MACRO_RECORD=$PATH_GZ"; BASEV="" ;;
   idle) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV="" ;;
+  fix)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV="" ;;  # working tree (alias of idle, for the shortage-capex run)
+  probe) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OVR=$H/ovr_probe PROBE_TICKER=${PROBE_TICKER:-FALC} ;;  # fix + gate log
+  fix2) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV="" ;;  # working tree, growth gates on WACC (section d)
   ovr)  MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=""; export OVR=$H/ovr ;;  # working tree + ovr/ src overrides
   plain) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV="" ;;  # probe-free check: same as idle without the KPI log
-  base) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:-$H/basetree-cf0e6108} ;;
-  *) echo "usage: run.sh rec|idle|base|plain|ovr <seed>" >&2; exit 2 ;;
+  base) MAC="MACRO_REPLAY=$PATH_GZ"; BASEV=${BASE:?set BASE=<git archive tree with a vendor symlink>} ;;
+  *) echo "usage: run.sh rec|idle|fix|fix2|base|plain|ovr|probe <seed>" >&2; exit 2 ;;
 esac
-cd "$PROJ" && env "$MAC" BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" OUT="$H/runs/$1-$2.jsonl" \
-  IDLE_OUT="$H/runs/$1-$2.idle.json" \
+cd "$PROJ" && env "$MAC" BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" OUT="$H/runs/$1-$2$TAG.jsonl" \
+  IDLE_OUT="$H/runs/$1-$2$TAG.idle.json" \
   bin/php-slot php -d memory_limit=3G vendor/bin/phpunit --bootstrap var/harness/bootstrap.php --no-configuration \
-  "$([ "$1" = plain ] && echo "$PROJ/var/harness/FullMarketHarnessTest.php" || echo "$H/IdleHarnessTest.php")" > "$H/runs/$1-$2.log" 2>&1
+  "$([ "$1" = plain ] && echo "$PROJ/var/harness/FullMarketHarnessTest.php" || echo "$H/IdleHarnessTest.php")" > "$H/runs/$1-$2$TAG.log" 2>&1

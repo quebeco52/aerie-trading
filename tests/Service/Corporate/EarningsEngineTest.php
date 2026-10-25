@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate;
 
 use App\Data\Company\LifecycleStage;
+use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
 use App\Data\Macro\CapitalGoodsPrices;
 use App\DTO\DebtHealthDTO;
@@ -202,6 +203,86 @@ class EarningsEngineTest extends TestCase
         // Alike, not identical: the two trade at different prices, so their market leverage, Hamada beta and hurdle
         // differ.
         $this->assertEqualsWithDelta($dominant, $priceTaker, 0.02, 'both grow their plant with demand');
+    }
+
+    /**
+     * Demand, not the seeded reinvestment rate, sets how much plant a firm builds: one that would reinvest a single
+     * percent of its earnings power keeps up with its market exactly as one that would reinvest ninety. Before, the
+     * low reinvester fell behind its market for good and the industry ran short.
+     */
+    public function testAFirmThatReinvestsLittleStillBuildsWithItsMarket(): void
+    {
+        $capitalGrowth = function (string $capexRatio): float {
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger(new InMemoryIndustryShareStore()));
+            mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+            $stock = $this->buildMatureIndustrial('KEEP');
+            $stock->setCapexRatio($capexRatio);
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+            $ticksPerYear = 252;
+
+            $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('KEEP', $ticksPerYear), $ticksPerYear);
+            $opening = $stock->getNetPpe();
+            for ($quarter = 1; $quarter <= 8; $quarter++) {
+                $engine->calculate($stock, $macro, ($quarter * 63) + EarningsEngine::resolveReportingTick('KEEP', $ticksPerYear), $ticksPerYear);
+            }
+
+            return $stock->getNetPpe() / $opening;
+        };
+
+        $low = $capitalGrowth('0.01');
+        $high = $capitalGrowth('0.90');
+
+        $this->assertGreaterThan(1.0, $low, 'the low reinvester grows its plant');
+        $this->assertEqualsWithDelta($high, $low, 1e-9, 'both build what demand calls for');
+    }
+
+    /**
+     * Plant is judged at the firm's true cost of capital whoever runs it. New plant here earns 10% against a cost of
+     * capital of about 11%: an empire builder's own hurdle (three quarters of it) would take the project, but the plant
+     * goes unbuilt though demand calls for it.
+     */
+    public function testAnEmpireBuilderBuildsNoPlantBelowTheTrueCostOfCapital(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher, new IndustryShareLedger(new InMemoryIndustryShareStore()));
+        mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+        $stock = $this->buildMatureIndustrial('EMPR');
+        $stock->setManagementStyle(ManagementStyle::EmpireBuilder);
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.095, yield5yEma: 0.10, inflationEma: 0.02), EarningsEngine::resolveReportingTick('EMPR', 252), 252);
+
+        $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+        $returnOnNewPlant = CapitalBudgetEngine::returnOnNewPlant($captured);
+        $this->assertLessThan($captured->health->wacc, $returnOnNewPlant, 'the fixture needs plant below the cost of capital');
+        $this->assertGreaterThan($stock->getManagementProfile()->appliedHurdle($captured->health->wacc), $returnOnNewPlant, '...and above the empire builder\'s own hurdle');
+        $this->assertEqualsWithDelta($captured->maintenanceCapex + $captured->scheduledCapex, $captured->operatingCapex, 1e-6, 'none is built');
+        $this->assertGreaterThan(0.0, $captured->expansionBudget, 'though demand calls for it');
+    }
+
+    /**
+     * New plant is judged at the price the industry pays today: a shortage's premium adds the after-tax margin it
+     * earns on each dollar of capital the plant turns over, a glut's cut takes it off, and a balanced price leaves the
+     * firm's own return.
+     */
+    public function testNewPlantIsJudgedAtTheIndustrysPriceToday(): void
+    {
+        $stock = $this->buildMatureIndustrial('JUDG');
+        $ctx = new EarningsSimulationContext($stock, new MacroStateDTO(), Sectors::strategyFor((string) $stock->getIndustry()), 'standard');
+        $ctx->baselineRoic = 0.08;
+        $ctx->corporateTaxRate = 0.20;
+        $ctx->assetTurnover = 0.25;
+
+        $ctx->industryPriceLevel = 1.0;
+        $this->assertSame(0.08, CapitalBudgetEngine::returnOnNewPlant($ctx));
+        $ctx->industryPriceLevel = 1.10;
+        $this->assertEqualsWithDelta(0.08 + (0.80 * 1.0 * 0.10), CapitalBudgetEngine::returnOnNewPlant($ctx), 1e-12, 'a year of turnover at a 10% premium');
+        $ctx->industryPriceLevel = 0.95;
+        $this->assertEqualsWithDelta(0.08 - (0.80 * 1.0 * 0.05), CapitalBudgetEngine::returnOnNewPlant($ctx), 1e-12);
     }
 
     /**

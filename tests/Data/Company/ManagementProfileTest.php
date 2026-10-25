@@ -167,4 +167,13 @@ final class ManagementProfileTest extends TestCase
         $unseeded->setManagementStyle(ManagementStyle::Steward);
         $this->assertSame(ManagementProfile::INTENSITY_MEDIAN, $unseeded->getManagementProfile()->intensity);
     }
+
+    public function testPlantClearsTheTrueCostOfCapitalWhileALendersBookClearsManagementsOwnHurdle(): void
+    {
+        $profile = new ManagementProfile(ManagementStyle::EmpireBuilder, ManagementProfile::MAX_INTENSITY);
+
+        $this->assertSame(0.10, $profile->growthHurdle(0.10, false));
+        $this->assertSame($profile->appliedHurdle(0.10), $profile->growthHurdle(0.10, true));
+        $this->assertLessThan(0.10, $profile->growthHurdle(0.10, true), 'an empire builder lends through returns a board would refuse');
+    }
 }
