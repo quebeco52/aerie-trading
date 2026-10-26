@@ -141,6 +141,37 @@ class SegmentLedgerTest extends TestCase
     }
 
     /**
+     * A deal into a segment is reviewed in that segment's market, among that industry's firms, and its plant joins that
+     * segment's record; a segment sold whole leaves its industry while the main record keeps its plant.
+     */
+    public function testDealsReachTheSegmentTheyAreIn(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $macro = new MacroStateDTO(totalTime: 0.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0);
+        $ledger->resolveIndustryCapacityRatio((new Stock())->setTicker('CANV')->setIndustry(self::FREIGHT), 5_000.0, 0.25, 1.0, 0.0, 0.0, 5, 252);
+        $tern = $this->tern();
+        $ledger->resolveIndustryCapacityRatio($tern, 900.0, 0.4, 1.0, 0.0, 0.0, 10, 252);
+        $tern->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, []));
+        $ledger->resolveSegmentSupply($tern, 'air_cargo', 100.0, 100.0, 0.02, 1.0, 0.0, 0.0, 10, 252);
+
+        $market = $ledger->describeMergerMarket($tern, $macro, 0.0, 10, 252, 'air_cargo');
+        $this->assertNotNull($market);
+        $this->assertEqualsWithDelta(100.0 / 0.02, $market['market_revenue'], 1e-6);
+        $this->assertEqualsWithDelta(0.02, $market['acquirer_share'], 1e-12);
+        $this->assertEqualsWithDelta(1.0 - 0.25 - 0.02, $market['fringe_share'], 1e-12, 'freight\'s roster, not the airlines\'');
+
+        $ledger->recordAcquiredCapacity($tern, 50.0, $macro, 0.0, 'air_cargo');
+        $this->assertEqualsWithDelta(150.0, $store->readIndustry(self::FREIGHT)['TERN/air_cargo']['capacity'], 1e-9);
+        $this->assertEqualsWithDelta(900.0, $store->readIndustry('Airlines')['TERN']['capacity'], 1e-9);
+
+        $ledger->recordSoldSegment($tern, 'air_cargo', $macro, 0.0);
+        $this->assertSame(0.0, $store->readIndustry(self::FREIGHT)['TERN/air_cargo']['capacity']);
+        $this->assertEqualsWithDelta(0.0, $store->readIndustry(self::FREIGHT)['TERN/air_cargo']['anchor_capacity_share'], 1e-12, 'its plant now the fringe\'s');
+        $this->assertEqualsWithDelta(900.0, $store->readIndustry('Airlines')['TERN']['capacity'], 1e-9);
+    }
+
+    /**
      * A segment sells in another company's industry but runs its own industry's regimes: it is not a member over which
      * this industry's regime odds are spread.
      */

@@ -15,12 +15,15 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
   (seeds 1-32 only). Outputs `runs/<arm>-<seed>.{jsonl,log,idle.json,seg.json}`.
   - `head`: `BASE=<tree>` = `git archive <commit>` + `vendor` symlink, kept in the scratchpad (outside the repo);
     delete it and `var/harness/cache-<basename>` afterwards.
+  - `p3`: BASE tree (phase 3 committed, 803d2ade). `p4`: working tree (phase 4, deals by segment).
   - `seg`: working tree (phase-3 first round). `seg2`: working tree after the entry-sizing fix (same as seg in
     run.sh; a separate name keeps the seg runs). `segplain`: working tree without the probe. `gapfix`: phase-2 store override (obsolete).
 - Batch (phase 3; stages 1-8, 9-16, 17-32):
 
       BASE=<scratchpad>/basetree-<sha> bin/harness-batch var/harness/segments/run.sh 1-8 head seg \
         && python3 var/harness/segments/analyse3.py 1-8 head seg > var/harness/segments/phase3_n8.out
+      BASE=<scratchpad>/basetree-803d2ade bin/harness-batch var/harness/segments/run.sh 1-16 p3 p4 \
+        && python3 var/harness/segments/deals.py 1-16 p3 p4 > var/harness/segments/p4_deals_n16.out
       bin/harness-batch var/harness/segments/run.sh 1-16 seg2 \
         && python3 var/harness/segments/analyse3.py 1-16 seg seg2 > var/harness/segments/seg2_vs_seg_n16.out
 
@@ -31,6 +34,9 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
     after opening, kappa <= 0); kappa paths and corr of d4 log kappa / d4 log record revenue with own vs main
     industry outlook; glut test (d log kappa ratio when the segment industry's peer price < 1); opening a_s,
     addressable share and penalty before/after; nine segment-industry peers; the eight. `YEARS=2` for short runs.
+  - `deals.py <seeds> A B` (phase 4): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events
+    with kappa after): whole-segment sales, slices, acquisitions by segment, sold-record checks, capacity mismatch
+    split by whether a deal fell between reports.
   - `analyse.py` (phase 2), `mix_response.py` (phase 2 tilt pass-through).
 - Gotchas: OUT appends; a reused run name keeps old lines, and the scripts read the last one. After a constructor or
   service change in `src/` or a probe change, delete `var/harness/cache/test`. BIRD, OWLS, RAVN, TRIV main

@@ -721,22 +721,25 @@ class IndustryShareLedger
      *
      * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float}|null
      */
-    public function describeMergerMarket(Stock $stock, MacroStateDTO $macroState, float $secularExcessGrowth, int $tick, int $ticksPerYear): ?array
+    public function describeMergerMarket(Stock $stock, MacroStateDTO $macroState, float $secularExcessGrowth, int $tick, int $ticksPerYear, string $segment = Segments::MAIN): ?array
     {
-        $own = $this->readOwnRecord($stock);
-        if ($own === null) {
+        // A company that keeps plant by segment buys into one of its segments' markets, reviewed in that market.
+        $address = self::segmentAddress($stock, $segment);
+        $own = $address === null ? null : ($this->store->readIndustry($address[0])[$address[1]] ?? null);
+        if ($address === null || $own === null) {
             return null;
         }
+        [$industry, $ticker] = $address;
         if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0 || (float) ($own['anchor_demand_share'] ?? 0.0) <= 0.0) {
-            return $this->describeRevenueMarket($stock, $own, $tick, $ticksPerYear);
+            return $this->describeRevenueMarket($industry, $ticker, $own, $tick, $ticksPerYear);
         }
 
-        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, (string) $stock->getIndustry()));
-        $shares = $this->rosterTrendShares((string) $stock->getIndustry(), $stock->getTicker(), $tick, $ticksPerYear);
+        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, $industry));
+        $shares = $this->rosterTrendShares($industry, $ticker, $tick, $ticksPerYear);
 
         return [
             'market_revenue' => (float) $own['anchor_demand_share'] * $growth,
-            'acquirer_share' => min(1.0, $shares[$stock->getTicker()] ?? 0.0),
+            'acquirer_share' => min(1.0, $shares[$ticker] ?? 0.0),
             'herfindahl'     => min(1.0, array_sum(array_map(static fn(float $share): float => $share * $share, $shares))),
             'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
         ];
@@ -750,7 +753,7 @@ class IndustryShareLedger
      * @param ShareRecord $own
      * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float}|null
      */
-    private function describeRevenueMarket(Stock $stock, array $own, int $tick, int $ticksPerYear): ?array
+    private function describeRevenueMarket(string $industry, string $ticker, array $own, int $tick, int $ticksPerYear): ?array
     {
         $ownShare = min(1.0, (float) ($own['addressable_share'] ?? 0.0));
         $ownRevenue = (float) ($own['revenue'] ?? 0.0);
@@ -759,10 +762,10 @@ class IndustryShareLedger
         }
 
         $marketRevenue = $ownRevenue / $ownShare;
-        $shares = [$stock->getTicker() => $ownShare];
-        foreach ($this->store->readIndustry((string) $stock->getIndustry()) as $peerTicker => $record) {
+        $shares = [$ticker => $ownShare];
+        foreach ($this->store->readIndustry($industry) as $peerTicker => $record) {
             $revenue = (float) ($record['revenue'] ?? 0.0);
-            if ($peerTicker === $stock->getTicker() || $revenue <= 0.0 || $tick - (int) $record['tick'] > $ticksPerYear) {
+            if ($peerTicker === $ticker || $revenue <= 0.0 || $tick - (int) $record['tick'] > $ticksPerYear) {
                 continue;
             }
             $shares[(string) $peerTicker] = $revenue / $marketRevenue;
@@ -915,11 +918,30 @@ class IndustryShareLedger
      * plant, not how much the industry supplies. The acquirer's trend plant rises with the capacity it
      * bought and its market stays where it was, so its share of that market rises and the fringe's falls.
      */
-    public function recordAcquiredCapacity(Stock $stock, float $annualCapacity, MacroStateDTO $macroState, float $secularExcessGrowth): void
+    public function recordAcquiredCapacity(Stock $stock, float $annualCapacity, MacroStateDTO $macroState, float $secularExcessGrowth, string $segment = Segments::MAIN): void
     {
-        $industry = $stock->getIndustry();
-        if ($industry !== null && $industry !== '' && $stock->getTicker() !== '') {
-            $this->transferCapacity($industry, $stock->getTicker(), max(0.0, $annualCapacity), $macroState, $secularExcessGrowth);
+        $address = self::segmentAddress($stock, $segment);
+        if ($address !== null) {
+            $this->transferCapacity($address[0], $address[1], max(0.0, $annualCapacity), $macroState, $secularExcessGrowth);
+        }
+    }
+
+    /**
+     * A segment sold whole to an off-board buyer keeps supplying its market, now from the fringe: its record's plant
+     * and trend plant leave together, as recordDivestedFraction() moves a slice, and the company's other records stay.
+     */
+    public function recordSoldSegment(Stock $stock, string $segment, MacroStateDTO $macroState, float $secularExcessGrowth): void
+    {
+        $address = self::segmentAddress($stock, $segment);
+        $own = $address === null ? null : ($this->store->readIndustry($address[0])[$address[1]] ?? null);
+        if ($address === null || $own === null) {
+            return;
+        }
+
+        if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0) {
+            $this->transferRevenue($address[0], $address[1], $own, -(float) ($own['revenue'] ?? 0.0));
+        } else {
+            $this->transferCapacity($address[0], $address[1], -max(0.0, (float) $own['capacity']), $macroState, $secularExcessGrowth);
         }
     }
 

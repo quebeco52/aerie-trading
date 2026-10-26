@@ -124,3 +124,40 @@ revenue +8.6% (t 3.8), margin +0.73 pt (t 10.6), P/E +0.70 (t 3.7).
 TRIV/OWLS seg2 vs seg: revenue +0.3% / +0.2% (se 0.7-0.8%); vs head still -40% / -14%.
 Identities as before: sum kappa 2e-16, revenue 5e-15, no kappa <= 0, no tilt left, 320 TICKER/seg records all owned by
 the eight; capacity split off by up to 0.015 in the same acquisition-shaped cases.
+
+## 2026-10-26: phase 4, deals by segment (p4 working tree) against 803d2ade (p3)
+
+Probe adds `onEvent`: every " sold its " / " executed a " event of the nine, with kappa after, in seg.json `deals`;
+`deals.py` classifies whole-segment sales, slices and acquisitions by segment and checks sold records. Arms `p3`
+(BASE = git archive 803d2ade), `p4` (working tree). Seeds 1-16, then 17-32 (eight-firm rows at |t| 2.2-2.9 at n 16).
+20 years, 360 ticks/year.
+
+    BASE=<scratchpad>/basetree-803d2ade bin/harness-batch var/harness/segments/run.sh 1-32 p3 p4
+    python3 var/harness/segments/analyse3.py 1-32 p3 p4 > p4_vs_p3_n32.out   # kappa paths of p3: ... p4 p3 > p3_paths_n32.out
+    python3 var/harness/segments/deals.py 1-32 p3 p4 > p4_deals_n32.out
+
+Board p4 - p3 (n 32): cap +0.45 tn (se 0.27), P/E +0.01 (0.05), vol -0.0002 (0.0009), defaults+deaths +0.13 (0.19),
+B-or-worse +0.11 pt (0.06, t 1.8), ND/EBITDA +0.026 (0.021), real revenue growth +0.02 pt/yr (0.02).
+
+Deals (32 seeds): whole-segment sales only ERNE consumer devices, 3 seeds (y10.3 kappa 0.079, y7.8 0.094, y7.2
+0.093; premium range). Slices p3/p4: JDAW 9/11, WEAV 6/8, TERN 3/4, others 0-2. Acquisitions p3 -> p4: TRIV 36 -> 276
+(industrial 158, consumer 82, main 36), WEAV 334 -> 322 (ads 88), RAVN 77 -> 91 (terminals 25), OWLS 57 -> 64, BIRD
+42 -> 39, ERNE 57 -> 67, JDAW 64 -> 80, TERN 66 -> 59. TRIV's cumulative deal value per seed rose from 0.04 to 0.48 of
+annual revenue (seeds 1-16): its main market (no ledger market) passed about one deal per seed; segments pass the
+gate.
+
+Identities: sum kappa 2e-16; record revenue = 4 x revenue (5e-15); sold records capacity 0 and tick frozen in 139 of
+139 later reads; no tilt keys. Capacity split vs previous kappa: every mismatch (p3 340, p4 578 of ~19,900) has a deal
+between the two reports, none without, so the phase-3 mismatch is the deal moving kappa between reports.
+
+kappa medians y1/y10/y20 p3 -> p4: WEAV ads 0.249/0.215/0.191 -> 0.249/0.280/0.299; ERNE devices 0.100/0.092/0.081 ->
+0.100/0.091/0.081 (sold in 3 seeds); RAVN terminals 0.300/0.299/0.291 -> 0.300/0.301/0.307; OWLS industrial 0.449/
+0.428/0.408 -> 0.449/0.429/0.412, consumer 0.351/0.358/0.357 -> 0.351/0.362/0.373; TRIV industrial 0.599/0.580/0.568 ->
+0.599/0.607/0.578, consumer 0.301/0.314/0.323 -> 0.301/0.309/0.322.
+
+Deals do not avoid gluts: share of acquisitions into a segment while its industry's peer median price < 1 vs share of
+quarters at P < 1: WEAV ads 41% vs 48%, TRIV industrial 55% vs 62%, TRIV consumer 51% vs 44%, RAVN terminals 52% vs
+44%. Organic build does avoid them (phase 3 glut test), so acquisitions reverse WEAV ads' drift.
+
+The eight p4 - p3: TRIV revenue +28% (t 8.9), margin -0.56 pt (t -7.3); WEAV +6.9% (t 2.0), margin -0.50 pt (t -2.1);
+OWLS +3.8% (t 1.9); others |t| < 1.5. TERN distress seeds 7 -> 6. No distress for the others.

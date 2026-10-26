@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate\Deal;
 
 use App\Data\Company\ManagementStyle;
+use App\Data\Company\Segments;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -14,6 +15,7 @@ use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
 use App\Tests\Support\DebtHealthBuilder;
@@ -950,6 +952,39 @@ class AcquisitionEngineTest extends TestCase
             $ledger->resolveIndustryCapacityRatio($stock, 20_000_000_000.0 + $acquiredRevenue, 0.05, 1.0, 0.0, 0.0, 73, 252),
             1e-9,
         );
+    }
+
+    /**
+     * A company that keeps plant by segment buys into one of its markets, drawn by its plant: the deal is reviewed in
+     * that market, its plant joins that segment's record and that segment's share of the plant, and the announcement
+     * names the business it grows.
+     */
+    public function testACompanyBuysIntoTheSegmentItDraws(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+        // The deal's gate passes on the first uniform; the second draws the ads arm, which holds the top fifth of the
+        // plant.
+        $this->mathUtilityMock->script(generateUniform: [0.0, 0.9]);
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $engine = new AcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+        $stock = $this->buildLedgeredAcquirer('WEAV', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $stock->setIndustry('Internet Retail');
+        $stock->setManagementStyle(ManagementStyle::Steward);
+        $ledger->resolveIndustryCapacityRatio($stock, 16_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []));
+        $ledger->resolveSegmentSupply($stock, 'ads_and_cloud', 4_000_000_000.0, 4_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
+
+        $deal = $engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
+
+        $this->assertIsArray($deal);
+        $acquired = (float) $stock->getTotalRevenue() - 20_000_000_000.0;
+        $this->assertGreaterThan(0.0, $acquired);
+        $this->assertEqualsWithDelta(4_000_000_000.0 + $acquired, $store->readIndustry('Internet Content & Information')['WEAV/ads_and_cloud']['capacity'], 1.0);
+        $this->assertEqualsWithDelta(16_000_000_000.0, $store->readIndustry('Internet Retail')['WEAV']['capacity'], 1.0);
+        $this->assertEqualsWithDelta((4_000_000_000.0 + $acquired) / (20_000_000_000.0 + $acquired), SegmentBooks::plant($stock->getEarningsMomentumZ() ?? [])['ads_and_cloud'] ?? 0.0, 1e-9);
+        $this->assertStringContainsString('for its advertising and cloud business', $deal['event']['description']);
     }
 
     /**

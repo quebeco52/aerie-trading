@@ -313,28 +313,103 @@ final class SegmentBooks
     }
 
     /**
-     * The plant shares after a deal that buys plant into the main segment's industry (a takeover folds the target into
-     * the buyer's industry): the main segment's plant grows by what was bought, the others' shares shrink with it.
+     * The plant shares after a deal that buys plant into one segment's industry: that segment's plant grows by what was
+     * bought, the others' shares shrink with it. What is bought into the main business brings its by-products with it
+     * (an airline bought comes with its holds), in the proportion the company runs them.
      *
      * @param array<string, float> $plant Segment => plant share.
+     * @param list<string>         $joint Segments whose plant rides the main segment's.
      * @return array<string, float>
      */
-    public static function acquireIntoMain(array $plant, float $capacity, float $acquiredCapacity): array
+    public static function acquireInto(array $plant, string $segment, float $capacity, float $acquiredCapacity, array $joint = []): array
     {
         $total = $capacity + max(0.0, $acquiredCapacity);
         if ($total <= 0.0) {
             return $plant;
         }
 
+        $plant += [$segment => 0.0];
+        $bought = $segment === Segments::MAIN ? array_intersect_key($plant, array_flip([Segments::MAIN, ...$joint])) : [$segment => 1.0];
+        $boughtTotal = array_sum($bought);
         $shares = [];
-        foreach ($plant as $segment => $share) {
-            $shares[$segment] = (($share * $capacity) + ($segment === Segments::MAIN ? max(0.0, $acquiredCapacity) : 0.0)) / $total;
-        }
-        if (!isset($shares[Segments::MAIN])) {
-            $shares[Segments::MAIN] = max(0.0, $acquiredCapacity) / $total;
+        foreach ($plant as $key => $share) {
+            $added = isset($bought[$key]) ? max(0.0, $acquiredCapacity) * ($boughtTotal > 0.0 ? $bought[$key] / $boughtTotal : (float) ($key === $segment)) : 0.0;
+            $shares[$key] = (($share * $capacity) + $added) / $total;
         }
 
         return $shares;
+    }
+
+    /**
+     * The plant shares after a segment is sold whole: it holds none, and the rest of the plant is the others' in the
+     * proportions they held it.
+     *
+     * @param array<string, float> $plant Segment => plant share.
+     * @return array<string, float>
+     */
+    public static function sellSegment(array $plant, string $segment): array
+    {
+        $kept = 1.0 - ($plant[$segment] ?? 0.0);
+        if ($kept <= 0.0) {
+            return $plant;
+        }
+
+        $shares = [];
+        foreach ($plant as $key => $share) {
+            $shares[$key] = $key === $segment ? 0.0 : $share / $kept;
+        }
+
+        return $shares;
+    }
+
+    /**
+     * The segment a company that keeps plant by segment would sell whole: of those it can sell apart from its main
+     * business (not one whose output rides the main plant), the one whose plant earns least, its share of the revenue
+     * over its share of the plant. Null when it has none.
+     */
+    public static function weakestSegment(Stock $stock): ?string
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $targets = self::filed($momentum, self::STATE_TARGET);
+        $weakest = null;
+        $lowest = INF;
+        foreach (self::plant($momentum) ?? [] as $segment => $share) {
+            if ($segment === Segments::MAIN || $share <= 0.0 || in_array($segment, self::jointSegments($stock), true)) {
+                continue;
+            }
+            $earning = ($targets[$segment] ?? $share) / $share;
+            if ($earning < $lowest) {
+                $lowest = $earning;
+                $weakest = $segment;
+            }
+        }
+
+        return $weakest;
+    }
+
+    /**
+     * The segment a deal buys into, drawn in proportion to the plant each holds, so deals keep the mix in expectation;
+     * a by-product's plant is bought only with the plant it rides. The main segment before the books open.
+     *
+     * @param float $uniform A draw on [0, 1).
+     */
+    public static function acquiringSegment(Stock $stock, float $uniform): string
+    {
+        $plant = self::plant($stock->getEarningsMomentumZ() ?? []) ?? [];
+        foreach (self::jointSegments($stock) as $joint) {
+            unset($plant[$joint]);
+        }
+        $plant = array_filter($plant, static fn(float $share): bool => $share > 0.0);
+        $total = array_sum($plant);
+        $cumulative = 0.0;
+        foreach ($plant as $segment => $share) {
+            $cumulative += $share / $total;
+            if ($uniform < $cumulative) {
+                return $segment;
+            }
+        }
+
+        return Segments::MAIN;
     }
 
     /**

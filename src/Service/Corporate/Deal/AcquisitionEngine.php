@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Deal;
 
+use App\Data\Company\Segments;
 use App\DTO\AcquisitionContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -371,8 +372,12 @@ class AcquisitionEngine
         $ctx->config = $config;
         $ctx->target = PrivateCompany::procedural($this->mathUtility);
         $this->drawTargetEconomics($ctx);
+        // A company that keeps plant by segment buys into one of its markets, drawn in proportion to its plant.
+        if (SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) !== null) {
+            $ctx->segment = SegmentBooks::acquiringSegment($stock, $this->mathUtility->generateUniform());
+        }
 
-        // The target is a private firm in the acquirer's own market, so the deal is sized to the largest
+        // The target is a private firm in the market the acquirer buys into, so the deal is sized to the largest
         // one there is to buy and that clears merger review.
         $market = $this->resolveLargestAvailableTarget($ctx);
         $this->capPurchasePrice($ctx, $market['price'], $market['review_binds'] ? self::LIMIT_MERGER_REVIEW : self::LIMIT_AVAILABLE_MARKET);
@@ -415,9 +420,10 @@ class AcquisitionEngine
         $market = $this->industryShareLedger?->describeMergerMarket(
             $ctx->acquirer,
             $ctx->macroState,
-            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $ctx->acquirer),
+            IndustryShareLedger::secularExcessGrowth($this->segmentStrategy($ctx), $ctx->acquirer),
             $ctx->tickCount,
             $ctx->ticksPerYear,
+            $ctx->segment,
         );
         if ($market === null) {
             return ['price' => INF, 'review_binds' => false];
@@ -601,12 +607,13 @@ class AcquisitionEngine
         $stock->setTotalRevenue((string) ($currentRevenue + $acquiredRevenue));
         // Credit agreements measure a buyer pro forma, as if it had owned the target all year.
         ProForma::restateOperatingHistory($stock, 1.0, $acquiredRevenue, $acquiredOperatingIncome);
-        $this->industryShareLedger?->recordAcquiredCapacity($stock, $acquiredRevenue, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
-        // A buyer that keeps plant by segment adds what it bought to its main segment, the one the ledger booked it in.
+        $this->industryShareLedger?->recordAcquiredCapacity($stock, $acquiredRevenue, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($this->segmentStrategy($ctx), $stock), $ctx->segment);
+        // A buyer that keeps plant by segment adds what it bought to the segment it bought into, the one the ledger
+        // booked it in.
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $plant = SegmentBooks::plant($momentum);
         if ($plant !== null) {
-            foreach (SegmentBooks::acquireIntoMain($plant, $currentRevenue, $acquiredRevenue) as $segment => $share) {
+            foreach (SegmentBooks::acquireInto($plant, $ctx->segment, $currentRevenue, $acquiredRevenue, SegmentBooks::jointSegments($stock)) as $segment => $share) {
                 $momentum[SegmentBooks::STATE_PLANT . $segment] = $share;
             }
             $stock->setEarningsMomentumZ($momentum);
@@ -725,10 +732,20 @@ class AcquisitionEngine
         return $sizedByRule ? "{$terms} Sized to {$ctx->bindingLimit}." : $terms;
     }
 
+    /** The model of the market a deal buys into: the acquirer's own, or its segment's industry's. */
+    private function segmentStrategy(AcquisitionContext $ctx): BusinessModelInterface
+    {
+        return $ctx->segment === Segments::MAIN
+            ? $ctx->strategy
+            : \App\Data\Company\Sectors::strategyFor(SegmentBooks::industries($ctx->acquirer)[$ctx->segment] ?? '');
+    }
+
     private function finalizeAcquisitionEvent(AcquisitionContext $ctx): array
     {
         $purchasePrice = WireFormat::money($ctx->purchasePrice);
-        $desc = "{$ctx->acquirer->getName()} executed a {$purchasePrice} {$ctx->config['type']} of {$ctx->target['name']}. " . $this->describeDealTerms($ctx);
+        $segment = Segments::forTicker($ctx->acquirer->getTicker())['segments'][$ctx->segment] ?? null;
+        $into = $segment === null ? '' : ' for its ' . lcfirst($segment['label']) . ' business';
+        $desc = "{$ctx->acquirer->getName()} executed a {$purchasePrice} {$ctx->config['type']} of {$ctx->target['name']}{$into}. " . $this->describeDealTerms($ctx);
 
         // The announcement return is the deal's NPV over the acquirer's market value before it (Moeller,
         // Schlingemann & Stulz 2004 measure acquirer returns in exactly these dollar terms). Limited

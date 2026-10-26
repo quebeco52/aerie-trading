@@ -9,12 +9,13 @@ use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBooks;
 
 /**
  * A company's segment note, as an annual report gives it: each segment's industry, that industry's demand outlook (the
  * company's lines lean toward the segments whose outlook runs ahead), and its revenue in the last quarterly report,
- * main segment first. Every revenue line lands in exactly one segment, so the segments add up to the lines. Null for a
- * company that sells into a single market.
+ * main segment first. Every revenue line lands in exactly one segment, so the segments add up to the lines; a segment
+ * sold is gone from the note. Null for a company that sells into a single market.
  *
  * @phpstan-type SegmentRow array{label: string, industry: string, outlook: float|null, revenue: float|null, share: float|null}
  */
@@ -55,9 +56,13 @@ class SegmentNoteBuilder
             return null;
         }
 
+        // A segment the company has sold holds no plant and is no longer reported.
+        $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []);
         $segments = [Segments::MAIN => ['label' => $plan['main'], 'industry' => (string) $stock->getIndustry(), 'revenue' => 0.0]];
         foreach ($plan['segments'] as $key => $segment) {
-            $segments[$key] = ['label' => $segment['label'], 'industry' => $segment['industry'], 'revenue' => 0.0];
+            if ($plant === null || ($plant[$key] ?? 0.0) > 0.0) {
+                $segments[$key] = ['label' => $segment['label'], 'industry' => $segment['industry'], 'revenue' => 0.0];
+            }
         }
         foreach ($report?->getRevenueStreams() ?? [] as $stream => $revenue) {
             $key = Segments::segmentOf($stock->getTicker(), (string) $stream);

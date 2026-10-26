@@ -202,13 +202,62 @@ class SegmentBooksTest extends TestCase
         $this->assertEqualsWithDelta(0.2, $streams['air_cargo'], 1e-12, 'the models\' stream mix reads the same split');
     }
 
-    /** A takeover in the main industry adds its plant to the main segment; the others keep theirs, a smaller share. */
-    public function testATakeoverAddsToTheMainSegment(): void
+    /**
+     * A takeover adds its plant to the segment it buys into, the others keep theirs at a smaller share; an airline
+     * bought comes with its holds, so belly cargo keeps its share of the plant it rides.
+     */
+    public function testATakeoverAddsToTheSegmentItBuysInto(): void
     {
-        $plant = SegmentBooks::acquireIntoMain([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1000.0, 250.0);
+        $ads = SegmentBooks::acquireInto([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 'ads_and_cloud', 1000.0, 250.0);
+        $this->assertEqualsWithDelta(450.0 / 1250.0, $ads['ads_and_cloud'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($ads), 1e-12);
 
-        $this->assertEqualsWithDelta(100.0 / 1250.0, $plant['air_cargo'], 1e-12);
+        $airline = SegmentBooks::acquireInto([Segments::MAIN => 0.9, 'air_cargo' => 0.1], Segments::MAIN, 1000.0, 250.0, ['air_cargo']);
+        $this->assertEqualsWithDelta(0.1, $airline['air_cargo'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($airline), 1e-12);
+    }
+
+    /** A segment sold whole holds no plant; the rest is the others' in the proportions they held it. */
+    public function testASegmentSoldWholeLeavesTheRestItsPlant(): void
+    {
+        $plant = SegmentBooks::sellSegment([Segments::MAIN => 0.5, 'industrial' => 0.3, 'consumer' => 0.2], 'industrial');
+
+        $this->assertSame(0.0, $plant['industrial']);
+        $this->assertEqualsWithDelta(0.5 / 0.7, $plant[Segments::MAIN], 1e-12);
         $this->assertEqualsWithDelta(1.0, array_sum($plant), 1e-12);
+    }
+
+    /**
+     * The business a company would sell whole is the one whose plant earns least; never its main business, never a
+     * by-product of its main plant, never one it no longer holds.
+     */
+    public function testTheWeakestSegmentIsTheOneWhosePlantEarnsLeast(): void
+    {
+        $triv = (new Stock())->setTicker('TRIV')->setIndustry('Conglomerates');
+        $triv->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.4, 'industrial' => 0.3, 'consumer' => 0.3], 1.0, []) + [
+            SegmentBooks::STATE_TARGET . Segments::MAIN => 0.2,
+            SegmentBooks::STATE_TARGET . 'industrial' => 0.33,
+            SegmentBooks::STATE_TARGET . 'consumer' => 0.47,
+        ]);
+        $this->assertSame('industrial', SegmentBooks::weakestSegment($triv), 'the main business earns least but is not for sale');
+
+        $tern = $this->tern();
+        $tern->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, []));
+        $this->assertNull(SegmentBooks::weakestSegment($tern));
+        $this->assertNull(SegmentBooks::weakestSegment((new Stock())->setTicker('LOON')->setIndustry('Telecom Services')));
+    }
+
+    /** A deal buys into a segment in proportion to its plant; a by-product is bought only with the main plant. */
+    public function testADealBuysIntoASegmentInProportionToItsPlant(): void
+    {
+        $weav = (new Stock())->setTicker('WEAV')->setIndustry('Internet Retail');
+        $weav->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []));
+        $this->assertSame(Segments::MAIN, SegmentBooks::acquiringSegment($weav, 0.79));
+        $this->assertSame('ads_and_cloud', SegmentBooks::acquiringSegment($weav, 0.81));
+
+        $tern = $this->tern();
+        $tern->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, []));
+        $this->assertSame(Segments::MAIN, SegmentBooks::acquiringSegment($tern, 0.95));
     }
 
     /** The company grows at its segments' industries' rates on its plant; before the books open, at its model's. */

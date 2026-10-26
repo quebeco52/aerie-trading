@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate\Deal;
 
+use App\Data\Company\Segments;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Deal\DivestitureEngine;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\News\MarketEventPublisher;
 use App\Service\News\WireFormat;
 use App\Tests\Support\DebtHealthBuilder;
@@ -384,6 +388,50 @@ class DivestitureEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $loss, 'a fire sale below book is a loss');
         $this->assertStringContainsString('booking a ' . WireFormat::money($loss) . ' loss on sale', (string) $published);
         $this->assertStringNotContainsString('$-', (string) $published);
+    }
+
+    /**
+     * A company that keeps plant by segment sells a whole business when one is the size this kind of sale takes: the
+     * one whose plant earns least, here by a dying business. Its plant and its share of every ledger leave, its record
+     * leaves its industry, and the company's other businesses keep all theirs.
+     */
+    public function testADistressedCompanySellsItsWeakestSegmentWhole(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('TRIV', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+        $stock->setIndustry('Conglomerates');
+        $stock->setRoicTtm('-0.02');
+        $stock->setLongRunReturn('-0.02');
+        $stock->setTotalNetIncome('-300000000');
+        // A dying business sells 30-50% of itself: the industrial arm is that size and earns least on its plant.
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.55, 'industrial' => 0.35, 'consumer' => 0.10], 1.0, []) + [
+            SegmentBooks::STATE_TARGET . Segments::MAIN => 0.58,
+            SegmentBooks::STATE_TARGET . 'industrial' => 0.31,
+            SegmentBooks::STATE_TARGET . 'consumer' => 0.11,
+        ]);
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $ledger->resolveSegmentSupply($stock, 'industrial', 5_000.0, 5_000.0, 0.1, 1.0, 0.0, 0.0, 10, 252);
+        $ledger->resolveSegmentSupply($stock, 'consumer', 4_000.0, 4_000.0, 0.1, 1.0, 0.0, 0.0, 10, 252);
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.42);
+        $published = null;
+        $publisher = $this->createStub(MarketEventPublisher::class);
+        $publisher->method('publish')->willReturnCallback(static function (Stock $seller, string $type, string $description) use (&$published): array {
+            $published = $description;
+
+            return [];
+        });
+        $engine = new DivestitureEngine($publisher, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+        $grossPpe = (float) $stock->getGrossPpe();
+
+        $this->assertIsArray($engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0), 1.0));
+
+        $this->assertEqualsWithDelta(0.65 * $grossPpe, (float) $stock->getGrossPpe(), 1.0, 'its share of the plant, not the drawn slice');
+        $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) ?? [];
+        $this->assertSame(0.0, $plant['industrial']);
+        $this->assertEqualsWithDelta(0.10 / 0.65, $plant['consumer'], 1e-12);
+        $this->assertSame(0.0, $store->readIndustry('Specialty Industrial Machinery')['TRIV/industrial']['capacity']);
+        $this->assertSame(4_000.0, $store->readIndustry('Household & Personal Products')['TRIV/consumer']['capacity']);
+        $this->assertStringContainsString('sold its industrial products business', (string) $published);
     }
 
     /**

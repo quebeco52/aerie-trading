@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Deal;
 
+use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
 use App\DTO\DivestitureContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -11,6 +13,7 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
@@ -187,8 +190,8 @@ class DivestitureEngine
         $ctx->wacc = $ctx->health->wacc;
 
         $ctx->industry = $stock->getIndustry() ?: 'General';
-        $ctx->businessModel = \App\Data\Company\Sectors::businessModelFor($ctx->industry);
-        $ctx->strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel);
+        $ctx->businessModel = Sectors::businessModelFor($ctx->industry);
+        $ctx->strategy = Sectors::getBusinessModelStrategy($ctx->businessModel);
 
         $ctx->currentReturn = $ctx->strategy->getTrueReturn($stock);
         if ($ctx->currentReturn === 0.0) {
@@ -250,15 +253,18 @@ class DivestitureEngine
     {
         if ($ctx->isDying) {
             $ctx->divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_DYING_FRACTION_MIN, self::DIV_DYING_FRACTION_MAX);
+            [$ctx->minFraction, $ctx->maxFraction] = [self::DIV_DYING_FRACTION_MIN, self::DIV_DYING_FRACTION_MAX];
             $ctx->saleMultiple = $this->mathUtility->generateUniformBetween(self::DIV_DYING_MULTIPLE_MIN, self::DIV_DYING_MULTIPLE_MAX);
             $ctx->annualProbability = self::DIV_DYING_ANNUAL_PROB;
         } elseif ($ctx->isDistressed) {
             $ctx->divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_DISTRESSED_FRACTION_MIN, self::DIV_DISTRESSED_FRACTION_MAX);
+            [$ctx->minFraction, $ctx->maxFraction] = [self::DIV_DISTRESSED_FRACTION_MIN, self::DIV_DISTRESSED_FRACTION_MAX];
             $ctx->saleMultiple = $this->mathUtility->generateUniformBetween(self::DIV_DISTRESSED_MULTIPLE_MIN, self::DIV_DISTRESSED_MULTIPLE_MAX);
             $ctx->annualProbability = self::DIV_DISTRESSED_ANNUAL_PROB;
         } else {
             $ctx->divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_PREMIUM_FRACTION_MIN, self::DIV_PREMIUM_FRACTION_MAX);
-            $ctx->sectorPE = \App\Data\Company\Sectors::MACRO_SECTORS[$ctx->seller->getSector()] ?? 20.0;
+            [$ctx->minFraction, $ctx->maxFraction] = [self::DIV_PREMIUM_FRACTION_MIN, self::DIV_PREMIUM_FRACTION_MAX];
+            $ctx->sectorPE = Sectors::MACRO_SECTORS[$ctx->seller->getSector()] ?? 20.0;
             $blendedMultiple = ($ctx->currentPE + $ctx->sectorPE) / 2.0;
             $ctx->saleMultiple = min(self::DIV_PREMIUM_MAX_MULTIPLE, max(self::DIV_PREMIUM_MIN_MULTIPLE, $blendedMultiple));
             $ctx->annualProbability = self::DIV_PREMIUM_ANNUAL_PROB;
@@ -272,6 +278,23 @@ class DivestitureEngine
         }
 
         $ctx->dealExecuted = true;
+        $this->chooseSegmentSale($ctx);
+    }
+
+    /**
+     * A company that keeps plant by segment sells a whole business where it can: the segment whose plant earns least
+     * (SegmentBooks::weakestSegment()), when its size is in the range this kind of sale takes. The slice is then its
+     * share of the plant, which takes the same share of every ledger the company keeps whole (working capital,
+     * goodwill, leases, debt): those are not kept by segment.
+     */
+    private function chooseSegmentSale(DivestitureContext $ctx): void
+    {
+        $segment = SegmentBooks::weakestSegment($ctx->seller);
+        $share = $segment === null ? 0.0 : (SegmentBooks::plant($ctx->seller->getEarningsMomentumZ() ?? [])[$segment] ?? 0.0);
+        if ($segment !== null && $share >= $ctx->minFraction && $share <= $ctx->maxFraction) {
+            $ctx->soldSegment = $segment;
+            $ctx->divestedFraction = $share;
+        }
     }
 
     private function executeDivestitureSale(DivestitureContext $ctx): void
@@ -325,7 +348,18 @@ class DivestitureEngine
         $stock->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $ctx->divestedFraction)));
         // ...and a seller as if the business it sold had never been its own.
         ProForma::restateOperatingHistory($stock, 1.0 - $ctx->divestedFraction, 0.0, 0.0);
-        $this->industryShareLedger?->recordDivestedFraction($stock, $ctx->divestedFraction, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
+        if ($ctx->soldSegment === null) {
+            $this->industryShareLedger?->recordDivestedFraction($stock, $ctx->divestedFraction, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
+        } else {
+            // A segment sold whole leaves its own industry; the company's other businesses keep all their plant.
+            $industry = SegmentBooks::industries($stock)[$ctx->soldSegment] ?? '';
+            $this->industryShareLedger?->recordSoldSegment($stock, $ctx->soldSegment, $ctx->macroState, IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor($industry), $stock));
+            $momentum = $stock->getEarningsMomentumZ() ?? [];
+            foreach (SegmentBooks::sellSegment(SegmentBooks::plant($momentum) ?? [], $ctx->soldSegment) as $segment => $share) {
+                $momentum[SegmentBooks::STATE_PLANT . $segment] = $share;
+            }
+            $stock->setEarningsMomentumZ($momentum);
+        }
 
         $markSold = $stock->hasBalanceSheetLedger() ? $this->retireDivestedLedgers($stock, $ctx->divestedFraction) : 0.0;
 
@@ -350,8 +384,9 @@ class DivestitureEngine
         $stock->setTotalEquity((string) ($ctx->currentEquity + $afterTaxGain - $markSold));
         $currentRetained = (float) $stock->getRetainedEarnings();
         $stock->setRetainedEarnings((string) ($currentRetained + $afterTaxGain));
-        // The division sold is a pro rata slice of the firm, so the business kept earns the same margin and
-        // return it did before. Distress does not make it more efficient.
+        // A division sold as a slice of the firm leaves the business kept earning the same margin and return it did
+        // before; a segment sold whole leaves the rest selling at its own industries' prices from the next report.
+        // Distress does not make it more efficient.
     }
 
     /**
@@ -440,8 +475,9 @@ class DivestitureEngine
         if ($ctx->taxOnSale !== 0.0) {
             $result .= ' (' . WireFormat::money(abs($ctx->gainOnSale - $ctx->taxOnSale)) . ' after tax)';
         }
-        $target = PrivateCompany::procedural($this->mathUtility);
-        $desc = "{$ctx->seller->getName()} sold its {$target['name']} division for {$salePrice} in cash, {$result}.";
+        $segment = $ctx->soldSegment === null ? null : (Segments::forTicker($ctx->seller->getTicker())['segments'][$ctx->soldSegment] ?? null);
+        $division = $segment === null ? PrivateCompany::procedural($this->mathUtility)['name'] . ' division' : lcfirst($segment['label']) . ' business';
+        $desc = "{$ctx->seller->getName()} sold its {$division} for {$salePrice} in cash, {$result}.";
 
         // The seller's announcement return is what the sale is worth to its shareholders over their stake. The
         // market already values the division pro rata inside the firm, and the buyer takes its share of the

@@ -13,10 +13,11 @@ PATH_GZ=$PROJ/var/harness/idle/macro/path-$2-oc.gz
 SEGV="SEG_OUT=$H/runs/$1-$2.seg.json"
 case "$1" in
   head) BASEV=${BASE:?set BASE=<tree>} ;;
-  seg|seg2)  BASEV="" ;;  # seg2: working tree after the RAVN entry-sizing fix
+  seg|seg2|p4)  BASEV="" ;;  # seg2: after the RAVN entry fix; p4: phase 4 (deals by segment)
+  p3) BASEV=${BASE:?set BASE=<tree>} ;;  # phase 3 committed (803d2ade)
   segplain) BASEV=""; SEGV="SEG_OFF=1" ;;
   gapfix) BASEV=""; export OVR=$H/ovr_gap ;;  # working tree + Redis store that reads segment_outlook_gap back
-  *) echo "usage: run.sh head|seg|segplain|gapfix <seed>" >&2; exit 2 ;;
+  *) echo "usage: run.sh head|seg|seg2|p3|p4|segplain|gapfix <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env MACRO_REPLAY="$PATH_GZ" "$SEGV" BASE="$BASEV" OUTLOOK_SALT=1 SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
   OUT="$H/runs/$1-$2.jsonl" IDLE_OUT="$H/runs/$1-$2.idle.json" \

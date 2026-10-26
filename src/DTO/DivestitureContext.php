@@ -66,6 +66,11 @@ class DivestitureContext
     public float $saleMultiple = 0.0;
     public float $annualProbability = 0.0;
     public float $sectorPE = 0.0;
+    /** The range of shares of the firm this kind of sale takes. */
+    public float $minFraction = 0.0;
+    public float $maxFraction = 0.0;
+    /** The segment sold whole by a company that keeps plant by segment (SegmentBooks); null for a slice of the firm. */
+    public ?string $soldSegment = null;
 
     // Accounting
     public float $lostNetIncome = 0.0;

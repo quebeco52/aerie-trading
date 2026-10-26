@@ -121,6 +121,27 @@ final class SegmentsHarnessTest extends BoardRun
         return $row;
     }
 
+    /** @var list<array<string, mixed>> SEG_OUT deal events of the segmented tickers: {t, tk, d, kappa after}. */
+    private array $segDeals = [];
+
+    /** Deal events (divestiture "sold its", acquisition "executed a") of the segmented tickers, with kappa after. */
+    protected function onEvent(\App\Entity\StockEvent $event): void
+    {
+        $stock = $event->getStock();
+        $desc = (string) $event->getDescription();
+        if (!getenv('SEG_OUT') || \App\Data\Company\Segments::forTicker($stock->getTicker()) === null
+            || !preg_match('/ sold its | executed a /', $desc)) {
+            return;
+        }
+        $kappa = [];
+        foreach ($stock->getEarningsMomentumZ() ?? [] as $k => $v) {
+            if (str_starts_with((string) $k, 'carry:segment_plant:')) {
+                $kappa[substr((string) $k, 20)] = (float) $v;
+            }
+        }
+        $this->segDeals[] = ['t' => round($this->currentTime, 3), 'tk' => $stock->getTicker(), 'd' => substr($desc, 0, 200), 'kappa' => $kappa];
+    }
+
     /** @var list<array<string, mixed>> SEG_OUT rows for the segmented tickers. */
     private array $segRows = [];
     /** @var array<string, int> SEG_OUT identity violations: unsegmented firm with a segment key or a ledger gap. */
@@ -303,7 +324,7 @@ final class SegmentsHarnessTest extends BoardRun
                     }
                 }
             }
-            file_put_contents((string) getenv('SEG_OUT'), json_encode(['rows' => $this->segRows, 'leaks' => $this->segLeaks, 'slash' => $slashKeys]));
+            file_put_contents((string) getenv('SEG_OUT'), json_encode(['rows' => $this->segRows, 'leaks' => $this->segLeaks, 'slash' => $slashKeys, 'deals' => $this->segDeals]));
         }
         $out = getenv('IDLE_OUT');
         if ($out) {

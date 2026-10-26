@@ -75,6 +75,8 @@ class AcquisitionContext
     /** The last sizing step that cut the purchase price (AcquisitionEngine::LIMIT_*). */
     public string $bindingLimit = '';
     public array $target = [];
+    /** The segment a company that keeps plant by segment buys into (SegmentBooks); its main business otherwise. */
+    public string $segment = \App\Data\Company\Segments::MAIN;
 
     // Funding results
     public float $costOfNewDebt = 0.0;

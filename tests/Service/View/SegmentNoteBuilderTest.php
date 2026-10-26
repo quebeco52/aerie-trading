@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
+use App\Data\Company\Segments;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\View\SegmentNoteBuilder;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -47,6 +49,20 @@ class SegmentNoteBuilderTest extends TestCase
         $this->assertEqualsWithDelta(1_000.0, array_sum(array_column($rows, 'revenue')), 1e-9);
         $this->assertEqualsWithDelta(0.2, $rows[0]['share'], 1e-12, 'the cash float stays in the main segment');
         $this->assertNull($rows[0]['outlook'], 'an industry with no outlook shows none');
+    }
+
+    /** A segment the company sold is gone from its note; one it still holds stays. */
+    public function testASegmentSoldIsNoLongerReported(): void
+    {
+        $stock = self::stock('TRIV', 'Conglomerates');
+        $plant = SegmentBooks::sellSegment([Segments::MAIN => 0.5, 'industrial' => 0.3, 'consumer' => 0.2], 'industrial');
+        $stock->setEarningsMomentumZ(SegmentBooks::open($plant, 1.0, []));
+        $report = (new CorporateReport())->setRevenueStreams(['industrial_manufacturing' => 0.0, 'defensive_staples' => 350.0, 'financial_investments' => 200.0]);
+
+        $rows = SegmentNoteBuilder::fromReport($stock, $report);
+
+        $this->assertNotNull($rows);
+        $this->assertSame(['Cash and investments', 'Household and medical products'], array_column($rows, 'label'));
     }
 
     public function testACompanyWithOneMarketHasNoSegmentNote(): void
