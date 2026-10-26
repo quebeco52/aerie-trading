@@ -8,6 +8,7 @@ use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Math\FinancialConstants;
@@ -472,11 +473,14 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
     private function resolveLineLevels(Stock $stock, float $years): array
     {
         $weights = $this->resolveLineWeights($stock);
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
 
+        // Satellite internet is a telecom market (Segments): it leans by telecom's outlook against the blend, while the
+        // learned market below is the firm's own share of it.
         return [
-            'launch_services'     => $weights['launch_services'] * exp(TimeSeries::fadedExcessIntegral(self::LAUNCH_EXCESS_GROWTH, 0.0, $years, self::LAUNCH_EXCESS_HALF_LIFE_YEARS)),
-            'government_missions' => $weights['government_missions'],
-            'satellite_broadband' => self::believedMarketSize($stock->getEarningsMomentumZ() ?? []) * ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION),
+            'launch_services'     => $weights['launch_services'] * exp(TimeSeries::fadedExcessIntegral(self::LAUNCH_EXCESS_GROWTH, 0.0, $years, self::LAUNCH_EXCESS_HALF_LIFE_YEARS)) * SegmentOutlook::tilt($momentum, 'launch_services'),
+            'government_missions' => $weights['government_missions'] * SegmentOutlook::tilt($momentum, 'government_missions'),
+            'satellite_broadband' => self::believedMarketSize($momentum) * ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION) * SegmentOutlook::tilt($momentum, 'satellite_broadband'),
         ];
     }
 
@@ -489,7 +493,8 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
             return 0.0;
         }
         $launchGrowth = $levels['launch_services'] * self::LAUNCH_EXCESS_GROWTH * (0.5 ** ($years / self::LAUNCH_EXCESS_HALF_LIFE_YEARS));
-        $signUps = self::believedMarketSize($stock->getEarningsMomentumZ() ?? []) * ResponseCurves::bassAdoptionRate($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION);
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $signUps = self::believedMarketSize($momentum) * ResponseCurves::bassAdoptionRate($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION) * SegmentOutlook::tilt($momentum, 'satellite_broadband');
 
         return ($launchGrowth + $signUps) / $total;
     }

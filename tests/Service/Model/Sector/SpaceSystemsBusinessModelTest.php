@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
+use App\Data\Company\Segments;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
@@ -98,6 +100,22 @@ class SpaceSystemsBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(ResponseCurves::bassAdoption($years - Space::BROADBAND_SERVICE_START_YEARS, Space::BROADBAND_INNOVATION, Space::BROADBAND_IMITATION), $result->kpis['broadband_penetration'], 1e-12);
         // A subscriber costs less to serve than a launch costs to fly.
         $this->assertLessThan(self::EXPECTED_REVENUE * self::VARIABLE_COST_RATIO, $result->actualVariableCosts);
+    }
+
+    /**
+     * Satellite internet is a telecom market: with telecom's outlook ahead of the blend the line takes more of the
+     * plan, and the plan still splits to the whole expected revenue.
+     */
+    public function testTheInternetLineLeansByTelecomsOutlook(): void
+    {
+        $years = 12.0;
+        $levels = self::levels($years);
+        $momentum = [Space::STATE_YEARS_LISTED => $years, Space::STATE_LAUNCH_EXPERIENCE => Space::INITIAL_LAUNCH_EXPERIENCE_YEARS, Space::STATE_MARKET_SIZE => Space::BROADBAND_MATURE_SIZE];
+        $leaning = $this->runQuarter($momentum + [SegmentOutlook::STATE_TILT . 'satellite_broadband' => 1.2, SegmentOutlook::STATE_TILT . Segments::MAIN => 0.9]);
+
+        $weighted = ($levels['broadband'] * 1.2) + (($levels['launch'] + $levels['government']) * 0.9);
+        $this->assertEqualsWithDelta(self::EXPECTED_REVENUE * $levels['broadband'] * 1.2 / $weighted, $leaning->streamRevenue['satellite_broadband'], 1.0);
+        $this->assertEqualsWithDelta(self::EXPECTED_REVENUE, array_sum($leaning->streamRevenue), 1.0);
     }
 
     public function testTakeUpReportsTheSignUpsAheadOfTheCurveOrBehindIt(): void

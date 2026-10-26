@@ -6,13 +6,17 @@ namespace App\Tests\Support;
 
 /**
  * Redis as far as the stores under test use it: string keys held in memory, set with its only-if-absent ('nx') and
- * only-if-present ('xx') options, and flushAll. The bootstrap's stand-in forgets every write; this one keeps them.
- * Parameters are typed loosely so the class extends both the extension and the bootstrap's stub.
+ * only-if-present ('xx') options, hashes written field by field and read whole, and flushAll. The bootstrap's stand-in
+ * forgets every write; this one keeps them. Parameters are typed loosely so the class extends both the extension and
+ * the bootstrap's stub.
  */
 final class InMemoryRedis extends \Redis
 {
     /** @var array<string, string> */
     private array $store = [];
+
+    /** @var array<string, array<string, string>> */
+    private array $hashes = [];
 
     public function get(mixed $key): mixed
     {
@@ -33,9 +37,26 @@ final class InMemoryRedis extends \Redis
         return true;
     }
 
+    public function hSet(mixed $key, mixed ...$fieldsAndValues): int
+    {
+        $written = 0;
+        for ($i = 0; $i + 1 < count($fieldsAndValues); $i += 2) {
+            $written += isset($this->hashes[(string) $key][(string) $fieldsAndValues[$i]]) ? 0 : 1;
+            $this->hashes[(string) $key][(string) $fieldsAndValues[$i]] = (string) $fieldsAndValues[$i + 1];
+        }
+
+        return $written;
+    }
+
+    public function hGetAll(mixed $key): array
+    {
+        return $this->hashes[(string) $key] ?? [];
+    }
+
     public function flushAll(?bool $sync = null): bool
     {
         $this->store = [];
+        $this->hashes = [];
 
         return true;
     }

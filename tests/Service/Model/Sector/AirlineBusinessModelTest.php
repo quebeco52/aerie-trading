@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
+use App\Data\Company\Segments;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\Distributions;
 use App\Service\Math\StochasticProcesses;
@@ -93,6 +95,20 @@ class AirlineBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(AirlineBusinessModel::PLANNED_LOAD_FACTOR, $result->kpis['load_factor'], 1e-12);
         $this->assertEqualsWithDelta(self::flownCosts($flown), $result->actualVariableCosts, 1.0);
         $this->assertNull($result->eventType);
+    }
+
+    /**
+     * Air cargo is a freight market of its own: with freight's outlook ahead of the blend it takes more of the plan, at
+     * its tilted weight against the passengers' and the miles', and the plan still splits to the whole.
+     */
+    public function testCargoLeansByFreightsOutlook(): void
+    {
+        $result = $this->runQuarter(self::macro(), [SegmentOutlook::STATE_TILT . 'air_cargo' => 1.3, SegmentOutlook::STATE_TILT . Segments::MAIN => 0.97]);
+        $flown = self::strikeCompensation();
+        $plan = self::EXPECTED_REVENUE / ((0.90 * 0.97) + (0.10 * 1.3));
+
+        $this->assertEqualsWithDelta($plan * 0.10 * 1.3 * $flown, $result->streamRevenue['air_cargo'], 1.0);
+        $this->assertEqualsWithDelta($plan * 0.45 * 0.97 * $flown, $result->streamRevenue['leisure_passengers'], 1.0);
     }
 
     /** Passenger demand across the cabins for leisure and business demand over plan. */

@@ -16,6 +16,7 @@ use App\Service\Corporate\Earnings\OperatingCapacityEngine;
 use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\MarketEngine;
@@ -730,6 +731,11 @@ class EarningsEngine
         // The price level the plant capacity was last struck against, and the surprise it carries.
         $streamState[OperatingCapacityEngine::STATE_LAST_DEFLATOR] = max(0.01, $ctx->macroState->gdpDeflator);
         $streamState[OperatingCapacityEngine::STATE_PRICE_LEVEL_SURPRISE] = $ctx->priceLevelSurprise;
+        // A company in several markets files each segment's share of the quarter's revenue, which its next report
+        // blends their outlooks at.
+        foreach (SegmentOutlook::shares($ctx->stock->getTicker(), $actuals->streamRevenue) as $segment => $share) {
+            $streamState[SegmentOutlook::STATE_SHARE . $segment] = $share;
+        }
         // State the physics does not own (the fixed-asset ledger's capital-goods vintage, rolled forward after the cash
         // flows; a distress episode the divestiture engine opened) is carried until its owner removes it. A physics key
         // it stopped registering is gone, so a list it shortens does not come back.

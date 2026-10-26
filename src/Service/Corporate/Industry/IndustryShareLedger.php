@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Industry;
 
+use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\TimeSeries;
@@ -154,7 +156,7 @@ class IndustryShareLedger
      * share; zero for a firm the ledger has not seen them from yet.
      *
      * @param array<string, mixed>|null $record
-     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float}
+     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float, segment_outlook_gap?: float}
      */
     private static function carriedFields(?array $record): array
     {
@@ -164,7 +166,19 @@ class IndustryShareLedger
             'anchor_time'           => (float) ($record['anchor_time'] ?? 0.0),
             'anchor_outlook'        => (float) ($record['anchor_outlook'] ?? 0.0),
             'addressable_share'     => (float) ($record['addressable_share'] ?? 0.0),
-        ];
+        ] + self::carriedSegmentGap($record);
+    }
+
+    /**
+     * A company in several markets carries how far its blended outlook sits from its industry's; a company in one
+     * market carries nothing, so its record is unchanged.
+     *
+     * @param array<string, mixed>|null $record
+     * @return array{segment_outlook_gap?: float}
+     */
+    private static function carriedSegmentGap(?array $record): array
+    {
+        return isset($record['segment_outlook_gap']) ? ['segment_outlook_gap' => (float) $record['segment_outlook_gap']] : [];
     }
 
     /**
@@ -263,6 +277,8 @@ class IndustryShareLedger
         $own = $records[$ticker] ?? null;
         $hasAnchor = $own !== null && (float) ($own['anchor_capacity_share'] ?? 0.0) > 0.0;
         $outlook = $this->outlook($industry);
+        // A company in several markets grows by its blend of their outlooks, not by its own industry's alone.
+        $segmentGap = Segments::forTicker($ticker) !== null ? ['segment_outlook_gap' => $this->resolveOutlookBelief($stock) - $outlook['belief']] : [];
 
         // The anchor is struck once, the first time the ledger prices the firm: its plant then is trend
         // plant, and its plant over its share is the market it sells into as the public then saw it. Entry is
@@ -274,11 +290,11 @@ class IndustryShareLedger
             'anchor_capacity_share' => $hasAnchor ? (float) $own['anchor_capacity_share'] : $annualCapacity / $trendNominalGdp,
             'anchor_demand_share'   => $hasAnchor ? (float) $own['anchor_demand_share'] : $annualCapacity / (min(1.0, $addressableShare) * $trendNominalGdp),
             'anchor_time'           => $hasAnchor ? (float) $own['anchor_time'] : $totalTime,
-            'anchor_outlook'        => $hasAnchor ? (float) ($own['anchor_outlook'] ?? 0.0) : $outlook['belief'],
+            'anchor_outlook'        => $hasAnchor ? (float) ($own['anchor_outlook'] ?? 0.0) : $outlook['belief'] + ($segmentGap['segment_outlook_gap'] ?? 0.0),
             'addressable_share'     => min(1.0, $addressableShare),
             'tick'                  => $tick,
             'consumed_tick'         => (int) ($own['consumed_tick'] ?? $tick),
-        ];
+        ] + $segmentGap;
         $this->store->writeRecord($industry, $ticker, $record);
         $records[$ticker] = $record;
 
@@ -300,15 +316,43 @@ class IndustryShareLedger
             return null;
         }
 
-        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->outlook((string) $stock->getIndustry())['belief']);
+        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, (string) $stock->getIndustry()));
 
         return log($anchorShare * $growth / $capacity);
     }
 
-    /** The level the public expects the firm's industry demand to reach, in log against its path: 0 if untracked. */
+    /**
+     * The level the public expects the firm's demand to reach, in log against its path: its industry's outlook (0 if
+     * untracked), or for a company in several markets the blend of its segments' at the shares its last report filed.
+     */
     public function resolveOutlookBelief(Stock $stock): float
     {
-        return $this->outlook((string) $stock->getIndustry())['belief'];
+        $beliefs = $this->resolveSegmentBeliefs($stock);
+        if ($beliefs === null) {
+            return $this->outlook((string) $stock->getIndustry())['belief'];
+        }
+
+        return SegmentOutlook::blend(SegmentOutlook::filedShares($stock->getEarningsMomentumZ() ?? []), $beliefs);
+    }
+
+    /**
+     * Each segment's industry outlook, in log, main segment under Segments::MAIN; null for a company in one market.
+     *
+     * @return array<string, float>|null
+     */
+    public function resolveSegmentBeliefs(Stock $stock): ?array
+    {
+        $plan = Segments::forTicker($stock->getTicker());
+        if ($plan === null) {
+            return null;
+        }
+
+        $beliefs = [Segments::MAIN => $this->outlook((string) $stock->getIndustry())['belief']];
+        foreach ($plan['segments'] as $key => $segment) {
+            $beliefs[$key] = $this->outlook($segment['industry'])['belief'];
+        }
+
+        return $beliefs;
     }
 
     /**
@@ -458,7 +502,7 @@ class IndustryShareLedger
                 continue;
             }
 
-            $growth = self::trendFactor($record, $trendNominalGdp, $secularExcessGrowth, $totalTime, $outlook['belief']);
+            $growth = self::trendFactor($record, $trendNominalGdp, $secularExcessGrowth, $totalTime, $outlook['belief'] + (float) ($record['segment_outlook_gap'] ?? 0.0));
             $trendPlant = (float) $record['anchor_capacity_share'] * $growth;
             $trendDemand = (float) $record['anchor_demand_share'] * $growth;
             $capacity = max(0.0, (float) $record['capacity']);
@@ -494,6 +538,16 @@ class IndustryShareLedger
             TimeSeries::fadedExcessIntegral($secularExcessGrowth, (float) $record['anchor_time'], $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)
             + $belief - (float) ($record['anchor_outlook'] ?? 0.0),
         );
+    }
+
+    /**
+     * The expected level a record grows by: its industry's outlook, plus the gap a company in several markets filed.
+     *
+     * @param ShareRecord $record
+     */
+    private function recordBelief(array $record, string $industry): float
+    {
+        return $this->outlook($industry)['belief'] + (float) ($record['segment_outlook_gap'] ?? 0.0);
     }
 
     /**
@@ -551,7 +605,7 @@ class IndustryShareLedger
             return $this->describeRevenueMarket($stock, $own, $tick, $ticksPerYear);
         }
 
-        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->outlook((string) $stock->getIndustry())['belief']);
+        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, (string) $stock->getIndustry()));
         $shares = $this->rosterTrendShares((string) $stock->getIndustry(), $stock->getTicker(), $tick, $ticksPerYear);
 
         return [
@@ -714,7 +768,7 @@ class IndustryShareLedger
             'addressable_share'     => (float) ($own['addressable_share'] ?? 0.0),
             'tick'                  => (int) $own['tick'],
             'consumed_tick'         => (int) $own['consumed_tick'],
-        ]);
+        ] + self::carriedSegmentGap($own));
     }
 
     /**
@@ -767,7 +821,7 @@ class IndustryShareLedger
             return;
         }
 
-        $growth = self::trendFactor($own, $trendNominalGdp, $secularExcessGrowth, $macroState->totalTime, $this->outlook((string) $stock->getIndustry())['belief']);
+        $growth = self::trendFactor($own, $trendNominalGdp, $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, (string) $stock->getIndustry()));
         $own['anchor_capacity_share'] = max(0.0, (float) $own['anchor_capacity_share'] + ($capacityDelta / $growth));
         $own['capacity'] = max(0.0, (float) $own['capacity'] + $capacityDelta);
 

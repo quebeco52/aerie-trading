@@ -8,6 +8,7 @@ use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
@@ -327,11 +328,14 @@ class AirlineBusinessModel extends StandardCorporateBusinessModel
             ModelParam::LoyaltyMilesWeight->value      => self::LOYALTY_MILES_WEIGHT,
         ]);
 
+        // Cargo is a market of its own (Segments): it leans in the plan by its industry's outlook against the blend.
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
         return [
-            'leisure_passengers'  => (float) $params[ModelParam::LeisurePassengerWeight],
-            'business_passengers' => (float) $params[ModelParam::BusinessPassengerWeight],
-            'air_cargo'           => (float) $params[ModelParam::AirCargoWeight],
-            'loyalty_miles'       => (float) $params[ModelParam::LoyaltyMilesWeight],
+            'leisure_passengers'  => (float) $params[ModelParam::LeisurePassengerWeight] * SegmentOutlook::tilt($momentum, 'leisure_passengers'),
+            'business_passengers' => (float) $params[ModelParam::BusinessPassengerWeight] * SegmentOutlook::tilt($momentum, 'business_passengers'),
+            'air_cargo'           => (float) $params[ModelParam::AirCargoWeight] * SegmentOutlook::tilt($momentum, 'air_cargo'),
+            'loyalty_miles'       => (float) $params[ModelParam::LoyaltyMilesWeight] * SegmentOutlook::tilt($momentum, 'loyalty_miles'),
         ];
     }
 

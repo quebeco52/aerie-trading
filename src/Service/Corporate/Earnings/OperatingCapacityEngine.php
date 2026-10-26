@@ -9,6 +9,7 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
@@ -137,10 +138,16 @@ final class OperatingCapacityEngine
         $inputCostMultiplier = (float) ($macroPhysics['input_cost_multiplier'] ?? $pricingPowerMultiplier);
 
         // The industry outlook as the public reads it this quarter, filed with the report: the market the firm sizes
-        // itself against below grows with it.
+        // itself against below grows with it. A company in several markets reads the blend of its segments' outlooks,
+        // and files how far each segment's lines lean in its plan (SegmentOutlook).
         if ($this->industryShareLedger !== null) {
-            $ctx->industryOutlook = exp($this->industryShareLedger->resolveOutlookBelief($stock));
-            $stock->setEarningsMomentumZ([IndustryOutlook::STATE_BELIEF => log($ctx->industryOutlook)] + ($stock->getEarningsMomentumZ() ?? []));
+            $belief = $this->industryShareLedger->resolveOutlookBelief($stock);
+            $ctx->industryOutlook = exp($belief);
+            $filed = [IndustryOutlook::STATE_BELIEF => log($ctx->industryOutlook)];
+            foreach (SegmentOutlook::tilts($stock->getTicker(), $this->industryShareLedger->resolveSegmentBeliefs($stock) ?? [], $belief) as $stream => $tilt) {
+                $filed[SegmentOutlook::STATE_TILT . $stream] = $tilt;
+            }
+            $stock->setEarningsMomentumZ($filed + ($stock->getEarningsMomentumZ() ?? []));
         }
 
         // The firm's reach into the market it sells into, on the base the saturation physics uses. The

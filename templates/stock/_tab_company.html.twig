@@ -16,13 +16,14 @@
 {% if segments|default(null) %}
 	<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" id="segments-card">
 		<h3 class="text-sm font-semibold text-on-surface">Segments</h3>
-		<p class="text-xs text-on-surface-variant mt-1">Each segment sells to its own customers against its own rivals. Revenue in the last quarterly report.</p>
+		<p class="text-xs text-on-surface-variant mt-1">Each segment sells to its own customers against its own rivals, and the company plans more of its sales in the segments whose industry outlook runs ahead. Revenue in the last quarterly report.</p>
 		<div class="overflow-x-auto mt-4">
 			<table class="w-full text-left border-collapse">
 				<thead>
 					<tr class="table-head">
 						<th class="py-2">Segment</th>
 						<th class="py-2">Industry</th>
+						<th class="py-2 text-right">Outlook</th>
 						<th class="py-2 text-right">Revenue</th>
 						<th class="py-2 text-right">Share</th>
 					</tr>
@@ -32,6 +33,7 @@
 						<tr>
 							<td class="py-2 text-on-surface">{{ segment.label }}</td>
 							<td class="py-2 text-on-surface-variant">{{ segment.industry }}</td>
+							<td class="py-2 text-right font-mono tabular-nums {{ segment.outlook is null ? 'text-on-surface-faint' : (segment.outlook - 1)|signed_class }}">{{ segment.outlook|figure('index', 2) }}</td>
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.revenue is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.revenue|format_large('$') }}</td>
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.share|pct(1) }}</td>
 						</tr>

@@ -7,6 +7,7 @@ namespace App\Tests\Service\Corporate;
 use App\Data\Company\LifecycleStage;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
 use App\Data\Macro\CapitalGoodsPrices;
 use App\DTO\DebtHealthDTO;
 use App\DTO\EarningsSimulationContext;
@@ -24,6 +25,7 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Market\Pricing\MarketConsensusEngine;
@@ -273,6 +275,28 @@ class EarningsEngineTest extends TestCase
         $this->assertNotNull($shortfall);
         $this->assertGreaterThan(0.03, $shortfall, 'the firm is short of the plant its market calls for');
         $this->assertSame(0.0, ($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? null, 'and files no shortfall it will not build');
+    }
+
+    /**
+     * A company in several markets files each segment's share of the quarter's revenue, which add to one, and the lean
+     * of each of its lines: one each while every outlook is still where trading opened.
+     */
+    public function testACompanyInSeveralMarketsFilesItsSegmentSharesAndLeans(): void
+    {
+        $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger(new InMemoryIndustryShareStore()));
+        mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+        $stock = $this->buildMatureIndustrial('TRIV');
+        $stock->setIndustry('Conglomerates');
+
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02), EarningsEngine::resolveReportingTick('TRIV', 252), 252);
+
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $shares = SegmentOutlook::filedShares($momentum);
+        $this->assertEqualsCanonicalizing([Segments::MAIN, 'industrial', 'consumer'], array_keys($shares), json_encode($shares) ?: '');
+        $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-9);
+        $this->assertGreaterThan(0.0, $shares['industrial']);
+        $this->assertSame(1.0, $momentum[SegmentOutlook::STATE_TILT . 'industrial_manufacturing'] ?? null);
+        $this->assertSame(1.0, $momentum[SegmentOutlook::STATE_TILT . Segments::MAIN] ?? null);
     }
 
     /**

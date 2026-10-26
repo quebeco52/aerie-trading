@@ -54,7 +54,7 @@ final class RedisIndustryShareStore implements IndustryShareStoreInterface
                 'addressable_share'     => (float) ($decoded['addressable_share'] ?? 0.0),
                 'tick'          => (int) ($decoded['tick'] ?? 0),
                 'consumed_tick' => (int) ($decoded['consumed_tick'] ?? 0),
-            ];
+            ] + (isset($decoded['segment_outlook_gap']) ? ['segment_outlook_gap' => (float) $decoded['segment_outlook_gap']] : []);
         }
 
         return $records;

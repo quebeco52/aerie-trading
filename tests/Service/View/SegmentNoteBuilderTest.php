@@ -29,11 +29,12 @@ class SegmentNoteBuilderTest extends TestCase
     public function testTheSegmentsAddUpToTheLinesTheReportFiled(): void
     {
         $report = (new CorporateReport())->setRevenueStreams(['launch_services' => 700.0, 'government_missions' => 300.0, 'satellite_broadband' => 0.0]);
-        $rows = SegmentNoteBuilder::fromReport(self::stock('SKYL', 'Space Systems'), $report);
+        $rows = SegmentNoteBuilder::fromReport(self::stock('SKYL', 'Space Systems'), $report, ['Space Systems' => 1.08, 'Telecom Services' => 0.97]);
 
         $this->assertNotNull($rows);
         $this->assertSame(['Launches and missions', 'Satellite internet'], array_column($rows, 'label'));
         $this->assertSame(['Space Systems', 'Telecom Services'], array_column($rows, 'industry'));
+        $this->assertSame([1.08, 0.97], array_column($rows, 'outlook'), 'each segment shows its own industry\'s outlook');
         $this->assertEqualsWithDelta(1_000.0, $rows[0]['revenue'], 1e-9);
         $this->assertEqualsWithDelta(1.0, $rows[0]['share'], 1e-12);
         $this->assertNull($rows[1]['revenue']);
@@ -45,6 +46,7 @@ class SegmentNoteBuilderTest extends TestCase
         $this->assertEqualsWithDelta(1.0, array_sum(array_column($rows, 'share')), 1e-12);
         $this->assertEqualsWithDelta(1_000.0, array_sum(array_column($rows, 'revenue')), 1e-9);
         $this->assertEqualsWithDelta(0.2, $rows[0]['share'], 1e-12, 'the cash float stays in the main segment');
+        $this->assertNull($rows[0]['outlook'], 'an industry with no outlook shows none');
     }
 
     public function testACompanyWithOneMarketHasNoSegmentNote(): void
