@@ -68,6 +68,42 @@ final class Segments
             // Household goods turn faster at a thinner margin, so the head office earns about the same on each.
             'consumer' => ['label' => 'Household and medical products', 'industry' => 'Household & Personal Products', 'streams' => ['defensive_staples'], 'margin' => 0.9, 'turnover' => 1.2],
         ]],
+        'GDWT' => ['main' => 'Strategy and risk advisory', 'segments' => [
+            // Programme teams bill as the advisers do on as little plant: the line's market is IT services, its
+            // economics the firm's.
+            'technology' => ['label' => 'Technology programmes', 'industry' => 'Information Technology Services', 'streams' => ['technology_programmes']],
+        ]],
+        'TSTN' => ['main' => 'Restructuring and investigations', 'segments' => [
+            // Systems work earns a little more than crisis advisory on the same light capital.
+            'technology' => ['label' => 'Technology programmes', 'industry' => 'Information Technology Services', 'streams' => ['technology_programmes'], 'margin' => 1.2, 'turnover' => 1.0],
+        ]],
+        'AVCT' => ['main' => 'Audit, tax and advisory', 'segments' => [
+            // Systems work earns a little more than audit and advisory on the same light capital.
+            'technology' => ['label' => 'Technology programmes', 'industry' => 'Information Technology Services', 'streams' => ['technology_programmes'], 'margin' => 1.2, 'turnover' => 1.0],
+        ]],
+        'HUMM' => ['main' => 'Search and advertising', 'segments' => [
+            // Data centres: a thinner margin than the ad platform on more capital per dollar of sales.
+            'cloud' => ['label' => 'Cloud computing', 'industry' => 'Software - Infrastructure', 'streams' => ['cloud_infrastructure'], 'margin' => 0.75, 'turnover' => 0.7],
+        ]],
+        'STAR' => ['main' => 'University and executive courses', 'segments' => [
+            // Licensed software earns more than a campus on less capital.
+            'learning_software' => ['label' => 'Learning software', 'industry' => 'Software - Application', 'streams' => ['digital_lms_licensing'], 'margin' => 1.5, 'turnover' => 1.5],
+        ]],
+        'FULM' => ['main' => 'Base petrochemicals', 'segments' => [
+            // Patented catalysts and fine materials: the group's best margins, on lighter plant than its crackers.
+            'specialty' => ['label' => 'Specialty chemicals', 'industry' => 'Specialty Chemicals', 'streams' => ['specialty_chemicals'], 'margin' => 1.6, 'turnover' => 0.8],
+            // Fertiliser and crop protection plants: better margins than bulk olefins on heavier capital.
+            'agrochemicals' => ['label' => 'Agrochemicals', 'industry' => 'Agricultural Inputs', 'streams' => ['agrochemicals'], 'margin' => 1.3, 'turnover' => 0.7],
+        ]],
+        'KSTL' => ['main' => 'Freight', 'segments' => [
+            // Commuter trains and buses run on rolling stock and depots of their own and pay for the shared track as
+            // they wear it; both lines hold a franchise, so neither earns more on its capital.
+            'transit' => ['label' => 'Passenger transit', 'industry' => 'Passenger Transit', 'streams' => ['transit_subscriptions']],
+        ]],
+        'GULL' => ['main' => 'Casino resort', 'segments' => [
+            // Shoreline rents: a landlord's margin on land that turns over slowly.
+            'property' => ['label' => 'Shoreline property', 'industry' => 'REIT - Retail', 'streams' => ['cre'], 'margin' => 2.2, 'turnover' => 0.30],
+        ]],
     ];
 
     /**

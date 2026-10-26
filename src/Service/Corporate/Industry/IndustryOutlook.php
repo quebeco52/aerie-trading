@@ -6,11 +6,14 @@ namespace App\Service\Corporate\Industry;
 
 use App\Data\Company\IndustryOutlooks;
 use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Segment\SegmentBooks;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
@@ -72,6 +75,7 @@ final class IndustryOutlook
             return [];
         }
 
+        $state['industries'] += $this->openSegmentIndustries($state['industries'], $stocks, $macroState);
         for ($next = $state['quarter'] + 1; $next <= $quarter; ++$next) {
             $state = self::step($state, $next, $macroState, $tick);
         }
@@ -108,13 +112,50 @@ final class IndustryOutlook
             $markets[$industry] = max($markets[$industry] ?? 0.0, $share > 0.0 ? (float) $stock->getTotalRevenue() / $share : 0.0);
         }
 
-        $records = [];
-        foreach ($markets as $industry => $market) {
-            $variance = self::steadyVariance(IndustryOutlooks::driftVol($industry), IndustryOutlooks::learningHalfLife($industry));
-            $records[$industry] = ['x' => 0.0, 'm' => -$variance / 2.0, 'v' => $variance, 'f' => 0.0, 'w' => $market, 'prior_belief' => 0.0, 'revised_tick' => -1];
+        return $markets === [] ? [] : array_combine(array_keys($markets), array_map(self::opening(...), array_keys($markets), $markets));
+    }
+
+    /**
+     * Every industry only a company's segment sells into, not yet open, opened the quarter after the company first
+     * files the segment's share of its sales, at its known level as the board's industries opened: its market is that
+     * share of the company's sales over the company's share of its markets, as a segment's market is sized where its
+     * industry's is not known (SegmentBooks::open()). It joins at the spending average, so no other industry moves.
+     *
+     * @param array<string, OutlookRecord> $open
+     * @param iterable<Stock>              $stocks
+     * @return array<string, OutlookRecord>
+     */
+    private function openSegmentIndustries(array $open, iterable $stocks, MacroStateDTO $macroState): array
+    {
+        $markets = [];
+        foreach ($stocks as $stock) {
+            $shares = $stock->isBankrupt() ? [] : SegmentOutlook::filedShares($stock->getEarningsMomentumZ() ?? []);
+            $industries = SegmentBooks::industries($stock);
+            foreach ($shares as $segment => $share) {
+                $industry = $industries[$segment] ?? '';
+                if ($segment === Segments::MAIN || $share <= 0.0 || $industry === '' || isset($open[$industry])
+                    || Sectors::strategyFor($industry)->isFinancial() || IndustryOutlooks::driftVol($industry) <= 0.0) {
+                    continue;
+                }
+                $strategy = Sectors::strategyFor($stock->getIndustry());
+                $firmShare = $this->corporateMetrics->calculateAddressableShare($stock, $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()), $macroState);
+                $markets[$industry] = max($markets[$industry] ?? 0.0, $firmShare > 0.0 ? (float) $stock->getTotalRevenue() * $share / $firmShare : 0.0);
+            }
         }
 
-        return $records;
+        return $markets === [] ? [] : array_combine(array_keys($markets), array_map(self::opening(...), array_keys($markets), $markets));
+    }
+
+    /**
+     * An industry's outlook as it opens: its level known, the settled belief centred on it, and its share of spending.
+     *
+     * @return OutlookRecord
+     */
+    private static function opening(string $industry, float $market): array
+    {
+        $variance = self::steadyVariance(IndustryOutlooks::driftVol($industry), IndustryOutlooks::learningHalfLife($industry));
+
+        return ['x' => 0.0, 'm' => -$variance / 2.0, 'v' => $variance, 'f' => 0.0, 'w' => $market, 'prior_belief' => 0.0, 'revised_tick' => -1];
     }
 
     /**

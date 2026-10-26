@@ -313,3 +313,24 @@ default, no whole sale. Telecom: LOON/SKUA price y12-20 about 0.01-0.03 lower in
 SKUA 75 -> 84; internet record 14% of telecom record revenue by y15-20. Identities: sum kappa 2e-16; main + internet
 record revenue = 4 x revenue (3e-14); path/anchor_path on every post-entry report; no internet kappa key before
 entry. Board (n 4): cap -0.97 tn (se 1.53), defaults+deaths 0, B-or-worse -0.17 pt (se 0.08), P/E +0.11 (0.07).
+
+## 2026-10-26: wave 2 of segments (8 more companies) vs d29edb90, 8 seeds x 20 years
+
+Arms `head` (BASE d29edb90), `wave2` (working tree), `wave2pl` (wave2 + refreshed `ovr_pl/`; OUT equal to wave2 on
+all 8 seeds). run.sh writes the outlook log (OUTLOOK_OUT).
+
+    BASE=<scratchpad>/basetree-d29edb90 bin/harness-batch var/harness/segments/run.sh 1-8 head wave2 wave2pl
+    python3 var/harness/segments/wave2.py 1-8 head wave2 wave2pl > wave2_n8.out
+
+Books open y0.31-0.39 for all eight. kappa y1 -> y20: GDWT technology 0.552 -> 0.615, TSTN 0.101 -> 0.125, AVCT 0.302
+-> 0.350, HUMM cloud 0.488 -> 0.437, STAR learning software 0.144 -> 0.153, FULM agro 0.246 -> 0.255 / specialty
+0.323 -> 0.304, KSTL transit 0.500 -> 0.509, GULL property 0.886 -> 0.910. None below half its opening; no whole
+sales, defaults or reorganisations. Real growth y1-10 / y10-20 head -> wave2: GDWT 3.8/3.2 -> 4.2/3.7%, STAR 3.6/3.2 ->
+3.9/2.7%, AVCT 2.9/3.1 -> 3.7/3.7%, HUMM 6.5/1.9 -> 5.4/2.9%, GULL 5.8/4.0 -> 4.2/3.3%. Cap y20 paired log ratio:
+GDWT +0.22 (se 0.12), GULL -0.10 (0.10; median 478 -> 356 bn), others |t| < 1. GULL op margin 0.246 both arms.
+Outlooks: all seven new industries open at quarter 1 (y0.25) in every seed; existing industries' belief step at q1
+differs from head's by at most 0.0013 (the q1 step itself is 0.065-0.137 in both arms, above the usual p95 0.06).
+Identities over 10,744 reports of 17 companies: sum kappa 2e-16, record revenue = 4 x revenue 4e-14, no foreign
+TICKER/seg owners. Board (n 8): cap +0.85 tn (se 0.67), defaults+deaths +0.25 (0.25), B-or-worse -0.06 pt (0.12),
+P/E 0.00 (0.07), vol +0.0018 (0.0023); wave-1 caps |t| <= 1.6. IT services segment price (three consultancies):
+1.00-1.036 by year, p5 0.96, loads always 1. HUMM main price drifts to 0.93 by y20 (p5 0.88).

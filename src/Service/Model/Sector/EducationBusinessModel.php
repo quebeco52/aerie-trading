@@ -26,7 +26,8 @@ use App\Service\Model\StreamContext;
  *      1. Degree & Tuition Enrollment: Counter-cyclical, backed by government student loans / upfront tuition.
  *      2. Enterprise B2B Training: Pro-cyclical corporate upskilling and executive development contracts.
  *      3. Digital LMS & Courseware Licensing: High-margin, sticky software subscription licensing.
- * - Structural Margin: Digital LMS licensing carries near-zero variable delivery cost.
+ * - Structural Margin: every line is charged the firm's cost ratio; the software's better margin on less capital is its
+ *   segment's (Segments).
  */
 class EducationBusinessModel extends StandardCorporateBusinessModel
 {

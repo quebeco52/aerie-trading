@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate\Industry;
 
+use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\TimeSeries;
@@ -159,6 +162,33 @@ class IndustryOutlookTest extends TestCase
         $this->assertEqualsWithDelta(($revisions['Steel']['level'] / exp($record['prior_belief'])) - 1.0, $revisions['Steel']['revision'], 1e-12);
         $this->assertNotEqualsWithDelta(0.0, $revisions['Steel']['revision'], 1e-9);
         $this->assertSame([], $outlook->advance([], new MacroStateDTO(), 64, 252));
+    }
+
+    /**
+     * An industry only a company's segment sells into is not on the board when the outlook opens; it opens at the
+     * quarter's turn after the company files the segment's share of its sales, at its known level, its market that
+     * share of the sales over the company's share of its markets, and is revised from then on with the rest.
+     */
+    public function testAnIndustryOnlyASegmentSellsIntoOpensOnceItsShareIsFiled(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $metrics = new CorporateMetrics();
+        $outlook = new IndustryOutlook($store, $metrics);
+        $tern = (new Stock())->setTicker('TERN')->setIndustry('Airlines')->setTotalRevenue('1000')->setTotalEquity('2000')->setSamRatio('0.05');
+        $macro = new MacroStateDTO(nominalGdpIndex: 1.0);
+        $outlook->advance([$tern], $macro, 0, 252);
+        $this->assertArrayNotHasKey('Integrated Freight & Logistics', $store->readOutlooks()['industries'] ?? [], 'no listed firm sells there');
+        $airlines = $store->readOutlook('Airlines');
+
+        $tern->setEarningsMomentumZ([SegmentOutlook::STATE_SHARE . Segments::MAIN => 0.9, SegmentOutlook::STATE_SHARE . 'air_cargo' => 0.1]);
+        $revisions = $outlook->advance([$tern], $macro, 63, 252);
+
+        $cargo = $store->readOutlook('Integrated Freight & Logistics');
+        $this->assertNotNull($cargo);
+        $firmShare = $metrics->calculateAddressableShare($tern, Sectors::strategyFor('Airlines')->getEvaluationCapital(2000.0, $tern->getInvestedCapital()), $macro);
+        $this->assertEqualsWithDelta(1000.0 * 0.1 / $firmShare, $cargo['w'], 1e-9);
+        $this->assertArrayHasKey('Integrated Freight & Logistics', $revisions, 'revised with the rest from its first turn');
+        $this->assertSame($airlines['w'] ?? null, $store->readOutlook('Airlines')['w'] ?? null, 'the main industry is not opened again');
     }
 
     /**

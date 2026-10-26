@@ -45,6 +45,11 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
   - `econ3`: working tree after the takeover-asset fix (probe adds `gw` goodwill, `tax` effective rate).
   - `skyl` (working tree, SKYL plant by segment) vs `head` = BASE 642a842c: `sky.py <seeds> head skyl` (internet
     kappa vs planned share, capacity gap, SKYL books, telecom peers LOON/SKUA, identities, board).
+  - `wave2` (working tree, 8 more segmented companies) and `wave2pl` (+ `ovr_pl/`, refreshed from src; neutral,
+    checked OUT equal on 8 seeds) vs `head` = BASE d29edb90: `wave2.py <seeds> head wave2 wave2pl` (new companies,
+    outlooks opened from `runs/<arm>-<seed>.outlook.json`, identities over all segmented, board, wave-1 caps,
+    segment prices). run.sh now always writes OUTLOOK_OUT. Never edit run.sh while a batch is running (bash reads
+    it as it goes; a mid-run edit failed every run).
   - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
     TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
   - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events

@@ -224,6 +224,7 @@ final class IndustryBetas
         'Oil & Gas Refining & Marketing' => 'Oil/Gas Distribution',
         'Packaged Foods' => 'Food Processing',
         'Packaging & Containers' => 'Packaging & Container',
+        'Passenger Transit' => 'Transportation (Railroads)',
         'Personal Services' => 'Business & Consumer Services',
         'Pollution & Treatment Controls' => 'Environmental & Waste Services',
         'Private Banks' => 'Bank (Money Center)',

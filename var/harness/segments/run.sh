@@ -21,12 +21,14 @@ case "$1" in
   econ2nj) BASEV=""; export OVR=$H/ovr_nj ;;  # as econ2, and every segment at the company avoidable-cost ratio (undoes fix 8)
   econ3) BASEV="" ;;  # working tree: takeover assets at revenue / the joined segment's turnover
   skyl) BASEV="" ;;  # working tree: SKYL keeps plant by segment, internet on its Bass path (head = 642a842c)
+  wave2) BASEV="" ;;  # working tree: 8 more segmented companies (head = d29edb90)
+  wave2pl) BASEV=""; export OVR=$H/ovr_pl ;;  # wave2 + ovr_pl price/load log (refreshed from src 2026-10-26; neutral)
   econlive) BASEV=""; PATH_GZ="" ;;  # econ on the live macro, for YEARS > 20
   segplain) BASEV=""; SEGV="SEG_OFF=1" ;;
   gapfix) BASEV=""; export OVR=$H/ovr_gap ;;  # working tree + Redis store that reads segment_outlook_gap back
-  *) echo "usage: run.sh head|seg|seg2|p3|p4|p4live|p4c|econ|econlive|econ2|econ2nj|econ3|skyl|segplain|gapfix <seed>" >&2; exit 2 ;;
+  *) echo "usage: run.sh head|seg|seg2|p3|p4|p4live|p4c|econ|econlive|econ2|econ2nj|econ3|skyl|wave2|wave2pl|segplain|gapfix <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env MACRO_REPLAY="$PATH_GZ" "$SEGV" BASE="$BASEV" OUTLOOK_SALT=1 SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
-  OUT="$H/runs/$1-$2.jsonl" IDLE_OUT="$H/runs/$1-$2.idle.json" \
+  OUT="$H/runs/$1-$2.jsonl" IDLE_OUT="$H/runs/$1-$2.idle.json" OUTLOOK_OUT="$H/runs/$1-$2.outlook.json" \
   bin/php-slot php -d memory_limit=3G vendor/bin/phpunit --bootstrap var/harness/bootstrap.php --no-configuration \
   "$H/SegmentsHarnessTest.php" > "$H/runs/$1-$2.log" 2>&1
