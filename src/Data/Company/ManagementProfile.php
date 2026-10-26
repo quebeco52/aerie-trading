@@ -112,8 +112,9 @@ final readonly class ManagementProfile
     }
 
     /**
-     * The share of what its weaker segments would lose to the stronger ones that headquarters gives them anyway.
-     * Additive, so it scales directly; a share, so all of it at most.
+     * The share of what its weaker segments would lose to the stronger ones that headquarters gives them anyway, or on
+     * one plant, of the plant its market no longer needs that it keeps up. Additive, so it scales directly; a share, so
+     * all of it at most.
      */
     public function weakSegmentSupport(): float
     {

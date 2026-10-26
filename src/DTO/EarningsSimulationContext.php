@@ -201,6 +201,11 @@ class EarningsSimulationContext
      * readers leave it out.
      */
     public float $plantLoad = 1.0;
+    /**
+     * For a company on one plant, the share of its running plant whose wear it replaces: below one while its new plant
+     * would not earn its cost and it runs more plant than its market needs (CapitalBudgetEngine).
+     */
+    public float $plantReplaced = 1.0;
     /** The level the public expects the firm's industry demand to reach against its expected path (1 = the opening). */
     public float $industryOutlook = 1.0;
     /**

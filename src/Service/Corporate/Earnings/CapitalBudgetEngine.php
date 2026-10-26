@@ -78,9 +78,11 @@ final class CapitalBudgetEngine
             // Operational CapEx:
             // 1. Maintenance CapEx: replaces depreciating physical capital in ongoing operations, at the capital-goods
             //    replacement cost of the plant worn out, scaled with the capex cycle. Plant idled in an industry glut is
-            //    left to wear out (Abel & Eberly 1994), and so is a segment's plant its market no longer needs while it
-            //    earns below its cost of capital (resolveSegmentGates()).
+            //    left to wear out (Abel & Eberly 1994), and so is running plant its market no longer needs while new
+            //    plant earns below its cost of capital: the firm's (resolvePlantGate()) or a segment's
+            //    (resolveSegmentGates()).
             $ctx->replacementCostRatio = $this->plant->resolveReplacementCostRatio($ctx);
+            $this->resolvePlantGate($ctx);
             $this->resolveSegmentGates($ctx);
             $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier * self::plantKept($ctx);
             if ($ctx->strategy->isFinancial()) {
@@ -361,13 +363,37 @@ final class CapitalBudgetEngine
     }
 
     /**
-     * Share of the plant whose wear the firm replaces: the plant in use (plantInUse()), or for a company that keeps
-     * plant by segment, each segment's running plant it keeps (resolveSegmentGates()).
+     * The gate for a company on one plant, as resolveSegmentGates() sets it for a segment: while its new plant would
+     * not earn the true hurdle at its industry's price today, it replaces only the wear on the running plant its market
+     * still needs, so a firm ahead of its market shrinks back toward it by depreciation and its supply falls until the
+     * price and its return recover. Management's support for a weak business keeps that share of the rest.
+     */
+    private function resolvePlantGate(EarningsSimulationContext $ctx): void
+    {
+        $ctx->plantReplaced = 1.0;
+        $stock = $ctx->stock;
+        $manager = $stock->getManagementProfile();
+        if ($ctx->segments !== [] || $ctx->strategy->isFinancial() || $ctx->strategy->depreciatesByUnitsOfProduction()
+            || self::returnOnNewPlant($ctx) >= $manager->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), false)) {
+            return;
+        }
+
+        $capitalGap = $this->industryShareLedger?->resolveTrendCapacityGap($stock, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
+        if ($capitalGap !== null) {
+            $support = $manager->weakSegmentSupport();
+            $gap = $capitalGap - log(max(OperatingCapacityEngine::MIN_CAPACITY_UTILIZATION, $ctx->plantLoad));
+            $ctx->plantReplaced = $support + ((1.0 - $support) * min(1.0, exp($gap)));
+        }
+    }
+
+    /**
+     * Share of the plant whose wear the firm replaces: the plant in use it keeps (plantInUse(), resolvePlantGate()), or
+     * for a company that keeps plant by segment, each segment's running plant it keeps (resolveSegmentGates()).
      */
     private static function plantKept(EarningsSimulationContext $ctx): float
     {
         if ($ctx->segments === [] || $ctx->strategy->depreciatesByUnitsOfProduction()) {
-            return self::plantInUse($ctx);
+            return self::plantInUse($ctx) * $ctx->plantReplaced;
         }
 
         $joint = SegmentBooks::jointSegments($ctx->stock);

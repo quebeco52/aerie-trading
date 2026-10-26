@@ -101,7 +101,9 @@ final class SegmentsHarnessTest extends BoardRun
                 }
                 $this->capRows[] = [round($this->currentTime, 3), $stock->getTicker(), $ctx->segments !== [], $ctx->strategy->isFinancial(), $fails,
                     (float) ($ctx->allocation['organic_capex'] ?? 0.0), $ctx->operatingCapex, $ctx->maintenanceCapex, $ctx->scheduledCapex,
-                    $ctx->actualRevenue, $stock->getNetPpe(), $stock->getManagementProfile()->style->value ?? null];
+                    $ctx->actualRevenue, $stock->getNetPpe(), $stock->getManagementProfile()->style->value ?? null,
+                    property_exists($ctx, 'plantReplaced') ? $ctx->plantReplaced : null, $ctx->plantLoad, $ctx->industryPriceLevel,
+                    $ctx->macroState->outputGap ?? null, (string) $stock->getIndustry()];
             });
         }
         if (getenv('OUTLOOK_SALT') && ($store = $this->outlookStore()) !== null) {

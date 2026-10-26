@@ -469,6 +469,57 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * A company on one plant whose market now needs only half the plant it runs, so that its new plant earns below the
+     * hurdle at the glut's price, keeps up only that half, as a weak segment does: upkeep is paid on the plant kept, at
+     * the same rate per unit of wear as a run where its market still needs all of it. An empire builder keeps up much
+     * of the rest; at a lower cost of capital, where the same plant clears the hurdle, the firm keeps all of it.
+     */
+    public function testAFirmBelowTheHurdleKeepsUpOnlyThePlantItsMarketNeeds(): void
+    {
+        $report = function (float $marketScale, ManagementStyle $style, float $policyRate = 0.06): EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $store = new InMemoryIndustryShareStore();
+            $engine = $this->buildEngine($dispatcher, new IndustryShareLedger($store));
+            mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+            $stock = $this->buildMatureIndustrial('SHRK');
+            $stock->setManagementStyle($style);
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: $policyRate, yield5yEma: $policyRate + 0.005, inflationEma: 0.02);
+            $tick = EarningsEngine::resolveReportingTick('SHRK', 252);
+            $engine->calculate($stock, $macro, $tick, 252);
+            $record = $store->readIndustry('Auto Manufacturers')['SHRK'] ?? null;
+            $this->assertNotNull($record);
+            $record['anchor_capacity_share'] *= $marketScale;
+            $record['anchor_demand_share'] *= $marketScale;
+            $store->writeRecord('Auto Manufacturers', 'SHRK', $record);
+            $engine->calculate($stock, $macro, $tick + 63, 252);
+            $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+
+            return $captured;
+        };
+
+        $control = $report(1.0, ManagementStyle::Operator);
+        $shrunk = $report(0.5, ManagementStyle::Operator);
+        $empire = $report(0.5, ManagementStyle::EmpireBuilder);
+
+        $this->assertLessThan($shrunk->stock->getManagementProfile()->growthHurdle($shrunk->strategy->getHurdleRate($shrunk->health), false), CapitalBudgetEngine::returnOnNewPlant($shrunk), 'the fixture needs plant below the hurdle');
+        $this->assertSame(1.0, $control->plantReplaced);
+        $this->assertLessThan(0.6, $shrunk->plantLoad * $shrunk->plantReplaced, 'about half the plant kept');
+        $perWearKept = static fn(EarningsSimulationContext $ctx): float => $ctx->maintenanceCapex / ($ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $ctx->plantLoad * $ctx->plantReplaced);
+        $this->assertLessThan(0.99 * $control->maintenanceCapex * $shrunk->plantLoad, $shrunk->maintenanceCapex, 'less than the plant in use alone would keep');
+        $this->assertEqualsWithDelta($perWearKept($control), $perWearKept($shrunk), 1e-9 * $perWearKept($control), 'upkeep is paid on the plant kept');
+        $support = $empire->stock->getManagementProfile()->weakSegmentSupport();
+        $this->assertEqualsWithDelta($support + ((1.0 - $support) * $shrunk->plantReplaced), $empire->plantReplaced, 1e-9, 'an empire builder keeps up much of the rest');
+
+        $cheap = $report(0.5, ManagementStyle::Operator, 0.04);
+        $this->assertGreaterThanOrEqual($cheap->stock->getManagementProfile()->growthHurdle($cheap->strategy->getHurdleRate($cheap->health), false), CapitalBudgetEngine::returnOnNewPlant($cheap), 'the fixture needs plant above the hurdle');
+        $this->assertSame(1.0, $cheap->plantReplaced, 'plant that pays is kept up, however far ahead of its market');
+    }
+
+    /**
      * A company whose books open once its own path has run for years (a live game): its model's growth covers the main
      * segment alone from then on, so the main segment's market is struck at that growth and stays where it was.
      */

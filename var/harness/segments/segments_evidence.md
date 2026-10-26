@@ -354,3 +354,18 @@ Gluts (price level < 0.97): 10.94% -> 10.98% of firm-quarters, median spell 3 qu
 Board (n 8): cap -0.09 tn (se 0.32), defaults+deaths +0.13 (0.35), B-or-worse -0.04 pt (0.07), P/E +0.00 (0.04),
 vol -0.0003 (0.0021), real growth +0.03 pt/yr (0.06), net PP&E growth -0.03 pt/yr (0.07), capex/revenue +0.0023
 (0.0026). Identities: 10,744 reports, sum kappa 2e-16, record revenue 4e-14.
+
+## 2026-10-26: one-plant harvest (p5b1) vs e2e9fb3d, 8 seeds x 20 years
+
+    BASE=<scratchpad>/basetree-e2e9fb3d bin/harness-batch var/harness/segments/run.sh 1-8 head p5b1
+    python3 var/harness/segments/p5b.py 1-8 head p5b1 > p5b1_n8.out
+
+Bites in 5.1% of 38,400 one-plant reports; plantReplaced median 0.905 when < 1 (p10 0.761, min 0.528). Top
+industries: farm & heavy machinery 33%, nuclear equipment 27%, autos 24%, semiconductors 14%, building products 12%,
+telecom 10%; tickers BUZT 49%, FIRE 27%, EIDR 26%, FALC 22%. By style: fortress 9.5%, empire builder 8.3%, steward
+4.5%, operator 3.6%. Net PP&E log growth over the 4 reports after a harvested report: head +1.26%, p5b1 +0.58%
+(other reports +4.4% both). Output gap < 0: 5.45% harvested, >= 0: 4.61% (gap < -2%: 6.17%); higher in negative
+gaps in 6 of 8 seeds. Gluts unchanged: 10.98% -> 10.94% of firm-quarters (se 0.07 pt), median spell 3, p90 22,
+mean glut price 0.9455 -> 0.9460. Board: all |t| <= 1.5 (defaults+deaths -0.25, se 0.16; maintenance capex/revenue
+-0.0003, se 0.0003). Reports 7754 vs 7760 per seed (one firm death differs), 97 companies both; identities exact;
+8/8 PHPUnit runs pass in each arm.

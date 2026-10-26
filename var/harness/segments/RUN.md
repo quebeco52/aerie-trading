@@ -53,6 +53,8 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
   - `p5a` (working tree, capital follows return) vs `head` = BASE 526ab166: `p5a.py <seeds> head p5a`. Probe adds
     `builds` (carry:segment_builds) and `cap` rows from an EarningsReportedEvent listener (one-plant gate, treasury
     organic capex, operating/maintenance/scheduled capex, revenue, net PP&E, management style).
+  - `p5b1` (working tree, one-plant harvest) vs `head` = BASE e2e9fb3d: `p5b.py <seeds> head p5b1`. The listener's
+    `cap` rows add plantReplaced, plantLoad, industryPriceLevel, output gap and industry.
   - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
     TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
   - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events

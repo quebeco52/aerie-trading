@@ -160,7 +160,8 @@ enum ManagementStyle: string
      * its division managers with capital instead, keeping weak divisions whole on the strong ones' cash
      * ("socialism"); Rajan, Servaes & Zingales (2000) find the subsidy in diversified firms' segment investment, and
      * Ozbas & Scharfstein (2010) find it partial and strongest where agency problems are: the typical empire builder
-     * gives back a little over half.
+     * gives back a little over half. A company on one plant keeps that share of the plant its market no longer needs
+     * (Jensen 1993: internal control is slow to take capacity out of an industry that has too much).
      */
     public function weakSegmentSupport(): float
     {
