@@ -485,4 +485,28 @@ class ValuationTest extends TestCase
         $this->assertSame($without, Valuation::calculateIntrinsicFairValuePE(0.09, 0.18, 0.12 + $catchUp, 22.0, Valuation::sectorPriorYieldShift(0.09, 1.2, 0.025)), 'the firm leg is pinned');
         $this->assertGreaterThan($without, $pinned(Valuation::sectorPriorYieldShift(0.09, 1.2, 0.025, $catchUp)));
     }
+
+    /**
+     * A venture's plant is worth the perpetuity of what it earns above the hurdle once learned, growing at the long-run
+     * rate and lifted by its industry's fading extra growth, less the learning it pays for first: nothing for plant
+     * that earns its hurdle with nothing to learn, learning always costs, and plant that earns below its hurdle is
+     * never worth building, however low the hurdle.
+     */
+    public function testAVentureIsWorthWhatItEarnsOnceLearnedLessTheLearning(): void
+    {
+        $this->assertEqualsWithDelta((0.15 - 0.10) / (0.10 - 0.04), Valuation::ventureValue(0.15, 0.10, 0.04, 0.0, 11.5, 0.0, 3.5), 1e-12);
+        $this->assertSame(0.0, Valuation::ventureValue(0.10, 0.10, 0.04, 0.03, 11.5, 0.0, 3.5));
+        $this->assertEqualsWithDelta(
+            (0.15 - 0.10) / 0.06 * (1.0 + (0.03 / (0.06 + (1.0 / 11.5)))),
+            Valuation::ventureValue(0.15, 0.10, 0.04, 0.03, 11.5, 0.0, 3.5),
+            1e-12,
+            'extra growth lifts it as far as it lasts',
+        );
+        $this->assertEqualsWithDelta(
+            Valuation::ventureValue(0.15, 0.10, 0.04, 0.0, 11.5, 0.0, 3.5) - (0.02 / (0.06 + (1.0 / 3.5))),
+            Valuation::ventureValue(0.15, 0.10, 0.04, 0.0, 11.5, 0.02, 3.5),
+            1e-12,
+        );
+        $this->assertLessThan(0.0, Valuation::ventureValue(0.025, 0.03, 0.04, 0.0, 11.5, 0.0, 3.5), 'below a hurdle under long-run growth, still a loss');
+    }
 }

@@ -57,6 +57,13 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
     `cap` rows add plantReplaced, plantLoad, industryPriceLevel, output gap and industry.
   - `div1` (working tree, 5b-1 entry infrastructure) vs `head` = BASE f64f5afa: `same.py <seeds> head div1` checks
     output identity stream by stream (probe counts venture keys ':x:'/segment_pending/segment_learning in `leaks`).
+  - `div2` (working tree, 5b-2 market entry) vs `head` = BASE ae6f0c4f: `div2.py <seeds> head div2`. The listener files
+    `ventures` rows for any firm that entered or carries a venture key (entry, venture momentum keys, kappa, segment
+    price/load, streams, revenue, learning drag, CIP, cap, style).
+  - `div3` (5b-2 after architect fixes) vs `head` = ae6f0c4f: `div2.py 1-8 head div3`, plus `front.py <seeds> ARM`
+    (entrant excess return over its sector, reports 0-8 from entry, against a one-year-earlier placebo).
+  - `div4`, `div5` (venture growth paths, outcomes, abandonment; div5 adds the distance shortfall) vs `head` = ae6f0c4f: `div2.py`, `front.py` and
+    `div4.py <seeds> head div4` (abandonment by closeness, successful ventures' kappa/share, pivots, prices, gates).
   - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
     TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
   - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events

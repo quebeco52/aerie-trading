@@ -99,6 +99,31 @@ final class SegmentsHarnessTest extends BoardRun
                         < $stock->getManagementProfile()->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), false);
                 } catch (\Throwable) {
                 }
+                // VENTURE rows (5b-2): any firm that entered this quarter or carries a venture key.
+                $mom = $stock->getEarningsMomentumZ() ?? [];
+                $vk = [];
+                foreach ($mom as $k => $v) {
+                    if (str_contains((string) $k, ':x:') || str_contains((string) $k, 'segment_pending') || str_contains((string) $k, 'segment_learning')) {
+                        $vk[(string) $k] = $v;
+                    }
+                }
+                $exit = property_exists($ctx, 'marketExit') ? $ctx->marketExit : null;
+                if ((property_exists($ctx, 'marketEntry') && $ctx->marketEntry !== null) || $exit !== null || $vk !== []) {
+                    $kap = [];
+                    foreach ($mom as $k => $v) {
+                        if (str_starts_with((string) $k, 'carry:segment_plant:')) {
+                            $kap[substr((string) $k, 20)] = (float) $v;
+                        }
+                    }
+                    $segs = [];
+                    foreach ($ctx->segments as $sk => $b) {
+                        $segs[$sk] = ['price' => $b['price'] ?? null, 'load' => $b['load'] ?? null];
+                    }
+                    $this->ventureRows[] = ['t' => round($this->currentTime, 3), 'tk' => $stock->getTicker(), 'entry' => $ctx->marketEntry ?? null, 'exit' => $exit, 'vk' => $vk, 'kappa' => $kap,
+                        'segs' => $segs, 'streams' => $ctx->streamRevenue, 'rev' => $ctx->actualRevenue, 'drag' => $ctx->ventureLearningDrag ?? null,
+                        'cip' => (float) $stock->getCipBalance(), 'cap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(),
+                        'style' => $stock->getManagementProfile()->style->value ?? null, 'industry' => (string) $stock->getIndustry()];
+                }
                 $this->capRows[] = [round($this->currentTime, 3), $stock->getTicker(), $ctx->segments !== [], $ctx->strategy->isFinancial(), $fails,
                     (float) ($ctx->allocation['organic_capex'] ?? 0.0), $ctx->operatingCapex, $ctx->maintenanceCapex, $ctx->scheduledCapex,
                     $ctx->actualRevenue, $stock->getNetPpe(), $stock->getManagementProfile()->style->value ?? null,
@@ -146,6 +171,9 @@ final class SegmentsHarnessTest extends BoardRun
 
         return $row;
     }
+
+    /** @var list<array<string, mixed>> VENTURE rows (see onStart). */
+    private array $ventureRows = [];
 
     /** @var list<list<mixed>> CAP_PROBE rows (see onStart). */
     private array $capRows = [];
@@ -406,7 +434,7 @@ final class SegmentsHarnessTest extends BoardRun
                     }
                 }
             }
-            file_put_contents((string) getenv('SEG_OUT'), json_encode(['rows' => $this->segRows, 'leaks' => $this->segLeaks, 'slash' => $slashKeys, 'deals' => $this->segDeals, 'cap' => $this->capRows]));
+            file_put_contents((string) getenv('SEG_OUT'), json_encode(['rows' => $this->segRows, 'leaks' => $this->segLeaks, 'slash' => $slashKeys, 'deals' => $this->segDeals, 'cap' => $this->capRows, 'ventures' => $this->ventureRows]));
         }
         $out = getenv('IDLE_OUT');
         if ($out) {

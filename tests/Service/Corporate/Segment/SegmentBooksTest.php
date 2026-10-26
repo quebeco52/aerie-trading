@@ -499,7 +499,7 @@ class SegmentBooksTest extends TestCase
         $loon = (new Stock())->setTicker('LOON')->setIndustry('Telecom Services');
         $this->assertFalse(SegmentBooks::keepsBooks($loon));
         $loon->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 1.0], 1.0, [])
-            + SegmentBooks::startVenture($segment, 300.0, 0.05, 1.0, 1.0, 0.1, 0.0, 0.08, 1.5, 2.5));
+            + SegmentBooks::startVenture($segment, 300.0, 0.05, 1.0, 1.0, 0.1, 0.0, ['margin' => 0.08, 'turnover' => 1.5, 'learning' => 2.5, 'outcome' => 0.0, 'target' => 0.0, 'start' => 1.0]));
 
         $momentum = $loon->getEarningsMomentumZ() ?? [];
         $this->assertTrue(SegmentBooks::keepsBooks($loon));
@@ -509,9 +509,9 @@ class SegmentBooksTest extends TestCase
         $this->assertSame(0.08, $momentum[SegmentBooks::STATE_MARGIN . $segment] ?? null);
         $this->assertSame(2.5, $momentum[SegmentBooks::STATE_LEARNING . $segment] ?? null);
         $this->assertEqualsWithDelta(0.05, (float) ($momentum[SegmentBooks::STATE_MARKET . $segment] ?? 0.0), 1e-12, 'the company\'s share of its new market');
-        $this->assertSame('Computer Hardware', SegmentBooks::label($loon, $segment));
+        $this->assertSame('Computer hardware', SegmentBooks::label($loon, $segment));
         $this->assertSame($segment, Segments::segmentOf('LOON', $segment));
-        $this->assertSame('Computer Hardware', \App\Data\Company\RevenueStreams::label($segment));
+        $this->assertSame('Computer hardware', \App\Data\Company\RevenueStreams::label($segment));
 
         // A line it has no model for is never a by-product of the plant it does have.
         $tern = $this->tern()->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, []) + [SegmentBooks::STATE_PENDING . $segment => 300.0]);
@@ -558,6 +558,57 @@ class SegmentBooksTest extends TestCase
         $tail = SegmentBooks::completePending([SegmentBooks::STATE_PENDING . $segment => 1_500.0] + $momentum, 0.5, 1_000.0);
         $this->assertSame(0.0, $tail[SegmentBooks::STATE_PENDING . $segment] ?? null, 'the tail is placed whole');
         $this->assertSame([], SegmentBooks::completePending(SegmentBooks::open([Segments::MAIN => 1.0], 1.0, []), 0.5, 1_000.0));
+    }
+
+    /**
+     * As a venture learns its trade it shows what it will earn: the margin it books moves from what was expected toward
+     * what it turns out to earn, all the way once it has learned.
+     */
+    public function testAVentureShowsWhatItEarnsAsItLearns(): void
+    {
+        $segment = Segments::enteredKey('Computer Hardware');
+        $momentum = [
+            SegmentBooks::STATE_LEARNING . $segment => 3.0,
+            SegmentBooks::STATE_LEARNING_START . $segment => 3.0,
+            SegmentBooks::STATE_VENTURE_OUTCOME . $segment => -0.5,
+            SegmentBooks::STATE_MARGIN . $segment => 0.10,
+        ];
+
+        $halfway = SegmentBooks::learn($momentum, SegmentEntry::LEARNING_YEARS * log(2.0)) + $momentum;
+        $this->assertEqualsWithDelta(0.10 * exp(-0.25), $halfway[SegmentBooks::STATE_MARGIN . $segment], 1e-12, 'half learned, half shown');
+        $learned = SegmentBooks::learn($halfway, 1_000.0) + $halfway;
+        $this->assertEqualsWithDelta(0.10 * exp(-0.5), $learned[SegmentBooks::STATE_MARGIN . $segment], 1e-9);
+    }
+
+    /**
+     * A venture follows a path of its own toward the share of its new market it means to reach; one given up on keeps a
+     * claim to almost none, so its plant withers; any other segment follows its model's path or none.
+     */
+    public function testAVentureFollowsAPathOfItsOwn(): void
+    {
+        $segment = Segments::enteredKey('Computer Hardware');
+        $momentum = [SegmentBooks::STATE_VENTURE_TARGET . $segment => 1.0, SegmentBooks::STATE_VENTURE_START . $segment => 2.0];
+
+        $this->assertEqualsWithDelta(['level' => SegmentEntry::pathLevel(1.0, 5.0), 'growth' => SegmentEntry::pathGrowth(1.0, 5.0)], SegmentBooks::venturePath($momentum, $segment, 7.0), 1e-12);
+        $abandoned = [SegmentBooks::STATE_VENTURE_ABANDONED . $segment => 6.0] + $momentum;
+        $this->assertTrue(SegmentBooks::isAbandoned($abandoned, $segment));
+        $this->assertEqualsWithDelta(log(SegmentEntry::ABANDONED_TREND_SHARE), SegmentBooks::venturePath($abandoned, $segment, 7.0)['level'] ?? null, 1e-12);
+        $this->assertNull(SegmentBooks::venturePath($momentum, 'air_cargo', 7.0));
+        $loon = (new Stock())->setTicker('LOON')->setIndustry('Telecom Services')->setEarningsMomentumZ([SegmentBooks::STATE_PENDING . $segment => 1.0] + $momentum);
+        $this->assertSame(SegmentBooks::venturePath($momentum, $segment, 7.0), SegmentBooks::segmentPath(Sectors::strategyFor('Telecom Services'), $loon, $segment, 7.0));
+        $this->assertEqualsWithDelta(SegmentEntry::pathGrowth(1.0, 5.0), SegmentBooks::segmentGrowth(Sectors::strategyFor('Telecom Services'), $loon, $segment, 7.0) - Sectors::strategyFor('Computer Hardware')->getFadedSecularGrowthRate($loon, 7.0), 1e-12);
+    }
+
+    /**
+     * A sale of part of the company takes that share of its construction, a venture's plant still being built with it.
+     */
+    public function testASaleTakesItsShareOfAVenturesConstruction(): void
+    {
+        $segment = Segments::enteredKey('Computer Hardware');
+        $momentum = [SegmentBooks::STATE_PENDING . $segment => 40_000.0, SegmentBooks::STATE_PLANT . Segments::MAIN => 1.0];
+
+        $this->assertEqualsWithDelta([$segment => 30_000.0], SegmentBooks::pending(SegmentBooks::scalePending($momentum, 0.75)), 1e-9);
+        $this->assertSame(1.0, SegmentBooks::scalePending($momentum, 0.75)[SegmentBooks::STATE_PLANT . Segments::MAIN]);
     }
 
     /**

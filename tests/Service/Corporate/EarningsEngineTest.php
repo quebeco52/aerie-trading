@@ -28,6 +28,7 @@ use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\Segment\SegmentBookOpener;
 use App\Service\Corporate\Segment\SegmentBooks;
+use App\Service\Corporate\Segment\SegmentEntry;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
@@ -43,6 +44,7 @@ use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HomebuilderBusinessModel;
 use App\Service\Model\Sector\SpaceSystemsBusinessModel;
 use App\Service\Model\Sector\TechBusinessModel;
+use App\Service\News\MarketEventPublisher;
 use App\Tests\Support\BalanceSheetAssertions;
 use App\Tests\Support\CorporateEngineFactory;
 use App\Tests\Support\ScriptedDraws;
@@ -555,7 +557,14 @@ class EarningsEngineTest extends TestCase
             (new SegmentBookOpener(new CorporateMetrics(), $ledger))->openForEntry($stock, Sectors::strategyFor((string) $stock->getIndustry()), $macro, $tick, 252);
             $construction = 0.05 * $stock->getNetPpe();
             $turnover = (float) $stock->getAssetTurnover();
-            $stock->setEarningsMomentumZ(SegmentBooks::startVenture($segment, $construction, $construction / ($stock->getNetPpe() + $construction), 1.0, 1.0, 0.05, 0.0, (float) $stock->getOperatingMargin(), $turnover, $learningGap) + ($stock->getEarningsMomentumZ() ?? []));
+            $stock->setEarningsMomentumZ(SegmentBooks::startVenture($segment, $construction, $construction / ($stock->getNetPpe() + $construction), 1.0, 1.0, 0.05, 0.0, [
+                'margin' => (float) $stock->getOperatingMargin(),
+                'turnover' => $turnover,
+                'learning' => $learningGap,
+                'outcome' => 0.0,
+                'target' => 0.0,
+                'start' => 1.0,
+            ]) + ($stock->getEarningsMomentumZ() ?? []));
             (new CapExEngine())->allocateGrowthCapEx($stock, $construction);
             $ledger->openVentureRecord($stock, $segment, $construction * $turnover, 0.05, $macro, $tick);
             for ($quarter = 1; $quarter <= 6; $quarter++) {
@@ -590,6 +599,84 @@ class EarningsEngineTest extends TestCase
         $this->assertSame(0.0, $learned[1]->ventureLearningDrag);
         $this->assertLessThan($learned[1]->ebit, $reports[1]->ebit, 'learning the trade costs money');
         $this->assertSame($learned[1]->segments[$segment]['return'] ?? null, $reports[1]->segments[$segment]['return'] ?? null, 'new plant is judged at the margin it will earn');
+    }
+
+    /**
+     * A carmaker with cash to spare enters heavy machinery, whose incumbent earns far more on its plant: the report
+     * books the venture's plant as construction, paid for once in the quarter's capex, tells the news, and over the
+     * following quarters the plant comes on line and the venture sells its own line while it learns the trade; as it
+     * pays, it grows past the plant it started with toward its share of its new market.
+     */
+    public function testACarmakerBuildsItsWayIntoHeavyMachinery(): void
+    {
+        $captured = [];
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured[] = $event->getContext();
+        });
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $this->mathUtility = new MathUtility();
+        $publisher = $this->createStub(MarketEventPublisher::class);
+        $publisher->method('publish')->willReturnCallback(static fn(Stock $stock, string $type): array => ['type' => $type]);
+        $engine = self::earningsEngine($this->mathUtility, $dispatcher, industryShareLedger: $ledger, publisher: $publisher);
+        mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.03, yield5yEma: 0.035, inflationEma: 0.02, totalTime: 2.0);
+        $incumbent = $this->buildMatureIndustrial('MACH');
+        $incumbent->setIndustry('Farm & Heavy Construction Machinery');
+        $incumbent->setOperatingMargin('0.30');
+        $incumbent->setBaselineRoic('0.40');
+        $engine->calculate($incumbent, $macro, EarningsEngine::resolveReportingTick('MACH', 252), 252);
+
+        [$ticker, $tick] = $this->enteringReport();
+        $carmaker = $this->buildMatureIndustrial($ticker);
+        $carmaker->setName('Coastal Motors');
+        $events = $engine->calculate($carmaker, $macro, $tick, 252);
+        $entry = end($captured);
+
+        $this->assertInstanceOf(EarningsSimulationContext::class, $entry);
+        $this->assertNotNull($entry->marketEntry, 'the fixture needs an entry');
+        $this->assertSame('Farm & Heavy Construction Machinery', $entry->marketEntry['industry']);
+        $capex = $entry->marketEntry['capex'];
+        $this->assertContains('MARKET ENTRY', array_column($events ?? [], 'type'));
+        $this->assertEqualsWithDelta(-$entry->operatingCapex, $entry->investingCashFlow, 1e-3, 'paid once, in the quarter\'s capex');
+        $this->assertGreaterThanOrEqual($entry->maintenanceCapex + $entry->scheduledCapex + $capex - 1e-3, $entry->operatingCapex);
+        $this->assertGreaterThanOrEqual($capex - 1e-3, (float) $carmaker->getCipBalance(), 'queued as construction');
+
+        $plannedShare = $capex / ($carmaker->getNetPpe() + $capex);
+        for ($quarter = 1; $quarter <= 16; $quarter++) {
+            $later = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.03, yield5yEma: 0.035, inflationEma: 0.02, totalTime: 2.0 + ($quarter / 4.0));
+            if ($quarter % 4 === 0) {
+                // The incumbent keeps filing, so the industry it sells into stays priced.
+                $engine->calculate($incumbent, $later, EarningsEngine::resolveReportingTick('MACH', 252) + (63 * $quarter), 252);
+            }
+            $engine->calculate($carmaker, $later, $tick + (63 * $quarter), 252);
+        }
+        $last = end($captured);
+        $this->assertInstanceOf(EarningsSimulationContext::class, $last);
+        $this->assertSame($carmaker, $last->stock);
+        $segment = $entry->marketEntry['segment'];
+        $this->assertGreaterThan(0.0, $last->streamRevenue[$segment] ?? 0.0, 'it sells its own line');
+        $this->assertGreaterThan(0.0, $last->ventureLearningDrag, 'while it learns the trade');
+        $this->assertGreaterThan(1.2 * $plannedShare, $last->segments[$segment]['plant'] ?? 0.0, 'and grows past the plant it started with');
+    }
+
+    /**
+     * A carmaker and the report on which its keyed draw falls under its chance of entering
+     * (MathUtility::hashedUniform() on the ledger's salt, zero before any outlook opens).
+     *
+     * @return array{0: string, 1: int}
+     */
+    private function enteringReport(): array
+    {
+        for ($n = 0; $n < 400; $n++) {
+            $ticker = sprintf('C%03d', $n);
+            $chance = SegmentEntry::entryChance($this->buildMatureIndustrial($ticker)->getManagementProfile()->acquisitionBias(), 0.25);
+            $tick = EarningsEngine::resolveReportingTick($ticker, 252);
+            if (MathUtility::hashedUniform(0, "entry:{$ticker}:{$tick}") < $chance) {
+                return [$ticker, $tick];
+            }
+        }
+        $this->fail('no carmaker enters');
     }
 
     /**

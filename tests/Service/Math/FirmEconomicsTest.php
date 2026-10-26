@@ -430,4 +430,15 @@ class FirmEconomicsTest extends TestCase
         $this->assertSame(0.0, FirmEconomics::structuralAssetTurnover(-0.02, 0.30, 0.20));
         $this->assertEqualsWithDelta(0.06 / 0.8 / FirmEconomics::MIN_TURNOVER_MARGIN, FirmEconomics::structuralAssetTurnover(0.06, 0.0, 0.20), 1e-9);
     }
+
+    /**
+     * A business's new plant earns the company's return scaled by its margin times its turnover over the company's,
+     * plus the after-tax margin its industry's price adds on what that plant turns over.
+     */
+    public function testABusinessesPlantEarnsAtItsOwnMarginTurnoverAndPrice(): void
+    {
+        $this->assertSame(0.12, FirmEconomics::returnOnSegmentPlant(0.12, 0.10, 1.0, 0.10, 1.0, 1.0, 0.21));
+        $this->assertEqualsWithDelta(0.12 * 2.0, FirmEconomics::returnOnSegmentPlant(0.12, 0.10, 1.0, 0.40, 0.5, 1.0, 0.21), 1e-12);
+        $this->assertEqualsWithDelta(0.12 + (0.79 * 0.5 * -0.1), FirmEconomics::returnOnSegmentPlant(0.12, 0.10, 0.5, 0.10, 0.5, 0.9, 0.21), 1e-12, 'a glut takes its cut');
+    }
 }

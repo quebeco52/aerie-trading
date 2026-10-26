@@ -57,7 +57,7 @@ final class RedisIndustryShareStore implements IndustryShareStoreInterface
             ] + (isset($decoded['segment_outlook_gap']) ? ['segment_outlook_gap' => (float) $decoded['segment_outlook_gap']] : [])
               + (isset($decoded['books_main_share']) ? ['books_main_share' => (float) $decoded['books_main_share']] : [])
               + (isset($decoded['path']) ? ['path' => (float) $decoded['path'], 'anchor_path' => (float) ($decoded['anchor_path'] ?? $decoded['path'])] : [])
-              + (isset($decoded['margin']) ? ['margin' => (float) $decoded['margin'], 'turnover' => (float) ($decoded['turnover'] ?? 0.0), 'price' => (float) ($decoded['price'] ?? 1.0)] : [])
+              + (isset($decoded['margin']) ? ['margin' => (float) $decoded['margin'], 'turnover' => (float) ($decoded['turnover'] ?? 0.0)] : [])
               + (isset($decoded['entry_offset']) ? ['entry_offset' => (float) $decoded['entry_offset'], 'entry_time' => (float) ($decoded['entry_time'] ?? 0.0)] : []);
         }
 

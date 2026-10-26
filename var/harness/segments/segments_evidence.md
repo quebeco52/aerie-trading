@@ -379,3 +379,71 @@ All 4 seeds byte-identical: run output (secs dropped), quarter log, listener row
 PP&E, price level, plant load), segment rows (kappa, targets, records), idle rows, deals, defaults, reorganisations,
 y20 caps. 7,760 reports, 97 companies, 1,343 segmented reports per seed in both arms. No venture momentum key and no
 TICKER/x: record in div1.
+
+## 2026-10-26: 5b-2 market entry (div2) vs ae6f0c4f, 8 seeds x 20 years
+
+    BASE=<scratchpad>/basetree-ae6f0c4f bin/harness-batch var/harness/segments/run.sh 1-8 head div2
+    python3 var/harness/segments/div2.py 1-8 head div2 > div2_n8.out
+
+Entries 239 (25-32 per seed, 1.49 per year), 60 distinct companies, 216 firm-seeds; closeness 0.25: 116, 0.5: 110,
+0.8: 13; operator 108, empire builder 93, steward 27, fortress 11; top targets IT services 25, internet retail 16,
+software - application 14, industrial distribution 14. Capex/cap median 0.0093 (max 0.065).
+Ventures stay small: kappa / revenue share median +1 y 0.020/0.024, +2 0.024/0.033, +4 0.023/0.035, +8 0.021/0.031;
+end kappa median 0.020 (p10 0.014, p90 0.027), 3 of 239 below 0.005. Learning drag at +1 y 0.0094 of revenue.
+Learning gap below 1 after a median 4.8 years (202 of 239). Builds at +4 y: 184 yes / 25 no; +8 y: 145 / 28 (66 too
+late to tell). Incumbent price change (q4-12 after vs 4 q before) -0.0064; difference vs head's same windows
+-0.0022 median (183 entries with listed incumbents); venture price q4-12 1.011.
+Board div2 - head: real revenue growth +0.13 pt/yr (se 0.05, t 2.5); B-or-worse +0.19 pt (se 0.12, t 1.5); cap +0.23
+tn (0.80), defaults+deaths +0.13 (0.23), P/E +0.01, vol 0.0000, net PP&E growth 0.00, capex/revenue +0.0014 (0.0020).
+Identities: 10,436 venture rows, sum streams = revenue 4e-16, sum kappa 2e-16, pending <= CIP always, no firm with
+venture keys and no entry; 62,080 reports and 97 companies per arm.
+
+## 2026-10-26: 5b-2 after the architect's fixes (div3) vs ae6f0c4f, 8 seeds x 20 years
+
+    BASE=<scratchpad>/basetree-ae6f0c4f bin/harness-batch var/harness/segments/run.sh 1-8 head div3
+    python3 var/harness/segments/div2.py 1-8 head div3 > div3_n8.out
+    python3 var/harness/segments/front.py 1-8 div3 >> div3_n8.out
+
+div2 -> div3: entries 239 -> 227 (1.49 -> 1.42 per year; per seed 20-36), companies 60 -> 59; closeness 0.25/0.5/0.8
+116/110/13 -> 108/109/10; operator 108 -> 116, empire builder 93 -> 75, steward 27 -> 29, fortress 11 -> 7; capex/cap
+median 0.0093 -> 0.0085. Top targets div3: IT services 27, software - application 17, internet retail 14, wineries
+14, internet content 12. Venture kappa/share +1 0.021/0.021, +2 0.024/0.027, +4 0.023/0.026, +8 0.021/0.024 (div2
+0.020-0.024 / 0.024-0.035); drag +1 y 0.0107 (0.0094); learning < 1 after 4.8 y (183 of 227); builds +4 166 yes / 26
+no, +8 134 / 14. Incumbent price change -0.0016, vs head -0.0022 (158 entries). Front-running: entrant excess log
+return over its sector, reports 0-8: div3 -0.0067 (se 0.030, n 208), placebo -0.0001 (0.030, n 214); div2 -0.019 /
++0.012. Board div3 - head: real growth +0.09 pt/yr (se 0.04, t 2.0), B-or-worse +0.22 pt (se 0.11, t 1.9), others
+|t| <= 1.1. Identities: 9,515 venture rows, streams = revenue 3e-16, sum kappa 3e-16, pending <= CIP, no venture
+keys without entry; 62,080 reports and 97 companies per arm.
+
+## 2026-10-26: 5b-2 with venture growth, outcomes and abandonment (div4) vs ae6f0c4f, 8 seeds x 20 years
+
+    BASE=<scratchpad>/basetree-ae6f0c4f bin/harness-batch var/harness/segments/run.sh 1-8 head div4
+    python3 var/harness/segments/div2.py 1-8 head div4 > div4_n8.out; front.py 1-8 div4 >> ...; div4.py 1-8 head div4 >> ...
+
+Entries 141 (0.88/yr; div3 1.42), per seed 14-25, 52 companies; closeness 0.8/0.5/0.25 6/85/50; operator 69, empire
+builder 53, steward 12, fortress 7; top targets IT services 14, software - application 13, wineries 11, tools 10.
+Abandoned within 4/6/10 y: 0%/13%/17% (0.5: 0/15/21%, 0.25: 0/12/13%, 0.8: 0/0/0%); 19 of 141, median 5.2 y after entry.
+Successful (not abandoned, building at +8 y): 58 of 92; kappa median/p90/max +4 0.042/0.056/0.138, +8 0.067/0.114/
+0.393, +12 0.097/0.168/0.282; revenue share +8 0.055/0.172/0.454, +12 0.084/0.202/0.481. Abandoned kappa 0.034 at exit,
+0.020 at +4 y, 0.015 at +8 y. Biggest pivots: CANV freight -> internet retail 0.60 of revenue at y19.8 (only venture
+above 50%), DIPR IPP -> electrical equipment 0.48, LOON telecom -> communication equipment 0.46, BREW restaurants ->
+wineries 0.45, WATCH security -> IT services 0.33. Successful ventures' price change vs year 1: -0.005 at +4, +0.005
+at +8; incumbents vs head -0.003 / -0.005 (mean -0.008 at +8). Front-running: entrant excess +0.050 (se 0.030, n 125)
+vs placebo +0.014 (se 0.029), difference +0.036 (se 0.042). Board: real growth +0.11 pt/yr (se 0.04, t 2.6),
+B-or-worse +0.19 pt (t 1.6), others |t| <= 1.0. Identities exact; abandoned kappa rises in 33 reports by at most
+0.2% relative (share renormalisation); no entry while a non-zero pending or a live learning gap >= 1 existed (8
+entries followed a zero leftover pending key).
+
+## 2026-10-26: div5 (distance shortfall in venture outcomes, zero pending keys cleared) vs ae6f0c4f, 8 seeds x 20 years
+
+    BASE=<scratchpad>/basetree-ae6f0c4f bin/harness-batch var/harness/segments/run.sh 1-8 head div5
+    div2.py 1-8 head div5 > div5_n8.out; front.py 1-8 div5 >> ...; div4.py 1-8 head div5 >> ...
+
+Entries 143 (0.89/yr; div4 141), 50 companies; closeness 0.8/0.5/0.25 7/83/53. Abandoned within 6 / 10 y: 0.25 22% of
+40 / 31% of 32; 0.5 22% of 58 / 30% of 44; 0.8 0% of 6 / 0% of 4; all 21% / 29% (div4 13% / 17%; 0.25 12/13%, 0.5
+15/21%). Successful 49 of 90: kappa +8 0.069/0.098/0.196, +12 0.105/0.163/0.257; revenue share +8 0.060/0.157/0.239,
++12 0.084/0.250/0.404 (median/p90/max). Top pivots: LOON telecom -> communication equipment 0.42, TICK exchanges ->
+IT services 0.42, CANV freight -> internet retail 0.41 (s4); none above 50%. Board div5 - head: real growth +0.10 pt/yr
+(se 0.04, t 2.6), B-or-worse +0.22 pt (t 1.7), others |t| <= 1.2. Front-running: entrant -0.002 (se 0.034, n 129) vs
+placebo +0.042 (0.035), difference -0.043 (0.049). Identities exact; zero pending keys 0 of 5,933 venture rows (div4
+1,434 of 6,013); no entry with a pending venture or live gap >= 1.

@@ -465,6 +465,8 @@ class DivestitureEngine
             $stock->setPpeTaxBasis((string) ((float) $stock->getPpeTaxBasis() * $retained));
         }
         $stock->setCipBalance((string) ((float) $stock->getCipBalance() * $retained));
+        // Construction leaves pro rata, so a venture still being built keeps the same share of what is left.
+        $stock->setEarningsMomentumZ(SegmentBooks::scalePending($stock->getEarningsMomentumZ() ?? [], $retained));
         $stock->setGoodwill((string) ((float) $stock->getGoodwill() * $retained));
         $stock->setDeferredTaxLiability((string) ((float) $stock->getDeferredTaxLiability() * $retained));
         // The unit's leases go with it (the ledger would otherwise run them off over years of no use); the loss

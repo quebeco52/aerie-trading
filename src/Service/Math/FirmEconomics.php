@@ -69,6 +69,22 @@ final class FirmEconomics
     }
 
     /**
+     * What new plant in one of a company's businesses earns at the price its industry pays today: the company's return
+     * scaled by how much more (or less) that business earns on each unit of plant, its margin times its turnover over
+     * the company's, plus the after-tax margin its industry's price adds on the revenue that plant turns over.
+     *
+     * @param float $companyTurnover  The company's annual revenue per unit of operating capital.
+     * @param float $segmentTurnover  The business's annual revenue per unit of its plant.
+     * @param float $industryPrice    Its industry's price level against a balanced market.
+     */
+    public static function returnOnSegmentPlant(float $companyReturn, float $companyMargin, float $companyTurnover, float $segmentMargin, float $segmentTurnover, float $industryPrice, float $taxRate): float
+    {
+        $relative = $companyMargin > 0.0 && $companyTurnover > 0.0 ? ($segmentMargin * $segmentTurnover) / ($companyMargin * $companyTurnover) : 1.0;
+
+        return ($companyReturn * $relative) + ((1.0 - $taxRate) * $segmentTurnover * ($industryPrice - 1.0));
+    }
+
+    /**
      * One step of a staggered lease roll: the slice of the rent roll expiring over dt (dt / WALT) reprices to
      * market, the rest stays contracted. The mark-to-market gap is bounded, past which tenants renegotiate or
      * hand back space.

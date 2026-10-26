@@ -499,7 +499,7 @@ final class OperatingCapacityEngine
         foreach ($ctx->segments as $segment => $books) {
             $strategy = $segment === Segments::MAIN ? $ctx->strategy : Sectors::strategyFor($industries[$segment] ?? '');
             $substitutability = $strategy->getIndustrySubstitutability();
-            $path = $ctx->strategy->resolveSegmentPath($ctx->stock, $segment)['level'] ?? null;
+            $path = SegmentBooks::segmentPath($ctx->strategy, $ctx->stock, $segment, $ctx->macroState->totalTime)['level'] ?? null;
             if ($path !== null) {
                 $ctx->segments[$segment]['path'] = $path;
             }
@@ -637,7 +637,12 @@ final class OperatingCapacityEngine
         $state = SegmentBooks::completePending($momentum, $construction > 0.0 ? $ctx->completedCip / $construction : 1.0, $stock->getNetPpe())
             + SegmentBooks::learn($momentum, $ctx->dt);
         if ($state !== []) {
-            $stock->setEarningsMomentumZ($state + $momentum);
+            // Construction finished leaves no mark: the books carry the segment by its plant from then on.
+            $stock->setEarningsMomentumZ(array_filter(
+                $state + $momentum,
+                static fn(mixed $value, string $key): bool => !str_starts_with($key, SegmentBooks::STATE_PENDING) || (float) $value > 0.0,
+                ARRAY_FILTER_USE_BOTH,
+            ));
         }
     }
 

@@ -87,6 +87,26 @@ final class Valuation
     }
 
     /**
+     * What a unit of plant a company builds into a new industry is worth over its cost: the perpetuity of what it earns
+     * above the hurdle once it has learned the trade, growing at the economy's long-run rate, raised by the extra
+     * growth its industry still has, which fades on its own mean life; less the learning it pays for first, a cost that
+     * fades e-folding over the learning time. The spread under each perpetuity is floored as every other one is.
+     *
+     * @param float $learnedReturn  The after-tax return on the plant once learned.
+     * @param float $longRunGrowth  The nominal growth every business settles to.
+     * @param float $excessGrowth   How far above that the industry grows now.
+     * @param float $excessLife     Mean life of that excess, in years.
+     * @param float $learningCost   The first year's after-tax learning cost per unit of plant.
+     */
+    public static function ventureValue(float $learnedReturn, float $hurdle, float $longRunGrowth, float $excessGrowth, float $excessLife, float $learningCost, float $learningYears): float
+    {
+        $spread = max(FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, $hurdle - self::perpetualGrowthRate($hurdle, $longRunGrowth));
+        $lift = 1.0 + ($excessGrowth / ($spread + (1.0 / max(1e-9, $excessLife))));
+
+        return (($learnedReturn - $hurdle) / $spread * $lift) - ($learningCost / ($spread + (1.0 / max(1e-9, $learningYears))));
+    }
+
+    /**
      * Calculates the Intrinsic Fair Value P/E ratio using fundamental drivers (Gordon Growth Model derivation).
      * P/E = (1 - Reinvestment Rate) / (Cost of Equity - Growth Rate)
      * Where Reinvestment Rate = Growth Rate / ROIC.

@@ -636,26 +636,26 @@ class IndustryShareLedgerTest extends TestCase
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
         $firm = $this->stock('MILL', 1_000.0);
         $ledger->resolveIndustrySupply($firm, 1_000.0, 0.5, 1.0, 0.0, 0.0, 10, 252);
-        $ledger->recordIdiosyncraticGain($firm, 1_000.0, 0.0, 0.5, 10, ['margin' => 0.12, 'turnover' => 1.5, 'price' => 0.97]);
+        $ledger->recordIdiosyncraticGain($firm, 1_000.0, 0.0, 0.5, 10, ['margin' => 0.12, 'turnover' => 1.5]);
         $ledger->resolveIndustrySupply($firm, 1_100.0, 0.5, 1.0, 0.25, 0.0, 73, 252);
 
         $this->assertSame(
-            ['margin' => 0.12, 'turnover' => 1.5, 'price' => 0.97],
+            ['margin' => 0.12, 'turnover' => 1.5],
             $ledger->resolvePeerEconomics('Steel', 'ENTR', 73, 252),
         );
     }
 
     /**
-     * An entrant benchmarks the industry as a whole: margins and prices over the revenue each plant can earn, and
+     * An entrant benchmarks the industry as a whole: margins over the revenue each plant can earn, and
      * turnover as that revenue over the plant behind it. Its own records and those gone stale are left out.
      */
     public function testAnEntrantBenchmarksTheIndustryAsAWhole(): void
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
-        foreach ([['SMAL', 1_000.0, 0.10, 2.0, 1.00, 300], ['LARG', 3_000.0, 0.20, 1.0, 0.90, 300], ['ENTR', 9_000.0, 0.90, 9.0, 2.00, 300], ['GONE', 9_000.0, 0.90, 9.0, 2.00, 10]] as [$ticker, $capacity, $margin, $turnover, $price, $tick]) {
+        foreach ([['SMAL', 1_000.0, 0.10, 2.0, 300], ['LARG', 3_000.0, 0.20, 1.0, 300], ['ENTR', 9_000.0, 0.90, 9.0, 300], ['GONE', 9_000.0, 0.90, 9.0, 10]] as [$ticker, $capacity, $margin, $turnover, $tick]) {
             $firm = $this->stock($ticker, $capacity);
             $ledger->resolveIndustrySupply($firm, $capacity, 0.2, 1.0, 0.0, 0.0, $tick, 252);
-            $ledger->recordIdiosyncraticGain($firm, $capacity, 0.0, 0.2, $tick, ['margin' => $margin, 'turnover' => $turnover, 'price' => $price]);
+            $ledger->recordIdiosyncraticGain($firm, $capacity, 0.0, 0.2, $tick, ['margin' => $margin, 'turnover' => $turnover]);
         }
 
         $peers = $ledger->resolvePeerEconomics('Steel', 'ENTR', 300, 252);
@@ -663,7 +663,6 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertNotNull($peers);
         $this->assertEqualsWithDelta(0.175, $peers['margin'], 1e-12);
         $this->assertEqualsWithDelta(4_000.0 / 3_500.0, $peers['turnover'], 1e-12);
-        $this->assertEqualsWithDelta(0.925, $peers['price'], 1e-12);
         $this->assertNull($ledger->resolvePeerEconomics('Copper', 'ENTR', 300, 252));
     }
 
@@ -691,5 +690,43 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertEqualsWithDelta($fringe(false, 0.0), $fringe(true, 0.0), 1e-12, 'the fringe has not yet yielded');
         $decay = exp(-CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED * 10.0);
         $this->assertEqualsWithDelta($fringe(false, 10.0) - (0.1 * (1.0 - $decay)), $fringe(true, 10.0), 1e-9, 'it yields at the speed it builds');
+    }
+
+    /**
+     * A newcomer sizes the room it can take against every anchored firm's share, an entrant's whose share the fringe
+     * has not yet yielded included, so two entrants never count on the same room.
+     */
+    public function testAnEntrantCountsTheRoomEarlierEntrantsTookAlready(): void
+    {
+        $macro = new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 1.0);
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $ledger->resolveIndustrySupply($this->stock('MILL', 1_000.0), 1_000.0, 0.5, 1.0, 1.0, 0.0, 252, 252);
+        $this->assertEqualsWithDelta(0.5, $ledger->describeEntrant('Steel', 'NEWC', $macro, 0.0, 252, 252)['fringe_share'] ?? null, 1e-12);
+
+        $entrant = $this->stock('AUTO', 5_000.0, 'Auto Manufacturers');
+        $entrant->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 1.0], 1.0, []) + [SegmentBooks::STATE_PENDING . Segments::enteredKey('Steel') => 100.0]);
+        $ledger->openVentureRecord($entrant, Segments::enteredKey('Steel'), 200.0, 0.1, $macro, 252);
+
+        $this->assertEqualsWithDelta(0.4, $ledger->describeEntrant('Steel', 'NEWC', $macro, 0.0, 252, 252)['fringe_share'] ?? null, 1e-12);
+    }
+
+    /**
+     * A venture growing its share along its own path takes the growth as it took its first share: the fringe yields it
+     * only as fast as the fringe builds, so what the fringe owes it rises by the step and the earlier debt fades.
+     */
+    public function testAVentureGrowingItsShareAddsToSupplyAsItsEntryDid(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $entrant = $this->stock('AUTO', 5_000.0, 'Auto Manufacturers');
+        $segment = Segments::enteredKey('Steel');
+        $entrant->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.98, $segment => 0.02], 1.0, []));
+        $ledger->openVentureRecord($entrant, $segment, 200.0, 0.1, new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 1.0), 252);
+
+        $ledger->resolveSegmentSupply($entrant, $segment, 200.0, 200.0, 0.1, 1.0, 1.5, 0.0, 300, 252, 0.5);
+
+        $record = $store->readIndustry('Steel')[SegmentBooks::recordKey('AUTO', $segment)] ?? [];
+        $this->assertEqualsWithDelta((0.1 * exp(-CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED * 0.5)) + (0.1 * (exp(0.5) - 1.0)), $record['entry_offset'] ?? null, 1e-12);
+        $this->assertSame(1.5, $record['entry_time'] ?? null);
     }
 }

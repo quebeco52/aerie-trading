@@ -97,7 +97,7 @@ class EventPresenter
                 ? self::story('RATING UPGRADE', Tone::Up, 'credit_score', $description ?: 'Credit rating upgraded.')
                 : self::story('RATING DOWNGRADE', Tone::Down, 'warning', $description ?: 'Credit rating downgraded.'),
             // The deal type is already the headline a desk would print (STRATEGIC ACQUISITION, LEVERAGED BUYOUT…).
-            NewsCard::Deal => self::story($type, Tone::Accent, $type === 'DIVESTITURE' ? 'domain_disabled' : 'domain_add', $description ?: 'Corporate restructuring announcement.'),
+            NewsCard::Deal => self::story($type, Tone::Accent, in_array($type, ['DIVESTITURE', 'MARKET EXIT'], true) ? 'domain_disabled' : 'domain_add', $description ?: 'Corporate restructuring announcement.'),
             NewsCard::Analyst => self::analyst($type, $description, $facts),
             NewsCard::Bankruptcy => self::story('BANKRUPTCY', Tone::Down, 'gavel', $description ?: 'Filed for Chapter 7 bankruptcy liquidation.'),
             // The company keeps trading, so a Chapter 11 plan reads as a restructuring rather than a death.

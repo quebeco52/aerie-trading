@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Segment;
 
+use App\Data\Company\IndustryAdjacency;
 use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\Entity\Stock;
@@ -54,6 +55,22 @@ final class SegmentBooks
      * will earn once it has learned the trade, as a share of that margin; it fades as the business learns.
      */
     public const STATE_LEARNING = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_learning:';
+    /** Carried stream-state key prefix: how far short of its learned margin a venture started (STATE_LEARNING). */
+    public const STATE_LEARNING_START = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_learning_start:';
+    /**
+     * Carried stream-state key prefix: what a venture turns out to earn once learned against what its company expected,
+     * in log; drawn at entry and revealed only as it learns (SegmentEntry::outcome()).
+     */
+    public const STATE_VENTURE_OUTCOME = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_venture_outcome:';
+    /**
+     * Carried stream-state key prefix: how far a venture means to grow its share of its new market, in log
+     * (SegmentEntry::pathLevel()).
+     */
+    public const STATE_VENTURE_TARGET = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_venture_target:';
+    /** Carried stream-state key prefix: when a venture entered its industry, in years of play. */
+    public const STATE_VENTURE_START = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_venture_start:';
+    /** Carried stream-state key prefix: when its company gave up on a venture that does not earn its cost, in years. */
+    public const STATE_VENTURE_ABANDONED = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_venture_abandoned:';
     /** Stream-state key prefix of a line's weight in the mix the plan steers to (StreamContext). */
     private const STREAM_WEIGHT_PREFIX = 'weight:';
 
@@ -93,15 +110,16 @@ final class SegmentBooks
         return $industries;
     }
 
-    /** A segment's name as the company reports it: its lore's, or for one entered in play, its industry's. */
+    /** A segment's name as the company reports it: its lore's, or for one entered in play, its industry's business. */
     public static function label(Stock $stock, string $segment): string
     {
         $books = Segments::forTicker($stock->getTicker());
         if ($segment === Segments::MAIN) {
             return $books['main'] ?? (string) $stock->getIndustry();
         }
+        $entered = Segments::enteredIndustry($segment);
 
-        return $books['segments'][$segment]['label'] ?? Segments::enteredIndustry($segment) ?? $segment;
+        return $books['segments'][$segment]['label'] ?? ($entered === null ? $segment : IndustryAdjacency::label($entered) ?? $entered);
     }
 
     /** The key of a segment's record in its industry's ledger: the ticker itself for the main segment. */
@@ -418,7 +436,7 @@ final class SegmentBooks
     {
         $segmentStrategy = $segment === Segments::MAIN ? $strategy : Sectors::strategyFor(self::industries($stock)[$segment] ?? '');
 
-        return $segmentStrategy->getFadedSecularGrowthRate($stock, $totalTime) + ($strategy->resolveSegmentPath($stock, $segment)['growth'] ?? 0.0);
+        return $segmentStrategy->getFadedSecularGrowthRate($stock, $totalTime) + (self::segmentPath($strategy, $stock, $segment, $totalTime)['growth'] ?? 0.0);
     }
 
     /**
@@ -674,7 +692,8 @@ final class SegmentBooks
 
     /**
      * The segment a deal buys into, drawn in proportion to the plant each holds, so deals keep the mix in expectation:
-     * a by-product's plant is bought only with the plant it rides, none into a segment on its model's own path, and
+     * a by-product's plant is bought only with the plant it rides, none into a segment on its model's own path or a
+     * venture its company has given up on, and
      * one whose new plant did not clear its hurdle at the last report (a glut) only as far as management supports its
      * weak segments. Where every segment is in a glut, the deal is drawn by plant alone, as a company in one market
      * buys into its own. The main segment before the books open.
@@ -687,7 +706,8 @@ final class SegmentBooks
         // A segment that rides its model's own path would not carry a bought rival along it.
         $strategy = Sectors::strategyFor($stock->getIndustry());
         foreach (array_keys($plant) as $segment) {
-            if (in_array($segment, self::jointSegments($stock), true) || $strategy->resolveSegmentPath($stock, $segment) !== null) {
+            if (in_array($segment, self::jointSegments($stock), true) || $strategy->resolveSegmentPath($stock, $segment) !== null
+                || self::isAbandoned($stock->getEarningsMomentumZ() ?? [], $segment)) {
                 unset($plant[$segment]);
             }
         }
@@ -779,16 +799,17 @@ final class SegmentBooks
     /**
      * The state that starts building a segment into a new industry: its plant under construction until the company's
      * queue places it in service (completePending()), so it holds no plant share yet; a market in which the plant it
-     * will hold has its share of its industry's (open()); the margin and turnover it will earn once it has learned the
-     * trade; and how far short of that margin it starts (SegmentEntry).
+     * will hold has its share of its industry's (open()); the margin and turnover its company expects it to earn once
+     * it has learned the trade, how far short of that margin it starts, and what it will turn out to earn instead; and
+     * the share of its market it means to grow to and when it set out (SegmentEntry).
      *
-     * @param float $construction  The plant it builds, in currency.
-     * @param float $plannedShare  The share of the company's plant that will be once built.
-     * @param float $marketShare   Its share of its industry's market once built, where known.
-     * @param float $learningGap   How far short of its learned margin it starts, as a share of it.
+     * @param float $construction The plant it builds, in currency.
+     * @param float $plannedShare The share of the company's plant that will be once built.
+     * @param float $marketShare  Its share of its industry's market once built, where known.
+     * @param array{margin: float, turnover: float, learning: float, outcome: float, target: float, start: float} $venture
      * @return array<string, float> Carried state.
      */
-    public static function startVenture(string $segment, float $construction, float $plannedShare, float $firmMarketGrowth, float $segmentGrowth, float $firmShare, float $marketShare, float $margin, float $turnover, float $learningGap): array
+    public static function startVenture(string $segment, float $construction, float $plannedShare, float $firmMarketGrowth, float $segmentGrowth, float $firmShare, float $marketShare, array $venture): array
     {
         if ($construction <= 0.0 || $plannedShare <= 0.0) {
             return [];
@@ -799,10 +820,59 @@ final class SegmentBooks
 
         return $state + [
             self::STATE_PENDING . $segment => $construction,
-            self::STATE_MARGIN . $segment => $margin,
-            self::STATE_TURNOVER . $segment => $turnover,
-            self::STATE_LEARNING . $segment => max(0.0, $learningGap),
+            self::STATE_MARGIN . $segment => $venture['margin'],
+            self::STATE_TURNOVER . $segment => $venture['turnover'],
+            self::STATE_LEARNING . $segment => max(0.0, $venture['learning']),
+            self::STATE_LEARNING_START . $segment => max(0.0, $venture['learning']),
+            self::STATE_VENTURE_OUTCOME . $segment => $venture['outcome'],
+            self::STATE_VENTURE_TARGET . $segment => max(0.0, $venture['target']),
+            self::STATE_VENTURE_START . $segment => $venture['start'],
         ];
+    }
+
+    /**
+     * The path a segment entered in play grows along toward the share of its new market it means to reach
+     * (SegmentEntry::pathLevel()), from where it entered; for one its company has given up on, a claim to almost none
+     * of it, so its plant withers. Null for any other segment.
+     *
+     * @param array<string, mixed> $momentum
+     * @return array{level: float, growth: float}|null
+     */
+    public static function venturePath(array $momentum, string $segment, float $totalTime): ?array
+    {
+        if (self::isAbandoned($momentum, $segment)) {
+            return ['level' => log(SegmentEntry::ABANDONED_TREND_SHARE), 'growth' => 0.0];
+        }
+        if (!isset($momentum[self::STATE_VENTURE_TARGET . $segment])) {
+            return null;
+        }
+        $target = (float) $momentum[self::STATE_VENTURE_TARGET . $segment];
+        $years = $totalTime - (float) ($momentum[self::STATE_VENTURE_START . $segment] ?? $totalTime);
+
+        return ['level' => SegmentEntry::pathLevel($target, $years), 'growth' => SegmentEntry::pathGrowth($target, $years)];
+    }
+
+    /**
+     * The path a segment's plant follows of its own, where it has one: the one its company's model plans
+     * (OperatingStrategyInterface::resolveSegmentPath()), or a venture's (venturePath()). Null for any other segment.
+     *
+     * @return array{level: float, growth: float}|null
+     */
+    public static function segmentPath(OperatingStrategyInterface $strategy, Stock $stock, string $segment, float $totalTime): ?array
+    {
+        $planned = $strategy->resolveSegmentPath($stock, $segment);
+
+        return $planned === null ? self::venturePath($stock->getEarningsMomentumZ() ?? [], $segment, $totalTime) : ['level' => $planned['level'], 'growth' => $planned['growth']];
+    }
+
+    /**
+     * Whether its company has given up on a segment it entered in play.
+     *
+     * @param array<string, mixed> $momentum
+     */
+    public static function isAbandoned(array $momentum, string $segment): bool
+    {
+        return isset($momentum[self::STATE_VENTURE_ABANDONED . $segment]);
     }
 
     /**
@@ -814,6 +884,22 @@ final class SegmentBooks
     public static function pending(array $momentum): array
     {
         return array_filter(self::filed($momentum, self::STATE_PENDING), static fn(float $amount): bool => $amount > 0.0);
+    }
+
+    /**
+     * The momentum with the plant each segment entered in play has under construction scaled, as a sale of part of the
+     * company takes that share of its construction.
+     *
+     * @param array<string, mixed> $momentum
+     * @return array<string, mixed>
+     */
+    public static function scalePending(array $momentum, float $retained): array
+    {
+        foreach (self::filed($momentum, self::STATE_PENDING) as $segment => $amount) {
+            $momentum[self::STATE_PENDING . $segment] = $amount * max(0.0, $retained);
+        }
+
+        return $momentum;
     }
 
     /**
@@ -852,16 +938,38 @@ final class SegmentBooks
     }
 
     /**
-     * The state that lets each segment built into a new industry learn its trade for dt years (SegmentEntry).
+     * How far each segment built into a new industry still falls short of its learned margin, as a share of it; a
+     * segment that has learned the trade, or was never built, is not listed.
+     *
+     * @param array<string, mixed> $momentum
+     * @return array<string, float>
+     */
+    public static function learningGaps(array $momentum): array
+    {
+        return self::filed($momentum, self::STATE_LEARNING);
+    }
+
+    /**
+     * The state that lets each segment built into a new industry learn its trade for dt years (SegmentEntry), and shows
+     * as much of what it will turn out to earn as it has learned.
      *
      * @param array<string, mixed> $momentum
      * @return array<string, float> Carried state.
      */
     public static function learn(array $momentum, float $dt): array
     {
+        $margins = self::filed($momentum, self::STATE_MARGIN);
+        $starts = self::filed($momentum, self::STATE_LEARNING_START);
+        $outcomes = self::filed($momentum, self::STATE_VENTURE_OUTCOME);
         $state = [];
         foreach (self::filed($momentum, self::STATE_LEARNING) as $segment => $gap) {
-            $state[self::STATE_LEARNING . $segment] = SegmentEntry::learningLeft($gap, $dt);
+            $left = SegmentEntry::learningLeft($gap, $dt);
+            $state[self::STATE_LEARNING . $segment] = $left;
+            // What it learns shows what it will earn: the margin it books moves from what was expected toward what it
+            // turns out to earn, as far as its learning has gone.
+            if (($starts[$segment] ?? 0.0) > 0.0 && isset($outcomes[$segment], $margins[$segment])) {
+                $state[self::STATE_MARGIN . $segment] = $margins[$segment] * exp($outcomes[$segment] * ($gap - $left) / $starts[$segment]);
+            }
         }
 
         return $state;

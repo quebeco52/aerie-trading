@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Earnings;
 
+use App\Data\Company\IndustryAdjacency;
 use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\DTO\EarningsSimulationContext;
@@ -11,7 +12,13 @@ use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBookOpener;
 use App\Service\Corporate\Segment\SegmentBooks;
+use App\Service\Corporate\Segment\SegmentEntry;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
+use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 
 /**
@@ -127,6 +134,11 @@ final class CapitalBudgetEngine
             //    scheduled spend too).
             $committedSpend = $maintenanceCapEx + ($isFundingConstrained ? $ctx->scheduledCapex : 0.0);
             $growthCapEx = $this->calculateGrowthCapEx($ctx, $cycleCapExModifier, $maintenanceCapEx, max(0.0, $internalFunds - $committedSpend));
+            // A company with cash its own plans leave, and lenders still willing, may start building into an industry
+            // next to its own; the plant is queued as construction (enterMarket()).
+            $ventureCapEx = $isFundingConstrained || $ctx->health->wantsToPaydownDebt
+                ? 0.0
+                : $this->enterMarket($ctx, $internalFunds - $committedSpend - $ctx->scheduledCapex - $growthCapEx - ($ctx->expansionBudget ?? 0.0));
 
             // 3. Scheduled CapEx: outlays the sector physics itself commits (spectrum licences, grid rebuilds).
             //    Committed, so no funding gate cuts it; a cash shortfall is the treasury's problem. The asset is
@@ -144,7 +156,7 @@ final class CapitalBudgetEngine
                 $ctx->netLoanOriginations += $deployed;
             }
 
-            $actualCapEx = $maintenanceCapEx + $growthCapEx + $ctx->scheduledCapex;
+            $actualCapEx = $maintenanceCapEx + $growthCapEx + $ctx->scheduledCapex + $ventureCapEx;
 
             $fcff = $operatingCashFlow - $actualCapEx;
             $ctx->operatingCashFlow = $operatingCashFlow;
@@ -165,9 +177,9 @@ final class CapitalBudgetEngine
 
         // Replacement CapEx is the bar the firm has to clear to stand still, so the reinvestment ratio is
         // measured against the depreciation charge restated at today's prices, not the historical-cost charge, on the
-        // plant in use.
+        // plant in use. A venture into a new industry is not reinvestment in this business.
         $replacementDepreciation = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * self::plantKept($ctx);
-        $reinvestmentRatio = $replacementDepreciation > 0 ? ($fcfData['capex'] / $replacementDepreciation) : 1.0;
+        $reinvestmentRatio = $replacementDepreciation > 0 ? (($fcfData['capex'] - ($ctx->marketEntry['capex'] ?? 0.0)) / $replacementDepreciation) : 1.0;
         $ctx->strategy->recordReinvestmentRatio($stock, $reinvestmentRatio, $ctx->dt);
 
         $this->plant->rollForwardFixedAssetLedger($ctx, $fcfData['direct_capex']);
@@ -243,7 +255,6 @@ final class CapitalBudgetEngine
         $industries = SegmentBooks::industries($stock);
         $joint = SegmentBooks::jointSegments($stock);
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $pending = SegmentBooks::pending($momentum);
         $inflation = max(0.0, $ctx->macroState->inflationEma);
         $ctx->segmentPlantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
 
@@ -258,12 +269,7 @@ final class CapitalBudgetEngine
             $gaps[$segment] = $books['gap'] ?? 0.0;
             $plant = $ctx->segmentPlantBase * $books['plant'];
 
-            if (($pending[$segment] ?? 0.0) > 0.0) {
-                // A segment still building into a new industry finishes the plant it started before it plans more, and
-                // the plant it is short of until then is the plant it is building.
-                $gaps[$segment] = 0.0;
-                $budgets[$segment] = 0.0;
-            } elseif (!($books['builds'] ?? true)) {
+            if (!($books['builds'] ?? true)) {
                 // As for the company on one plant: no shortfall is closed by building, and none is priced.
                 $gaps[$segment] = min(0.0, $gaps[$segment]);
                 $budgets[$segment] = 0.0;
@@ -316,6 +322,136 @@ final class CapitalBudgetEngine
     }
 
     /**
+     * A company with spare cash may start building a business in an industry next to one it knows (SegmentEntry):
+     * rarely, at its manager's appetite for deals, and only where the venture is worth more than its cost once its
+     * learning is paid for. It is valued at the return the industry's incumbents earn on their plant, less what it
+     * cannot copy of their margin, at the hurdle its manager applies; the market is drawn in proportion to what each is
+     * worth weighed by how close it is, as a company searches near home first (Cyert & March 1963), and the venture
+     * must fit in the room the industry's fringe holds. A holding company buys businesses and builds none, and a
+     * company still losing money on one venture starts no other. Draws are keyed (MathUtility::hashedUniform()), so
+     * nothing is taken from the stream every other draw follows.
+     *
+     * @param float $spareFunds Internal funds left after the company's own plans.
+     * @return float The capex the venture commits this quarter, queued as construction.
+     */
+    private function enterMarket(EarningsSimulationContext $ctx, float $spareFunds): float
+    {
+        $stock = $ctx->stock;
+        $ledger = $this->industryShareLedger;
+        $strategy = $ctx->strategy;
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $learning = SegmentBooks::learningGaps($momentum);
+        if ($ledger === null || $strategy->isFinancial() || !$strategy->allowsPhysicalOrganicCapex() || $stock->getGrossPpe() === null
+            || IndustryAdjacency::isHoldingCompany((string) $stock->getIndustry()) || $ctx->macroState->totalTime < SegmentEntry::FIRST_ENTRY_YEARS
+            || SegmentBooks::pending($momentum) !== [] || max([0.0, ...array_values($learning)]) >= 1.0) {
+            return 0.0;
+        }
+        $plantBase = max(0.0, $stock->getNetPpe());
+        $manager = $stock->getManagementProfile();
+        $salt = $ledger->runSalt();
+        if ($plantBase <= 0.0 || $spareFunds <= 0.0
+            || MathUtility::hashedUniform($salt, "entry:{$stock->getTicker()}:{$ctx->tickCount}") >= SegmentEntry::entryChance($manager->acquisitionBias(), $ctx->dt)) {
+            return 0.0;
+        }
+
+        // A market it is in, or sold out of, is not entered again; it looks next to the businesses it still runs and
+        // has learned, not next to one it has given up on.
+        $held = SegmentBooks::industries($stock);
+        $homes = array_filter($held, static fn(string $segment): bool => SegmentBooks::holdsPlant($stock, $segment) && !SegmentBooks::isAbandoned($momentum, $segment), ARRAY_FILTER_USE_KEY);
+        $hurdle = $manager->appliedHurdle($strategy->getHurdleRate($ctx->health));
+        $longRunGrowth = MacroConstants::TREND_REAL_GROWTH + max(0.0, $ctx->macroState->inflationEma);
+        $plans = [];
+        foreach ($homes as $industry) {
+            foreach (IndustryAdjacency::neighbours($industry) as $target => $closeness) {
+                $targetStrategy = Sectors::strategyFor($target);
+                if (in_array($target, $held, true) || !SegmentEntry::isEnterable($target, $targetStrategy)) {
+                    continue;
+                }
+                $peers = $ledger->resolvePeerEconomics($target, $stock->getTicker(), $ctx->tickCount, $ctx->ticksPerYear);
+                $market = $ledger->describeEntrant($target, $stock->getTicker(), $ctx->macroState, IndustryShareLedger::secularExcessGrowth($targetStrategy, $stock), $ctx->tickCount, $ctx->ticksPerYear);
+                if ($peers === null || $market === null || $market['market'] <= 0.0) {
+                    continue;
+                }
+                $construction = SegmentEntry::ventureConstruction($plantBase, $market['market'], $peers['turnover']);
+                if ($construction <= 0.0 || $construction > $spareFunds || $construction * $peers['turnover'] / $market['market'] > $market['fringe_share']) {
+                    continue;
+                }
+                $margin = SegmentEntry::attainedMargin($peers['margin'], $closeness);
+                $gap = SegmentEntry::learningGap($closeness);
+                $value = Valuation::ventureValue(
+                    (1.0 - $ctx->corporateTaxRate) * $peers['turnover'] * $margin,
+                    $hurdle,
+                    $longRunGrowth,
+                    $targetStrategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) - MacroConstants::TREND_REAL_GROWTH,
+                    FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS / M_LN2,
+                    (1.0 - $ctx->corporateTaxRate) * $peers['turnover'] * $margin * $gap,
+                    SegmentEntry::LEARNING_YEARS,
+                );
+                if ($value > ($plans[$target]['value'] ?? 0.0)) {
+                    $plans[$target] = ['value' => $value, 'closeness' => $closeness, 'construction' => $construction, 'margin' => $margin, 'turnover' => $peers['turnover'], 'gap' => $gap, 'market' => $market['market'], 'room' => $market['fringe_share']];
+                }
+            }
+        }
+        $target = SegmentEntry::choose(array_map(static fn(array $plan): float => $plan['value'] * $plan['closeness'], $plans), MathUtility::hashedUniform($salt, "entry-market:{$stock->getTicker()}:{$ctx->tickCount}"));
+        if ($target === null) {
+            return 0.0;
+        }
+
+        $this->startVenture($ctx, $target, $plans[$target], $plantBase);
+
+        return $plans[$target]['construction'];
+    }
+
+    /**
+     * Books a venture into a new industry: the company's books open if it kept none (SegmentBookOpener::
+     * openForEntry()), the venture's plant is queued as construction and booked as building (SegmentBooks::
+     * startVenture()), at the share of the industry's market its plant will hold, and the industry's ledger anchors it
+     * at that plant, which adds to supply as it comes on line (IndustryShareLedger::openVentureRecord()). It means to
+     * grow to the share of its new market its company holds of its own, as far as the room there allows; what it will
+     * earn once learned is drawn now and shown only as it learns (SegmentEntry::outcome()).
+     *
+     * @param array{value: float, closeness: float, construction: float, margin: float, turnover: float, gap: float, market: float, room: float} $plan
+     */
+    private function startVenture(EarningsSimulationContext $ctx, string $industry, array $plan, float $plantBase): void
+    {
+        $stock = $ctx->stock;
+        $segment = Segments::enteredKey($industry);
+        $construction = $plan['construction'];
+        (new SegmentBookOpener($this->corporateMetrics, $this->industryShareLedger))->openForEntry($stock, $ctx->strategy, $ctx->macroState, $ctx->tickCount, $ctx->ticksPerYear);
+        // Filed first, so the books know the industry it is entering before its market is struck.
+        $momentum = [SegmentBooks::STATE_PENDING . $segment => $construction] + ($stock->getEarningsMomentumZ() ?? []);
+        $stock->setEarningsMomentumZ($momentum);
+
+        $years = $ctx->macroState->totalTime;
+        $firmShare = $this->corporateMetrics->calculateAddressableShare($stock, $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()), $ctx->macroState);
+        $revenue = $construction * $plan['turnover'];
+        // A venture holds what its plant sells of the market its industry's firms sell into, not the share its parent
+        // holds of its own.
+        $marketShare = SegmentBooks::entryMarketShare($revenue, $plan['market'], 0.0);
+        $targetShare = min($firmShare, $plan['room']);
+        $stock->setEarningsMomentumZ(SegmentBooks::startVenture(
+            $segment,
+            $construction,
+            $construction / ($plantBase + $construction),
+            CorporateMetrics::secularMarketGrowth($stock, $years),
+            SegmentBooks::marketGrowths($stock, $years)[$segment] ?? 1.0,
+            $firmShare,
+            $marketShare,
+            [
+                'margin' => $plan['margin'],
+                'turnover' => $plan['turnover'],
+                'learning' => $plan['gap'],
+                'outcome' => SegmentEntry::outcome($plan['closeness'], MathUtility::hashedUniform($this->industryShareLedger?->runSalt() ?? 0, "entry-outcome:{$stock->getTicker()}:{$ctx->tickCount}")),
+                'target' => $marketShare > 0.0 && $targetShare > $marketShare ? log($targetShare / $marketShare) : 0.0,
+                'start' => $years,
+            ],
+        ) + $momentum);
+        $this->capExEngine->allocateGrowthCapEx($stock, $construction);
+        $this->industryShareLedger?->openVentureRecord($stock, $segment, $revenue, $marketShare, $ctx->macroState, $ctx->tickCount);
+        $ctx->marketEntry = ['industry' => $industry, 'segment' => $segment, 'capex' => $construction, 'closeness' => $plan['closeness']];
+    }
+
+    /**
      * The part of the quarter's upkeep that restated plant at today's prices rather than replacing it at its booked
      * cost: the price level's slice of what upkeep spent, whatever share of the plant it kept. Growth spend nets it
      * out, since it already carried part of the price level onto the plant ledger.
@@ -334,6 +470,10 @@ final class CapitalBudgetEngine
      * diversified firms shrink their less productive segments). Management's support for weak segments keeps that share
      * of the rest (ManagementProfile::weakSegmentSupport()). A by-product follows the main segment. Whether each
      * segment builds is filed for the deals between reports.
+     *
+     * A venture that has learned enough to turn a profit and still earns less on its plant at a balanced price than its
+     * manager's hurdle, at the margin its learning has shown, is given up on: its market claim falls away and its plant
+     * withers (SegmentBooks::venturePath()).
      */
     private function resolveSegmentGates(EarningsSimulationContext $ctx, ?float $growthHurdle = null): void
     {
@@ -347,6 +487,8 @@ final class CapitalBudgetEngine
         $growthHurdle ??= $stock->getManagementProfile()->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), false);
         $support = $stock->getManagementProfile()->weakSegmentSupport();
         $wears = !$ctx->strategy->depreciatesByUnitsOfProduction();
+        $pending = SegmentBooks::pending($stock->getEarningsMomentumZ() ?? []);
+        $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
         $filed = [];
         foreach ([...array_diff(array_keys($ctx->segments), $joint), ...array_intersect(array_keys($ctx->segments), $joint)] as $segment) {
             $books = $ctx->segments[$segment];
@@ -356,6 +498,12 @@ final class CapitalBudgetEngine
             } else {
                 $strategy = $segment === Segments::MAIN ? $ctx->strategy : Sectors::strategyFor($industries[$segment] ?? '');
                 $capitalGap = $this->industryShareLedger?->resolveSegmentCapacityGap($stock, $segment, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($strategy, $stock)) ?? 0.0;
+                // Plant a venture still has under construction is plant it has for its market, so it is not built
+                // twice.
+                $installed = $books['plant'] * $plantBase;
+                if (($pending[$segment] ?? 0.0) > 0.0 && $installed > 0.0) {
+                    $capitalGap -= log1p($pending[$segment] / $installed);
+                }
                 $books['capital_gap'] = $capitalGap;
                 $books['gap'] = $capitalGap - log(max(OperatingCapacityEngine::MIN_CAPACITY_UTILIZATION, $books['load']));
                 $books['return'] = self::segmentReturnOnPlant($ctx, $books);
@@ -365,7 +513,20 @@ final class CapitalBudgetEngine
             $ctx->segments[$segment] = $books;
             $filed[SegmentBooks::STATE_BUILDS . $segment] = $books['builds'] ? 1.0 : 0.0;
         }
-        $stock->setEarningsMomentumZ($filed + ($stock->getEarningsMomentumZ() ?? []));
+
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $learning = SegmentBooks::learningGaps($momentum);
+        $appliedHurdle = $stock->getManagementProfile()->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
+        foreach ($ctx->segments as $segment => $books) {
+            $industry = Segments::enteredIndustry($segment);
+            if ($industry === null || SegmentBooks::isAbandoned($momentum, $segment) || ($learning[$segment] ?? 0.0) >= 1.0
+                || (1.0 - $ctx->corporateTaxRate) * $books['turnover'] * $books['margin'] >= $appliedHurdle) {
+                continue;
+            }
+            $filed[SegmentBooks::STATE_VENTURE_ABANDONED . $segment] = $ctx->macroState->totalTime;
+            $ctx->marketExit = ['industry' => $industry, 'segment' => $segment];
+        }
+        $stock->setEarningsMomentumZ($filed + $momentum);
     }
 
     /**
@@ -413,17 +574,18 @@ final class CapitalBudgetEngine
     }
 
     /**
-     * The plant a segment on its model's own path needs for the step the path takes before its next report: its trend
-     * plant grown from the level the ledger priced this quarter to the level the quarter's physics leaves, a revision
-     * of the belief included. Built on the trend plant, not on the plant installed, so a segment behind its path does
-     * not fall further behind as the path climbs, and apart from the cycle, which moves the build around a path, not
-     * the path. Nothing for any other segment.
+     * The plant a segment on a path of its own needs for the step the path takes before its next report
+     * (SegmentBooks::segmentPath()): its trend plant grown from the level the ledger priced this quarter to the level
+     * the quarter's physics leaves (a venture's, the level a quarter on), a revision of the belief included. Built on
+     * the trend plant, not on the plant installed, so a segment behind its path does not fall further behind as the
+     * path climbs, and apart from the cycle, which moves the build around a path, not the path. Nothing for any other
+     * segment.
      *
      * @param array{path?: float} $books
      */
     private static function pathPlant(EarningsSimulationContext $ctx, string $segment, array $books, float $trendPlant): float
     {
-        $next = $ctx->strategy->resolveSegmentPath($ctx->stock, $segment)['level'] ?? null;
+        $next = SegmentBooks::segmentPath($ctx->strategy, $ctx->stock, $segment, $ctx->macroState->totalTime + $ctx->dt)['level'] ?? null;
 
         return isset($books['path']) && $next !== null ? $trendPlant * (exp($next - $books['path']) - 1.0) : 0.0;
     }
@@ -487,18 +649,14 @@ final class CapitalBudgetEngine
     }
 
     /**
-     * returnOnNewPlant() for one segment of a company that keeps plant by segment: the company's return scaled by how
-     * much more (or less) the segment earns on each unit of plant, its margin times its turnover over the company's,
-     * plus the after-tax margin its own industry's price adds on the revenue that plant turns over.
+     * returnOnNewPlant() for one segment of a company that keeps plant by segment, at its own margin, turnover and
+     * industry price (FirmEconomics::returnOnSegmentPlant()).
      *
      * @param array{margin: float, turnover: float, price: float} $books
      */
     private static function segmentReturnOnPlant(EarningsSimulationContext $ctx, array $books): float
     {
-        $companyTurnover = $ctx->assetTurnover * EarningsEngine::TTM_QUARTERS;
-        $relative = $ctx->stableMargin > 0.0 && $companyTurnover > 0.0 ? ($books['margin'] * $books['turnover']) / ($ctx->stableMargin * $companyTurnover) : 1.0;
-
-        return ($ctx->baselineRoic * $relative) + ((1.0 - $ctx->corporateTaxRate) * $books['turnover'] * ($books['price'] - 1.0));
+        return FirmEconomics::returnOnSegmentPlant($ctx->baselineRoic, $ctx->stableMargin, $ctx->assetTurnover * EarningsEngine::TTM_QUARTERS, $books['margin'], $books['turnover'], $books['price'], $ctx->corporateTaxRate);
     }
 
     /**

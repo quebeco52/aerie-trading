@@ -23,6 +23,8 @@ final class RevenueStreams
     /** Sentence-case name of a stream key ("aftermarket_services" reads "Aftermarket services"). */
     public static function label(string $streamKey): string
     {
-        return self::LABELS[$streamKey] ?? Segments::enteredIndustry($streamKey) ?? ucfirst(str_replace('_', ' ', $streamKey));
+        $entered = Segments::enteredIndustry($streamKey);
+
+        return self::LABELS[$streamKey] ?? ($entered === null ? ucfirst(str_replace('_', ' ', $streamKey)) : IndustryAdjacency::label($entered) ?? $entered);
     }
 }

@@ -685,7 +685,6 @@ class EarningsEngine
                 $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount, [
                     'margin' => $ctx->stableMargin,
                     'turnover' => $ctx->assetTurnover * self::TTM_QUARTERS,
-                    'price' => $ctx->industryPriceLevel,
                 ]);
             } else {
                 // Plant kept by segment: each segment's industry books that segment's sales alone, so the company's
@@ -701,7 +700,6 @@ class EarningsEngine
                     $this->industryShareLedger->recordSegmentGain($ctx->stock, $segment, $segmentRevenue * 4.0, $gain, $books['market'], $ctx->tickCount, [
                         'margin' => $books['margin'],
                         'turnover' => $books['turnover'],
-                        'price' => $books['price'],
                     ]);
                 }
             }
@@ -1351,9 +1349,34 @@ class EarningsEngine
         // drop, and a holder who was paid the dividend did not lose it.
         $earningsEvent['dividend_per_share'] = (float) ($ctx->allocation['dividend_paid'] ?? 0.0);
 
+        $events = [$earningsEvent];
+        // A move into a new industry is its own story: the plant the company commits, where, and how far from home.
+        if ($ctx->marketEntry !== null) {
+            $entry = $ctx->marketEntry;
+            $business = lcfirst(SegmentBooks::label($stock, $entry['segment']));
+            $events[] = $this->marketEvent->publish(
+                $stock,
+                'MARKET ENTRY',
+                "{$stock->getName()} is moving into {$business}, building " . WireFormat::money($entry['capex']) . " of plant to enter the {$entry['industry']} industry.",
+                0.0,
+                ['industry' => $entry['industry'], 'business' => $business, 'capex' => $entry['capex']],
+                $entry['capex'] / max(1.0, (float) $stock->getPrice() * $ctx->sharesOutstanding),
+            );
+        }
+        if ($ctx->marketExit !== null) {
+            $business = lcfirst(SegmentBooks::label($stock, $ctx->marketExit['segment']));
+            $events[] = $this->marketEvent->publish(
+                $stock,
+                'MARKET EXIT',
+                "{$stock->getName()} is winding down its {$business} business, which has not earned what its plant costs.",
+                0.0,
+                ['industry' => $ctx->marketExit['industry'], 'business' => $business],
+            );
+        }
+
         $this->eventDispatcher->dispatch(new EarningsReportedEvent($ctx));
 
-        return [$earningsEvent];
+        return $events;
     }
 
     /**
