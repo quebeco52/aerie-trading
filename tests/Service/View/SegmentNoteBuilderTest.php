@@ -89,6 +89,32 @@ class SegmentNoteBuilderTest extends TestCase
         $this->assertNull(SegmentNoteBuilder::fromReport(self::stock('SKYL', 'Space Systems'), $report)[0]['margin'] ?? null, 'a company on one plant shows none');
     }
 
+    /**
+     * A business still learning its trade shows the loss it makes on its own row, its learned margin less what it still
+     * falls short by, and the other segments keep their own; the segments' profits still add up to the company's.
+     */
+    public function testAVentureStillLearningShowsItsOwnLoss(): void
+    {
+        $segment = Segments::enteredKey('Farm & Heavy Construction Machinery');
+        $stock = self::stock('ZZZZ', 'Auto Manufacturers');
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, $segment => 0.1], 1.0, []) + [
+            SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.10,
+            SegmentBooks::STATE_TURNOVER . Segments::MAIN => 1.0,
+            SegmentBooks::STATE_MARGIN . $segment => 0.15,
+            SegmentBooks::STATE_TURNOVER . $segment => 1.0,
+            SegmentBooks::STATE_LEARNING . $segment => 2.0,
+        ]);
+        $report = (new CorporateReport())->setRevenueStreams(['passenger_cars' => 900.0, $segment => 100.0]);
+        $report->setOperatingMargin('0.0750');
+
+        $rows = SegmentNoteBuilder::fromReport($stock, $report) ?? [];
+
+        $this->assertCount(2, $rows);
+        $this->assertEqualsWithDelta(0.10, (float) $rows[0]['margin'], 1e-9);
+        $this->assertEqualsWithDelta(-0.15, (float) $rows[1]['margin'], 1e-9, 'it loses what it still falls short by');
+        $this->assertEqualsWithDelta(75.0, (900.0 * (float) $rows[0]['margin']) + (100.0 * (float) $rows[1]['margin']), 1e-9);
+    }
+
     public function testACompanyWithOneMarketHasNoSegmentNote(): void
     {
         $this->assertNull(SegmentNoteBuilder::fromReport(self::stock('LOON', 'Telecom Services'), new CorporateReport()));

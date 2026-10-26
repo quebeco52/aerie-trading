@@ -567,14 +567,20 @@ class EarningsEngineTest extends TestCase
             ]) + ($stock->getEarningsMomentumZ() ?? []));
             (new CapExEngine())->allocateGrowthCapEx($stock, $construction);
             $ledger->openVentureRecord($stock, $segment, $construction * $turnover, 0.05, $macro, $tick);
+            $placed = [];
             for ($quarter = 1; $quarter <= 6; $quarter++) {
                 $engine->calculate($stock, $macro, $tick + (63 * $quarter), 252);
+                $placed[$quarter] = $construction - (SegmentBooks::pending($stock->getEarningsMomentumZ() ?? [])[$segment] ?? 0.0);
             }
 
-            return [$captured, $stock, $store];
+            return [$captured, $stock, $store, $placed];
         };
 
-        [$reports, $stock, $store] = $run(2.5);
+        [$reports, $stock, $store, $placed] = $run(2.5);
+        // Its share is of the capital the company's plant sells on: it holds what it has placed in service, not that
+        // plant grossed up by the working capital the rest of the company runs on.
+        $this->assertGreaterThan(0.0, $placed[1]);
+        $this->assertEqualsWithDelta($placed[1], $reports[1]->segments[$segment]['plant'] * $reports[1]->revenueGeneratingCapital, 0.005 * $placed[1]);
         [$learned] = $run(0.0);
 
         $plantShares = [];
@@ -642,7 +648,8 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThanOrEqual($entry->maintenanceCapex + $entry->scheduledCapex + $capex - 1e-3, $entry->operatingCapex);
         $this->assertGreaterThanOrEqual($capex - 1e-3, (float) $carmaker->getCipBalance(), 'queued as construction');
 
-        $plannedShare = $capex / ($carmaker->getNetPpe() + $capex);
+        // Plant shares are of the capital the company's plant sells on.
+        $plannedShare = $capex / ($entry->revenueGeneratingCapital + $capex);
         for ($quarter = 1; $quarter <= 16; $quarter++) {
             $later = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.03, yield5yEma: 0.035, inflationEma: 0.02, totalTime: 2.0 + ($quarter / 4.0));
             if ($quarter % 4 === 0) {

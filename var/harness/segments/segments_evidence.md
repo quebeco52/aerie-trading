@@ -546,3 +546,31 @@ company goodwill drop = tracked at sale except cal1old s3 TRIV (fell 1.86 bn vs 
 after sales (cal1 seeds 3, 4; cal1old seed 3). Bought builds=0 42% / 48%, pays=0 32% / 29%; bought kappa 0.029 ->
 0.014 (+8 y, cal1). Board vs head: cal1 vol +0.0039 (t 2.3), capex/revenue -0.0031 (t -2.2), B-or-worse +0.15 pt (t
 1.5); cal1old all |t| <= 0.9. Identities exact.
+
+## 2026-10-26: hard check of the whole segment rework (5d3b769a `pre` vs 102d2f80 `seg`; 40-year scan `head40`)
+
+    BASE=<scratchpad>/basetree-5d3b769a bin/harness-batch var/harness/segments/run.sh 1-8 pre && bin/harness-batch ... 1-8 seg
+    YEARS=40 bin/harness-batch var/harness/segments/run.sh 1-8 head40
+    hard1.py 1-8 pre seg > hard1_n8.out; hard3.py 1-8 pre seg head40 > hard3_n8.out; hard2.py 1-8 head40 40 > hard2_head40.out
+
+Part 1 (n 8, 20 y, replayed macro): cap, P/E, vol, defaults, B-or-worse, ND/EBITDA, real growth, capex/revenue,
+revenue/GDP, NI/GDP, glut share/spells all |t| <= 1.1. Net PP&E growth 4.48 -> 4.26%/yr (t -4.6); share of
+firm-quarters with industry price > 1.05: 4.98% -> 4.23% (t -4.5). Industries: sellers rise where segments and
+ventures enter (IT services 0 -> 4.3, internet content 1 -> 3.8, specialty machinery 3 -> 5.1, ...); ledger revenue
+moves with segment carve-outs (ports +1.73 log, resorts & casinos -1.67, conglomerates -1.39, household +0.45);
+utilities IPP price +0.006 (t 7.4), aerospace -0.005 (t -4.0). Firms |t| > 2: 11 of 97; largest OWLS +27% (reseeded),
+TRIV -41% (reseeded), GULL -22%, GDWT +18%, BUZT -14%; untouched KTWK -7%, RIVR -9%, SHOR -6%, BNTH +5%.
+M&A: deals per seed 209.6 -> 189.9 (conglomerate expansion 148 -> 130); goodwill/price median conglomerate 0.25 ->
+0.32, LBO 0.00 -> 0.12, stock 0.19 -> 0.33. FALC 5.4 -> 6.5 deals per seed (range 2-14), revenue/GDP -1.7 -> -2.2%/yr.
+Deals into x: segments (seg 10, head40 84): goodwill/price median 0.40 / 0.60 (main 0.27 / 0.31); price / acquired
+line revenue 1.07 / 1.28; segment margin / peers at the deal median 0.66 / 0.86, max 3.37 / 3.60 (BREW wineries
+0.63 vs 0.19, 85% goodwill). Entered-segment margin / peers over all reports: p50 0.72-0.75, p90 1.64-1.71, max 20-63.
+Part 2 (head40, live macro, 8 x 40 y): sum kappa, record revenue, line carve exact; no negative/NaN plant, pending,
+goodwill; capacity split vs targets median 0.007, max 0.15. Sold bought segments keep zeroed keys (target, margin,
+builds, outcome, market, turnover, goodwill 0, integrating 0, for_sale timestamp): 25 segment-firms; 25 sold/retired
+records keep capacity > 0, 1 written in the last year. 11 x: segments above 50% of revenue; 31 above 15% of their
+industry; 17 industry-seeds with 3 entrants at once; no re-entry; 14 entered margins outside 0.2-3x peers for 8+ q;
+pending construction left at +3 y median 3% (p90 20%); 54 abandoned with positive margin (below hurdle); 1 bought
+sold within a year; revenue/GDP beyond 3x in 44 firm-seeds (21 segmented or entrants). Industry price medians 1.000
+each decade, range 0.93-1.07; held per seed y10/y20/y30/y40: built ventures 6.8/12.1/17.6/22.2, bought 2.8/3.1/
+3.9/4.2, plan segments 20; entered goodwill / company goodwill max 1.000.

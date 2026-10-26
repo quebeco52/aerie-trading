@@ -416,6 +416,9 @@ class DivestitureEngine
         }
 
         $markSold = $stock->hasBalanceSheetLedger() ? $this->retireDivestedLedgers($stock, $ctx->divestedFraction, $ctx->goodwillSold, $ctx->soldSegment) : 0.0;
+        if ($ctx->soldSegment !== null) {
+            $stock->setEarningsMomentumZ(SegmentBooks::withoutEntryState($stock->getEarningsMomentumZ() ?? [], $ctx->soldSegment));
+        }
 
         // A gain on selling a business is taxable income (ASC 740), struck under the same carryforward rules as a
         // quarter's (FirmEconomics::resolveIncomeTax()): it uses the carried loss up to its cap, and a loss adds to

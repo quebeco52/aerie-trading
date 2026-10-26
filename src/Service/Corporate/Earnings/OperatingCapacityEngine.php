@@ -634,7 +634,9 @@ final class OperatingCapacityEngine
         $stock = $ctx->stock;
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $construction = (float) $stock->getCipBalance() + $ctx->completedCip;
-        $state = SegmentBooks::completePending($momentum, $construction > 0.0 ? $ctx->completedCip / $construction : 1.0, $stock->getNetPpe())
+        // The shares are of the capital the plant sells on, which the plant placed this quarter has just joined.
+        $capital = CorporateMetrics::revenueGeneratingCapital($ctx->investedCapital, $stock->getTotalCipAmount(), (float) $stock->getGoodwill());
+        $state = SegmentBooks::completePending($momentum, $construction > 0.0 ? $ctx->completedCip / $construction : 1.0, $capital)
             + SegmentBooks::learn($momentum, $ctx->dt);
         if ($state !== []) {
             // Construction finished leaves no mark: the books carry the segment by its plant from then on.

@@ -9,6 +9,7 @@ use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Model\Strategy\OperatingStrategyInterface;
 
@@ -74,14 +75,20 @@ final class SegmentBookOpener
 
         $firmGrowth = CorporateMetrics::secularMarketGrowth($stock, $macroState->totalTime);
         $excessBefore = IndustryShareLedger::secularExcessGrowth($strategy, $stock);
-        $stock->setEarningsMomentumZ(SegmentBooks::open($plant, 1.0, []) + $momentum);
+        // A company that kept no books filed no outlook for its main segment: its market was just read at the belief
+        // its report filed, so that is the main segment's, or the next report would grow its market by the belief
+        // again.
+        $outlook = isset($momentum[SegmentBooks::STATE_OUTLOOK . Segments::MAIN])
+            ? []
+            : [SegmentBooks::STATE_OUTLOOK . Segments::MAIN => (float) ($momentum[IndustryOutlook::STATE_BELIEF] ?? 0.0)];
+        $stock->setEarningsMomentumZ(SegmentBooks::open($plant, 1.0, []) + $outlook + $momentum);
         $opened = SegmentBooks::open($plant, $firmGrowth, SegmentBooks::marketGrowths($stock, $macroState->totalTime), $firmShare, $marketShares);
         foreach (array_keys($momentum) as $key) {
             if (str_starts_with((string) $key, SegmentOutlook::STATE_TILT)) {
                 unset($momentum[$key]);
             }
         }
-        $stock->setEarningsMomentumZ($opened + $momentum);
+        $stock->setEarningsMomentumZ($opened + $outlook + $momentum);
         $this->industryShareLedger?->openSegmentBooks($stock, $plant[Segments::MAIN] ?? 0.0, $macroState->totalTime, $excessBefore, IndustryShareLedger::secularExcessGrowth($strategy, $stock));
     }
 }

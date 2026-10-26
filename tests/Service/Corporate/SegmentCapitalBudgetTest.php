@@ -53,8 +53,10 @@ final class SegmentCapitalBudgetTest extends TestCase
         $this->assertSame(0.0, $momentum[CapitalBudgetEngine::STATE_CAPACITY_GAP]);
         $this->assertEqualsWithDelta(0.25 * log(2.0 / 3.0), $momentum[CapitalBudgetEngine::STATE_CAPACITY_SPARE], 1e-12, 'weighed by its share of the revenue');
 
+        // The shares are of the capital the plant sells on, and what the arm builds joins that capital.
+        $ctx->revenueGeneratingCapital = 5_000_000_000.0;
         $this->budget($ledger)->rollSegmentPlant($ctx, 0.0);
-        $this->assertGreaterThan(0.2, SegmentBooks::plant($ctx->stock->getEarningsMomentumZ() ?? [])['ads_and_cloud'] ?? 0.0);
+        $this->assertEqualsWithDelta((0.2 * 5_000_000_000.0 + $growthCapEx) / (5_000_000_000.0 + $growthCapEx), SegmentBooks::plant($ctx->stock->getEarningsMomentumZ() ?? [])['ads_and_cloud'] ?? 0.0, 1e-12);
     }
 
     /**

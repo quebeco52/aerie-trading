@@ -48,6 +48,9 @@ final class SegmentsHarnessTest extends BoardRun
     /** OUTLOOK_SALT=1 pre-writes the outlook salt 1000 + SEED so the outlook draws repeat across runs. */
     protected function afterStocks(array $result): void
     {
+        if ($this->currentMacro !== null && $this->tick % max(1, intdiv($this->tpy, 4)) === 0) {
+            $this->macroRows[] = [round($this->currentTime, 3), (float) $this->currentMacro->nominalGdpIndex, (float) $this->currentMacro->consumerPriceLevel];
+        }
         foreach ($this->stocks as $ticker => $stock) {
             $price = (float) $stock->getPrice();
             if (!isset($this->realisedVol[$ticker]) || $price <= 0.0 || $stock->isBankrupt()) {
@@ -99,8 +102,36 @@ final class SegmentsHarnessTest extends BoardRun
                         < $stock->getManagementProfile()->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), false);
                 } catch (\Throwable) {
                 }
+                $ctxSegs = property_exists($ctx, 'segments') ? $ctx->segments : [];
                 // VENTURE rows (5b-2): any firm that entered this quarter or carries a venture key.
                 $mom = $stock->getEarningsMomentumZ() ?? [];
+                // ORPHANS: a carried segment key for a segment holding no plant (no live venture either), first seen
+                // time and count per (ticker, kind, segment); negative or non-finite plant/pending/goodwill values.
+                $plantOf = [];
+                foreach ($mom as $k => $v) {
+                    if (str_starts_with((string) $k, 'carry:segment_plant:')) {
+                        $plantOf[substr((string) $k, 20)] = (float) $v;
+                    }
+                }
+                foreach ($mom as $k => $v) {
+                    if (!preg_match('/^carry:segment_([a-z_]+):(.+)$/', (string) $k, $mm) || in_array($mm[1], ['plant', 'share', 'tilt'], true)) {
+                        continue;
+                    }
+                    if (in_array($mm[1], ['plant', 'pending', 'goodwill'], true) && (!is_finite((float) $v) || (float) $v < 0.0)) {
+                        $this->badValues[] = [round($this->currentTime, 3), $stock->getTicker(), (string) $k, $v];
+                    }
+                    $live = ($plantOf[$mm[2]] ?? 0.0) > 0.0 || (float) ($mom['carry:segment_pending:' . $mm[2]] ?? 0.0) > 0.0;
+                    if (!$live) {
+                        $ok = $stock->getTicker() . '|' . $mm[1] . '|' . $mm[2];
+                        $this->orphans[$ok] ??= [round($this->currentTime, 3), 0];
+                        ++$this->orphans[$ok][1];
+                    }
+                }
+                foreach ($plantOf as $sk => $v) {
+                    if (!is_finite($v) || $v < 0.0) {
+                        $this->badValues[] = [round($this->currentTime, 3), $stock->getTicker(), 'carry:segment_plant:' . $sk, $v];
+                    }
+                }
                 $vk = [];
                 foreach ($mom as $k => $v) {
                     if (str_contains((string) $k, ':x:') || str_contains((string) $k, 'segment_pending') || str_contains((string) $k, 'segment_learning')) {
@@ -116,7 +147,7 @@ final class SegmentsHarnessTest extends BoardRun
                         }
                     }
                     $segs = [];
-                    foreach ($ctx->segments as $sk => $b) {
+                    foreach ($ctxSegs as $sk => $b) {
                         $segs[$sk] = ['price' => $b['price'] ?? null, 'load' => $b['load'] ?? null];
                     }
                     $xrec = [];
@@ -137,13 +168,13 @@ final class SegmentsHarnessTest extends BoardRun
                     }
                     $this->ventureRows[] = ['t' => round($this->currentTime, 3), 'tk' => $stock->getTicker(), 'entry' => $ctx->marketEntry ?? null, 'exit' => $exit, 'vk' => $vk, 'kappa' => $kap,
                         'segs' => $segs, 'streams' => $ctx->streamRevenue, 'rev' => $ctx->actualRevenue, 'drag' => $ctx->ventureLearningDrag ?? null,
-                        'cip' => (float) $stock->getCipBalance(), 'cap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(),
+                        'cip' => method_exists($stock, 'getCipBalance') ? (float) $stock->getCipBalance() : null, 'cap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(),
                         'style' => $stock->getManagementProfile()->style->value ?? null, 'industry' => (string) $stock->getIndustry(), 'xrec' => $xrec, 'gw' => (float) $stock->getGoodwill()];
                 }
-                $this->capRows[] = [round($this->currentTime, 3), $stock->getTicker(), $ctx->segments !== [], $ctx->strategy->isFinancial(), $fails,
-                    (float) ($ctx->allocation['organic_capex'] ?? 0.0), $ctx->operatingCapex, $ctx->maintenanceCapex, $ctx->scheduledCapex,
+                $this->capRows[] = [round($this->currentTime, 3), $stock->getTicker(), $ctxSegs !== [], $ctx->strategy->isFinancial(), $fails,
+                    (float) ($ctx->allocation['organic_capex'] ?? 0.0), $ctx->operatingCapex ?? null, $ctx->maintenanceCapex ?? null, $ctx->scheduledCapex ?? null,
                     $ctx->actualRevenue, $stock->getNetPpe(), $stock->getManagementProfile()->style->value ?? null,
-                    property_exists($ctx, 'plantReplaced') ? $ctx->plantReplaced : null, $ctx->plantLoad, $ctx->industryPriceLevel,
+                    property_exists($ctx, 'plantReplaced') ? $ctx->plantReplaced : null, $ctx->plantLoad ?? null, $ctx->industryPriceLevel ?? null,
                     $ctx->macroState->outputGap ?? null, (string) $stock->getIndustry(),
                     array_filter($stock->getEarningsMomentumZ() ?? [], static fn($k): bool => str_starts_with((string) $k, 'carry:segment_pays:'), ARRAY_FILTER_USE_KEY)];
             });
@@ -191,6 +222,13 @@ final class SegmentsHarnessTest extends BoardRun
 
     /** @var list<array<string, mixed>> VENTURE rows (see onStart). */
     private array $ventureRows = [];
+
+    /** @var array<string, array{0: float, 1: int}> ORPHANS (see onStart). */
+    private array $orphans = [];
+    /** @var list<list<mixed>> */
+    private array $badValues = [];
+    /** @var list<list<float>> quarterly [t, nominal GDP index, CPI] */
+    private array $macroRows = [];
 
     /** @var list<list<mixed>> CAP_PROBE rows (see onStart). */
     private array $capRows = [];
@@ -480,14 +518,39 @@ final class SegmentsHarnessTest extends BoardRun
                 }
             }
             $slashKeys = [];
+            $slashDetail = [];
+            $indTable = [];
+            foreach ($this->stocks as $s0) {
+                foreach (array_keys($s0->getEarningsMomentumZ() ?? []) as $k0) {
+                    if (preg_match('/^carry:segment_plant:x:(.+)$/', (string) $k0, $m0)) {
+                        $inds[$m0[1]] = true;
+                    }
+                }
+            }
             foreach (array_keys($inds) as $ind) {
                 foreach (array_keys($store->readIndustry((string) $ind)) as $key) {
                     if (str_contains((string) $key, '/')) {
                         $slashKeys[] = $ind . '|' . $key;
+                        $r = $store->readIndustry((string) $ind)[$key];
+                        [$own, $seg] = explode('/', (string) $key, 2);
+                        $holder = $this->stocks[$own] ?? null;
+                        $slashDetail[] = [$ind, $key, (float) ($r['capacity'] ?? 0.0), (float) ($r['revenue'] ?? 0.0), (int) ($r['tick'] ?? 0),
+                            $holder === null ? null : (float) (($holder->getEarningsMomentumZ() ?? [])['carry:segment_plant:' . $seg] ?? 0.0)];
                     }
                 }
             }
-            file_put_contents((string) getenv('SEG_OUT'), json_encode(['rows' => $this->segRows, 'leaks' => $this->segLeaks, 'slash' => $slashKeys, 'deals' => $this->segDeals, 'cap' => $this->capRows, 'ventures' => $this->ventureRows]));
+            foreach (array_keys($inds) as $ind) {
+                $n = 0;
+                $rev = 0.0;
+                foreach ($store->readIndustry((string) $ind) as $r) {
+                    if ((float) ($r['revenue'] ?? 0.0) > 0.0 && $this->tick - (int) ($r['tick'] ?? 0) <= $this->tpy) {
+                        ++$n;
+                        $rev += (float) $r['revenue'];
+                    }
+                }
+                $indTable[(string) $ind] = [$n, $rev];
+            }
+            file_put_contents((string) getenv('SEG_OUT'), json_encode(['ind' => $indTable, 'slashDetail' => $slashDetail, 'orphans' => $this->orphans, 'bad' => $this->badValues, 'macro' => $this->macroRows, 'rows' => $this->segRows, 'leaks' => $this->segLeaks, 'slash' => $slashKeys, 'deals' => $this->segDeals, 'cap' => $this->capRows, 'ventures' => $this->ventureRows]));
         }
         $out = getenv('IDLE_OUT');
         if ($out) {

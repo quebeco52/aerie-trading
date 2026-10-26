@@ -388,10 +388,13 @@ class AcquisitionEngine
         // it; otherwise a company that keeps plant by segment buys into one of its markets, drawn in proportion to its
         // plant.
         $ctx->entry = $this->chooseEntryMarket($ctx);
+        // Drawn for every company that keeps plant by segment, entering or not, so the keyed choice of a new industry
+        // moves no later draw on the stream.
+        $segmentDraw = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) !== null ? $this->mathUtility->generateUniform() : null;
         if ($ctx->entry !== null) {
             $ctx->segment = Segments::enteredKey($ctx->entry['industry']);
-        } elseif (SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) !== null) {
-            $ctx->segment = SegmentBooks::acquiringSegment($stock, $this->mathUtility->generateUniform());
+        } elseif ($segmentDraw !== null) {
+            $ctx->segment = SegmentBooks::acquiringSegment($stock, $segmentDraw);
         }
         $this->drawTargetEconomics($ctx);
 
@@ -432,7 +435,7 @@ class AcquisitionEngine
     {
         $stock = $ctx->acquirer;
         $ledger = $this->industryShareLedger;
-        if ($ledger === null || $ctx->strategy->isFinancial() || $stock->getGrossPpe() === null
+        if ($ledger === null || $ctx->strategy->isFinancial() || $stock->getGrossPpe() === null || !SegmentBooks::canEnter($stock)
             || $ctx->macroState->totalTime < SegmentEntry::FIRST_ENTRY_YEARS || SegmentBooks::isDiversifying($stock)
             || (!IndustryAdjacency::isHoldingCompany((string) $stock->getIndustry()) && SegmentBooks::paysAnywhere($stock))) {
             return null;
@@ -465,11 +468,14 @@ class AcquisitionEngine
         $ctx->targetRoic = max(self::MA_TARGET_ROIC_FLOOR, min(self::MA_TARGET_ROIC_CEILING, $targetRoicDraw));
 
         // A target earns like the business it joins: the segment bought into, for a company that keeps plant by
-        // segment, or in a new industry its incumbents' margin and turnover.
+        // segment, or in a new industry its incumbents' margin and turnover. One added to a business the company
+        // entered in play is an incumbent there too, and earns as they do, not what its new owner turned out to earn.
         $economics = SegmentBooks::companyEconomics($ctx->acquirer->getEarningsMomentumZ() ?? []);
-        $joinedMargin = $ctx->entry['margin'] ?? $economics['margins'][$ctx->segment] ?? (float) $ctx->acquirer->getOperatingMargin();
+        $entered = $ctx->entry === null ? Segments::enteredIndustry($ctx->segment) : null;
+        $peers = $entered !== null ? $this->industryShareLedger?->resolvePeerEconomics($entered, $ctx->acquirer->getTicker(), $ctx->tickCount, $ctx->ticksPerYear) : null;
+        $joinedMargin = $ctx->entry['margin'] ?? $peers['margin'] ?? $economics['margins'][$ctx->segment] ?? (float) $ctx->acquirer->getOperatingMargin();
         $ctx->targetMargin = max(0.01, $joinedMargin * $this->mathUtility->generateUniformBetween(self::MA_TARGET_MARGIN_SHARE_MIN, self::MA_TARGET_MARGIN_SHARE_MAX));
-        $ctx->targetTurnover = $ctx->entry['turnover'] ?? $economics['turnovers'][$ctx->segment] ?? null;
+        $ctx->targetTurnover = $ctx->entry['turnover'] ?? $peers['turnover'] ?? $economics['turnovers'][$ctx->segment] ?? null;
     }
 
     /**
@@ -716,6 +722,7 @@ class AcquisitionEngine
         // own are then its segments' blend again.
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         if (SegmentBooks::plant($momentum) !== null) {
+            $heldBefore = ((SegmentBooks::plant($momentum) ?? [])[$ctx->segment] ?? 0.0) * $oldRevenueCapital;
             $momentum = SegmentBooks::acquireIntoBooks($momentum, $ctx->segment, $oldRevenueCapital, $netAssetsAcquired, $acquiredRevenue, $acquiredOperatingIncome, SegmentBooks::jointSegments($stock)) + $momentum;
             $stock->setEarningsMomentumZ($momentum);
             // A business bought in a new industry takes its market, its share of the revenue and its ledger record at
@@ -730,7 +737,8 @@ class AcquisitionEngine
                 $this->industryShareLedger?->openAcquiredRecord($stock, $ctx->segment, $acquiredRevenue, SegmentBooks::entryMarketShare($acquiredRevenue, $ctx->entry['market'], 0.0), $ctx->macroState, $ctx->tickCount);
             } elseif (Segments::enteredIndustry($ctx->segment) !== null) {
                 $key = SegmentBooks::STATE_GOODWILL . $ctx->segment;
-                $momentum = [$key => (float) ($momentum[$key] ?? 0.0) + $ctx->goodwillRecorded] + $momentum;
+                $kept = $heldBefore > 0.0 ? $heldBefore / ($heldBefore + max(0.0, $netAssetsAcquired)) : 0.0;
+                $momentum = [$key => (float) ($momentum[$key] ?? 0.0) + $ctx->goodwillRecorded] + SegmentBooks::boughtInto($momentum, $ctx->segment, $kept) + $momentum;
                 $stock->setEarningsMomentumZ($momentum);
             }
             $economics = SegmentBooks::companyEconomics($momentum);

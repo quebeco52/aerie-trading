@@ -1062,6 +1062,69 @@ class AcquisitionEngineTest extends TestCase
     }
 
     /**
+     * A company that keeps plant by segment takes the same draws from the stream for a deal whether it buys into a new
+     * industry or at home: the choice of a new industry is keyed, so it moves no later draw.
+     */
+    public function testADealTakesTheSameDrawsWhetherOrNotItEntersANewIndustry(): void
+    {
+        $draws = function (bool $pays): array {
+            [$engine, , $stock] = $this->entrant(pays: $pays);
+            $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 1.0], 1.0, []) + [SegmentBooks::STATE_PAYS . Segments::MAIN => $pays ? 1.0 : 0.0]);
+            $this->mathUtilityMock->script(generateUniform: [0.0, 0.5]);
+            $before = $this->mathUtilityMock->callCount('generateUniform');
+            $this->assertIsArray($engine->evaluatePrivateAcquisition($stock, $this->enteringMacro(), 1.0, self::ENTRY_TICK, 252));
+
+            return [$this->mathUtilityMock->callCount('generateUniform') - $before, array_keys(SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) ?? [])];
+        };
+
+        [$entering, $enteredSegments] = $draws(false);
+        [$atHome, $homeSegments] = $draws(true);
+
+        $this->assertContains(Segments::enteredKey(self::ENTERED), $enteredSegments, 'the fixture enters a new industry');
+        $this->assertSame([Segments::MAIN], $homeSegments);
+        $this->assertSame($atHome, $entering);
+    }
+
+    /**
+     * A carmaker whose machinery venture turned out to earn far above the industry's incumbents adds a machinery maker
+     * to it: the business bought is an incumbent and earns as they do, not what the venture turned out to earn, and it
+     * brings its own trade, so it neither pays the venture's learning cost nor shares what is still to show of its
+     * outcome.
+     */
+    public function testABusinessAddedToAVentureEarnsAsItsIndustryDoesAndHasNothingToLearn(): void
+    {
+        $segment = Segments::enteredKey(self::ENTERED);
+        [$engine, , $stock] = $this->entrant(pays: true);
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.8, $segment => 0.2], 1.0, []) + [
+            SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.10,
+            SegmentBooks::STATE_TURNOVER . Segments::MAIN => 1.0,
+            SegmentBooks::STATE_MARGIN . $segment => 0.90,
+            SegmentBooks::STATE_TURNOVER . $segment => 1.5,
+            SegmentBooks::STATE_LEARNING . $segment => 0.5,
+            SegmentBooks::STATE_LEARNING_START . $segment => 2.5,
+            SegmentBooks::STATE_VENTURE_OUTCOME . $segment => 1.0,
+            SegmentBooks::STATE_VENTURE_START . $segment => 1.0,
+            SegmentBooks::STATE_PAYS . Segments::MAIN => 1.0,
+            SegmentBooks::STATE_PAYS . $segment => 1.0,
+        ]);
+        // The deal's gate passes on the first uniform; the second draws the venture, the last fifth of the plant.
+        $this->mathUtilityMock->script(generateUniform: [0.0, 0.95]);
+
+        $this->assertIsArray($engine->evaluatePrivateAcquisition($stock, $this->enteringMacro(), 1.0, self::ENTRY_TICK, 252));
+
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $kept = ($momentum[SegmentBooks::STATE_LEARNING . $segment] ?? 0.0) / 0.5;
+        $this->assertGreaterThan(0.2, (SegmentBooks::plant($momentum) ?? [])[$segment] ?? 0.0, 'the deal grows the venture');
+        $this->assertGreaterThan(0.0, $kept);
+        $this->assertLessThan(1.0, $kept);
+        // Both turn their plant at the incumbents' 1.5, so the margin blends on the plant: the venture's 90% on what it
+        // held, the drawn 80% of the incumbent's 30% on what was bought.
+        $this->assertEqualsWithDelta((0.90 * $kept) + (0.80 * 0.30 * (1.0 - $kept)), $momentum[SegmentBooks::STATE_MARGIN . $segment] ?? null, 1e-9);
+        $this->assertEqualsWithDelta(2.5 * $kept, $momentum[SegmentBooks::STATE_LEARNING_START . $segment] ?? null, 1e-12, 'only the plant it built learns');
+        $this->assertEqualsWithDelta(1.0 * $kept, $momentum[SegmentBooks::STATE_VENTURE_OUTCOME . $segment] ?? null, 1e-12, 'only the plant it built shows the outcome');
+    }
+
+    /**
      * The plant a deal buys in a new industry was supplying it already, from the fringe: anchored at the deal, and
      * again once the buyer's first report prices it at the share of the market its books hold it to, it leaves the
      * incumbent's market exactly as supplied as before, with nothing waiting on the fringe to yield. The industry's

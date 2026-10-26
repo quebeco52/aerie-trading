@@ -56,6 +56,8 @@ final class PriceVolProbe
     /** @var list<Stock> live names in the tracker's order, set before each stock update */
     public array $queue = [];
     public int $unmatched = 0;
+    /** Optional per-tick consumer of each name's channel vector and fair value: fn(string $tk, list<float> $c, float $fv). */
+    public ?\Closure $sink = null;
 
     /** @param list<int> $horizons */
     public function __construct(private StockTracker $tracker, private LiquidityEngine $liq, private int $skip, private array $horizons) {}
@@ -213,6 +215,9 @@ final class PriceVolProbe
         $c[12] = log(((float) $s->getPrice() + $div) / $this->pWarn);
         if (!isset($this->meta[$tk])) {
             $this->meta[$tk] = ['sector' => $s->getSector(), 'industry' => $s->getIndustry(), 'sigma' => (float) $s->getVolatility()];
+        }
+        if ($this->sink !== null) {
+            ($this->sink)($tk, $c, $this->lastFv[$tk] ?? 0.0);
         }
         if ($this->tick > $this->skip) {
             foreach ($this->cur['a'] as $k => $v) {

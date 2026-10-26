@@ -78,6 +78,11 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
   - `cal1` (5b-4 calibration, working tree) / `cal1old` (+ `ovr_cal1old/` SegmentEntry with the old distance dials;
     `cal1same` = unmodified copy, OUT equal to cal1) vs `head` = 7c53cb94: `cal0.py` + `cal1x.py <seeds> ARM` (bought
     outcomes, for-sale/sold by closeness, sale terms, goodwill tracking). Venture rows carry company goodwill `gw`.
+  - Hard check (whole rework): `pre` = BASE 5d3b769a vs `seg` (working tree; NOTE the `head` arm is a BASE arm too),
+    `hard1.py <seeds> pre seg` (board, industries |t| > 3, firms), `hard3.py <seeds> pre seg [head40]` (x: deal pricing,
+    entered margins vs peers, M&A volume); `head40` = working tree on the live macro (YEARS=40), `hard2.py <seeds> head40 40`
+    (identities, orphan keys, weird outcomes, long-run drift). The probe logs orphans, bad values, quarterly GDP index,
+    the industry ledger table and every TICKER/seg record at the end.
   - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
     TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
   - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events

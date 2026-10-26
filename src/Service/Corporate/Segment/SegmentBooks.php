@@ -671,14 +671,18 @@ final class SegmentBooks
     {
         $targets = self::filed($momentum, self::STATE_TARGET);
         $margins = self::filed($momentum, self::STATE_MARGIN);
+        $learning = self::learningGaps($momentum);
+        // A business still learning its trade earns its learned margin less what it still falls short by, nothing while
+        // it loses money (learningDrag()).
+        $earns = static fn(string $key): float => ($targets[$key] ?? 0.0) * ($margins[$key] ?? 1.0) * max(0.0, 1.0 - ($learning[$key] ?? 0.0));
         $income = 0.0;
-        foreach ($targets as $key => $target) {
-            $income += $target * ($margins[$key] ?? 1.0);
+        foreach (array_keys($targets) as $key) {
+            $income += $earns((string) $key);
         }
 
         return [
             'revenue' => $targets[$segment] ?? 0.0,
-            'income' => $income > 0.0 ? ($targets[$segment] ?? 0.0) * ($margins[$segment] ?? 1.0) / $income : ($targets[$segment] ?? 0.0),
+            'income' => $income > 0.0 ? $earns($segment) / $income : ($targets[$segment] ?? 0.0),
         ];
     }
 
@@ -686,16 +690,21 @@ final class SegmentBooks
      * The segment a company that keeps plant by segment would sell whole: of those it can sell apart from its main
      * business (not one whose output rides the main plant, nor one on its model's own path, whose value is mostly the
      * path still ahead and not the share of the income a sale is priced on), the one whose plant earns least, its share
-     * of the operating income over its share of the plant. Null when it has none.
+     * of the operating income over its share of the plant. A business entered in play is not sold this way before it
+     * has shown what it earns: not while its plant is still being built, while it still loses money learning the trade,
+     * or while one bought is being integrated. Null when it has none.
      */
     public static function weakestSegment(Stock $stock): ?string
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $learning = self::learningGaps($momentum);
+        $pending = self::pending($momentum);
         $weakest = null;
         $lowest = INF;
         foreach (self::plant($momentum) ?? [] as $segment => $share) {
             if ($segment === Segments::MAIN || $share <= 0.0 || in_array($segment, self::jointSegments($stock), true)
-                || Sectors::strategyFor($stock->getIndustry())->resolveSegmentPath($stock, $segment) !== null) {
+                || Sectors::strategyFor($stock->getIndustry())->resolveSegmentPath($stock, $segment) !== null
+                || isset($pending[$segment]) || ($learning[$segment] ?? 0.0) >= 1.0 || !self::isIntegrated($momentum, $segment)) {
                 continue;
             }
             $earning = self::earningShares($momentum, $segment)['income'] / $share;
@@ -711,7 +720,8 @@ final class SegmentBooks
     /**
      * The segments a deal can buy into, each with its share of the plant: not a by-product, whose plant is bought only
      * with the plant it rides; not one on its model's own path, which would not carry a bought rival along it; not a
-     * venture its company has given up on, nor one without plant. The main segment alone before the books open.
+     * venture its company has given up on or a business it has put up for sale, nor one without plant. The main
+     * segment alone before the books open.
      *
      * @return array<string, float>
      */
@@ -722,7 +732,7 @@ final class SegmentBooks
         $strategy = Sectors::strategyFor($stock->getIndustry());
         foreach (array_keys($plant) as $segment) {
             if (in_array($segment, self::jointSegments($stock), true) || $strategy->resolveSegmentPath($stock, $segment) !== null
-                || self::isAbandoned($momentum, $segment)) {
+                || self::isAbandoned($momentum, $segment) || isset($momentum[self::STATE_FOR_SALE . $segment])) {
                 unset($plant[$segment]);
             }
         }
@@ -962,6 +972,16 @@ final class SegmentBooks
     }
 
     /**
+     * Whether a company's books can take a business in a new industry: open already, or on one plant, where entering
+     * opens them with all of it in the main segment. A company whose lines sell into several markets waits for its own
+     * books to open, or its other segments' lines would be left out of them.
+     */
+    public static function canEnter(Stock $stock): bool
+    {
+        return self::plant($stock->getEarningsMomentumZ() ?? []) !== null || Segments::forTicker($stock->getTicker()) === null;
+    }
+
+    /**
      * Whether its company has given up on a segment it entered in play.
      *
      * @param array<string, mixed> $momentum
@@ -1006,25 +1026,29 @@ final class SegmentBooks
      *
      * @param array<string, mixed> $momentum
      * @param float $completedShare The share of the company's construction placed in service this quarter.
-     * @param float $plantBase      The plant the shares are of (net PP&E).
+     * @param float $capital        The capital the shares are of, the company's revenue-generating capital, with the
+     *                              plant placed in service this quarter in it.
      * @return array<string, float> Carried state.
      */
-    public static function completePending(array $momentum, float $completedShare, float $plantBase): array
+    public static function completePending(array $momentum, float $completedShare, float $capital): array
     {
         $pending = self::pending($momentum);
         if ($pending === []) {
             return [];
         }
 
-        $plant = self::plant($momentum) ?? [Segments::MAIN => 1.0];
-        $base = max(0.0, $plantBase);
-        $state = [];
+        $placed = [];
         foreach ($pending as $segment => $amount) {
-            $placed = $amount * max(0.0, min(1.0, $completedShare));
-            $placed = $amount - $placed < CapExEngine::CIP_SNAP_AMOUNT ? $amount : $placed;
-            $plant = self::acquireInto($plant, $segment, $base, $placed);
-            $base += $placed;
-            $state[self::STATE_PENDING . $segment] = $amount - $placed;
+            $done = $amount * max(0.0, min(1.0, $completedShare));
+            $placed[$segment] = $amount - $done < CapExEngine::CIP_SNAP_AMOUNT ? $amount : $done;
+        }
+        $plant = self::plant($momentum) ?? [Segments::MAIN => 1.0];
+        $base = max(0.0, $capital > array_sum($placed) ? $capital - array_sum($placed) : $capital);
+        $state = [];
+        foreach ($placed as $segment => $amount) {
+            $plant = self::acquireInto($plant, $segment, $base, $amount);
+            $base += $amount;
+            $state[self::STATE_PENDING . $segment] = $pending[$segment] - $amount;
         }
         foreach ($plant as $segment => $share) {
             $state[self::STATE_PLANT . $segment] = $share;
@@ -1093,6 +1117,44 @@ final class SegmentBooks
             self::STATE_INTEGRATING . $segment => 1.0,
             self::STATE_GOODWILL . $segment => max(0.0, $goodwill),
         ];
+    }
+
+    /**
+     * The state that keeps what a business entered in play has still to learn and show to the part of it that was there
+     * before a going concern was bought into it: the business bought brings its own trade and earnings, so it neither
+     * pays to learn nor shares the outcome. How far short of its learned margin the business falls, where that started
+     * and what is still to show of its outcome all scale by the share of its plant that was there before.
+     *
+     * @param array<string, mixed> $momentum
+     * @param float $kept The share of the segment's plant that was there before the deal.
+     * @return array<string, float> Carried state.
+     */
+    public static function boughtInto(array $momentum, string $segment, float $kept): array
+    {
+        $state = [];
+        foreach ([self::STATE_LEARNING, self::STATE_LEARNING_START, self::STATE_VENTURE_OUTCOME] as $prefix) {
+            if (isset($momentum[$prefix . $segment])) {
+                $state[$prefix . $segment] = (float) $momentum[$prefix . $segment] * max(0.0, min(1.0, $kept));
+            }
+        }
+
+        return $state;
+    }
+
+    /**
+     * The carried state without what a business entered in play still had to build, learn, show or be sold for, once it
+     * is sold: its plant share stays at none, so its company does not enter its industry again.
+     *
+     * @param array<string, mixed> $momentum
+     * @return array<string, mixed>
+     */
+    public static function withoutEntryState(array $momentum, string $segment): array
+    {
+        foreach ([self::STATE_PENDING, self::STATE_LEARNING, self::STATE_LEARNING_START, self::STATE_VENTURE_OUTCOME, self::STATE_VENTURE_TARGET, self::STATE_INTEGRATING, self::STATE_FOR_SALE, self::STATE_GOODWILL] as $prefix) {
+            unset($momentum[$prefix . $segment]);
+        }
+
+        return $momentum;
     }
 
     /**

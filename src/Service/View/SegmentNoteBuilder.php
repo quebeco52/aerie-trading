@@ -81,8 +81,17 @@ class SegmentNoteBuilder
         $total = array_sum(array_column($segments, 'revenue'));
         // Margins and assets are known once the company keeps its plant by segment with economics of its own.
         $economics = SegmentBooks::companyEconomics($stock->getEarningsMomentumZ() ?? []);
+        // A business still learning its trade earns its learned margin less what it still falls short by, so its loss
+        // shows on its own row rather than spread over the others.
+        $learning = SegmentBooks::learningGaps($stock->getEarningsMomentumZ() ?? []);
+        $margins = [];
+        $blend = 0.0;
+        foreach ($economics['margins'] ?? [] as $key => $margin) {
+            $margins[$key] = $margin * (1.0 - ($learning[$key] ?? 0.0));
+            $blend += ($economics['sales'][$key] ?? 0.0) * $margins[$key];
+        }
         $reported = $report?->getOperatingMargin();
-        $scale = $economics !== null && $reported !== null && $economics['margin'] > 0.0 ? (float) $reported / $economics['margin'] : null;
+        $scale = $reported !== null && $blend > 0.0 ? (float) $reported / $blend : null;
         $rows = [];
         foreach ($segments as $key => $segment) {
             $rows[] = [
@@ -91,7 +100,7 @@ class SegmentNoteBuilder
                 'outlook' => $outlooks[$segment['industry']] ?? null,
                 'revenue' => $segment['revenue'] > 0.0 ? $segment['revenue'] : null,
                 'share' => $total > 0.0 && $segment['revenue'] > 0.0 ? $segment['revenue'] / $total : null,
-                'margin' => $scale !== null && isset($economics['margins'][$key]) ? $economics['margins'][$key] * $scale : null,
+                'margin' => $scale !== null && isset($margins[$key]) ? $margins[$key] * $scale : null,
                 'assets' => $plant[$key] ?? null,
             ];
         }

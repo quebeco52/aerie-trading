@@ -342,7 +342,7 @@ final class CapitalBudgetEngine
         $strategy = $ctx->strategy;
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $learning = SegmentBooks::learningGaps($momentum);
-        if ($ledger === null || $strategy->isFinancial() || !$strategy->allowsPhysicalOrganicCapex() || $stock->getGrossPpe() === null
+        if ($ledger === null || $strategy->isFinancial() || !$strategy->allowsPhysicalOrganicCapex() || $stock->getGrossPpe() === null || !SegmentBooks::canEnter($stock)
             || IndustryAdjacency::isHoldingCompany((string) $stock->getIndustry()) || $ctx->macroState->totalTime < SegmentEntry::FIRST_ENTRY_YEARS
             || SegmentBooks::pending($momentum) !== [] || max([0.0, ...array_values($learning)]) >= 1.0) {
             return 0.0;
@@ -410,10 +410,12 @@ final class CapitalBudgetEngine
         // holds of its own.
         $marketShare = SegmentBooks::entryMarketShare($revenue, $plan['market'], 0.0);
         $targetShare = min($firmShare, $plan['room']);
+        // Plant shares are of the capital the company's plant sells on, as its revenue is.
+        $capital = $ctx->revenueGeneratingCapital > 0.0 ? $ctx->revenueGeneratingCapital : $plantBase;
         $stock->setEarningsMomentumZ(SegmentBooks::startVenture(
             $segment,
             $construction,
-            $construction / ($plantBase + $construction),
+            $construction / ($capital + $construction),
             CorporateMetrics::secularMarketGrowth($stock, $years),
             SegmentBooks::marketGrowths($stock, $years)[$segment] ?? 1.0,
             $firmShare,
@@ -626,9 +628,11 @@ final class CapitalBudgetEngine
                 + (isset($mainPlant[$segment]) && array_sum($mainPlant) > 0.0 ? $ctx->scheduledCapex * $mainPlant[$segment] / array_sum($mainPlant) : 0.0);
             $loads[$segment] = (in_array($segment, $joint, true) ? ($ctx->segments[Segments::MAIN]['load'] ?? 1.0) : $books['load']) * ($books['replaced'] ?? 1.0);
         }
+        // The shares are of the capital the plant sells on, so what is built is weighed against that, not the plant
+        // alone.
         $plant = SegmentBooks::rollPlant(
             array_map(static fn(array $books): float => $books['plant'], $ctx->segments),
-            $ctx->segmentPlantBase,
+            $ctx->revenueGeneratingCapital > 0.0 ? $ctx->revenueGeneratingCapital : $ctx->segmentPlantBase,
             $growth,
             $loads,
             $ctx->strategy->depreciatesByUnitsOfProduction() ? 0.0 : $ctx->quarterlyDepreciation,

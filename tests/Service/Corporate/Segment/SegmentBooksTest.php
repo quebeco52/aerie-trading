@@ -259,6 +259,67 @@ class SegmentBooksTest extends TestCase
         $this->assertNull(SegmentBooks::weakestSegment((new Stock())->setTicker('LOON')->setIndustry('Telecom Services')));
     }
 
+    /**
+     * A business entered in play is not sold as the weakest before it has shown what it earns: not while its plant is
+     * being built, while it still loses money learning the trade, or while one bought is being integrated. Once it has
+     * learned enough to earn, its income share counts only what it earns so far, and once sold, what it still had to
+     * build, learn, show or be sold for goes with it, its place kept at no plant so it is not entered again.
+     */
+    public function testABusinessEnteredInPlayIsSoldOnlyOnceItHasShownWhatItEarns(): void
+    {
+        $segment = Segments::enteredKey('Farm & Heavy Construction Machinery');
+        $stock = (new Stock())->setTicker('ZZZZ')->setIndustry('Auto Manufacturers');
+        $books = SegmentBooks::open([Segments::MAIN => 0.9, $segment => 0.1], 1.0, []) + [
+            SegmentBooks::STATE_TARGET . Segments::MAIN => 0.9,
+            SegmentBooks::STATE_TARGET . $segment => 0.1,
+            SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.10,
+            SegmentBooks::STATE_MARGIN . $segment => 0.10,
+        ];
+        $this->assertSame($segment, SegmentBooks::weakestSegment($stock->setEarningsMomentumZ($books)));
+        $this->assertNull(SegmentBooks::weakestSegment($stock->setEarningsMomentumZ([SegmentBooks::STATE_PENDING . $segment => 1_000.0] + $books)), 'still being built');
+        $this->assertNull(SegmentBooks::weakestSegment($stock->setEarningsMomentumZ([SegmentBooks::STATE_LEARNING . $segment => 1.5] + $books)), 'still losing money');
+        $this->assertNull(SegmentBooks::weakestSegment($stock->setEarningsMomentumZ([SegmentBooks::STATE_INTEGRATING . $segment => 0.5] + $books)), 'still being integrated');
+
+        $learning = [SegmentBooks::STATE_LEARNING . $segment => 0.5] + $books;
+        $this->assertSame($segment, SegmentBooks::weakestSegment($stock->setEarningsMomentumZ($learning)));
+        $this->assertEqualsWithDelta(0.1 * 0.5 / ((0.9 * 1.0) + (0.1 * 0.5)), SegmentBooks::earningShares($learning, $segment)['income'], 1e-12, 'half its learned margin so far');
+
+        $sold = SegmentBooks::withoutEntryState([
+            SegmentBooks::STATE_PLANT . $segment => 0.0,
+            SegmentBooks::STATE_PENDING . $segment => 10.0,
+            SegmentBooks::STATE_LEARNING . $segment => 0.2,
+            SegmentBooks::STATE_LEARNING_START . $segment => 3.0,
+            SegmentBooks::STATE_VENTURE_OUTCOME . $segment => -0.1,
+            SegmentBooks::STATE_VENTURE_TARGET . $segment => 2.0,
+            SegmentBooks::STATE_INTEGRATING . $segment => 0.0,
+            SegmentBooks::STATE_FOR_SALE . $segment => 30.0,
+            SegmentBooks::STATE_GOODWILL . $segment => 0.0,
+        ] + $books, $segment);
+        $this->assertSame(0.0, $sold[SegmentBooks::STATE_PLANT . $segment] ?? null);
+        foreach ([SegmentBooks::STATE_PENDING, SegmentBooks::STATE_LEARNING, SegmentBooks::STATE_LEARNING_START, SegmentBooks::STATE_VENTURE_OUTCOME, SegmentBooks::STATE_VENTURE_TARGET, SegmentBooks::STATE_INTEGRATING, SegmentBooks::STATE_FOR_SALE, SegmentBooks::STATE_GOODWILL] as $prefix) {
+            $this->assertArrayNotHasKey($prefix . $segment, $sold);
+        }
+        $this->assertArrayHasKey($segment, SegmentBooks::industries($stock->setEarningsMomentumZ($sold)), 'its place is kept');
+    }
+
+    /**
+     * A deal buys into a business its company has put up for sale no more; a company whose lines sell into several
+     * markets enters a new one only once its own books are open.
+     */
+    public function testNothingIsBoughtIntoABusinessForSaleAndBooksOpenBeforeAnEntry(): void
+    {
+        $segment = Segments::enteredKey('Farm & Heavy Construction Machinery');
+        $stock = (new Stock())->setTicker('ZZZZ')->setIndustry('Auto Manufacturers');
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.8, $segment => 0.2], 1.0, []) + [SegmentBooks::STATE_FOR_SALE . $segment => 10.0]);
+        $this->assertSame([Segments::MAIN], array_keys(SegmentBooks::dealSegments($stock)));
+        $this->assertSame(Segments::MAIN, SegmentBooks::acquiringSegment($stock, 0.95));
+
+        $this->assertTrue(SegmentBooks::canEnter((new Stock())->setTicker('ZZZZ')->setIndustry('Auto Manufacturers')), 'one plant opens its books as it enters');
+        $weav = (new Stock())->setTicker('WEAV')->setIndustry('Internet Retail');
+        $this->assertFalse(SegmentBooks::canEnter($weav), 'its own segments\' books are not open yet');
+        $this->assertTrue(SegmentBooks::canEnter($weav->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []))));
+    }
+
     /** A deal buys into a segment in proportion to its plant; a by-product is bought only with the main plant. */
     public function testADealBuysIntoASegmentInProportionToItsPlant(): void
     {
@@ -655,7 +716,8 @@ class SegmentBooksTest extends TestCase
         $segment = Segments::enteredKey('Computer Hardware');
         $momentum = SegmentBooks::open([Segments::MAIN => 1.0], 1.0, []) + [SegmentBooks::STATE_PENDING . $segment => 40_000.0];
 
-        $state = SegmentBooks::completePending($momentum, 0.25, 100_000.0);
+        // The company's capital with the quarter's 10,000 placed in it.
+        $state = SegmentBooks::completePending($momentum, 0.25, 110_000.0);
 
         $this->assertEqualsWithDelta(30_000.0, $state[SegmentBooks::STATE_PENDING . $segment] ?? null, 1e-9);
         $plant = SegmentBooks::plant($state + $momentum) ?? [];

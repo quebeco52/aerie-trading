@@ -492,7 +492,9 @@ class DivestitureEngineTest extends TestCase
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $this->assertSame(0.0, (SegmentBooks::plant($momentum) ?? [])[$machinery] ?? null, 'sold whole');
         $this->assertEqualsWithDelta(1_000_000_000.0, (float) $stock->getGoodwill(), 1.0, 'what was paid for it leaves with it');
-        $this->assertSame(0.0, $momentum[SegmentBooks::STATE_GOODWILL . $machinery] ?? null);
+        foreach ([SegmentBooks::STATE_GOODWILL, SegmentBooks::STATE_FOR_SALE, SegmentBooks::STATE_INTEGRATING, SegmentBooks::STATE_VENTURE_OUTCOME] as $prefix) {
+            $this->assertArrayNotHasKey($prefix . $machinery, $momentum, 'what it still had to show or be sold for leaves with it');
+        }
         $this->assertStringContainsString('sold its heavy machinery business', (string) $published);
         $this->assertStringContainsString('loss on sale', (string) $published);
         $this->assertBalanced($stock, 'selling a business bought into a new industry');
