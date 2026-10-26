@@ -41,33 +41,43 @@ final class SegmentEntry
      */
     public const ATTAINMENT_DISTANCE_PENALTY = 0.2;
     /**
-     * What each step away from what it knows really costs a company of its rivals' margin, against what it counts on:
-     * twice as much, so a venture next door turns out ~4% below its plan on average and one on a stretch ~18% below.
-     * Managers overrate how far their skills carry (Roll 1986), the more so the further from home: diversifying bidders
-     * lose value (Morck, Shleifer & Vishny 1990) and firms leave the businesses least like their own (Chang 1996).
+     * What each step away from what it knows really costs a company of its rivals' margin, whether it builds or buys:
+     * twice what a builder counts on, so a venture next door turns out ~4% below its plan on average and one on a
+     * stretch ~18% below, and a business bought on a stretch earns ~70% of what it did. Managers overrate how far their
+     * skills carry (Roll 1986), the more so the further from home: diversifying bidders lose value (Morck, Shleifer &
+     * Vishny 1990) and firms leave the businesses least like their own (Chang 1996).
      */
     public const REALISED_DISTANCE_PENALTY = 0.4;
     /**
      * Rate per year at which a company with the cash and a market worth entering goes ahead, before its manager's
-     * appetite for deals: 0.025, about once in forty years, as entry by listed firms is rare (Chang 1996; Miller & Yang
-     * 2016).
+     * appetite for deals: 0.015, about once in sixty-five years, as entry by listed firms is rare (Chang 1996; Miller &
+     * Yang 2016).
      */
-    public const ENTRY_RATE = 0.025;
+    public const ENTRY_RATE = 0.015;
     /** Years of play before any company enters: a year of reports has filed what each industry's plant earns. */
     public const FIRST_ENTRY_YEARS = 1.0;
 
     // --- How It Turns Out ---
     /**
-     * How widely what a venture turns out to earn spreads around what its company expects, as a log standard deviation
-     * of its margin once learned: 0.3 for a business next door, plus this much for each step away from what it knows.
+     * How widely what a business entered in play turns out to earn spreads around what its company expects, as a log
+     * standard deviation of its margin once learned or integrated: 0.3, plus this much for each step away from what it
+     * knows.
      */
     public const OUTCOME_SPREAD_BASE = 0.3;
     /**
      * What each step away from what it knows adds to that spread: 0.46 next door, 0.7 in a related market, 0.9 on a
-     * stretch, so distant ventures fail several times as often as related ones (Kaplan & Weisbach 1992: ~44% of large
-     * acquisitions were sold within a decade, diversifying ones ~4 times as often as related ones).
+     * stretch, so with the shortfall distant entries fail about twice as often as related ones (Kaplan & Weisbach 1992:
+     * ~44% of large acquisitions were sold within a decade, diversifying ones ~4 times as often as related ones).
      */
     public const OUTCOME_SPREAD_DISTANCE = 0.8;
+
+    // --- Buying In ---
+    /**
+     * Years over which what a business bought into a new industry earns under its new owner shows: 2, the time a
+     * buyer takes to integrate a target and find out what it has bought, after which the business is judged on what it
+     * earns.
+     */
+    public const INTEGRATION_YEARS = 2.0;
 
     // --- Growing into the Market ---
     /**
@@ -92,10 +102,11 @@ final class SegmentEntry
     // --- Learning the Trade ---
     /**
      * Years over which a business built into a new industry closes its gap to the margin it will earn once it has
-     * learned the trade, e-folding: 3.5, so a venture starting three to four and a half times that margin short loses
-     * money for four to five years (Biggadike 1979: 68 corporate ventures lost heavily through their first four years).
+     * learned the trade, e-folding: 3, so a venture starting three to four and a half times that margin short loses
+     * money for three to four and a half years and reaches 90% of that margin in ten to eleven (Biggadike 1979: 68
+     * corporate ventures lost heavily through their first four years and took ten to twelve to match their parents).
      */
-    public const LEARNING_YEARS = 3.5;
+    public const LEARNING_YEARS = 3.0;
     /** How far short of its learned margin a venture next door starts, as a share of that margin. */
     public const LEARNING_GAP_BASE = 2.5;
     /** What each step away from what it knows adds to that: a stretch starts ~4.4 times short. */
@@ -175,6 +186,28 @@ final class SegmentEntry
         $shortfall = log((1.0 - (self::REALISED_DISTANCE_PENALTY * (1.0 - $closeness))) / (1.0 - (self::ATTAINMENT_DISTANCE_PENALTY * (1.0 - $closeness))));
 
         return $shortfall + ($spread * Distributions::standardNormalQuantile($uniform)) - ($spread * $spread / 2.0);
+    }
+
+    /**
+     * What a business bought into an industry this close to its buyer's turns out to earn against what its buyer counts
+     * on, in log: the buyer counts on what the business earned before, as a going concern brings its trade with it, but
+     * under an owner further from what it knows it keeps less of its rivals' margin (REALISED_DISTANCE_PENALTY), the
+     * gap that makes diversifying acquisitions the ones sold again (Kaplan & Weisbach 1992); spread as widely as a
+     * venture's outcome.
+     *
+     * @param float $uniform A draw on (0, 1).
+     */
+    public static function boughtOutcome(float $closeness, float $uniform): float
+    {
+        $spread = self::outcomeSpread($closeness);
+
+        return log(1.0 - (self::REALISED_DISTANCE_PENALTY * (1.0 - $closeness))) + ($spread * Distributions::standardNormalQuantile($uniform)) - ($spread * $spread / 2.0);
+    }
+
+    /** The share of what a bought business will turn out to earn still to show after dt more years of integration. */
+    public static function integrationLeft(float $unshown, float $dt): float
+    {
+        return max(0.0, $unshown - (max(0.0, $dt) / self::INTEGRATION_YEARS));
     }
 
     /** How far a venture growing toward its target share has gone, in log, after this many years. */

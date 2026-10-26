@@ -2954,6 +2954,9 @@ class EarningsEngineTest extends TestCase
         $stock->setBaselineRoic('0.02');
         $stock->setRoicTtm('0.02');
         $stock->setLifecycleStage(LifecycleStage::Mature);
+        // 2bn of the goodwill was paid for a business bought into a new industry.
+        $steel = Segments::enteredKey('Steel');
+        $stock->setEarningsMomentumZ([SegmentBooks::STATE_GOODWILL . $steel => 2_000_000_000.0] + ($stock->getEarningsMomentumZ() ?? []));
 
         $q4Tick = ((EarningsEngine::FISCAL_YEAR_END_QUARTER + 1) * $ticksPerQuarter) + EarningsEngine::resolveReportingTick('NEGQ', 252);
         $this->earningsEngine->calculate($stock, $macroState, $q4Tick);
@@ -2961,6 +2964,7 @@ class EarningsEngineTest extends TestCase
         $impairment = 5_000_000_000.0 - (float) $stock->getGoodwill();
         $this->assertGreaterThan(0.0, $impairment, 'a reporting unit carried above its fair value is impaired');
         $this->assertLessThan(3_000_000_000.0, $impairment, 'the charge stops at fair value: it cannot write equity off below what the unit is worth');
+        $this->assertEqualsWithDelta(2_000_000_000.0 * (float) $stock->getGoodwill() / 5_000_000_000.0, ($stock->getEarningsMomentumZ() ?? [])[SegmentBooks::STATE_GOODWILL . $steel] ?? null, 1.0, 'the firm is one reporting unit: each business bought keeps its share');
 
         $businessModel = Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model'] ?? 'none';
         $strategy = Sectors::getBusinessModelStrategy($businessModel);

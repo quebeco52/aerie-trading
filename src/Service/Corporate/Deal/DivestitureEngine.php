@@ -64,6 +64,12 @@ class DivestitureEngine
     /** Annual probability for premium company divestiture. */
     public const DIV_PREMIUM_ANNUAL_PROB = 0.05;
 
+    /**
+     * Annual hazard at which a company sells a business it bought into a new industry and put up for sale once it
+     * showed it does not earn its cost: 2, a buyer found in about half a year.
+     */
+    public const DIV_FAILED_ENTRY_ANNUAL_PROB = 2.0;
+
     /** P/E threshold for divestiture consideration. */
     public const DIV_PE_THRESHOLD = 30.0;
     /** Minimum net income for divestiture consideration, at the District's $12T scale. */
@@ -92,7 +98,7 @@ class DivestitureEngine
     /** The largest annual divestiture hazard any state assigns; the bound its rejection gate is struck at. */
     public static function divestitureHazardCeiling(): float
     {
-        return max(self::DIV_DYING_ANNUAL_PROB, self::DIV_DISTRESSED_ANNUAL_PROB, self::DIV_PREMIUM_ANNUAL_PROB);
+        return max(self::DIV_DYING_ANNUAL_PROB, self::DIV_DISTRESSED_ANNUAL_PROB, self::DIV_PREMIUM_ANNUAL_PROB, self::DIV_FAILED_ENTRY_ANNUAL_PROB);
     }
 
     public function __construct(
@@ -120,18 +126,24 @@ class DivestitureEngine
 
         $this->initializeDivestitureContext($ctx);
 
-        if ($this->isInOpenDistressEpisode($ctx) || $this->shouldAbortDivestiture($ctx)) {
+        // A business bought into a new industry that does not earn its cost is sold whatever the rest of the company
+        // is doing: firms refocus by selling the businesses they diversified into (Kaplan & Weisbach 1992; John &
+        // Ofek 1995).
+        $failedEntry = SegmentBooks::forSale($seller);
+        if ($failedEntry !== null) {
+            $this->determineRefocusingSale($ctx, $failedEntry);
+        } elseif ($this->isInOpenDistressEpisode($ctx) || $this->shouldAbortDivestiture($ctx)) {
             return null;
+        } else {
+            $this->determineDivestitureStrategy($ctx);
         }
-
-        $this->determineDivestitureStrategy($ctx);
         if (!$ctx->dealExecuted) {
             return null;
         }
 
         $this->executeDivestitureSale($ctx);
         $this->applyDivestitureAccounting($ctx);
-        if ($ctx->isDying || $ctx->isDistressed) {
+        if ($failedEntry === null && ($ctx->isDying || $ctx->isDistressed)) {
             self::openDistressEpisode($seller, $macroState->totalTime);
         }
 
@@ -283,6 +295,30 @@ class DivestitureEngine
     }
 
     /**
+     * The sale of a business bought into a new industry and put up for sale: whole, its share of the plant, at the
+     * multiple a buyer pays for a business earning less than its cost (or the market's value of it less the forced
+     * seller's discount, if more), once a buyer is found.
+     */
+    private function determineRefocusingSale(DivestitureContext $ctx, string $segment): void
+    {
+        $ctx->dealExecuted = false;
+        if ($this->mathUtility->generateUniform() * self::divestitureHazardCeiling() >= self::DIV_FAILED_ENTRY_ANNUAL_PROB) {
+            return;
+        }
+
+        $momentum = $ctx->seller->getEarningsMomentumZ() ?? [];
+        $ctx->soldSegment = $segment;
+        $ctx->divestedFraction = (SegmentBooks::plant($momentum) ?? [])[$segment] ?? 0.0;
+        [$ctx->minFraction, $ctx->maxFraction] = [$ctx->divestedFraction, $ctx->divestedFraction];
+        $ctx->saleMultiple = $this->mathUtility->generateUniformBetween(self::DIV_DISTRESSED_MULTIPLE_MIN, self::DIV_DISTRESSED_MULTIPLE_MAX);
+        $ctx->annualProbability = self::DIV_FAILED_ENTRY_ANNUAL_PROB;
+        $earnings = SegmentBooks::earningShares($momentum, $segment);
+        $ctx->revenueFraction = $earnings['revenue'];
+        $ctx->incomeFraction = $earnings['income'];
+        $ctx->dealExecuted = $ctx->divestedFraction > 0.0;
+    }
+
+    /**
      * A company that keeps plant by segment sells a whole business where it can: the segment whose plant earns least
      * (SegmentBooks::weakestSegment()), when its size is in the range this kind of sale takes. The slice is then its
      * share of the plant, which takes the same share of every ledger the company keeps whole (working capital,
@@ -314,8 +350,9 @@ class DivestitureEngine
         // The book value leaving with the division is what its ledgers actually carry, less the debt the buyer
         // assumes. Only a balance sheet with no modelled asset side (a bank's loan book) falls back to the
         // strategy's capital-proxy estimate; anything else would state a gain against assets never retired.
+        $ctx->goodwillSold = SegmentBooks::goodwillSold($ctx->seller->getEarningsMomentumZ() ?? [], $ctx->soldSegment, $ctx->divestedFraction, (float) $ctx->seller->getGoodwill());
         $ctx->lostEquity = $ctx->seller->hasBalanceSheetLedger()
-            ? $this->calculateBookValueDisposed($ctx->seller, $ctx->divestedFraction) - $ctx->lostDebt
+            ? $this->calculateBookValueDisposed($ctx->seller, $ctx->divestedFraction, $ctx->goodwillSold) - $ctx->lostDebt
             : $ctx->strategy->calculateDivestedEquity($ctx->seller, $ctx->divestedFraction, $ctx->currentEquity, $ctx->currentDebt, $ctx->treasury, $ctx->investedCapital, $ctx->lostDebt);
 
         // What the assets fetch on their own: the market's value of the slice sold, less the discount a forced seller
@@ -378,7 +415,7 @@ class DivestitureEngine
             }
         }
 
-        $markSold = $stock->hasBalanceSheetLedger() ? $this->retireDivestedLedgers($stock, $ctx->divestedFraction) : 0.0;
+        $markSold = $stock->hasBalanceSheetLedger() ? $this->retireDivestedLedgers($stock, $ctx->divestedFraction, $ctx->goodwillSold, $ctx->soldSegment) : 0.0;
 
         // A gain on selling a business is taxable income (ASC 740), struck under the same carryforward rules as a
         // quarter's (FirmEconomics::resolveIncomeTax()): it uses the carried loss up to its cap, and a loss adds to
@@ -408,16 +445,16 @@ class DivestitureEngine
 
     /**
      * Book value of the assets a divested division takes with it, before the debt the buyer assumes: a pro
-     * rata slice of every operating ledger. Goodwill follows the business it was paid for (ASC 350-20-40-1
-     * allocates it on relative value, which a fraction of the whole approximates), the trade cycle goes net of
-     * its credit-loss allowance and of the payables suppliers are owed, and the deferred tax on the plant's
-     * timing difference is a liability the buyer inherits with the plant.
+     * rata slice of every operating ledger, and the goodwill the sale takes. Goodwill follows the business it was
+     * paid for (ASC 350-20-40-1): a business bought into a new industry takes what was paid for it, any other a share
+     * of the rest, as relative value would allocate it. The trade cycle goes net of its credit-loss allowance and of
+     * the payables suppliers are owed, and the deferred tax on the plant's timing difference is a liability the buyer
+     * inherits with the plant.
      */
-    private function calculateBookValueDisposed(Stock $stock, float $fraction): float
+    private function calculateBookValueDisposed(Stock $stock, float $fraction, float $goodwillSold): float
     {
         $assets = $stock->getNetPpe()
             + (float) $stock->getCipBalance()
-            + (float) $stock->getGoodwill()
             + $stock->getNetReceivables()
             + $stock->getNetInventory()
             + $stock->getNetEarningAssets();
@@ -430,7 +467,7 @@ class DivestitureEngine
             $liabilities += (float) $stock->getCustomerDeposits();
         }
 
-        return ($assets - $liabilities) * $fraction;
+        return (($assets - $liabilities) * $fraction) + $goodwillSold;
     }
 
     /**
@@ -443,7 +480,7 @@ class DivestitureEngine
      * @return float The slice's securities mark net of its deferred tax, which leaves other comprehensive income now
      *               rather than at the next quarter's mark (ASC 320 recycling).
      */
-    private function retireDivestedLedgers(Stock $stock, float $fraction): float
+    private function retireDivestedLedgers(Stock $stock, float $fraction, float $goodwillSold, ?string $soldSegment): float
     {
         $retained = max(0.0, 1.0 - $fraction);
         $markSold = 0.0;
@@ -467,7 +504,8 @@ class DivestitureEngine
         $stock->setCipBalance((string) ((float) $stock->getCipBalance() * $retained));
         // Construction leaves pro rata, so a venture still being built keeps the same share of what is left.
         $stock->setEarningsMomentumZ(SegmentBooks::scalePending($stock->getEarningsMomentumZ() ?? [], $retained));
-        $stock->setGoodwill((string) ((float) $stock->getGoodwill() * $retained));
+        $stock->setEarningsMomentumZ(SegmentBooks::keepGoodwill($stock->getEarningsMomentumZ() ?? [], $soldSegment, $retained) + ($stock->getEarningsMomentumZ() ?? []));
+        $stock->setGoodwill((string) max(0.0, (float) $stock->getGoodwill() - $goodwillSold));
         $stock->setDeferredTaxLiability((string) ((float) $stock->getDeferredTaxLiability() * $retained));
         // The unit's leases go with it (the ledger would otherwise run them off over years of no use); the loss
         // carryforward and its asset stay with the seller, whose losses they were.

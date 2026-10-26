@@ -77,6 +77,18 @@ final class SegmentBooks
     public const STATE_VENTURE_START = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_venture_start:';
     /** Carried stream-state key prefix: when its company gave up on a venture that does not earn its cost, in years. */
     public const STATE_VENTURE_ABANDONED = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_venture_abandoned:';
+    /**
+     * Carried stream-state key prefix: the share of what a business bought into a new industry will turn out to earn
+     * still to show, 1 at the deal and none once integrated (SegmentEntry::INTEGRATION_YEARS).
+     */
+    public const STATE_INTEGRATING = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_integrating:';
+    /**
+     * Carried stream-state key prefix: when its company put up for sale a business it bought that does not earn its
+     * cost.
+     */
+    public const STATE_FOR_SALE = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_for_sale:';
+    /** Carried stream-state key prefix: the goodwill a company paid for a business it bought into a new industry. */
+    public const STATE_GOODWILL = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_goodwill:';
     /** Stream-state key prefix of a line's weight in the mix the plan steers to (StreamContext). */
     private const STREAM_WEIGHT_PREFIX = 'weight:';
 
@@ -1053,6 +1065,92 @@ final class SegmentBooks
             // turns out to earn, as far as its learning has gone.
             if (($starts[$segment] ?? 0.0) > 0.0 && isset($outcomes[$segment], $margins[$segment])) {
                 $state[self::STATE_MARGIN . $segment] = $margins[$segment] * exp($outcomes[$segment] * ($gap - $left) / $starts[$segment]);
+            }
+        }
+        // A business bought shows what it earns under its new owner as it is integrated.
+        foreach (self::filed($momentum, self::STATE_INTEGRATING) as $segment => $unshown) {
+            $left = SegmentEntry::integrationLeft($unshown, $dt);
+            $state[self::STATE_INTEGRATING . $segment] = $left;
+            if (isset($outcomes[$segment], $margins[$segment])) {
+                $state[self::STATE_MARGIN . $segment] = $margins[$segment] * exp($outcomes[$segment] * ($unshown - $left));
+            }
+        }
+
+        return $state;
+    }
+
+    /**
+     * The state that starts integrating a business bought into a new industry: what it will turn out to earn under its
+     * new owner against what was counted on (SegmentEntry::boughtOutcome()), all still to show, and the goodwill paid
+     * for it, which leaves with it if it is sold.
+     *
+     * @return array<string, float> Carried state.
+     */
+    public static function buyIn(string $segment, float $outcome, float $goodwill): array
+    {
+        return [
+            self::STATE_VENTURE_OUTCOME . $segment => $outcome,
+            self::STATE_INTEGRATING . $segment => 1.0,
+            self::STATE_GOODWILL . $segment => max(0.0, $goodwill),
+        ];
+    }
+
+    /**
+     * Whether a business bought into a new industry has shown what it earns under its new owner; one bought before
+     * integration was tracked counts as integrated.
+     *
+     * @param array<string, mixed> $momentum
+     */
+    public static function isIntegrated(array $momentum, string $segment): bool
+    {
+        return (float) ($momentum[self::STATE_INTEGRATING . $segment] ?? 0.0) <= 0.0;
+    }
+
+    /** The business its company has put up for sale and still runs, if any. */
+    public static function forSale(Stock $stock): ?string
+    {
+        foreach (array_keys(self::filed($stock->getEarningsMomentumZ() ?? [], self::STATE_FOR_SALE)) as $segment) {
+            if (self::holdsPlant($stock, (string) $segment)) {
+                return (string) $segment;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The goodwill a sale takes with it: what was paid for the business, where it was bought into a new industry and
+     * that is known, or else its share of the goodwill not tied to one (the company's own past deals), as a slice of
+     * the company takes.
+     *
+     * @param array<string, mixed> $momentum
+     * @param string|null          $segment  The segment sold whole; null for a slice of the whole company.
+     */
+    public static function goodwillSold(array $momentum, ?string $segment, float $fraction, float $goodwill): float
+    {
+        $tied = self::filed($momentum, self::STATE_GOODWILL);
+        if ($segment !== null && isset($tied[$segment])) {
+            return min(max(0.0, $goodwill), $tied[$segment]);
+        }
+
+        return max(0.0, min(1.0, $fraction)) * ($segment === null ? max(0.0, $goodwill) : max(0.0, $goodwill - array_sum($tied)));
+    }
+
+    /**
+     * The goodwill tied to each business bought into a new industry after some of the company's goodwill leaves or is
+     * written down: none for the business sold whole, and the kept share of each where the whole company shrinks (a
+     * slice sold, or an impairment of the firm's goodwill as one reporting unit).
+     *
+     * @param array<string, mixed> $momentum
+     * @param string|null          $segment  The segment sold whole; null when every business keeps the same share.
+     * @return array<string, float> Carried state.
+     */
+    public static function keepGoodwill(array $momentum, ?string $segment, float $kept): array
+    {
+        $state = [];
+        foreach (self::filed($momentum, self::STATE_GOODWILL) as $key => $amount) {
+            if ($segment === null || $key === $segment) {
+                $state[self::STATE_GOODWILL . $key] = $segment === null ? $amount * max(0.0, $kept) : 0.0;
             }
         }
 

@@ -138,7 +138,7 @@ final class SegmentsHarnessTest extends BoardRun
                     $this->ventureRows[] = ['t' => round($this->currentTime, 3), 'tk' => $stock->getTicker(), 'entry' => $ctx->marketEntry ?? null, 'exit' => $exit, 'vk' => $vk, 'kappa' => $kap,
                         'segs' => $segs, 'streams' => $ctx->streamRevenue, 'rev' => $ctx->actualRevenue, 'drag' => $ctx->ventureLearningDrag ?? null,
                         'cip' => (float) $stock->getCipBalance(), 'cap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(),
-                        'style' => $stock->getManagementProfile()->style->value ?? null, 'industry' => (string) $stock->getIndustry(), 'xrec' => $xrec];
+                        'style' => $stock->getManagementProfile()->style->value ?? null, 'industry' => (string) $stock->getIndustry(), 'xrec' => $xrec, 'gw' => (float) $stock->getGoodwill()];
                 }
                 $this->capRows[] = [round($this->currentTime, 3), $stock->getTicker(), $ctx->segments !== [], $ctx->strategy->isFinancial(), $fails,
                     (float) ($ctx->allocation['organic_capex'] ?? 0.0), $ctx->operatingCapex, $ctx->maintenanceCapex, $ctx->scheduledCapex,

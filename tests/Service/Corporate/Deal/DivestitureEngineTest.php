@@ -446,6 +446,59 @@ class DivestitureEngineTest extends TestCase
     }
 
     /**
+     * A business a company bought into a new industry and put up for sale, once it showed it does not earn its cost, is
+     * sold whole however the rest of the company is doing: the same company with nothing for sale sells nothing. The
+     * goodwill paid for it leaves with it, not its share of the plant's worth of the company's goodwill, so the sale
+     * books the loss on what was overpaid, and the books still balance.
+     */
+    public function testABusinessBoughtThatDoesNotPayIsSoldWholeWithItsGoodwill(): void
+    {
+        $machinery = Segments::enteredKey('Farm & Heavy Construction Machinery');
+        $seller = function (bool $forSale) use ($machinery): Stock {
+            $stock = $this->buildLedgeredAcquirer('ENTR', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 100_000_000.0);
+            $stock->setIndustry('Auto Manufacturers');
+            $stock->setTotalNetIncome('2000000000');
+            $stock->setGoodwill('3000000000');
+            $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+            $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.96, $machinery => 0.04], 1.0, []) + [
+                SegmentBooks::STATE_TARGET . Segments::MAIN => 0.95,
+                SegmentBooks::STATE_TARGET . $machinery => 0.05,
+                SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.20,
+                SegmentBooks::STATE_MARGIN . $machinery => 0.02,
+                SegmentBooks::STATE_GOODWILL . $machinery => 2_000_000_000.0,
+            ] + ($forSale ? [SegmentBooks::STATE_FOR_SALE . $machinery => 3.0] : []));
+
+            return $stock;
+        };
+        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn(DebtHealthBuilder::healthy()->build());
+        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(20_000_000_000.0);
+        $this->corporateMetricsMock->method('calculateAddressableShare')->willReturn(0.10);
+        $this->mathUtilityMock->script(checkProbability: true, generateUniform: 0.0, generateUniformBetween: 8.0);
+        $published = null;
+        $publisher = $this->createStub(MarketEventPublisher::class);
+        $publisher->method('publish')->willReturnCallback(static function (Stock $stock, string $type, string $description) use (&$published): array {
+            $published = $description;
+
+            return [];
+        });
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $engine = new DivestitureEngine($publisher, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0);
+
+        $this->assertNull($engine->evaluateCorporateDivestiture($seller(false), $macro, 1.0), 'a healthy company at its multiple sells nothing');
+
+        $stock = $seller(true);
+        $this->assertIsArray($engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $this->assertSame(0.0, (SegmentBooks::plant($momentum) ?? [])[$machinery] ?? null, 'sold whole');
+        $this->assertEqualsWithDelta(1_000_000_000.0, (float) $stock->getGoodwill(), 1.0, 'what was paid for it leaves with it');
+        $this->assertSame(0.0, $momentum[SegmentBooks::STATE_GOODWILL . $machinery] ?? null);
+        $this->assertStringContainsString('sold its heavy machinery business', (string) $published);
+        $this->assertStringContainsString('loss on sale', (string) $published);
+        $this->assertBalanced($stock, 'selling a business bought into a new industry');
+    }
+
+    /**
      * The seller's announcement return is the sale's worth to its shareholders over their stake: the price
      * received less the pro-rata market value of the division given up, struck at the price before the sale.
      */

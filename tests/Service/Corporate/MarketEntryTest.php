@@ -107,9 +107,9 @@ final class MarketEntryTest extends TestCase
     public function testAVentureThatDoesNotPayIsGivenUpOnceItKnows(): void
     {
         $segment = Segments::enteredKey(self::TARGET);
-        $gate = function (float $margin, float $learning, bool $built = true) use ($segment): EarningsSimulationContext {
+        $gate = function (float $margin, float $learning, bool $built = true, float $integrating = 0.0) use ($segment): EarningsSimulationContext {
             [$ctx, $ledger] = $this->entrant();
-            $venture = $built ? [SegmentBooks::STATE_LEARNING . $segment => $learning, SegmentBooks::STATE_VENTURE_START . $segment => 1.0] : [];
+            $venture = $built ? [SegmentBooks::STATE_LEARNING . $segment => $learning, SegmentBooks::STATE_VENTURE_START . $segment => 1.0] : [SegmentBooks::STATE_INTEGRATING . $segment => $integrating];
             $ctx->stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.97, $segment => 0.03], 1.0, []) + $venture);
             foreach ([Segments::MAIN => [0.97, 0.10], $segment => [0.03, $margin]] as $key => [$plant, $segmentMargin]) {
                 $ctx->segments[$key] = ['plant' => $plant, 'sales' => $plant, 'margin' => $segmentMargin, 'turnover' => 1.0, 'market' => 0.1, 'price' => 1.0, 'load' => 1.0, 'drain' => 0.0, 'growth' => 0.0, 'leftover' => 0.0];
@@ -126,7 +126,14 @@ final class MarketEntryTest extends TestCase
         $this->assertTrue(SegmentBooks::isAbandoned($failed->stock->getEarningsMomentumZ() ?? [], $segment));
         $this->assertNull($gate(0.02, 1.5)->marketExit, 'still learning');
         $this->assertNull($gate(0.30, 0.5)->marketExit, 'it pays');
-        $this->assertNull($gate(0.02, 0.0, built: false)->marketExit, 'bought');
+        $bought = $gate(0.02, 0.0, built: false);
+        $this->assertNull($bought->marketExit, 'a business bought is not given up but sold');
+        $this->assertSame(2.0, ($bought->stock->getEarningsMomentumZ() ?? [])[SegmentBooks::STATE_FOR_SALE . $segment] ?? null, 'put up for sale once integrated');
+        $this->assertFalse(SegmentBooks::isAbandoned($bought->stock->getEarningsMomentumZ() ?? [], $segment));
+        $integrating = $gate(0.02, 0.0, built: false, integrating: 0.5);
+        $this->assertArrayNotHasKey(SegmentBooks::STATE_FOR_SALE . $segment, $integrating->stock->getEarningsMomentumZ() ?? [], 'still showing what it earns');
+        $paying = $gate(0.30, 0.0, built: false);
+        $this->assertArrayNotHasKey(SegmentBooks::STATE_FOR_SALE . $segment, $paying->stock->getEarningsMomentumZ() ?? [], 'it pays');
     }
 
     /**

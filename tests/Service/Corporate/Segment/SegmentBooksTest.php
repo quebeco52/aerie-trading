@@ -381,6 +381,44 @@ class SegmentBooksTest extends TestCase
         $this->assertEqualsWithDelta(1.0, array_sum(SegmentBooks::boughtTargets($unfiled, $venture)), 1e-12);
     }
 
+    /**
+     * A business bought into a new industry shows what it earns under its new owner as it is integrated, and once
+     * integrated is judged; the goodwill paid for it leaves with it if it is sold, and every business's share of an
+     * impairment or a sale of a slice of the company is its kept share.
+     */
+    public function testABoughtBusinessShowsWhatItEarnsAndTakesItsGoodwillWithIt(): void
+    {
+        $machinery = Segments::enteredKey('Farm & Heavy Construction Machinery');
+        $momentum = SegmentBooks::open([Segments::MAIN => 0.7, 'industrial' => 0.26, $machinery => 0.04], 1.0, [])
+            + [SegmentBooks::STATE_MARGIN . $machinery => 0.20]
+            + SegmentBooks::buyIn($machinery, -0.5, 2.0e9);
+        $this->assertFalse(SegmentBooks::isIntegrated($momentum, $machinery));
+
+        $momentum = SegmentBooks::learn($momentum, SegmentEntry::INTEGRATION_YEARS / 2.0) + $momentum;
+        $this->assertEqualsWithDelta(0.20 * exp(-0.25), $momentum[SegmentBooks::STATE_MARGIN . $machinery], 1e-12);
+        $momentum = SegmentBooks::learn($momentum, SegmentEntry::INTEGRATION_YEARS) + $momentum;
+        $this->assertEqualsWithDelta(0.20 * exp(-0.5), $momentum[SegmentBooks::STATE_MARGIN . $machinery], 1e-12, 'all of it, once');
+        $this->assertTrue(SegmentBooks::isIntegrated($momentum, $machinery));
+        $this->assertTrue(SegmentBooks::isIntegrated($momentum, 'industrial'), 'nothing to integrate');
+
+        // 5bn of goodwill: 2bn paid for the machinery business, 3bn from the company's own past deals.
+        $this->assertSame(2.0e9, SegmentBooks::goodwillSold($momentum, $machinery, 0.04, 5.0e9));
+        $this->assertEqualsWithDelta(0.26 * 3.0e9, SegmentBooks::goodwillSold($momentum, 'industrial', 0.26, 5.0e9), 1.0);
+        $this->assertEqualsWithDelta(0.1 * 5.0e9, SegmentBooks::goodwillSold($momentum, null, 0.1, 5.0e9), 1.0);
+        $this->assertSame(1.5e9, SegmentBooks::goodwillSold($momentum, $machinery, 0.04, 1.5e9), 'no more than the company carries');
+        $this->assertSame([SegmentBooks::STATE_GOODWILL . $machinery => 0.0], SegmentBooks::keepGoodwill($momentum, $machinery, 0.0));
+        $this->assertSame([], SegmentBooks::keepGoodwill($momentum, 'industrial', 0.74));
+        $this->assertEqualsWithDelta([SegmentBooks::STATE_GOODWILL . $machinery => 1.8e9], SegmentBooks::keepGoodwill($momentum, null, 0.9), 1.0);
+
+        $entr = (new Stock())->setTicker('ENTR')->setIndustry('Auto Manufacturers');
+        $entr->setEarningsMomentumZ($momentum);
+        $this->assertNull(SegmentBooks::forSale($entr));
+        $entr->setEarningsMomentumZ([SegmentBooks::STATE_FOR_SALE . $machinery => 4.0] + $momentum);
+        $this->assertSame($machinery, SegmentBooks::forSale($entr));
+        $entr->setEarningsMomentumZ([SegmentBooks::STATE_PLANT . $machinery => 0.0] + ($entr->getEarningsMomentumZ() ?? []));
+        $this->assertNull(SegmentBooks::forSale($entr), 'sold');
+    }
+
     /** One segment set to a share, the others scaled to the rest in the proportions they held. */
     public function testReshare(): void
     {

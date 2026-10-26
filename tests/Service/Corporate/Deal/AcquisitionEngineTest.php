@@ -1030,6 +1030,9 @@ class AcquisitionEngineTest extends TestCase
         $this->assertGreaterThanOrEqual(1.5 - 1e-12, $momentum[SegmentBooks::STATE_TURNOVER . $segment] ?? 0.0, 'it runs the incumbents\' plant for its sales');
         $this->assertGreaterThan(0.0, $momentum[SegmentBooks::STATE_MARKET . $segment] ?? 0.0);
         $this->assertSame([], SegmentBooks::learningGaps($momentum), 'a going concern has nothing to learn');
+        $this->assertSame(1.0, $momentum[SegmentBooks::STATE_INTEGRATING . $segment] ?? null, 'what it earns under its new owner is still to show');
+        $this->assertArrayHasKey(SegmentBooks::STATE_VENTURE_OUTCOME . $segment, $momentum);
+        $this->assertEqualsWithDelta((float) $stock->getGoodwill() - 1_000_000_000.0, $momentum[SegmentBooks::STATE_GOODWILL . $segment] ?? null, 1.0, 'the goodwill paid for it');
         $this->assertFalse(SegmentBooks::isBuilt($momentum, $segment));
         $this->assertEqualsWithDelta(SegmentBooks::companyEconomics($momentum)['sales'][$segment] ?? null, $momentum[SegmentBooks::STATE_TARGET . $segment] ?? null, 1e-12);
         $record = $store->readIndustry(self::ENTERED)[SegmentBooks::recordKey('ENTR', $segment)] ?? null;

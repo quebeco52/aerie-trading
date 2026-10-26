@@ -73,6 +73,11 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
   - `buy3` (outlook filed at entry, holding companies look outside) vs `head` = 3f1aa807: `drift.py <seeds> ARM...`
     (entered record share at deal/entry vs first report; deal events carry `xrec` with anchor_demand_share, trend GDP,
     outlook), plus div6.py / buy2x.py / div2.py.
+  - `cal0.py <seeds> ARM [HEAD]`: 5b-4 entry calibration scorecard (entries, Biggadike timing, exits by closeness,
+    bought segments, growth industries, entry price effect, front-running, survivors). No runs needed beyond ARM/HEAD.
+  - `cal1` (5b-4 calibration, working tree) / `cal1old` (+ `ovr_cal1old/` SegmentEntry with the old distance dials;
+    `cal1same` = unmodified copy, OUT equal to cal1) vs `head` = 7c53cb94: `cal0.py` + `cal1x.py <seeds> ARM` (bought
+    outcomes, for-sale/sold by closeness, sale terms, goodwill tracking). Venture rows carry company goodwill `gw`.
   - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
     TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
   - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events

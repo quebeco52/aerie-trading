@@ -83,6 +83,11 @@ class DivestitureContext
     public float $currentDebt = 0.0;
     public float $lostDebt = 0.0;
     public float $lostEquity = 0.0;
+    /**
+     * Goodwill the sale takes: what was paid for a business bought into a new industry, or else the sold share of the
+     * goodwill not tied to one (SegmentBooks::goodwillSold()).
+     */
+    public float $goodwillSold = 0.0;
 
     /**
      * Market value of what is handed over: the slice of the firm's value without the cash and listed stakes it keeps.

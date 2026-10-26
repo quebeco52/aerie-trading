@@ -24,9 +24,12 @@ class SegmentEntryTest extends TestCase
         $this->assertEqualsWithDelta(3.0, SegmentEntry::learningGap(IndustryAdjacency::CLOSE), 1e-12);
         $this->assertEqualsWithDelta(4.375, SegmentEntry::learningGap(IndustryAdjacency::DISTANT), 1e-12);
         $this->assertEqualsWithDelta(3.0 / M_E, SegmentEntry::learningLeft(3.0, SegmentEntry::LEARNING_YEARS), 1e-12);
-        // Losses end once the gap falls below one: about four years next door, five on a stretch.
-        $this->assertEqualsWithDelta(3.85, SegmentEntry::LEARNING_YEARS * log(SegmentEntry::learningGap(IndustryAdjacency::CLOSE)), 0.01);
-        $this->assertEqualsWithDelta(5.17, SegmentEntry::LEARNING_YEARS * log(SegmentEntry::learningGap(IndustryAdjacency::DISTANT)), 0.01);
+        // Losses end once the gap falls below one: three and a third years next door, four and a half on a stretch; 90%
+        // of the margin is learned in ten to eleven.
+        $this->assertEqualsWithDelta(3.30, SegmentEntry::LEARNING_YEARS * log(SegmentEntry::learningGap(IndustryAdjacency::CLOSE)), 0.01);
+        $this->assertEqualsWithDelta(4.43, SegmentEntry::LEARNING_YEARS * log(SegmentEntry::learningGap(IndustryAdjacency::DISTANT)), 0.01);
+        $this->assertEqualsWithDelta(10.20, SegmentEntry::LEARNING_YEARS * log(10.0 * SegmentEntry::learningGap(IndustryAdjacency::CLOSE)), 0.01);
+        $this->assertEqualsWithDelta(11.33, SegmentEntry::LEARNING_YEARS * log(10.0 * SegmentEntry::learningGap(IndustryAdjacency::DISTANT)), 0.01);
     }
 
     /**
@@ -53,6 +56,29 @@ class SegmentEntryTest extends TestCase
         $this->assertEqualsWithDelta(log(0.92 / 0.96) - (0.46 * 0.46 / 2.0), SegmentEntry::outcome(IndustryAdjacency::CLOSE, 0.5), 1e-9);
         $this->assertLessThan(SegmentEntry::outcome(IndustryAdjacency::DISTANT, 0.9), SegmentEntry::outcome(IndustryAdjacency::CLOSE, 0.9));
         $this->assertGreaterThan(SegmentEntry::outcome(IndustryAdjacency::DISTANT, 0.1), SegmentEntry::outcome(IndustryAdjacency::CLOSE, 0.1));
+    }
+
+    /**
+     * A business bought into a new industry turns out to earn, on average, the share of what its buyer counted on that
+     * an owner this far from home keeps of its rivals' margin, less the further it is from home; and it shows that over
+     * its integration, linearly.
+     */
+    public function testABoughtBusinessDisappointsMoreTheFurtherFromHome(): void
+    {
+        $mean = static function (float $closeness): float {
+            $sum = 0.0;
+            for ($i = 0; $i < 20_000; $i++) {
+                $sum += exp(SegmentEntry::boughtOutcome($closeness, ($i + 0.5) / 20_000));
+            }
+
+            return $sum / 20_000;
+        };
+        foreach ([IndustryAdjacency::CLOSE, IndustryAdjacency::RELATED, IndustryAdjacency::DISTANT] as $closeness) {
+            $this->assertEqualsWithDelta(1.0 - (SegmentEntry::REALISED_DISTANCE_PENALTY * (1.0 - $closeness)), $mean($closeness), 2e-3, "closeness {$closeness}");
+        }
+
+        $this->assertSame(0.5, SegmentEntry::integrationLeft(1.0, SegmentEntry::INTEGRATION_YEARS / 2.0));
+        $this->assertSame(0.0, SegmentEntry::integrationLeft(0.25, SegmentEntry::INTEGRATION_YEARS));
     }
 
     /**

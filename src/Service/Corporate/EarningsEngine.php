@@ -962,6 +962,9 @@ class EarningsEngine
         // Equity takes the full charge, even below zero: a floor here would leave goodwill written off on the
         // asset side and the equity that carried it still standing, and the sheet would no longer balance.
         $stock->setGoodwill((string) ($goodwill - $impairment));
+        // The firm is one reporting unit, so the goodwill paid for each business bought into a new industry is written
+        // down in the same proportion.
+        $stock->setEarningsMomentumZ(SegmentBooks::keepGoodwill($stock->getEarningsMomentumZ() ?? [], null, 1.0 - ($impairment / $goodwill)) + ($stock->getEarningsMomentumZ() ?? []));
         $stock->setTotalEquity((string) ((float) $stock->getTotalEquity() - $impairment));
         $stock->setRetainedEarnings((string) ((float) $stock->getRetainedEarnings() - $impairment));
 

@@ -719,12 +719,19 @@ class AcquisitionEngine
             $momentum = SegmentBooks::acquireIntoBooks($momentum, $ctx->segment, $oldRevenueCapital, $netAssetsAcquired, $acquiredRevenue, $acquiredOperatingIncome, SegmentBooks::jointSegments($stock)) + $momentum;
             $stock->setEarningsMomentumZ($momentum);
             // A business bought in a new industry takes its market, its share of the revenue and its ledger record at
-            // the deal, so nothing before the next report finds it missing.
+            // the deal, so nothing before the next report finds it missing. What it earns under its new owner shows as
+            // it is integrated, and the goodwill paid for it, or for a business added to one entered in play, leaves
+            // with it if it is sold.
             if ($ctx->entry !== null) {
+                $outcome = SegmentEntry::boughtOutcome($ctx->entry['closeness'], MathUtility::hashedUniform($this->industryShareLedger?->runSalt() ?? 0, "entry-deal-outcome:{$stock->getTicker()}:{$ctx->tickCount}"));
                 $momentum = $this->enteredMarket($ctx, $ctx->entry['market'], $acquiredRevenue) + $momentum;
-                $momentum = SegmentBooks::boughtTargets($momentum, $ctx->segment) + $momentum;
+                $momentum = SegmentBooks::buyIn($ctx->segment, $outcome, $ctx->goodwillRecorded) + SegmentBooks::boughtTargets($momentum, $ctx->segment) + $momentum;
                 $stock->setEarningsMomentumZ($momentum);
                 $this->industryShareLedger?->openAcquiredRecord($stock, $ctx->segment, $acquiredRevenue, SegmentBooks::entryMarketShare($acquiredRevenue, $ctx->entry['market'], 0.0), $ctx->macroState, $ctx->tickCount);
+            } elseif (Segments::enteredIndustry($ctx->segment) !== null) {
+                $key = SegmentBooks::STATE_GOODWILL . $ctx->segment;
+                $momentum = [$key => (float) ($momentum[$key] ?? 0.0) + $ctx->goodwillRecorded] + $momentum;
+                $stock->setEarningsMomentumZ($momentum);
             }
             $economics = SegmentBooks::companyEconomics($momentum);
             if ($economics !== null && $acquirerTurnover !== null) {

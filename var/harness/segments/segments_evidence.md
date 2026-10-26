@@ -516,3 +516,33 @@ industrial distribution 0.03 y after entering, before its first report, $2.2 bn)
 vs own -0.46%. Incumbent price across the buy +0.0011 (head +0.0015). Identities exact.
 Board vs head: capex/revenue +0.0057 (se 0.0024, t 2.4), P/E -0.07 (t -1.2), defaults+deaths +0.25 (t 1.0), others
 |t| <= 0.4. vs buy2: cap -0.93 tn (se 0.44, t -2.1), P/E -0.07 (se 0.02, t -2.8), defaults +0.38 (t 1.4).
+
+## 2026-10-26: 5b-4 baseline scorecard on buy3 (= 7c53cb94), seeds 1-8, no new runs
+
+    python3 var/harness/segments/cal0.py 1-8 buy3 head > cal0_buy3_n8.out
+
+Entries 1.03/yr (build 0.84, se 0.05; buy 0.19, se 0.02; target ~0.75). Builds reach venture operating income >= 0
+(gap < 1) after 4.8 y median (0.8: 4.0, 0.5: 4.8, 0.25: 5.2; 102 of 135) and 90% of learned margin after 12.8 y
+(59 of 135); venture OI / parent EBIT years 1-4 -3.2% (se 0.2%). Exits within 10 y: builds 29% (0.5 31%, 0.25 32%,
+0.8 0%, all abandonment), buys 0% (no sale, no harvest); bought kappa median 0.026, 20% of bought-segment reports
+inside the 0.05-0.50 whole-sale band. Bought: builds=0 14%, pays=0 1%, kappa ~0.025 flat. Growth industries: build
+63% of 103, buy 57% of 30 (board real growth +2.38%/yr). Incumbent price after a build -0.0013 (placebo +0.0002; vs
+head -0.0007, se 0.0001). Front-running: build entrant -0.049 vs placebo +0.079 (difference -0.13, se 0.05); buy
++0.107 vs -0.084 (se 0.146). Survivors +12 y: build kappa 0.094 (p90 0.169), revenue share 0.087 (p90 0.224); buy
+kappa 0.026, share 0.056 (p90 0.36).
+
+## 2026-10-26: 5b-4 cal1 / cal1old (old distance dials) vs 7c53cb94, 8 seeds x 20 years
+
+    BASE=<scratchpad>/basetree-7c53cb94 bin/harness-batch var/harness/segments/run.sh 1-8 head cal1 cal1old
+    cal0.py 1-8 <arm> head; cal1x.py 1-8 <arm>; div2.py 1-8 head <arm>   (cal1same == cal1 on seed 1, 3 y)
+
+Entries/yr cal1 / cal1old / buy3: build 0.669 / 0.656 / 0.844, buy 0.237 / 0.194 / 0.188, total 0.906 / 0.850 /
+1.031. Builds: OI >= 0 after 4.0 y (0.8 3.5, 0.5 4.0, 0.25 4.5), 90% margin 11.0 y (both arms; buy3 4.8 / 12.8).
+Build abandonment within 10 y: cal1 0.5 25%, 0.25 32%; cal1old 0.5 17%, 0.25 33%. Bought outcome mean (log): cal1
+0.5 -0.23, 0.25 -0.70; cal1old 0.5 -0.36, 0.25 -0.53. Bought sold within 10 y: cal1 33% (0.5 11% of 9, 0.25 47% of
+17); cal1old 36% (0.5 17% of 6, 0.25 41% of 17); sale 2.2-2.4 y after entry; sale price / paid median 0.25 / 0.24;
+gain/loss median +0.26 bn (6 of 13 losses) / -2.17 bn (9 of 11). Tracked goodwill <= company goodwill on all rows;
+company goodwill drop = tracked at sale except cal1old s3 TRIV (fell 1.86 bn vs 4.39 bn tracked). BRKW buys again
+after sales (cal1 seeds 3, 4; cal1old seed 3). Bought builds=0 42% / 48%, pays=0 32% / 29%; bought kappa 0.029 ->
+0.014 (+8 y, cal1). Board vs head: cal1 vol +0.0039 (t 2.3), capex/revenue -0.0031 (t -2.2), B-or-worse +0.15 pt (t
+1.5); cal1old all |t| <= 0.9. Identities exact.

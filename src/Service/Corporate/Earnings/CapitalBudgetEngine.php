@@ -454,8 +454,8 @@ final class CapitalBudgetEngine
      *
      * A venture built into a new industry that has learned enough to turn a profit and still earns less on its plant at
      * a balanced price than its manager's hurdle, at the margin its learning has shown, is given up on: its market
-     * claim falls away and its plant withers (SegmentBooks::venturePath()). One bought as a going concern is gated like
-     * any other segment, and sold whole if it is the weakest (DivestitureEngine).
+     * claim falls away and its plant withers (SegmentBooks::venturePath()). One bought as a going concern that, once
+     * integrated, earns less than that hurdle is put up for sale whole (DivestitureEngine).
      */
     private function resolveSegmentGates(EarningsSimulationContext $ctx, ?float $growthHurdle = null): void
     {
@@ -501,12 +501,17 @@ final class CapitalBudgetEngine
         $appliedHurdle = $stock->getManagementProfile()->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
         foreach ($ctx->segments as $segment => $books) {
             $industry = Segments::enteredIndustry($segment);
-            if ($industry === null || !SegmentBooks::isBuilt($momentum, $segment) || SegmentBooks::isAbandoned($momentum, $segment) || ($learning[$segment] ?? 0.0) >= 1.0
-                || (1.0 - $ctx->corporateTaxRate) * $books['turnover'] * $books['margin'] >= $appliedHurdle) {
+            if ($industry === null || (1.0 - $ctx->corporateTaxRate) * $books['turnover'] * $books['margin'] >= $appliedHurdle) {
                 continue;
             }
-            $filed[SegmentBooks::STATE_VENTURE_ABANDONED . $segment] = $ctx->macroState->totalTime;
-            $ctx->marketExit = ['industry' => $industry, 'segment' => $segment];
+            if (!SegmentBooks::isBuilt($momentum, $segment)) {
+                if (SegmentBooks::isIntegrated($momentum, $segment) && !isset($momentum[SegmentBooks::STATE_FOR_SALE . $segment])) {
+                    $filed[SegmentBooks::STATE_FOR_SALE . $segment] = $ctx->macroState->totalTime;
+                }
+            } elseif (!SegmentBooks::isAbandoned($momentum, $segment) && ($learning[$segment] ?? 0.0) < 1.0) {
+                $filed[SegmentBooks::STATE_VENTURE_ABANDONED . $segment] = $ctx->macroState->totalTime;
+                $ctx->marketExit = ['industry' => $industry, 'segment' => $segment];
+            }
         }
         $stock->setEarningsMomentumZ($filed + $momentum);
     }
